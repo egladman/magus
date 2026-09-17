@@ -1957,9 +1957,9 @@ func newestGoSource(root string) (time.Time, string) {
 // pointed at by another config's text, is checked directly in the directory
 // branch of checkGuardWiring instead of appearing here.
 var guardTemplateBasenames = []string{
-	"magus-guard-command.sh",
-	"magus-guard-path.sh",
-	"cursor-guard.sh",
+	"magus-hook-command.sh",
+	"magus-hook-path.sh",
+	"cursor-hook.sh",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository
 	// where nobody ever stopped mid-task.
@@ -1975,19 +1975,34 @@ var guardTemplateBasenames = []string{
 	"magus-rehydrate.sh",
 }
 
+// workspaceHarnesses returns magusfile-wired harness spell names when ws
+// exposes Harnesses (a *magus.Magus does). Nil or unknown ws yields nil.
+func workspaceHarnesses(ws types.WorkspaceReader) []string {
+	type harnesses interface{ Harnesses() []string }
+	if h, ok := any(ws).(harnesses); ok {
+		return h.Harnesses()
+	}
+	return nil
+}
+
 // harnessConfigCandidates resolves configuration paths from user-owned
 // contracts. Doctor deliberately has no built-in host inventory: adding a
-// collaborator must be data, not a binary release.
-func harnessConfigCandidates(root string) ([]string, error) {
-	ids, err := agent.KnownHarnesses(root)
+// collaborator must be data, not a binary release. wired are magusfile-
+// selected harness spell names unioned with JSON descriptors.
+func harnessConfigCandidates(root string, wired ...string) ([]string, error) {
+	ctx := agent.ContextWithWiredHarnesses(context.Background(), wired)
+	ids, err := agent.KnownHarnesses(ctx, root, wired...)
 	if err != nil {
 		return nil, err
 	}
 	paths := make([]string, 0, len(ids))
 	for _, id := range ids {
-		descriptor, _, err := agent.LoadHarness(root, id)
+		descriptor, _, err := agent.LoadHarness(ctx, root, id)
 		if err != nil {
 			return nil, err
+		}
+		if descriptor.Config.Path == "" {
+			continue
 		}
 		paths = append(paths, filepath.Join(root, descriptor.Config.Path))
 	}
@@ -1999,7 +2014,7 @@ func harnessConfigCandidates(root string) ([]string, error) {
 // execute, in the same order checkGuardBinary reports on: ./magus at the
 // workspace root if present and executable, else whatever resolves on PATH.
 // Kept separate from checkGuardBinary rather than shared, so a change to one
-// check's resolution order cannot silently retarget the other's canary.
+// check's resolution order cannot silently retarget the other's probe.
 func resolveGuardBinaryForWiring(root string) (string, bool) {
 	bin := filepath.Join(root, "magus")
 	if info, err := os.Stat(bin); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
@@ -2113,83 +2128,22 @@ func guardTemplateMarkerProblem(body []byte) string {
 // (a host glue calling the wrong subcommand for weeks, unnoticed) sits the
 // same failure with nothing to notice at all: no invocation.
 //
-// Two layers, cheapest first. Layer A is a binary-level canary that always
+// Two layers, cheapest first. Layer A is a binary-level probe that always
 // runs: it proves the resolved binary can still judge a command at all,
 // independent of whether anything is wired to ask it to. Layer B is a wiring
 // inventory: for each candidate host hook config found, it confirms the
-// config actually mentions magus and hook, and that every template file it
-// names (or, for a self-contained template, the file itself) carries a
-// current magus-guard-template marker.
+// config actually invokes magus, and that every template file it names (or,
+// for a self-contained template, the file itself) carries a current
+// magus-guard-template marker.
 //
 // Layer B never executes a candidate config's command string: jq or a
 // host-relative path may only make sense inside the host's own event loop.
-// The canary plus the marker comparison is the honest, portable probe; full
+// The probe plus the marker comparison is the honest, portable check; full
 // end-to-end execution is guard_templates.txtar's job, which runs in CI
 // against real event fixtures.
 func (r *runner) checkGuardWiring() types.DoctorCheck {
-	home, _ := os.UserHomeDir()
-	return checkGuardWiring(r.runCtx(), r.ws.Root(), home, guardCanaryBudget)
+	return checkGuardWiring(r.runCtx(), r.ws.Root(), guardProbeBudget, workspaceHarnesses(r.ws)...)
 }
-
-func (r *runner) checkCheckpointWiring() types.DoctorCheck {
-	return checkCheckpointWiring(r.ws.Root())
-}
-
-// checkCheckpointWiring reports a host that magus is wired into but that records no
-// checkpoint, so nothing says where the work stood when a session stopped.
-//
-// It asks only of a checkout that ALREADY has a host hook config. A machine with no host
-// wiring at all is guard-wiring's finding, and repeating it here would be a second
-// advisory about the same absence. What this catches is the narrower and quieter case: a
-// host set up months ago, guarding correctly, silently recording nothing.
-//
-// Advice rather than a failure. Not every workspace wants this wired, and a doctor that
-// fails over an optional hook teaches people to stop reading it.
-func checkCheckpointWiring(root string) types.DoctorCheck {
-	const name = "checkpoint-wiring"
-
-	var hosts, recording []string
-	for _, path := range HookConfigs(root) {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		hosts = append(hosts, path)
-		if bytes.Contains(body, []byte("checkpoint")) {
-			recording = append(recording, path)
-		}
-	}
-
-	switch {
-	case len(hosts) == 0:
-		return types.DoctorCheck{
-			Name:     name,
-			Status:   types.DoctorOK,
-			Evidence: types.EvidenceUnknown,
-			Message:  "no agent-host hook config in this checkout, so there is nothing to record from; skipped",
-		}
-	case len(recording) == 0:
-		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorAdvice,
-			Message: fmt.Sprintf("%d host hook config(s) wired, none recording a checkpoint; nothing says where work stood when a session stopped", len(hosts)),
-			Details: append(append([]string{}, hosts...),
-				"wire a stop hook to "+checkpointTemplate+": docs/guides/integrations/agents.md",
-				"or record one by hand: "+hint.SessionCheckpoint.With(`--note "..."`)),
-		}
-	default:
-		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorOK,
-			Message: fmt.Sprintf("%d of %d host hook config(s) record a checkpoint", len(recording), len(hosts)),
-			Details: recording,
-		}
-	}
-}
-
-// checkpointTemplate is the shipped stop-hook script, named here so the check can spot a
-// config that runs it. A path, which is the one host-specific shape magus owns.
-const checkpointTemplate = "magus-checkpoint.sh"
 
 // HookConfigs names the host hook config files IN THIS CHECKOUT that run a magus
 // hook, which is what a caller outside doctor needs to say whether a checkout's
@@ -2199,21 +2153,25 @@ const checkpointTemplate = "magus-checkpoint.sh"
 // Scoped to the checkout on purpose, unlike that check: a home-relative config
 // governs the machine, and a report about this tree that named one would tell a
 // reader their tree is wired when the next clone of it is not. It grades nothing
-// either: staleness is the check's job, and it costs a canary subprocess this
+// either: staleness is the check's job, and it costs a probe subprocess this
 // caller must not pay.
-func HookConfigs(root string) []string { return guardHookConfigs(root) }
+func HookConfigs(ctx context.Context, root string, wired ...string) []string {
+	return guardHookConfigs(ctx, root, wired...)
+}
 
-// guardHookConfigs is the inventory HookConfigs and the lease-binding check share, so
+// guardHookConfigs is the inventory HookConfigs and the bound-lease check share, so
 // neither can disagree with checkGuardWiring about what counts as verified wiring.
-func guardHookConfigs(root string) []string {
+// wired are magusfile-selected harness spell names (see Magus.Harnesses).
+func guardHookConfigs(ctx context.Context, root string, wired ...string) []string {
 	var out []string
-	ids, err := agent.KnownHarnesses(root)
+	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
+	ids, err := agent.KnownHarnesses(ctx, root, wired...)
 	if err != nil {
 		return nil
 	}
 	for _, id := range ids {
-		verification, err := agent.VerifyHarness(root, id)
-		if err == nil && verification.Status == "verified" {
+		verification, err := agent.VerifyHarness(ctx, root, id)
+		if err == nil && verification.Path != "" && (verification.Status == agent.HarnessVerified || verification.Guarded) {
 			out = append(out, verification.Path)
 		}
 	}
@@ -2221,17 +2179,16 @@ func guardHookConfigs(root string) []string {
 	return out
 }
 
-// guardCanaryBudget bounds the canary. Generous for what it runs (one `magus
-// hook` that has to load the workspace to answer), but bounded because doctor
+// guardProbeBudget bounds the probe. Generous for what it runs (one `magus
+// shell` that has to load the workspace to answer), but bounded because doctor
 // is interactive and a hung binary must not hang the report. Injected rather
 // than hardcoded at the call site so a test on a loaded machine can raise it
 // without loosening what ships.
-const guardCanaryBudget = 5 * time.Second
+const guardProbeBudget = 5 * time.Second
 
-// checkGuardWiring is the free-function core, taking home explicitly rather
-// than calling os.UserHomeDir() itself so a test can point it at a fixture
-// directory instead of the machine's real home.
-func checkGuardWiring(ctx context.Context, root, _ string, budget time.Duration) types.DoctorCheck {
+// checkGuardWiring is the free-function core. wiredNames are magusfile-selected
+// harness spell names unioned with JSON descriptors.
+func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wiredNames ...string) types.DoctorCheck {
 	const name = "guard-wiring"
 
 	bin, ok := resolveGuardBinaryForWiring(root)
@@ -2239,14 +2196,14 @@ func checkGuardWiring(ctx context.Context, root, _ string, budget time.Duration)
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
-			Message: "no ./magus and no magus on PATH, so the guard canary could not run",
+			Message: "no ./magus and no magus on PATH, so the guard probe could not run",
 			Details: []string{"build one: " + hint.Run.With("build", ".")},
 		}
 	}
 
-	canaryCtx, cancel := context.WithTimeout(ctx, budget)
+	probeCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
-	cmd := exec.CommandContext(canaryCtx, bin, "session", "hook", "-o", "name")
+	cmd := exec.CommandContext(probeCtx, bin, "shell", "-o", "name")
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader("git stash")
 	stdout, runErr := cmd.Output()
@@ -2264,9 +2221,9 @@ func checkGuardWiring(ctx context.Context, root, _ string, budget time.Duration)
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
-			Message: "the guard canary did not return a deny",
+			Message: "the guard probe did not return a deny",
 			Details: []string{
-				"command: printf 'git stash' | " + bin + " session hook -o name",
+				"command: printf 'git stash' | " + bin + " shell -o name",
 				"stdout:  " + firstLine,
 				"exit:    " + exit,
 				"rebuild: " + hint.Run.With("build", "."),
@@ -2274,19 +2231,28 @@ func checkGuardWiring(ctx context.Context, root, _ string, budget time.Duration)
 		}
 	}
 
-	ids, err := agent.KnownHarnesses(root)
+	ctx = agent.ContextWithWiredHarnesses(ctx, wiredNames)
+	ids, err := agent.KnownHarnesses(ctx, root, wiredNames...)
 	if err != nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: "could not load harness descriptors", Details: []string{err.Error()}}
 	}
 	var wired, problems []string
 	for _, id := range ids {
-		verification, err := agent.VerifyHarness(root, id)
+		verification, err := agent.VerifyHarness(ctx, root, id)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
 			continue
 		}
-		if verification.Status != "verified" {
+		if verification.Status == agent.HarnessSkillsOnly {
+			// Wires no guard at all by design; nothing here is a problem to report,
+			// and Path == "" already routes it out of `wired` below.
+			continue
+		}
+		if verification.Status != agent.HarnessVerified {
 			problems = append(problems, fmt.Sprintf("%s harness is %s: %s", id, verification.Status, verification.Reason))
+			continue
+		}
+		if verification.Path == "" {
 			continue
 		}
 		wired = append(wired, verification.Path)
@@ -2305,7 +2271,9 @@ func checkGuardWiring(ctx context.Context, root, _ string, budget time.Duration)
 			Name:    name,
 			Status:  types.DoctorAdvice,
 			Message: "no harness descriptor found in this checkout; the guard rules exist but no collaborator is configured to invoke them",
-			Details: []string{"add a descriptor under harnesses/ or .magus/harnesses/"},
+			Details: []string{
+				"wire magus\\harness.provider(<spell>) in the root magusfile (several hosts are fine), or add a descriptor under harnesses/ or .magus/harnesses/",
+			},
 		}
 	}
 	return types.DoctorCheck{
@@ -2341,6 +2309,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 	}
 
 	var stale, details []string
+	var staleStatuses []agent.Status
 	var pastedStale bool
 	for _, st := range statuses {
 		details = append(details, st.Location+": "+st.Detail)
@@ -2350,6 +2319,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 			pastedStale = true
 		default:
 			stale = append(stale, st.Location)
+			staleStatuses = append(staleStatuses, st)
 		}
 	}
 
@@ -2372,17 +2342,12 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 		}
 		// One check carries one remedy, so two stale locations need --fix twice; the
 		// message lists them all.
-		//
-		// --dir pins the base, because install resolves a destination against the
-		// CALLER's directory and doctor runs from anywhere. It must be the RESOLVED
-		// root: r.root is the root as asked for, and is empty whenever the caller let
-		// magus discover it.
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
 			Message: "installed skills are behind this binary: " + strings.Join(stale, ", "),
 			Details: details,
-			Fix:     []string{"agent", "install", stale[0], "--force", "--dir", root},
+			Fix:     skillInstallFix(staleStatuses[0]),
 		}
 	case pastedStale:
 		return types.DoctorCheck{
@@ -2398,6 +2363,16 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 		Message: fmt.Sprintf("%d install location(s) current with this binary", len(statuses)),
 		Details: details,
 	}
+}
+
+// skillInstallFix is doctor's half of the ONE remedy for a stale skill install:
+// every location checkAgentSkills grades comes from a harness descriptor (see
+// agent.HarnessSkillLocations), whose ID is validated non-empty at load, so
+// st.ID is always in hand here. It defers to agent.ReinstallCommand so this
+// structured --fix and the free-text Detail strings for the same condition
+// read as one command, not two that can drift apart.
+func skillInstallFix(st agent.Status) []string {
+	return agent.ReinstallCommand(st.ID)
 }
 
 // orphanedSkillDirs returns the installed skill directories this binary no longer ships,

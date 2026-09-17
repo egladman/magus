@@ -62,7 +62,7 @@ func DeclarationHeld(ctx context.Context, res Resolver, a Anchor) bool {
 // The empirical case for doing this at all is blunt: humans do not maintain references in
 // prose. Under 9% of links in source comments are ever revised after the commit that added
 // them, and an outdated code reference in documentation survives 4.7 years on average. A
-// store that relies on its authors noticing decays exactly like every corpus that came
+// store that relies on its authors noticing decays exactly like every knowledge base that came
 // before it, so the anchor has to be machine-checked and the staleness surfaced.
 //
 // The degradation ladder is Gerrit's, which is the only system in this space whose comments

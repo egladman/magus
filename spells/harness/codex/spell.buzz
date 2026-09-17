@@ -1,0 +1,211 @@
+// Codex agent-host harness. Same provider-style spell contract as
+// spells/harness/cursor: selected from a magusfile with magus\harness.provider,
+// not a JSON file under harnesses/.
+//
+//   import "spells/harness/codex" as codex
+//   magus\harness.provider(codex)
+//
+// To adapt without modifying Magus source: copy this spell into the workspace,
+// change only the import path (keep provider), edit Buzz, then
+// `magus agent harness apply`. See magus-workspace-rules "Adapting a Buzz harness".
+//
+// Magus invokes the reserved harness_* names on apply/verify. The fragments are
+// opaque host JSON; Magus merges them and does not rewrite command fields.
+
+import "magus/spell";
+import "assert";
+
+export fun mgs_getName() > str { return "codex"; }
+
+fun codex_config_path() > str { return ".codex/hooks.json"; }
+
+fun codex_skills_form() > str { return "both"; }
+
+fun codex_skills_paths() > [str] {
+    return [".agents/skills"];
+}
+
+fun codex_guard_command() > str {
+    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh";
+}
+
+fun codex_path_command() > str {
+    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-path.sh";
+}
+
+fun codex_observe_command() > str {
+    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-observe.sh";
+}
+
+fun codex_mcp_command() > str {
+    return "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh";
+}
+
+fun codex_rehydrate_command() > str {
+    return "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh";
+}
+
+fun codex_checkpoint_command() > str {
+    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh";
+}
+
+fun codex_command_hook(cmd: str, status: str) > {str: any} {
+    return {
+        "type": "command",
+        "command": cmd,
+        "statusMessage": status,
+    };
+}
+
+fun codex_pretool_entry(matcher: str, cmd: str, status: str) > {str: any} {
+    return {
+        "matcher": matcher,
+        "hooks": [codex_command_hook(cmd, status)],
+    };
+}
+
+// codex_entries is the managed_entries list merged into .codex/hooks.json.
+fun codex_entries() > [any] {
+    return [
+        {
+            "path": ["hooks", "PreToolUse"],
+            "entries": [
+                codex_pretool_entry("Bash", codex_guard_command(), "magus guard: checking command"),
+                codex_pretool_entry("Edit|Write", codex_path_command(), "magus guard: checking file"),
+                codex_pretool_entry("Read", codex_observe_command(), "magus: recording read"),
+                codex_pretool_entry("mcp__.*", codex_mcp_command(), "magus guard: checking MCP tool call"),
+            ],
+        },
+        {
+            "path": ["hooks", "SessionStart"],
+            "entries": [
+                {
+                    "matcher": "compact",
+                    "hooks": [codex_command_hook(codex_rehydrate_command(), "magus: restating this checkout's rules")],
+                },
+            ],
+        },
+        {
+            "path": ["hooks", "Stop"],
+            "entries": [
+                {
+                    "hooks": [codex_command_hook(codex_checkpoint_command(), "magus: recording where the work stands")],
+                },
+            ],
+        },
+    ];
+}
+
+fun codex_config() > {str: any} {
+    return {
+        "path": codex_config_path(),
+    };
+}
+
+fun codex_skills() > {str: any} {
+    return {
+        "paths": codex_skills_paths(),
+        "form": codex_skills_form(),
+    };
+}
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return codex_config();
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return codex_skills();
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return codex_entries();
+}
+
+fun codex_mcp() > {str: any} {
+    // Codex MCP lives in ~/.codex/config.toml (user-global). Magus does not
+    // write it; apply prints a short paste hint. Placeholders avoid Buzz {...}.
+    final hint = "Paste into ~/.codex/config.toml (token via secret ref / env __TOKEN_REF__):\n\n"
+        + "[mcp_servers.magus]\n"
+        + "url = \"__URL__\"\n"
+        + "bearer_token_env_var = \"__TOKEN_REF__\"\n"
+        + "enabled = true\n";
+    return {
+        "token_ref": "MAGUS_MCP_TOKEN",
+        "url": "http://127.0.0.1:7391/mcp",
+        "hint": hint,
+        "docs": "docs/guides/integrations/mcp.md",
+    };
+}
+
+export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
+    return codex_mcp();
+}
+
+test "mgs_getName is the harness id apply and verify look up" {
+    assert\equal(mgs_getName(), "codex", "id must match magus\\harness.provider wiring and --id");
+}
+
+test "harness_config names the Codex hooks file" {
+    assert\equal(codex_config_path(), ".codex/hooks.json", "workspace-relative host config path");
+    final cfg = codex_config();
+    assert\equal("{cfg["path"]}", ".codex/hooks.json", "config map carries the same path");
+}
+
+test "harness_skills installs both forms under .agents/skills" {
+    assert\equal(codex_skills_form(), "both", "matches the JSON descriptor and Codex dogfood");
+    final skills = codex_skills();
+    assert\equal("{skills["form"]}", "both", "skills map carries the form");
+    final paths = skills["paths"] as [str];
+    assert\equal(paths.len(), 1, "one skills install path");
+    assert\equal(paths[0], ".agents/skills", "Codex reads .agents/skills");
+}
+
+test "guard commands name the shared templates with __MAGUS_AGENT_NAME=codex" {
+    assert\isTrue(codex_guard_command().indexOf("__MAGUS_AGENT_NAME=codex") != null, "command surface stamps agent name");
+    assert\isTrue(codex_guard_command().indexOf("magus-hook-command.sh") != null, "command surface");
+    assert\isTrue(codex_path_command().indexOf("magus-hook-path.sh") != null, "path surface");
+    assert\isTrue(codex_observe_command().indexOf("magus-hook-observe.sh") != null, "read observe");
+    assert\isTrue(codex_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
+    assert\isTrue(codex_rehydrate_command().indexOf("REHYDRATE_FORMAT=json") != null, "SessionStart needs JSON stdout");
+    assert\isTrue(codex_rehydrate_command().indexOf("REHYDRATE_RULES=AGENTS.md") != null, "Codex reads AGENTS.md");
+    assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.sh") != null, "Stop checkpoint");
+}
+
+test "harness_entries covers PreToolUse SessionStart and Stop" {
+    final entries = codex_entries();
+    assert\equal(entries.len(), 3, "three managed path blocks");
+    final pre = entries[0];
+    final pre_path = pre["path"] as [str];
+    assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
+    final pre_entries = pre["entries"] as [any];
+    assert\equal(pre_entries.len(), 4, "Bash EditWrite Read and mcp matchers");
+    foreach (entry in pre_entries) {
+        final hooks = entry["hooks"] as [any];
+        assert\equal(hooks.len(), 1, "one command hook per matcher");
+        assert\equal("{hooks[0]["type"]}", "command", "Codex hook type");
+        assert\isTrue("{entry["matcher"]}".len() > 0, "matcher present");
+    }
+    final start = entries[1];
+    final start_path = start["path"] as [str];
+    assert\equal(start_path[1], "SessionStart", "rehydrate on compact");
+    final stop = entries[2];
+    final stop_path = stop["path"] as [str];
+    assert\equal(stop_path[1], "Stop", "checkpoint");
+}
+
+test "harness_mcp is a paste hint for Codex user config.toml" {
+    final mcp = codex_mcp();
+    assert\equal("{mcp["token_ref"]}", "MAGUS_MCP_TOKEN", "secret provider ref");
+    assert\isTrue("{mcp["hint"]}".indexOf("bearer_token_env_var") != null, "names env bind");
+    assert\isTrue("{mcp["hint"]}".indexOf("__TOKEN_REF__") != null, "placeholder for apply");
+    assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
+}
+
+test "harness_* contract wrappers return the same pure helpers" {
+    final t = null;
+    final cb = fun(_: any) > void {};
+    assert\equal("{harness_config(t, cb)["path"]}", codex_config_path(), "config path");
+    assert\equal("{harness_skills(t, cb)["form"]}", codex_skills_form(), "skills form");
+    assert\equal(harness_entries(t, cb).len(), codex_entries().len(), "entries length");
+    assert\equal("{harness_mcp(t, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
+}

@@ -2,65 +2,95 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
         "hooks": [
           {
-            "type": "command",
-            "command": "magus agent hook --host claude-code",
-            "timeout": 10
+            "command": "sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "timeout": 10,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Bash"
       },
       {
-        "matcher": "Edit|Write|NotebookEdit",
         "hooks": [
           {
-            "type": "command",
-            "command": "magus agent hook --host claude-code",
-            "timeout": 10
+            "command": "sh docs/guides/integrations/agents/magus-hook-path.sh",
+            "timeout": 10,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Edit|Write|NotebookEdit"
       },
       {
-        "matcher": "Read",
         "hooks": [
           {
-            "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-guard-observe.sh",
-            "timeout": 10
+            "command": "sh docs/guides/integrations/agents/magus-hook-observe.sh",
+            "timeout": 10,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Read"
       },
       {
-        "matcher": "^mcp__magus__",
         "hooks": [
           {
-            "type": "command",
-            "command": "magus agent hook --host claude-code",
-            "timeout": 10
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "timeout": 10,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "^mcp__magus__"
+      },
+      {
+        "hooks": [
+          {
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task"
+      },
+      {
+        "hooks": [
+          {
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Skill"
+      },
+      {
+        "hooks": [
+          {
+            "command": "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task"
       }
     ],
     "SessionStart": [
       {
-        "matcher": "compact",
         "hooks": [
           {
-            "type": "command",
             "command": "sh docs/guides/integrations/agents/magus-rehydrate.sh",
-            "timeout": 10
+            "timeout": 10,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "compact"
       }
     ],
     "Stop": [
       {
         "hooks": [
           {
-            "type": "command",
             "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
-            "timeout": 10
+            "timeout": 10,
+            "type": "command"
           }
         ]
       }

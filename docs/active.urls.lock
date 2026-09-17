@@ -416,6 +416,8 @@ reference/codes/magusfile/MGS1030/
 reference/codes/magusfile/MGS1031/
 reference/codes/magusfile/MGS1032/
 reference/codes/magusfile/MGS1033/
+reference/codes/magusfile/MGS1034/
+reference/codes/magusfile/MGS1035/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -429,6 +431,8 @@ reference/codes/race/MGS4004/
 reference/codes/race/MGS4005/
 reference/codes/race/MGS4006/
 reference/codes/race/MGS4007/
+reference/codes/race/MGS4008/
+reference/codes/race/MGS4009/
 reference/codes/sandbox/
 reference/codes/sandbox/MGS2001/
 reference/codes/sandbox/MGS2002/
@@ -453,6 +457,9 @@ reference/codes/sandbox/MGS3009/
 reference/codes/sandbox/MGS3010/
 reference/codes/sandbox/MGS3011/
 reference/codes/sandbox/MGS3012/
+reference/codes/sandbox/MGS3013/
+reference/codes/sandbox/MGS3014/
+reference/codes/sandbox/MGS3015/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -481,6 +488,7 @@ reference/manpage/magus-graph/
 reference/manpage/magus-hook/
 reference/manpage/magus-init/
 reference/manpage/magus-insight/
+reference/manpage/magus-job/
 reference/manpage/magus-ledger/
 reference/manpage/magus-ls/
 reference/manpage/magus-man/
@@ -594,6 +602,7 @@ tags/claude/
 tags/cli/
 tags/codegen/
 tags/codex/
+tags/commit/
 tags/compatibility/
 tags/completion/
 tags/concurrency/
@@ -609,6 +618,7 @@ tags/cosign/
 tags/coupling/
 tags/credentials/
 tags/cross-project/
+tags/ctx-needs/
 tags/cursor/
 tags/cycle/
 tags/daemon/
@@ -642,6 +652,7 @@ tags/errors/
 tags/eslint/
 tags/events/
 tags/exec/
+tags/exit-75/
 tags/explain/
 tags/extension/
 tags/extraction/
@@ -649,9 +660,11 @@ tags/filesystem/
 tags/fingerprint/
 tags/fish/
 tags/flags/
+tags/footprint/
 tags/format/
 tags/formatter/
 tags/fs/
+tags/gate/
 tags/generated-files/
 tags/generated/
 tags/getting-started/
@@ -681,6 +694,7 @@ tags/install/
 tags/integration/
 tags/interactive/
 tags/interpreter/
+tags/jobs/
 tags/journal/
 tags/json-patch/
 tags/json/
@@ -701,6 +715,7 @@ tags/macos/
 tags/magus-buzz/
 tags/magus-hook/
 tags/magus-init/
+tags/magus-job/
 tags/magus-ledger/
 tags/magus-memory/
 tags/magus-no-wait/
@@ -735,6 +750,7 @@ tags/oci/
 tags/onboarding/
 tags/opencode/
 tags/operations/
+tags/ordering/
 tags/os/
 tags/output-ref/
 tags/output-refs/
@@ -767,6 +783,7 @@ tags/python/
 tags/query/
 tags/race/
 tags/readiness/
+tags/reads-files/
 tags/redaction/
 tags/reference/
 tags/registry/
@@ -805,6 +822,7 @@ tags/socket/
 tags/sources/
 tags/spell/
 tags/spells/
+tags/stall/
 tags/status/
 tags/stdlib/
 tags/subscribe/
@@ -837,10 +855,12 @@ tags/volatility/
 tags/ward/
 tags/watch/
 tags/windows/
+tags/workspace-lock/
 tags/workspace-provider/
 tags/workspace-providers/
 tags/workspace/
 tags/worktrees/
+tags/writes-files/
 tags/zsh/
 targets/
 targets/ci/

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -195,7 +196,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
 		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
 		// Still caught in every real command position.
-		{command: "cd /repo && go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "cd /repo && go test ./...", rule: denyRule{Name: denyRuleCd}},
 		{command: "make lint; pytest tests/"},
 		{command: "go build ./... | tee log", rule: rawTool(`go build ./...`)},
 		// A READ-ONLY rendering is covered too. It used to be exempt on the reading that
@@ -323,9 +324,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// Only run and affected carry the flag, so nothing else is advised toward it.
 		{command: "timeout 60 magus graph build"},
 		{command: "magus run test ."},
-		// A cd WITHIN the workspace stays an advisory: naming the project is the
-		// fix, and the run still describes the tree that ships.
-		{command: "cd libs/gopherbuzz && magus run test .", context: "CWD-relative"},
+		// A cd WITHIN the workspace is denied: name the project instead. A cd into
+		// a temp or scratchpad copy is the throwaway rule above (more specific).
+		{command: "cd libs/gopherbuzz && magus run test .", rule: denyRule{Name: denyRuleCd}},
+		{command: "cd libs/diagnostics", rule: denyRule{Name: denyRuleCd}},
+		{command: "bash -c 'cd /tmp && ls'", rule: denyRule{Name: denyRuleCd}},
+		{command: "(cd libs/diagnostics && ls)", rule: denyRule{Name: denyRuleCd}},
 		// --root is the sanctioned way to mean a different workspace, and a temp
 		// path merely MENTIONED is not a relocation.
 		{command: "magus run test . --root /tmp/other-workspace"},
@@ -351,6 +355,13 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "magus query output ref1a2b3c | grep -n error"},
 		{command: "magus query output ref1a2b3c | tail -50"},
 		{command: "magus query output ref1a2b3c > /tmp/out.txt"},
+		// `magus refs <pattern> --text` is the other exemption: a raw grep
+		// replacement whose whole purpose is being piped or redirected. Every
+		// OTHER refs invocation (a symbol lookup) still renders a structured
+		// record `-o` shapes, so the deny still fires without --text.
+		{command: "magus refs TODO --text | grep -n fixme"},
+		{command: "magus refs TODO --text > /tmp/hits.txt"},
+		{command: "magus refs Open | grep -n Open", rule: denyRule{Name: denyRuleOutputPipe}},
 		// An input redirect FEEDS magus rather than hiding what it said.
 		{command: "magus buzz - < script.buzz"},
 		// magus must be the COMMAND, not a substring: these are paths and text.
@@ -396,12 +407,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// A find feeding a grep is a CONTENT question, so the search-family
 		// suggestion leads, not the file listing.
 		{command: `find . -name '*.go' | xargs grep -l HandleFoo`, context: "magus refs HandleFoo"},
-		// magus is CWD-relative, so cd-then-magus is how the right command lands
-		// on the wrong project. The project is an argument; only a different
-		// WORKSPACE needs --root.
-		{command: "cd libs/diagnostics && magus run test", context: "CWD-relative"},
+		// magus is CWD-relative, so cd-then-magus is denied: the project is an
+		// argument; only a different WORKSPACE needs --root.
+		{command: "cd libs/diagnostics && magus run test", rule: denyRule{Name: denyRuleCd}},
 		{command: "magus run test libs/diagnostics"},
-		{command: "cd libs/diagnostics"},
 		{command: "grep pattern onefile.txt"},
 		{command: "grep -n x file.go"},
 		{command: "cat x | grep y"},
@@ -436,7 +445,11 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "rg wiring notes.md", context: "docsection"},
 		{command: "head -50 README.md", context: "docsection"},
 		// A code file is not prose; the doc-section advisory must not fire on it.
-		{command: "cat cmd/magus/main.go"},
+		// An unbounded source dump routes to SCIP/refs instead.
+		{command: "cat cmd/magus/main.go", context: "refs"},
+		{command: "head -50 internal/guard/shell.go", context: "refs"},
+		// A line-bounded read already has a range; refs is not the next step.
+		{command: "sed -n '10,40p' cmd/magus/main.go"},
 	}
 	for _, tt := range tests {
 		v := Evaluate(testDependencies(), tt.command)
@@ -467,6 +480,67 @@ func TestEvaluateBashGuard(t *testing.T) {
 			assert.Contains(t, v.Context, tt.context, "%q context names the skill", tt.command)
 		}
 	}
+}
+
+// TestDenyReasonsStayShort gives shell.go's three-line budget an enforcement point.
+//
+// A refusal is read under interruption by someone who wanted to run something else, so
+// length is what gets it skimmed instead of read. Every sentence these carried about why
+// magus is better, what else the guard catches, or which skill to load was true and cost
+// more than it returned. The budget is the only thing that keeps them from growing back,
+// one defensible sentence at a time.
+//
+// The allowance is per refusal as the reader SEES it: the `magus guard denied ...` prefix
+// and the multi-command trailer are framing the rule does not choose, so they are counted
+// but not charged against the three body lines.
+func TestDenyReasonsStayShort(t *testing.T) {
+	const (
+		maxLines = 5   // prefix + three body lines + the multi-command trailer
+		maxBytes = 600 // a screenful at a terminal's width, not a page
+	)
+	// One command per deny rule this file can reach, so the budget is measured against
+	// what ships rather than against a constant read in isolation.
+	commands := []string{
+		"go vet ./...",
+		"gofmt -w .",
+		"cd /repo && magus run build",
+		"magus run build > out.txt",
+		"magus run build | tail -5",
+		"sed -i 's/a/b/' cmd/magus/main.go",
+		"git add -A",
+		"git stash",
+		"magus diff --ack",
+		"magus notes add 'a decision'",
+		"while true; do magus status | grep done; done",
+		"pgrep magus",
+		"gh run watch",
+		"grep 'cause:' /tmp/task-capture.log",
+		`python3 -c "open('cmd/magus/main.go','w').write(x)"`,
+	}
+	for _, command := range commands {
+		v := Evaluate(testDependencies(), command)
+		if v.Deny == "" {
+			continue // a rule this build does not reach; other tests pin which fire
+		}
+		lines := strings.Split(strings.TrimSpace(v.Deny), "\n")
+		lines = slices.DeleteFunc(lines, func(l string) bool { return strings.TrimSpace(l) == "" })
+		assert.LessOrEqual(t, len(lines), maxLines,
+			"deny for %q runs %d lines; the budget is three body lines\n%s", command, len(lines), v.Deny)
+		assert.LessOrEqual(t, len(v.Deny), maxBytes,
+			"deny for %q is %d bytes\n%s", command, len(v.Deny), v.Deny)
+	}
+}
+
+// TestDenyDoesNotReplayALongCommand pins the elision in explainDeny. A denied line
+// carrying a heredoc replayed the whole body back to its author, which made the refusal
+// several times longer than the script that tripped it, and told the reader nothing they
+// were not already looking at.
+func TestDenyDoesNotReplayALongCommand(t *testing.T) {
+	body := strings.Repeat("x = 1\n", 200)
+	v := Evaluate(testDependencies(), "go run -c \""+body+"\"")
+	require.NotEmpty(t, v.Deny)
+	assert.NotContains(t, v.Deny, body, "the command is elided, not quoted back")
+	assert.Less(t, len(v.Deny), len(body), "the refusal must be shorter than what tripped it")
 }
 
 // TestSearchAdviceIsTentativeNotAPromise pins the honest framing: the translation is a
@@ -1020,15 +1094,39 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	assert.Contains(t, piped, "-o template=")
 	assert.Contains(t, piped, "exit status", "a pipe replaces the exit status; that is why it is denied, not advised")
 
-	redirected := Evaluate(testDependencies(), "magus affected ci --silent > /dev/null 2>&1").Deny
-	require.NotEmpty(t, redirected)
-	assert.Contains(t, redirected, "magus query output", "the captured log is already persisted; that is the replacement")
-	assert.Contains(t, redirected, ".magus/logs/", "a failure names the full-log path, so capturing it is redundant")
-	assert.Contains(t, redirected, "never console text",
-		"--tee mirrors STRUCTURED output only; telling an agent to tee console output would write nothing")
-	assert.Contains(t, redirected, "silent", "the -s + redirect combination is the case worth calling out")
+	// Discarding and KEEPING are different intents, so they get different corrections.
+	// Both name where the log already is, because `affected ci` mints one.
+	discarded := Evaluate(testDependencies(), "magus affected ci --silent > /dev/null 2>&1").Deny
+	require.NotEmpty(t, discarded)
+	assert.Contains(t, discarded, "silent", "the --silent + /dev/null combination is the case worth calling out")
+	assert.Contains(t, discarded, "magus query output", "the captured log is already persisted; that is the replacement")
+	assert.Contains(t, discarded, ".magus/logs/", "a failure names the full-log path, so capturing it is redundant")
 
-	assert.NotEqual(t, piped, redirected, "the two shapes need different corrections")
+	kept := Evaluate(testDependencies(), "magus affected ci > run.log").Deny
+	require.NotEmpty(t, kept)
+	assert.Contains(t, kept, "--tee", "keeping output is what --tee is for")
+	assert.Contains(t, kept, "never console text",
+		"--tee mirrors STRUCTURED output only; telling an agent to tee console output would write nothing")
+
+	// A verb that mints no ref must not be sent after one: `magus ls` has no run log and
+	// no output ref, so naming them would point the reader at an id that never existed.
+	noRef := Evaluate(testDependencies(), "magus ls > out.txt").Deny
+	require.NotEmpty(t, noRef)
+	assert.NotContains(t, noRef, "magus query output", "ls mints no ref, so the log pointer would be a dead end")
+
+	assert.NotEqual(t, piped, discarded, "the two shapes need different corrections")
+}
+
+// TestGuardExemptsRefsTextFromOutputRules pins the --text exemption's SCOPE: it
+// covers exactly the flag that makes refs a grep replacement, not the command
+// name in general.
+func TestGuardExemptsRefsTextFromOutputRules(t *testing.T) {
+	assert.Empty(t, Evaluate(testDependencies(), "magus refs TODO --text | grep -n fixme").Deny,
+		"a raw text search exists to be piped")
+	assert.Empty(t, Evaluate(testDependencies(), "magus refs TODO --text > /tmp/hits.txt").Deny,
+		"and to be redirected")
+	assert.NotEmpty(t, Evaluate(testDependencies(), "magus refs Open | grep -n Open").Deny,
+		"a symbol lookup still renders a structured record -o shapes; only --text is exempt")
 }
 
 // TestStageEverythingDenialNamesDirectStaging pins the replacement `git add -A` is
@@ -1061,12 +1159,13 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git rev-parse @",
 		"git describe",
 		"git stash create",
-		"cd libs/foo && git rev-parse HEAD",
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
 		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
 	}
+	// A leading cd is refused on its own; the checkpoint advise is never reached.
+	assert.Equal(t, denyRuleCd, Evaluate(testDependencies(), "cd libs/foo && git rev-parse HEAD").Rule.Name)
 
 	for _, cmd := range []string{
 		"git rev-parse --show-toplevel",
@@ -1114,12 +1213,13 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 		"uv lock",
 		"poetry update",
 		"pip-compile",
-		"cd libs/foo && pnpm add lodash",
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
 		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
+	// A leading cd is refused on its own; the update advise is never reached.
+	assert.Equal(t, denyRuleCd, Evaluate(testDependencies(), "cd libs/foo && pnpm add lodash").Rule.Name)
 
 	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
 	// spell op and a dependency refresh, and the deny answers first, so without this
@@ -1144,15 +1244,36 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 func TestGuardDeniesInPlaceSed(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
+		// A bare -i is the unsplittable form: BSD reads the next word as the suffix and
+		// GNU reads it as the first file, so the edited set is unknowable either way.
 		"sed -i 's/a/b/' f.go",
 		"sed -i '' 's/a/b/' f.go",
-		"sed -i.bak s/a/b/ f",
-		"sed --in-place=.bak s/a/b/ f",
 		"cat x | sed -i s/a/b/ y",
+		// Driven forms. The file list comes from a traversal and appears nowhere on the
+		// line, which is the blind rewrite this rule is for.
 		"find . -name '*.go' -exec sed -i 's/a/b/' {} +",
+		"find . -name '*.go' -exec sed -i.bak 's/a/b/' {} +",
+		"git ls-files | xargs sed -i.bak 's/a/b/'",
+		// Unbounded operands: a glob names files nobody listed.
+		"sed -i.bak s/a/b/ **/*.go",
+		"sed -i.bak s/a/b/ $(git ls-files)",
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+	}
+	// A sed that NAMES its files is a targeted edit and is allowed. This reverses the
+	// blanket refusal that stood here: the alternative it pointed at, `refs --occurrences`,
+	// answers for SYMBOLS, so a rename of an environment variable or a filename was denied
+	// with nothing offered that could do it. An unambiguous suffix plus literal paths is a
+	// change a reader can check before it runs, which is the whole distinction.
+	for _, cmd := range []string{
+		"sed -i.bak s/a/b/ f",
+		"sed --in-place=.bak s/a/b/ f",
+		"sed -i.bak -e s/a/b/ one.go two.go",
+		"sed -i.bak -f prog.sed one.go",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "a sed naming its files is targeted, not blind: %q", cmd)
 	}
 	for _, cmd := range []string{
 		"sed -n '1,5p' f.go",
@@ -1309,6 +1430,33 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 	}
 }
 
+// Agents poll with pgrep/ps when a magus run is slow; status --watch already
+// names the lock holder. Measured 2026-09-15: pgrep -fl 'magus|go-build'.
+func TestGuardDeniesProcessPoll(t *testing.T) {
+	for _, cmd := range []string{
+		`pgrep -fl magus`,
+		`pgrep -fl 'magus|go-build|go build'`,
+		`ps -p 85665`,
+		`ps -p 85665 -o pid,etime,command`,
+		`pidof magus`,
+		`bash -c 'pgrep -fl magus'`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleProcessPoll, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "status --watch", cmd)
+	}
+}
+
+func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
+	for _, cmd := range []string{
+		`echo 'pgrep -fl magus'`,
+		`./magus status --watch=15s`,
+	} {
+		assert.NotEqual(t, denyRuleProcessPoll, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
 // A backgrounded gate's capture is magus output one step removed, and nothing on the
 // filter line is a magus invocation, so the pipe rule cannot see it. Measured twice in
 // one session: a grep for `cause:` dropped the `output:` and `inspect:` lines two below
@@ -1340,11 +1488,16 @@ func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
 
 // The deny has to name what the filter was about to cut, or the reader corrects the
 // spelling instead of the mistake, and it has to route somewhere that works.
+//
+// It used to reproduce the whole five-line failure block, which was eight lines of a
+// message that still owed the reader three lines of advice. The PAIR is what carries the
+// argument: `cause:` is what a filter matches and `output:` is the ref it drops, two lines
+// below it. Naming the other three proved nothing the pair does not.
 func TestCaptureFilterDenialNamesTheFailureBlock(t *testing.T) {
 	v := Evaluate(testDependencies(), `grep -n "cause:" tasks/abc123.output | head -8`)
 	require.NotEmpty(t, v.Deny)
-	for _, field := range []string{"[fail] <target>", "cause:", "output: out<hex>", "inspect: magus query output out<hex>", "reproduce:"} {
-		assert.Contains(t, v.Deny, field, "the block's fields are what the filter drops")
+	for _, field := range []string{"cause:", "output: out<hex>"} {
+		assert.Contains(t, v.Deny, field, "the matched line and the dropped ref are what the filter costs")
 	}
 	assert.Contains(t, v.Deny, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
 	assert.Contains(t, v.Deny, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")

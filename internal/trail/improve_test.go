@@ -48,6 +48,26 @@ func TestRecentGuardFeedbackTreatsTwoSessionsAsRecurringWithoutClaimingSuccess(t
 	assert.Zero(t, feedback[0].FollowedSessions, "the hook observes requests, never target completion")
 }
 
+func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
+	base := t.TempDir()
+	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
+	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
+	recordFeedbackCommand(t, base, "", "operator-probe", "go test ./...")
+
+	feedback, err := RecentGuardFeedback(base, "", 100)
+	require.NoError(t, err)
+	assert.Empty(t, feedback, "a probe nobody wired is not evidence that a host integration should change")
+
+	recordFeedbackCommand(t, base, "cursor", "real", "go test ./...")
+
+	feedback, err = RecentGuardFeedback(base, "", 100)
+	require.NoError(t, err)
+	require.Len(t, feedback, 1)
+	assert.Equal(t, 1, feedback[0].Denied, "the host-less denials must not inflate the count")
+	assert.Equal(t, 1, feedback[0].Sessions)
+	assert.False(t, feedback[0].NeedsReview(), "one operator cannot manufacture the repeat that promotes a candidate")
+}
+
 func recordFeedbackCommand(t *testing.T, base, host, session, command string) {
 	t.Helper()
 	AppendAgentCommand(context.Background(), base, AgentCommand{

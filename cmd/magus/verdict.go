@@ -23,9 +23,8 @@ import (
 // The verbs here inform; none of them decides. An unknown verdict still prints what was
 // found, still exits, and names the command that would close the gap.
 
-// symbolCoverage reports what a lookup was able to search. input is the query text,
-// seeded reports whether this lookup merged the lazy @symbols shards, and indexOnly marks
-// a verb whose whole evidence base is the index (see knowledge.Coverage).
+// symbolCoverage reports what a lookup was able to search. input is the query text and
+// seeded reports whether this lookup merged the lazy @symbols shards.
 //
 // It observes; knowledge.Answer judges. That split is what keeps this surface and the MCP
 // tools from reaching different verdicts about the same graph.
@@ -33,8 +32,8 @@ import (
 // Both probes are skipped entirely when the symbol layer could not have held the answer
 // (`kind:author` returning nothing has no bearing on a missing or stale symbol index), so an
 // ordinary domain query pays nothing for the verdict.
-func symbolCoverage(ctx context.Context, root, input string, seeded, indexOnly bool) knowledge.Coverage {
-	cov := knowledge.Coverage{Seeded: seeded, IndexOnly: indexOnly}
+func symbolCoverage(ctx context.Context, root, input string, seeded bool) knowledge.Coverage {
+	cov := knowledge.Coverage{Seeded: seeded}
 	if !knowledge.CouldMatchLazyLayer(input) {
 		return cov
 	}

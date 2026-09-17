@@ -33,7 +33,7 @@ rather than switched.
 
 `_selftest` is not an arm. It provisions nothing and exists so the runner can be
 exercised without the real recipes; `tasks/_placeholder` is its counterpart.
-Neither is part of the corpus.
+Neither is part of the task set.
 
 ## Headline metric
 
@@ -176,7 +176,7 @@ solution.
 The session is launched with `env -i` and a whitelist: `HOME`, `PATH`, the
 locale, the credential names, plus every name the worktree's
 `.benchmark/env.sh` exports. That file is how an arm sets its levers
-(`MAGUS_HINTS_ENABLED=false`, `GUARD_MAGUS_BIN`): `provision.sh` writes it per
+(`MAGUS_HINTS_ENABLED=false`, `__MAGUS_BIN`): `provision.sh` writes it per
 run through `arm_write_env` in `arms/lib.sh`, and `agent.sh` sources it before
 the scrub. cwd is the worktree and `--setting-sources project` limits settings
 to the worktree's own `.claude/settings.json`; `HOME` is kept, so whatever the
@@ -325,7 +325,7 @@ pilot did; a tree that mixes models is refused.
   transcripts never show and the extractor does not model.
 - An enforced turn cap: `claude` exposes no `--max-turns`, so `max_turns` is
   recorded and not enforced (see Budget caps).
-- An LLM judge and its blinding pass. Nothing in the corpus needs one today:
+- An LLM judge and its blinding pass. Nothing in the task set needs one today:
   every task grades deterministically, against an `ANSWER.md` set or a held-out
   test. A task that cannot be graded that way has no home yet.
 - Warm-versus-cold start is still undecided; whichever is chosen has to be held

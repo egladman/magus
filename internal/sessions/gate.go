@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
@@ -82,6 +83,33 @@ func LatestGate(fold Fold, ref, target string) (GateRecord, bool) {
 			continue
 		}
 		if g.Ref != ref || g.Target != target || g.Outcome == OutcomeDeferred {
+			continue
+		}
+		return GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true
+	}
+	return GateRecord{}, false
+}
+
+// GateAt returns the newest gate verdict for target recorded at commit, on any ref.
+// Commits compare by prefix in both directions, because callers hold abbreviations of
+// different lengths. Deferrals are skipped for the reason LatestGate gives.
+func GateAt(fold Fold, commit, target string) (GateRecord, bool) {
+	if commit == "" {
+		return GateRecord{}, false
+	}
+	for i := len(fold.Records) - 1; i >= 0; i-- {
+		rec := fold.Records[i]
+		if rec.Kind != KindGateResult {
+			continue
+		}
+		var g GateResult
+		if json.Unmarshal(rec.Payload, &g) != nil {
+			continue
+		}
+		if g.Target != target || g.Outcome == OutcomeDeferred || g.Commit == "" {
+			continue
+		}
+		if !strings.HasPrefix(g.Commit, commit) && !strings.HasPrefix(commit, g.Commit) {
 			continue
 		}
 		return GateRecord{GateResult: g, At: time.UnixMilli(rec.Ts)}, true

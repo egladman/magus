@@ -390,9 +390,10 @@ func AnyVal(v any) vm.Value {
 	// types.BuzzObject is a NAMED map[string]any, and a type switch matches on type
 	// IDENTITY, not on underlying type, so without its own case it falls through to
 	// the null below. That is not theoretical: it is what broke every NESTED boundary
-	// value the moment the named type was introduced. Tag.BuzzObject() nests
-	// Version.BuzzObject(), whose Go type is BuzzObject, so `t.version` arrived in a
-	// magusfile as null and every field read off it read null too.
+	// value the moment the named type was introduced: a nested boundary map arrived in a
+	// magusfile as null, and every field read off it read null too. The generated
+	// encoders no longer produce one (they nest vm.Value directly), but AnyVal is also
+	// the path for a hand-written BuzzObject and for an untyped AnyMap return.
 	case types.BuzzObject:
 		return AnyMapVal(x)
 	case map[string]string:
@@ -495,20 +496,29 @@ func AnyToValue(v any) vm.Value { return AnyVal(v) }
 // [AnyToValue]; see its note for why this is exported.
 func ValueToAny(v vm.Value) any { return valToAny(v) }
 
-// buzzObject is the narrow boundary view host needs. It stays at the consumer:
-// types define their exact BuzzObject representation without publishing a
-// speculative interface for callers that do not need polymorphism.
-type buzzObject interface{ BuzzObject() types.BuzzObject }
+// BoundaryType pairs a runtime boundary type with the encoder generated for it, so a
+// test can walk every value that crosses into Buzz. Encode takes any because the list is
+// heterogeneous; the generated closure asserts the concrete type back, which is safe
+// precisely because the same generator wrote both halves.
+type BoundaryType struct {
+	// Name is the BUZZ name, the registry key: `Commit`, `Projects`.
+	Name string
+	// Zero is the zero value, for a test to populate through reflection.
+	Zero any
+	// Encode is the generated encoder, bound to Zero's concrete type.
+	Encode func(any) vm.Value
+}
 
-// MapsVal marshals a slice of field-objects to a Buzz list of their boundary maps,
-// the return form for list-of-object Impls like vcs.history. It keeps the "Maps"
-// name (not "ObjectsVal") because it names the vm.Value SHAPE it produces (a
-// Buzz list of maps) matching AnyMapVal/StrMapVal's convention of naming after
-// the runtime value, not the source type's Buzz-language name.
-func MapsVal[T buzzObject](rs []T) vm.Value {
-	items := make([]vm.Value, len(rs))
-	for i, r := range rs {
-		items[i] = AnyMapVal(r.BuzzObject())
+// ObjectSlice marshals a list of boundary values through the encoder generated for the
+// element type, the return form for list-of-object Impls like vcs.history.
+//
+// Written once here rather than generated per element type: the body is the same loop
+// whatever T is, and the generator emitting one copy per type meant a list return added
+// a function nobody would ever read.
+func ObjectSlice[T any](values []T, encode func(T) vm.Value) vm.Value {
+	items := make([]vm.Value, len(values))
+	for i, v := range values {
+		items[i] = encode(v)
 	}
 	return vm.ListValue(items)
 }

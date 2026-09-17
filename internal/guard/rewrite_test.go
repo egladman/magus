@@ -37,11 +37,16 @@ PY`,
 		"perl -pi -e 's/a/b/' internal/ledger/store.go",
 		"perl -i -e 's/a/b/' internal/ledger/store.go",
 		"ruby -i -e 'gsub' internal/ledger/store.go",
+		// The backup-suffix spelling of in-place: -i takes "bak" as a value in flag
+		// clusters, but perl/ruby fold it into one word instead.
+		"perl -i.bak -pe 's/a/b/' internal/ledger/store.go",
 		`node -e "require('fs').writeFileSync('internal/ledger/store.go', out)"`,
 		`awk '{print > "internal/ledger/store.go"}' f`,
+		// The append form of the same redirect.
+		`awk '{print >> "internal/ledger/store.go"}' f`,
 		"cat f | python3 - <<'PY'\nopen('internal/ledger/store.go','w').write(out)\nPY",
 	} {
-		assert.NotEmpty(t, denyInterpreterRewrite(at, command), "%q rewrites a tracked file", command)
+		assert.NotEmpty(t, denyInterpreterRewrite(at, command, DialectBash), "%q rewrites a tracked file", command)
 	}
 }
 
@@ -62,6 +67,13 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 		`python3 -c "print(open('internal/ledger/store.go').read())"`,
 		"python3 - <<'PY'\nprint(open('internal/ledger/store.go').read())\nPY",
 
+		// A pure print: awk's range/comparison operators share a character with its
+		// redirect operator, but neither follows a print/printf statement here, so this
+		// is a read like any other. The exact false positive observed live.
+		"awk 'NR>=1,NR<=20' internal/ledger/store.go",
+		// A bare (no `=`) comparison, same reasoning.
+		"awk '$1 > 5' internal/ledger/store.go",
+
 		// Not an interpreter: a heredoc into cat is data, and the lane rule is what judges
 		// where it lands.
 		"cat > internal/ledger/store.go <<'EOF'\npackage ledger\nEOF",
@@ -69,12 +81,12 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 		// A quoted mention of the act is not the act.
 		`echo "python3 -c \"open('internal/ledger/store.go','w')\""`,
 	} {
-		assert.Empty(t, denyInterpreterRewrite(at, command), "%q", command)
+		assert.Empty(t, denyInterpreterRewrite(at, command, DialectBash), "%q", command)
 	}
 
 	t.Run("no workspace", func(t *testing.T) {
 		assert.Empty(t, denyInterpreterRewrite(location{},
-			"python3 -c \"open('internal/ledger/store.go','w').write(x)\""))
+			"python3 -c \"open('internal/ledger/store.go','w').write(x)\"", DialectBash))
 	})
 }
 
@@ -82,10 +94,10 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 // substitute-then-write rule refuse the same act in their own words, and a reader who got
 // one of those must not get this one instead.
 func TestRankInterpreterRewriteNeverReplacesADeny(t *testing.T) {
-	stood := BashVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
+	stood := ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	assert.Equal(t, stood, rankInterpreterRewrite(stood, "a rewrite reason"))
 
-	advisory := BashVerdict{Context: "something milder"}
+	advisory := ShellVerdict{Context: "something milder"}
 	got := rankInterpreterRewrite(advisory, "a rewrite reason")
 	assert.Equal(t, "a rewrite reason", got.Deny)
 	assert.Equal(t, denyRuleInterpreterRewrite, got.Rule.Name)

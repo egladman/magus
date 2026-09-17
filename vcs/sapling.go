@@ -228,6 +228,35 @@ func (v saplingVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (
 	return out, nil
 }
 
+// RangeDiff implements types.RangeDiffReporter via `sl diff -r "ancestor(base,head)" -r
+// head`, the same Mercurial-inherited ancestor() revset hg's RangeDiff uses. Verified
+// separately against Sapling 0.2.20260811-150444, per this file's own rule about verifying
+// the two backends independently rather than porting one to the other: a repository forked
+// into two single-file branches showed the same failure mode hg's does, where diffing base
+// directly against head (the naive two-point form) reported base's own new file as a
+// deletion, and the ancestor-based form did not.
+//
+// No --git flag: Sapling already emits a git-style diff by default (see DirtyDiff).
+func (v saplingVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
+	// checkRevsetRef, not checkRef: see hgVCS.RangeDiff, whose expression this mirrors.
+	if err := checkRevsetRef(base); err != nil {
+		return "", err
+	}
+	if err := checkRevsetRef(head); err != nil {
+		return "", err
+	}
+	args := []string{"diff", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, hgFamilyGlobs(paths)...)
+	}
+	out, err := vcsOutputRaw(ctx, dir, "sl", args...)
+	if err != nil {
+		return "", fmt.Errorf("sl diff ancestor(%s,%s)-%s: %w", base, head, head, err)
+	}
+	return out, nil
+}
+
 // Describe reports "": Sapling has no tags to describe from. See Tags.
 func (v saplingVCS) Describe(_ context.Context, _ string) (string, error) {
 	return "", nil
@@ -378,6 +407,26 @@ func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) 
 	return "", types.ErrVCSUnsupported
 }
 
+// RevTime implements types.RevTimeReporter with hgCommitTemplate's {date|rfc3339date}
+// filter, parsed by the same parseWhen commit.go uses; verified live against Sapling
+// 0.2.20260811-150444.
+//
+// The lookup error is discarded, mirroring git's and hg's RevTime: `sl log -r <rev>` for a
+// revision this clone lacks aborts non-zero with nothing on stdout, the ordinary "you have
+// never fetched this" answer, not a probe failure. The one error left is a date sl printed
+// that did not parse.
+func (v saplingVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	out, _ := vcsOutput(ctx, dir, "sl", "log", "-r", rev, "--template", "{date|rfc3339date}")
+	if out == "" {
+		return time.Time{}, false, nil
+	}
+	t := parseWhen(out)
+	if t.IsZero() {
+		return time.Time{}, false, fmt.Errorf("sl log -r %s: parse %q: unrecognized date format", rev, out)
+	}
+	return t, true, nil
+}
+
 // saplingChurnTemplate opens each commit with its NUL-separated hash, author and record
 // date, then lists that commit's files as git-shaped --name-status lines, the same stream
 // shape parseChangesByCommit reads from git, minus git's leading NUL sentinel, which is
@@ -389,62 +438,9 @@ func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) 
 // delete plus an add) lives at that constant.
 const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n` + hgChurnFileTail
 
-// ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
-// copy's ancestors so a repository with several heads cannot attribute churn from a line of
-// development this checkout is not on. `not merge()` keeps a merge's sprawling file list
-// from skewing edit-frequency attribution, matching git's --no-merges.
-//
-// The `.` pathspec limits which COMMITS appear, but NOT the files each one lists: the
-// template's file keywords cover the changeset whole, so a commit touching both root.txt and
-// sub/a.txt reports both even when the log runs in sub/. git's --name-status filters to the
-// pathspec and reports only sub/a.txt. Measured, and the difference matters: churn is per
-// project, so the unfiltered list credits a nested workspace with edits made outside it.
-// The subtree filter is therefore applied here rather than left to the template.
-//
-// reverse() is load-bearing and is the one thing here that does not read like hg. A bare
-// `sl log` is newest-first, but `sl log -r <revset>` follows the REVSET's order, and
-// ancestors() is ascending, so without it `-l N` would return the N OLDEST commits while
-// the interface promises the newest, and a churn heatmap would describe the repository's
-// first week forever.
-//
-// since bounds the scan by commit date. Mercurial's date() predicate takes a date STRING
-// rather than an epoch, and reads a leading ">" as "after", so an RFC 3339 lower bound
-// arrives as `date('>2026-01-01T00:00:00Z')`.
+// ChangesByCommit implements types.ChurnReporter; see hgFamilyChangesByCommit.
 func (v saplingVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
-	if commits <= 0 {
-		commits = 1
-	}
-	scope := "ancestors(.)"
-	if since != "" {
-		if err := checkRef(since); err != nil {
-			return nil, err
-		}
-		scope = fmt.Sprintf("ancestors(.) and date('>%s')", since)
-	}
-	revset := fmt.Sprintf("reverse(%s) and not merge()", scope)
-	args := []string{"log", "-r", revset, "-l", fmt.Sprintf("%d", commits), "--template", saplingChurnTemplate, "--", "."}
-	out, err := vcsOutput(ctx, dir, "sl", args...)
-	if err != nil {
-		return nil, fmt.Errorf("sl log: %w", err)
-	}
-	changes := parseChangesByCommit(out)
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
-	if err != nil {
-		return nil, err
-	}
-	if prefix == "" {
-		return changes, nil // dir IS the repository root; every file is in the subtree
-	}
-	for i := range changes {
-		kept := changes[i].Files[:0]
-		for _, f := range changes[i].Files {
-			if strings.HasPrefix(f.Path, prefix) {
-				kept = append(kept, f)
-			}
-		}
-		changes[i].Files = kept
-	}
-	return changes, nil
+	return hgFamilyChangesByCommit(ctx, v, "sl", saplingChurnTemplate, dir, commits, since)
 }
 
 // saplingArchivalMeta is the provenance file `sl archive` injects into every export. It is
@@ -452,19 +448,6 @@ func (v saplingVCS) ChangesByCommit(ctx context.Context, dir string, commits int
 // in the exported tree that no commit contains, which a graph diff would read as a change.
 const saplingArchivalMeta = ".sl_archival.txt"
 
-// ExportRevision implements types.RevisionExporter via `sl archive -t files`.
-//
-// Two Sapling behaviors shape this, both verified:
-//
-//   - A whole-tree include is REFUSED ("this repository has a very large working copy and
-//     requires an explicit set of files to be archived"), and it fires on a four-file
-//     repository, so it is a guard against an unqualified include rather than a size limit.
-//     `-I 'glob:**'` states the same set explicitly and is accepted; `-I .` is not.
-//   - The archive is repo-rooted and ignores cwd for PATHING. Running it in a subdirectory
-//     correctly narrows the contents to that subtree but keeps the full repo-relative paths,
-//     where git's `archive <rev> -- .` re-roots them. dir's prefix is therefore stripped
-//     here, so dstDir mirrors the workspace as of rev the way the interface promises.
-//
 // ReadFileAt implements types.RevisionFileReader via `sl cat -r <rev>`. "" is `.`, the
 // committed revision, matching hg's spelling rather than git's.
 func (v saplingVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
@@ -479,39 +462,14 @@ func (v saplingVCS) ReadFileAt(ctx context.Context, root, rev, path string) (str
 	return revFileOutput(cmd, fmt.Sprintf("sl cat -r %s %s", rev, path))
 }
 
+// ExportRevision implements types.RevisionExporter via `sl archive -t files`.
+//
+// A whole-tree include is REFUSED ("this repository has a very large working copy and
+// requires an explicit set of files to be archived"), and it fires on a four-file
+// repository, so it is a guard against an unqualified include rather than a size limit.
+// `-I 'glob:**'` states the same set explicitly and is accepted; `-I .` is not.
 func (v saplingVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
-	if rev == "" {
-		rev = "."
-	}
-	if err := checkRef(rev); err != nil {
-		return err
-	}
-
-	staging, err := os.MkdirTemp("", "magus-sl-export-")
-	if err != nil {
-		return fmt.Errorf("sl archive: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(staging) }()
-
-	cmd := vcsExec(ctx, "sl", "archive", "-r", rev, "-t", "files",
-		"-I", "glob:**", "-X", saplingArchivalMeta, staging)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("sl archive %q: %w\n%s", rev, err, strings.TrimSpace(string(out)))
-	}
-
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
-	if err != nil {
-		return err
-	}
-	// A revision predating dir yields no subtree in the export. That is an empty tree, not
-	// a failure (git's ExportRevision reports the same case as "everything was added"),
-	// so an absent staging subtree is left for WalkDir to skip rather than raised.
-	staged := filepath.Join(staging, filepath.FromSlash(prefix))
-	if _, err := os.Stat(staged); os.IsNotExist(err) {
-		return os.MkdirAll(dstDir, 0o755)
-	}
-	return copyTree(staged, dstDir)
+	return hgFamilyExportRevision(ctx, v, "sl", dir, rev, dstDir, "-I", "glob:**", "-X", saplingArchivalMeta)
 }
 
 // copyTree copies src's contents into dst, creating dst. A rename would be cheaper but is
@@ -649,7 +607,16 @@ const (
 	slHookBegin     = "# BEGIN magus-refresh"
 	slHookBeginLine = slHookBegin + " - do not edit this section manually"
 	slHookEnd       = "# END magus-refresh"
+
+	slDriftHookBegin     = "# BEGIN magus-drift-notice"
+	slDriftHookBeginLine = slDriftHookBegin + " - do not edit this section manually"
+	slDriftHookEnd       = "# END magus-drift-notice"
 )
+
+// slDriftHooks mirrors hgDriftHooks: Sapling is a Mercurial-compatible fork and accepts
+// the same hook names in the same [hooks] section. Verified directly (sl 0.2.x): a
+// commit.NAME hook fired on `sl commit`, and an outgoing.NAME hook fired on `sl push`.
+var slDriftHooks = []string{"commit", "outgoing"}
 
 // slConfigPath is Sapling's per-repository config file, the counterpart of .hg/hgrc.
 func slConfigPath(root string) string { return filepath.Join(root, ".sl", "config") }
@@ -726,16 +693,63 @@ func (v saplingVCS) InstallRefreshHook(_ context.Context, root, command string) 
 	return []string{"update"}, nil
 }
 
+// InstallDriftHook implements types.DriftHookInstaller: it registers Sapling's `commit`
+// and `outgoing` hooks (see slDriftHooks) to run command. It shares replaceManagedSection
+// with the merge-driver and refresh-hook installs, under its own markers so all three
+// managed sections coexist in .sl/config. Returns the labels of the hooks it installed.
+func (v saplingVCS) InstallDriftHook(_ context.Context, root, command string) ([]string, error) {
+	path := slConfigPath(root)
+	var section strings.Builder
+	section.WriteString(slDriftHookBeginLine + "\n")
+	section.WriteString("[hooks]\n")
+	for _, name := range slDriftHooks {
+		fmt.Fprintf(&section, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
+	}
+	section.WriteString(slDriftHookEnd + "\n")
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	updated := replaceManagedSection(string(existing), section.String(), slDriftHookBegin, slDriftHookEnd)
+	if updated == string(existing) {
+		return nil, nil
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		return nil, fmt.Errorf("vcs: write %s: %w", path, err)
+	}
+	return append([]string(nil), slDriftHooks...), nil
+}
+
 // ConflictResolver and MergeStarter for Sapling. The resolve state machine is Mercurial's,
 // so the mapping is close, but two behaviors differ from hg and the methods below note
 // where they bite.
 //
-// The assertions are compile-time on purpose: both interfaces are reached by type assertion
-// at the call site, so dropping a method would not fail the build, it would silently demote
-// Sapling to "resolve this merge by hand".
+// The assertions below cover every optional capability Sapling implements. They are
+// compile-time on purpose: each interface is reached by type assertion at its call site, so
+// dropping a method would not fail the build, it would silently demote Sapling to whatever
+// the caller's fallback answers ("resolve this merge by hand" for ConflictResolver, "assume
+// pushed" for PushStatusReporter, and so on).
+//
+// BranchChangeReporter is the one optional capability Sapling does not implement. As with
+// hg, that is not a technical wall: nothing here suggests a bookmark or ChangedFiles could
+// not answer it. It is simply unbuilt, and the caller (Magus.BranchChanges) reports a named
+// types.VCSCapabilityMissing diagnostic rather than silence for exactly this reason.
 var (
-	_ types.ConflictResolver = saplingVCS{}
-	_ types.MergeStarter     = saplingVCS{}
+	_ types.MergeDriverInstaller = saplingVCS{}
+	_ types.RefreshHookInstaller = saplingVCS{}
+	_ types.DriftHookInstaller   = saplingVCS{}
+	_ types.RemoteReporter       = saplingVCS{}
+	_ types.DefaultRefReporter   = saplingVCS{}
+	_ types.PushStatusReporter   = saplingVCS{}
+	_ types.RevTimeReporter      = saplingVCS{}
+	_ types.TrackedFileReporter  = saplingVCS{}
+	_ types.IgnoredFileReporter  = saplingVCS{}
+	_ types.ChurnReporter        = saplingVCS{}
+	_ types.RangeDiffReporter    = saplingVCS{}
+	_ types.ConflictResolver     = saplingVCS{}
+	_ types.RevisionFileReader   = saplingVCS{}
+	_ types.RevisionExporter     = saplingVCS{}
+	_ types.MergeStarter         = saplingVCS{}
 )
 
 func runSaplingBatched(ctx context.Context, root string, args []string, paths []string) error {
@@ -1086,4 +1100,10 @@ func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 // touching the working copy; the check is that the log above comes back empty after it.
 func (v saplingVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
 	return nil, nil
+}
+
+// CommitPushed implements types.PushStatusReporter via Sapling's phases, which it
+// inherits from Mercurial; see hgFamilyCommitPushed.
+func (v saplingVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
+	return hgFamilyCommitPushed(ctx, "sl", dir, id)
 }

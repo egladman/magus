@@ -2,6 +2,7 @@ package cache
 
 import (
 	"bufio"
+	"cmp"
 	"os"
 	"path/filepath"
 	"sort"
@@ -84,26 +85,52 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 		ran         int
 		cached      int
 		totalMs     int64
+		// cmds are the DISTINCT commands the executions ran, from the journal's exec
+		// records. More than one means the runs were not the same work, so "never
+		// replayed" says nothing about the footprint: a different command SHOULD miss.
+		// Measured: `go-test` showed 43 runs and 0 replays, which was twenty different
+		// `-run` filters, most carrying `-count=1`. See the report filter below.
+		cmds map[string]bool
+		// cacheKeys are the DISTINCT cache keys those executions carried. The same argument
+		// applies one level down: a key that differs every run means the INPUTS moved, so
+		// the miss was correct and the cache is doing its job. Only a key that repeats
+		// and still never replays is evidence of a footprint keyed on more than the
+		// target reads. Measured: two generators showed 10 runs and 0 replays after ten
+		// edits to the Go sources they read, which is not a defect at all.
+		//
+		// Empty for a journal written before result events carried the key; the report
+		// filter falls back to the command test rather than guessing.
+		cacheKeys map[string]bool
 	}
 	tallies := map[string]*tally{}
 	for _, path := range journals {
 		// A journal that could not be read whole is skipped entirely: a partial tally can
 		// invent a stalled target by dropping its "cached" records.
 		partial := map[string]*tally{}
-		if err := scanJournal(path, only, func(project, target, status string, durMs int64) {
-			key := project + "\x00" + target
-			t := partial[key]
+		if err := scanJournal(path, only, func(rec journalRecord) {
+			id := rec.project + "\x00" + rec.target
+			t := partial[id]
 			if t == nil {
-				t = &tally{project: displayProject(project), projectPath: project, target: target}
-				partial[key] = t
+				t = &tally{
+					project: displayProject(rec.project), projectPath: rec.project, target: rec.target,
+					cmds: map[string]bool{}, cacheKeys: map[string]bool{},
+				}
+				partial[id] = t
 			}
-			switch status {
+			if rec.kind == "exec" {
+				t.cmds[rec.text] = true
+				return
+			}
+			switch rec.status {
 			case "cached":
 				t.cached++
 			case "pass", "fail":
 				// A failure still executed, so it still proves the cache did not replay.
 				t.ran++
-				t.totalMs += durMs
+				t.totalMs += rec.durationMs
+				if rec.cacheKey != "" {
+					t.cacheKeys[rec.cacheKey] = true
+				}
 			}
 		}); err != nil {
 			continue
@@ -117,11 +144,31 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 			agg.ran += t.ran
 			agg.cached += t.cached
 			agg.totalMs += t.totalMs
+			for cmd := range t.cmds {
+				agg.cmds[cmd] = true
+			}
+			for k := range t.cacheKeys {
+				agg.cacheKeys[k] = true
+			}
 		}
 	}
 
 	var out []Stalled
 	for _, t := range tallies {
+		// More than one distinct command means the runs were not the same work, and a
+		// different command is SUPPOSED to miss. Reporting it would accuse a target of a
+		// footprint it has no evidence against, which is the failure this check exists to
+		// avoid on the other side. It under-reports instead: a target whose args vary AND
+		// whose footprint is wrong stays silent until someone runs it the same way twice.
+		if len(t.cmds) > 1 {
+			continue
+		}
+		// Keys that differ mean the inputs moved, so every miss was correct. This is the
+		// same judgment as the command test, one level down, and it is the one that
+		// separates a broken footprint from an ordinary edit-and-rebuild session.
+		if len(t.cacheKeys) > 1 {
+			continue
+		}
 		if t.cached == 0 && t.ran >= MinRunsForYield && t.totalMs/int64(t.ran) >= MinAvgMsForYield {
 			out = append(out, Stalled{Project: t.project, ProjectPath: t.projectPath, Target: t.target, Runs: t.ran, TotalMs: t.totalMs})
 		}
@@ -130,10 +177,27 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 	return out
 }
 
-// scanJournal feeds each result record in one journal to fn. Journals are append-only
-// and a run killed mid-write leaves a partial final line, so an unparsable line is
-// skipped rather than treated as a corrupt file.
-func scanJournal(path string, only map[string]bool, fn func(project, target, status string, durMs int64)) error {
+// scanJournal feeds each result and exec record in one journal to fn. Journals are
+// append-only and a run killed mid-write leaves a partial final line, so an unparsable
+// line is skipped rather than treated as a corrupt file.
+//
+// exec records carry the command text, which is what lets a caller tell one target run
+// twice from one target run two different ways. A replay writes no exec record, so the
+// text cannot key the tally; it can only qualify it.
+// journalRecord is one result or exec line, as the yield tallies read it. A struct rather
+// than six positional parameters: the list grew twice while answering the same question,
+// and a caller that transposes two strings of the same type gets no compiler error.
+type journalRecord struct {
+	project    string
+	target     string
+	kind       string
+	status     string
+	text       string
+	cacheKey   string
+	durationMs int64
+}
+
+func scanJournal(path string, only map[string]bool, fn func(journalRecord)) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -144,19 +208,32 @@ func scanJournal(path string, only map[string]bool, fn func(project, target, sta
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // captured output lines can be long
 	for sc.Scan() {
 		var rec struct {
-			Kind    string `json:"kind"`
-			Project string `json:"project"`
-			Target  string `json:"target"`
-			Status  string `json:"status"`
-			DurMs   int64  `json:"dur_ms"`
+			Kind       string `json:"kind"`
+			Project    string `json:"project"`
+			Target     string `json:"target"`
+			Status     string `json:"status"`
+			Text       string `json:"text"`
+			CacheKey   string `json:"cache_key"`
+			DurationMs int64  `json:"duration_ms"`
+			// compat: see journal.Event.UnmarshalJSON. This scan decodes into a struct
+			// of its own rather than journal.Event, so it repeats the fallback rather
+			// than inheriting it.
+			LegacyDurationMs int64 `json:"dur_ms"`
 		}
-		if err := json.Unmarshal(sc.Bytes(), &rec); err != nil || rec.Kind != "result" || rec.Target == "" {
+		if err := json.Unmarshal(sc.Bytes(), &rec); err != nil || rec.Target == "" {
+			continue
+		}
+		if rec.Kind != "result" && rec.Kind != "exec" {
 			continue
 		}
 		if len(only) > 0 && !only[rec.Project+"\x00"+rec.Target] {
 			continue
 		}
-		fn(rec.Project, rec.Target, rec.Status, rec.DurMs)
+		fn(journalRecord{
+			project: rec.Project, target: rec.Target, kind: rec.Kind,
+			status: rec.Status, text: rec.Text, cacheKey: rec.CacheKey,
+			durationMs: cmp.Or(rec.DurationMs, rec.LegacyDurationMs),
+		})
 	}
 	// A line over the buffer cap aborts the scan mid-file and otherwise looks like EOF.
 	// Half a journal is worse than none here: dropping a "cached" record while keeping
@@ -184,9 +261,12 @@ func displayProject(p string) string {
 // its own journal and stops.
 func SlowExecutions(journalPath string, minMs int64) map[string]bool {
 	out := map[string]bool{}
-	if err := scanJournal(journalPath, nil, func(project, target, status string, durMs int64) {
-		if (status == "pass" || status == "fail") && durMs >= minMs {
-			out[project+"\x00"+target] = true
+	if err := scanJournal(journalPath, nil, func(rec journalRecord) {
+		if rec.kind != "result" {
+			return
+		}
+		if (rec.status == "pass" || rec.status == "fail") && rec.durationMs >= minMs {
+			out[rec.project+"\x00"+rec.target] = true
 		}
 	}); err != nil {
 		// Same discard-on-error rule as StalledTargets: a journal that could not be

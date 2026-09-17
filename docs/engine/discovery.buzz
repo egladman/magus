@@ -57,7 +57,7 @@ fun llmsIndexBody(pages: mut [DocPage], base: str, title: str) > str {
 }
 
 
-// writeLLMsIndex writes gen/llms.txt from the collected docs corpus. Links are absolute
+// writeLLMsIndex writes gen/llms.txt from the collected docPages. Links are absolute
 // under baseURL when set (so an external agent can follow them), else root-relative.
 export fun writeLLMsIndex(site: Site) > void !> any {
     var base = "/";

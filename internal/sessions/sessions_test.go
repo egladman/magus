@@ -18,7 +18,7 @@ func TestAppendReadRoundTrip(t *testing.T) {
 
 	w, err := Open(dir, "sess1", SessionStart{Workspace: "/repo", Command: "run build"})
 	require.NoError(t, err)
-	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurMs: 12}))
+	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}))
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
@@ -31,7 +31,7 @@ func TestAppendReadRoundTrip(t *testing.T) {
 
 	var got TargetResult
 	require.NoError(t, json.Unmarshal(fold.Records[1].Payload, &got))
-	assert.Equal(t, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurMs: 12}, got)
+	assert.Equal(t, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}, got)
 }
 
 // Open must not create the file: a magus command that records no fact should leave

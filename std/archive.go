@@ -402,6 +402,35 @@ func resolveThreads(opts map[string]any, lim *cache.Limiter) int {
 	return n
 }
 
+// archiveHoldThreads takes the threads an archive op runs with out of the build budget,
+// and returns the count and the release the caller defers.
+//
+// Every build slot the caller holds is handed back while it holds the threads, so peak
+// in-flight stays within the budget (cap) rather than cap+threads-1. A weighted step holds
+// more than one slot, so giving back only one would deadlock the AcquireN on slots it pins
+// itself. The originals are reclaimed uncancellably once the threads are released.
+func archiveHoldThreads(ctx context.Context, opts map[string]any) (threads int, release func(), err error) {
+	lim := cache.LimiterFromContext(ctx)
+	threads = resolveThreads(opts, lim)
+	if lim == nil {
+		return threads, func() {}, nil
+	}
+	held := cache.SlotsHeld(ctx)
+	reclaim := func() {
+		if held > 0 {
+			_ = lim.AcquireN(context.WithoutCancel(ctx), held)
+		}
+	}
+	if held > 0 {
+		lim.ReleaseN(held)
+	}
+	if err := lim.AcquireN(ctx, threads); err != nil {
+		reclaim()
+		return 0, nil, err
+	}
+	return threads, func() { lim.ReleaseN(threads); reclaim() }, nil
+}
+
 func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]any) (types.UncompressResult, error) {
 	if types.Tracing(ctx) {
 		return types.UncompressResult{}, nil
@@ -419,24 +448,11 @@ func ArchiveUncompress(ctx context.Context, src, dest string, opts map[string]an
 		}
 	}
 
-	lim := cache.LimiterFromContext(ctx)
-	threads := resolveThreads(opts, lim)
-
-	if lim != nil {
-		// Hand back every build slot we hold while we hold `threads`, so peak
-		// in-flight stays within the budget (cap) rather than cap+threads-1. A
-		// weighted step holds more than one, so giving back only one would
-		// deadlock the AcquireN below on slots we pin ourselves. Reclaim them
-		// uncancellably after the work completes.
-		if held := cache.SlotsHeld(ctx); held > 0 {
-			lim.ReleaseN(held)
-			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
-		}
-		if err := lim.AcquireN(ctx, threads); err != nil {
-			return types.UncompressResult{}, fmt.Errorf("archive.uncompress: %w", err)
-		}
-		defer lim.ReleaseN(threads)
+	threads, release, err := archiveHoldThreads(ctx, opts)
+	if err != nil {
+		return types.UncompressResult{}, fmt.Errorf("archive.uncompress: %w", err)
 	}
+	defer release()
 	op := proc.SubOpFromContext(ctx)
 	op.Set(archiveSubOpLabel("archive.uncompress", filepath.Base(src), threads))
 	defer op.Set("")
@@ -499,24 +515,11 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 	}
 	dest = filepath.Join(destReal, filepath.Base(dest))
 
-	lim := cache.LimiterFromContext(ctx)
-	threads := resolveThreads(opts, lim)
-
-	if lim != nil {
-		// Hand back every build slot we hold while we hold `threads`, so peak
-		// in-flight stays within the budget (cap) rather than cap+threads-1. A
-		// weighted step holds more than one, so giving back only one would
-		// deadlock the AcquireN below on slots we pin ourselves. Reclaim them
-		// uncancellably after the work completes.
-		if held := cache.SlotsHeld(ctx); held > 0 {
-			lim.ReleaseN(held)
-			defer func() { _ = lim.AcquireN(context.WithoutCancel(ctx), held) }()
-		}
-		if err := lim.AcquireN(ctx, threads); err != nil {
-			return types.CompressResult{}, fmt.Errorf("archive.compress: %w", err)
-		}
-		defer lim.ReleaseN(threads)
+	threads, release, err := archiveHoldThreads(ctx, opts)
+	if err != nil {
+		return types.CompressResult{}, fmt.Errorf("archive.compress: %w", err)
 	}
+	defer release()
 	op := proc.SubOpFromContext(ctx)
 	op.Set(archiveSubOpLabel("archive.compress", filepath.Base(dest), threads))
 	defer op.Set("")

@@ -92,6 +92,23 @@ magus server job sync-graph >/dev/null 2>&1 || true
 Your own hook body, above or below that section, is preserved across every reinstall.
 Delete the section to remove the integration; the next `magus server start` puts it back.
 
+## The drift notice
+
+`post-commit` and `pre-push` carry a second managed section, `magus-drift`, in the same
+shape: post a `check-drift` job, return. The daemon compares the commit's changed sources
+against the outputs they produce and runs `gofmt -l` over its changed, format-governed
+files, then prints the fix and the command that folds it into the offending commit
+(MGS4006 stale output, MGS4009 stale formatting).
+
+It never blocks and never writes to your tree. CI is the check; this is the earlier
+warning. A hook only runs where someone installed it and did not pass `--no-verify`, and
+jj has no hooks at all, so hooks catch three backends on a good day and CI catches
+everything. See [the gate is a commit hook, so it is not a gate](../../concepts/targets/ci.md).
+
+The difference is the feedback loop: CI rejects the same commit ten minutes later on a
+pull request you then have to push again; the notice catches it while it is still the
+commit in front of you.
+
 ## The merge driver, and what it cannot do
 
 Generated files conflict constantly and merge meaninglessly: the correct merge of build

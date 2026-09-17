@@ -44,8 +44,11 @@ func (t *insightTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 	case "unreferenced":
 		// Takes no window: it reads the knowledge graph, not the commit log.
 		data, err = analyzer.Unreferenced(ctx)
+	case "duplication":
+		// No window either, for the same reason.
+		data, err = analyzer.Duplication(ctx)
 	default:
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown insight lens %q (use hotspots, files, affinity, ownership, trend, or unreferenced)", lens)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown insight lens %q (use hotspots, files, affinity, ownership, trend, unreferenced, or duplication)", lens)
 	}
 	if err != nil {
 		toolLogger(ctx).WarnContext(ctx, "mcp: insight computation failed", "error", err)

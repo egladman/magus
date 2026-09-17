@@ -2,55 +2,84 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
         "hooks": [
           {
-            "type": "command",
-            "command": "magus agent hook --host codex",
-            "statusMessage": "magus guard: checking command"
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "statusMessage": "magus guard: checking command",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Bash"
       },
       {
-        "matcher": "Edit|Write",
         "hooks": [
           {
-            "type": "command",
-            "command": "magus agent hook --host codex",
-            "statusMessage": "magus guard: checking file"
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-path.sh",
+            "statusMessage": "magus guard: checking file",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Edit|Write"
       },
       {
-        "matcher": "mcp__.*",
         "hooks": [
           {
-            "type": "command",
-            "command": "magus agent hook --host codex",
-            "statusMessage": "magus guard: checking MCP tool call"
+            "command": "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "statusMessage": "magus guard: checking MCP tool call",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "mcp__.*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-observe.sh",
+            "statusMessage": "magus: recording read",
+            "type": "command"
+          }
+        ],
+        "matcher": "Read"
       }
     ],
     "SessionStart": [
       {
-        "matcher": "compact",
         "hooks": [
           {
-            "type": "command",
             "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-rehydrate.sh\"",
-            "statusMessage": "magus: restating this checkout's rules"
+            "statusMessage": "magus: restating this checkout's rules",
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "compact"
+      },
+      {
+        "hooks": [
+          {
+            "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "statusMessage": "magus: restating this checkout's rules",
+            "type": "command"
+          }
+        ],
+        "matcher": "compact"
       }
     ],
     "Stop": [
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
-            "statusMessage": "magus: recording where the work stands"
+            "command": "__MAGUS_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
+            "statusMessage": "magus: recording where the work stands",
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "statusMessage": "magus: recording where the work stands",
+            "type": "command"
           }
         ]
       }

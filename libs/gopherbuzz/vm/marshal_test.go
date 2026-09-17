@@ -31,11 +31,11 @@ func TestUnmarshalChunk_InvalidData(t *testing.T) {
 	assert.Error(t, err, "UnmarshalChunk(garbage): expected error, got nil")
 }
 
-// marshalCorpus holds programs chosen to cover the encoder's constant kinds and
+// marshalFixtures holds programs chosen to cover the encoder's constant kinds and
 // node shapes (see enc.constVal and enc.node): null/bool/int/float/str constants,
 // enum definitions, object declarations, pattern literals, functions (a nested
 // chunk each), and the control-flow node varieties.
-var marshalCorpus = []struct {
+var marshalFixtures = []struct {
 	name string
 	src  string
 	want string // canonical rendering of the program's result
@@ -83,14 +83,14 @@ func runChunk(t *testing.T, c *vm.Chunk) string {
 }
 
 // TestMarshalRoundTripSemantics is the marshal contract that matters: for every
-// corpus program, (1) the original chunk and the decoded chunk produce the same
+// fixture program, (1) the original chunk and the decoded chunk produce the same
 // result, and (2) re-marshaling the decoded chunk reproduces the original bytes
 // exactly. The byte-stability half is the whole-struct assertion for a Chunk:
 // two chunks that encode identically are identical in every serialized field,
 // with none of the pointer-identity noise a require.Equal on the structs would
 // trip over.
 func TestMarshalRoundTripSemantics(t *testing.T) {
-	for _, c := range marshalCorpus {
+	for _, c := range marshalFixtures {
 		t.Run(c.name, func(t *testing.T) {
 			chunk := compileChunk(t, c.src)
 			require.Equal(t, c.want, runChunk(t, chunk), "original chunk result")
@@ -113,7 +113,7 @@ func TestMarshalRoundTripSemantics(t *testing.T) {
 // blob, AttachDebug folds it back onto a freshly decoded chunk, and a debug blob
 // from a DIFFERENT chunk is rejected rather than silently mismatching lines.
 func TestMarshalDebugRoundTrip(t *testing.T) {
-	chunk := compileChunk(t, marshalCorpus[2].src) // function constants: nested funs exercise the tree walk
+	chunk := compileChunk(t, marshalFixtures[2].src) // function constants: nested funs exercise the tree walk
 	code, err := chunk.Marshal()
 	require.NoError(t, err, "Marshal code")
 	debug, err := chunk.Marshal(vm.DebugOnly())
@@ -162,7 +162,7 @@ func TestExecBytecode(t *testing.T) {
 // is the deterministic, always-on floor for the most common corruption
 // (truncation), and it runs every length rather than sampled ones.
 func TestUnmarshalChunkTruncated(t *testing.T) {
-	data, err := compileChunk(t, marshalCorpus[0].src).Marshal()
+	data, err := compileChunk(t, marshalFixtures[0].src).Marshal()
 	require.NoError(t, err, "Marshal")
 	for n := 0; n < len(data); n++ {
 		c, err := vm.UnmarshalChunk(data[:n])

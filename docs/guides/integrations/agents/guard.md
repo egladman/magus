@@ -9,10 +9,10 @@ tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 Most agent hosts can run a hook before executing a shell command or writing a
 file. magus supplies the rule evaluation; the host supplies the hook that calls
 it. `magus session hook` reads one command or one path, applies the rules, and
-returns a neutral verdict. A harness descriptor can select the tested
-`magus agent hook --host <id>` adapter and its reply template without adding
-host-specific code to Magus; portable hosts can render the neutral verdict
-themselves.
+returns a neutral verdict. A harness descriptor merges opaque host-config
+fragments that already name the shipped scripts or plugin; Magus does not
+inject a reserved command or a reply codec. Portable hosts can render the
+neutral verdict themselves.
 
 Wiring is per host: [Claude Code](claude-code.md), [Codex](codex.md),
 [Cursor](cursor.md), [OpenCode](opencode.md), or
@@ -179,8 +179,66 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   main checkout reached from inside one - denies on the same ground, recognized
   by reading the shared git directory rather than by the path's name: that
   tree's `./magus` was linked from ITS sources and its cache is keyed to ITS
-  tree, so the verdict describes neither checkout. A cd into a genuinely
-  different repository is not denied; that one only draws the `--root` advisory.
+  tree, so the verdict describes neither checkout. That reason outranks the
+  general `cd` deny below, because "do not cd" understates aiming at another
+  tree of this repository.
+- **`cd`**, including a bare `cd <dir>`, `cd <dir> && ...`, a subshell
+  `(cd ... && ...)`, and `bash -c 'cd ...'`. Magus takes the project as an
+  argument; a host shell tool that needs a different directory for one call has
+  a working_directory (or cwd) field. A different workspace is `--root <path>`,
+  not a `cd`. The advise that used to cover only `cd <dir> && magus ...` was
+  tuned out: agents kept prefixing `cd` on every call, which relocates later
+  commands on the line and re-fires shell chpwd hooks.
+- **Workspace-declared shell rules** (`magus\guard.shell({...})` in the root
+  magusfile): additive deny or advise entries matched against the same parsed
+  invocations the built-ins see (`program` plus optional arg subset). They
+  strengthen only - a built-in deny always wins; a workspace deny may escalate a
+  built-in advise or a pass; a workspace advise fills silence only. They cannot
+  disable a compiled rule. Rule ids are recorded as `workspace:<name>` on the
+  verdict. Declared at magusfile load time, never mid-session, and deliberately
+  not `magus.yaml` (runtime knobs) and not a host harness (those are harness
+  spells selected with `magus\harness.provider`; several hosts are fine when you
+  bounce between tools). Optional `dialect` selects the mvdan/sh parser variant
+  for outer parse when judging rules; the last declared non-empty dialect wins.
+  `magus\guard.bash` remains as a deprecated alias that defaults dialect to bash.
+
+| dialect | parser                        |
+| ------- | ----------------------------- |
+| `posix` | POSIX shell                   |
+| `bash`  | GNU Bash (default)            |
+| `mksh`  | MirBSD Korn shell             |
+| `zsh`   | Z shell                       |
+| `bats`  | Bash Automated Testing System |
+
+Example:
+
+```buzz
+magus\guard.shell({
+    name: "no-curl-prod",
+    decision: "deny",
+    program: "curl",
+    args: ["https://prod.example/health"],
+    reason: "Do not hit prod from an agent shell; use staging or a magus job.",
+})
+magus\guard.shell({
+    name: "prefer-terraform-target",
+    decision: "advise",
+    program: "terraform",
+    reason: "Prefer the workspace terraform target: magus run plan <project>.",
+})
+
+import "spells/harness/cursor" as cursor
+import "spells/harness/codex" as codex
+import "spells/harness/claude-code" as claude
+import "spells/harness/opencode" as opencode
+magus\harness.provider(cursor)
+magus\harness.provider(codex)
+magus\harness.provider(claude)
+magus\harness.provider(opencode)
+```
+
+Then `magus agent harness apply` (no `--id`) writes every wired host's fragments.
+
 - **Writing into the workspace's magus cache dir** (`.magus/` by default), on
   either surface and under every role, unbound sessions included. That directory
   holds the files the guard's own verdicts are computed from: the `lease` marker
@@ -264,11 +322,6 @@ hook run failed are `continue`, `stopReason` and `suppressOutput`.
   cannot, and records it on the activity trail. The layout questions
   `git rev-parse` also answers (`--show-toplevel`, `--git-dir`, `--abbrev-ref`)
   pass, because a checkpoint does not replace them.
-- `cd <dir> && magus ...` within the workspace: magus is CWD-relative and the
-  project is always an explicit argument, so the `cd` is how the right command
-  lands on the wrong project. A `cd` into a temp or scratchpad copy is denied
-  instead, because that one changes what the answer means rather than only where
-  it runs.
 - `time magus ...`, `timeout 5m magus ...`, and `magus ... && echo done`: magus
   already reports each target's duration and verdict, already takes `--timeout`,
   and already reports success through its exit status.
@@ -600,14 +653,40 @@ guessed.
 The trail is evidence, not automatic self-modification. By default, `magus agent
 improve` is read-only. It deduplicates only repeated stable denial rules (three
 times in one host session, or across two sessions) and proposes a destination:
-discard it, improve a local skill, update a Magus-owned host harness, or
-report an upstream issue.
+discard it, improve a local skill, adapt a host harness, or report an upstream
+issue.
 
 ```sh
 magus agent improve
 magus agent improve --session <host-session-id> -o json
-magus agent improve --apply --host claude-code
-magus agent improve --apply --host codex
+```
+
+### Buzz harness spells (preferred)
+
+A harness spell is selected by import path. To adapt it without touching Magus
+source or a release binary's embedded spells:
+
+1. Copy `spells/harness/<id>/` (or the path your Magus install documents) into
+   the workspace, e.g. `harness/<id>/`. Keep the spell's stable host id
+   (`mgs_getName()`).
+2. In the root magusfile, change `import "spells/harness/<id>" as host` to
+   `import "harness/<id>" as host`. Leave `magus\harness.provider(host)`.
+3. Edit the workspace Buzz (matchers, managed fragments, guard command).
+4. `magus agent harness apply` then `magus agent harness verify`. Commit the
+   import change and the forked spell together.
+
+That is the ownership switch: Magus ships the default spell; your import path
+chooses which tree apply reads. See the magus-workspace-rules skill section
+"Adapting a Buzz harness".
+
+### JSON descriptors (`improve --apply`)
+
+For hosts still described by `harnesses/<id>.json`, a human may apply
+Magus-owned fragment merges:
+
+```sh
+magus agent improve --apply --id claude-code
+magus agent improve --apply --id codex
 ```
 
 `--apply` is the explicit authorization to write. It updates only Magus-owned
@@ -622,7 +701,10 @@ not a success: pre-tool hooks cannot observe execution or an exit status. After
 a person makes a durable decision, use the existing workspace-rules loop to
 create a memory decision and, when appropriate, a stamped local skill. A host
 harness update is not itself a memory decision. Never relax a compiled guard
-locally.
+locally. To strengthen one for THIS workspace, declare an additive
+`magus\guard.shell({...})` in the root magusfile (deny or advise matched on
+parsed program + args) and commit it; that path cannot disable a built-in.
+`magus\guard.bash` is deprecated; use `guard.shell` instead.
 
 One payload shape is recorded and never judged. A hook event carrying a `prompt`
 rather than a command or a file path is a lease handoff: it appends an

@@ -10,7 +10,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 )
 
 // RegisterFs builds the "fs" module map and returns it.
@@ -25,7 +24,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueFsPathSlice(ret0), nil
+		return ObjectSlice(ret0, ObjectPath), nil
 	}))
 	m.MapSet("dirname", vm.DirectValue("fs.dirname", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
@@ -167,7 +166,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueFsFileInfo(ret0), nil
+		return ObjectFileInfo(ret0), nil
 	}))
 	m.MapSet("copyFile", vm.DirectValue("fs.copyFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := Str(bzArgs, 0)
@@ -258,28 +257,4 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		return vm.Null, nil
 	}))
 	return m
-}
-func buzzValueFsPath(v types.Path) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("value", vm.StrValue(v.Value))
-	out.MapSet("base", vm.StrValue(v.Base))
-	out.MapSet("isDir", vm.BoolValue(v.IsDir))
-	return out
-}
-
-func buzzValueFsPathSlice(values []types.Path) vm.Value {
-	items := make([]vm.Value, len(values))
-	for i, value := range values {
-		items[i] = buzzValueFsPath(value)
-	}
-	return vm.ListValue(items)
-}
-
-func buzzValueFsFileInfo(v types.FileInfo) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("size", vm.IntValue(int64(v.Size)))
-	out.MapSet("mtime", vm.FloatValue(float64(v.Mtime)))
-	out.MapSet("mode", vm.IntValue(int64(v.Mode)))
-	out.MapSet("is_dir", vm.BoolValue(v.IsDir))
-	return out
 }

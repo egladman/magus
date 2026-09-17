@@ -115,7 +115,7 @@ func (r *RunRegistry) fold(e journal.Event) {
 		t.State = resultState(e.Status)
 		t.EndedAt = time.UnixMilli(e.Ts)
 		t.OutputRef = e.Ref
-		t.DurationMs = e.DurMs
+		t.DurationMs = e.DurationMs
 		if t.StartedAt.IsZero() {
 			// A cache hit produces a result with no preceding exec; anchor its start so the
 			// dashboard has a sensible start time.

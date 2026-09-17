@@ -210,6 +210,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		}
 		cfg.Knowledge.Workspaces = out
 	}
+	if v := getenv("MAGUS_KNOWLEDGE_PUBLISHED_REF"); v != "" {
+		cfg.Knowledge.PublishedRef = v
+	}
 	if v := getenv("MAGUS_KNOWLEDGE_MAX_SIZE_MB"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Knowledge.MaxSizeMB = n
@@ -239,6 +242,32 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Knowledge.SymbolIndexing.MinIntervalSeconds = n
 		}
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Knowledge.Duplication.MinCallees = n
+		}
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Knowledge.Duplication.MinShared = n
+		}
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.Knowledge.Duplication.MinScore = f
+		}
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			cfg.Knowledge.Duplication.MinSpanRatio = f
+		}
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS"); v != "" {
+		cfg.Knowledge.Duplication.IncludeTests = parseBoolEnv(v, cfg.Knowledge.Duplication.IncludeTests)
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_SESSIONS_DISABLED"); v != "" {
+		cfg.Knowledge.Sessions.Disabled = parseBoolEnv(v, cfg.Knowledge.Sessions.Disabled)
 	}
 	if v := getenv("MAGUS_KNOWLEDGE_NOTES_SHARED"); v != "" {
 		cfg.Knowledge.Notes.Shared = v

@@ -51,7 +51,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 1, Kind: trail.KindMCPToolCall, Actor: "claude", UserAgent: "claude-code/1.2.3",
 		Action: "magus_query", Outcome: trail.OutcomeOK,
-		ResponseRef: respRef, Preview: "the result body", DurMs: 12,
+		ResponseRef: respRef, Preview: "the result body", DurationMs: 12,
 	})
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 2, Kind: trail.KindTokenLifecycle, Actor: "cli",
@@ -59,7 +59,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	})
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 3, Kind: trail.KindJob, Actor: "daemon", Workspace: "/ws/a",
-		Action: "graph build", Outcome: trail.OutcomeError, Error: "boom", DurMs: 40,
+		Action: "graph build", Outcome: trail.OutcomeError, Error: "boom", DurationMs: 40,
 	})
 	agentReqBody := []byte(`{"schema_version":1,"tool":"Bash","command":"go test ./..."}`)
 	agentRespBody := []byte(`{"schema_version":1,"decision":"deny","reason":"use magus"}`)

@@ -102,10 +102,11 @@ func attentionList(root string, args []string) error {
 	case outputText:
 		return renderAttentionText(requests, dir)
 	case outputName:
+		names := make([]string, 0, len(requests))
 		for _, req := range requests {
-			fmt.Println(req.ID)
+			names = append(names, req.ID)
 		}
-		return nil
+		return emitNames(names)
 	}
 	return emitFormatted(opts, attentionListOutput{Requests: requests, Store: dir})
 }

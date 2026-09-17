@@ -16,11 +16,12 @@ no expiry, no severity inference and no auto\-dispose flag, because a request
 magus could answer by itself would not have needed a person \- see the doctrine
 page.
 .PP
-Agent hosts write it. Their hooks pipe every event through `session hook`
-(one command or path, judged against the guard rules and recorded) and
-`session notify` (one attention event, normalized; a waiting or permission
-outcome opens a durable request). No person types those two; they exist to be
-wired.
+Agent hosts write it. Their hooks pipe every judged command through `magus shell`,
+which records what it judged, and every attention event through `session notify`
+(normalized; a waiting or permission outcome opens a durable request). No person
+types notify; it exists to be wired. `magus shell` is the exception, and
+deliberately so: it is the same command a person runs to ask what this workspace
+would rather they ran.
 .PP
 The store is keyed by repository identity rather than by checkout path, so
 every git worktree of one repo reads and writes the same records \- what
@@ -67,30 +68,6 @@ Read the event stream from this file instead of stdin
 \fB\-\-reason\fR \fIstring\fR
 Record why the request is being closed, alongside the disposition
 .RE
-.SS session hook options
-.RS
-.TP
-\fB\-\-agent\-name\fR \fIstring\fR
-Name of the agent host this invocation came from (attribution only)
-.TP
-\fB\-\-event\fR \fIstring\fR
-The host's hook event name (e.g. PreToolUse)
-.TP
-\fB\-\-lease\fR \fIstring\fR
-The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)
-.TP
-\fB\-\-observe\fR
-Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
-.TP
-\fB\-\-path\fR
-Judge the input as a file path an edit is about to write, not as a shell command
-.TP
-\fB\-\-session\fR \fIstring\fR
-The host's own session id for this invocation
-.TP
-\fB\-\-transcript\fR \fIstring\fR
-Path to the host's own log of this session, recorded as a pointer; magus never opens it
-.RE
 .SS session checkpoint options
 .RS
 .TP
@@ -136,9 +113,6 @@ List the open requests agents raised, oldest first; with \-q, print nothing and 
 \fBdispose\fR
 Close one open request by id or unambiguous id prefix
 .TP
-\fBhook\fR
-Evaluate one shell command or file path against the magus guard rules
-.TP
 \fBcheckpoint\fR
 Record where the work stands, so it can be picked up later
 .TP
@@ -149,13 +123,13 @@ Normalize an attention event and optionally notify the local desktop
 .RS
 .TP
 \fB0\fR
-Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; \-\-observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best\-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0.
+Sessions or requests were listed, a request was disposed, or an event was normalized and emitted. A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best\-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0.
 .TP
 \fB1\fR
 dispose: the request named is not in the store, or was already disposed; a request closes once and stays closed. attention with \-q: the queue is empty, so a prompt or watch loop can branch on status instead of parsing the listing. notify: stdin could not be read. Text that is not a complete event envelope becomes the event's message rather than an error. load: at least one line was rejected; usable lines are still loaded and the summary is printed, so fix the adapter and run it again. show: the session named has no loaded events.
 .TP
 \fB2\fR
-Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command \- deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases.
+Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id.
 .RE
 .SH EXAMPLES
 \fIShow recent sessions\fR
@@ -212,24 +186,6 @@ magus session attention -q
 magus session dispose att-3f9c -reason "approved and pushed by hand"
 .EE
 .PP
-\fIJudge a shell command (host\-wired)\fR
-.PP
-.EX
-printf '%s' 'go build ./...' | magus session hook
-.EE
-.PP
-\fIRecord a path an agent read, without judging it\fR
-.PP
-.EX
-printf '%s' 'internal/cache/output.go' | magus session hook --observe
-.EE
-.PP
-\fIGrade a write as a lease\fR
-.PP
-.EX
-printf '%s' 'internal/ledger/store.go' | magus session hook --path --lease f2-guard
-.EE
-.PP
 \fIRaise a permission prompt on the desktop (host\-wired)\fR
 .PP
 .EX
@@ -253,6 +209,7 @@ printf '%s\(rsn' 'needs approval' | magus session notify --outcome permission --
 \fBmagus\-events\fR(1),
 \fBmagus\-status\fR(1),
 \fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
 \fBmagus\-vcs\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),

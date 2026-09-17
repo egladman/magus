@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, bound fan-out depth, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28509
-skill_short_bytes: 20278
+skill_full_bytes: 32645
+skill_short_bytes: 24257
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `70` |
-| `knowledge-schema-version` | `12` |
-| `skill-content` | `25ae796440e5` |
+| `agent-skill-version` | `82` |
+| `knowledge-schema-version` | `13` |
+| `skill-content` | `c9e5e6b4be94` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -161,9 +161,27 @@ it a definitive end:
   the callers in no project belong to nobody, so every job passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the job. That is the whole rule, and it runs both ways:
-a mechanical rename does not need the strongest model available, and an ambiguous
-API boundary does not get the cheapest one because it looked like less work.
+Pick the model that FITS the job, and SAY which one. That is the whole rule, and it
+runs both ways: a mechanical rename does not need the strongest model available, and
+an ambiguous API boundary does not get the cheapest one because it looked like less
+work.
+
+Naming it is the half that is checkable. Every spawn names a model, or names an agent
+definition that names one. Inheriting the parent's model ON PURPOSE is fine and often
+right, since a hard review under a cheaper coordinator is exactly the case an ordering
+rule would forbid. Inheriting it BY OMISSION is the failure: a host whose default is
+"same as the parent" turns every unnamed spawn into the most expensive one available,
+and nothing afterwards records that no choice was made.
+
+ASK THE HUMAN when the right model is unclear, before spawning rather than after the
+budget is spent. There is no ordering rule to fall back on: "only ever spawn something
+weaker" was tried and withdrawn, because same-strength offload is legitimate. So an
+unclear case is a question, not a default.
+
+Model NAMES belong to the host, never to magus: they change faster than any table here
+could track. Name the model your host names, or point the spawn at an agent definition
+the user owns. Where the host has a default-subagent setting, setting it is what makes
+omission cheap instead of expensive.
 
 Map work to provider capabilities without assuming model names:
 
@@ -247,11 +265,11 @@ tree is not clean) - and keep descendants in the same store. Fork each one with
 the `magus_job` tool from the orchestrating agent, or `magus job fork` from a
 person at a terminal:
 
-| Job | Parent | Checkpoint | Goal and acceptance criteria | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
+| Job | Parent | Checkpoint | Criteria | Completion gates | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 Render the prompt FROM the row rather than typing it: `magus describe job <job>`
-prints the job's own goal, boundary and check, plus what the workspace knows
+prints the job's own criteria, boundary and check, plus what the workspace knows
 and nobody wrote down. Two renders
 of one row are byte-identical, which hand-typed prompts are not. It
 REFUSES a job whose check is the gate, or a target that chains to one.
@@ -353,6 +371,64 @@ row ends in pass, fail, or NO-RETURN, and the root writes which: silence is not 
 Make acceptance criteria observable: named tests,
 artifacts, diagnostics, API behavior, or review checks. A child that hands work on must
 evaluate its descendants before reporting upward.
+
+## Declare the criteria magus can check for you
+
+A job's acceptance criteria are prose a reader grades. A COMPLETION GATE is the
+part magus grades itself, from evidence the worker cannot author, and `magus job
+wait` refuses to record pass until every one verifies. Declare them at fork:
+
+```sh
+magus job fork api/migrate \
+  --gate-check green='go-test api' \
+  --gate-paths migration='db/migrations/**' \
+  --gate-symbol-unreferenced unused='LegacyAccountStore'
+```
+
+A gate names WHAT it examines and what must be true of it:
+
+| kind     | expects                                         | read from                                      |
+| -------- | ----------------------------------------------- | ---------------------------------------------- |
+| `check`  | `passed`                                        | a recorded run, captured after the declaration |
+| `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
+| `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
+
+Each kind has a default expectation, so the common gate declares only its
+subject; the other flags spell it out (`--gate-paths-present`,
+`--gate-symbol-absent`, ...). `magus job fork -h` lists them all.
+
+Reach for `symbol` + `unreferenced` when partitioning a rename. It is the REMAINDER rule
+made checkable: split per project and the callers in no project belong to no job,
+so every job passes and the rename is unfinished.
+
+Every kind reads what magus already holds, which is what makes a gate a contract
+rather than an attestation. There is no escape hatch for "this command exited 0",
+deliberately: magus did not record that run and cannot attribute it, so it would
+be the easiest gate of all to satisfy falsely. Declare a target and use `check`.
+
+The worker's own `changed_paths` is its account of its work and is never the
+evidence. An observation magus could not MAKE fails the gate rather than passing
+it, because the cheapest way past a gate that shrugged would be to break the
+observation.
+
+Ask where a job stands without advancing it:
+
+```sh
+magus describe job <job> --gates
+```
+
+Same grading `magus job wait` does, recording nothing, exit 1 while any gate is
+unmet. Use it instead of asking a worker how it is going: the answer is graded
+from evidence rather than composed by the thing being asked about.
+
+SEQUENCE gates with `depends_on` between them, which is how one is cleared
+before another is approached; a failed prerequisite propagates. Do NOT nest
+them: a gate that wants children is a JOB that wants splitting, and the rule
+above already covers it. Gates stay flat so the job tree stays the only
+hierarchy with an owner.
+
+A gate is not the gate. `--gate-check` still may not name `ci` or anything that
+chains to it, for the reason the check rule gives above.
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the
@@ -519,7 +595,7 @@ Run this control loop:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
-3. Give every job its own goal, ownership boundary, and acceptance criteria.
+3. Give every job its own criteria, ownership boundary, and completion gates.
 4. Hand out work within one global cost and concurrency budget.
 5. Observe agents and Magus processes through their separate control planes.
 6. Evaluate evidence, revise ownership or ordering when assumptions change, and
@@ -593,12 +669,31 @@ it a definitive end:
   the callers in no project belong to nobody, so every job passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the job. That is the whole rule, and it runs both ways:
-a mechanical rename does not need the strongest model available, and an ambiguous
-API boundary does not get the cheapest one because it looked like less work.
-Matching the model to the work is the only cost decision worth making here - past
-that, cost is not your call to agonize over, and a job done badly by an
+Pick the model that FITS the job, and SAY which one. That is the whole rule, and it
+runs both ways: a mechanical rename does not need the strongest model available, and
+an ambiguous API boundary does not get the cheapest one because it looked like less
+work. Matching the model to the work is the only cost decision worth making here -
+past that, cost is not your call to agonize over, and a job done badly by an
 under-powered worker costs more than the model it saved.
+
+Naming it is the half that is checkable. Every spawn names a model, or names an agent
+definition that names one. Inheriting the parent's model ON PURPOSE is fine and often
+right, since a hard review under a cheaper coordinator is exactly the case an ordering
+rule would forbid. Inheriting it BY OMISSION is the failure: a host whose default is
+"same as the parent" turns every unnamed spawn into the most expensive one available,
+and nothing afterwards records that no choice was made. Measured 2026-09-15: nine
+workers spawned in one session, every one inheriting the root's model, five of them
+mechanical work a cheaper model does as well.
+
+ASK THE HUMAN when the right model is unclear, before spawning rather than after the
+budget is spent. There is no ordering rule to fall back on: "only ever spawn something
+weaker" was tried and withdrawn, because same-strength offload is legitimate. So an
+unclear case is a question, not a default.
+
+Model NAMES belong to the host, never to magus: they change faster than any table here
+could track. Name the model your host names, or point the spawn at an agent definition
+the user owns. Where the host has a default-subagent setting, setting it is what makes
+omission cheap instead of expensive.
 
 Map work to provider capabilities without assuming model names:
 
@@ -691,11 +786,11 @@ indistinguishable to everything that reads them:
 The same checkpoint is what a later incremental re-review diffs from (see the
 magus-change-summary skill) - review time and pickup time read the same object.
 
-| Job | Parent | Checkpoint | Goal and acceptance criteria | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
+| Job | Parent | Checkpoint | Criteria | Completion gates | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 Render the prompt FROM the row rather than typing it: `magus describe job <job>`
-prints the job's own goal, boundary and check, plus what the workspace knows
+prints the job's own criteria, boundary and check, plus what the workspace knows
 and nobody wrote down - the projects the write paths reach, the declared
 output globs that land inside them, the paths a sibling job is holding, the build
 inputs and workspace configuration that have one owner, and the projects that
@@ -840,6 +935,64 @@ artifacts, diagnostics, API behavior, or specific review checks over phrases suc
 as "works correctly." A child that hands work on remains responsible for evaluating
 its descendants before reporting upward. The root still verifies the combined
 result independently.
+
+## Declare the criteria magus can check for you
+
+A job's acceptance criteria are prose a reader grades. A COMPLETION GATE is the
+part magus grades itself, from evidence the worker cannot author, and `magus job
+wait` refuses to record pass until every one verifies. Declare them at fork:
+
+```sh
+magus job fork api/migrate \
+  --gate-check green='go-test api' \
+  --gate-paths migration='db/migrations/**' \
+  --gate-symbol-unreferenced unused='LegacyAccountStore'
+```
+
+A gate names WHAT it examines and what must be true of it:
+
+| kind     | expects                                         | read from                                      |
+| -------- | ----------------------------------------------- | ---------------------------------------------- |
+| `check`  | `passed`                                        | a recorded run, captured after the declaration |
+| `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
+| `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
+
+Each kind has a default expectation, so the common gate declares only its
+subject; the other flags spell it out (`--gate-paths-present`,
+`--gate-symbol-absent`, ...). `magus job fork -h` lists them all.
+
+Reach for `symbol` + `unreferenced` when partitioning a rename. It is the REMAINDER rule
+made checkable: split per project and the callers in no project belong to no job,
+so every job passes and the rename is unfinished.
+
+Every kind reads what magus already holds, which is what makes a gate a contract
+rather than an attestation. There is no escape hatch for "this command exited 0",
+deliberately: magus did not record that run and cannot attribute it, so it would
+be the easiest gate of all to satisfy falsely. Declare a target and use `check`.
+
+The worker's own `changed_paths` is its account of its work and is never the
+evidence. An observation magus could not MAKE fails the gate rather than passing
+it, because the cheapest way past a gate that shrugged would be to break the
+observation.
+
+Ask where a job stands without advancing it:
+
+```sh
+magus describe job <job> --gates
+```
+
+Same grading `magus job wait` does, recording nothing, exit 1 while any gate is
+unmet. Use it instead of asking a worker how it is going: the answer is graded
+from evidence rather than composed by the thing being asked about.
+
+SEQUENCE gates with `depends_on` between them, which is how one is cleared
+before another is approached; a failed prerequisite propagates. Do NOT nest
+them: a gate that wants children is a JOB that wants splitting, and the rule
+above already covers it. Gates stay flat so the job tree stays the only
+hierarchy with an owner.
+
+A gate is not the gate. `--gate-check` still may not name `ci` or anything that
+chains to it, for the reason the check rule gives above.
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the

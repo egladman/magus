@@ -61,10 +61,11 @@ func describeModules(args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, types.ModuleReport{Definition: types.ModuleDefinition, Count: len(out), Modules: out})
 	case outputName:
+		names := make([]string, 0, len(out))
 		for _, m := range out {
-			fmt.Println(m.Name)
+			names = append(names, m.Name)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide

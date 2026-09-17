@@ -194,12 +194,13 @@ func describeTools(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, report)
 	case outputName:
+		// project/bin, because a bare bin repeats once per project that drives it and
+		// cannot be fed back to `magus describe tools <project>`.
+		names := make([]string, 0, len(report.Tools))
 		for _, t := range report.Tools {
-			// project/bin, because a bare bin repeats once per project that drives it and
-			// cannot be fed back to `magus describe tools <project>`.
-			fmt.Println(t.Project + "/" + t.Bin)
+			names = append(names, t.Project+"/"+t.Bin)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide

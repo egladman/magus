@@ -44,8 +44,8 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run build", Version: "test-version"})
 	require.NotNil(t, h)
 
-	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurMs: 20, Ref: "out1"})
-	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail, DurMs: 5})
+	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
+	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail, DurationMs: 5})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "lint", Project: "web", Status: journal.StatusCached})
 
 	dir, err := Dir(root)
@@ -72,7 +72,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 
 	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run ci"})
 	require.NotNil(t, h)
-	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurMs: 20, Ref: "out1"})
+	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "lint", Project: "web", Status: journal.StatusCached})
 
@@ -84,7 +84,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	require.Len(t, summaries, 1)
 
 	assert.Equal(t, []TargetResult{
-		{Target: "build", Project: "api", Outcome: OutcomePass, DurMs: 20, Ref: "out1"},
+		{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 20, Ref: "out1"},
 		{Target: "test", Project: "api", Outcome: OutcomeFail},
 		{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true},
 	}, summaries[0].Targets)

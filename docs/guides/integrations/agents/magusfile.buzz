@@ -25,6 +25,9 @@ import "magus";
 import "os";
 
 import "proc";
+// fs enumerates the shell templates for shellcheck, so adding one does not mean
+// remembering to add it to a list.
+import "fs";
 // magusfile binds this file's exported targets; bash adds shellcheck for the sh
 // templates; ts adds the TypeScript spell so the plugin is
 // symbol-capable (its `scip` op indexes it for the knowledge graph). ts is opaque - pnpm owns
@@ -50,7 +53,23 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
-// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.
+//
+// A GENERATOR where every other Cursor schema in that tree is a hand transcription, which
+// is the point: a transcription is partial by construction and goes stale in silence, and
+// this one cannot, because its source is a pinned package and the drift gate compares the
+// output byte for byte.
+//
+// The output lands in the ROOT project's testdata, because that is where the host schemas
+// live and where host_schema_test.go reads them. Declared with writesFiles so the snapshot
+// covers it and a cross-project write is not a surprise.
+export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(preflight);
+    ctx.writesFiles("../../../../testdata/hosts/cursor/gen/*.schema.json");
+    proc\exec("pnpm", ["run", "cursor-schemas"], ".", {});
+}
+
+// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
 // that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation
@@ -71,10 +90,16 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // The shell templates are POSIX sh that users copy into their own hook config, so
     // they get the same scrutiny as the TypeScript: shellcheck in sh mode catches the
     // bashisms that would break on a host whose /bin/sh is dash.
-    proc\exec("shellcheck", ["--shell=sh", "--severity=style",
-                          "magus-guard-command.sh", "magus-guard-path.sh", "cursor-guard.sh",
-                          "magus-session-load-claude-code.sh", "magus-session-load-codex.sh",
-                          "magus-session-load-opencode.sh"], ".", {});
+    // GLOBBED, not enumerated. The hand-written list this replaced named six of the nine
+    // scripts here: magus-hook-observe.sh, magus-rehydrate.sh and magus-checkpoint.sh
+    // were added later and never joined it, so the three that run on every Read, every
+    // compaction and every Stop were the unchecked ones. A list that must be edited when a
+    // file is added is a list that stops matching the directory.
+    var shell_args = mut ["--shell=sh", "--severity=style"];
+    foreach (script in fs\glob("*.sh")) {
+        shell_args.append(script.value);
+    }
+    proc\exec("shellcheck", shell_args, ".", {});
 }
 
 // test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level

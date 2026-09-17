@@ -16,9 +16,16 @@ export fun mgs_getName() > str { return "typescript"; }
 export fun mgs_listRequiredGlobs() > [Path] {
     // tsconfig*.json is listed explicitly even though the broader **/*.json below
     // already matches it - self-documenting rather than riding along by accident.
+    //
+    // pnpm-workspace.yaml sits beside .npmrc because pnpm 10.16 moved settings into it,
+    // and those settings decide what an install DOES: the minimum-release-age gate this
+    // workspace relies on lives there now. A .yaml matches none of the globs above, so
+    // without this entry a project could move its supply-chain policy into that file and
+    // every target would keep replaying the verdict it reached under the old one.
     return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.mts"}, Path{value = "**/*.cts"}, Path{value = "**/*.js"}, Path{value = "**/*.jsx"},
             Path{value = "**/*.mjs"}, Path{value = "**/*.cjs"}, Path{value = "**/*.json"}, Path{value = "tsconfig*.json"}, Path{value = "package.json"},
-            Path{value = ".npmrc"}, Path{value = "pnpm-lock.yaml"}, Path{value = "package-lock.json"}, Path{value = "npm-shrinkwrap.json"},
+            Path{value = ".npmrc"}, Path{value = "pnpm-workspace.yaml"},
+            Path{value = "pnpm-lock.yaml"}, Path{value = "package-lock.json"}, Path{value = "npm-shrinkwrap.json"},
             Path{value = "yarn.lock"}, Path{value = "bun.lockb"}];
 }
 
@@ -223,21 +230,23 @@ fun vitest(target: Target) > Command {
 fun devServer(target: Target) > Service {
     return Service{command = Command{bin = "pnpm", args = ["run", "dev"]}};
 }
-// scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge
-// graph. The indexer is a PATH binary (install it with mise, not as a project dep), so
-// the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination,
-// so the index never lands in the tree; scip-typescript writes there via --output. The
-// runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no
-// shell is needed to expand it.
-fun scip(target: Target) > Command {
-    return Command{bin = "scip-typescript", args = ["index", "--output", "$MAGUS_SYMBOL_INDEX"]};
-}
-
 // mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because
 // dev-server mixes in a Service-returning op alongside the Command-returning ones.
 export fun mgs_listTargets() > any {
     return {"biome-check": biomeCheck, "biome-format": biomeFormat,
             "eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc,
             "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest,
-            "dev-server": devServer, "scip": scip};
+            "dev-server": devServer};
+}
+
+// The indexer is a PATH binary (install it with mise, not as a project dep), so it is
+// forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the
+// index never lands in the tree; scip-typescript writes there via --output. The runner
+// resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is
+// needed to expand it.
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{
+        format = SymbolFormat.scip,
+        command = Command{bin = "scip-typescript", args = ["index", "--output", "$MAGUS_SYMBOL_INDEX"]},
+    };
 }

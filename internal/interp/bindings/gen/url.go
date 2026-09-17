@@ -8,7 +8,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std/encoding/url"
-	"github.com/egladman/magus/types"
 )
 
 // RegisterUrl builds the "url" module map and returns it.
@@ -39,7 +38,7 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueUrlURL(ret0), nil
+		return ObjectURL(ret0), nil
 	}))
 	m.MapSet("build", vm.DirectValue("url.build", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		parts := AnyMap(bzArgs, 0)
@@ -50,14 +49,4 @@ func RegisterUrl(ctx context.Context, sess *buzz.Session) vm.Value {
 		return StrVal(ret0), nil
 	}))
 	return m
-}
-func buzzValueUrlURL(v types.URL) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("scheme", vm.StrValue(v.Scheme))
-	out.MapSet("host", vm.StrValue(v.Host))
-	out.MapSet("port", vm.StrValue(v.Port))
-	out.MapSet("path", vm.StrValue(v.Path))
-	out.MapSet("query", vm.StrValue(v.Query))
-	out.MapSet("fragment", vm.StrValue(v.Fragment))
-	return out
 }

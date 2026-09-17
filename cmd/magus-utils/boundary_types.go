@@ -3,6 +3,7 @@ package main
 //go:generate go run . enums -package types -out ../../types/enum_gen.go
 //go:generate go run . enums -package spells -out ../../spells/enum_gen.go
 //go:generate go run . boundarylist -out ../../internal/interp/bindings/gen/boundary_list.go
+//go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go
 
 import (
 	"reflect"
@@ -25,8 +26,15 @@ var boundaryTypes = []boundaryType{
 	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
 	// Leaf first: Command.hints is [Hint], so Hint must already be declared.
 	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},
-	{Name: "Command", Type: reflect.TypeFor[spells.Command]()},
+	// RuntimeObject on both: a resolved spell is handed back to Buzz as a handle, and the
+	// encoder for that has to be GENERATED from this registry rather than hand-written
+	// beside it. A hand-written one drops a field the moment the struct grows one, silently
+	// and only on the round trip, which is how SymbolIndexer went missing from a handle
+	// while the decoder still demanded it.
+	{Name: "Command", Type: reflect.TypeFor[spells.Command](), RuntimeObject: true},
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
+	// Must follow Command: SymbolIndexer.command is one.
+	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer](), RuntimeObject: true},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
@@ -117,7 +125,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
 	// Not RuntimeObject: unlike their insight-bundle siblings above, nothing declares
 	// these for Buzz (no gen/decls entry reaches them), so no method call ever surfaces
-	// one as a typed return; moduledecls.go's KnowledgeGodNode comment is the fossil
+	// one as a typed return; module_decls.go's KnowledgeGodNode comment is the fossil
 	// of that gap (an `in:` field that shipped unparsable because nothing checked it).
 	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode]()},
 	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan]()},
@@ -125,9 +133,17 @@ var boundaryTypes = []boundaryType{
 	{Name: "KnowledgeStats", Type: reflect.TypeFor[types.KnowledgeStats]()},
 	{Name: "ProjectRef", Type: reflect.TypeFor[types.ProjectRef](), RuntimeObject: true},
 	{Name: "KnowledgeSymbolGap", Type: reflect.TypeFor[types.KnowledgeSymbolGap](), RuntimeObject: true},
+	// Registered because KnowledgeAnswer carries it: a struct field on a registered Buzz
+	// object must itself be registered, or the generated encoder calls one the field's
+	// type does not have.
+	{Name: "KnowledgeTextPresence", Type: reflect.TypeFor[types.KnowledgeTextPresence](), RuntimeObject: true},
 	{Name: "KnowledgeAnswer", Type: reflect.TypeFor[types.KnowledgeAnswer](), RuntimeObject: true},
 	{Name: "UnreferencedEntry", Type: reflect.TypeFor[types.UnreferencedEntry](), RuntimeObject: true},
 	{Name: "Unreferenced", Type: reflect.TypeFor[types.UnreferencedOutput](), RuntimeObject: true},
+	{Name: "DuplicationSite", Type: reflect.TypeFor[types.DuplicationSite](), RuntimeObject: true},
+	{Name: "DuplicationGroup", Type: reflect.TypeFor[types.DuplicationGroup](), RuntimeObject: true},
+	{Name: "DuplicationHistory", Type: reflect.TypeFor[types.DuplicationHistory](), RuntimeObject: true},
+	{Name: "Duplication", Type: reflect.TypeFor[types.DuplicationOutput](), RuntimeObject: true},
 	{Name: "InsightReport", Type: reflect.TypeFor[types.InsightReport](), RuntimeObject: true},
 	{Name: "ImpactCoverage", Type: reflect.TypeFor[types.ImpactCoverage](), RuntimeObject: true},
 	{Name: "ImpactSymbol", Type: reflect.TypeFor[types.ImpactSymbol](), RuntimeObject: true},
@@ -268,6 +284,11 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "DiagnosticFormat",
 		Type:  reflect.TypeFor[spells.DiagnosticFormat](),
 		Cases: []enumCase{{"none", ""}, {"gnu", "gnu"}},
+	},
+	{
+		Name:  "SymbolFormat",
+		Type:  reflect.TypeFor[spells.SymbolFormat](),
+		Cases: []enumCase{{"none", ""}, {"scip", "scip"}},
 	},
 	{
 		Name:  "External",

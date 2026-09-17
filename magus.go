@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -29,7 +30,7 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -85,7 +86,19 @@ type Magus struct {
 	warmGraphOnce sync.Once
 	warmGraph     *warmGraph
 
+	// publishedShards is the read-only knowledge-shard source UsePublishedShards installs,
+	// which is after Open or Inspect has returned: the destination comes from config a
+	// command reads, not from a workspace fact. Atomic because every later graph build
+	// reads it, and the daemon builds on its own goroutines.
+	publishedShards atomic.Pointer[knowledge.RemoteShards]
+
 	symbolStatus symbolStatusCache
+
+	// probeCache backs freshnessCache on an Inspect-constructed workspace, which has no
+	// cache of its own. Opened at most once, because the handle carries the mtime-keyed
+	// hash memo: a second probe in the same process re-stats rather than re-hashes.
+	probeCacheOnce sync.Once
+	probeCache     *cache.Cache
 
 	wsReg *WorkspaceRegistry
 
@@ -652,6 +665,24 @@ func (m *Magus) Root() string                   { return m.ws.Root }
 func (m *Magus) All() []*types.Project          { return m.ws.All() }
 func (m *Magus) Get(path string) *types.Project { return m.ws.Get(path) }
 func (m *Magus) Graph() (*types.Graph, error)   { return dependency.Build(m.ws) }
+
+// ShellRules returns additive agent-guard rules the root magusfile declared via
+// magus\guard.shell, or nil. `magus shell` reads these after Inspect.
+func (m *Magus) ShellRules() []workspace.ShellRule {
+	if m.wsReg == nil {
+		return nil
+	}
+	return m.wsReg.ShellRules()
+}
+
+// Harnesses returns agent-harness spell names the root magusfile wired via
+// magus\harness.provider, or nil.
+func (m *Magus) Harnesses() []string {
+	if m.wsReg == nil {
+		return nil
+	}
+	return m.wsReg.Harnesses()
+}
 
 // SetGraphObserver installs an observer on the workspace; pass nil to clear.
 func (m *Magus) SetGraphObserver(o types.Observer) {
@@ -1415,7 +1446,7 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 		IgnoreDirs:      ignoreDirs,
 		Outputs:         outputs,
 		WorkspaceRoot:   m.ws.Root,
-		SpellDefVersion: spellruntime.BuiltinsHash(),
+		SpellDefVersion: spell.BuiltinsHash(),
 		Label:           types.ProjectDisplayName(p.Path, p.Name, p.Dir),
 	}
 }

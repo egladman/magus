@@ -1,9 +1,12 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
@@ -79,6 +82,32 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	assert.Contains(t, out.String(), "magus_job")
 }
 
+// TestPrintJobStatusFailedGateNamesHowToReadIt pins the completion-gates plan's
+// step 3: a failed gate named an output ref but not how to read it, leaving the
+// holder to reconstruct `magus query output <ref>` by hand. The line must be
+// rendered through hint.QueryOutput (never a hardcoded string), and must appear
+// only for a gate that actually failed and actually carries a ref.
+func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
+	t.Parallel()
+
+	status := job.Status{
+		Job:        "plan",
+		Violations: []string{`completion gate "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
+		Gates: []types.GateStatus{
+			{ID: "ci", Verified: false, OutputRef: "outdeadbeef"},
+			{ID: "lint", Verified: true, OutputRef: "outfeedface"},
+		},
+	}
+
+	var out strings.Builder
+	printJobStatus(&out, status)
+	got := out.String()
+
+	assert.Contains(t, got, "completion gate ci: rejected (outdeadbeef)")
+	assert.Contains(t, got, "magus query output outdeadbeef", "a failed gate must name how to read its ref")
+	assert.NotContains(t, got, "magus query output outfeedface", "a verified gate needs no query-output line")
+}
+
 // Explain resolves a bare name fuzzily, which is right for a person typing
 // `magus explain build` and wrong for evidence: asked for "cmd/magus" it once answered
 // target:.:release-sign, and a blast radius from an unrelated node is worse than silence.
@@ -132,21 +161,21 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	t.Parallel()
 
 	flags := forkFlags{
-		goal:       "the store is the enforcement point",
+		criteria:   "the store is the enforcement point",
 		parent:     "adjacency",
 		checkpoint: "cf5509d09",
-		writePaths: pathList{"internal/ledger", "types/lease.go"},
-		denyPaths:  pathList{"MAGUS.md"},
-		readPaths:  pathList{"internal/trail"},
-		dependsOn:  pathList{"adj/guard"},
+		writePaths: listFlag{"internal/ledger", "types/lease.go"},
+		denyPaths:  listFlag{"MAGUS.md"},
+		readPaths:  listFlag{"internal/trail"},
+		dependsOn:  listFlag{"adj/guard"},
 		check:      "test internal/ledger",
 		model:      "principal",
 	}
 	piped, err := job.DecodeDeclaration(strings.NewReader(`{
-	  "schema_version": 5,
+	  "schema_version": 6,
 	  "id": "adj/store",
 	  "parent": "adjacency",
-	  "goal": "the store is the enforcement point",
+	  "criteria": "the store is the enforcement point",
 	  "checkpoint": "cf5509d09",
 	  "write_paths": ["internal/ledger", "types/lease.go"],
 	  "deny_paths": ["MAGUS.md"],
@@ -172,13 +201,119 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
 	t.Parallel()
 
-	var repeated, combined pathList
+	var repeated, combined listFlag
 	require.NoError(t, repeated.Set("internal/ledger"))
 	require.NoError(t, repeated.Set("types/lease.go"))
 	require.NoError(t, combined.Set("internal/ledger, types/lease.go"))
 	assert.Equal(t, repeated, combined)
 
-	var refused pathList
+	var refused listFlag
 	require.Error(t, refused.Set("internal/ledger,"))
 	require.Error(t, refused.Set(""))
+}
+
+// execFixture pins XDG_STATE_HOME to a scratch dir (the job store lives there, not under
+// t.TempDir() alone: see the tests-need-xdg-state-home-pinned lesson) and resolves the
+// same cache dir jobExec itself will compute from root, so a marker or row seeded here is
+// the one jobExec sees. Mirrors TestHookEnvelopeCwdLocatesTheWorkersCheckout's setup.
+func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root = t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	for _, row := range rows {
+		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	return root, cacheDir
+}
+
+// TestJobExecVacateIsANoOpWithNoBinding pins the ABSENT verdict: a checkout that never
+// bound anything vacates cleanly, printing rather than failing, because a no-op must not
+// read as an error.
+func TestJobExecVacateIsANoOpWithNoBinding(t *testing.T) {
+	root, _ := execFixture(t)
+	out := captureStdout(t, func() {
+		require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
+	})
+	assert.Contains(t, out, "holds no job")
+}
+
+// TestJobExecVacateRefusesAnInFlightJob pins the semantics this exists to fix without
+// reopening the escape denyLeaseScopedRebind closes: a checkout may not walk away from a
+// job the store still says is declared or running, because its next write would land
+// ungraded from then on. The marker is left in place.
+func TestJobExecVacateRefusesAnInFlightJob(t *testing.T) {
+	for _, state := range []types.JobState{types.StateDeclared, types.StateRunning} {
+		t.Run(string(state), func(t *testing.T) {
+			row := leaseRow("lease-enforcement/wave4/docs", "")
+			row.State = state
+			root, cacheDir := execFixture(t, row)
+			require.NoError(t, job.BindLease(cacheDir, row.ID))
+
+			err := jobExec(t.Context(), root, []string{"--vacate"})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), row.ID)
+			assert.Contains(t, err.Error(), string(state))
+			assert.Equal(t, row.ID, job.LeaseFromMarker(cacheDir), "a refused vacate changed nothing")
+		})
+	}
+}
+
+// TestJobExecVacateAllowsAJobThatAlreadyExited is the exact shape of the four-day bug
+// this verb exists to fix: a checkout bound to a job that returned its result (exited)
+// and that nobody will ever wait on. types.JobState.Live counts exited as live, on
+// purpose, so a rejected wait can send work back to the same lanes; but that is a
+// property of grading writes against a LIVE lease, not a reason to keep a checkout
+// hostage to a lease its own holder is done with. Every later state (pass, fail,
+// no_return) vacates the same way, and so does every state the store never declared at
+// all: proof there is no lingering boundary for any of them to protect.
+func TestJobExecVacateAllowsAJobThatAlreadyExited(t *testing.T) {
+	for _, state := range []types.JobState{types.StateExited, types.StatePass, types.StateFail, types.StateNoReturn} {
+		t.Run(string(state), func(t *testing.T) {
+			row := leaseRow("lease-enforcement/wave4/docs", "")
+			row.State = state
+			root, cacheDir := execFixture(t, row)
+			require.NoError(t, job.BindLease(cacheDir, row.ID))
+
+			out := captureStdout(t, func() {
+				require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
+			})
+			assert.Contains(t, out, row.ID)
+			assert.Empty(t, job.LeaseFromMarker(cacheDir), "the marker is gone")
+		})
+	}
+}
+
+// TestJobExecVacateAllowsAJobTheStoreDoesNotCarry covers the UNKNOWN case: a marker
+// naming an id no row declares (a reset ledger, a store from before this one) has no
+// boundary left to fail open against, so it vacates rather than wedging the checkout on
+// an id nobody can even look up.
+func TestJobExecVacateAllowsAJobTheStoreDoesNotCarry(t *testing.T) {
+	root, cacheDir := execFixture(t)
+	require.NoError(t, job.BindLease(cacheDir, "harness/no-such-job"))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, jobExec(t.Context(), root, []string{"--vacate"}))
+	})
+	assert.Contains(t, out, "harness/no-such-job")
+	assert.Empty(t, job.LeaseFromMarker(cacheDir))
+}
+
+// TestJobExecVacateRejectsBeingCombinedWithOtherArgs: --vacate gives up whichever job
+// this checkout holds, so a positional job or a --base to record is nothing it can act on.
+func TestJobExecVacateRejectsBeingCombinedWithOtherArgs(t *testing.T) {
+	root, _ := execFixture(t)
+
+	err := jobExec(t.Context(), root, []string{"--vacate", "some/job"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "takes no job")
+
+	err = jobExec(t.Context(), root, []string{"--vacate", "--base", "rev1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--base")
 }

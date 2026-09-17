@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `70` |
-| `knowledge-schema-version` | `12` |
-| `skill-content` | `f3af877a7821` |
+| `agent-skill-version` | `82` |
+| `knowledge-schema-version` | `13` |
+| `skill-content` | `0a6ecf5768d8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.

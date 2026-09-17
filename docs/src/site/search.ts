@@ -251,7 +251,7 @@ export function initSearch(): void {
       return;
     } // re-renders once loaded
     // Capture the now-non-null index before any call that could invalidate the narrowing;
-    // runSearch takes the corpus as its first argument now that it lives in the shared lib.
+    // runSearch takes the index as its first argument now that it lives in the shared lib.
     const res = runSearch(index, query);
     results.hidden = false;
     setExpanded(true);

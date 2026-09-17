@@ -208,6 +208,10 @@ func (f *fakeAnalyzer) Unreferenced(context.Context) (types.UnreferencedOutput, 
 	return types.UnreferencedOutput{}, errors.New("no symbol index")
 }
 
+func (f *fakeAnalyzer) Duplication(context.Context) (types.DuplicationOutput, error) {
+	return types.DuplicationOutput{}, errors.New("no symbol index")
+}
+
 func TestInsightIsServedInProcess(t *testing.T) {
 	t.Parallel()
 
@@ -307,7 +311,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"goal": "ship it", "state": "running"})
+	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "ship it", "state": "running"})
 	require.NoError(t, err)
 
 	report, err := MagusListJob(ctx)
@@ -353,13 +357,13 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"goal": "the declared goal", "write_paths": "internal/job"})
+	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "the declared goal", "write_paths": "internal/job"})
 	require.NoError(t, err)
 
 	got, err := MagusPutJob(ctx, "u1", map[string]any{"state": "pass"})
 	require.NoError(t, err)
 	assert.Equal(t, types.StatePass, got.State)
-	assert.Equal(t, "the declared goal", got.Goal, "the state advance must not erase the row")
+	assert.Equal(t, "the declared goal", got.Criteria, "the state advance must not erase the row")
 	assert.Equal(t, []string{"internal/job"}, got.WritePaths)
 }
 
@@ -414,14 +418,14 @@ func TestLedgerAndTheMCPToolAgree(t *testing.T) {
 	cacheDir, root := t.TempDir(), t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: cacheDir, root: root})
 
-	_, err := MagusPutJob(ctx, "u1", map[string]any{"goal": "shared row"})
+	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "shared row"})
 	require.NoError(t, err)
 
 	store := job.NewStore(job.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
 	leases, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, leases, 1)
-	assert.Equal(t, "shared row", leases[0].Goal)
+	assert.Equal(t, "shared row", leases[0].Criteria)
 }
 
 func TestJobResultFromMapUsesTheVersionedStrictDecoder(t *testing.T) {

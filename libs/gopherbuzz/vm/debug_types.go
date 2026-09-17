@@ -22,8 +22,12 @@ const (
 // source name, the enclosing function name, and the 1-based current line.
 type DebugFrame struct {
 	Source string
-	Name   string
-	Line   int
+	// SourceFile is the .buzz path stamped at compile time, or "" when unknown.
+	// Distinct from Source, which falls back to the function name for debugger
+	// display: line coverage must not treat those labels as paths.
+	SourceFile string
+	Name       string
+	Line       int
 }
 
 // frameName returns a human-readable name for f's function ("(top level)" for
@@ -39,8 +43,17 @@ func frameName(f *frame) string {
 // last fetched (the one currently executing / paused at).
 func frameToDebug(f *frame) DebugFrame {
 	src := "<buzz>"
-	if f.chunk != nil && f.chunk.Name != "" {
-		src = f.chunk.Name
+	sourceFile := ""
+	if f.chunk != nil {
+		sourceFile = f.chunk.SourceFile
+		// Prefer the file the chunk was compiled from. Falling back to the
+		// function name kept Debugger displays working before SourceFile existed,
+		// and still does for one-shot Compile that never stamps a path.
+		if f.chunk.SourceFile != "" {
+			src = f.chunk.SourceFile
+		} else if f.chunk.Name != "" {
+			src = f.chunk.Name
+		}
 	}
-	return DebugFrame{Source: src, Name: frameName(f), Line: f.chunk.lineAt(f.ip - 1)}
+	return DebugFrame{Source: src, SourceFile: sourceFile, Name: frameName(f), Line: f.chunk.lineAt(f.ip - 1)}
 }

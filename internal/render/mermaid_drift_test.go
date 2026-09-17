@@ -24,15 +24,15 @@ import (
 
 // targetsClassDefNames are the exact classDef name strings the Go targets-flavor
 // emitter writes. They are listed here explicitly so that renaming one in
-// targetgraph.go without updating this list causes a test failure. Only the two
+// target_graph.go without updating this list causes a test failure. Only the two
 // role classes are emitted now; MAGUS.md no longer embeds per-project graphs.
 var targetsClassDefNames = []string{
-	"anchor", // targetRoleClasses[0].Name (targetgraph.go)
-	"target", // targetRoleClasses[1].Name (targetgraph.go)
+	"anchor", // targetRoleClasses[0].Name (target_graph.go)
+	"target", // targetRoleClasses[1].Name (target_graph.go)
 }
 
 // knowledgeClassDefNames are kind_<kind> names from knowledgeKindPalette in
-// knowledgegraph.go.
+// knowledge_graph.go.
 var knowledgeClassDefNames = []string{
 	"kind_project",
 	"kind_spell",
@@ -67,7 +67,7 @@ func TestMermaidClassDefDrift(t *testing.T) {
 		for _, name := range targetsClassDefNames {
 			require.True(t, strings.Contains(got, "classDef "+name+" "),
 				"WriteTargetGraphMermaid output missing classDef %q - "+
-					"update targetsClassDefNames in this test to match targetgraph.go", name)
+					"update targetsClassDefNames in this test to match target_graph.go", name)
 		}
 	})
 
@@ -96,7 +96,7 @@ func TestMermaidClassDefDrift(t *testing.T) {
 		for _, name := range knowledgeClassDefNames {
 			require.True(t, strings.Contains(got, "classDef "+name+" "),
 				"WriteKnowledgeMermaid output missing classDef %q - "+
-					"update knowledgeClassDefNames in this test to match knowledgegraph.go", name)
+					"update knowledgeClassDefNames in this test to match knowledge_graph.go", name)
 		}
 	})
 }

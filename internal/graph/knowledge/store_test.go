@@ -528,3 +528,61 @@ func BenchmarkStoreSync(b *testing.B) {
 		}
 	}
 }
+
+// TestReadStoreExportKeysShardsByFingerprint pins the publishable form: every shard the
+// returned manifest names has a blob keyed the way GetShard asks for it.
+func TestReadStoreExportKeysShardsByFingerprint(t *testing.T) {
+	in := sampleInputs()
+	in.PrivateNotes = []types.KnowledgeNote{{Path: "/home/me/notes.md", Title: "mine"}}
+	in.Runtime = []types.DiagnosticEvent{{Unit: "pkg/a:build", Code: types.ExecDenied}}
+	dir := t.TempDir()
+	_, err := Build(t.Context(), dir, BuildOptions{}, in, nil)
+	require.NoError(t, err)
+
+	export, err := ReadStoreExport(dir)
+	require.NoError(t, err)
+	require.NotEmpty(t, export.Shards)
+
+	keys, err := ShardKeys(export.Manifest)
+	require.NoError(t, err)
+	require.Len(t, keys, len(export.Shards), "the manifest names exactly the shards that ship with it")
+	for _, sh := range export.Shards {
+		assert.Equal(t, keys[sh.Name], sh.Key, "a shard's layer key is the fingerprint the manifest routes by")
+		assert.False(t, isMachineLocalShard(sh.Name), "machine-local content must never be published")
+	}
+	assert.NotContains(t, keys, runtimeShardName)
+	assert.NotContains(t, keys, privateNotesShardName)
+}
+
+// TestPublishedShardsRebuildTheGraph proves the shards alone are enough: a reader holding
+// the export and no store on disk reconstructs what the build produced.
+func TestPublishedShardsRebuildTheGraph(t *testing.T) {
+	in := sampleInputs()
+	dir := t.TempDir()
+	built, err := Build(t.Context(), dir, BuildOptions{}, in, nil)
+	require.NoError(t, err)
+
+	export, err := ReadStoreExport(dir)
+	require.NoError(t, err)
+
+	merged := NewGraph()
+	for _, sh := range export.Shards {
+		require.NoError(t, MergeShardFile(merged, sh.Bytes))
+	}
+	assert.Equal(t, len(built.Nodes()), len(merged.Nodes()))
+	assert.Equal(t, len(built.Edges()), len(merged.Edges()))
+}
+
+// TestShardKeysRefusesAForeignSchema stops a published store written by another schema
+// from being read as this one: the shard files behind it carry that schema's shapes.
+func TestShardKeysRefusesAForeignSchema(t *testing.T) {
+	_, err := ShardKeys([]byte(`{"schema_version":0,"shards":{}}`))
+	assert.Error(t, err)
+}
+
+// TestReadStoreExportWithoutAStore reports the absence rather than an empty export, so a
+// publisher cannot push nothing and call it a publish.
+func TestReadStoreExportWithoutAStore(t *testing.T) {
+	_, err := ReadStoreExport(t.TempDir())
+	assert.ErrorIs(t, err, ErrNoStore)
+}

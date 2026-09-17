@@ -1,9 +1,0 @@
-// buzz-check parses every .buzz file: magus run check runs buzz --check over the tree.
-import "magus";
-import "magus/spell/buzz";
-
-magus\project({ "spells": [buzz] });
-
-export fun check(ctx: magus\Context, args: [str]) > void {
-    buzz["buzz-check"](ctx);
-}

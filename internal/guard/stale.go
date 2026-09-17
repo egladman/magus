@@ -17,7 +17,8 @@ import (
 // a notice that fired on that would appear on every tool call of a normal session.
 var sourceGlobs = []string{
 	"internal/guard/*.go",
-	"cmd/magus/hook*.go",
+	"cmd/magus/shell*.go",
+	"cmd/magus/guard_*.go",
 	"internal/agent/*.go",
 	"internal/agent/skills/*/SKILL.md",
 }

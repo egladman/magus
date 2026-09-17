@@ -147,6 +147,30 @@ func (s *ConnectorSuite) TestRevokeByFingerprintAndPrefix() {
 	assert.Empty(t, st.List())
 }
 
+// TestRevokeScopedStaysInsideItsScopes pins the case a caller's pre-check could not: a
+// query that is one pool's fingerprint prefix and another pool's exact NAME. Unconfined, the
+// exact name wins and a console command deletes an MCP connector.
+func (s *ConnectorSuite) TestRevokeScopedStaysInsideItsScopes() {
+	t := s.T()
+	st := s.store()
+
+	_, console, err := st.Create("viewer", time.Time{}, ScopeConsoleRead)
+	require.NoError(t, err)
+	prefix := console.Fingerprint[:8]
+	_, mcp, err := st.Create(prefix, time.Time{}, ScopeMCP)
+	require.NoError(t, err)
+
+	removed, err := st.RevokeScoped(prefix, []ClientScope{ScopeConsole, ScopeConsoleRead})
+	require.NoError(t, err)
+	assert.Equal(t, console, removed)
+	assert.Equal(t, []ConnectorToken{mcp}, st.List(), "the MCP connector named like the prefix survives")
+
+	_, err = st.RevokeScoped("viewer", []ClientScope{ScopeMCP})
+	assert.ErrorIs(t, err, ErrConnectorNotFound, "a record outside the scopes does not resolve")
+	_, err = st.RevokeScoped("viewer", nil)
+	assert.ErrorIs(t, err, ErrConnectorNotFound, "no scopes confines to nothing rather than to everything")
+}
+
 func (s *ConnectorSuite) TestExpiredTokenDoesNotVerify() {
 	t := s.T()
 	st := s.store()

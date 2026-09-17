@@ -1,6 +1,6 @@
 # Navigating the magus docs
 
-magus ships one official documentation corpus.{{if .Full}} It is a static site, so its
+magus ships one official documentation site.{{if .Full}} It is a static site, so its
 structure is fixed and machine-readable: this skill teaches HOW to move through
 it; the pages themselves carry the WHAT.{{end}} Reach for it when a magus-domain fact
 is not derivable from the workspace graph{{if .Full}} - the docs are the source of truth for
@@ -49,8 +49,8 @@ Pages use extensionless directory URLs; append `index.md` for the raw source.
 | You have                     | Page URL             | Raw Markdown                |
 | ---------------------------- | -------------------- | --------------------------- |
 | the `go` spell               | `/spells/go/`        | `/spells/go/index.md`       |
-| the `magus run` command      | `/manpage/magus-run/`| `/manpage/magus-run/index.md`|
-| diagnostic MGS2001           | `/codes/sandbox/MGS2001/` | `.../MGS2001/index.md` |
+| the `magus run` command      | `/manpage/{{skill "run"}}/`| `/manpage/{{skill "run"}}/index.md`|
+| diagnostic {{mgs "MGS2001"}}           | `/codes/sandbox/{{mgs "MGS2001"}}/` | `.../{{mgs "MGS2001"}}/index.md` |
 
 ## Where things live (stable IDs route straight to a page)
 
@@ -86,5 +86,5 @@ generated for HUMAN readers, so do not answer from it{{if .Full}}: it is true on
 last regeneration, and every fact in it has a live command{{else}}: true only as of its last
 regeneration{{end}}.{{if .Full}} The knowledge graph
 carries every page as a `doc` node, so `magus query "kind=doc"` (see the
-magus-query skill) lists them from the graph.{{else}} `magus query "kind=doc"` lists every
+{{skill "query"}} skill) lists them from the graph.{{else}} `magus query "kind=doc"` lists every
 page from the graph.{{end}}

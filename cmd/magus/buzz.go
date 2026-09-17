@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -60,6 +61,9 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	if !isRepl && (bf.NoAutoload || bf.C != "") {
 		return usagef("magus buzz: --%s and -%s apply to the REPL, not to a script, -%s, or -%s",
 			gen.FlagBuzzNoAutoload, gen.FlagBuzzC, gen.FlagBuzzE, gen.FlagBuzzT)
+	}
+	if bf.Coverprofile != "" && !bf.Test {
+		return usagef("magus buzz: --%s requires -%s", gen.FlagBuzzCoverprofile, gen.FlagBuzzT)
 	}
 
 	// No code, no file/stdin argument, and an interactive terminal: open the REPL,
@@ -132,6 +136,14 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	}
 	sess := buzz.NewSession(ctx, opts...)
 	defer func() { _ = sess.Close() }()
+	var cov *buzz.LineCoverage
+	if bf.Coverprofile != "" {
+		if path := buzzCoverPath(name); path != "" {
+			sess.SetSourceFile(path)
+		}
+		cov = buzz.NewLineCoverage()
+		sess.EnableLineCoverage(cov)
+	}
 	// Install the full magus module surface (Buzz stdlib + assert/suite + every
 	// magus host module), the same one the magusfile engine uses. Sharing one
 	// registration keeps `magus buzz` and magusfile execution in lock-step: any
@@ -162,27 +174,50 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, w)
 		}
 	}
+	var testErr error
 	if bf.Test {
-		return runBuzzTests(ctx, sess, name)
-	}
-	// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once
-	// its top level has. Without it a script had to call its own main, which strict
-	// mode cannot wrap: a top-level `try` is rejected and a bare call is BZZ1006.
-	if mainFn := sess.GetGlobal("main"); mainFn.IsFun() {
+		testErr = runBuzzTests(ctx, sess, name)
+	} else if mainFn := sess.GetGlobal("main"); mainFn.IsFun() {
+		// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once
+		// its top level has. Without it a script had to call its own main, which strict
+		// mode cannot wrap: a top-level `try` is rejected and a bare call is BZZ1006.
 		// Empty: buzzSource rejects a second positional, so there is no script argv
 		// to pass yet. main still takes the parameter, as upstream declares it.
 		var items []vm.Value
 		ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)})
 		if err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		// `fun main() > int` is upstream's exit-status convention, and the checker
-		// permits it; discarding the value made such a script always exit 0.
-		if ret.IsInt() && ret.AsInt() != 0 {
-			return errSilent{exitCode: int(ret.AsInt())}
+			testErr = fmt.Errorf("%s: %w", name, err)
+		} else if ret.IsInt() && ret.AsInt() != 0 {
+			// `fun main() > int` is upstream's exit-status convention, and the checker
+			// permits it; discarding the value made such a script always exit 0.
+			testErr = errSilent{exitCode: int(ret.AsInt())}
 		}
 	}
-	return nil
+	if cov != nil {
+		if err := os.WriteFile(bf.Coverprofile, []byte(cov.Report()), 0o644); err != nil {
+			return fmt.Errorf("magus buzz: write --%s: %w", gen.FlagBuzzCoverprofile, err)
+		}
+	}
+	return testErr
+}
+
+// buzzCoverPath returns a stable, slash-separated path for LCOV SF: records.
+// Absolute paths under the cwd become relative so a coverprofile is machine-
+// stable; -e and stdin have no file to attribute and return "".
+func buzzCoverPath(name string) string {
+	switch name {
+	case "", "-e", "<stdin>":
+		return ""
+	}
+	path := name
+	if abs, err := filepath.Abs(name); err == nil {
+		if cwd, err := os.Getwd(); err == nil {
+			if rel, err := filepath.Rel(cwd, abs); err == nil && !strings.HasPrefix(rel, "..") {
+				path = rel
+			}
+		}
+	}
+	return filepath.ToSlash(path)
 }
 
 // stdinIsTerminal reports whether stdin is an interactive terminal rather than

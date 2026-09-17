@@ -139,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **The hook configs magus ships are graded against the agent hosts' own schemas.** Claude
   Code's `.claude/settings.json`, the `codex-hooks.json` wiring, and every hooks block the
   Claude Code, Codex and Cursor guide pages embed now validate against a schema vendored
-  under `testdata/hostschemas/`: SchemaStore's for Claude Code settings and Codex hooks, and
+  under `testdata/hosts/`: SchemaStore's for Claude Code settings and Codex hooks, and
   OpenAI's own generated one for a Codex `PreToolUse` reply. The JSON the shipped guard
   templates print is rendered from the template bodies in those files and graded the same
   way, so a host renaming a field surfaces as a failing test rather than as a hook that
@@ -148,7 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Cursor publish nothing for hook stdout and Cursor nothing for `.cursor/hooks.json`, so
   those three schemas are transcribed by hand from the reference pages and the
   `@anthropic-ai/claude-agent-sdk` types and are recorded as ours, not theirs, in
-  `testdata/hostschemas/SOURCES.md` beside each file's URL, read date and digest. OpenCode
+  `testdata/hosts/SOURCES.md` beside each file's URL, read date and digest. OpenCode
   has no hook config to check; its plugin is type-checked against `@opencode-ai/plugin`
   already. `HOST_SCHEMAS_MODE=verify magus buzz tools/host-schemas.buzz` re-fetches and
   reports what moved upstream. No test reaches the network.
@@ -369,6 +369,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   empty command string.
 
 ### Changed
+
+- **Guard advises unbounded source dumps toward SCIP/`magus refs`.** `cat`/`head`/`less`
+  of source extensions (and Cursor `Read` without a limit, restated as `cat` on
+  `postToolUse`) get the same once-per-session advisory family as code-search; a
+  Read that already carries `limit` is restated as `sed -n` and stays quiet.
+- **Guard denies process-table polling** (`pgrep`/`pidof`/`ps`). Agents waiting
+  on a magus run must use `magus status --watch` instead of inventing a second
+  waiter. Doctor `checkpoint-wiring` follows named `.sh` hook scripts so Cursor's
+  embedded `session checkpoint` counts. MCP `magus_job` documents
+  `completion_gates` on fork (same contract as CLI `--stdin` and `magus\job.put`).
+  Skill v75.
+
+
+- **Claude Code and OpenCode harnesses are Buzz spells**
+  (`spells/harness/claude-code`, `spells/harness/opencode`), wired with Cursor
+  and Codex (skill v73). OpenCode stays skills-only; its guard remains the
+  TypeScript plugin. JSON under `harnesses/` remains the unwired fallback.
+
+- **Codex harness is a Buzz spell** (`spells/harness/codex`), wired beside Cursor
+  with `magus\harness.provider` (skill v72 example). Same import-path ownership
+  switch as Cursor; `harnesses/codex.json` remains the unwired fallback.
+
+- **Document adapting a Buzz harness by changing the magusfile import path** (skill
+  v71). Fork the shipped spell into the workspace, point `import "..."` at that
+  path, keep `magus\harness.provider`, edit Buzz, then `magus agent harness apply`.
+  No Magus source edits. The magus-workspace-rules skill and the agents/guard docs
+  spell the loop; JSON `improve --apply` remains for descriptor hosts.
 
 - **`magus ledger accept` grades evidence, not what the report claims.** The `passed` field
   is GONE from the report schema: the outcome is read from the stored run behind the
@@ -1050,7 +1077,7 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.2
   `magus notes promote` carries the excerpt into the note. Nothing is captured
   automatically and nothing gates on it.
 - **`magus agent adoption` measures whether agents actually use the knowledge graph.** It
-  reads a corpus of shell commands (stdin or `--commands`) and reports how often the graph
+  reads a set of recorded shell commands (stdin or `--commands`) and reports how often the graph
   (`query`/`refs`/`explain`/`path`) was reached versus a raw text search, the graph-to-grep
   ratio, and the top repo-wide greps whose pattern is a real identifier - each with the graph
   command to try for it. That command is routed by the pattern's shape through the same
@@ -1766,7 +1793,7 @@ file` explains any one of them in full. `magus doctor` reports the standing set.
   contract. Adding a decision kind or a guard surface without wiring every host now
   fails `go test`, as does a declaration that disagrees with the parity table in the
   agents guide. A declaration can also be sincere and wrong, so the templates are now
-  EXECUTED as well: a testscript corpus runs the three POSIX sh templates against real
+  EXECUTED as well: a testscript suite runs the three POSIX sh templates against real
   host events with a real binary, and the OpenCode plugin's transport cases run under
   node with `Bun.spawn` supplied by the test, leaving the shipped artifact untouched.
   Both are tied back to the contract - a new decision or surface fails until an

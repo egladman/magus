@@ -148,7 +148,7 @@ document went wrong.
 
 ## What a first implementation covers
 
-1. `types/streamevent.go` - the envelope, the taxonomy, the per-type bodies.
+1. `types/stream_event.go` - the envelope, the taxonomy, the per-type bodies.
    This is the contract, and it is the deliverable that has to be right.
 2. `internal/eventstream` - the adapter mapping journal records onto
    `StreamEvent`, plus the cross-process follower over the run-log directory.

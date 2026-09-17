@@ -87,10 +87,7 @@ func runConfigView(cfg config.Config, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, cfg)
 	case outputName:
-		for _, k := range config.KnownKeys() {
-			fmt.Println(k)
-		}
-		return nil
+		return emitNames(config.KnownKeys())
 	}
 
 	// text / wide: human-readable layout.

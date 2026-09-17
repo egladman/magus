@@ -135,3 +135,32 @@ func TestWriteMagusfileStubSkipsExisting(t *testing.T) {
 	data, _ := os.ReadFile(existing)
 	assert.Equal(t, "// mine\n", string(data), "existing magusfile.buzz was modified")
 }
+
+// TestInitCmdRootWithoutLocalOrGlobalRefused pins the fix for the scoping defect:
+// --root only ever reached the merge-driver load, so `magus init --root <scratch>`
+// (no --local/--global) wrote the caller's REAL global config while bootstrapping
+// an unrelated workspace. Refusing the ambiguous combination is cheaper than
+// guessing, and it must fire before anything is written.
+func TestInitCmdRootWithoutLocalOrGlobalRefused(t *testing.T) {
+	// Sandbox the global path too: if the refusal regresses, this proves it by
+	// failing on a write attempt instead of by polluting the real XDG dir.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	root := t.TempDir()
+
+	err := initCmd(context.Background(), root, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--local or --global")
+
+	assert.NoFileExists(t, filepath.Join(root, "magusfile.buzz"), "refused init must not scaffold root")
+	assert.NoFileExists(t, filepath.Join(cwd, "magusfile.buzz"), "refused init must not scaffold cwd either")
+	xdgTarget := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "magus", "magus.yaml")
+	assert.NoFileExists(t, xdgTarget, "refused init must not write the global config")
+}
+
+// The other half, that --local alongside --root lands both writes in root, is pinned by
+// testdata/script/init_root_scopes_writes.txtar rather than here. It cannot be an
+// in-process test: initCmd reaches loadMagus, which memoizes its root for the life of
+// the process and panics when a later call names a different one, so the assertion
+// passes alone and panics in a full run. Each script case is its own subprocess.

@@ -336,7 +336,7 @@ func TestClassifyWithoutReaders(t *testing.T) {
 
 // testSyntax mirrors the mgs_getCommentSyntax declarations in the built-in
 // spells (spells/golang, spells/buzz, spells/python); the spells are the
-// source of truth, and TestBuiltinCommentSyntax in internal/spellruntime pins
+// source of truth, and TestBuiltinCommentSyntax in internal/spell pins
 // the decoded declarations, so drift between the two is caught there.
 var testSyntax = map[string]spells.CommentSyntax{
 	".go": {

@@ -10,7 +10,7 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 5,
+      "const": 6,
       "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See JobSchemaVersion."
     },
     "id": {
@@ -23,9 +23,9 @@
       "type": "string",
       "description": "Parent is the lease this one was spawned under, empty for a lease the root declared."
     },
-    "goal": {
+    "criteria": {
       "type": "string",
-      "description": "Goal is the goal and its observable acceptance criteria, as one block of text."
+      "description": "Criteria is what this lease is for and what done means, as one block of prose. The machine-checkable half is CompletionGates."
     },
     "checkpoint": {
       "type": "string",
@@ -129,13 +129,28 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "check"],
+        "required": ["id", "kind", "expect"],
         "properties": {
           "id": {
             "type": "string"
           },
           "description": {
             "type": "string"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["check", "paths", "symbol"],
+            "description": "Kind names WHAT this gate examines and Expect names what must be true of it. Two fields rather than one, because the alternative is a kind per pair: `paths` beside `exists` beside `absent` beside `no-symbol`, which is a vocabulary that grows by multiplication and reads inconsistently the moment it has four members."
+          },
+          "expect": {
+            "type": "string",
+            "enum": ["passed", "changed", "present", "absent", "unreferenced"]
           },
           "check": {
             "type": "object",
@@ -157,13 +172,22 @@
                 },
                 "description": "Args are forwarded to the tool after `--`, never to magus."
               }
-            }
+            },
+            "description": "Check is the run a GateKindCheck gate examines. Zero on every other kind."
           },
-          "depends_on": {
+          "paths": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Paths are the globs a GateKindPaths gate examines. Zero on every other kind."
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Symbols are the names a GateKindSymbol gate examines, as the knowledge graph resolves them. Zero on every other kind."
           }
         }
       },

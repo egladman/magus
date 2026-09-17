@@ -44,12 +44,16 @@ enum SubmitState {
 }
 
 // RunJobResponse reports what the submission did: whether the job started or coalesced, the
-// invocation id and console deep-link for its live log, and the job's fresh metadata snapshot so a
-// caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
+// invocation id, and the job's fresh metadata snapshot so a caller can render "last rotated
+// 3m ago, trail 2.1 MB" without a follow-up call.
 message RunJobResponse {
   SubmitState state = 1;
   string invocation_id = 2; // the running job's invocation id (the new one, or the coalesced one)
-  string console_url = 3;   // deep-link to this invocation's live log; empty when no console is mounted
+  // Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
+  // not an absolute URL, because the reader is the console itself and resolves it against
+  // its own origin. Empty only when the daemon coalesced a submit it could not name, since
+  // a run with no invocation has nothing to link to.
+  string console_url = 3;
   Job job = 4;              // the job's descriptor plus its last-run and current-size metadata
 }
 
@@ -85,7 +89,9 @@ message Job {
 
   // The facts a DELEGATED job carries, empty on a catalog job. These are what an
   // orchestrator declared, never a verdict magus reached.
-  string goal = 9;
+  // Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before
+  // the rename still reads and writes this field.
+  string criteria = 9;
   string parent = 10; // the job this one was handed out under, empty for a root
   string model = 11;
   string check = 12; // the one check this job runs, rendered as the command that runs it

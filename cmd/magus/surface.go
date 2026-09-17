@@ -40,6 +40,7 @@ var subcommands = []subcommand{
 	{Group: groupWork, Name: "affected", Short: "run a target for VCS-diff affected projects"},
 	{Group: groupWork, Name: "x", Short: "interactive shorthand: pick project + target (TTY only)"},
 	{Group: groupWork, Name: "clean", Short: "remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]"},
+	{Group: groupWork, Name: "shell", Short: "check a command against this workspace's conventions and name the better one (shell '<command>')"},
 
 	{Group: groupKnowledge, Name: "query", Short: "search the knowledge graph and show a node's neighborhood"},
 	{Group: groupKnowledge, Name: "refs", Short: "list where an ingested code symbol is defined and referenced"},

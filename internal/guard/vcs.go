@@ -68,7 +68,7 @@ func isDependencyMutation(c hint.Invocation) bool {
 // as the safe direction; with an AST it is not a trade at all, since a quoted
 // word structurally cannot be a command, and `cd /repo && git stash` still
 // matches however it is reached.
-func gitGuard(cmds []hint.Invocation) (BashVerdict, bool) {
+func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	for _, c := range cmds {
 		if c.Name != "git" || len(c.Args) == 0 {
 			continue
@@ -108,7 +108,7 @@ func gitGuard(cmds []hint.Invocation) (BashVerdict, bool) {
 			return denyWholeTree("git stash"), true
 		case "worktree":
 			if len(rest) > 0 && rest[0] == "remove" {
-				return BashVerdict{
+				return ShellVerdict{
 					Deny: "Check it is clean first with `git -C <path> status`, then remove the worktree from a session that owns it.\n" +
 						"git worktree remove deletes that worktree's uncommitted and untracked work, which in a repo running several worktrees is routinely another session's and is in no commit to recover from.",
 					Rule: denyRule{Name: denyRuleWorktreeRemove},
@@ -125,7 +125,7 @@ func gitGuard(cmds []hint.Invocation) (BashVerdict, bool) {
 				return denyWholeTree("git checkout ."), true
 			}
 			if side := mergeSideRef(rest); side != "" {
-				return BashVerdict{
+				return ShellVerdict{
 					Deny: denyMergeSideCheckout(side),
 					Rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: side},
 				}, true
@@ -135,7 +135,7 @@ func gitGuard(cmds []hint.Invocation) (BashVerdict, bool) {
 				return denyWholeTree("git restore ."), true
 			}
 			if side := mergeSideRef(rest); side != "" {
-				return BashVerdict{
+				return ShellVerdict{
 					Deny: denyMergeSideCheckout(side),
 					Rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: side},
 				}, true
@@ -150,7 +150,7 @@ func gitGuard(cmds []hint.Invocation) (BashVerdict, bool) {
 			// whichever advisory the first command earned, which is the ordering the
 			// two-pass split exists to prevent.
 			if slices.ContainsFunc(rest, isStageAllOperand) {
-				return BashVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
+				return ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
 			}
 		}
 	}
@@ -164,21 +164,21 @@ func gitGuard(cmds []hint.Invocation) (BashVerdict, bool) {
 		sub, rest := c.Args[0], c.Args[1:]
 		switch sub {
 		case "push":
-			return BashVerdict{Context: pushGuardContext}, true
+			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
 		case "add":
 			// The stage-everything forms already denied in the first pass.
-			return BashVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+			return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 		case "commit":
-			return BashVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+			return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 		case "checkout":
 			// A revert needs the `--` separator; without it the operand is a
 			// branch, which is not this rule's business.
 			if slices.Contains(rest, "--") {
-				return BashVerdict{Context: revertGuardContext}, true
+				return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
 			}
 		case "restore":
 			// `git restore` targets worktree files by definition.
-			return BashVerdict{Context: revertGuardContext}, true
+			return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
 		case "describe":
 			// --tags and --always are the build-stamp spelling (this repository's own
 			// go_build target uses both): the caller wants a version string to embed,
@@ -187,18 +187,18 @@ func gitGuard(cmds []hint.Invocation) (BashVerdict, bool) {
 			if slices.ContainsFunc(rest, func(a string) bool { return a == "--tags" || a == "--always" }) {
 				continue
 			}
-			return BashVerdict{Context: checkpointGuardContext}, true
+			return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
 		case "stash":
 			if len(rest) > 0 && rest[0] == "create" {
-				return BashVerdict{Context: checkpointGuardContext}, true
+				return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
 			}
 		case "rev-parse":
 			if isTreeIdentityQuery(rest) {
-				return BashVerdict{Context: checkpointGuardContext}, true
+				return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
 			}
 		}
 	}
-	return BashVerdict{}, false
+	return ShellVerdict{}, false
 }
 
 // isTreeIdentityQuery reports whether a `git rev-parse` invocation is asking WHICH
@@ -234,7 +234,7 @@ func isTreeIdentityQuery(args []string) bool {
 // is confined to the case where there is no AST to consult, and there, an
 // over-eager deny really is the safe direction, because these rules guard work
 // that cannot be recovered.
-func gitGuardFallback(command string) (BashVerdict, bool) {
+func gitGuardFallback(command string) (ShellVerdict, bool) {
 	switch {
 	case stashRe.MatchString(command) && !stashSafeRe.MatchString(command):
 		return denyWholeTree("git stash"), true
@@ -250,15 +250,15 @@ func gitGuardFallback(command string) (BashVerdict, bool) {
 	// unparsable line got a reminder instead of the deny, in the one place the file's own
 	// invariant says an over-eager deny is the safe direction.
 	case stageAllRe.MatchString(command):
-		return BashVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
+		return ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
 	case pushRe.MatchString(command):
-		return BashVerdict{Context: pushGuardContext}, true
+		return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
 	case stageRe.MatchString(command):
-		return BashVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+		return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 	case scopedRevertRe.MatchString(command):
-		return BashVerdict{Context: revertGuardContext}, true
+		return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
 	}
-	return BashVerdict{}, false
+	return ShellVerdict{}, false
 }
 
 // isWholeTreePathspec reports the `.` pathspec forms, with or without the `--`
@@ -377,7 +377,7 @@ func isDeletingClean(args []string) bool {
 //
 // SCOPED forms stay allowed, matching the git rules: `hg revert <paths>` names what it
 // touches, and only the whole-tree flags below discard a tree the caller did not enumerate.
-func nonGitVCSGuard(cmds []hint.Invocation) (BashVerdict, bool) {
+func nonGitVCSGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	for _, c := range cmds {
 		if len(c.Args) == 0 {
 			continue
@@ -409,12 +409,12 @@ func nonGitVCSGuard(cmds []hint.Invocation) (BashVerdict, bool) {
 			}
 		}
 	}
-	return BashVerdict{}, false
+	return ShellVerdict{}, false
 }
 
 // jjRule is the Jujutsu arm. Its verbs share no spelling with the others, so it reads as
 // its own switch rather than another arm of one that would then be a lookup table.
-func jjRule(prog, sub string, rest []string) (BashVerdict, bool) {
+func jjRule(prog, sub string, rest []string) (ShellVerdict, bool) {
 	switch sub {
 	// Abandons the changes in a revision, defaulting to the working copy.
 	case "abandon":
@@ -427,14 +427,14 @@ func jjRule(prog, sub string, rest []string) (BashVerdict, bool) {
 		}
 	case "workspace":
 		if len(rest) > 0 && rest[0] == "forget" {
-			return BashVerdict{
+			return ShellVerdict{
 				Deny: "Check it is clean first, then forget the workspace from a session that owns it.\n" +
 					"jj workspace forget drops that workspace's working copy, which in a repo running several is routinely another session's.",
 				Rule: denyRule{Name: denyRuleWorktreeRemove},
 			}, true
 		}
 	}
-	return BashVerdict{}, false
+	return ShellVerdict{}, false
 }
 
 // hasPositional reports whether args carries a non-flag argument, which for a restore is

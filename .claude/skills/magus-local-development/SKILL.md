@@ -67,7 +67,7 @@ In `std/`, a method's `Name` and `Doc` are inputs to codegen, not documentation.
   names. Nothing catches a renamed std method.
 
 Renaming `fs.mkdirall` to `fs.mkdirAll` was one word in one descriptor. It left
-`internal/interp/bindings/gen/fs.go`, `internal/spellruntime/gen/decls/fs.buzz`,
+`internal/interp/bindings/gen/fs.go`, `internal/spell/gen/decls/fs.buzz`,
 `internal/langservice/manifest_data.go` and the manpage API lock stale, and three
 tests red until regeneration. Regenerate in the SAME commit, via `magus run
 generate .` (or the narrower `*-generate` target that owns the stale output).
@@ -115,3 +115,22 @@ what proved the vcs docs were the stale side rather than the bodies.
 
 When code and comment disagree, find the test. If there is no test, you do not yet
 know which one is wrong.
+
+<!-- rule: cursor-grep-through-harness; added: 2026-09-14; origin: agent, unreviewed;
+     evidence: memory:query-before-grep-session-audit, transcript 665f41d2 (128 Grep / 18 query), harnesses/cursor.json postToolUse Grep|Glob;
+     retire-when: measured Cursor sessions stop grepping past a graph advise, or Cursor exposes a pre-Grep context channel that can carry advise before the call -->
+## Cursor Grep is a harness problem, not a Cursor Rules file
+
+Do not add `.cursor/rules/*.mdc` for magus behavior. Cursor's always-on prose is
+`AGENTS.md`; enforcement is `harnesses/cursor.json` plus
+`docs/guides/integrations/agents/cursor-hook.sh`.
+
+The guard already advises repo-wide `rg` / `grep -r` / `find -name` toward
+`magus refs` / `magus query`. Cursor's built-in Grep and Glob tools never hit
+`beforeShellExecution`, so they used to bypass that entirely. They must stay on
+`postToolUse` matchers in the cursor harness, and the guard script must restate
+them as the shell shapes those rules already judge.
+
+A side rules file is the opposite of host-agnostic glue: invisible to
+`harness verify`, unowned by apply, and gone the next time someone treats
+`.cursor/` as disposable host state.

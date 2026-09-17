@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -321,6 +322,22 @@ func connectorPath(dir, name string) string { return filepath.Join(dir, name+".j
 // s.mu against the freshly re-read store; only the final splice of the in-memory
 // snapshot is locked.
 func (s *ConnectorStore) Revoke(nameOrFingerprint string) (ConnectorToken, error) {
+	return s.revoke(nameOrFingerprint, func(ConnectorToken) bool { return true })
+}
+
+// RevokeScoped is Revoke confined to records of scopes: a record of any other scope never
+// resolves, and an empty scopes matches nothing.
+//
+// Confinement has to happen in the resolution rather than as a caller's pre-check, because
+// resolution prefers an exact name anywhere over a fingerprint prefix: a query a pre-check
+// matched in one pool by prefix can resolve to another pool's record by name, and delete it.
+func (s *ConnectorStore) RevokeScoped(nameOrFingerprint string, scopes []ClientScope) (ConnectorToken, error) {
+	return s.revoke(nameOrFingerprint, func(t ConnectorToken) bool {
+		return slices.Contains(scopes, t.EffectiveScope())
+	})
+}
+
+func (s *ConnectorStore) revoke(nameOrFingerprint string, eligible func(ConnectorToken) bool) (ConnectorToken, error) {
 	q := strings.TrimSpace(nameOrFingerprint)
 	if q == "" {
 		return ConnectorToken{}, ErrConnectorNotFound
@@ -333,16 +350,17 @@ func (s *ConnectorStore) Revoke(nameOrFingerprint string) (ConnectorToken, error
 	if err != nil {
 		return ConnectorToken{}, err
 	}
-	idx, err := indexConnector(tokens, q)
+	candidates := slices.DeleteFunc(slices.Clone(tokens), func(t ConnectorToken) bool { return !eligible(t) })
+	idx, err := indexConnector(candidates, q)
 	if err != nil {
 		return ConnectorToken{}, err
 	}
-	removed := tokens[idx]
+	removed := candidates[idx]
 	if err := os.Remove(connectorPath(s.dir, removed.Name)); err != nil {
 		return ConnectorToken{}, fmt.Errorf("auth: revoke %s: %w", removed.Name, err)
 	}
 	s.mu.Lock()
-	s.tokens = append(tokens[:idx], tokens[idx+1:]...)
+	s.tokens = slices.DeleteFunc(tokens, func(t ConnectorToken) bool { return t.Name == removed.Name })
 	s.mu.Unlock()
 	return removed, nil
 }

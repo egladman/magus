@@ -187,8 +187,14 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
 // pinned by whatever the workspace uses, and mgs_getVersionProbes records which.
 fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."], external = External.reads}; }
-fun scipGo(target: Target) > Command {
-    return Command{bin = "scip-go", args = ["--output", "$MAGUS_SYMBOL_INDEX"]};
+// magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands
+// in the tree; scip-go writes there via --output. The runner resolves the bare
+// $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{
+        format = SymbolFormat.scip,
+        command = Command{bin = "scip-go", args = ["--output", "$MAGUS_SYMBOL_INDEX"]},
+    };
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
@@ -205,6 +211,5 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-mod-json": goModJSON,
         "go-vet": goVet,
         "govulncheck": goVulncheck,
-        "scip": scipGo,
     };
 }

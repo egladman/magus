@@ -31,11 +31,24 @@ fun git(argv: [str], tolerate: bool) > str !> any {
 }
 
 // labelled reports whether the PR carries the consent label.
+//
+// It asks gh to PROJECT the names rather than searching the raw body for one. The
+// search form shipped and never once matched: it looked for `"name": "` with a space
+// after the colon, and `gh api` emits compact JSON, `{"id":...,"name":"magus:regenerate:requested"`.
+// So the label was applied on PR #147 on 2026-09-04, the workflow ran twelve minutes
+// later, and it logged `label ... absent; nothing to do`. The feature has never fired.
+//
+// --jq makes the shape someone else chose stop being this file's problem, which is the
+// same reason nothing here parses git porcelain by hand.
 fun labelled(repo: str, pr: str, want: str) > bool !> any {
-    final listed = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+    final listed = proc\exec("gh",
+        args: ["api", "repos/" + repo + "/issues/" + pr + "/labels", "--jq", ".[].name"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!listed.ok) { return false; }
-    return listed.stdout.indexOf("\"name\": \"" + want + "\"") != null;
+    foreach (name in listed.stdout.split("\n")) {
+        if (name.trim() == want) { return true; }
+    }
+    return false;
 }
 
 // dirty lists the paths regeneration changed, tracked files only.

@@ -29,14 +29,29 @@ const (
 	whyFdBoth       = "matchers AND: fd's pattern and its -e extension each become an id regex"
 	whyFdRegex      = "file nodes are indexed by path, and fd's pattern is already a regex over names"
 	hedgeDiagnostic = "If it misses, the code is not one this workspace defines."
+	// The literal arm: refs --text asks grep's own question, so its Why and Hedge
+	// promise a search rather than a semantic answer.
+	whyLiteral       = "the same literal search, over the workspace's source files, with grep's exit codes"
+	hedgeLiteral     = "Case-sensitive and literal; generated files are searched and counted separately."
+	hedgeLiteralCase = "Case-SENSITIVE, unlike the -i you asked for, and literal."
 )
 
-// identPair is the two-suggestion shape every bare-identifier pattern produces;
-// scope is the trailing project filter, empty when nothing scopes.
-func identPair(pat, scope string, refsConf Confidence) []Suggestion {
+// identPair is the routing a bare identifier earns: the two graph verbs that answer a
+// better question when the pattern really is a symbol, then the literal search that
+// answers the one grep actually asked. The third exists so the hedge on the first two
+// ("grep is right") names a magus command instead of sending the reader out of the
+// workspace to act on it.
+//
+// paths are the caller's own path operands, carried onto the text suggestion unchanged.
+func identPair(pat, scope string, refsConf Confidence, paths ...string) []Suggestion {
+	text := "magus refs --text " + quoted(pat)
+	for _, p := range paths {
+		text += " " + p
+	}
 	return []Suggestion{
 		{Run: "magus refs " + pat, Why: whyRefs, Confidence: refsConf, Hedge: hedgeRefs},
 		{Run: "magus query " + pat + scope, Why: whyEntity, Confidence: ConfidenceLow, Hedge: hedgeQuery},
+		{Run: text, Why: whyLiteral, Confidence: ConfidenceHigh, Hedge: hedgeLiteral},
 	}
 }
 
@@ -56,8 +71,14 @@ func TestSuggestGolden(t *testing.T) {
 			cmd: Invocation{Name: "awk", Args: []string{"{print $1}", "file.txt"}}},
 		{name: "sed in-place abstains",
 			cmd: Invocation{Name: "sed", Args: []string{"-i", "s/a/b/", "file"}}},
-		{name: "single-file grep abstains",
-			cmd: Invocation{Name: "grep", Args: []string{"pat", "onefile.txt"}}},
+		// A grep at named files asks no repo-wide question, so no GRAPH verb answers
+		// it. refs --text does, scoped by the caller's own operands, which is why this
+		// row stopped abstaining when that landed.
+		{name: "single-file grep routes to the literal search",
+			cmd: Invocation{Name: "grep", Args: []string{"pat", "onefile.txt"}},
+			want: []Suggestion{
+				{`magus refs --text "pat" onefile.txt`, whyLiteral, ConfidenceHigh, hedgeLiteral},
+			}},
 		{name: "cat abstains",
 			cmd: Invocation{Name: "cat", Args: []string{"cmd/magus/main.go"}}},
 		{name: "grep -f abstains: pattern unknowable",
@@ -68,8 +89,11 @@ func TestSuggestGolden(t *testing.T) {
 			cmd: Invocation{Name: "frobnicate", Args: []string{"--all"}}},
 		{name: "empty pattern abstains",
 			cmd: Invocation{Name: "grep", Args: []string{"-r"}}},
-		{name: "recursive grep over files only abstains",
-			cmd: Invocation{Name: "grep", Args: []string{"-r", "pat", "a.go", "b.go"}}},
+		{name: "recursive grep over files only routes to the literal search",
+			cmd: Invocation{Name: "grep", Args: []string{"-r", "pat", "a.go", "b.go"}},
+			want: []Suggestion{
+				{`magus refs --text "pat" a.go b.go`, whyLiteral, ConfidenceHigh, hedgeLiteral},
+			}},
 		{name: "multiple -e with -F abstains: no honest single translation",
 			cmd: Invocation{Name: "grep", Args: []string{"-r", "-F", "-e", "alpha", "-e", "beta", "."}}},
 
@@ -109,6 +133,10 @@ func TestSuggestGolden(t *testing.T) {
 			want: []Suggestion{
 				{"magus refs todo", whyRefs, ConfidenceMedium, hedgeRefs + hedgeCase},
 				{"magus query todo", whyEntity, ConfidenceLow, hedgeQuery + hedgeCase},
+				// The literal arm states the fold plainly rather than appending the
+				// shared clause: refs --text cannot honor -i at all, where the graph
+				// verbs merely match case-sensitively.
+				{`magus refs --text "todo"`, whyLiteral, ConfidenceHigh, hedgeLiteralCase},
 			}},
 		{name: "phrase routes to quoted query",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "go test", "docs/"}},
@@ -141,13 +169,13 @@ func TestSuggestGolden(t *testing.T) {
 		{name: "rg with file operand keeps suggestion unscoped",
 			tr:   scoped,
 			cmd:  Invocation{Name: "rg", Args: []string{"symbolName", "internal/cache/keys.go"}},
-			want: identPair("symbolName", "", ConfidenceMedium)},
+			want: identPair("symbolName", "", ConfidenceMedium, "internal/cache/keys.go")},
 		{name: "multiple -e joins into one alternation query",
 			cmd:  Invocation{Name: "rg", Args: []string{"-e", "alpha", "-e", "beta"}},
 			want: []Suggestion{{`magus query "id=~alpha|beta"`, whyAlternation, ConfidenceLow, hedgeQuery}}},
 		{name: "grep -G is boolean and does not eat the pattern",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rG", "MyFunc", "src/"}},
-			want: identPair("MyFunc", "", ConfidenceMedium)},
+			want: identPair("MyFunc", "", ConfidenceMedium, "src/")},
 		{name: "ag -t is boolean and does not eat the pattern",
 			cmd:  Invocation{Name: "ag", Args: []string{"-t", "someSymbol"}},
 			want: identPair("someSymbol", "", ConfidenceMedium)},
@@ -257,27 +285,27 @@ func TestSuggestGolden(t *testing.T) {
 		{name: "project scoping lands on query suggestions only",
 			tr:   scoped,
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "Foo", "internal/cache/"}},
-			want: identPair("Foo", ` 'project=~^internal/cache(/|$)'`, ConfidenceMedium)},
+			want: identPair("Foo", ` 'project=~^internal/cache(/|$)'`, ConfidenceMedium, "internal/cache/")},
 		// The anchored regex is what keeps the suggestion from being narrower than
 		// the grep: project=docs would exclude the nested project's nodes outright.
 		{name: "scoping a project with a nested one still covers the nest",
 			tr:   nested,
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
-			want: identPair("Foo", ` 'project=~^docs(/|$)'`, ConfidenceMedium)},
+			want: identPair("Foo", ` 'project=~^docs(/|$)'`, ConfidenceMedium, "docs/")},
 		{name: "operands in two projects abstain from scoping",
 			tr:   nested,
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs", "libs/gopherbuzz"}},
-			want: identPair("Foo", "", ConfidenceMedium)},
+			want: identPair("Foo", "", ConfidenceMedium, "docs", "libs/gopherbuzz")},
 		{name: "two operands in one project still scope",
 			tr:   nested,
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/site", "docs/tour"}},
-			want: identPair("Foo", ` 'project=~^docs(/|$)'`, ConfidenceMedium)},
+			want: identPair("Foo", ` 'project=~^docs(/|$)'`, ConfidenceMedium, "docs/site", "docs/tour")},
 		// A string prefix is not a path prefix, which is why scope compares
 		// against proj+"/" rather than the bare name.
 		{name: "a sibling sharing a name prefix does not scope",
 			tr:   nested,
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs-old/"}},
-			want: identPair("Foo", "", ConfidenceMedium)},
+			want: identPair("Foo", "", ConfidenceMedium, "docs-old/")},
 		{name: "root project never scopes: project=. says nothing",
 			tr:   rootScoped,
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "Foo", "."}},
@@ -285,10 +313,10 @@ func TestSuggestGolden(t *testing.T) {
 		{name: "root project in the list still lets a sibling scope",
 			tr:   rootScoped,
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "Foo", "docs/"}},
-			want: identPair("Foo", ` 'project=~^docs(/|$)'`, ConfidenceMedium)},
+			want: identPair("Foo", ` 'project=~^docs(/|$)'`, ConfidenceMedium, "docs/")},
 		{name: "no WithProjects means no project= anywhere",
 			cmd:  Invocation{Name: "grep", Args: []string{"-rn", "Foo", "internal/cache/"}},
-			want: identPair("Foo", "", ConfidenceMedium)},
+			want: identPair("Foo", "", ConfidenceMedium, "internal/cache/")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -550,12 +578,12 @@ func TestGlobToRe(t *testing.T) {
 	}
 }
 
-// TestCorpusDistribution pins the aggregate behavior over a realistic command
-// corpus. The exact numbers are a snapshot: a change that starts
+// TestCommandDistribution pins the aggregate behavior over a realistic set of
+// recorded commands. The exact numbers are a snapshot: a change that starts
 // over-suggesting (or silently stops abstaining) moves them and must be seen
 // and re-justified here, not discovered in advisory noise later.
-func TestCorpusDistribution(t *testing.T) {
-	f, err := os.Open("testdata/corpus.txt")
+func TestCommandDistribution(t *testing.T) {
+	f, err := os.Open("testdata/commands.txt")
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -568,7 +596,7 @@ func TestCorpusDistribution(t *testing.T) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		// The corpus is controlled (no spaces inside an argument), so a
+		// The command list is controlled (no spaces inside an argument), so a
 		// whitespace split plus quote-stripping stands in for a shell parser
 		// without depending on one.
 		fields := strings.Fields(line)
@@ -593,6 +621,11 @@ func TestCorpusDistribution(t *testing.T) {
 		ClassTransform:    5,
 		ClassNone:         4,
 	}, counts)
-	assert.Equal(t, 33, suggesting)
-	assert.Equal(t, 23, abstaining)
+	// 33 -> 36 when refs --text landed. The three that moved are the shapes with no
+	// GRAPH answer: a non-recursive grep, and one pointed only at named files. They
+	// abstained for as long as magus had no raw-text search, and silence there is
+	// what sent a reader back to grep with nothing to try. This is the one direction
+	// an increase is allowed to move: a literal-for-literal translation, not a guess.
+	assert.Equal(t, 36, suggesting)
+	assert.Equal(t, 20, abstaining)
 }

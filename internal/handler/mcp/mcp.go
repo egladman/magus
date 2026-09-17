@@ -182,7 +182,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&diffTool{sessions: opts.DiffSessions, root: opts.Magus.Root(), src: opts.Magus},
 		&vcsCheckpointTool{ws: opts.Magus},
 		&consolePresentTool{host: opts.httpAddr().String(), unavailable: consoleUnavailable},
-		&jobTool{store: jobStore, resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
+		&jobTool{store: jobStore, observe: job.CheckpointObserver(opts.Magus.Root(), symbolReader(opts.Magus)), resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
 			if strings.TrimSpace(ref) == "" {
 				return types.JobAttempt{}, nil
 			}
@@ -325,7 +325,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 			UserAgent:     o.UserAgent,
 			Action:        toolName,
 			Outcome:       trail.OutcomeOK,
-			DurMs:         dur.Milliseconds(),
+			DurationMs:    dur.Milliseconds(),
 			RequestRef:    reqRef,
 			RequestBytes:  reqBytes,
 			ResponseRef:   respRef,

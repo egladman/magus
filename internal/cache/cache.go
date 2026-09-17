@@ -572,15 +572,15 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 					// here; otherwise a fully-cached run's log (and the live viewer) shows the run
 					// with no per-target results.
 					journal.Emit(ctx, journal.Event{
-						Ts:      time.Now().UnixMilli(),
-						Inv:     journal.InvocationIDFromContext(ctx),
-						Project: s.ProjectPath,
-						Target:  reproTarget(s),
-						Kind:    journal.KindResult,
-						Level:   "info",
-						Status:  journal.StatusCached,
-						Ref:     ref,
-						DurMs:   result.Duration.Milliseconds(),
+						Ts:         time.Now().UnixMilli(),
+						Inv:        journal.InvocationIDFromContext(ctx),
+						Project:    s.ProjectPath,
+						Target:     reproTarget(s),
+						Kind:       journal.KindResult,
+						Level:      "info",
+						Status:     journal.StatusCached,
+						Ref:        ref,
+						DurationMs: result.Duration.Milliseconds(),
 					})
 				}
 				event := "cache.hit"
@@ -628,12 +628,18 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	lp := c.logPath(s.ProjectPath, hash)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
-	if runErr != nil {
+
+	// fail is every way this step can end badly after fn was invoked: the run itself, a
+	// source the run mutated, a snapshot that would not write. All three record the same
+	// facts in the same order, and they used to do it as three copies, so a fourth failure
+	// mode would have been a fourth copy and a chance to omit one line of it.
+	//
+	// The captured output is persisted verbatim under a ref, so the exact failing output
+	// stays retrievable with `magus query output <ref>`.
+	fail := func(err error) (Result, error) {
 		result.Duration = time.Since(start)
 		c.errs.Add(1)
-		// The captured output is persisted verbatim under a ref so the exact failing
-		// output stays retrievable via `magus query ref`.
-		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, runErr, false)
+		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, err, false)
 		result.Ref = ref
 		c.log.ErrorContext(ctx,
 			"cache.error",
@@ -641,21 +647,25 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			slog.String("label", s.Label),
 			slog.String("target", reproTarget(s)),
 			slog.Int64("duration", int64(result.Duration)),
-			// The concise cause: this record already carries project and target as
-			// their own attrs, and the pretty handler prints both in the heading
-			// directly above the cause line.
-			slog.String("error", types.CauseText(runErr)),
+			// The concise cause: this record already carries project and target as their
+			// own attrs, and the pretty handler prints both in the heading directly above
+			// the cause line.
+			slog.String("error", types.CauseText(err)),
 			slog.String("ref", ref),
-			// The captured log's path on disk. Carried so the pretty handler can
-			// make the ref a real hyperlink without resolving anything: a
-			// file:// link needs no daemon running, so it cannot be dead.
+			// The captured log's path on disk, carried so the pretty handler can make the
+			// ref a real hyperlink without resolving anything: a file:// link needs no
+			// daemon running, so it cannot be dead.
 			slog.String("log", lp),
 		)
 		if rc.onError != nil {
-			rc.onError(runErr)
+			rc.onError(err)
 		}
-		rc.fireResults(rc.step, &result, runErr)
-		return result, runErr
+		rc.fireResults(rc.step, &result, err)
+		return result, err
+	}
+
+	if runErr != nil {
+		return fail(runErr)
 	}
 
 	// fn may "win the race" and return success even after ctx was cancelled. Do
@@ -670,25 +680,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// Before the snapshot, never after: an entry whose key no longer describes its
 	// inputs must not reach the local store or the shared remote.
 	if mutErr := c.checkSourceMutation(ctx, rc.step, preSources); mutErr != nil {
-		result.Duration = time.Since(start)
-		c.errs.Add(1)
-		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, mutErr, false)
-		result.Ref = ref
-		c.log.ErrorContext(ctx,
-			"cache.error",
-			slog.String("project", s.ProjectPath),
-			slog.String("label", s.Label),
-			slog.String("target", reproTarget(s)),
-			slog.Int64("duration", int64(result.Duration)),
-			slog.String("error", types.CauseText(mutErr)),
-			slog.String("ref", ref),
-			slog.String("log", lp),
-		)
-		if rc.onError != nil {
-			rc.onError(mutErr)
-		}
-		rc.fireResults(rc.step, &result, mutErr)
-		return result, mutErr
+		return fail(mutErr)
 	}
 
 	if c.mutable && !s.NoCache {
@@ -696,29 +688,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		outs, err := c.snapshot(ctx, s, hash, time.Since(start))
 		endSnap(err)
 		if err != nil {
-			result.Duration = time.Since(start)
-			snapErr := fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err)
-			// Report like the sibling runErr path above: fn already succeeded, so
-			// without this the journal and any observer never see the step finish:
-			// it just vanishes mid-run instead of failing loudly.
-			c.errs.Add(1)
-			ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, snapErr, false)
-			result.Ref = ref
-			c.log.ErrorContext(ctx,
-				"cache.error",
-				slog.String("project", s.ProjectPath),
-				slog.String("label", s.Label),
-				slog.String("target", reproTarget(s)),
-				slog.Int64("duration", int64(result.Duration)),
-				slog.String("error", types.CauseText(snapErr)),
-				slog.String("ref", ref),
-				slog.String("log", lp),
-			)
-			if rc.onError != nil {
-				rc.onError(snapErr)
-			}
-			rc.fireResults(rc.step, &result, snapErr)
-			return result, snapErr
+			// Reported like the sibling runErr path: fn already succeeded, so without
+			// this the journal and any observer never see the step finish: it just
+			// vanishes mid-run instead of failing loudly.
+			return fail(fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err))
 		}
 		result.Outputs = outs
 	}
@@ -876,7 +849,8 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 	// the freshly minted ref. Per-line output events already reached the journal during capture.
 	result := journal.Event{
 		Ts: nowMs, Project: s.ProjectPath, Target: target, Kind: journal.KindResult,
-		Level: "info", Status: journal.StatusPass, DurMs: dur.Milliseconds(), Inv: inv, Ref: ref,
+		Level: "info", Status: journal.StatusPass, DurationMs: dur.Milliseconds(), Inv: inv, Ref: ref,
+		CacheKey: hash,
 	}
 	if cacheHit {
 		result.Status = journal.StatusCached

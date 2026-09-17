@@ -77,9 +77,23 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // these sources. Without this the cache key does not move when only markdown
     // changes, and format:rw replays a pass without running dprint at all.
     //
-    // The glob mirrors this project's dprint.json `includes` (./**/*.md); keep the two
-    // in step.
-    ctx.readsFiles("**/*.md");
+    // dprint.json is named beside it because the rules are an input too, and this is the
+    // only target that reads them: an explicit ctx.readsFiles REPLACES the project
+    // baseline, so a project-wide declaration would never reach this key.
+    ctx.readsFiles("dprint.json");
+    // What this target EDITS, restated. Not writesFiles: dprint, gofmt and go-mod-tidy
+    // amend authored files rather than producing them, so the bytes stay off the
+    // snapshot/replay path.
+    //
+    // The Go half is here because of the replacement above, and it was missing: the go
+    // spell contributes its globs project-wide (mgs_listRequiredGlobs takes no target),
+    // so the readsFiles call dropped **/*.go and go.mod out of this key entirely and
+    // go-fmt replayed on a pure-Go edit. lint, build and test still re-ran, inheriting
+    // the baseline, so the gate stayed green while nothing was reformatted.
+    //
+    // The markdown glob mirrors this project's dprint.json `includes` (./**/*.md); keep
+    // the two in step.
+    ctx.modifiesExistingFiles("**/*.md", "**/*.go", "go.mod", "go.sum");
     ctx.needs(generate);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);

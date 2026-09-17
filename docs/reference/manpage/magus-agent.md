@@ -2,7 +2,7 @@
 title: magus agent
 generated_from: internal/cli/registry.go
 description: Render agent skills, adapt a user-owned harness, or review recurring guard feedback; it never writes the AGENTS.md you own.
-tags: [cli, magus agent, skills, agents, AGENTS.md, install, harness, hook, improve]
+tags: [cli, magus agent, skills, agents, AGENTS.md, install, harness]
 ---
 
 # magus-agent
@@ -11,7 +11,7 @@ Manage skills, harnesses, and agent feedback
 
 ## Synopsis
 
-**magus** agent \<install|hook|harness|improve|starter|adoption\> [flags]
+**magus** agent \<install|harness|starter|adoption\> [flags]
 
 ## Description
 
@@ -24,9 +24,15 @@ install PRINTS the managed magus block for you to paste, and only when your
 AGENTS.md is missing it or is carrying a stale one. sample prints a starter
 AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
-hook translates a descriptor-defined host event into the response format its host expects.
-harness applies or verifies a user-owned descriptor. improve reviews recurring
-guard feedback and can explicitly update descriptor-managed entries.
+harness applies, removes, or verifies harnesses selected with
+magus\\harness.provider (several hosts are fine when you bounce between LLM
+tools) or a JSON descriptor: apply merges opaque host-config fragments the
+descriptor already names, remove deletes only those same fragments (a user's
+own hooks beside them are untouched, and nothing is asked for confirmation -
+pass --dry-run to preview one first), and verify actually runs the wired guard
+command against a synthetic event rather than trusting its mere presence in
+the config. Omit --id to act on every magusfile-wired provider. Guard feedback
+that keeps recurring is doctor's recurring-guard-denials check, not a verb here.
 
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
@@ -68,34 +74,25 @@ a pattern no graph verb fits.
 **--tar**
 : Stream a tar archive to stdout instead of writing files (agent install)
 
-### agent hook options
-
-**--host** *string*
-: Harness descriptor receiving the guard response
-
 ### agent harness apply options
 
-**--host** *string*
-: Harness descriptor ID
+**--id** *string*
+: Harness ID; omit to apply every magusfile-wired provider
+
+### agent harness remove options
+
+**--id** *string*
+: Harness ID; omit to remove every magusfile-wired provider
 
 ### agent harness verify options
 
-**--host** *string*
-: Harness descriptor ID
+**--id** *string*
+: Harness ID; omit to verify every magusfile-wired provider
 
-### agent improve options
+### agent harness install options
 
-**--all**
-: Include one-off feedback
-
-**--apply**
-: Apply one descriptor-managed harness update
-
-**--host** *string*
-: Harness descriptor to update with --apply
-
-**--session** *string*
-: Only evidence from this host session
+**--id** *string*
+: Harness ID; omit to install every magusfile-wired provider
 
 ### agent adoption options
 
@@ -107,14 +104,8 @@ a pattern no graph verb fits.
 **install**
 : Render the embedded skills and write or stream them into named destinations
 
-**hook**
-: Translate a descriptor-defined guard event into a host response
-
 **harness**
-: Apply or verify a user-owned harness descriptor
-
-**improve**
-: Review recurring guard feedback and propose a harness update
+: Apply, remove, or verify harnesses wired in the magusfile or JSON descriptors
 
 **starter**
 : Print a starter AGENTS.md to stdout; never writes a file
@@ -180,5 +171,5 @@ magus agent adoption --commands commands.txt -o json
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

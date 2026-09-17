@@ -45,7 +45,8 @@ Work with people and other agents:
   magus_diff              - join the review session a person has open: state, comment, suggest, resolve
   magus_memory            - the per-repository memory of decisions, plans, and ruled-out hypotheses
   magus_vcs_checkpoint    - record the working state's identity (revision, branch, patch digest)
-  magus_job               - declare the job plan an orchestrator hands out: goals, paths, states
+  magus_job               - declare the job plan an orchestrator hands out: criteria, paths, states
+  magus_console_present   - return a local console link when a person asks to see it
 
 Typical flow:
   Discover first: magus_describe (list spells/targets/projects/workspaces), magus_where (resolve a fuzzy project name to a path).

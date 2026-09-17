@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
-	"github.com/egladman/magus/internal/jobs"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	procrun "github.com/egladman/magus/internal/proc/run"
@@ -49,14 +49,16 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverStatus(ctx, rest)
 	case hint.ServerReload.Leaf():
 		return serverReload(ctx, rest)
-	case jobs.NameRotateActivities:
+	case job.NameRotateActivities:
 		return serverRotateActivities(ctx, root, rest)
-	case jobs.NameRotateLogs:
+	case job.NameRotateLogs:
 		return serverRotateLogs(ctx, root, rest)
-	case jobs.NamePrunePreserved:
+	case job.NamePrunePreserved:
 		return serverPrunePreserved(ctx, root, rest)
-	case jobs.NameCheckReview:
+	case job.NameCheckReview:
 		return serverCheckReview(ctx, root, rest)
+	case job.NameCheckDrift:
+		return serverCheckDrift(ctx, root, rest)
 	default:
 		return usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
 	}
@@ -210,6 +212,7 @@ func serverStart(ctx context.Context, args []string) error {
 	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", hint.ServerStop)
 
 	installRefreshHooks(ctx)
+	installDriftHooks(ctx)
 
 	// Start the MCP HTTP server alongside the daemon so MCP clients can
 	// connect without a separate process. No-op when mcp.enabled=false.
@@ -747,7 +750,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		return nil
 	}
 	name := args[0]
-	job, ok := jobs.Lookup(name)
+	job, ok := job.Lookup(name)
 	if !ok {
 		return fmt.Errorf("magus job run: no job named %q; run `%s` to list them", name, hint.JobRun)
 	}
@@ -848,7 +851,7 @@ func jobRunUsage() {
 	fmt.Fprintln(os.Stderr, "A no-op when no daemon is running, so a VCS hook can call it unconditionally.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Jobs:")
-	for _, j := range jobs.All() {
+	for _, j := range job.All() {
 		fmt.Fprintf(os.Stderr, "  %-16s%s\n", j.Name, j.Desc)
 	}
 }
@@ -857,7 +860,7 @@ func jobRunUsage() {
 // activity trail back to its cap and garbage-collects orphaned payload blobs. It runs inside the
 // daemon when dispatched as a job (reusing the warm workspace) and works standalone with no
 // daemon too. The trail lives under the workspace cache dir, the same base the MCP handler
-// writes and the ActivityService reads. Normally reached via `server job rotate-activities`.
+// writes and the ActivityService reads. Normally reached via `magus job run rotate-activities`.
 func serverRotateActivities(ctx context.Context, root string, args []string) error {
 	if _, err := cmdParse("server rotate-activities", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
@@ -878,9 +881,10 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 }
 
 // serverRotateLogs is the worker for the rotate-logs job: it trims the invocation run-log
-// journals (<cacheDir>/runs/<inv>.jsonl) back to their cap, keeping the most recent ones. It runs
-// inside the daemon when dispatched as a job and works standalone too. Normally reached via
-// `server job rotate-logs`.
+// journals (<cacheDir>/runs/<inv>.jsonl) to the count and byte caps and drops anything older
+// than config.Maintenance.RotateLogs, keeping the most recent ones. It runs inside the daemon
+// when dispatched as a job and works standalone too. Normally reached via
+// `magus job run rotate-logs`.
 func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	if _, err := cmdParse("server rotate-logs", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
@@ -896,7 +900,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("server rotate-logs: %w", err)
 	}
-	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes)
+	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes, globalCfg.Daemon.Maintenance.RotateLogs)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
 	return nil
 }
@@ -904,7 +908,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 // serverPrunePreserved is the worker for the prune-preserved job: it drops the working-copy
 // captures `vcs checkpoint --preserve` minted once they outlive the retention that flag
 // promises. It runs inside the daemon when dispatched as a job and works standalone too.
-// Normally reached via `server job prune-preserved`.
+// Normally reached via `magus job run prune-preserved`.
 //
 // The failure is RETURNED here, where Preserve's own prune deliberately discards it. The
 // two are not the same call: a housekeeping failure reported out of Preserve would send a
@@ -912,29 +916,29 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 // housekeeping has nothing else to report, and a store nobody can prune any more has to be
 // visible somewhere. Here that is the job's outcome in the activity trail.
 func serverPrunePreserved(ctx context.Context, root string, args []string) error {
-	if _, err := cmdParse("server "+jobs.NamePrunePreserved, args, func(fs *flag.FlagSet) {
+	if _, err := cmdParse("server "+job.NamePrunePreserved, args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server prune-preserved")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Drop the working-copy captures `magus vcs checkpoint --preserve` minted")
 			fmt.Fprintln(os.Stderr, "once they are past their retention. Sapling captures survive this pass;")
 			fmt.Fprintln(os.Stderr, "Jujutsu mints none. This is the worker for")
-			fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(jobs.NamePrunePreserved)+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(job.NamePrunePreserved)+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return fmt.Errorf("server %s: %w", jobs.NamePrunePreserved, err)
+		return fmt.Errorf("server %s: %w", job.NamePrunePreserved, err)
 	}
 	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
 	if err != nil {
-		return fmt.Errorf("server %s: %w", jobs.NamePrunePreserved, err)
+		return fmt.Errorf("server %s: %w", job.NamePrunePreserved, err)
 	}
 	dropped, err := vcs.PrunePreserved(ctx, m.Root(), res)
 	if err != nil {
-		return fmt.Errorf("server %s: %w", jobs.NamePrunePreserved, err)
+		return fmt.Errorf("server %s: %w", job.NamePrunePreserved, err)
 	}
 	slog.InfoContext(ctx, "pruned preserved captures",
 		slog.Int("dropped", len(dropped)), slog.String("vcs", res.Name))
@@ -970,6 +974,38 @@ func installRefreshHooks(ctx context.Context) {
 	}
 	if len(installed) > 0 {
 		fmt.Fprintf(os.Stderr, "magus: installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically\n", res.Name, strings.Join(installed, ", "))
+	}
+}
+
+// installDriftHooks installs the VCS drift-notice hook (types.DriftHookInstaller) so a
+// commit and the push that follows it each poke this daemon to check, in the background,
+// whether the commit left generated output stale. Same shape and same guarantees as
+// installRefreshHooks: best-effort, never fatal to starting the daemon, and a no-op on a
+// non-git tree or a VCS with no hook support (jj).
+func installDriftHooks(ctx context.Context) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	res, err := vcs.Resolve(ctx, cwd, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return
+	}
+	installer, ok := res.VCS.(types.DriftHookInstaller)
+	if !ok {
+		return // this VCS has no hook support
+	}
+	root, err := res.VCS.Root(ctx, cwd)
+	if err != nil {
+		root = cwd
+	}
+	installed, err := installer.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
+	if err != nil {
+		slog.WarnContext(ctx, "server start: could not install VCS drift-notice hook", slog.String("error", err.Error()))
+		return
+	}
+	if len(installed) > 0 {
+		fmt.Fprintf(os.Stderr, "magus: installed %s drift-notice hook(s) [%s]; a commit that leaves generated output stale is now noticed automatically\n", res.Name, strings.Join(installed, ", "))
 	}
 }
 
@@ -1046,9 +1082,9 @@ func serverReload(ctx context.Context, args []string) error {
 //
 // It records rather than notifies. The event is the durable fact; the console's watcher reads the
 // trail for it, exactly as it already does for a share being opened. Normally reached via
-// `magus server job check-review`.
+// `magus job run check-review`.
 func serverCheckReview(ctx context.Context, root string, args []string) error {
-	if _, err := cmdParse("server "+jobs.NameCheckReview, args, func(fs *flag.FlagSet) {
+	if _, err := cmdParse("server "+job.NameCheckReview, args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server check-review")
 			fmt.Fprintln(os.Stderr, "")
@@ -1060,7 +1096,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return fmt.Errorf("server %s: %w", jobs.NameCheckReview, err)
+		return fmt.Errorf("server %s: %w", job.NameCheckReview, err)
 	}
 	// The PERSISTED watermark, not a session. This runs in its own process, so the store's
 	// in-memory session map is empty by construction: reading it was a gate that could never

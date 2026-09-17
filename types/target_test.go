@@ -15,17 +15,6 @@ func TestTargetString(t *testing.T) {
 	assert.Equal(t, ":test", Target{Name: "test"}.String())
 }
 
-func TestExecResultBuzzObject(t *testing.T) {
-	r := ExecResult{Stdout: "out", Stderr: "err", Code: 2, OK: false}
-	want := BuzzObject{
-		"stdout": "out",
-		"stderr": "err",
-		"code":   2,
-		"ok":     false,
-	}
-	assert.Equal(t, want, r.BuzzObject())
-}
-
 func TestParseTarget(t *testing.T) {
 	got, err := ParseTarget("build") // bare target
 	require.NoError(t, err)

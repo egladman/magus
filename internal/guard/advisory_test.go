@@ -29,6 +29,45 @@ func TestPrecedentIdentClassifier(t *testing.T) {
 	assert.Empty(t, ident("cat internal/hint/hint.go"), "reading a known path asks nothing of the graph")
 }
 
+// TestSymbolSearchDeniesOnlyWhatRefsReplaces pins the condition the deny rests on. refs
+// replaces a grep exactly when the name is an indexed symbol AND the index can be
+// trusted; every other answer leaves the advisory in place, because a deny that routes
+// nowhere takes a capability away. Raw text is the standing case: no index holds a
+// string literal, so grep stays the only tool for it.
+func TestSymbolSearchDeniesOnlyWhatRefsReplaces(t *testing.T) {
+	verdict := func(defined, definitive bool) ShellVerdict {
+		return Evaluate(Dependencies{
+			SymbolDefined: func(string) (bool, bool) { return defined, definitive },
+		}, "grep -r HandleRequest internal/")
+	}
+
+	denied := verdict(true, true)
+	assert.NotEmpty(t, denied.Deny, "an indexed symbol under a current index is the case refs replaces exactly")
+	assert.Equal(t, denyRuleSymbolSearch, denied.Rule.Name)
+	assert.Equal(t, "HandleRequest", denied.Rule.Arg, "the deny names the symbol so the trail can count it")
+	assert.Contains(t, denied.Deny, "HandleRequest", "a deny that does not carry the replacement is a lost turn")
+
+	stale := verdict(true, false)
+	assert.Empty(t, stale.Deny, "a stale index answers unknown, which cannot justify taking grep away")
+	assert.Equal(t, advisoryPrecedent, stale.Kind)
+	// The brief is the only part read on every call, so it owes the reader the reason this
+	// was advice and the command that makes it a deny next time. Without them a stale index
+	// degrades the rule silently, on exactly the branch that is adding the symbols.
+	assert.Contains(t, stale.Brief, "cannot vouch for HandleRequest",
+		"the brief must say the index is behind, not merely prefer refs")
+	assert.Contains(t, stale.Brief, hint.GraphBuild.String(),
+		"an advisory naming a gap owes the command that closes it")
+
+	absent := verdict(false, true)
+	assert.Empty(t, absent.Deny, "nothing replaces a search for text no index holds")
+	assert.Equal(t, advisoryPrecedent, absent.Kind)
+	assert.NotContains(t, absent.Brief, "cannot vouch",
+		"a definitive not-a-symbol answer is not staleness; grep is simply right here")
+
+	unwired := Evaluate(Dependencies{}, "grep -r HandleRequest internal/")
+	assert.Empty(t, unwired.Deny, "a caller that supplies no resolver keeps the advisory it had")
+}
+
 // The property nothing may erode: a DENY carries its whole reason on every invocation,
 // whatever the marker directory says. The gate is not consulted on that arm at all, and
 // this asserts it against a spent marker for every enrolled kind at once.
@@ -36,7 +75,7 @@ func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
 	base := t.TempDir()
 	gate := hint.NewGate(base, "shared")
 	for _, kind := range []hint.MarkerKind{
-		advisoryStaleBinary, advisoryCodeSearch, advisoryDocSearch, advisoryPrecedent,
+		advisoryStaleBinary, advisoryCodeSearch, advisoryDocSearch, advisorySourceRead, advisoryPrecedent,
 		advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource, advisoryRegenSource,
 		advisoryGraphStale, advisoryFocus, advisoryNewFile,
 	} {

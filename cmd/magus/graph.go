@@ -27,6 +27,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
 
@@ -36,7 +37,7 @@ import (
 // merged knowledge graph for external tools (export), and report its shape
 // (stats). One home instead of surfaces scattered across describe and insight.
 
-var graphSubs = []string{"build", "deps", "export", "stats", "diff"}
+var graphSubs = []string{"build", "push", "pull", "deps", "export", "stats", "diff"}
 
 func graphCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -47,6 +48,10 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 	switch sub {
 	case "build":
 		return graphBuild(ctx, root, rest)
+	case "push":
+		return graphPush(ctx, root, rest)
+	case "pull":
+		return graphPull(ctx, root, rest)
 	case "deps":
 		return graphDeps(ctx, root, rest)
 	case "export":
@@ -82,6 +87,8 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  build    rebuild the knowledge graph now, reindexing code symbols (runs each project's scip op)")
+	fmt.Fprintln(os.Stderr, "  push     publish the graph to a container registry as an OCI artifact")
+	fmt.Fprintln(os.Stderr, "  pull     fetch a published graph; a public one needs no credentials")
 	fmt.Fprintln(os.Stderr, "  deps     project dependency DAG (-o text|json|yaml|dot|mermaid|tree)")
 	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot|mermaid neighborhood)")
 	fmt.Fprintln(os.Stderr, "  stats    knowledge-graph shape: god nodes, orphans, doc coverage (--kind to scope)")
@@ -98,16 +105,19 @@ func graphUsage() {
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless.
 func graphBuild(ctx context.Context, root string, args []string) error {
-	var skipSymbols bool
+	var skipSymbols, skipSessions bool
 	_, err := cmdParse("graph build", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
+		fs.BoolVar(&skipSessions, "no-sessions", false, "do not run the declared agent-session adapters first")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph build [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Rebuild the knowledge graph now. By default it first reindexes code symbols")
-			fmt.Fprintln(os.Stderr, "by running each symbol-capable project's `scip` op, then rebuilds and")
-			fmt.Fprintln(os.Stderr, "re-ingests. The daemon does this automatically in the background; this is the")
-			fmt.Fprintln(os.Stderr, "manual trigger (after a branch switch, or when the daemon is not running).")
+			fmt.Fprintln(os.Stderr, "by running each symbol-capable project's `scip` op, then runs each adapter")
+			fmt.Fprintln(os.Stderr, "declared in knowledge.sessions to fold this machine's agent transcripts into")
+			fmt.Fprintln(os.Stderr, "the @session overlay, then rebuilds and re-ingests. The daemon does this")
+			fmt.Fprintln(os.Stderr, "automatically in the background; this is the manual trigger (after a branch")
+			fmt.Fprintln(os.Stderr, "switch, or when the daemon is not running).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -133,6 +143,10 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 		}
 	}
 
+	if !skipSessions {
+		ingestSessions(ctx, root)
+	}
+
 	g, err := loadKnowledgeGraph(ctx, root, true /* refresh */, false, false)
 	if err != nil {
 		return err
@@ -140,6 +154,41 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	out := g.Output()
 	fmt.Fprintf(os.Stderr, "knowledge graph rebuilt: %d nodes, %d edges\n", out.NodeCount, out.EdgeCount)
 	return nil
+}
+
+// ingestSessions runs the declared transcript adapters, reporting each one's own summary
+// line, before the graph that reads what they loaded is assembled.
+//
+// Never fatal, for the same reason reindexing is not: an adapter that fails leaves the
+// previous ingest in place, so the graph is missing its newest sessions rather than
+// wrong, and failing the rebuild over it would take the other nine tenths of the graph
+// down with it. A workspace that declares no adapter says nothing at all, since silence
+// is the correct report for a feature nobody opted into.
+func ingestSessions(ctx context.Context, root string) {
+	cfg := globalCfg.Knowledge.Sessions
+	if cfg.Disabled {
+		return
+	}
+	// The config-to-store mapping lives HERE, in the composition root, so neither package
+	// names the other's vocabulary: config owns the workspace schema, internal/sessions
+	// owns the store and takes two strings per adapter.
+	adapters := make([]sessions.Adapter, 0, len(cfg.Adapters))
+	for _, a := range cfg.Adapters {
+		adapters = append(adapters, sessions.Adapter{Host: a.Host, Argv: a.Command})
+	}
+	// Resolved here rather than taken as given: root is empty on every invocation that did
+	// not pass --root, and an adapter is a command with a working directory, so it has to
+	// be a real path before one can run.
+	results := sessions.RunAdapters(ctx, resolveRootOrEmpty(root), adapters)
+	for _, r := range results {
+		if r.Err != nil {
+			interactive.Emit(os.Stderr, "session adapter "+r.Host+" did not finish:")
+			fmt.Fprintf(os.Stderr, "  %s\n", r.Err.Error())
+		}
+		if r.Output != "" {
+			fmt.Fprintf(os.Stderr, "%s\n", r.Output)
+		}
+	}
 }
 
 // graphDeps emits the project dependency DAG, the standalone home of the view
@@ -285,10 +334,11 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	case outputMermaid:
 		return render.WriteKnowledgeMermaid(os.Stdout, out)
 	case outputName:
+		names := make([]string, 0, len(out.Nodes))
 		for _, n := range out.Nodes {
-			fmt.Println(n.ID)
+			names = append(names, n.ID)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide: a routing summary, not a data dump (counts by kind and relation).
@@ -387,10 +437,11 @@ func graphStats(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(outOpts, out)
 	case outputName:
+		names := make([]string, 0, len(out.Gods))
 		for _, god := range out.Gods {
-			fmt.Println(god.ID)
+			names = append(names, god.ID)
 		}
-		return nil
+		return emitNames(names)
 	}
 	return statsText(out)
 }
@@ -453,6 +504,13 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 			interactive.Emit(os.Stderr, "note: symbol queries are domain-only under --global (cross-workspace symbols are a later phase)")
 		}
 		return magus.BuildGlobalKnowledgeGraph(ctx, ws, globalCfg, refresh, slog.Default())
+	}
+	if refresh {
+		// Before paying to rebuild, take the published copy if this workspace names one.
+		// A refresh is the moment the expensive half (the SCIP shards, which are never
+		// committed) would otherwise be recomputed, and a branch switch reaches here
+		// through the VCS refresh hook's sync-graph job.
+		seedFromPublishedGraph(ws)
 	}
 	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
 	if err != nil {
@@ -557,10 +615,11 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 		return emitFormatted(outOpts, magus.ComposeGraph(ws, composeOpts...))
 	case outputName:
 		out := magus.ComposeGraph(ws, composeOpts...)
+		names := make([]string, 0, len(out.Nodes))
 		for _, n := range out.Nodes {
-			fmt.Println(n.Path)
+			names = append(names, n.Path)
 		}
-		return nil
+		return emitNames(names)
 	case outputDot:
 		return render.WriteGraphDOT(os.Stdout, magus.ComposeGraph(ws, composeOpts...))
 	case outputMermaid:

@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v12). Query it instead of grepping:
+This workspace has a knowledge graph (schema v13). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -46,18 +46,18 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                    |
 | ---------- | -------: | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                          |
-| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `format`                                                                               |
+| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `test`                                                                                 |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                                  |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                             |
 | tool       | built in | `magus query kind=tool`       | `go`, `pnpm`, `buf`                                                                                                         |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
 | module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
-| method     | built in | `magus query kind=method`     | `archive.compress`, `archive.list`, `archive.read_file`                                                                     |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3010`, `MGS3012`, `MGS1002`                                                                                             |
-| doc        |     300+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir        |     200+ | `magus query kind=dir`        | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage`                                           |
+| method     | built in | `magus query kind=method`     |                                                                                                                             |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS1028`, `MGS3010`, `MGS3012`                                                                                             |
+| doc        |     400+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir        |     200+ | `magus query kind=dir`        | `docs/reference/rules`, `docs/reference/codes/magusfile`, `docs/reference/buzz`                                             |
 | file       |     200+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
-| function   |     900+ | `magus query kind=function`   | `tail`, `sign`, `renderContentHTML`                                                                                         |
+| function   |    1000+ | `magus query kind=function`   | `tail`, `sign`, `claude_entries`                                                                                            |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
 | rationale  |        6 | `magus query kind=rationale`  | `TODO`, `WHY`, `NOTE`                                                                                                       |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
@@ -65,10 +65,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| .                               |      50 | `magus query project=.`                               | `generate`, `buzz-test`, `release-index`                 |
+| .                               |      49 | `magus query project=.`                               | `test`, `generate`, `buzz-test`                          |
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       6 | `magus query project=docs/guides/integrations/agents` | `format`, `preflight`, `ci`                              |
+| docs/guides/integrations/agents |       7 | `magus query project=docs/guides/integrations/agents` | `format`, `preflight`, `ci`                              |
 | libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `test`, `build`                                |
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
@@ -96,6 +96,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `preflight`               |                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `index-generate`          | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.                                                                                                                                                                                                                                                                                       |
 | `content-generate`        | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
-| `conventions`             | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.                                                                                                                                                                                                                        |
+| `conventions`             | conventions holds every doc page to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.                                                                                                                                                                                                                          |
 | `buzz-test`               | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve.                                                                                                                                                                                                                                                                                 |
 | `diagrams-generate`       | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/.                                                                                                                                                                                                                                                                                                                                  |

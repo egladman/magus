@@ -37,38 +37,6 @@ func TestCommitBuzzObjectZeroDate(t *testing.T) {
 	assert.Equal(t, "", got["date"])
 }
 
-// TestTagBuzzObject covers the Buzz boundary map, including the nested
-// SemverVersion record and the RFC3339 date formatting.
-func TestTagBuzzObject(t *testing.T) {
-	tag := VCSTag{
-		Name:    "libs/gopherbuzz/v0.1.0",
-		Prefix:  "libs/gopherbuzz/",
-		Version: SemverVersion{Major: 0, Minor: 1, Patch: 0, Original: "0.1.0"},
-		Date:    time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-		ID:      "deadbeef",
-	}
-	want := BuzzObject{
-		"name":   "libs/gopherbuzz/v0.1.0",
-		"prefix": "libs/gopherbuzz/",
-		"version": BuzzObject{
-			"major": 0, "minor": 1, "patch": 0,
-			"prerelease": "", "metadata": "", "original": "0.1.0",
-		},
-		"date": "2026-01-02T03:04:05Z",
-		"id":   "deadbeef",
-	}
-	assert.Equal(t, want, tag.BuzzObject())
-}
-
-// A tag whose Name never parsed as semver carries the zero Version: test
-// Version.Original == "" rather than a separate bool, and BuzzObject must nest
-// that zero value rather than omitting the key.
-func TestTagBuzzObjectNonSemver(t *testing.T) {
-	got := VCSTag{Name: "checkpoint", ID: "x"}.BuzzObject()
-	assert.Equal(t, SemverVersion{}.BuzzObject(), got["version"])
-	assert.Equal(t, "", got["prefix"])
-}
-
 func TestVCSErrorSentinels(t *testing.T) {
 	for _, sentinel := range []error{ErrVCSUnsupported, ErrVCSUnknown} {
 		assert.NotNil(t, sentinel)
@@ -123,4 +91,51 @@ func TestClassifyDrift(t *testing.T) {
 	// Inputs unchanged on a RELEASE build: same inputs, same generator, different bytes.
 	code, _ = ClassifyDrift(false, "v0.3.0")
 	assert.Equal(t, NondeterministicOutput, code)
+}
+
+// TestStaleSourceProjects pins the complement SplitExplainedOutputs does not answer: a
+// project whose source changed but whose output did not move AT ALL in the same files.
+func TestStaleSourceProjects(t *testing.T) {
+	t.Run("source and output both moved: not stale", func(t *testing.T) {
+		files := []FileEntry{
+			{Path: "api/schema.proto", Role: "source", SourceOf: []string{"api"}},
+			{Path: "api/gen/schema.pb.go", Role: "output", OutputOf: []string{"api"}},
+		}
+		assert.Empty(t, StaleSourceProjects(files))
+	})
+
+	t.Run("source moved with no matching output: stale", func(t *testing.T) {
+		files := []FileEntry{
+			{Path: "api/schema.proto", Role: "source", SourceOf: []string{"api"}},
+		}
+		assert.Equal(t, []string{"api"}, StaleSourceProjects(files))
+	})
+
+	t.Run("output moved with no source: not this function's question", func(t *testing.T) {
+		// This is SplitExplainedOutputs' unexplained case (MGS4005/MGS4003), not a stale
+		// source: there is no source project to report as stale here.
+		files := []FileEntry{
+			{Path: "api/gen/schema.pb.go", Role: "output", OutputOf: []string{"api"}},
+		}
+		assert.Empty(t, StaleSourceProjects(files))
+	})
+
+	t.Run("one project regenerated, a sibling did not: only the sibling is stale", func(t *testing.T) {
+		files := []FileEntry{
+			{Path: "api/schema.proto", Role: "source", SourceOf: []string{"api"}},
+			{Path: "api/gen/schema.pb.go", Role: "output", OutputOf: []string{"api"}},
+			{Path: "web/schema.graphql", Role: "source", SourceOf: []string{"web"}},
+		}
+		assert.Equal(t, []string{"web"}, StaleSourceProjects(files))
+	})
+
+	t.Run("multiple stale projects come back sorted", func(t *testing.T) {
+		files := []FileEntry{
+			{Path: "web/schema.graphql", Role: "source", SourceOf: []string{"web"}},
+			{Path: "api/schema.proto", Role: "source", SourceOf: []string{"api"}},
+		}
+		assert.Equal(t, []string{"api", "web"}, StaleSourceProjects(files))
+	})
+
+	assert.Empty(t, StaleSourceProjects(nil))
 }

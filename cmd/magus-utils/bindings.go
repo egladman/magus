@@ -143,7 +143,10 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	for _, f := range m.Fields {
 		emitBuzzField(&body, f, implPkg)
 	}
-	objects := newBuzzValueEmitter(m.Name)
+	// Discarded: this emitter is here to NAME the shared encoders and to reject an
+	// undeclared return, not to write one. The bodies are emitted once for the whole
+	// package by `magus-utils boundaryobjects`.
+	objects := newBuzzValueEmitter()
 	for _, meth := range m.Methods {
 		// An Extern member has no Impl to wrap; internal/interp/bindings MapSets it
 		// onto the namespace at run time. It is declared, not trampolined.
@@ -187,19 +190,9 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	if implPath != "" {
 		fmt.Fprintf(&b, "\t%q\n", implPath)
 	}
-	if objects.usesSpells {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/spells"`)
-	}
-	if objects.usesTypes {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
-	}
-	if objects.usesTime {
-		fmt.Fprintln(&b, `	"time"`)
-	}
 	fmt.Fprintln(&b, `)`)
 	fmt.Fprintln(&b)
 	b.Write(body.Bytes())
-	b.Write(objects.funcs.Bytes())
 
 	out, err := format.Source(b.Bytes())
 	if err != nil {
@@ -524,20 +517,25 @@ func buzzValConv(t std.TypeTag, src string) string {
 	}
 }
 
-// buzzValueEmitter writes concrete Go-to-VM encoders for descriptor object
-// returns. It is generator-only reflection: the binary receives ordinary field
-// reads, loops, and vm constructors.
+// buzzValueEmitter writes concrete Go-to-VM encoders for boundary types. It is
+// generator-only reflection: the binary receives ordinary field reads, loops, and vm
+// constructors.
+//
+// One emitter serves the whole package, and its output is one file. Per-module
+// emitters produced a copy of each shared type's encoder in every module that
+// returned it (Path had three), and none of them could be reached from the
+// hand-bound members in the parent package, which is why types carried a second,
+// parallel set of encoders as METHODS until this replaced them.
 type buzzValueEmitter struct {
 	funcs      bytes.Buffer
 	emitted    map[reflect.Type]bool
-	module     string
 	usesTypes  bool
 	usesSpells bool
 	usesTime   bool
 }
 
-func newBuzzValueEmitter(module string) *buzzValueEmitter {
-	return &buzzValueEmitter{emitted: map[reflect.Type]bool{}, module: titleCase(module)}
+func newBuzzValueEmitter() *buzzValueEmitter {
+	return &buzzValueEmitter{emitted: map[reflect.Type]bool{}}
 }
 
 func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error) {
@@ -551,10 +549,10 @@ func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error)
 		if t.Elem().Kind() != reflect.Struct {
 			return "", fmt.Errorf("object return %s is not a slice of structs", t)
 		}
-		if err := e.emitSlice(t.Elem()); err != nil {
+		if err := e.emitStruct(t.Elem()); err != nil {
 			return "", err
 		}
-		return e.sliceFuncName(t.Elem()) + "(" + src + ")", nil
+		return "ObjectSlice(" + src + ", " + e.funcName(t.Elem()) + ")", nil
 	default:
 		return "", fmt.Errorf("object return %s is not a struct or slice of structs", t)
 	}
@@ -609,26 +607,6 @@ func (e *buzzValueEmitter) markPkg(t reflect.Type) {
 		return
 	}
 	e.usesSpells = true
-}
-
-func (e *buzzValueEmitter) emitSlice(t reflect.Type) error {
-	if err := e.emitStruct(t); err != nil {
-		return err
-	}
-	marker := reflect.SliceOf(t)
-	if e.emitted[marker] {
-		return nil
-	}
-	e.emitted[marker] = true
-	fmt.Fprintf(&e.funcs, "func %s(values []%s) vm.Value {\n", e.sliceFuncName(t), e.qualify(t))
-	fmt.Fprintln(&e.funcs, "\titems := make([]vm.Value, len(values))")
-	fmt.Fprintln(&e.funcs, "\tfor i, value := range values {")
-	fmt.Fprintf(&e.funcs, "\t\titems[i] = %s(value)\n", e.funcName(t))
-	fmt.Fprintln(&e.funcs, "\t}")
-	fmt.Fprintln(&e.funcs, "\treturn vm.ListValue(items)")
-	fmt.Fprintln(&e.funcs, "}")
-	fmt.Fprintln(&e.funcs)
-	return nil
 }
 
 // value renders the conversion for one field, emitting any temporaries it needs first.
@@ -713,11 +691,17 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 	}
 }
 
+// funcName keys the encoder on the GO type name, not the Buzz one. The Buzz name reads
+// better at a call site (ObjectProjects over ObjectProjectsOutput), and it is not unique:
+// several registry entries name a *Record MIRROR that exists only to be reflected over
+// (CommitRecord is Buzz `Commit`) while the Impl returns the live type beside it, so both
+// arrive here wanting the same name.
+//
+// Exported because the hand-bound members in internal/interp/bindings call these
+// directly; a member bound at run time has no trampoline to inline the conversion into.
 func (e *buzzValueEmitter) funcName(t reflect.Type) string {
-	return "buzzValue" + e.module + t.Name()
+	return "Object" + t.Name()
 }
-
-func (e *buzzValueEmitter) sliceFuncName(t reflect.Type) string { return e.funcName(t) + "Slice" }
 
 // name builds a temporary's identifier from the field path rather than a running
 // counter. A counter makes every temporary after an inserted field shift by one, so
@@ -730,9 +714,10 @@ func (e *buzzValueEmitter) name(prefix, path string) string {
 	return prefix + path
 }
 
-// buzzVMFieldName must agree with buzzgen.MemberName exactly: this emits the RUNTIME map
-// key and that one emits the DECLARED field, so the two drifting means a magusfile reads a
-// name the encoder never writes. Both go through LowerFirstWord for that reason.
+// buzzVMFieldName must agree with the mirror's field name exactly: this emits the RUNTIME
+// map key and buzzgen.ObjectDecl emits the DECLARED field, so the two drifting means a
+// magusfile reads a name the encoder never writes. Both go through LowerFirstWord for that
+// reason.
 func buzzVMFieldName(f reflect.StructField) string {
 	if name := f.Tag.Get("buzz"); name != "" {
 		return name

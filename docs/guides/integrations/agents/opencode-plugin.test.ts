@@ -20,7 +20,7 @@
 // proves the sh templates get the right answer from a real binary, and
 // opencode-plugin.live.test.ts proves THIS plugin does too (live = binary
 // interface) - it drives the same exported functions through a Bun.spawn shim
-// backed by a real child process instead of a canned reply. Set GUARD_MAGUS_BIN to
+// backed by a real child process instead of a canned reply. Set __MAGUS_BIN to
 // a built magus to run it locally; it skips loudly without one.
 
 import assert from "node:assert/strict";
@@ -85,7 +85,8 @@ async function hooks() {
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
-    "experimental.session.compacting": (
+    // Optional, and asserted ABSENT below: magus registers no pre-compaction handler.
+    "experimental.session.compacting"?: (
       input: Record<string, never>,
       output: { context: string[] },
     ) => Promise<void>;
@@ -97,7 +98,7 @@ const deny: Canned = { schema_version: 1, decision: "deny", reason: "whole-tree 
 const advise: Canned = { schema_version: 1, decision: "advise", context: "that file is generated" };
 const pass: Canned = { schema_version: 1, decision: "pass" };
 
-test("a shell command is judged over stdin by the top-level hook subcommand", async () => {
+test("a shell command is judged over stdin by the top-level shell subcommand", async () => {
   const calls = stubBun(() => deny);
   const h = await hooks();
 
@@ -109,7 +110,7 @@ test("a shell command is judged over stdin by the top-level hook subcommand", as
   assert.equal(calls.length, 1);
   // The exact contract, spelled out rather than pattern-matched: these are the two
   // things that were wrong, and a loose assertion would have passed on both.
-  assert.deepEqual(calls[0].argv, ["session", "hook", "--agent-name", "opencode", "-o", "json"]);
+  assert.deepEqual(calls[0].argv, ["shell", "--agent-name", "opencode", "-o", "json"]);
   assert.equal(calls[0].stdin, "git stash");
   assert.ok(
     !calls[0].argv.includes("agent"),
@@ -129,15 +130,7 @@ test("a file write is judged on the path surface, also over stdin", async () => 
     );
   });
 
-  assert.deepEqual(calls[0].argv, [
-    "session",
-    "hook",
-    "--path",
-    "--agent-name",
-    "opencode",
-    "-o",
-    "json",
-  ]);
+  assert.deepEqual(calls[0].argv, ["shell", "--path", "--agent-name", "opencode", "-o", "json"]);
   assert.equal(calls[0].stdin, "gen/index.json");
   // An advise must not throw, and must not be logged either: it is held for the
   // call it judged and appended to that call's own result, which is the only
@@ -172,15 +165,19 @@ test("an advisory reaches only the call it judged", async () => {
   assert.equal(again.output, "matches");
 });
 
-test("a compacting session is handed the brief", async () => {
-  const calls = stubBun(() => null);
+test("nothing is written into the compaction prompt", async () => {
   const h = await hooks();
 
-  const output: { context: string[] } = { context: [] };
-  await h["experimental.session.compacting"]({}, output);
-
-  assert.deepEqual(calls[0].argv, ["session", "--brief"]);
-  assert.deepEqual(output.context, [], "an empty brief adds nothing to the compaction prompt");
+  // Pinned as an ABSENCE because the handler was there and was removed on purpose. The
+  // hook appends to OpenCode's summarizer prompt, so anything registered here shapes what
+  // the summary keeps -- which no other host magus wires can do, and which contradicts the
+  // brief's own contract that it is state read from disk rather than prose retold. See the
+  // comment where the handler used to be in opencode-plugin.ts.
+  assert.equal(
+    h["experimental.session.compacting"],
+    undefined,
+    "magus must not register a pre-compaction handler: it steers the summary on the one host that allows it",
+  );
 });
 
 test("a pass is silent and blocks nothing", async () => {

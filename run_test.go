@@ -265,6 +265,36 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 		"a sibling target must not inherit build's per-target outputs")
 }
 
+// TestFootprintAlwaysKeysOnTheDefiningMagusfile pins the one thing a declared footprint may
+// never narrow away: the file the target is written in.
+//
+// A footprint REPLACES the project baseline, so the natural reading of "the body states the
+// rest" is that the body states ALL of it. If the magusfile fell out with the baseline, a
+// target would keep replaying its previous answer after its own logic was rewritten, and the
+// author would be looking at code that had not run. Nothing else in the workspace would say
+// so. buildStep seeds the footprint with the magusfile globs for exactly that reason, and
+// this asserts the seed rather than trusting the comment there.
+func TestFootprintAlwaysKeysOnTheDefiningMagusfile(t *testing.T) {
+	root := t.TempDir()
+	// A footprint naming one unrelated file: the narrowest a target can declare.
+	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("src/**");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	assert.Contains(t, m.buildStep(p, "build").Sources, "magusfile.buzz",
+		"a target that declares its inputs must still key on the magusfile defining it, "+
+			"or editing the target body cannot invalidate its cache")
+}
+
 // A composer's key must move when the artifact of a composed skip_cache target
 // does; see types.ChainSkipCacheOutputs for why.
 func TestComposerKeysOnAComposedSkipCacheTargetsOutput(t *testing.T) {

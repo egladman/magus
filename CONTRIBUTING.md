@@ -441,9 +441,15 @@ and will drift from the real `//go:generate` directive.
 
 ## The coverage badge is a record, not a measurement
 
+There are three language badges on the README: `assets/coverage.svg` (Go),
+`assets/buzz-coverage.svg` (Buzz), and `console/coverage.svg` (TypeScript). The Go
+badge is the special case below; Buzz and TypeScript are measured by their own
+test targets (`buzz-test` and `console`'s `test`) and drift-gated the same way
+as any other declared output.
+
 `assets/coverage.svg` is one figure over the whole Go codebase, and no single machine
 can measure that: 119 non-test files sit behind `//go:build` constraints, so macOS and
-Linux read 67.6% and 66.9% for the same commit. The badge is therefore split in two.
+Linux read 67.6% and 66.9% for the same commit. The Go badge is therefore split in two.
 
 The **denominator** is static. Which statements exist does not depend on where you
 stand, so `coverage.buzz` enumerates every statement block of every Go file in every

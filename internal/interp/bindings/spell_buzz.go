@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -79,6 +79,9 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	if spec.Comments != nil {
 		extra = append(extra, spells.WithComments(spec.Comments))
 	}
+	if spec.SymbolIndexer != nil {
+		extra = append(extra, spells.WithSymbolIndexer(spec.SymbolIndexer))
+	}
 	if spec.Opaque {
 		extra = append(extra, spells.WithOpaque())
 	}
@@ -110,14 +113,14 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	// A spell gets the SCRIPT surface, the same one `magus buzz` sees: the members that
 	// declare into a workspace being loaded raise MGS1022, the rest work. Without this
 	// `import "magus"` fails outright with BZZ2001, which reads as "the module does not
-	// exist": the failure mode buildMagusNS explicitly rejects for the script surface.
+	// exist": the failure mode buildMagus explicitly rejects for the script surface.
 	// Note the in-process readers (ls, targets, graph) still raise here: a spell has no
 	// workspace on its context, so it must reach for the forking members (cmd, describe).
 	RegisterMagusNamespace(ctx, sess)
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return spells.Descriptor{}, err
 	}
-	return spellruntime.Resolve(ctx, sess)
+	return spell.Resolve(ctx, sess)
 }
 
 // spellSearchPaths resolves imports from the candidate and its magusfile's directory.
@@ -147,7 +150,7 @@ func spellSearchPaths(roots ...string) []string {
 func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		if _, ok := spec.Ops[req.Target]; ok {
-			return dispatchOp(ctx, spec.Ops, spec.Tools, spec.IgnoreDirs, req)
+			return dispatchOp(ctx, spec, req)
 		}
 		return callBuzzSpellFunc(ctx, src, req.Target, req)
 	}

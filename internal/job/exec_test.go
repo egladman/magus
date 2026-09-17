@@ -146,7 +146,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	seed(t, s, types.Job{ID: "u1", Checkpoint: baseA, Goal: "declared goal"})
+	seed(t, s, types.Job{ID: "u1", Checkpoint: baseA, Criteria: "declared goal"})
 
 	diverged, err := s.Exec(ctx, "u1", baseB)
 	require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	settled, err := s.Exec(ctx, "u1", baseA)
 	require.NoError(t, err)
 	assert.Equal(t, types.BaseMatch, settled.BaseVerdict)
-	assert.Equal(t, "declared goal", settled.Goal, "registering erased nothing the orchestrator declared")
+	assert.Equal(t, "declared goal", settled.Criteria, "registering erased nothing the orchestrator declared")
 	assert.Equal(t, diverged.Created, settled.Created)
 }
 

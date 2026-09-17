@@ -135,13 +135,14 @@ registered job by its resource name (`jobs/{job}`), and `ListJobs` reports every
 job's running state, last run, and target size. A job name nobody registered is
 a NotFound error rather than a third RPC.
 
-| Job                 | Effect                                               |
-| ------------------- | ---------------------------------------------------- |
-| `sync-graph`        | Reconcile the knowledge graph to current source      |
-| `rotate-activities` | Trim the activity trail to its cap                   |
-| `rotate-logs`       | Trim the invocation run-log journals to their cap    |
-| `clear-cache`       | Invalidate cached build entries                      |
-| `check-review`      | Note when a review this tree took part in has merged |
+| Job                 | Effect                                                                            |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `sync-graph`        | Reconcile the knowledge graph to current source                                   |
+| `rotate-activities` | Trim the activity trail to its cap                                                |
+| `rotate-logs`       | Trim the invocation run-log journals to their cap                                 |
+| `clear-cache`       | Invalidate cached build entries                                                   |
+| `check-review`      | Note when a review this tree took part in has merged                              |
+| `check-drift`       | Notice, without blocking, a commit that left generated output or formatting stale |
 
 Each submit is fire-and-forget and coalesced (an identical in-flight job is not
 started twice) and returns a metadata snapshot - the job's last run and the
@@ -175,9 +176,13 @@ magus config token print
 
 The token is stored on disk (`~/.config/magus/mcp-token`) and never logged.
 
-**DNS-rebind guard.** The console shares the MCP server's host-header check.
-A request whose `Host` header does not resolve to the loopback range is
-rejected with 403 before the bearer token is examined.
+**DNS-rebind guard.** Every console route validates `Host` and, when present,
+`Origin`. Loopback hosts are always accepted. For the `/api/` bridge and the
+Connect services the hosted console reaches, the accept-list also includes the
+hosted site host (`eli.gladman.cc`), so a page at `https://eli.gladman.cc` can
+talk to the local daemon. `/mcp` stays loopback-only: a site Origin there is
+still 403. A non-loopback `Host` that is not otherwise allow-listed is rejected
+with 403 before the bearer token is examined.
 
 **CORS.** `Access-Control-Allow-Origin` is set only for:
 

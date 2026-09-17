@@ -1,7 +1,7 @@
 // Comment when a pull request adds a target whose NAME diverges from what the rest of
 // the workspace already calls that same work.
 //
-// The norm is derived from the corpus, never declared. Nobody writes down "a target
+// The norm is derived from the tree, never declared. Nobody writes down "a target
 // running jest shall be called test"; the graph observes that 47 of 48 already are, and
 // the 48th is the finding. That is what makes the advice persuasive - it is not one
 // team's opinion, it is what everyone else already agreed on by doing it - and it is why

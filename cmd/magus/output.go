@@ -61,6 +61,20 @@ func emitNames(names []string) error {
 	return nil
 }
 
+// emitNamesOf is emitNames over a slice of records, projecting each to its identity.
+//
+// It exists because the shape it replaces was four lines at every call site -- allocate,
+// loop, append, emit -- and most `-o name` arms skipped it and wrote fmt.Println instead.
+// That silently bypassed --tee: the flag was accepted, no file was written, and nothing
+// said so. A helper only prevents that when using it is shorter than not using it.
+func emitNamesOf[T any](items []T, name func(T) string) error {
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		names = append(names, name(item))
+	}
+	return emitNames(names)
+}
+
 func writeJSON(w io.Writer, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {

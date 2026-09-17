@@ -16,11 +16,17 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // SkillVersion changes when the installed skill contract changes. It is part
@@ -164,9 +170,36 @@ import (
 // a person or unbound orchestrator may explicitly refresh only the Magus-owned
 // host hook entries, while the rule engine, installed skills, memory,
 // and repository instructions remain outside that write set.
-const SkillVersion = 70
+// 78: magus-workspace-rules states the self-improvement loop as a checklist that
+// stops at the first failing line, names who acts on each destination, and ends in
+// proof: show the rule in the file the agent LOADS, then re-run the command the
+// evidence cites. A change that does not move that verdict changed nothing, and
+// the loop it replaced ended before anyone could notice.
+// 79: skill bodies resolve their cross-links instead of retyping them. CLI paths,
+// MCP tool names, sibling skill names and Buzz host calls now go through the
+// registries that define them, so a rename fails the install rather than shipping
+// prose that names something gone. A cited MGS code gains its docs URL, whose
+// category segment the digits do not imply.
+// 80: `magus agent improve` is retired. Its read half is doctor's
+// recurring-guard-denials check, where every other workspace verdict already lives, and
+// its --apply half duplicated `magus agent harness apply` call for call.
+// magus-workspace-rules routes to both.
+// 81: internal/spellruntime is internal/spell. magus-sdk named the old path when
+// explaining what an SDK caller may and may not import.
+// 82: `magus session hook` is `magus shell`, with no alias. The verdict was never
+// session-scoped, and one command now answers a person typing at a prompt and a host's
+// pre-tool-use hook: an operand for the first, stdin for the second, one evaluator
+// behind both. magus-context-audit piped its candidate command into the old path.
+const SkillVersion = 82
 
 const skillLicense = "GPL-3.0-or-later"
+
+// unreadableDigest is what SkillDigest and computeContentDigest report when
+// this binary could not read or hash its own embedded source. It is a failure
+// marker, not a content fingerprint, so gradeStamp refuses to let it satisfy
+// an equality check: two catalogs that both failed to hash their sources would
+// otherwise report equal "unreadable" digests and grade each other current.
+const unreadableDigest = "unreadable"
 
 const anchorSkillRel = "magus-query/SKILL.md"
 
@@ -353,8 +386,124 @@ func (f Form) Variant() Variant {
 // `-o template` flag, magus-buzz-write documents mustache) escapes it as a string
 // constant: {{"{{.Field}}"}}. That applies inside fenced code blocks too; the
 // template engine does not know what Markdown is.
+// skillFuncs is the template vocabulary a skill body may call.
+//
+// `cmd` renders a CLI path from the canonical registry rather than from the
+// author's memory of it: {{cmd "agent improve"}}. A verb that gets renamed then
+// fails the install with the path it could not resolve, instead of shipping a
+// sentence that names a command nobody has any more. Skills install into repos
+// whose readers cannot check, which is exactly where stale prose survives.
+//
+// It renders the PATH spelling always. The reader is another process on another
+// machine, so this process's own argv0 (./magus in a source checkout) would be a
+// path that resolves somewhere else or nowhere.
+// magusModule is the host module a skill's Buzz examples call into. The only one they
+// name: fs, http and the rest belong to magusfile authoring, which magus-buzz-write
+// covers from the live module list rather than from prose here.
+const magusModule = "magus"
+
+// diagnosticCode resolves a registered code, so a skill can cite only one that exists.
+func diagnosticCode(code string) (types.DiagnosticCode, error) {
+	for _, c := range types.AllDiagnosticCodes() {
+		if string(c) == code {
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("no diagnostic %q: a skill may only cite a registered code", code)
+}
+
+// buzzSurfaceName is the identifier a magusfile writes for decl, which is not always
+// its declared Name: a declaration may pin a verbatim spelling, and otherwise the Buzz
+// surface is the camelCase of the snake_case Name.
+func buzzSurfaceName(decl std.Method) string {
+	if decl.BuzzName != "" {
+		return decl.BuzzName
+	}
+	return std.CamelCase(decl.Name)
+}
+
+// Every function here renders the SAME text in both forms. That is not a style
+// preference: the two forms exist to describe one behaviour at two lengths, and
+// validateActionPipe permits these calls only on that basis.
+var skillFuncs = template.FuncMap{
+	"cmd": func(path string) (string, error) {
+		c, ok := hint.Lookup(path)
+		if !ok {
+			return "", fmt.Errorf("no command %q: declare it in internal/hint and register it in AllCommands", path)
+		}
+		return c.StringAs(hint.DefaultBinaryName), nil
+	},
+	"tool": func(verb string) (string, error) {
+		t, ok := hint.LookupTool("magus_" + verb)
+		if !ok {
+			return "", fmt.Errorf("no MCP tool %q: declare it in internal/hint and register it in AllToolNames", "magus_"+verb)
+		}
+		return t.String(), nil
+	},
+	"skill": func(topic string) (string, error) {
+		for _, s := range skillSources {
+			if s.name == "magus-"+topic {
+				return s.name, nil
+			}
+		}
+		return "", fmt.Errorf("no shipped skill %q: a cross-reference must name one magus installs", "magus-"+topic)
+	},
+	// mgs is the bare code, checked against the registry. For the places a code appears
+	// as DATA rather than as a citation: inside a graph node id, a URL pattern, a string
+	// literal the prose is quoting. A link in any of those would be wrong, so this one
+	// buys validation only.
+	"mgs": func(code string) (string, error) {
+		if _, err := diagnosticCode(code); err != nil {
+			return "", err
+		}
+		return code, nil
+	},
+	// mgslink is the citation form: a markdown link to the code's documentation. The URL
+	// is the half a reader cannot reconstruct, because its category segment comes from
+	// the code's range rather than from the digits, so prose that cited a bare code sent
+	// its reader to a search box.
+	"mgslink": func(code string) (string, error) {
+		c, err := diagnosticCode(code)
+		if err != nil {
+			return "", err
+		}
+		return "[" + code + "](" + types.CodeURL(c) + ")", nil
+	},
+	// buzz renders a call into the magus host module from "namespace.method":
+	// magus\harness.provider. These are the load-bearing lines in magus-workspace-rules,
+	// the calls a workspace makes to wire a host or strengthen the guard, so a renamed
+	// method would teach a call that errors in the one place a reader cannot check it.
+	//
+	// The backslash is namespace access and the dot is member access on the object the
+	// namespace resolves to, which is why this walks Namespaces rather than Methods.
+	"buzz": func(call string) (string, error) {
+		space, method, ok := strings.Cut(call, ".")
+		if !ok {
+			return "", fmt.Errorf("buzz call %q must be \"namespace.method\"", call)
+		}
+		for _, m := range hostmodules.All() {
+			if m.Name != magusModule {
+				continue
+			}
+			for _, ns := range m.Namespaces {
+				if ns.Name != space {
+					continue
+				}
+				for _, decl := range ns.Methods {
+					if buzzSurfaceName(decl) == method {
+						return magusModule + `\` + call, nil
+					}
+				}
+				return "", fmt.Errorf(`no method %q on magus\%s`, method, space)
+			}
+			return "", fmt.Errorf(`no namespace %q on the %s module`, space, magusModule)
+		}
+		return "", fmt.Errorf("no host module %q", magusModule)
+	},
+}
+
 func applyVariant(name, body string, v Variant) (string, error) {
-	t, err := template.New(name).Parse(body)
+	t, err := template.New(name).Funcs(skillFuncs).Parse(body)
 	if err != nil {
 		return "", fmt.Errorf("skill %q: %w", name, err)
 	}
@@ -394,6 +543,7 @@ func tidyBlankLines(s string) string {
 // Status is the verification verdict for one installed skill location.
 type Status struct {
 	Location  string
+	ID        string
 	Installed bool
 	Stale     bool
 	Detail    string
@@ -485,7 +635,7 @@ func (c *Catalog) SkillDigest(name string) string {
 	if d, ok := c.skillDigests[baseSkillName(name)]; ok {
 		return d
 	}
-	return "unreadable"
+	return unreadableDigest
 }
 
 func (c *Catalog) computeSkillDigests() map[string]string {
@@ -493,18 +643,18 @@ func (c *Catalog) computeSkillDigests() map[string]string {
 	for _, source := range skillSources {
 		body, err := fs.ReadFile(c.sourceFS, source.bodyPath)
 		if err != nil {
-			out[source.name] = "unreadable"
+			out[source.name] = unreadableDigest
 			continue
 		}
 		h := sha256.New()
 		// The name and description are stamped alongside the body and are what a
 		// host lists a skill by, so a description edit has to move the digest too.
 		if _, err := fmt.Fprintf(h, "%s\n%s\n", source.name, source.description); err != nil {
-			out[source.name] = "unreadable"
+			out[source.name] = unreadableDigest
 			continue
 		}
 		if _, err := h.Write(body); err != nil {
-			out[source.name] = "unreadable"
+			out[source.name] = unreadableDigest
 			continue
 		}
 		out[source.name] = hex.EncodeToString(h.Sum(nil))[:12]
@@ -564,11 +714,20 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Deliberately NOT cross-referenced from the primary's description. The
-		// twin's own description already announces itself in the host's skill
-		// listing, where a delegated model browsing for a skill sees it; adding a
-		// pointer here would spend context on every short skill to say something
-		// the twin's own entry already says, and short exists to spend less.
+		// Cross-referenced, which reverses an earlier decision and is worth saying why.
+		// The old reasoning was that a pointer here spends context on every short skill to
+		// say what the twin's own entry already says. That held while the twin's entry
+		// RESTATED this one in full; now it is a standalone line, so the pair costs about
+		// 900 bytes of back-references against the ~8.6KB the restatement used to spend.
+		//
+		// The link is what makes the twin reachable at all. A reader with the short copy in
+		// hand and a step it left underspecified has no way to learn the fuller copy exists
+		// unless this entry says so, and browsing for it is exactly what nobody did:
+		// measured, 12 of 15 twins were never loaded once.
+		if form == FormBoth {
+			primary.Description += " A fuller copy with the worked examples kept is installed as " +
+				FullTwinName(def.Name) + "; load that one if this leaves a step underspecified."
+		}
 		skills = append(skills, primary)
 
 		if form != FormBoth {
@@ -579,8 +738,19 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 			return nil, err
 		}
 		full.Name = FullTwinName(def.Name)
-		full.Description = def.Description + " This is the full reference copy of " + def.Name +
-			" - prefer it over " + def.Name + " if you are a smaller or delegated model."
+		// STANDALONE, not the twin's description plus a sentence. Restating it cost 10,105
+		// of the 19,113 description bytes a host loads into every session's prompt, and
+		// bought nothing: measured across 2,147 transcripts, 12 of the 15 full twins were
+		// never loaded once, because the sentence it appended asked the model to decide
+		// whether it is "smaller", which is not a fact a model has. The trigger conditions
+		// live on the twin, which is always installed beside this one.
+		//
+		// Discovery moves to something that can actually act on it: the guard names the
+		// full twin when the acting lease says a delegated worker is running, and the
+		// session brief names it for the same reason. A description cannot route; a
+		// verdict that has read the lease can.
+		full.Description = "Full reference copy of " + def.Name + ", same scope with the worked examples kept. " +
+			"Load it instead of " + def.Name + " when magus names it, or when that skill left a step underspecified."
 		skills = append(skills, full)
 	}
 	return skills, nil
@@ -670,14 +840,24 @@ func (c *Catalog) PlanSkillTree(dir, dest string, form Form) ([]string, error) {
 }
 
 // checkDestination refuses a destination that lands outside dir. The joined path
-// is cleaned and re-checked because "../../outside" is neither absolute nor ~.
+// is cleaned and re-checked because "../../outside" is neither absolute nor ~,
+// and then walked component by component because cleaning is lexical: a symlink
+// mid-path lands a write, and the prune that follows it, outside the tree.
 func checkDestination(dir, dest string) error {
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
 		return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
 	}
 	joined := filepath.Clean(filepath.Join(dir, dest))
-	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel, err := filepath.Rel(dir, joined)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("agent install: destination %q escapes the working tree", dest)
+	}
+	link, err := firstSymlinkComponent(dir, rel)
+	if err != nil {
+		return fmt.Errorf("agent install: %w", err)
+	}
+	if link != "" {
+		return fmt.Errorf("agent install: destination %q contains symlink %q, so a write or a prune through it lands outside the working tree", dest, link)
 	}
 	return nil
 }
@@ -687,34 +867,45 @@ func checkDestination(dir, dest string) error {
 // refused so magus never silently writes outside the working tree. The
 // caller is responsible for that guard at the CLI surface; this method
 // enforces it for safety.
-func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) ([]string, error) {
+// changed is the SUBSET of written whose bytes this install actually altered, so a
+// caller can report what a run did rather than how many files it touched. Without it
+// every reinstall reads identically whether it replaced the whole set or confirmed a
+// set that was already current, and a line that says the same thing every time is one
+// nobody reads on the run where it finally differs.
+func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) (written, changed []string, err error) {
 	if err := checkDestination(dir, dest); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	skills, err := c.RenderedSkills(form)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var written []string
 	for _, skill := range skills {
 		rel := filepath.Join(skill.Name, "SKILL.md")
 		outPath := filepath.Join(dir, dest, rel)
 		if !force {
 			if _, err := os.Stat(outPath); err == nil {
-				return nil, fmt.Errorf("agent install: %s already exists (use --force to overwrite)", filepath.Join(dest, rel))
+				return nil, nil, fmt.Errorf("agent install: %s already exists (use --force to overwrite)", filepath.Join(dest, rel))
 			} else if !os.IsNotExist(err) {
-				return nil, fmt.Errorf("agent install: stat %s: %w", outPath, err)
+				return nil, nil, fmt.Errorf("agent install: stat %s: %w", outPath, err)
 			}
 		}
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if err := os.WriteFile(outPath, c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant), 0o644); err != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
+		body := c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant)
+		// A read error counts as changed: the install is about to overwrite whatever is
+		// there, and claiming "unchanged" for a file magus could not read would be the
+		// one answer that stops a reader looking.
+		if prev, readErr := os.ReadFile(outPath); readErr != nil || !bytes.Equal(prev, body) {
+			changed = append(changed, filepath.Join(dest, rel))
+		}
+		if err := os.WriteFile(outPath, body, 0o644); err != nil {
+			return nil, nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
 		}
 		written = append(written, filepath.Join(dest, rel))
 	}
-	return written, nil
+	return written, changed, nil
 }
 
 // StaleSkillDirs returns the installed skill directories under <dir>/<dest> that
@@ -849,30 +1040,30 @@ func (c *Catalog) computeContentDigest() string {
 	h := sha256.New()
 	paths, err := c.skillSourceFiles()
 	if err != nil {
-		return "unreadable"
+		return unreadableDigest
 	}
 	for _, p := range paths {
 		body, err := fs.ReadFile(c.sourceFS, p)
 		if err != nil {
-			return "unreadable"
+			return unreadableDigest
 		}
 		if _, err := fmt.Fprintf(h, "%d:%s\n", len(p), p); err != nil {
-			return "unreadable"
+			return unreadableDigest
 		}
 		if _, err := h.Write(body); err != nil {
-			return "unreadable"
+			return unreadableDigest
 		}
 	}
 	for _, source := range skillSources {
 		if _, err := fmt.Fprintf(h, "%s\n%s\n", source.name, source.description); err != nil {
-			return "unreadable"
+			return unreadableDigest
 		}
 	}
 	if _, err := fmt.Fprintf(h, "%d:agents-section.md\n", len(c.agentsSection)); err != nil {
-		return "unreadable"
+		return unreadableDigest
 	}
 	if _, err := h.Write([]byte(c.agentsSection)); err != nil {
-		return "unreadable"
+		return unreadableDigest
 	}
 	return hex.EncodeToString(h.Sum(nil))[:12]
 }
@@ -898,7 +1089,25 @@ func (c *Catalog) skillSourceFiles() ([]string, error) {
 }
 
 var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-schema-version: (\d+)`)
-var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|unreadable)`)
+var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|` + unreadableDigest + `)`)
+
+// ReinstallCommand is the ONE remedy for a skill install location CheckStatuses
+// grades stale or missing: every location it discovers comes from a harness
+// descriptor (see HarnessSkillLocations), whose ID is validated non-empty at
+// load, so "harness install --id" always clears the finding. Doctor's
+// structured --fix (internal/doctor's checkAgentSkills) calls this directly,
+// and the free-text Detail sentences below go through ReinstallHint rather
+// than building their own copy, so the printed remedy and the one --fix runs
+// are always the same command.
+func ReinstallCommand(id string) []string {
+	return []string{"agent", "harness", "install", "--id", id}
+}
+
+// ReinstallHint renders ReinstallCommand as the sentence embedded in a Status
+// Detail.
+func ReinstallHint(id string) string {
+	return "magus " + strings.Join(ReinstallCommand(id), " ")
+}
 
 // CheckStatuses inspects descriptor-declared skill locations plus AGENTS.md, returning only
 // locations with a Magus install. The result order is deterministic.
@@ -906,7 +1115,7 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 	var out []Status
 	locations, err := HarnessSkillLocations(dir)
 	if err != nil {
-		out = append(out, Status{Location: harnessDirName, Installed: true, Stale: true, Detail: "cannot load harness descriptors: " + err.Error()})
+		out = append(out, Status{Location: harnessDirName, Installed: false, Stale: true, Detail: "cannot load harness descriptors: " + err.Error()})
 	}
 	for _, location := range locations {
 		// The anchor decides only whether magus is installed HERE; grading is
@@ -916,14 +1125,19 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 		if err != nil {
 			if os.IsNotExist(err) {
 				if _, dirErr := os.Stat(filepath.Join(dir, location.Path)); dirErr == nil {
-					out = append(out, Status{Location: location.Path, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: magus agent harness install --host " + location.Host})
+					if !c.hasMagusOwnedSkill(dir, location.Path) {
+						continue
+					}
+					out = append(out, Status{Location: location.Path, ID: location.ID, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: " + ReinstallHint(location.ID)})
 				}
 				continue
 			}
-			out = append(out, Status{Location: location.Path, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
+			out = append(out, Status{Location: location.Path, ID: location.ID, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
 			continue
 		}
-		out = append(out, c.gradeDest(dir, location))
+		st := c.gradeDest(dir, location)
+		st.ID = location.ID
+		out = append(out, st)
 	}
 	if body, err := os.ReadFile(filepath.Join(dir, AgentsFile)); err == nil {
 		if section := agentsSectionRe.Find(body); section != nil {
@@ -939,10 +1153,28 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 	return out
 }
 
+// hasMagusOwnedSkill answers whether a descriptor-declared skill directory contains
+// anything this catalog should grade. A clean checkout may carry hand-authored
+// magus-* skills beside an ignored generated destination; those are not an
+// installed Magus skill tree, so a missing anchor is not stale by itself.
+func (c *Catalog) hasMagusOwnedSkill(dir, dest string) bool {
+	shipped, shippedErr := c.shipped(FormBoth)
+	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
+		if shippedErr != nil || shipped[name] {
+			return true
+		}
+		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
+		if err == nil && bytes.Contains(body, []byte(generatedSkillMarker)) {
+			return true
+		}
+	}
+	return false
+}
+
 // HarnessSkillLocation is one descriptor-declared skill tree and the one form
 // it is allowed to contain.
 type HarnessSkillLocation struct {
-	Host string
+	ID   string
 	Path string
 	Form Form
 }
@@ -954,13 +1186,24 @@ func HarnessSkillLocations(root string) ([]HarnessSkillLocation, error) {
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]string, 0, len(descriptors))
+	for id := range descriptors {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
 	seen := map[string]HarnessSkillLocation{}
-	for _, loaded := range descriptors {
+	for _, id := range ids {
+		loaded := descriptors[id]
 		for _, path := range loaded.descriptor.Skills.Paths {
-			location := HarnessSkillLocation{Host: loaded.descriptor.ID, Path: path, Form: loaded.descriptor.Skills.Form}
+			location := HarnessSkillLocation{ID: loaded.descriptor.ID, Path: path, Form: loaded.descriptor.Skills.Form}
 			if prior, exists := seen[path]; exists {
 				if prior.Form != location.Form {
-					return nil, fmt.Errorf("harnesses %q and %q declare different skill forms for %q", prior.Host, location.Host, path)
+					return nil, fmt.Errorf("harnesses %q and %q declare different skill forms for %q", prior.ID, location.ID, path)
+				}
+				// Shared path: keep the lexicographically smaller harness ID so
+				// doctor Fix strings stay deterministic across runs.
+				if location.ID < prior.ID {
+					seen[path] = location
 				}
 				continue
 			}
@@ -971,21 +1214,23 @@ func HarnessSkillLocations(root string) ([]HarnessSkillLocation, error) {
 	for _, location := range seen {
 		locations = append(locations, location)
 	}
-	sort.Slice(locations, func(i, j int) bool { return locations[i].Path < locations[j].Path })
+	slices.SortFunc(locations, func(a, b HarnessSkillLocation) int {
+		return strings.Compare(a.Path, b.Path)
+	})
 	return locations, nil
 }
 
 // HarnessSkillDirs returns descriptor-declared locations for display-only callers.
-func HarnessSkillDirs(root string) []string {
+func HarnessSkillDirs(root string) ([]string, error) {
 	locations, err := HarnessSkillLocations(root)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	paths := make([]string, 0, len(locations))
 	for _, location := range locations {
 		paths = append(paths, location.Path)
 	}
-	return paths
+	return paths, nil
 }
 
 // gradeDest grades every magus skill installed under dest, not just the anchor.
@@ -993,8 +1238,18 @@ func HarnessSkillDirs(root string) []string {
 // Reading one skill worked only while the digest covered the whole catalog. With
 // a per-skill digest that shortcut goes blind: a stale magus-run reads as current
 // when magus-query happens not to have changed.
+//
+// Every problem found is collected rather than returned on the first one. This
+// used to return as soon as ANY installed skill turned up one offense (an
+// unreadable file, a name outside the descriptor's form, a missing skill), which
+// meant an alphabetically-earlier, cosmetic finding silently hid a later skill's
+// real version/schema mismatch: the operator saw "magus-aaa is not part of the
+// form" and never learned that magus-query was 50 releases behind. Collecting
+// lets every offender surface in one Status, and sortReasons keeps a
+// version/schema mismatch first among them, since that is the one reason that
+// must never go unseen.
 func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
-	reinstall := "magus agent harness install --host " + location.Host
+	reinstall := ReinstallHint(location.ID)
 	dest := location.Path
 	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
 	// reads an unknown name as "not magus's", which would silently drop a
@@ -1007,16 +1262,17 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 	if expectedErr != nil {
 		return Status{Location: dest, Installed: true, Stale: true, Detail: expectedErr.Error()}
 	}
+	var reasons []string
 	seen := make(map[string]bool, len(expected))
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
 		if err != nil {
-			// A skill magus cannot READ is not a skill magus can vouch for. Continuing here
-			// graded the location up to date while an installed file sat unreadable, which
-			// is the one answer that stops a reader looking. The anchor path already reports
-			// this; the per-skill loop was the half that stayed quiet.
-			return Status{Location: dest, Installed: true, Stale: true,
-				Detail: name + ": cannot read it (" + err.Error() + "), so its provenance cannot be checked; " + reinstall}
+			// A skill magus cannot READ is not a skill magus can vouch for; record it and
+			// move on rather than silently dropping it, which is the one answer that stops
+			// a reader looking. The anchor path already reports this; the per-skill loop
+			// was the half that stayed quiet.
+			reasons = append(reasons, name+": cannot read it ("+err.Error()+"), so its provenance cannot be checked; "+reinstall)
+			continue
 		}
 		// Not ours to grade: a workspace's own skill sits here by design, and grading it
 		// reported drift no reinstall could clear, since install writes only the names
@@ -1029,19 +1285,43 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 			continue
 		}
 		if !expected[name] {
-			return Status{Location: dest, Installed: true, Stale: true, Detail: name + " is not part of the descriptor's " + string(location.Form) + " form; re-run: " + reinstall}
+			reasons = append(reasons, name+" is not part of the descriptor's "+string(location.Form)+" form; re-run: "+reinstall)
+			continue
 		}
 		seen[name] = true
 		if st := c.gradeStamp(dest, reinstall, string(body), c.SkillDigest(baseSkillName(name))); st.Stale {
-			return Status{Location: dest, Installed: true, Stale: true, Detail: name + ": " + st.Detail}
+			reasons = append(reasons, name+": "+st.Detail)
 		}
 	}
+	var missing []string
 	for name := range expected {
 		if !seen[name] {
-			return Status{Location: dest, Installed: true, Stale: true, Detail: "missing " + name + "; re-run: " + reinstall}
+			missing = append(missing, name)
 		}
 	}
-	return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
+	sort.Strings(missing) // map iteration order would otherwise make Detail nondeterministic
+	for _, name := range missing {
+		reasons = append(reasons, "missing "+name+"; re-run: "+reinstall)
+	}
+	if len(reasons) == 0 {
+		return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
+	}
+	sortReasons(reasons)
+	return Status{Location: dest, Installed: true, Stale: true, Detail: strings.Join(reasons, "; ")}
+}
+
+// sortReasons orders gradeDest's collected reasons so a version/schema mismatch
+// (gradeStamp's "stale (skill vX/schema vY; ...)" wording) is never buried
+// behind a lesser finding like an unreadable file or an orphaned name. Stable,
+// so reasons that are equally severe keep the order they were found in.
+func sortReasons(reasons []string) {
+	sort.SliceStable(reasons, func(i, j int) bool {
+		return isVersionMismatch(reasons[i]) && !isVersionMismatch(reasons[j])
+	})
+}
+
+func isVersionMismatch(reason string) bool {
+	return strings.Contains(reason, "stale (skill v")
 }
 
 // installedSkillNames lists the magus skill directories under path, sorted. One
@@ -1108,6 +1388,14 @@ func (c *Catalog) gradeStamp(location, reinstall, body, wantDigest string) Statu
 	d := footerDigestRe.FindStringSubmatch(body)
 	if d == nil {
 		return Status{Location: location, Installed: true, Stale: true, Detail: "installed by a magus that predates the content fingerprint; re-run: " + reinstall}
+	}
+	// unreadableDigest marks a hash this binary (or the one that stamped the
+	// installed file) could not compute; it is a failure, not a content value, so
+	// it must never satisfy the equality check below. Without this, two catalogs
+	// that both failed to hash their sources would produce equal "unreadable"
+	// digests and grade the pair current, each vouching for content it never read.
+	if d[1] == unreadableDigest || wantDigest == unreadableDigest {
+		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("content fingerprint unreadable (installed %s, binary %s); re-run: %s", d[1], wantDigest, reinstall)}
 	}
 	if d[1] != wantDigest {
 		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("content differs from this binary's embedded skills (installed %s, binary %s); re-run: %s", d[1], wantDigest, reinstall)}

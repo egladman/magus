@@ -82,6 +82,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if sym.DefEndLine > 0 {
 			attrs[attrDefEndLine] = strconv.Itoa(sym.DefEndLine)
 		}
+		if sym.Namespace != "" {
+			attrs[attrNamespace] = symbolID(sym.Namespace)
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     sID,
 			Kind:   types.KindSymbol,
@@ -104,17 +107,44 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 	return s
 }
 
-// testRefCount counts the referencing files that are Go test files (path ends in
-// "_test.go"). One entry per file (SCIP collapses a file's occurrences), so this is the
-// number of distinct test files that name the symbol, not the raw occurrence count.
+// testRefCount counts the referencing files that are test files. One entry per file (SCIP
+// collapses a file's occurrences), so this is the number of distinct test files that name
+// the symbol, not the raw occurrence count.
 func testRefCount(refs []types.KnowledgeSymbolRef) int {
 	n := 0
 	for _, ref := range refs {
-		if strings.HasSuffix(ref.Path, "_test.go") {
+		if isTestSource(ref.Path) {
 			n++
 		}
 	}
 	return n
+}
+
+// testSuffixes and testPrefixes are the naming conventions that mark a file as a test in
+// the languages a SCIP indexer covers. By NAME, because the graph is language-agnostic and
+// a name is the one thing every language's convention agrees can carry it.
+var (
+	testSuffixes = []string{"_test.go", ".test.ts", ".test.tsx", ".test.js", ".spec.ts", ".spec.tsx", ".spec.js", "_test.py"}
+	testPrefixes = []string{"test_"}
+)
+
+// isTestSource reports whether a path (or a symbol Source, "<path>:<line>") is a test
+// file. One predicate for every caller in this package, so the Go-only suffix check that
+// used to live inline in testRefCount cannot drift from the rule the lenses apply.
+func isTestSource(source string) bool {
+	path, _, _ := strings.Cut(source, ":")
+	base := path[strings.LastIndex(path, "/")+1:]
+	for _, s := range testSuffixes {
+		if strings.HasSuffix(base, s) {
+			return true
+		}
+	}
+	for _, p := range testPrefixes {
+		if strings.HasPrefix(base, p) && strings.HasSuffix(base, ".py") {
+			return true
+		}
+	}
+	return false
 }
 
 // refProvenance encodes a reference's occurrence count and capped line list into the

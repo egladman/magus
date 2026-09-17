@@ -40,16 +40,16 @@ only: no daemon AND no CLI, or a human asking what the committed index says.{{en
 
    | question                                      | MCP tool        | CLI                                |
    | --------------------------------------------- | --------------- | ---------------------------------- |
-   | find and relate entities                      | `magus_query`   | `magus query "<terms>"`            |
-   | one node: its edges, provenance, blast radius | `magus_explain` | `magus explain <node>`             |
-   | how do two nodes relate                       | `magus_path`    | `magus path <a> <b>`               |
-   | where risk concentrates                       | `magus_stats`   | `magus graph stats`                |
-   | where a code symbol is defined and used       | `magus_refs`    | `magus refs <symbol>`              |
+   | find and relate entities                      | `{{tool "query"}}`   | `magus query "<terms>"`            |
+   | one node: its edges, provenance, blast radius | `{{tool "explain"}}` | `magus explain <node>`             |
+   | how do two nodes relate                       | `{{tool "path"}}`    | `magus path <a> <b>`               |
+   | where risk concentrates                       | `{{tool "stats"}}`   | `magus graph stats`                |
+   | where a code symbol is defined and used       | `{{tool "refs"}}`    | `magus refs <symbol>`              |
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
-   Prefer these over grep and glob for anything in the magus domain. `magus_refs`
+   Prefer these over grep and glob for anything in the magus domain. `{{tool "refs"}}`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config);{{if .Full}} it
-   is the occurrence-shaped def/references answer, so use it over `magus_query` for a
+   is the occurrence-shaped def/references answer, so use it over `{{tool "query"}}` for a
    symbol's fan-in.{{end}} Every empty result carries a verdict: `absent` means magus
    searched every symbol index this workspace declares and the thing is not there;
    `unknown` names the projects it could not search, and building those with
@@ -180,7 +180,7 @@ cat over markdown to find a passage - not a targeted read.
   bare IDs for piping. Do not scrape the human text or trim it with `head`.
 {{if .Full}}  Over MCP the tools already return structured content; nothing to shape.{{end}}
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
-  `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them{{if .Full}}; a rename
+  `target:pkg/foo:build`, `spell:go`, `diagnostic:{{mgs "MGS2001"}}`. Key on them{{if .Full}}; a rename
   is a delete plus an add{{end}}.
 - Edges are directed and carry a `confidence` - `extracted` (read directly off a
   source) or `inferred` (a rubric score) - plus `provenance` (where it came from).
@@ -205,11 +205,34 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.{{else}} `magus
 <node>` for owners plus dependents; `magus query kind=owner` to list. Declared
 ownership only, never blame-inferred.{{end}}
 
+## What other sessions already did here
+
+You are not the first agent in this repository, and the ones before you left a
+record. Where a workspace declares a session adapter, `magus graph build` folds
+each host's own transcripts into a local store, and two surfaces read it back.
+
+- `magus explain <node>` ends with an `agent sessions:` line when any loaded
+  session touched that file: reads, writes, how many distinct sessions, how long
+  ago, and any write the host refused. Silence means nothing touched it.
+- `magus session` lists those sessions; `magus session show <id>` opens one,
+  joined against this checkout's guard trail.
+
+{{if .Full}}Read it BEFORE a non-trivial edit, for the reason the git half of the same output
+exists. A file last committed three weeks ago looks dormant and may have been
+rewritten twice yesterday by a session whose work is not committed yet. Four
+sessions on one file is a reason to look at what they did before adding a fifth
+opinion, and a refused write is a rule you are about to hit too.{{else}}Read it before a non-trivial edit: a file last committed weeks ago may have been
+rewritten yesterday by a session whose work is not committed. A refused write
+there is a rule you are about to hit too.{{end}}
+
+Never infer from an empty result that nobody worked on a file. It equally means
+this workspace declares no adapter, which is the common case.
+
 ## Across workspaces and neighbors
 
 - `--global` unions every workspace registered in config
   (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `magus_insight`, and `magus describe` sit alongside the graph;
+- `magus affected`, `{{tool "insight"}}`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
   comment{{if .Full}} (nodes/edges added, removed, or changed); `--rev` builds the base graph from

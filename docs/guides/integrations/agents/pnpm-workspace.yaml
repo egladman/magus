@@ -1,2 +1,32 @@
+# pnpm settings for the hook templates. NOT a workspace: there is no `packages:` key and
+# this project is one package. The filename is pnpm's, not a claim about layout - pnpm
+# 10.16+ reads settings here that older versions read from .npmrc, and the three sibling
+# projects that predate that still carry their own .npmrc saying the same things.
+#
+# magus is what knows which projects exist and how they relate. A real pnpm workspace would
+# be a second answer to that question, free to disagree with the first, so none of the four
+# TypeScript projects here is one: each has its own package.json and lockfile.
+
+# Supply-chain guard, in MINUTES; 14400 = 10 days. Never install a version published less
+# than ten days ago, so a compromised release has time to be caught before it enters a
+# build. Matches console/.npmrc, docs/.npmrc and libs/textsearch/.npmrc.
+#
+# This project's package.json has claimed this guard since it was written, and until now
+# there was no file to carry it: no .npmrc here, and none at the workspace root to inherit.
+# The one project that ships code to users was the one running unguarded.
+minimumReleaseAge: 14400
+
+# msgpackr-extract is a native MessagePack accelerator, and this answers pnpm's question
+# about running its build step. The answer is no.
+#
+# Nothing here asked for it. It arrives as @opencode-ai/plugin -> effect -> msgpackr ->
+# msgpackr-extract, and @opencode-ai/plugin is a devDependency used for exactly one thing:
+# `import type { Plugin }`, which TypeScript erases. Compiling C++ to type-check an import
+# that does not survive compilation is not a trade worth making.
+#
+# The dependency is optional, so refusing the build costs a pure-JS fallback nothing here
+# ever executes. It stays an explicit `false` rather than a deletion because pnpm asks
+# again on the next lockfile change, and an unanswered prompt is how the placeholder string
+# this replaced ended up committed.
 allowBuilds:
-  msgpackr-extract: set this to true or false
+  msgpackr-extract: false

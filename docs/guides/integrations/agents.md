@@ -61,20 +61,33 @@ wire the guard hook. Both are on your host's page.
 
 | host                                 | skills                        | guard                                                    |
 | ------------------------------------ | ----------------------------- | -------------------------------------------------------- |
-| [Claude Code](agents/claude-code.md) | `.claude/skills/`             | descriptor-owned `PreToolUse` entries                    |
-| [Codex](agents/codex.md)             | `.agents/skills/` + AGENTS.md | descriptor-owned `PreToolUse` entries                    |
+| [Claude Code](agents/claude-code.md) | `.claude/skills/`             | shipped `PreToolUse` scripts via harness spell           |
+| [Codex](agents/codex.md)             | `.agents/skills/` + AGENTS.md | shipped `PreToolUse` scripts via harness spell           |
 | [Cursor](agents/cursor.md)           | AGENTS.md only                | one self-contained script                                |
-| [OpenCode](agents/opencode.md)       | `.opencode/skills/`           | a TypeScript plugin                                      |
+| [OpenCode](agents/opencode.md)       | `.opencode/skills/`           | TypeScript plugin (harness spell is skills-only)         |
 | [Any other host](agents/any-host.md) | wherever it reads them        | a collaborator-owned harness descriptor or small adapter |
 
-What you wire is yours. A native harness is a JSON descriptor: it names its own
-configuration path, event matchers, response template, and skill locations.
-Magus loads those collaborators rather than compiling host paths or matcher
-rules into the binary. `magus agent harness apply --host <id>` writes only the
-descriptor's Magus-owned `PreToolUse` entries, while `verify` reports whether
-the configuration still matches. A host Magus has never heard of can therefore
-ship its own descriptor without a Magus release; a portable adapter remains an
-option where a native event contract is not available.
+What you wire is yours. Prefer a harness spell selected from the root magusfile
+(`import "spells/harness/..." as host` then `magus\harness.provider(host)`).
+Wire several providers when you bounce between hosts; each call appends.
+
+To adapt a Buzz harness **without modifying Magus source**, copy the shipped
+spell into the workspace and change only the import path (keep
+`magus\harness.provider(...)`). Edit the workspace Buzz, then
+`magus agent harness apply` / `verify`. That ownership switch is documented in
+the [workspace-rules skill](../../reference/skills/magus-workspace-rules.md)
+under "Adapting a Buzz harness" and in [Improving recurring friction](agents/guard.md#improving-recurring-friction). Additive deny/advise
+that is not host-shaped stays in `magus\guard.shell({...})`.
+
+A JSON descriptor under `harnesses/` still works the same way: it names a config
+path, skill locations, and opaque host-config fragments. Magus merges those
+fragments; it does not inject a reserved command or a reply codec. The glue that
+talks to `session hook` is the shipped scripts and plugin. `magus agent harness
+apply` (no `--id`) applies every magusfile-wired provider; `--id <id>` targets
+one spell or JSON descriptor. `verify` reports whether the fragments are still
+present and that the config invokes magus. A host Magus has never heard of can
+therefore ship its own descriptor without a Magus release; a portable adapter
+remains an option where a native event contract is not available.
 [Doctrine](../../doctrine.md#the-host-wiring-is-yours) records that trade and
 what it costs you.
 
@@ -129,14 +142,14 @@ It does not mean vendors expose the same tools, payloads, or lifecycle events.
 ## Manual host end-to-end harness
 
 The ordinary checks are deterministic: vendored schemas validate configuration
-and reply shapes, and the fixture-driven transport corpus executes every guard
+and reply shapes, and the fixture-driven transport cases execute every guard
 decision cell against the shipped adapters. That proves the guard's decision
 and adapter behavior for controlled events; it does not prove that a locally
 installed vendor client discovers configuration or dispatches a real hook.
 
 That separate, opt-in end-to-end check currently proves one narrow boundary:
 host discovery and delivery of a **denied command**. It is not a general host
-certification or a replacement for the deterministic corpus:
+certification or a replacement for the deterministic cases:
 
 ```sh
 MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \
@@ -162,12 +175,12 @@ launch command, and evidence contract. A descriptor must represent a real host
 dispatch path; the runner never substitutes a fixture and calls that an
 end-to-end pass.
 
-|             | command rules | declared-output rule | deny | advise | manual E2E: command discovery and block dispatch | MCP call rules                             |
-| ----------- | ------------- | -------------------- | ---- | ------ | ----------------------------------------------- | ------------------------------------------- |
-| Claude Code | yes           | yes                  | yes  | yes    | yes                                             | wired, rule-empty; live pending             |
-| Codex       | yes           | yes                  | yes  | yes    | yes                                             | wired, fixture-verified; live pending       |
-| Cursor      | yes           | yes                  | yes  | yes    | unsupported                                     | not wired: event exists, payload does not   |
-| OpenCode    | yes           | yes                  | yes  | yes    | yes                                             | not wired: sees call, tool name unconfirmed |
+|             | command rules | declared-output rule | deny | advise | manual E2E: command discovery and block dispatch | MCP call rules                              |
+| ----------- | ------------- | -------------------- | ---- | ------ | ------------------------------------------------ | ------------------------------------------- |
+| Claude Code | yes           | yes                  | yes  | yes    | yes                                              | wired, rule-empty; live pending             |
+| Codex       | yes           | yes                  | yes  | yes    | yes                                              | wired, fixture-verified; live pending       |
+| Cursor      | yes           | yes                  | yes  | yes    | unsupported                                      | not wired: event exists, payload does not   |
+| OpenCode    | yes           | yes                  | yes  | yes    | yes                                              | not wired: sees call, tool name unconfirmed |
 
 "Fixture-verified" means the adapter executed against this binary with a
 controlled host event on stdin. "Manual-E2E-proven" means a locally installed
@@ -200,7 +213,7 @@ matrix above explicitly marks them proven.
 | write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools                                   | `preToolUse`                                              | `tool.execute.before`             |
 | write guard, advise         | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                          | `tool.execute.after`              |
 | MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | not wired: payload unconfirmed                            | not wired: tool name unconfirmed  |
-| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                         | not expressible: `preCompact` returns `user_message` only | `experimental.session.compacting` |
+| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                         | not expressible: `preCompact` returns `user_message` only | not wired: only a PRE hook exists |
 | checkpoint                  | `Stop`                                     | `Stop`                                                           | `sessionEnd`                                              | the `session.idle` bus event      |
 | lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt                               | `subagentStart` (unverified live)                         | not wired: no confirmed tool id   |
 | read observation            | `PreToolUse` `Read`                        | not wired                                                        | not wired                                                 | not wired                         |

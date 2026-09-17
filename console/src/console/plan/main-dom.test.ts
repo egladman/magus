@@ -287,7 +287,7 @@ test("a served but empty listing is a different sentence from a refusal", async 
 test("the jobs draw one node and one list row each", async () => {
   serve({
     jobs: okJobs([
-      sessionJob("root", { state: "running", goal: "ship it" }),
+      sessionJob("root", { state: "running", criteria: "ship it" }),
       sessionJob("b1", { parent: "root", state: "pass" }),
       sessionJob("b2", {
         parent: "root",
@@ -492,11 +492,11 @@ test("the next-job key selects a job and focuses its row", async () => {
   }
 });
 
-test("selecting a job shows its goal, checkpoint, model, check and paths", async () => {
+test("selecting a job shows its criteria, checkpoint, model, check and paths", async () => {
   serve({
     jobs: okJobs([
       sessionJob("root", {
-        goal: "draw the jobs",
+        criteria: "draw the jobs",
         checkpoint: "after the stage lands",
         model: "opus",
         check: "console:test",

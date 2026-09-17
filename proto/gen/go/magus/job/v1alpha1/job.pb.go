@@ -139,14 +139,18 @@ func (JobHolder) EnumDescriptor() ([]byte, []int) {
 }
 
 // RunJobResponse reports what the submission did: whether the job started or coalesced, the
-// invocation id and console deep-link for its live log, and the job's fresh metadata snapshot so a
-// caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
+// invocation id, and the job's fresh metadata snapshot so a caller can render "last rotated
+// 3m ago, trail 2.1 MB" without a follow-up call.
 type RunJobResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         SubmitState            `protobuf:"varint,1,opt,name=state,proto3,enum=magus.job.v1alpha1.SubmitState" json:"state,omitempty"`
-	InvocationId  string                 `protobuf:"bytes,2,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"` // the running job's invocation id (the new one, or the coalesced one)
-	ConsoleUrl    string                 `protobuf:"bytes,3,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`       // deep-link to this invocation's live log; empty when no console is mounted
-	Job           *Job                   `protobuf:"bytes,4,opt,name=job,proto3" json:"job,omitempty"`                                       // the job's descriptor plus its last-run and current-size metadata
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	State        SubmitState            `protobuf:"varint,1,opt,name=state,proto3,enum=magus.job.v1alpha1.SubmitState" json:"state,omitempty"`
+	InvocationId string                 `protobuf:"bytes,2,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"` // the running job's invocation id (the new one, or the coalesced one)
+	// Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
+	// not an absolute URL, because the reader is the console itself and resolves it against
+	// its own origin. Empty only when the daemon coalesced a submit it could not name, since
+	// a run with no invocation has nothing to link to.
+	ConsoleUrl    string `protobuf:"bytes,3,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`
+	Job           *Job   `protobuf:"bytes,4,opt,name=job,proto3" json:"job,omitempty"` // the job's descriptor plus its last-run and current-size metadata
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -232,7 +236,9 @@ type Job struct {
 	State string `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
 	// The facts a DELEGATED job carries, empty on a catalog job. These are what an
 	// orchestrator declared, never a verdict magus reached.
-	Goal          string        `protobuf:"bytes,9,opt,name=goal,proto3" json:"goal,omitempty"`
+	// Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before
+	// the rename still reads and writes this field.
+	Criteria      string        `protobuf:"bytes,9,opt,name=criteria,proto3" json:"criteria,omitempty"`
 	Parent        string        `protobuf:"bytes,10,opt,name=parent,proto3" json:"parent,omitempty"` // the job this one was handed out under, empty for a root
 	Model         string        `protobuf:"bytes,11,opt,name=model,proto3" json:"model,omitempty"`
 	Check         string        `protobuf:"bytes,12,opt,name=check,proto3" json:"check,omitempty"` // the one check this job runs, rendered as the command that runs it
@@ -335,9 +341,9 @@ func (x *Job) GetState() string {
 	return ""
 }
 
-func (x *Job) GetGoal() string {
+func (x *Job) GetCriteria() string {
 	if x != nil {
-		return x.Goal
+		return x.Criteria
 	}
 	return ""
 }
@@ -886,7 +892,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xa6\x05\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xae\x05\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -895,8 +901,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x06target\x18\x05 \x01(\v2 .magus.job.v1alpha1.ResourceSizeR\x06target\x12\x0e\n" +
 	"\x02id\x18\x06 \x01(\tR\x02id\x125\n" +
 	"\x06holder\x18\a \x01(\x0e2\x1d.magus.job.v1alpha1.JobHolderR\x06holder\x12\x14\n" +
-	"\x05state\x18\b \x01(\tR\x05state\x12\x12\n" +
-	"\x04goal\x18\t \x01(\tR\x04goal\x12\x16\n" +
+	"\x05state\x18\b \x01(\tR\x05state\x12\x1a\n" +
+	"\bcriteria\x18\t \x01(\tR\bcriteria\x12\x16\n" +
 	"\x06parent\x18\n" +
 	" \x01(\tR\x06parent\x12\x14\n" +
 	"\x05model\x18\v \x01(\tR\x05model\x12\x14\n" +

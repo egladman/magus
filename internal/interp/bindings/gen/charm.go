@@ -7,7 +7,6 @@ import (
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 )
 
@@ -23,7 +22,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("prepend", vm.DirectValue("charm.prepend", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		vals := StrSlice(bzArgs, 0)
@@ -31,7 +30,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("after", vm.DirectValue("charm.after", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -41,7 +40,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("before", vm.DirectValue("charm.before", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -51,7 +50,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("set", vm.DirectValue("charm.set", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -61,7 +60,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("drop", vm.DirectValue("charm.drop", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -70,7 +69,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("afterFunc", vm.DirectValue("charm.afterFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -80,7 +79,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("beforeFunc", vm.DirectValue("charm.beforeFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -90,7 +89,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("setFunc", vm.DirectValue("charm.setFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -100,7 +99,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("dropFunc", vm.DirectValue("charm.dropFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -109,7 +108,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("path", vm.DirectValue("charm.path", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -137,7 +136,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("moveFunc", vm.DirectValue("charm.moveFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -147,7 +146,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("copy", vm.DirectValue("charm.copy", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -157,7 +156,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("copyFunc", vm.DirectValue("charm.copyFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -167,7 +166,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("test", vm.DirectValue("charm.test", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -176,7 +175,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	m.MapSet("testFunc", vm.DirectValue("charm.testFunc", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		argv := StrSlice(bzArgs, 0)
@@ -185,25 +184,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueCharmCharm(ret0), nil
+		return ObjectCharm(ret0), nil
 	}))
 	return m
-}
-func buzzValueCharmPatchOp(v spells.PatchOp) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("op", vm.StrValue(string(v.Op)))
-	out.MapSet("path", vm.StrValue(v.Path))
-	out.MapSet("value", vm.StrValue(v.Value))
-	out.MapSet("fromPtr", vm.StrValue(v.From))
-	return out
-}
-
-func buzzValueCharmCharm(v spells.Charm) vm.Value {
-	out := vm.NewMap()
-	itemsOps := make([]vm.Value, len(v.Ops))
-	for indexOps := range v.Ops {
-		itemsOps[indexOps] = buzzValueCharmPatchOp(v.Ops[indexOps])
-	}
-	out.MapSet("ops", vm.ListValue(itemsOps))
-	return out
 }

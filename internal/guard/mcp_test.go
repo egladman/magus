@@ -57,7 +57,14 @@ func jobJSONFields() []string {
 // state, and a rendered run line cover every shape it accepts, and a key it ignores leaves
 // the row untouched under all four.
 func jobMergeApplies(key string) bool {
-	for _, value := range []any{"declared", "magus run test .", []any{"x"}, true} {
+	// The last value is a well-formed completion gate. Without it the probe reports
+	// completion_gates as unmerged, because none of the scalar shapes decodes into one,
+	// and the judged list would have to drop the very field an agent rewrites when it
+	// changes what another job must satisfy.
+	for _, value := range []any{
+		"declared", "magus run test .", []any{"x"}, true,
+		[]any{map[string]any{"id": "g", "check": map[string]any{"target": "test", "project": "."}}},
+	} {
 		apply, err := job.ParseMerge(map[string]any{key: value})
 		if err != nil {
 			continue
@@ -129,7 +136,7 @@ func TestRenderMCPCallSpellsTheWorkTheToolDoes(t *testing.T) {
 		"a graph query":    {hint.ToolQuery, map[string]any{"query": "guard rules"}, `magus query "guard rules"`},
 		"no CLI door":      {hint.ToolInsight, map[string]any{"lens": "hotspots"}, "magus_insight"},
 		"the job tool":     {hint.ToolJob, map[string]any{"op": "fork", "id": "a/b"}, "magus_job op=fork id=a/b"},
-		"an elided value":  {hint.ToolJob, map[string]any{"op": "fork", "goal": "ship the thing"}, "magus_job op=fork goal=..."},
+		"an elided value":  {hint.ToolJob, map[string]any{"op": "fork", "criteria": "ship the thing"}, "magus_job op=fork criteria=..."},
 		"a missing target": {hint.ToolRunAffected, map[string]any{}, "magus affected"},
 	} {
 		assert.Equal(t, tc.want, renderMCPCall(tc.tool.String(), tc.input), name)

@@ -2,7 +2,7 @@
    the fixed bottom status bar, the full-height (console-fill) layout, the console-app button
    contrast, and the small accent palette + layout custom properties they consume. Loaded by the
    daemon-facing app surfaces (/dashboard/, /logs/, /graph/) - and the playground, which borrows
-   the status bar - after site.css. It is deliberately NOT loaded on the documentation corpus:
+   the status bar - after site.css. It is deliberately NOT loaded on the documentation pages:
    that is the console-vs-docs distinction. The shared nav panels the docs pages DO need (the
    settings gear dropdown + the reference drawer) were split out into ui-panels.css, which every
    page loads; console.css holds only what is unique to the app surfaces. */
@@ -1432,7 +1432,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   display: inline-flex; align-items: stretch;
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
-  overflow: hidden; block-size: 1.75rem;
+  overflow: hidden; block-size: var(--console-control-block-size);
 }
 .console-shell-scope[hidden] { display: none; }
 /* Its own segment behind a hairline - the form-addon treatment, which is what makes the pair read as
@@ -1451,7 +1451,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* The compact tier, which is what the Reference and Notifications buttons beside it already
      measure. This one carried its own 26px and 12.5px, so the title bar had two control sizes on
      one row. */
-  block-size: var(--console-control-block-size);
+  block-size: 100%;
   padding-block: 0;
   font-size: var(--console-control-font-size);
   color: var(--pf-t--global--text--color--regular);

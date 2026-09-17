@@ -15,6 +15,7 @@ const (
 	advisoryStaleBinary   hint.MarkerKind = "stale-binary"
 	advisoryCodeSearch    hint.MarkerKind = "code-search"
 	advisoryDocSearch     hint.MarkerKind = "doc-search"
+	advisorySourceRead    hint.MarkerKind = "source-read"
 	advisoryPrecedent     hint.MarkerKind = "precedent-search"
 	advisoryStageClassify hint.MarkerKind = "stage-classify"
 	advisoryUnleasedWrite hint.MarkerKind = "unleased-write"
@@ -27,6 +28,33 @@ const (
 	advisoryNewFile       hint.MarkerKind = "new-file"
 	advisoryLeaseTerminal hint.MarkerKind = "lease-terminal"
 	advisoryLeaseInvalid  hint.MarkerKind = "lease-invalid"
+
+	// Enrolled late. These five and the three VCS kinds below shipped anonymous, which
+	// an empty kind spells as "speak every time": they had no marker, so they repeated in
+	// full on every matching call and no verdict could name them. Both halves were the
+	// same gap, because the kind IS the name.
+	//
+	// Each one gets a brief alongside, so enrolling degrades it to a line rather than
+	// silencing it. A notice that carries a command earns a repeat at a size nobody has
+	// to read around; see Gate.OnceOrBrief.
+	advisoryGeneratedWrite hint.MarkerKind = "generated-write"
+	advisoryInstalledSkill hint.MarkerKind = "installed-skill"
+	advisoryMemoryWrite    hint.MarkerKind = "memory-write"
+	advisoryScopeDrift     hint.MarkerKind = "scope-drift"
+	advisoryNewSourceDir   hint.MarkerKind = "new-source-dir"
+)
+
+// The VCS advisories name themselves without enrolling in the gate above, so they are
+// denyRuleName values rather than MarkerKinds: a kind is a marker KEY, and holding these
+// is a behavior change none of them asked for. See ShellVerdict.Rule.
+//
+// denyRuleName is the type despite these not denying. Renaming it to cover both arms
+// would touch every rule in the file for a word, and the field it lands in, Rule, already
+// reads correctly on either.
+const (
+	advisoryPushGate        denyRuleName = "push-gate"
+	advisoryRevertClassify  denyRuleName = "revert-classify"
+	advisoryCheckpointState denyRuleName = "checkpoint-state"
 )
 
 // advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session

@@ -10,7 +10,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 )
 
 // RegisterHttp builds the "http" module map and returns it.
@@ -28,7 +27,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueHttpHTTPResponse(ret0), nil
+		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("download", vm.DirectValue("http.download", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		url := Str(bzArgs, 0)
@@ -52,7 +51,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueHttpHTTPResponse(ret0), nil
+		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("request", vm.DirectValue("http.request", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		method := Str(bzArgs, 0)
@@ -65,7 +64,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueHttpHTTPResponse(ret0), nil
+		return ObjectHTTPResponse(ret0), nil
 	}))
 	m.MapSet("server", vm.DirectValue("http.server", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		opts := AnyMap(bzArgs, 0)
@@ -76,15 +75,4 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		return IntVal(ret0), nil
 	}))
 	return m
-}
-func buzzValueHttpHTTPResponse(v types.HTTPResponse) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("status", vm.IntValue(int64(v.Status)))
-	out.MapSet("body", vm.StrValue(v.Body))
-	mappedHeaders := vm.NewMap()
-	for keyHeaders, itemHeaders := range v.Headers {
-		mappedHeaders.MapSet(keyHeaders, vm.StrValue(itemHeaders))
-	}
-	out.MapSet("headers", mappedHeaders)
-	return out
 }

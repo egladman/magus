@@ -237,3 +237,107 @@ func TestServeHealthRoutesCORS(t *testing.T) {
 		t.Fatal("daemon did not shut down")
 	}
 }
+
+// TestServeConsoleHostedOriginCORS proves the hosted PWA Origin
+// (https://eli.gladman.cc) can clear rebind and get a CORS preflight answer on
+// /api/, while /mcp stays loopback-only on Origin and never reflects that site.
+func TestServeConsoleHostedOriginCORS(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := fixtureWorkspace(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m, err := magus.Open(ctx, root)
+	require.NoError(t, err)
+
+	port := freePort(t)
+	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
+
+	d := New(mcp.Options{
+		Magus:    m,
+		Version:  "test",
+		HTTPAddr: addr,
+		HealthRoutes: map[string]http.Handler{
+			"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		},
+	})
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+
+	const siteOrigin = "https://eli.gladman.cc"
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// OPTIONS /api/v1/graph from the hosted origin: rebind admits the Origin,
+	// CORS outside bearer answers 204 with ACAO + PNA when requested.
+	req, err := http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/graph", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", siteOrigin)
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Private-Network", "true")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, siteOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", resp.Header.Get("Access-Control-Allow-Private-Network"))
+
+	// Viewer remount of /api/v1/insight must share the same posture (longer
+	// pattern wins over /api/).
+	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/insight", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", siteOrigin)
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, siteOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
+
+	cli, err := auth.Load()
+	require.NoError(t, err)
+
+	// Authenticated GET with the hosted Origin must not be 403 from rebind.
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/graph", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", siteOrigin)
+	req.Header.Set("Authorization", "Bearer "+cli)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.NotEqual(t, http.StatusForbidden, resp.StatusCode, "hosted Origin must clear rebind on /api/")
+	assert.Equal(t, siteOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
+
+	// An origin not on the allow-list is still refused by rebind on /api/.
+	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/api/v1/graph", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", "https://evil.example")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
+
+	// /mcp keeps loopback-only Origin posture: the site Origin is forbidden.
+	req, err = http.NewRequestWithContext(ctx, http.MethodOptions, base+"/mcp", nil)
+	require.NoError(t, err)
+	req.Header.Set("Origin", siteOrigin)
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "/mcp must not admit the hosted Origin")
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("daemon did not shut down")
+	}
+}

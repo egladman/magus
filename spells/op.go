@@ -173,6 +173,10 @@ type Hint struct {
 const (
 	OpKindCommand = "command"
 	OpKindService = "service"
+	// OpKindSymbolIndex tags the op magus synthesizes from mgs_getSymbolIndexer. It is
+	// the only kind a spell does not author directly, and the tag is what lets the
+	// runner recognize an index run without matching the op's NAME.
+	OpKindSymbolIndex = "symbol-index"
 )
 
 // Service is the declarative description of a long-running process a service op

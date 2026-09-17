@@ -36,6 +36,22 @@ var scriptWriteCalls = []string{
 // file is left alone.
 var openWriteRe = regexp.MustCompile(`open\s*\([^)]*['"][rbt+]*[wa][rbt+]*['"]`)
 
+// awkRedirectRe matches awk's own redirect operators, `>` and `>>`, in the one place awk's
+// grammar accepts a write target: right after a `print` or `printf` statement. A bare `>`
+// or `>=` used as a numeric or string comparison (`NR>=1`, `$1 > 5`) never follows one of
+// those two keywords, so requiring it is what tells a range selection from a write.
+var awkRedirectRe = regexp.MustCompile(`\b(?:print|printf)\b[^;{}\n]*>`)
+
+// interpreterScript is the program text an interpreter runs: its arguments, plus the
+// heredoc body when the program is read from stdin (`awk -f /dev/stdin <<EOF`).
+//
+// One assembly, used by every caller. Two call sites building this differently is exactly
+// how a redirect spelled only inside a heredoc reached no boundary check at all: the
+// rewrite rule included the body and the write-candidate scan did not.
+func interpreterScript(args []string, heredoc string) string {
+	return strings.Join(args, "\n") + "\n" + heredoc
+}
+
 // scriptWrites reports a program that would write a file, in the spelling name uses.
 func scriptWrites(name, script string, args []string) bool {
 	switch name {
@@ -45,7 +61,7 @@ func scriptWrites(name, script string, args []string) bool {
 		}
 	case "awk":
 		// awk redirects in its own language, so the write is inside the program text.
-		if strings.Contains(script, ">") {
+		if awkRedirectRe.MatchString(script) {
 			return true
 		}
 	}
@@ -61,11 +77,11 @@ func scriptWrites(name, script string, args []string) bool {
 // It walks the AST itself rather than reading writeTargetCandidates, because it needs the
 // SCRIPT as one text to ask whether it writes at all, and the heredoc body is a redirect
 // rather than an argument.
-func denyInterpreterRewrite(location location, command string) string {
+func denyInterpreterRewrite(location location, command string, d Dialect) string {
 	if location.workspace == "" {
 		return ""
 	}
-	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	f, err := parseFile(command, d)
 	if err != nil {
 		return ""
 	}
@@ -82,12 +98,12 @@ func denyInterpreterRewrite(location location, command string) string {
 		if !ok {
 			return true
 		}
-		for _, c := range peelWrappers(literalWords(call.Args)) {
+		for _, c := range peelWrappers(literalWords(call.Args), d) {
 			name := path.Base(c.Name)
 			if !scriptedRewriteInterpreters[name] && name != "awk" {
 				continue
 			}
-			script := strings.Join(c.Args, "\n") + "\n" + heredocText(st)
+			script := interpreterScript(c.Args, heredocText(st))
 			if !scriptWrites(name, script, c.Args) {
 				continue
 			}
@@ -134,18 +150,17 @@ func rewrittenWorkspaceFile(location location, script string, args []string) str
 // name a magus target: a refusal that does not hand back the verb it wanted is one the
 // reader routes around.
 func interpreterRewriteDenial(rel string) string {
-	return fmt.Sprintf("magus guard denied an inline interpreter rewriting %s, a file this tree already carries.\n\n"+
-		"Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. A script that rewrites a file it never read cannot tell a symbol from a word that looks like one, and what it mangles arrives with no record of what it matched. The heredoc spelling is the same act as `sed -i` and is refused for the same reason.\n"+
-		"For a whole-tree mechanical edit, `"+hint.Refs.With("<symbol>", "--occurrences")+"` gives column-precise sites rather than a pattern that also matches the comment about it.\n"+
-		"Writing to a scratch or temp path is untouched, and so is a script that CREATES a file.", rel)
+	return fmt.Sprintf("Use your editor tool on %s: it reads the file first and reports what it changed.\n"+
+		"Whole-tree mechanical edit? `"+hint.Refs.With("<symbol>", "--occurrences")+"` gives column-precise sites.\n"+
+		"Scratch paths and scripts that CREATE a file are untouched.", rel)
 }
 
 // rankInterpreterRewrite ranks this reason against the verdict the other command rules
 // reached. It fills a silence and outranks an advisory, but never replaces a deny: `sed -i`
 // and the substitute-then-write rule both refuse the same act in their own words.
-func rankInterpreterRewrite(v BashVerdict, reason string) BashVerdict {
+func rankInterpreterRewrite(v ShellVerdict, reason string) ShellVerdict {
 	if reason == "" || v.Deny != "" {
 		return v
 	}
-	return BashVerdict{Deny: reason, Rule: denyRule{Name: denyRuleInterpreterRewrite}}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleInterpreterRewrite}}
 }

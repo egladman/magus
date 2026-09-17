@@ -78,12 +78,17 @@ import (
 // store on disk, whose doc and buzz shards were extracted before citations were indexed
 // and whose sources have not changed, and for the relation fingerprint, which the wider
 // shapes move.
-const KnowledgeSchemaVersion = 12
+// v13 adds a `namespace` attr to symbol nodes: the ID of the SCIP namespace symbol (a Go
+// package, a TypeScript or Python module, a Rust mod) the symbol is declared in. Additive,
+// so a v12 consumer parses a v13 graph unchanged; the bump is for a v12 store on disk,
+// whose symbol shards were extracted before the attr existed and whose indexes have not
+// changed.
+const KnowledgeSchemaVersion = 13
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
-// ("schema v10" in internal/render/targetgraph.go), the knowledge-graph markdown
-// ("schema v10" in internal/render/knowledgegraph.go), the graph export's
+// ("schema v10" in internal/render/target_graph.go), the knowledge-graph markdown
+// ("schema v10" in internal/render/knowledge_graph.go), the graph export's
 // schema_version field, and the installed agent skills
 // ("knowledge-schema-version: 10" in internal/agent).
 var schemaStampRe = regexp.MustCompile(`(?:schema v|"schema_version":\s*|knowledge-schema-version:\s*)(\d+)`)
@@ -485,8 +490,12 @@ type KnowledgeSymbol struct {
 	// symbol occupies, so a consumer can tell "this symbol still exists" from "this symbol
 	// still exists and says the same thing".
 	DefEndLine int
-	Defs       []string
-	Refs       []KnowledgeSymbolRef
+	// Namespace is the key of the innermost namespace the moniker declares this symbol in
+	// (its own key for a namespace symbol), or empty when the moniker names none. It is what
+	// joins a symbol to its package without reading paths, which differ per language.
+	Namespace string
+	Defs      []string
+	Refs      []KnowledgeSymbolRef
 	// Calls are the workspace-defined symbols referenced from inside this symbol's own
 	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
 	// (caller, callee), the same scale decision Refs makes per (file, symbol), so a hot
@@ -601,17 +610,17 @@ const (
 	// searched. Reporting this as `absent` would assert exactly the fact it failed to
 	// establish, which is the one outcome this whole verdict exists to prevent.
 	ReasonCoverageUnknown KnowledgeUnknownReason = "coverage-unknown"
-	// ReasonIndexStale: the symbol index was read, but it predates the sources it covers,
-	// so a definition added or moved since the build is not in it. Fix: rebuild the index.
-	// Only a lookup whose whole evidence base IS the index reports this: a miss there is
-	// unverifiable, while a general query reads layers the index has no bearing on.
+	// ReasonIndexStale: the symbol index was read, but the sources it covers have changed
+	// since, so a definition added or moved since the build is not in it. Fix: rebuild the
+	// index. Every miss against one reports this, and no hit does: the sites a lookup did
+	// return are still facts, and the ones it did not are unverifiable.
 	ReasonIndexStale KnowledgeUnknownReason = "index-stale"
 )
 
 // KnowledgeSymbolGap is one project whose declared symbol index magus could not read.
-// State reuses SymbolIndexFreshness so reporting staleness later is additive rather than
-// a second enum; today only SymbolIndexNotBuilt is emitted, because the read verbs
-// deliberately probe with a stat rather than opening the workspace's cache.
+// State reuses SymbolIndexFreshness so reporting staleness here later is additive rather
+// than a second enum; today only SymbolIndexNotBuilt is emitted, because a gap is an index
+// magus could not READ and staleness reaches the answer by its own route, as StaleIndexes.
 type KnowledgeSymbolGap struct {
 	Project ProjectRef           `json:"project"          yaml:"project"`
 	State   SymbolIndexFreshness `json:"state"            yaml:"state"`
@@ -647,11 +656,35 @@ func DescribeGaps(gaps []KnowledgeSymbolGap) string {
 // symbol index predates the sources it covers. It rides the answer rather than the console
 // so `-o json` and MCP cannot lose it: a machine consumer reading only stdout got an
 // unqualified `absent` where a human reading the same lookup was told the index was behind.
+//
+// Text rides the answer for the same reason and corrects a sharper misreading. A symbol
+// lookup that finds nothing reports `absent`, which is TRUE of symbols and false of the
+// tree: MAGUS_MCP_TOKEN is a string literal in twelve files and no symbol anywhere, so
+// the honest answer is "not a symbol, and here is how many times it appears as text".
+// Deliberately NOT a fourth verdict: a verdict classifies an answer that came back
+// empty, and this is a non-empty answer to a different question from a different
+// evidence base.
+//
+// A POINTER, not two ints: this package's JSON encoder keeps numeric values exact and
+// therefore does not drop a zero int under omitempty, so plain counters would put
+// `"text_hits": 0` on every answer magus has ever rendered. Nil means the text half was
+// not consulted, which is a different fact from consulting it and finding nothing.
 type KnowledgeAnswer struct {
 	Verdict      KnowledgeVerdict       `json:"verdict"                 yaml:"verdict"`
 	Reason       KnowledgeUnknownReason `json:"reason,omitempty"        yaml:"reason,omitempty"`
 	Gaps         []KnowledgeSymbolGap   `json:"gaps,omitempty"          yaml:"gaps,omitempty"`
 	StaleIndexes []string               `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
+	Text         *KnowledgeTextPresence `json:"text,omitempty"          yaml:"text,omitempty"`
+}
+
+// KnowledgeTextPresence is what a raw-text search found for a name no symbol index
+// holds: how many occurrences, across how many files.
+//
+// It answers the question `absent` cannot, and it is reported beside the verdict rather
+// than replacing it, because "no symbol by that name" stays true either way.
+type KnowledgeTextPresence struct {
+	Hits  int `json:"hits"  yaml:"hits"`
+	Files int `json:"files" yaml:"files"`
 }
 
 // ClassifyAnswer classifies a lookup's result against what magus was actually able to search.

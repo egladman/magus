@@ -48,6 +48,7 @@ _magus() {
                 'affected:run a target for VCS-diff affected projects'
                 'x:interactive shorthand\: pick project + target (TTY only)'
                 'clean:remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]'
+                'shell:check a command against this workspace'\''s conventions and name the better one (shell '\''<command>'\'')'
                 'query:search the knowledge graph and show a node'\''s neighborhood'
                 'refs:list where an ingested code symbol is defined and referenced'
                 'explain:show one knowledge-graph node\: its edges, provenance, blast radius'

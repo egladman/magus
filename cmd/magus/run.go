@@ -347,7 +347,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		err = m.Run(invCtx, targets, runOpts...)
 	}
-	gate.record(invCtx, err)
+	// See affected.go: the cut-short question is read here, not inside record.
+	gate.record(invCtx, err, invCtx.Err() != nil)
 	if rf.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("run %s: timed out after %s", targetName, rf.Timeout)
 	}

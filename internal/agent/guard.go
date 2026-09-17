@@ -22,7 +22,7 @@ const GuardSchemaVersion = 1
 var guardDecisions = []string{"pass", "advise", "deny"}
 
 // guardSurfaces is every input the guard judges: a shell command, a file path
-// an edit is about to write (`magus session hook --path`), or an MCP tool call
+// an edit is about to write (`magus shell --path`), or an MCP tool call
 // (a tool name plus a params object, forwarded whole rather than reduced to a
 // single string). A host wires each surface to a different one of its events,
 // and a host that cannot wire one covers less, which is a coverage difference
@@ -59,11 +59,11 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // the attribution flag, which no released binary accepts (v0.3.0 predates it):
 // an older binary rejected it, the plugin's judge() got unparsable stdout, and
 // every verdict silently allowed. The sh templates already retried without
-// attribution on exactly this failure (magus-guard-command.sh's guard()); the
+// attribution on exactly this failure (magus-hook-command.sh's guard()); the
 // plugin now does the same.
 //
 // 3: that flag is now --agent-name (was --host, which read as a network host)
-// and the templates' variable is GUARD_AGENT_NAME (was GUARD_HOST). A copy
+// and the templates' variable is __MAGUS_AGENT_NAME (was __MAGUS_HOST). A copy
 // still passing the old spelling degrades rather than breaks (the retry that
 // version 2 added drops attribution and keeps the verdict), so an unbumped
 // copy loses the activity trail's host label, not its guard.
@@ -79,7 +79,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // the context key (treating it as an error and then failing OPEN) was not merely
 // ignoring an advisory, it was disarmed by one for that call. A copy that predates
 // this keeps sending it and keeps failing open, which no verdict anywhere reveals.
-// Suppression is opt-in per host (GUARD_NO_ADVISE), so the rendered response for a
+// Suppression is opt-in per host (__MAGUS_NO_ADVISE), so the rendered response for a
 // host that keeps the arm is byte-identical to version 6. Which hosts need it is
 // recorded in their own guide pages, not here.
 //
@@ -120,14 +120,20 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // compacted session is handed back renders as a JSON envelope on request, for a host that
 // parses a session-start hook's stdout as a reply rather than reading it as context.
 //
-// 13: the contract grew a third surface, MCP tool calls, and magus-guard-command.sh grew
+// 13: the contract grew a third surface, MCP tool calls, and magus-hook-command.sh grew
 // HOST_EVENT_RAW to carry it: an MCP call has no single string to select with
 // HOST_EVENT_PATH, only a tool name and a params object, so a host wiring this surface
 // forwards the whole event instead of reducing it to one jq extraction. A copy that
 // predates this has no HOST_EVENT_RAW arm at all, so a host that tries to wire an
 // mcp__magus__* matcher through it ships the literal string "null" as the command to
 // judge rather than the envelope the guard can at least recognize and pass through.
-const GuardTemplateVersion = 13
+//
+// 14: Cursor's self-contained guard now matches WebSearch/WebFetch and injects
+// workspace kind=link citations into additional_context so the next open-web
+// search is biased toward package/docs URLs this tree already depends on. A copy
+// that predates this lets WebSearch run unbound against the open web with no
+// pointer at the citation index.
+const GuardTemplateVersion = 14
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

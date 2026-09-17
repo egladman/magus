@@ -131,16 +131,14 @@ func TestBudgetFramesRequireTheMagic(t *testing.T) {
 	require.True(t, held.Granted)
 
 	// An acquire with no magic is answered as unrecognized rather than acted on.
-	var reply budgetAcquireReply
-	err = DaemonAdmitter{Addr: srv.Addr()}.call(t.Context(), typeBudgetAcquire,
-		budgetAcquireRequest{Protocol: protocolV2, Waiter: "w1"}, typeBudgetAcquireReply, &reply)
+	reply, err := roundTrip[budgetAcquireReply](t.Context(), srv.Addr(),
+		budgetExchange(typeBudgetAcquire, typeBudgetAcquireReply), budgetAcquireRequest{Protocol: protocolV2, Waiter: "w1"})
 	require.NoError(t, err, "the server answers rather than hanging up")
 	assert.Equal(t, "unrecognized request", reply.Err)
 
 	// A release with no magic leaves the claim alone.
-	var rel budgetReleaseReply
-	err = DaemonAdmitter{Addr: srv.Addr()}.call(t.Context(), typeBudgetRelease,
-		budgetReleaseRequest{Protocol: protocolV2, ID: held.ID}, typeBudgetReleaseReply, &rel)
+	_, err = roundTrip[budgetReleaseReply](t.Context(), srv.Addr(),
+		budgetExchange(typeBudgetRelease, typeBudgetReleaseReply), budgetReleaseRequest{Protocol: protocolV2, ID: held.ID})
 	require.NoError(t, err)
 	assert.Len(t, budget.Snapshot().Holders, 1, "an unauthenticated release must not free a peer's claim")
 }

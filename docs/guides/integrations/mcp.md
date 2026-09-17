@@ -129,8 +129,8 @@ Memory and scratch:
 
 Console:
 
-| Tool                    | Purpose                                                                                                  |
-| ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| Tool                    | Purpose                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- |
 | `magus_console_present` | Return a tokenless link to a local console surface when the user asks to see dashboard status or output |
 
 `magus_console_present` does not open a browser or hand a client a token. A compatible
@@ -203,6 +203,17 @@ logs and history). How you connect depends on the client:
   installed by `magus agent install .claude/skills`) at launch, so an already-open session
   will not see them until it is restarted.
 
+- **Cursor** owns its MCP client config. `magus agent harness apply --id cursor`
+  prints a short setup hint and a docs pointer; it does not write
+  `.cursor/mcp.json`. Register Magus under Settings -> Tools & MCP (or
+  hand-write `.cursor/mcp.json` / `~/.cursor/mcp.json`) at
+  `http://127.0.0.1:7391/mcp`, preferably with
+  `Authorization: Bearer ${env:MAGUS_MCP_TOKEN}` so the secret stays out of the
+  file. Export `MAGUS_MCP_TOKEN` where the Cursor GUI process inherits it
+  (macOS Dock launches often miss shell-profile exports), then restart Cursor
+  or toggle Magus under Tools & MCP. Confirm with Output -> MCP Logs and
+  `magus status --probe=mcp`.
+
 - **Codex** uses user-level `~/.codex/config.toml` to register the local
   Streamable HTTP endpoint. Do not commit this client configuration. It contains
   no secret; the token comes from the process environment:
@@ -247,6 +258,14 @@ logs and history). How you connect depends on the client:
     "headers": { "Authorization": "Bearer <token>" }
   }
   ```
+
+  Prefer binding the token through the workspace **secret provider** (built-in
+  environment provider: the ref `MAGUS_MCP_TOKEN`) rather than pasting a
+  plaintext secret into a committed file. Harness spells declare that ref via
+  `harness_mcp`; `magus agent harness apply` prints a host CLI command sketch
+  and/or a docs pointer only - Magus does not write host MCP client config.
+  Resolve the ref with `magus\secret.read("MAGUS_MCP_TOKEN")` inside a
+  magusfile when a spell needs the value; hosts read the env var directly.
 
   Clients whose connector UI only speaks OAuth (no static-header option) reach a
   loopback server through the `mcp-remote` stdio bridge:

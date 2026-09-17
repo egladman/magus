@@ -70,3 +70,25 @@ func TestLatestGateEmptyStore(t *testing.T) {
 	_, ok := LatestGate(fold, "b", "ci")
 	assert.False(t, ok)
 }
+
+// TestGateAtMatchesTheCommitOnAnyRef pins the lookup the push rule reads: a verdict at a
+// commit answers for that commit whichever branch recorded it, an abbreviation matches
+// the full id, and a deferral never counts as a verdict.
+func TestGateAtMatchesTheCommitOnAnyRef(t *testing.T) {
+	dir := t.TempDir()
+	start := SessionStart{Workspace: "/repo"}
+	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Ref: "a", Commit: "a89dee5c7f00", Outcome: OutcomePass}, start))
+	time.Sleep(5 * time.Millisecond)
+	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Ref: "b", Commit: "a89dee5c7f00", Outcome: OutcomeDeferred}, start))
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	rec, ok := GateAt(fold, "a89dee5c", "ci")
+	require.True(t, ok)
+	assert.Equal(t, OutcomePass, rec.Outcome, "the deferral is skipped for the verdict behind it")
+
+	_, ok = GateAt(fold, "0000000", "ci")
+	assert.False(t, ok)
+	_, ok = GateAt(fold, "", "ci")
+	assert.False(t, ok, "no commit is no answer, not a match on everything")
+}

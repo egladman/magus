@@ -80,13 +80,15 @@ func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 		Verified: true,
 		Risks:    []string{},
 		Command:  "magus run go::go-test . -- -run Ledger",
+		// The primary check reports as the gate it is. See the note in lifecycle_test.go.
+		Gates: []types.GateStatus{{ID: types.PrimaryCompletionGateID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
 	}, Verify(acceptRow(), passingResult(), passingRun, nil))
 }
 
 func TestVerifyCompletionGatesRequireEvidenceForEveryDeclaredGate(t *testing.T) {
 	t.Parallel()
 
-	status := VerifyGates(completionGateRow(), completionGateResult(), types.JobAttempt{}, completionGateAttempts(), nil)
+	status := VerifyGates(completionGateRow(), completionGateResult(), types.JobAttempt{}, completionGateAttempts(), nil, Observed{})
 	assert.True(t, status.Verified, status.Violations)
 	require.Len(t, status.Gates, 2)
 	assert.True(t, status.Gates[0].Verified)
@@ -98,14 +100,14 @@ func TestVerifyCompletionGatesRejectMissingOrWrongEvidence(t *testing.T) {
 
 	rep := completionGateResult()
 	rep.GateEvidence = rep.GateEvidence[:1]
-	status := VerifyGates(completionGateRow(), rep, types.JobAttempt{}, completionGateAttempts()[:1], nil)
+	status := VerifyGates(completionGateRow(), rep, types.JobAttempt{}, completionGateAttempts()[:1], nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `completion gate "docs"`)
 
 	rep = completionGateResult()
 	attempts := completionGateAttempts()
 	attempts[1].Attempt.Project = "."
-	status = VerifyGates(completionGateRow(), rep, types.JobAttempt{}, attempts, nil)
+	status = VerifyGates(completionGateRow(), rep, types.JobAttempt{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "different run")
 }
@@ -119,7 +121,7 @@ func TestVerifyCompletionGatesRejectUndeclaredEvidence(t *testing.T) {
 		GateID:  "invented",
 		Attempt: types.JobAttempt{Found: true, Ref: "invented-ref", Project: ".", Target: "go-test"},
 	})
-	status := VerifyGates(completionGateRow(), rep, types.JobAttempt{}, attempts, nil)
+	status := VerifyGates(completionGateRow(), rep, types.JobAttempt{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared completion gate \"invented\"")
 }
@@ -149,7 +151,7 @@ func TestVerifyCompletionGateDependenciesPropagate(t *testing.T) {
 		GateID: "publish", Attempt: types.JobAttempt{Found: true, Ref: "publish-ref", Project: "docs", Target: "test"},
 	})
 	attempts[0].Attempt.Failed = true
-	status := VerifyGates(row, rep, types.JobAttempt{}, attempts, nil)
+	status := VerifyGates(row, rep, types.JobAttempt{}, attempts, nil, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, status.Gates[1].Violations, `depends_on completion gate "unit" has not verified`)
 	assert.Contains(t, status.Gates[2].Violations, `depends_on completion gate "docs" has not verified`)
@@ -160,7 +162,7 @@ func TestVerifyCompletionGatesEnforceJobDependencies(t *testing.T) {
 
 	row := completionGateRow()
 	row.DependsOn = []string{"upstream"}
-	status := VerifyGates(row, completionGateResult(), types.JobAttempt{}, completionGateAttempts(), []types.Job{{ID: "upstream", State: types.StateExited}})
+	status := VerifyGates(row, completionGateResult(), types.JobAttempt{}, completionGateAttempts(), []types.Job{{ID: "upstream", State: types.StateExited}}, Observed{})
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "upstream")
 }
@@ -236,15 +238,15 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "declares no completion gate")
 }
 
-// A charm, the binary's spelling and the args after `--` are all ways of running one
-// target, so none of them may decide whether the evidence binds.
+// The binary's spelling and the args after `--` are ways of running one target, so
+// neither may decide whether the evidence binds.
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	t.Parallel()
 
 	att := types.JobAttempt{Found: true, Project: "internal/ledger", Target: "test"}
 	for _, line := range []string{
 		"magus run test internal/ledger",
-		"./magus run test:rw internal/ledger",
+		"./magus run test internal/ledger",
 		"magus run test internal/ledger -- -run Ledger",
 	} {
 		c, err := types.ParseLeaseRunLine(line)
@@ -255,6 +257,28 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
 	require.NoError(t, err)
 	assert.False(t, bindsTo(c, att), "another project is another run")
+}
+
+// A CHARM is part of a run's identity, not a spelling of it. The store records what was
+// invoked, so the charmless `generate` that GATES drift and the `generate:rw` that WRITES
+// it are two runs; accepting either for the other made a drift gate satisfiable by the
+// run that produces the drift. This workspace sets default_charms, so `test:rw` is what
+// an ordinary run records and a check meaning that form has to say so.
+func TestCheckBindsOnCharm(t *testing.T) {
+	t.Parallel()
+
+	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
+	gated := types.JobAttempt{Found: true, Project: ".", Target: "generate"}
+
+	charmless, err := types.ParseLeaseRunLine("magus run generate .")
+	require.NoError(t, err)
+	assert.False(t, bindsTo(charmless, written), "a written run is not evidence of a gated one")
+	assert.True(t, bindsTo(charmless, gated))
+
+	rw, err := types.ParseLeaseRunLine("magus run generate:rw .")
+	require.NoError(t, err)
+	assert.True(t, bindsTo(rw, written))
+	assert.False(t, bindsTo(rw, gated), "a gated run is not evidence of a written one")
 }
 
 // A directory declaration covers what is under it and a glob covers only what it matches.

@@ -23,12 +23,12 @@ func populate(t *testing.T, root, dir string, names ...string) {
 // from, in a directory whose own names it never read.
 func TestAdviseNewFileNameListsTheSiblingsItWillJoin(t *testing.T) {
 	root := inWorkspace(t)
-	populate(t, root, filepath.Join("internal", "guard"), "advisory.go", "cachedir.go", "focus.go")
+	populate(t, root, filepath.Join("internal", "guard"), "advisory.go", "cache.go", "focus.go")
 
 	got := adviseNewFileName(filepath.Join("internal", "guard", "lease.go"))
 
 	assert.Contains(t, got, "NEW FILE")
-	assert.Contains(t, got, "advisory.go, cachedir.go, focus.go", "the siblings ARE the advisory")
+	assert.Contains(t, got, "advisory.go, cache.go, focus.go", "the siblings ARE the advisory")
 }
 
 // The rule runs BEFORE the write, so a file that exists is an edit. An edit chooses no
@@ -56,21 +56,21 @@ func TestAdviseNewFileNameLeavesTheEmptyDirectoryToTheBoundaryRule(t *testing.T)
 // convention left to read and the session's one firing would buy nothing.
 func TestAdviseNewFileNameIsSilentOnADerivedName(t *testing.T) {
 	root := inWorkspace(t)
-	populate(t, root, filepath.Join("internal", "guard"), "sourcedir.go", "advisory.go")
+	populate(t, root, filepath.Join("internal", "guard"), "dir.go", "advisory.go")
 
-	assert.Empty(t, adviseNewFileName(filepath.Join("internal", "guard", "sourcedir_test.go")))
+	assert.Empty(t, adviseNewFileName(filepath.Join("internal", "guard", "dir_test.go")))
 }
 
 // A name hung off the directory's EPONYMOUS file is one somebody picked, so the
 // derived-name suppression must not reach it and the list still has something to say.
 func TestAdviseNewFileNameStillSpeaksForANameOffTheEponymousFile(t *testing.T) {
 	root := inWorkspace(t)
-	populate(t, root, filepath.Join("internal", "guard"), "guard.go", "advisory.go", "cachedir.go")
+	populate(t, root, filepath.Join("internal", "guard"), "guard.go", "advisory.go", "cache.go")
 
 	got := adviseNewFileName(filepath.Join("internal", "guard", "guard_thing.go"))
 
 	assert.Contains(t, got, "NEW FILE")
-	assert.Contains(t, got, "advisory.go, cachedir.go, guard.go", "the list is what names the convention")
+	assert.Contains(t, got, "advisory.go, cache.go, guard.go", "the list is what names the convention")
 }
 
 // The host sends an ABSOLUTE path and this repo is routinely checked out under

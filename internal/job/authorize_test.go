@@ -28,7 +28,7 @@ func declared(t *testing.T, rows ...types.Job) Location {
 func workerRow() types.Job {
 	return types.Job{
 		ID:         "adj/store",
-		Goal:       "the store is the enforcement point",
+		Criteria:   "the store is the enforcement point",
 		WritePaths: []string{"internal/ledger", "types/lease.go"},
 		Validation: "magus run test internal/ledger",
 		State:      types.StateRunning,
@@ -127,7 +127,7 @@ func TestBoundWorkerWritesOnlyItsOwnRowAndChildren(t *testing.T) {
 	loc := declared(t, workerRow(), types.Job{ID: "adj/other", WritePaths: []string{"internal/sessions"}})
 
 	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/other", func(u *types.Job) {
-		u.Goal = "rewritten by a neighbour"
+		u.Criteria = "rewritten by a neighbour"
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no row but its own")
@@ -261,7 +261,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 
 	require.NoError(t, BindLease(loc.CacheDir, "adj/other"))
 
-	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Goal = "rewritten" })
+	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Criteria = "rewritten" })
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
 	_, err = s.Clear(t.Context())
@@ -270,7 +270,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, workerRow().Goal, rows[0].Goal)
+	assert.Equal(t, workerRow().Criteria, rows[0].Criteria)
 }
 
 // The row records who declared it, which is the provenance a refusal names.
@@ -305,6 +305,37 @@ func TestBindLeaseIsOneWay(t *testing.T) {
 	assert.Equal(t, "adj/store", LeaseFromMarker(cacheDir), "the refused bind changed nothing")
 
 	assert.NoError(t, BindLease(cacheDir, "adj/store"), "a worker running its bootstrap twice is not refused")
+}
+
+// TestVacateLeaseClearsTheMarkerAndReopensBinding pins the file half of the fix for a
+// checkout stuck bound forever: BindLease refuses to name anything else while a marker
+// is set, whatever state the row behind it is in, so the only way back was deleting the
+// file by hand until this existed. Vacating is idempotent (a no-op on an unbound
+// checkout, and clearing a marker twice is not an error), so a caller never has to check
+// before calling it.
+func TestVacateLeaseClearsTheMarkerAndReopensBinding(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+
+	id, err := VacateLease(cacheDir)
+	require.NoError(t, err, "no marker at all is a no-op, not an error")
+	assert.Empty(t, id)
+
+	require.NoError(t, BindLease(cacheDir, "adj/store"))
+	id, err = VacateLease(cacheDir)
+	require.NoError(t, err)
+	assert.Equal(t, "adj/store", id, "reports what it cleared")
+	assert.Empty(t, LeaseFromMarker(cacheDir))
+
+	id, err = VacateLease(cacheDir)
+	require.NoError(t, err, "vacating an already-unbound checkout is still a no-op")
+	assert.Empty(t, id)
+
+	// BindLease's one-way refusal is gone once vacated: the checkout can take a
+	// DIFFERENT lease, which it could not do while the marker still named the first one.
+	require.NoError(t, BindLease(cacheDir, "adj/other"))
+	assert.Equal(t, "adj/other", LeaseFromMarker(cacheDir))
 }
 
 // An unattributed write is an OBSERVATION the guard makes about somebody else's row, so

@@ -193,14 +193,7 @@ func configConsoleTokenList(args []string) error {
 		if c.EffectiveScope() == auth.ScopeConsoleRead {
 			tier = "viewer"
 		}
-		expiresCol := "never"
-		if !c.Expires.IsZero() {
-			expiresCol = c.Expires.Format("2006-01-02")
-			if now.After(c.Expires) {
-				expiresCol += " (expired)"
-			}
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", c.Name, tier, c.Fingerprint, c.Created.Format("2006-01-02"), expiresCol)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", c.Name, tier, c.Fingerprint, c.Created.Format("2006-01-02"), expiresColumn(c, now))
 	}
 	return tw.Flush()
 }
@@ -227,25 +220,32 @@ func configConsoleTokenRevoke(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Resolve WITHIN the console tiers before revoking. Revoke itself searches the whole
-	// store, so without this an MCP connector sharing a name would be deleted by a
-	// console command: the two pools must not be reachable through each other.
-	if !matchesScoped(store.ListScope(consoleScopes...), q) {
+	// Confined to the console tiers, so an MCP connector is never deleted by a console
+	// command; one that would have matched is named with the command that revokes it.
+	removed, err := store.RevokeScoped(q, consoleScopes)
+	if errors.Is(err, auth.ErrConnectorNotFound) {
 		if matchesScoped(store.ListScope(auth.ScopeMCP), q) {
 			return usagef("magus config console token revoke: %q is an MCP connector, not a console token; revoke it with `"+hint.ConfigMCPConnectorRevoke.With("%s")+"`", q, q)
 		}
 		return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config console token revoke: no console token matches %q", q)
 	}
-
-	removed, err := store.Revoke(q)
 	if err != nil {
-		if errors.Is(err, auth.ErrConnectorNotFound) {
-			return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config console token revoke: no console token matches %q", q)
-		}
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "magus config console token revoke: removed %q (fingerprint %s)\n", removed.Name, removed.Fingerprint)
 	return nil
+}
+
+// expiresColumn renders a token's expiry for a listing.
+func expiresColumn(c auth.ConnectorToken, now time.Time) string {
+	if c.Expires.IsZero() {
+		return "never"
+	}
+	col := c.Expires.Format("2006-01-02")
+	if now.After(c.Expires) {
+		col += " (expired)"
+	}
+	return col
 }
 
 // matchesScoped reports whether q names one of toks by exact name, or by an exact or

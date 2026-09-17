@@ -3,8 +3,8 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5832
-skill_short_bytes: 4173
+skill_full_bytes: 5811
+skill_short_bytes: 4152
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `70` |
-| `knowledge-schema-version` | `12` |
-| `skill-content` | `622da65ffdb4` |
+| `agent-skill-version` | `82` |
+| `knowledge-schema-version` | `13` |
+| `skill-content` | `76687b5af876` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -87,7 +87,7 @@ the one nobody remembers is loaded.
  So resolve every claim against something that executes.
 
 ```sh
-printf '%s' "<the exact command a document recommends>" | magus session hook
+magus shell "<the exact command a document recommends>"
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```
@@ -200,7 +200,7 @@ not the exception - they were usually written in the same sitting by the same
 person. So resolve every claim against something that executes.
 
 ```sh
-printf '%s' "<the exact command a document recommends>" | magus session hook
+magus shell "<the exact command a document recommends>"
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```

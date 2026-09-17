@@ -206,7 +206,32 @@ const (
 	// A reads-external op has two answers, not one: declare skip_cache, or let the
 	// spell probe the external data's identity (Tool.observe) so it keys like any other
 	// input. A mutates-external op has only the first: a side effect cannot be hashed.
-	CacheableExternalOp       DiagnosticCode = "MGS1033"
+	CacheableExternalOp DiagnosticCode = "MGS1033"
+	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
+	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
+	// keying the target are the bytes the cache wrote: an edit to that file can neither
+	// miss the cache nor be read by the target that declared it.
+	SourceIsAlsoOutput DiagnosticCode = "MGS1034"
+	// WriteWithoutRWCharm is a target with an rw branch that writes a file outside it, so
+	// the run that was given no rw charm edits the tree anyway and then reports its own edit.
+	WriteWithoutRWCharm DiagnosticCode = "MGS1035"
+	// FootprintDropsOpGlobs is a target that declares its own footprint and then composes a
+	// spell op reading file kinds that footprint never names.
+	//
+	// A ctx.readsFiles call REPLACES the project baseline (buildStep), and a spell
+	// contributes its globs project-wide unless it declares them per target, so narrowing a
+	// target's footprint silently drops the very files the ops in its body run on. The
+	// target then replays on an edit to them.
+	//
+	// The failure is GREEN, which is what earns it a code over a comment: the op is skipped,
+	// not failed, and a sibling target that kept the baseline still re-runs, so the gate
+	// stays green while the formatter or the suite never saw the change. Measured in this
+	// workspace four times before anyone wrote the rule down.
+	//
+	// It fires only on total omission. A footprint naming one *.go path is a narrowing its
+	// author meant; a footprint naming no Go file at all under a target that calls go-fmt is
+	// the mistake, and the two are distinguishable without knowing what the op reads.
+	FootprintDropsOpGlobs     DiagnosticCode = "MGS1036"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -354,7 +379,16 @@ const (
 	// The same-step case is the one magus must not schedule around. Across steps the
 	// engine derives writer-before-reader ordering itself; within one step the sequencing
 	// is the composing body's own, and only ctx.needs can express it.
-	UnorderedSameStepWrite   DiagnosticCode = "MGS4008"
+	UnorderedSameStepWrite DiagnosticCode = "MGS4008"
+	// UnformattedCommit is a commit that changed a Go file without leaving it correctly
+	// formatted (gofmt -l still names it). A COMMIT-TIME question, not "is this file
+	// formatted right now": golangci-lint's formatters already answer that one, against
+	// the whole tree, on demand. This fires once per commit, scoped to the files that
+	// commit touched, from the drift-notice hooks (post-commit, pre-push); see
+	// checkDriftForCommit in cmd/magus. Sibling of MGS4006 (generated-output drift, the
+	// other class the same notice carries) and distinct from MGS4007 (a target rewriting
+	// an undeclared source, checked after a target runs, not after a commit is made).
+	UnformattedCommit        DiagnosticCode = "MGS4009"
 	NearDuplicateServices    DiagnosticCode = "MGS5001"
 	ServiceOpDetached        DiagnosticCode = "MGS5002"
 	CommandOpNeverExits      DiagnosticCode = "MGS5003"
@@ -411,7 +445,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
-	TimeoutDeclarationDrift, CacheableExternalOp,
+	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
+	FootprintDropsOpGlobs,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
@@ -421,6 +456,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	RunIsolationWedged,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
+	UnformattedCommit,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,

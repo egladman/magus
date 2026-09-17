@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,13 +38,18 @@ const (
 	// what lands on disk.
 	markerDir = "advisories"
 
-	// anonWindow bounds a marker that could not be keyed to a session id.
+	// anonWindow bounds a marker that could not be keyed to a session id at all.
 	//
-	// A host that reports no session leaves nothing to tell this run from the next, so
-	// that marker expires on a clock instead: long enough to cover a working session,
-	// short enough that tomorrow's session is told the fact again. A host that DOES
-	// report one needs no window: the id is the session, and its return is the same
-	// session.
+	// A caller that reports no session and has no terminal to stand in for one leaves
+	// nothing to tell this run from the next, so that marker expires on a clock instead:
+	// long enough to cover a working session, short enough that tomorrow's is told the
+	// fact again. A caller that DOES name a session needs no window: the id is the
+	// session, and its return is the same session.
+	//
+	// It is the LAST resort rather than the human default. A person at a prompt passes
+	// no --session, and keying them on a clock made the gate mean "in the last two
+	// hours", so the same advisory went quiet on a second deliberate look and came back
+	// unbidden the next morning. SessionFromTerminal is what gives them a real one.
 	anonWindow = 2 * time.Hour
 
 	// markerRetention is how long any marker survives the sweep. Long enough that a
@@ -63,6 +69,38 @@ type Gate struct {
 // workspace, and the gate then suppresses nothing.
 func NewGate(cacheDir, session string) Gate {
 	return Gate{cacheDir: cacheDir, session: strings.TrimSpace(session)}
+}
+
+// SessionFromTerminal derives a session id for a caller that named none, from the
+// terminal it is attached to. Empty when there is no terminal to read, which is the
+// pipeline and CI case and correctly falls back to anonWindow.
+//
+// A person is the caller this exists for. An agent host passes --session and has always
+// had a real one; a person at a prompt passes nothing and so shared one "anon" bucket
+// with every other unattributed run on the machine, held on a two-hour clock. That is
+// not what they mean by a session: they mean this terminal, until they close it.
+//
+// The terminal is read from the environment a terminal emulator sets, and falls back to
+// the parent process id, which is the shell that invoked magus. Neither is a secret and
+// neither is trusted: MarkerPath hashes whatever comes back, so a value holding
+// separators or anything else cannot pick a path. Getting it WRONG costs an advisory
+// shown twice or held once too long, never a wrong verdict.
+func SessionFromTerminal(env func(string) string, ppid int, isTerminal bool) string {
+	if !isTerminal {
+		return ""
+	}
+	// TERM_SESSION_ID is macOS Terminal and iTerm2; WINDOWID is X11 terminals. Both
+	// name the WINDOW, which outlives a shell restart inside it, so they are preferred
+	// over the pid: reopening a shell in the same window is the same sitting.
+	for _, key := range []string{"TERM_SESSION_ID", "WINDOWID"} {
+		if v := strings.TrimSpace(env(key)); v != "" {
+			return "tty:" + v
+		}
+	}
+	if ppid > 1 {
+		return "ppid:" + strconv.Itoa(ppid)
+	}
+	return ""
 }
 
 // CacheDir returns the cache dir this gate is keyed on.
@@ -90,6 +128,14 @@ func (g Gate) Once(kind MarkerKind, text string) string {
 // 1,499 sessions: 95% of all advisory bytes were same-session repeats, and conversion
 // happens on first contact, so a repeat earns its place only at a size nobody has to read
 // around. A one-line repeat still names the command; a suppressed one cannot.
+//
+// TODO: the brief repeats without limit, and one 961-command session re-judged the four
+// search advisories as firing 426 times with zero measured uptake. A capped tier that
+// went silent after N repeats was tried and REVERTED: it cannot tell a reader ignoring
+// the tenth reminder from sixteen workers racing the first firing, and
+// TestAdvisoryGateRaceCostsBytesNotVerdicts pins that a raced firing must never come back
+// silent. Whatever replaces it has to separate repeats over TIME from concurrent
+// duplicates, which the marker alone does not record.
 //
 // An empty brief goes quiet on the repeat, which is right for a notice reporting a
 // condition rather than offering a command.
@@ -125,22 +171,44 @@ func (g Gate) AlreadyFired(kind MarkerKind) bool {
 // MarkFired marks kind reported for this session and returns whether it ALREADY was: a
 // check-and-set, and the return is the check half.
 //
+// The set half is an exclusive create, not a stat followed by a write. A host runs one
+// hook process per tool call and an agent issues tool calls in parallel, so the racing
+// callers are the normal case rather than the exotic one: four processes that each stat
+// a missing marker and then each write it all believe they are the first, and the reader
+// gets the notice four times. That is the shape this gate exists to prevent, arriving
+// through the gate itself.
+//
 // Every failure returns false, which speaks. State magus cannot write is not a reason to
 // go quiet: a notice repeated is a smaller failure than a notice nobody ever gets.
 func (g Gate) MarkFired(kind MarkerKind) bool {
-	if g.AlreadyFired(kind) {
-		return true
+	if kind == "" || g.cacheDir == "" {
+		return false
 	}
 	path := g.markerPath(kind)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return false
 	}
-	// Rewritten rather than created, so an expired anonymous marker starts its window
-	// again instead of staying expired forever.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err == nil {
+		_ = f.Close()
+		sweepMarkers(filepath.Dir(path))
+		return false
+	}
+	if !os.IsExist(err) {
+		return false
+	}
+	// The marker is there, so someone fired. A session-keyed marker settles it; an
+	// anonymous one is held only for its window, and past that this caller takes the
+	// firing and restarts the window by rewriting the file.
+	if g.session != "" {
+		return true
+	}
+	if info, serr := os.Stat(path); serr == nil && time.Since(info.ModTime()) < anonWindow {
+		return true
+	}
 	if err := os.WriteFile(path, nil, 0o644); err != nil {
 		return false
 	}
-	sweepMarkers(filepath.Dir(path))
 	return false
 }
 

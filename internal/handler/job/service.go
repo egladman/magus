@@ -1,7 +1,7 @@
 // Package job is the console-facing JobService handler: the daemon's CONTROL surface, the
 // mutating sibling of the read-only activity/status/viewer handlers. Its RPCs submit background
 // maintenance jobs (graph sync, activity-trail rotate, cache clear) through the same
-// fire-and-forget, coalescing proc mechanism the CLI's `server job` uses, so a double-click never
+// fire-and-forget, coalescing proc mechanism the CLI's `magus job run` uses, so a double-click never
 // starts a second copy. Each response carries a metadata snapshot: the job's running state, its
 // last completed run (from the activity trail), and the current size of what it maintains, so a
 // caller renders a job's state in one round trip. The daemon mounts it behind the bearer guard;
@@ -23,8 +23,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
@@ -44,7 +44,7 @@ type workspace interface {
 type Service struct {
 	ws      workspace
 	version string
-	// store is where a catalog job's row lives, beside the delegated jobs. Nil leaves the
+	// store is where a catalog job's row lives, beside the delegated jobstore. Nil leaves the
 	// rows unwritten, which is what a server with no store does rather than failing a
 	// submit: the job still runs, and only its row is missing.
 	store *jobstore.Store
@@ -90,7 +90,7 @@ func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJob
 	for _, row := range rows {
 		byID[row.ID] = row
 	}
-	all := jobs.All()
+	all := jobstore.All()
 	out := make([]*jobv1.Job, 0, len(all)+len(rows))
 	catalog := make(map[string]bool, len(all))
 	for _, j := range all {
@@ -146,7 +146,7 @@ func overlaps(rows []types.Job) []*jobv1.JobOverlap {
 // replaced took no argument, so they had nothing to get wrong.
 func (s *Service) RunJob(ctx context.Context, req *connect.Request[jobv1.RunJobRequest]) (*connect.Response[jobv1.RunJobResponse], error) {
 	id := strings.TrimPrefix(req.Msg.GetName(), jobsPrefix)
-	if _, ok := jobs.Lookup(id); !ok {
+	if _, ok := jobstore.Lookup(id); !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("job: unknown job %q", req.Msg.GetName()))
 	}
 	return s.submit(ctx, id)
@@ -156,7 +156,7 @@ func (s *Service) RunJob(ctx context.Context, req *connect.Request[jobv1.RunJobR
 // A coalesced submit (empty invocation id back) is ALREADY_RUNNING, not an error: the response
 // still carries the running job's id and its metadata. Only real failures use error codes.
 func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jobv1.RunJobResponse], error) {
-	j, ok := jobs.Lookup(name)
+	j, ok := jobstore.Lookup(name)
 	if !ok { // RunJob already rejected an unknown name, so reaching here is a programmer error
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("job: unknown job %q", name))
 	}
@@ -184,7 +184,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	return connect.NewResponse(&jobv1.RunJobResponse{
 		State:        state,
 		InvocationId: inv,
-		ConsoleUrl:   "", // TODO: deep-link once the /logs page accepts an invocation fragment
+		ConsoleUrl:   consoleURL(inv),
 		Job:          info,
 	}), nil
 }
@@ -197,13 +197,13 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 // Best-effort, like the trail the daemon writes beside it. The store refuses a write from
 // a checkout bound to a lease, so a daemon serving a worker's worktree leaves the row
 // alone rather than failing a submit that otherwise succeeded.
-func (s *Service) recordSubmit(ctx context.Context, j jobs.Job, inv string) {
+func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv string) {
 	if s.store == nil {
 		return
 	}
 	if _, err := s.store.Update(ctx, j.Name, func(row *types.Job) {
 		row.Holder = types.HolderDaemon
-		row.Goal = j.Desc
+		row.Criteria = j.Desc
 		row.State = types.StateRunning
 		if row.LastRun == nil {
 			row.LastRun = &types.JobRun{}
@@ -218,7 +218,7 @@ func (s *Service) recordSubmit(ctx context.Context, j jobs.Job, inv string) {
 // job assembles a job's descriptor plus its running state, last completed run (from the
 // trail), and the current size of what it maintains. running maps a worker-argv key to the live
 // invocation id, so ListJobs and submit share one status query.
-func (s *Service) job(j jobs.Job, running map[string]string, row types.Job) *jobv1.Job {
+func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row types.Job) *jobv1.Job {
 	info := &jobv1.Job{
 		Name:        jobsPrefix + j.Name,
 		Id:          j.Name,
@@ -237,7 +237,7 @@ func (s *Service) job(j jobs.Job, running map[string]string, row types.Job) *job
 	// for a job that ran before anything wrote rows, where a run with no id still beats none.
 	if row.LastRun != nil {
 		info.LastRun = storedRun(row.LastRun)
-	} else if ev, ok := trail.LastRun(s.ws.CacheDir(), jobs.ActionString(j.Argv)); ok {
+	} else if ev, ok := trail.LastRun(s.ws.CacheDir(), jobstore.ActionString(j.Argv)); ok {
 		info.LastRun = lastRun(ev)
 	}
 	return info
@@ -245,7 +245,7 @@ func (s *Service) job(j jobs.Job, running map[string]string, row types.Job) *job
 
 // delegatedJob maps a stored row to the wire Job: what an orchestrator DECLARED about work
 // it handed out. It carries no description or target size, which are a catalog job's; a
-// delegated job's equivalents are its goal and the lanes it was given.
+// delegated job's equivalents are its criteria and the lanes it was given.
 //
 // Running is left unset rather than derived from the state. Nothing here watched the
 // worker, and a row still reading `running` after its holder died would be the stored
@@ -256,7 +256,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		Id:         row.ID,
 		Holder:     jobv1.JobHolder_JOB_HOLDER_SESSION,
 		State:      string(row.State),
-		Goal:       row.Goal,
+		Criteria:   row.Criteria,
 		Parent:     row.Parent,
 		Model:      row.Model,
 		Check:      row.Validation,
@@ -304,27 +304,27 @@ func storedRun(r *types.JobRun) *jobv1.JobRun {
 // so those fields stay zero, additive to fill in later.
 func lastRun(e trail.Event) *jobv1.JobRun {
 	run := &jobv1.JobRun{
-		EndTime: timestamppb.New(time.UnixMilli(e.Ts + e.DurMs)),
+		EndTime: timestamppb.New(time.UnixMilli(e.Ts + e.DurationMs)),
 		Ok:      e.Outcome == trail.OutcomeOK,
 		Error:   e.Error,
 	}
-	if e.DurMs > 0 {
-		run.Duration = durationpb.New(time.Duration(e.DurMs) * time.Millisecond)
+	if e.DurationMs > 0 {
+		run.Duration = durationpb.New(time.Duration(e.DurationMs) * time.Millisecond)
 	}
 	return run
 }
 
 // targetSize is the current magnitude of what a job maintains. Not every job shrinks a resource
 // (sync-graph reconciles rather than trims), so an unmapped job reports a zero size.
-func (s *Service) targetSize(j jobs.Job) *jobv1.ResourceSize {
+func (s *Service) targetSize(j jobstore.CatalogEntry) *jobv1.ResourceSize {
 	switch j.Name {
-	case jobs.NameRotateActivities:
+	case jobstore.NameRotateActivities:
 		bytes, count := trail.Stat(s.ws.CacheDir())
 		return &jobv1.ResourceSize{SizeBytes: bytes, ItemCount: count}
-	case jobs.NameRotateLogs:
+	case jobstore.NameRotateLogs:
 		bytes, count := cache.NewOutputStore(s.ws.CacheDir()).RunsStat()
 		return &jobv1.ResourceSize{SizeBytes: bytes, ItemCount: count}
-	case jobs.NameClearCache:
+	case jobstore.NameClearCache:
 		return &jobv1.ResourceSize{SizeBytes: s.ws.CacheDiskBytes()}
 	default:
 		return &jobv1.ResourceSize{}
@@ -349,3 +349,18 @@ func (s *Service) runningByArgv(ctx context.Context) map[string]string {
 // argvKey is a stable map key for a worker argv. \x00 cannot appear in a shell token, so joining
 // on it is collision-free where a space join would conflate ["a","b"] with ["a b"].
 func argvKey(argv []string) string { return strings.Join(argv, "\x00") }
+
+// consoleURL is where a caller watches the job it just submitted: the console's runs
+// surface, scoped to this invocation.
+//
+// Empty when there is no invocation, which is the one case the proto's "empty when no
+// console is mounted" covers: a submit the daemon could not name cannot be linked to. It
+// is a PATH rather than an absolute URL because the reader is the console, served from the
+// daemon it just called, so it resolves this against its own origin; see
+// console.SurfaceLink.
+func consoleURL(inv string) string {
+	if inv == "" {
+		return ""
+	}
+	return console.SurfaceLink("runs", console.FragmentParam{Key: "inv", Value: inv})
+}

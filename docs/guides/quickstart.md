@@ -189,8 +189,8 @@ Point it at a real binary. If the guard cannot find one it says so loudly, and
 `magus doctor`'s **guard binary** check names the binary a hook would run and
 fails when it is older than your working tree - because a stale guard enforces
 stale rules while looking perfectly healthy. The **guard wiring** check answers
-a different question: whether anything actually invokes it. It runs a canary
-command through the resolved binary and inventories every host hook config it
+a different question: whether anything actually invokes it. It probes the resolved
+binary with a known-denied command and inventories every host hook config it
 finds, advising when none exists (correct rules, nothing asking them) and
 failing when a config points at a template file that is stale or missing.
 

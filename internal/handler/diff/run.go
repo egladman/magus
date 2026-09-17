@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/handler"
-	"github.com/egladman/magus/internal/jobs"
+	"github.com/egladman/magus/internal/job"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
@@ -164,14 +164,14 @@ func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diff
 	// deliberately does not guess. A replay is not a stale answer: the cache key covers the
 	// target's sources, so a hit means THIS tree state passed. What can go stale is the reader's
 	// view moving on after the verdict, which as_of covers.
-	if ev, ok := trail.LastRun(h.cacheDir, jobs.ActionString(argv)); ok {
+	if ev, ok := trail.LastRun(h.cacheDir, job.ActionString(argv)); ok {
 		out.State = "passed"
 		if ev.Outcome != trail.OutcomeOK {
 			out.State = "failed"
 			out.Error = ev.Error
 		}
-		out.FinishedMs = ev.Ts + ev.DurMs
-		out.DurationMs = ev.DurMs
+		out.FinishedMs = ev.Ts + ev.DurationMs
+		out.DurationMs = ev.DurationMs
 	}
 	handler.WriteJSON(w, out)
 }

@@ -10,11 +10,8 @@ package viewer
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -32,11 +29,8 @@ const liveGrace = 3 * time.Second
 // [LiveServer.ViewerURL], let the run emit into the broadcaster, then [LiveServer.Stop] when
 // done.
 type LiveServer struct {
-	srv    *httpx.Server
-	bc     *journal.Broadcaster
-	token  string
-	cancel context.CancelFunc
-	done   chan struct{} // closed once the background Serve has fully shut down
+	ts *httpx.TokenServer
+	bc *journal.Broadcaster
 }
 
 // StartLive starts a loopback SSE server on an ephemeral 127.0.0.1 port for bc in the
@@ -44,34 +38,21 @@ type LiveServer struct {
 // The caller owns bc and must add it to the invocation's capture logger so events flow, and
 // call [LiveServer.Stop] when the run is finished.
 func StartLive(origin string, bc *journal.Broadcaster) (*LiveServer, error) {
-	s, err := httpx.NewServer(netip.AddrPort{})
+	ls := &LiveServer{bc: bc}
+	ts, err := httpx.StartTokenServer(origin, map[string]http.Handler{"/events": http.HandlerFunc(ls.streamEvents)})
 	if err != nil {
 		return nil, err
 	}
-	tokenBytes := make([]byte, 16)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return nil, fmt.Errorf("mint stream token: %w", err)
-	}
-	ls := &LiveServer{srv: s, bc: bc, token: hex.EncodeToString(tokenBytes), done: make(chan struct{})}
-	// The shared loopback stack: peer must be loopback, CORS-locked to the page origin,
-	// and the per-run token enforced by the same guard the daemon uses (accepting the
-	// token as a header OR a `?token=` query param, since a browser EventSource cannot
-	// set headers).
-	tokenFn := func() (string, error) { return ls.token, nil }
-	s.Handle("/events", httpx.RequireLoopbackPeer(httpx.CORS(origin)(httpx.BearerGuardWithQueryToken(httpx.SingleTokenVerifier(tokenFn), http.HandlerFunc(ls.streamEvents)))))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ls.cancel = cancel
-	go func() { defer close(ls.done); _ = s.Serve(ctx) }()
+	ls.ts = ts
 	return ls, nil
 }
 
 // Addr is the loopback "127.0.0.1:PORT" the server bound, the value the viewer connects its
 // EventSource to.
-func (ls *LiveServer) Addr() string { return ls.srv.Addr().String() }
+func (ls *LiveServer) Addr() string { return ls.ts.Addr() }
 
 // Token is the per-run bearer token the viewer must present.
-func (ls *LiveServer) Token() string { return ls.token }
+func (ls *LiveServer) Token() string { return ls.ts.Token() }
 
 // ViewerURL builds the viewer link for this live run: <logsBase>/#live=<addr>&token=<token>,
 // where logsBase is the log viewer page URL (e.g. https://.../magus/logs/). BOTH the loopback
@@ -79,7 +60,7 @@ func (ls *LiveServer) Token() string { return ls.token }
 // server, so the connection details are handed to the page locally and nothing leaves the
 // machine; the page reads the token and strips it from the URL.
 func (ls *LiveServer) ViewerURL(logsBase string) string {
-	return strings.TrimRight(logsBase, "/") + "/#live=" + url.QueryEscape(ls.Addr()) + "&token=" + url.QueryEscape(ls.token)
+	return strings.TrimRight(logsBase, "/") + "/#live=" + url.QueryEscape(ls.Addr()) + "&token=" + url.QueryEscape(ls.Token())
 }
 
 // Stop shuts the server down, allowing a brief grace window first so a late or reloading
@@ -90,8 +71,7 @@ func (ls *LiveServer) Stop(ctx context.Context) {
 	case <-time.After(liveGrace):
 	case <-ctx.Done():
 	}
-	ls.cancel()
-	<-ls.done
+	ls.ts.Close()
 }
 
 // streamEvents streams the broadcaster's backlog then its live events as SSE, ending with a

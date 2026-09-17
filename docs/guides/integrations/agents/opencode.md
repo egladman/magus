@@ -29,15 +29,34 @@ window. One file carries all of it.
 magus agent install .opencode/skills
 ```
 
+Prefer wiring the OpenCode harness from the root magusfile so skills install
+and multi-host apply see it beside the other hosts:
+
+```buzz
+import "spells/harness/opencode" as opencode
+magus\harness.provider(opencode)
+```
+
+The spell is skills-only (empty config path): `magus agent harness apply` writes
+nothing for OpenCode, and verify does not invent a stamp JSON for Magus to check.
+The guard is the TypeScript plugin, not managed hook fragments. To adapt without
+Magus source edits, fork the spell and change only the import path; see
+[Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md).
+
+`harnesses/opencode.json` remains the unwired fallback so
+`magus agent harness install --id opencode` can still refresh `.opencode/skills`.
+OpenCode has no shell-command hook config, so that descriptor is skills-only too.
+
 If you already installed into `.claude/skills` for Claude Code, OpenCode reads
 those too and this step is optional. [Skills](skills.md) covers the rest of the
 install surface.
 
 ## MCP
 
-Configure MCP for OpenCode as a host-level integration; see [MCP](../mcp.md)
-for the client configuration and token. An agent uses the CLI fallback when MCP
-is unavailable; it does not manually start Magus solely to obtain tools.
+Configure MCP for OpenCode yourself. `magus agent harness apply --id opencode`
+prints a short secret-ref hint and a docs pointer; Magus does not write OpenCode
+MCP config. See [MCP](../mcp.md). An agent uses the CLI fallback when MCP is
+unavailable.
 
 ## Guard hook
 
@@ -48,7 +67,7 @@ then confirm OpenCode loaded it:
 opencode debug config
 ```
 
-It encodes no magus rule. Every decision comes from `magus session hook`, which keeps it
+It encodes no magus rule. Every decision comes from `magus shell`, which keeps it
 host-only glue rather than a second rule set that drifts out of step with the
 other templates.
 
@@ -60,7 +79,7 @@ other templates.
 // This file is the source of truth. Copy it to ~/.config/opencode/plugins/ (or
 // .opencode/plugins/) and adjust to taste; nothing in it is magus-internal.
 //
-// It encodes no magus rule. Every decision comes from `magus session hook`, so
+// It encodes no magus rule. Every decision comes from `magus shell`, so
 // this stays host-only glue rather than a second rule set that drifts out of
 // step with the other hosts' templates. `--agent-name opencode` only labels the
 // observation magus records; it cannot change a verdict.
@@ -75,13 +94,13 @@ other templates.
 // belongs to by callID. That append is what replaced a console.warn, which reached
 // the person and never the model. The declarations below record it, and they
 // are machine-read by the host-parity gate; see the longer note in
-// magus-guard-command.sh.
+// magus-hook-command.sh.
 //
 // It also carries the two jobs that are not verdicts: a compacting session is
 // handed this checkout back through the compaction prompt, and a checkpoint is
 // recorded when the session goes idle, since OpenCode has no session-end event and
 // idle is the proxy its own docs name.
-// magus-guard-template: 13
+// magus-guard-template: 14
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none
@@ -96,7 +115,7 @@ other templates.
 //
 // PATH contract: this shells out to `magus` by name, inheriting PATH from the
 // opencode process. If magus lives in a prefix PATH does not include (mise,
-// brew, asdf, ~/.local/bin), set GUARD_MAGUS_BIN to an absolute path. That name
+// brew, asdf, ~/.local/bin), set __MAGUS_BIN to an absolute path. That name
 // deliberately avoids the MAGUS_* space, which is magus's own config surface.
 
 import { existsSync } from "node:fs";
@@ -171,9 +190,9 @@ function workspaceMagus(): string | null {
 
 export const MagusGuard: Plugin = async () => {
   // Prefer the workspace's own ./magus over PATH, for the reason spelled out in
-  // magus-guard-command.sh: an older PATH binary does not fail when it lacks a rule, it
+  // magus-hook-command.sh: an older PATH binary does not fail when it lacks a rule, it
   // fails to recognize the config key that arms the rule and returns pass.
-  const magus = process.env.GUARD_MAGUS_BIN ?? workspaceMagus() ?? "magus";
+  const magus = process.env.__MAGUS_BIN ?? workspaceMagus() ?? "magus";
 
   // Said once per session. This plugin instance lives as long as the session does, so a
   // flag here IS the session and needs no marker on disk, unlike the sh templates whose
@@ -193,7 +212,7 @@ export const MagusGuard: Plugin = async () => {
   const pending = new Map<string, string>();
 
   /**
-   * Runs one `magus session hook` invocation and returns its raw stdout, or null when the
+   * Runs one `magus shell` invocation and returns its raw stdout, or null when the
    * binary could not be run at all (missing, not executable). An older binary that
    * rejects a flag still runs and exits, so that case comes back as "" here, not
    * null - the caller distinguishes them.
@@ -222,7 +241,7 @@ export const MagusGuard: Plugin = async () => {
    * call and make the session unusable - worse than no guard. The failure is
    * logged rather than swallowed, so an unguarded session stays visible.
    *
-   * The thing being judged goes in on STDIN, never in argv. `magus session hook` takes
+   * The thing being judged goes in on STDIN, never in argv. `magus shell` takes
    * no positional arguments at all, and that is not an incidental preference:
    * a command is arbitrary text, and a shell command passed as an argument is
    * one quoting mistake away from being re-parsed. Passing it in argv does not
@@ -236,7 +255,7 @@ export const MagusGuard: Plugin = async () => {
    * empty and every verdict silently disappears. So: try as called, and on an
    * empty reply - which under `-o json` only happens when the call itself failed,
    * since even a pass renders `{"decision":"pass",...}` - retry with `--agent-name` and
-   * its value stripped out. Same shape as magus-guard-command.sh's `guard()`
+   * its value stripped out. Same shape as magus-hook-command.sh's `guard()`
    * fallback, fixed there after the same gap (memory:
    * agent-host-attribution-not-captured) and ported here so this plugin degrades
    * the same way.
@@ -247,7 +266,7 @@ export const MagusGuard: Plugin = async () => {
       saidUnguarded = true;
       console.warn(
         `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
-          "Install magus, or set GUARD_MAGUS_BIN to its path.",
+          "Install magus, or set __MAGUS_BIN to its path.",
       );
     };
 
@@ -315,7 +334,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        const args = ["session", "hook", "--agent-name", "opencode", "-o", "json"];
+        const args = ["shell", "--agent-name", "opencode", "-o", "json"];
         remember(input.callID, apply(await judge(args, command)));
         return;
       }
@@ -325,7 +344,7 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        const args = ["session", "hook", "--path", "--agent-name", "opencode", "-o", "json"];
+        const args = ["shell", "--path", "--agent-name", "opencode", "-o", "json"];
         remember(input.callID, apply(await judge(args, path)));
       }
     },
@@ -364,12 +383,12 @@ export const MagusGuard: Plugin = async () => {
 export default MagusGuard;
 ```
 
-The thing being judged goes in on stdin, never in argv. `magus session hook` takes no
+The thing being judged goes in on stdin, never in argv. `magus shell` takes no
 positional arguments, and a plugin that passes the command as one does not get a
 wrong verdict - it gets no verdict, which fails open on every call.
 
 If magus lives in a prefix the OpenCode process does not have on PATH (mise,
-brew, asdf, `~/.local/bin`), set `GUARD_MAGUS_BIN` to an absolute path.
+brew, asdf, `~/.local/bin`), set `__MAGUS_BIN` to an absolute path.
 
 ## Notifications
 
@@ -380,14 +399,25 @@ uses; see [Attention hooks](notifications.md).
 
 `experimental.session.compacting` runs while OpenCode is building the summary
 that will replace a session's history, and takes `context: string[]` straight
-into the compaction prompt. The plugin puts `magus session --brief` there: branch
-and revision, commits not yet on the base ref, the dirty tree split into sources,
-generated outputs and unclaimed paths, the live leases, the last recorded run's
-failures, and where the rules live.
+into the compaction prompt. **The plugin deliberately does not use it**, and a
+compacted OpenCode session is therefore handed nothing.
 
-Every line is read off the disk at the moment it runs, so nothing in it is a
-retelling of a retelling. Run `magus session --brief` yourself to see what a
-compacting session will be handed.
+That hook feeds the SUMMARIZER, not the model that comes after it. The plugin
+used to push `magus session --brief` through it, which read as rehydration and
+was not: on Claude Code and Codex the brief lands verbatim after the summary,
+while here it went in as summarizer input and survived only as much of it as the
+summarizer kept. The brief is state read off the disk, and this was the one place
+it was retold.
+
+The second reason is parity. Of the four hosts, only OpenCode can shape a summary
+at all -- Claude Code exposes no `PreCompact` output arm, Codex's
+`pre-compact.command.output` schema is closed over four fields with no context
+channel, and Cursor's `preCompact` is observational. A behavior available on one
+host of four is a difference nobody can reason about, and deciding what a model
+remembers is not magus's call to make.
+
+Run `magus session --brief` yourself after a compaction: it prints the same state
+on demand, which is the surface every host shares.
 
 ## Recording where the work stands
 
@@ -402,7 +432,7 @@ hook produces on the hosts that have one, and the listing is ordered.
 
 If you would rather not have the plugin do it, running
 [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh) with
-`GUARD_AGENT_NAME=opencode` records the identical row.
+`__MAGUS_AGENT_NAME=opencode` records the identical row.
 `magus session checkpoint --note "..."` writes it by hand.
 
 ## Coverage and limits
@@ -419,7 +449,7 @@ If you would rather not have the plugin do it, running
   `edit`, `write`, `read`, `patch` and `glob` all appear in its binary, and
   `filePath` is the field its edit tools carry. An MCP tool's `input.tool`
   string was NOT among them (OpenCode has no hook config schema to check it
-  against either, per `testdata/hostschemas/SOURCES.md`), so the MCP call
+  against either, per `testdata/hosts/SOURCES.md`), so the MCP call
   surface is feasible - `tool.execute.before`/`.after` already see every call,
   MCP included - but not wired: a branch keyed on a guessed name risks judging
   an unrelated tool rather than magus's own calls. Confirm the string against a
@@ -428,7 +458,7 @@ If you would rather not have the plugin do it, running
 - Lease capture is FEASIBLE but not wired. `tool.execute.before` fires for
   every tool and hands the plugin `input.tool` plus the call's arguments, so a
   branch alongside the `bash` and `edit`/`write` ones could pipe a sub-agent
-  tool's prompt to `magus session hook` and get the same `agent_spawn` event. Which tool
+  tool's prompt to `magus shell` and get the same `agent_spawn` event. Which tool
   identifier to match on has not been confirmed against an installed OpenCode,
   so the plugin above does not guess at one.
 - `shell.env` could export `BAGGAGE=magus.lease=<id>` into every shell the

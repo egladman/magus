@@ -23,17 +23,14 @@ import (
 )
 
 // Analyzer is the workspace's codebase-analytics surface: the VCS-history lenses plus the
-// two that read the knowledge graph. Deliberately the narrow set the report needs rather
+// ones that read the knowledge graph. Deliberately the narrow set the report needs rather
 // than the whole of *Magus: a wide interface here would re-couple std to the shape of the
 // package it cannot import.
-type Analyzer interface {
-	Hotspots(ctx context.Context, opts types.InsightOptions) (types.HotspotOutput, error)
-	Affinity(ctx context.Context, opts types.InsightOptions) (types.AffinityOutput, error)
-	Ownership(ctx context.Context, opts types.InsightOptions) (types.OwnershipOutput, error)
-	Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error)
-	Volatility(ctx context.Context) (types.VolatilityReport, error)
-	Unreferenced(ctx context.Context) (types.UnreferencedOutput, error)
-}
+//
+// An ALIAS of types.InsightAnalyzer rather than a second declaration of the same method
+// set. The two were hand-kept copies, so a lens added to one compiled against the other
+// until the first caller tried to use it.
+type Analyzer = types.InsightAnalyzer
 
 // AnalyzerFromContext recovers the analytics surface from the workspace on ctx.
 //

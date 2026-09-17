@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -69,7 +69,7 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 				opCommands[t] = append([]string{cmd}, args...)
 			}
 		}
-		_, builtIn := spellruntime.Builtins()[p.Name()]
+		_, builtIn := spell.Builtins()[p.Name()]
 		entries = append(entries, types.Spell{
 			Name:         p.Name(),
 			BuiltIn:      builtIn,
@@ -80,6 +80,7 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 			Opaque:       p.Opaque(),
 			Language:     p.Language(),
 			VersionProbe: p.HasVersionProbe(),
+			SymbolFormat: symbolFormat(p),
 			TargetDocs:   docs,
 			OpCommands:   opCommands,
 			Toolchains:   spellToolchains(opCommands),
@@ -89,6 +90,17 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 		return cmp.Compare(a.Name, b.Name)
 	})
 	return entries, nil
+}
+
+// symbolFormat returns the index format the spell's declared symbol indexer emits,
+// or "" when it declares none. The one place the descriptor's declaration becomes the
+// describe record's field, so the two views cannot disagree about which spells index.
+func symbolFormat(p *spells.Spell) string {
+	si := p.SymbolIndexer()
+	if si == nil {
+		return ""
+	}
+	return string(si.Format)
 }
 
 func spellToolchains(opCommands map[string][]string) []types.SpellToolchain {

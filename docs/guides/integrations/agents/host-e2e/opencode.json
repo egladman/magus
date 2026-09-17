@@ -11,7 +11,7 @@
   "setup": [{"kind": "template", "path": "config/opencode/plugins/magus-e2e.ts", "source": "guard-plugin.tmpl"}],
   "launch": {
     "args": ["run", "--format", "json", "--dir", "{{workspace}}", "--auto", "Use the Bash tool once to run exactly go test ./.... Do not make any other change."],
-    "env": {"XDG_CONFIG_HOME": "{{workspace}}/config", "GUARD_MAGUS_BIN": "{{workspace}}/magus"}
+    "env": {"XDG_CONFIG_HOME": "{{workspace}}/config", "__MAGUS_BIN": "{{workspace}}/magus"}
   },
   "evidence": {"kind": "guard-deny", "transport": "plugin"}
 }

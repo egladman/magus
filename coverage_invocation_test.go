@@ -105,14 +105,14 @@ func TestNewEventCarriesEveryField(t *testing.T) {
 	got := newEvent(journal.Event{
 		Ts: 1700000000000, Inv: "inv1", Project: "api", Target: "build:rw",
 		Kind: journal.KindResult, Stream: "stdout", Level: "info",
-		Status: journal.StatusCached, Ref: "outdeadbe", DurMs: 42, Text: "done",
+		Status: journal.StatusCached, Ref: "outdeadbe", DurationMs: 42, Text: "done",
 		MagusVersion: "v0.9.0",
 	})
 
 	assert.Equal(t, Event{
 		Ts: 1700000000000, Inv: "inv1", Project: "api", Target: "build:rw",
 		Kind: journal.KindResult, Stream: "stdout", Level: "info",
-		Status: journal.StatusCached, Ref: "outdeadbe", DurMs: 42, Text: "done",
+		Status: journal.StatusCached, Ref: "outdeadbe", DurationMs: 42, Text: "done",
 		MagusVersion: "v0.9.0",
 	}, got)
 }

@@ -9,6 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func testSiblingCheckoutDeny(command string) string {
+	return denySiblingCheckout(command, DialectBash)
+}
+
 // twoCheckouts builds the layout this rule is about, without invoking git: one
 // main checkout whose .git is a DIRECTORY, and one linked worktree whose .git is a
 // FILE pointing into the main repository's worktrees/. Returns both roots.
@@ -44,7 +48,7 @@ func TestDenySiblingCheckoutBlocksAnotherCheckoutOfThisRepository(t *testing.T) 
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	got := denySiblingCheckout("cd " + wt + " && ./magus affected ci --no-default-charms -s")
+	got := testSiblingCheckoutDeny("cd " + wt + " && ./magus affected ci --no-default-charms -s")
 
 	require.NotEmpty(t, got, "a sibling checkout is the case this rule exists for")
 	assert.Contains(t, got, wt, "the deny has to name the tree the command points at")
@@ -58,7 +62,7 @@ func TestDenySiblingCheckoutIsDirectionAgnostic(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(wt)
 
-	assert.NotEmpty(t, denySiblingCheckout("cd "+main+" && magus run test ."))
+	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+main+" && magus run test ."))
 }
 
 // The boundary that keeps this shippable. A cd into a DIFFERENT repository is
@@ -71,18 +75,19 @@ func TestDenySiblingCheckoutAllowsADifferentRepository(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(other, ".git"), 0o755))
 	t.Chdir(main)
 
-	assert.Empty(t, denySiblingCheckout("cd "+other+" && magus run build ."))
+	assert.Empty(t, testSiblingCheckoutDeny("cd "+other+" && magus run build ."))
 }
 
-// A cd WITHIN the session's own checkout is the ordinary cwd advisory's business,
-// not a deny. Denying it would block the single most common shape in the corpus.
+// A cd WITHIN the session's own checkout is not a sibling-checkout finding.
+// The general cd deny still refuses it; this rule only upgrades the reason when
+// the target is another checkout of THIS repository.
 func TestDenySiblingCheckoutAllowsASubdirectoryOfThisCheckout(t *testing.T) {
 	main, _ := twoCheckouts(t)
 	sub := filepath.Join(main, "internal", "cache")
 	require.NoError(t, os.MkdirAll(sub, 0o755))
 	t.Chdir(main)
 
-	assert.Empty(t, denySiblingCheckout("cd "+sub+" && magus run test ."))
+	assert.Empty(t, testSiblingCheckoutDeny("cd "+sub+" && magus run test ."))
 }
 
 // Fail OPEN on every unknown. A guard that blocks because it could not read
@@ -92,19 +97,19 @@ func TestDenySiblingCheckoutFailsOpen(t *testing.T) {
 
 	t.Run("session is in no checkout at all", func(t *testing.T) {
 		t.Chdir(t.TempDir())
-		assert.Empty(t, denySiblingCheckout("cd "+wt+" && magus run test ."))
+		assert.Empty(t, testSiblingCheckoutDeny("cd "+wt+" && magus run test ."))
 	})
 
 	t.Run("the line does not run magus", func(t *testing.T) {
 		t.Chdir(main)
-		assert.Empty(t, denySiblingCheckout("cd "+wt+" && ls -la"),
+		assert.Empty(t, testSiblingCheckoutDeny("cd "+wt+" && ls -la"),
 			"naming a directory is not relocating a magus command into it")
 	})
 
 	t.Run("a .git file that is not a gitdir pointer", func(t *testing.T) {
 		t.Chdir(main)
 		require.NoError(t, os.WriteFile(filepath.Join(wt, ".git"), []byte("garbage\n"), 0o644))
-		assert.Empty(t, denySiblingCheckout("cd "+wt+" && magus run test ."))
+		assert.Empty(t, testSiblingCheckoutDeny("cd "+wt+" && magus run test ."))
 	})
 }
 
@@ -119,7 +124,7 @@ func TestDenySiblingCheckoutResolvesARelativeGitdir(t *testing.T) {
 	linkGitFile(t, wt, rel)
 	t.Chdir(main)
 
-	assert.NotEmpty(t, denySiblingCheckout("cd "+wt+" && ./magus affected ci"))
+	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+wt+" && ./magus affected ci"))
 }
 
 // A submodule is its own repository, so its common dir is its own git dir with no
@@ -134,63 +139,66 @@ func TestDenySiblingCheckoutAllowsASubmodule(t *testing.T) {
 	linkGitFile(t, sub, gitdir)
 	t.Chdir(main)
 
-	assert.Empty(t, denySiblingCheckout("cd "+sub+" && magus run test ."))
+	assert.Empty(t, testSiblingCheckoutDeny("cd "+sub+" && magus run test ."))
 }
 
 // A path inside a QUOTED ARGUMENT is not a cd, and the line that found this was a
 // test harness for the rule itself: `printf '%s' "cd <sibling> && ls" | ./magus
-// session hook` mentions magus and contains the text of a cd, and the regex this
+// shell` mentions magus and contains the text of a cd, and the regex this
 // rule inherited read that as relocating into the sibling. Anything that names a
 // checkout while running magus (a note, a message, a --root) hits the same trap.
 func TestDenySiblingCheckoutIgnoresAPathInsideAQuotedArgument(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	assert.Empty(t, denySiblingCheckout(`printf '%s' "cd `+wt+` && ls" | ./magus session hook`))
-	assert.Empty(t, denySiblingCheckout(`./magus notes add "compare against `+wt+`"`))
+	assert.Empty(t, testSiblingCheckoutDeny(`printf '%s' "cd `+wt+` && ls" | ./magus shell`))
+	assert.Empty(t, testSiblingCheckoutDeny(`./magus notes add "compare against `+wt+`"`))
 }
 
 // Shared with magusInThrowawayCopy rather than reimplemented, so the variable
-// expansion that rule needed works here for free. The observed corpus chains a
+// expansion that rule needed works here for free. The observed sample chains a
 // whole pipeline onto an assignment.
 func TestDenySiblingCheckoutResolvesAnAssignedPath(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	assert.NotEmpty(t, denySiblingCheckout("WT="+wt+"; cd $WT && ./magus run lint ."))
+	assert.NotEmpty(t, testSiblingCheckoutDeny("WT="+wt+"; cd $WT && ./magus run lint ."))
 }
 
-// The ordering the wiring exists for. An ADVISE must lose: cdMagusRe fires on
-// every one of these lines and answers "name the project instead", which is true
-// and beside the point when the command is aimed at another tree.
-func TestRankSiblingCheckoutOutranksAnAdvise(t *testing.T) {
-	cwdAdvise := BashVerdict{Context: cwdGuardContext}
-	got := rankSiblingCheckout(cwdAdvise, "aimed at another checkout")
+// The ordering the wiring exists for. The general cd deny must lose to a
+// sibling reason: every sibling case is itself a `cd`, and "do not cd"
+// understates a command aimed at another tree.
+func TestRankSiblingCheckoutOutranksACdDeny(t *testing.T) {
+	cdDeny := ShellVerdict{Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}
+	got := rankSiblingCheckout(cdDeny, "aimed at another checkout")
 
 	assert.Equal(t, "aimed at another checkout", got.Deny)
+	assert.Equal(t, denyRuleSiblingCheckout, got.Rule.Name)
 	assert.Empty(t, got.Context, "a deny that still carries advisory context renders both")
 }
 
-// An existing DENY stands. Replacing it would swap a block the caller already has
-// for a different one, and one is enough.
+// An existing DENY stands when it is not the general cd rule. Replacing it would
+// swap a block the caller already has for a different one, and one is enough.
 func TestRankSiblingCheckoutYieldsToAnExistingDeny(t *testing.T) {
-	got := rankSiblingCheckout(BashVerdict{Deny: outputPipeDeny}, "aimed at another checkout")
+	pipe := pipeDeny("ls", "grep")
+	got := rankSiblingCheckout(ShellVerdict{Deny: pipe}, "aimed at another checkout")
 
-	assert.Equal(t, outputPipeDeny, got.Deny)
+	assert.Equal(t, pipe, got.Deny)
 }
 
 // The common case: nothing to add, and the pure verdict passes through untouched.
 func TestRankSiblingCheckoutIsInertWithoutAReason(t *testing.T) {
-	for _, v := range []BashVerdict{{}, {Context: cwdGuardContext}, {Deny: outputPipeDeny}} {
+	for _, v := range []ShellVerdict{{}, {Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}, {Deny: pipeDeny("ls", "grep")}} {
 		assert.Equal(t, v, rankSiblingCheckout(v, ""))
 	}
 }
 
-// The pure rules must only ADVISE on this shape, or the rule above is dead weight
-// and the tests around it prove nothing.
-func TestCdIntoACheckoutIsOnlyAdvisoryWithoutTheSiblingRule(t *testing.T) {
+// Without the sibling rule, a cd into another path is still refused by the
+// general cd deny. The sibling rule upgrades the reason when the target is
+// another checkout of THIS repository.
+func TestCdIntoACheckoutIsDeniedByCdRuleWithoutTheSiblingRule(t *testing.T) {
 	v := Evaluate(testDependencies(), "cd /Users/someone/checkouts/other && ./magus run lint .")
 
-	assert.Empty(t, v.Deny)
-	assert.NotEmpty(t, v.Context)
+	assert.Equal(t, denyRuleCd, v.Rule.Name)
+	assert.NotEmpty(t, v.Deny)
 }

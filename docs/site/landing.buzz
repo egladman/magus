@@ -561,7 +561,7 @@ std&#92;print(yaml);</code></pre>
   </section>
 `, {"session": TERMINAL_SESSION, "recent": recentPosts(site)});
 
-    // Same cross-linking the docs corpus gets: auto-link the first mention of each
+    // Same cross-linking the docs pages get: auto-link the first mention of each
     // glossary term (definition baked into the popover) and link inline-code domain
     // references to their reference pages. Root-relative, so "" is both this page's
     // clean directory and the base relativePath resolves from.

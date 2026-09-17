@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+
 	"github.com/egladman/magus/internal/interactive/tty"
 	run "github.com/egladman/magus/internal/proc/run"
 	"log/slog"
@@ -20,7 +22,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service/identity"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -36,7 +38,7 @@ func init() {
 }
 
 var ensureSpellsRegistered = sync.OnceFunc(func() {
-	for _, spec := range spellruntime.Builtins() {
+	for _, spec := range spell.Builtins() {
 		opts := []spells.Option{
 			spells.WithSources(spec.Needs...),
 			spells.WithIgnoreDirs(spec.IgnoreDirs...),
@@ -44,7 +46,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
-			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.Tools, spec.IgnoreDirs)),
+			spells.WithInvoker(newSpellInvoker(spec)),
 			spells.WithOps(spec.Ops),
 			spells.WithTools(spec.Tools),
 			spells.WithVersionProber(versionProber),
@@ -67,6 +69,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		}
 		if spec.Comments != nil {
 			opts = append(opts, spells.WithComments(spec.Comments))
+		}
+		if spec.SymbolIndexer != nil {
+			opts = append(opts, spells.WithSymbolIndexer(spec.SymbolIndexer))
 		}
 		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spec.Name, opts...))
 	}
@@ -178,7 +183,7 @@ func newCommandExplainer(targets map[string]spells.Op) func(string, []string) ([
 				active = append(active, name)
 			}
 		}
-		charmSteps, err := spellruntime.ExplainCharms(op.Args, op.Charms, active)
+		charmSteps, err := spell.ExplainCharms(op.Args, op.Charms, active)
 		if err != nil {
 			return nil, false, err
 		}
@@ -200,7 +205,7 @@ func newCommandExplainer(targets map[string]spells.Op) func(string, []string) ([
 
 // newCommandConflictChecker returns the charm-conflict detector used by `magus
 // describe target`: it reports the active charms whose edit is overridden by another
-// active charm on this op's argv (see spellruntime.Conflicts). It mirrors the renderer's
+// active charm on this op's argv (see spell.Conflicts). It mirrors the renderer's
 // ok/err contract and executes nothing.
 func newCommandConflictChecker(targets map[string]spells.Op) func(string, []string) ([]spells.CharmConflict, bool, error) {
 	return func(target string, charms []string) ([]spells.CharmConflict, bool, error) {
@@ -215,7 +220,7 @@ func newCommandConflictChecker(targets map[string]spells.Op) func(string, []stri
 				active = append(active, name)
 			}
 		}
-		conflicts, err := spellruntime.Conflicts(op.Args, op.Charms, active)
+		conflicts, err := spell.Conflicts(op.Args, op.Charms, active)
 		if err != nil {
 			return nil, false, err
 		}
@@ -382,7 +387,8 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	}
 }
 
-func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]spells.Tool, ignoreDirs []string, req spells.InvokeRequest) (any, error) {
+func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRequest) (any, error) {
+	ops, tools, ignoreDirs := spec.Ops, spec.Tools, spec.IgnoreDirs
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
@@ -396,23 +402,52 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 		return nil, err
 	}
 	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: ignoreDirs}
-	// The reserved `scip` op writes its index into the cache, not the tree: magus
-	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command (a bare
+	// A symbol indexer writes its index into the cache, not the tree: magus hands it
+	// the destination via MAGUS_SYMBOL_INDEX so the spell command (a bare
 	// "$MAGUS_SYMBOL_INDEX" arg token, resolved by resolveRunnerRefs) needs no
 	// knowledge of where the cache is. Set on both opts.refs (what a spell's Args
-	// token resolves against) and opts.env (the process environment), so a
-	// workspace-local scip spell that still shells out (the doc comment on
-	// symbols.IndexEnvVar promises the env var is set) keeps working.
-	if req.Target == symbols.IndexOp {
-		env, err := symbolIndexEnv(ctx, req.Dir)
-		if err != nil {
-			return nil, err
-		}
-		opts.env = env
-		opts.refs = env
+	// token resolves against) and opts.env (the process environment), so an indexer
+	// that shells out (the doc comment on symbols.IndexEnvVar promises the env var is
+	// set) keeps working.
+	//
+	// Keyed on the op's KIND, which magus stamped when it synthesized the op from
+	// mgs_getSymbolIndexer. Matching the op's name instead made the capability a
+	// reserved string any spell could claim by spelling it.
+	if op.Kind != spells.OpKindSymbolIndex {
+		_, err := runCommand(ctx, op, opts)
+		return nil, err
 	}
-	_, err := runCommand(ctx, op, opts)
-	return nil, err
+	indexPath, err := symbolIndexEnv(ctx, req.Dir)
+	if err != nil {
+		return nil, err
+	}
+	env := map[string]string{symbols.IndexEnvVar: indexPath}
+	opts.env = env
+	opts.refs = env
+	if _, err := runCommand(ctx, op, opts); err != nil {
+		return nil, err
+	}
+	// Checked HERE because this is the site that made the promise: it handed the
+	// indexer a destination, so it is the one place that knows what was supposed to
+	// appear and can still name the op that failed to write it.
+	//
+	// Without it an indexer could exit 0 having written nothing and the project still
+	// read as symbol-capable with no index, while `graph build` reported it reindexed
+	// and meant it. Ingestion cannot raise this: a missing index there is
+	// indistinguishable from one never built.
+	// Only a MISSING file is the indexer's fault. A permission error or a broken path
+	// reads as "wrote nothing" otherwise, which sends the spell author to debug a command
+	// that worked. The format is deliberately not named here: op.Bin and the path are the
+	// diagnosis, and reading it off spec would mean trusting that the caller kept
+	// spec.SymbolIndexer in step with op.Kind, which only Decode guarantees.
+	switch _, err := os.Stat(indexPath); {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil, fmt.Errorf("spell %q declares a symbol indexer, but %q exited 0 and wrote no index to %s; it must write to the path magus passes in %s",
+			spec.Name, op.Bin, indexPath, symbols.IndexEnvVar)
+	case err != nil:
+		return nil, fmt.Errorf("spell %q symbol indexer: reading the index %q wrote: %w", spec.Name, op.Bin, err)
+	}
+	return noResult()
 }
 
 // resolveSecretEnv resolves a command's declared secrets (env var name -> provider
@@ -458,38 +493,44 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 	return env, nil
 }
 
-// symbolIndexEnv resolves the cache destination for a `scip` op run and returns it as
-// the MAGUS_SYMBOL_INDEX environment binding, having created the containing dir. It
-// requires the active cache (the op runs inside a cached target), so the index lands
-// where ingestion later looks; run outside that path it errors rather than emit an
-// index the graph will never find.
-func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, error) {
+// symbolIndexEnv resolves the cache destination for a symbol-index run, having created
+// the containing dir. It requires the active cache (the op runs inside a cached
+// target), so the index lands where ingestion later looks; run outside that path it
+// errors rather than emit an index the graph will never find.
+//
+// The cache check STAYS after the move to a declared capability. The indexer is still
+// registered as an ordinary target, which is what gives it cache keying and the
+// freshness probe SymbolIndexStatus reads, so `magus run scip <project>` remains
+// reachable and a magusfile can still compose the op into a body that runs outside a
+// cached target. Only the authoring hack went away, not the path this defends.
+func symbolIndexEnv(ctx context.Context, projectDir string) (string, error) {
 	c := cache.FromContext(ctx)
 	if c == nil {
-		return nil, fmt.Errorf("spell: the %q op must run as a magus target so its index lands in the cache", symbols.IndexOp)
+		return "", fmt.Errorf("spell: a symbol indexer must run as a magus target so its index lands in the cache")
 	}
 	abs := projectDir
 	if !filepath.IsAbs(abs) {
 		cwd, err := std.EffectiveCwd(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("spell: resolve %q op dir: %w", symbols.IndexOp, err)
+			return "", fmt.Errorf("spell: resolve symbol index dir: %w", err)
 		}
 		abs = filepath.Join(cwd, abs)
 	}
 	path := symbols.IndexPath(c.Dir(), abs)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("spell: prepare symbol index dir: %w", err)
+		return "", fmt.Errorf("spell: prepare symbol index dir: %w", err)
 	}
-	return map[string]string{symbols.IndexEnvVar: path}, nil
+	return path, nil
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
-// are command-only (cmd/args/charms data, no script body). ignoreDirs is the
-// spell's own declared mgs_listIgnoreDirs, carried through to dispatchOp so a
-// Command.Sources op inherits it (see commandOpts.ignoreDirs).
-func newSpellInvoker(targets map[string]spells.Op, tools map[string]spells.Tool, ignoreDirs []string) func(context.Context, spells.InvokeRequest) (any, error) {
+// are command-only (cmd/args/charms data, no script body). The whole descriptor is
+// carried rather than a projection of it: dispatchOp reads the ops, the tools, the
+// declared ignore dirs (so a Command.Sources op inherits them, see
+// commandOpts.ignoreDirs) and the declared symbol indexer.
+func newSpellInvoker(spec spells.Descriptor) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, targets, tools, ignoreDirs, req)
+		return dispatchOp(ctx, spec, req)
 	}
 }
 
@@ -536,7 +577,7 @@ func loadSpellFile(ctx context.Context, path string) (spells.Driver, error) {
 }
 
 // loadLocalBuzzSpell compiles a workspace-local Buzz spell at path, returning its
-// spec and ok=false on any failure. Extract routes through the same spellruntime.Decode
+// spec and ok=false on any failure. Extract routes through the same spell.Decode
 // a built-in uses, so a .buzz workspace spell and a built-in are read and validated
 // identically. Errors are logged, not raised, since discovery paths cannot route an
 // error back to the caller. Registration is deferred to magus.project; the handle
@@ -551,7 +592,7 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bo
 		// A plain Buzz library imported by name (not a spell) is expected here:
 		// resolution falls through to a normal module import. Only a genuinely
 		// malformed spell is worth logging.
-		if !errors.Is(err, spellruntime.ErrNotASpell) {
+		if !errors.Is(err, spell.ErrNotASpell) {
 			slog.ErrorContext(ctx, "load local spell: buzz", "path", path, "err", err)
 		}
 		return spells.Descriptor{}, false
@@ -595,12 +636,12 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 }
 
 // registerLocalSpell registers a decoded fork-only workspace-local spell into the
-// default registry. The shared spellruntime.Decode produces m for the imported Buzz
+// default registry. The shared spell.Decode produces m for the imported Buzz
 // spell by-value path, so this is the single deferred registration point (called at
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
 func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.Tools, m.IgnoreDirs)))
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 
@@ -648,7 +689,7 @@ func checkSpellImports(handles []string) error {
 // This mirrors the native modules registerAllBuzz installs, so the check can
 // never reject a handle the import would actually resolve.
 func isRegisteredSpell(name string) bool {
-	if _, ok := spellruntime.Builtins()[name]; ok {
+	if _, ok := spell.Builtins()[name]; ok {
 		return true
 	}
 	_, ok := project.DefaultSpellRegistry().Lookup(name)
@@ -689,7 +730,7 @@ func suggestSpellName(name string) string {
 // builtinSpellHandles returns the compiled-in spell handles, sorted. Used both for
 // the suggestion search and the handles listed in the error.
 func builtinSpellHandles() []string {
-	b := spellruntime.Builtins()
+	b := spell.Builtins()
 	out := make([]string, 0, len(b))
 	for name := range b {
 		out = append(out, name)

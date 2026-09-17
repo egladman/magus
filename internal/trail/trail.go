@@ -128,7 +128,7 @@ const (
 // Event is one recorded action, the on-disk atom of the trail. The envelope (Ts/Kind/Actor/
 // Action/Outcome) is common to every kind; the payload refs point into the blob store so a large
 // body never bloats the line. Field names are snake_case and match the journal's Event where
-// they overlap (Ts, DurMs).
+// they overlap (Ts, DurationMs).
 //
 // Host and Session duplicate what an agent-hook event also records in its request blob, and that
 // duplication is deliberate: a reader grouping a page of 200 rows by agent host must not have to
@@ -148,12 +148,41 @@ type Event struct {
 	Lease         string `json:"lease,omitempty"`
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
 	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
-	DurMs         int64  `json:"dur_ms,omitempty"`        // wall-clock, on call-shaped actions
+	DurationMs    int64  `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions
 	RequestRef    string `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
 	ResponseRef   string `json:"response_ref,omitempty"`  // blob ref for the response body
 	Preview       string `json:"preview,omitempty"`       // opening characters of the response, for list views
 	RequestBytes  int64  `json:"request_bytes,omitempty"` // full request length
 	ResponseBytes int64  `json:"response_bytes,omitempty"`
+}
+
+// UnmarshalJSON decodes an event, reading a duration written under either spelling.
+//
+// compat(until: no trail under <base>/activity still carries "dur_ms"): the duration was
+// spelled `dur_ms` before [Event.DurationMs] was. The trail is append-only and rotates, so
+// observing that dropping this is safe means finding none left:
+//
+//	grep -l '"dur_ms"' <base>/activity/events.jsonl
+//
+// Dropping it early is silent rather than loud: the daemon's scheduler reads a job's last
+// finish as start plus duration, so every pre-rename row reads as having finished the instant
+// it started, and a job whose interval has not elapsed is rerun anyway.
+func (e *Event) UnmarshalJSON(b []byte) error {
+	type event Event // no method set, so this does not recurse
+	var decoded event
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		return err
+	}
+	*e = Event(decoded)
+	if e.DurationMs == 0 {
+		var legacy struct {
+			DurMs int64 `json:"dur_ms"`
+		}
+		if json.Unmarshal(b, &legacy) == nil {
+			e.DurationMs = legacy.DurMs
+		}
+	}
+	return nil
 }
 
 // AgentCommand is the normalized, host-independent observation an agent hook contributes to the
@@ -313,15 +342,24 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // There is no Decision field, unlike AgentCommand: a spawn is not a guard surface. The handed
 // context is prose, not a command line, and judging it as one would deny a lease for quoting
 // a denied command in its instructions.
+//
+// DeclaredModel is what the spawning tool_input claimed about which model the child runs as,
+// or "" when the caller named none; the same trust tier as [BaggageSpawner]: the spawning
+// process's own assertion about itself, recorded verbatim and corroborated by nothing. NO
+// verdict may key on it; a spawn stays outside the guard whatever it claims. Named
+// DeclaredModel rather than Model because "model" already names the guard's reply CHANNEL in
+// its coverage vocabulary (deny=model, advise=model, pass=none), and a bare Model field here
+// would read as one more of those instead of a spawn's own claim.
 type AgentSpawn struct {
-	Actor     string
-	Workspace string
-	Host      string
-	Session   string
-	Event     string
-	Tool      string
-	Child     string
-	Context   string
+	Actor         string
+	Workspace     string
+	Host          string
+	Session       string
+	Event         string
+	Tool          string
+	Child         string
+	Context       string
+	DeclaredModel string
 }
 
 const agentSpawnSchemaVersion = 1
@@ -335,6 +373,11 @@ type agentSpawnRequest struct {
 	Child         string `json:"child,omitempty"`
 	Lease         string `json:"lease,omitempty"`
 	Context       string `json:"context"`
+	// DeclaredModel is additive: an older reader ignores a field it does not know, and one
+	// reading a record written before this field existed gets "" for it, which is exactly
+	// "no model declared": the same fact a genuinely undeclared spawn reports. No schema
+	// bump, for the reason agentCommandResponse.PreauthorizedBy already documents.
+	DeclaredModel string `json:"declared_model,omitempty"`
 }
 
 // AppendAgentSpawn records one spawn and stores the context it was given as a blob.
@@ -356,6 +399,10 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// invent or destroy a lease id after the fact.
 	spawn.Context = secret.RedactString(ctx, spawn.Context)
 	spawn.Child = secret.RedactString(ctx, spawn.Child)
+	// Clamped like the magus.spawner claim it sits beside (see MaxSpawnerLen): a model
+	// name is short, and an unbounded claim is a cost every later read of the
+	// repository would pay for one bad payload.
+	spawn.DeclaredModel = clampRunes(spawn.DeclaredModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
 	request, _ := json.Marshal(agentSpawnRequest{
 		SchemaVersion: agentSpawnSchemaVersion,
@@ -366,6 +413,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Child:         spawn.Child,
 		Lease:         lease,
 		Context:       spawn.Context,
+		DeclaredModel: spawn.DeclaredModel,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
 

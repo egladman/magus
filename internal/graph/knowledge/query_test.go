@@ -339,7 +339,7 @@ func TestGlobMatch(t *testing.T) {
 	}
 }
 
-// conformanceGraph is a fixed corpus of representative nodes for the grammar
+// conformanceGraph is a fixed set of representative nodes for the grammar
 // conformance table. Deterministic node IDs and labels so the expected match sets are
 // exact.
 func conformanceGraph() *Graph {
@@ -360,9 +360,9 @@ func conformanceGraph() *Graph {
 	return g
 }
 
-// TestGrammarConformance is the corpus that pins the deterministic grammar (fields,
+// TestGrammarConformance is the fixture that pins the deterministic grammar (fields,
 // wildcards, negation) so the Go query engine cannot silently drift. It is intended to
-// become the shared cross-language corpus the docs-site search (search.js) also
+// become the shared cross-language fixture the docs-site search (search.js) also
 // validates against; the JS side is not wired to it yet, so for now it is a Go-only
 // regression gate. Free-text fuzzy ranking is intentionally excluded; this table is
 // about which nodes a query MATCHES, not their order.

@@ -108,5 +108,5 @@ often the single largest reduction available{{end}}.
 
 ## See also
 
-- **magus-vcs-hygiene** - classifying paths and staging one commit safely.
-- **magus-memory** - where session notes live instead of the branch.
+- **{{skill "vcs-hygiene"}}** - classifying paths and staging one commit safely.
+- **{{skill "memory"}}** - where session notes live instead of the branch.

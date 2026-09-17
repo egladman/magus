@@ -52,7 +52,8 @@ the gap where it will be found (the plans doc, a task, magus_memory).
 ## 3b. Two forms from one body: mark the why, then shorten the rest
 
 A skill body is a `text/template` rendered against the variant, so a form is an
-ordinary `{{if}}`. Three constructs, and that is the whole vocabulary:
+ordinary `{{if}}`. Three branching constructs, plus the registry lookups in
+section 3c, and that is the whole vocabulary:
 
 ```markdown
 Run the target first{{if .Full}}, because a raw tool bypasses the cache{{end}}.
@@ -80,6 +81,53 @@ A third form costs a constant, not a new markup convention:
 ```markdown
 {{if .Is "minimal"}}bare imperative{{else if .Full}}the long version{{else}}the short one{{end}}
 ```
+
+### 3c. Never type a command path; resolve it
+
+A skill is read in someone else's repo, where nobody can check whether the
+command it names still exists. A retyped path is therefore the one kind of error
+that reaches its reader intact and stays wrong. Resolve it instead:
+
+```markdown
+Run `{{cmd "agent harness verify"}}`, then read what it reports.
+```
+
+`cmd` looks the path up in `internal/hint`'s `AllCommands` and fails the INSTALL
+when it misses, naming the path it could not resolve. So renaming a verb either
+updates every skill that mentions it or stops the build, and the failure lands on
+whoever moved the command rather than on an agent a month later.
+
+Register the command in `internal/hint/cli_command.go` first; an unregistered
+path is a lookup failure, not a silent pass. It always renders the PATH spelling
+(`magus ...`), never this process's `./magus`, because the reader's checkout is
+not ours.
+
+The whole vocabulary, each resolving against the registry that defines it:
+
+| write | renders | resolves against |
+| --- | --- | --- |
+| `{{cmd "agent harness verify"}}` | `magus agent harness verify` | `hint.AllCommands` |
+| `{{tool "query"}}` | `magus_query` | `hint.AllToolNames` |
+| `{{skill "vcs-hygiene"}}` | `magus-vcs-hygiene` | the shipped catalog |
+| `{{buzz "harness.provider"}}` | `magus\harness.provider` | the magus host module |
+| `{{mgs "MGS2001"}}` | `MGS2001` | the diagnostic registry |
+| `{{mgslink "MGS2001"}}` | a markdown link to its docs | the diagnostic registry |
+
+Each key is the SHORT form and each output is the full one, so the call is never
+the answer retyped. The two diagnostic functions split by job rather than by
+taste: a code inside a graph node id, a URL pattern, or a quoted literal is DATA
+and takes `mgs`, while a code a sentence cites takes `mgslink`, because the URL's
+category segment follows the code's range and no reader can derive it from the
+digits.
+
+`{{skill}}` resolves only skills magus SHIPS. A local skill name
+(`magus-local-development`) stays literal on purpose: magus does not install it,
+so there is nothing to check it against, and the lookup refusing it is the
+correct answer rather than a gap.
+
+Adding a function to `skillFuncs` inherits the obligation `validateActionPipe`
+documents: it must render the same text in both forms, or the two forms stop
+describing one behaviour and nothing catches it.
 
 ### Showing template syntax inside a skill
 

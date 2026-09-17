@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 )
@@ -76,7 +76,7 @@ func exampleSession(t *testing.T, src string) *buzz.Session {
 	for _, m := range importLine.FindAllStringSubmatch(src, -1) {
 		importPath := m[1]
 		name := importPath[strings.LastIndex(importPath, "/")+1:]
-		if decls, ok := spellruntime.ModuleDecls(name); ok {
+		if decls, ok := spell.ModuleDecls(name); ok {
 			sess.SetModuleDecls(importPath, decls)
 		}
 	}

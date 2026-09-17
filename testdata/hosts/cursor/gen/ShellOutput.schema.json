@@ -1,0 +1,26 @@
+{
+  "$ref": "#/definitions/ShellOutput",
+  "definitions": {
+    "ShellOutput": {
+      "type": "object",
+      "properties": {
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "exitCode": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "stdout",
+        "stderr",
+        "exitCode"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

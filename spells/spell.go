@@ -41,6 +41,7 @@ type Spell struct {
 	language            string          // canonical source language the spell adapts; "" when it adapts none
 	languageExtensions  []string        // file extensions that ARE the language, from the Language record
 	comments            *CommentSyntax  // declared comment/string syntax; nil when the spell declares none
+	symbolIndexer       *SymbolIndexer  // declared symbol-indexing capability; nil when the spell declares none
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
 	internal            bool
@@ -110,6 +111,11 @@ func (s *Spell) LanguageExtensions() []string { return s.languageExtensions }
 
 // Comments returns the declared comment and string syntax, or nil.
 func (s *Spell) Comments() *CommentSyntax { return s.comments }
+
+// SymbolIndexer returns the spell's declared symbol-indexing capability, or nil when
+// it declares none. A non-nil result is what makes a project bound to this spell
+// symbol-capable; nothing else answers that question.
+func (s *Spell) SymbolIndexer() *SymbolIndexer { return s.symbolIndexer }
 
 // IsServiceTarget reports whether target name is backed by a service op (a
 // long-running process). The runner forces such targets uncacheable.
@@ -339,6 +345,12 @@ func WithLanguage(language string) Option {
 // language, from the Language record.
 func WithLanguageExtensions(exts []string) Option {
 	return func(s *Spell) { s.languageExtensions = exts }
+}
+
+// WithSymbolIndexer sets the spell's declared symbol-indexing capability. A spell
+// registered without it is not symbol-capable.
+func WithSymbolIndexer(si *SymbolIndexer) Option {
+	return func(s *Spell) { s.symbolIndexer = si }
 }
 
 // WithComments sets the comment and string syntax the spell declares for its

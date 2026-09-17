@@ -63,7 +63,7 @@ func TestPrintVerdictIsPlainASCII(t *testing.T) {
 		types.ClassifyAnswer(false, "", nil),
 		types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil),
 		types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")}),
-		knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, IndexOnly: true, Stale: []string{"libs/api"}}),
+		knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, Stale: []string{"libs/api"}}),
 	} {
 		got := renderVerdict(ans, "magus refs Foo")
 		for _, r := range got {
@@ -140,7 +140,7 @@ func TestPrintVerdictCoverageUnknownDoesNotAssertAbsence(t *testing.T) {
 // case where it did not change what to do.
 func TestPrintVerdictIndexStaleNamesTheProjectsAndTheRefresh(t *testing.T) {
 	got := renderVerdict(knowledge.Answer("adoptionRun", false, knowledge.Coverage{
-		Seeded: true, Probed: true, IndexOnly: true, Stale: []string{"libs/api", "."},
+		Seeded: true, Probed: true, Stale: []string{"libs/api", "."},
 	}), "")
 	assert.Contains(t, got, "verdict: unknown, not absent")
 	assert.Contains(t, got, "libs/api, .")

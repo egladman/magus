@@ -220,7 +220,7 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 			a := byKey[key]
 			if a == nil {
 				a = &acc{
-					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage},
+					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage, Namespace: info.Namespace},
 					defs: map[string]bool{},
 					refs: map[string]*types.KnowledgeSymbolRef{},
 				}
@@ -341,9 +341,10 @@ func workspaceRelative(p string) bool {
 // where transposing them compiles, vets, and silently reclassifies every unparsable
 // moniker as merely uncallable.
 type monikerInfo struct {
-	Key      string
-	Label    string
-	Callable bool
+	Key       string
+	Namespace string
+	Label     string
+	Callable  bool
 }
 
 // parseMoniker turns a SCIP moniker into a stable, version-free node key and a display
@@ -366,6 +367,15 @@ func parseMoniker(moniker string) (info monikerInfo, ok bool) {
 	if n := len(sym.Descriptors); n > 0 {
 		info.Label = sym.Descriptors[n-1].Name
 		info.Callable = isCallableSuffix(sym.Descriptors[n-1].Suffix)
+	}
+	// The namespace is the moniker cut after its last namespace descriptor, keyed the way
+	// the namespace symbol's own moniker is, so the two meet on one node.
+	for i := len(sym.Descriptors) - 1; i >= 0; i-- {
+		if sym.Descriptors[i].Suffix == scip.Descriptor_Namespace {
+			sym.Descriptors = sym.Descriptors[:i+1]
+			info.Namespace = strings.TrimSpace(pkg + " " + scip.DescriptorOnlyFormatter.FormatSymbol(sym))
+			break
+		}
 	}
 	return info, true
 }

@@ -24,14 +24,9 @@ type Coverage struct {
 	Probed bool
 	// Gaps are the projects whose declared symbol index could not be read.
 	Gaps []types.KnowledgeSymbolGap
-	// Stale are the workspace-relative projects whose built index predates its sources.
+	// Stale are the workspace-relative projects whose built index would be rebuilt for the
+	// current sources.
 	Stale []string
-	// IndexOnly marks a lookup whose ENTIRE evidence base is the symbol index, so a stale
-	// index leaves a miss unverifiable. `magus refs` is the one: it resolves symbol nodes
-	// and consults nothing else. A general query reads many layers, and downgrading every
-	// empty one in an actively edited tree would make the verdict noise a caller learns to
-	// ignore, the same trap refs' -o name exit code documents.
-	IndexOnly bool
 }
 
 // Answer classifies a lookup's result against its coverage. input is the query text, used
@@ -59,10 +54,17 @@ func reasonFor(matched bool, cov Coverage) types.KnowledgeUnknownReason {
 		return types.ReasonCoverageUnknown
 	case !cov.Seeded:
 		return types.ReasonSymbolsNotLoaded
-	case cov.IndexOnly && !matched && len(cov.Stale) > 0:
+	case !matched && len(cov.Stale) > 0:
 		// A stale index cannot hold a definition added since it was built, so a MISS against
 		// one is not a verified absence. The sites it did return are still facts, which is
 		// why this fires only on a miss.
+		//
+		// It used to fire only for a lookup whose whole evidence base WAS the index, on the
+		// argument that downgrading every empty query would be noise. That argument rested
+		// on staleness being measured by mtime, which `format` made permanently true; now
+		// that it is the cache's content answer, an empty seeded lookup against an index
+		// magus knows is behind has no claim to `absent`, and printing one under a "stale
+		// index" banner contradicted the banner in the same breath.
 		return types.ReasonIndexStale
 	}
 	return ""

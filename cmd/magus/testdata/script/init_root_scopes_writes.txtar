@@ -1,0 +1,27 @@
+# --root has to scope every write init makes, not only the merge-driver step it was
+# already threaded through. An agent pointed `init` at a scratch --root, the workspace
+# failed to load, and a config appeared in the real user's config dir instead.
+#
+# A script rather than a Go test: initCmd reaches loadMagus, which memoizes its root for
+# the life of the PROCESS and panics when a later call names a different one. In-process
+# the assertion passes alone and panics in a full run; each script case is its own
+# subprocess, so the root is fresh.
+
+mkdir elsewhere
+mkdir target
+cd elsewhere
+
+# --root with neither --local nor --global is refused rather than guessed at: the
+# default config path is the user's, and --root has never scoped it. It is a GLOBAL
+# flag, so it precedes the subcommand.
+! exec magus -root $WORK/target init
+stderr 'root'
+
+# --local scopes both writes to --root.
+exec magus -root $WORK/target init -local -vcs git
+exists $WORK/target/magusfile.buzz
+exists $WORK/target/magus.yaml
+
+# and leaves the working directory untouched.
+! exists $WORK/elsewhere/magusfile.buzz
+! exists $WORK/elsewhere/magus.yaml

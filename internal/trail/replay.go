@@ -241,11 +241,16 @@ type SessionTrail struct {
 }
 
 // SessionSpawn is one recorded spawn: the label the host gave the callee, the lease the
-// context it was given named, and when.
+// context it was given named, when, and what the caller claimed about the model.
+//
+// DeclaredModel is "" both when the caller named no model and when the spawn blob could not
+// be read; a reader who needs to tell those apart reads the trail's own blob (RequestRef,
+// off the underlying trail.Event) rather than this summary.
 type SessionSpawn struct {
-	Child string    `json:"child"`
-	Lease string    `json:"lease,omitempty"`
-	At    time.Time `json:"at"`
+	Child         string    `json:"child"`
+	Lease         string    `json:"lease,omitempty"`
+	At            time.Time `json:"at"`
+	DeclaredModel string    `json:"declared_model,omitempty"`
 }
 
 // ForSession folds the trail at base for one host session, reading at most limit recent
@@ -275,7 +280,14 @@ func ForSession(base, session string, limit int) SessionTrail {
 				}
 			}
 		case KindAgentSpawn:
-			out.Spawns = append(out.Spawns, SessionSpawn{Child: e.Action, Lease: e.Lease, At: time.UnixMilli(e.Ts)})
+			sp := SessionSpawn{Child: e.Action, Lease: e.Lease, At: time.UnixMilli(e.Ts)}
+			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
+				var req agentSpawnRequest
+				if json.Unmarshal(raw, &req) == nil {
+					sp.DeclaredModel = req.DeclaredModel
+				}
+			}
+			out.Spawns = append(out.Spawns, sp)
 		default:
 			continue
 		}

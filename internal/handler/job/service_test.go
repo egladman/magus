@@ -13,7 +13,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
@@ -105,14 +104,14 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 	dir := t.TempDir()
 	// A completed rotate-activities job in the trail, plus two more events so Stat has a count of 3.
 	start := time.UnixMilli(1_000_000).UnixMilli()
-	trail.Append(t.Context(), dir, trail.Event{Ts: start, Kind: trail.KindJob, Actor: "daemon", Action: "server rotate-activities", Outcome: trail.OutcomeOK, DurMs: 250})
+	trail.Append(t.Context(), dir, trail.Event{Ts: start, Kind: trail.KindJob, Actor: "daemon", Action: "server rotate-activities", Outcome: trail.OutcomeOK, DurationMs: 250})
 	trail.Append(t.Context(), dir, trail.Event{Ts: start + 1, Kind: trail.KindMCPToolCall, Actor: "a", Action: "query", Outcome: trail.OutcomeOK})
 	trail.Append(t.Context(), dir, trail.Event{Ts: start + 2, Kind: trail.KindMCPToolCall, Actor: "a", Action: "explain", Outcome: trail.OutcomeOK})
 
 	s := newTestService(fakeWS{dir: dir}, nil, nil)
 	running := map[string]string{argvKey([]string{"server", "rotate-activities"}): "inv-live"}
 
-	j, ok := jobs.Lookup("rotate-activities")
+	j, ok := jobstore.Lookup("rotate-activities")
 	require.True(t, ok)
 	got := s.job(j, running, types.Job{})
 
@@ -141,7 +140,7 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 	}
 	require.Equal(t, []string{
 		"jobs/sync-graph", "jobs/rotate-activities", "jobs/rotate-logs", "jobs/prune-preserved",
-		"jobs/clear-cache", "jobs/check-review",
+		"jobs/clear-cache", "jobs/check-review", "jobs/check-drift",
 	}, names)
 }
 
@@ -189,7 +188,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	dir := t.TempDir()
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
-		row.Goal = "ship the store"
+		row.Criteria = "ship the store"
 		row.Checkpoint = "60dc9151"
 		row.WritePaths = []string{"internal/job", "types/job.go"}
 		row.State = types.StateRunning
@@ -220,7 +219,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 
 	got := byID["job-a"]
 	require.NotNil(t, got, "the delegated row is missing from the listing")
-	require.Equal(t, "ship the store", got.Goal)
+	require.Equal(t, "ship the store", got.Criteria)
 	require.Equal(t, "60dc9151", got.Checkpoint)
 	require.Equal(t, []string{"internal/job"}, got.WritePaths)
 	require.Equal(t, stored.Updated, got.Updated, "the row's own stamp, not the moment it was read")
@@ -277,7 +276,7 @@ func TestListJobs_EmptyStoreServesEmptyList(t *testing.T) {
 	resp, err := s.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.Jobs)
-	require.Len(t, resp.Msg.Jobs, len(jobs.All()), "an unwritten store handed the listing a row")
+	require.Len(t, resp.Msg.Jobs, len(jobstore.All()), "an unwritten store handed the listing a row")
 	require.NotNil(t, resp.Msg.Overlaps)
 	require.Empty(t, resp.Msg.Overlaps)
 }

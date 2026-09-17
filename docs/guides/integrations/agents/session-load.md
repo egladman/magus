@@ -175,6 +175,28 @@ sh magus-session-load-claude-code.sh            # extract and load
 sh magus-session-load-claude-code.sh --stdout   # read the stream yourself
 ```
 
+Declare it instead, and you stop running it by hand:
+
+```yaml
+knowledge:
+  sessions:
+    adapters:
+      - host: claude-code
+        command: sh magus-session-load-claude-code.sh
+```
+
+`magus graph build` runs each declared adapter before it assembles, so the
+overlay is rebuilt from the same command that rebuilds everything else reading
+it, and the daemon's `sync-graph` job carries it on the daemon's own schedule
+with nothing further to set up. `--no-sessions` skips them for one build;
+`knowledge.sessions.disabled` turns them off for good. An adapter that fails is
+reported and not fatal: the graph is then missing its newest sessions, which is a
+smaller problem than no graph.
+
+Nothing is derived. An adapter reads a transcript store under your home
+directory, and magus does not go looking through it because a config key was left
+blank.
+
 Each one scopes to a repository (`HOST_REPO_ROOT`, defaulting to the git toplevel
 of the current directory) and keeps a per-file checkpoint under
 `${XDG_STATE_HOME:-~/.local/state}/magus/session-load/<host>/`, so a re-run reads
@@ -249,7 +271,7 @@ the delegated half of every fanned-out session goes with them.
 # by the session-parity gate, which fails the build when an adapter drops a
 # dimension or the guide's table disagrees with it. A host that supplies less
 # declares less; the report then says unobservable rather than zero.
-# magus-guard-template: 13
+# magus-guard-template: 14
 # magus-session-coverage: schema=1 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes
 
 # NO `set -e`. Every failure below is a transcript this run does not read, not a
@@ -443,7 +465,7 @@ exit-like signal describes a patch rather than a command.
 # command. The coverage line says so, and a report reading it says unobservable
 # for those dimensions rather than zero. Declaring commands=yes on the strength
 # of what the other hosts supply is the failure this line exists to prevent.
-# magus-guard-template: 13
+# magus-guard-template: 14
 # magus-session-coverage: schema=1 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes
 
 # NO `set -e`: a rollout this run cannot read is not a reason to abandon the rest.
@@ -596,7 +618,7 @@ a command's exit code, and the only one with no hook records and no spawn part.
 # OpenCode is the only host of the three that records a command's exit code, and
 # the only one with neither hook records nor a spawn part. The coverage line says
 # both; a report reading it says unobservable, never zero.
-# magus-guard-template: 13
+# magus-guard-template: 14
 # magus-session-coverage: schema=1 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes
 
 # NO `set -e`: a session whose export fails is not a reason to abandon the rest.

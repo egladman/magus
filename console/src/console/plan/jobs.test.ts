@@ -50,7 +50,7 @@ function row(partial: Partial<ActivityRow> & { id: string }): ActivityRow {
 // The listing every assembly test reads: a root with two children, one of which has a child of its
 // own, plus one ordering constraint that is NOT a parent link (b2 must wait for b1).
 const TREE: Job[] = [
-  job("root", { goal: "ship the view" }),
+  job("root", { criteria: "ship the view" }),
   job("b1", { parent: "root", state: "pass" }),
   job("b2", { parent: "root", state: "running", dependsOn: ["b1"] }),
   job("b2a", { parent: "b2", state: "no_return", readOnly: true }),
@@ -134,9 +134,9 @@ test("a parent cycle flattens instead of hanging, and every job still appears", 
 });
 
 test("a duplicate id keeps the first entry", () => {
-  const model = buildJobTree([job("a", { goal: "first" }), job("a", { goal: "second" })]);
+  const model = buildJobTree([job("a", { criteria: "first" }), job("a", { criteria: "second" })]);
   assert.equal(model.nodes.length, 1);
-  assert.equal(model.byId.get("a")?.job.goal, "first");
+  assert.equal(model.byId.get("a")?.job.criteria, "first");
 });
 
 test("a depends_on naming a job outside this listing draws no edge and is not invented", () => {

@@ -116,13 +116,13 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	var submitted [][]string
 	h := newTestRunHandler(t, dir, &submitted)
 	trail.Append(context.Background(), dir, trail.Event{
-		Ts:      1000,
-		Kind:    trail.KindJob,
-		Actor:   "daemon",
-		Action:  "run test libs/authkit",
-		Outcome: trail.OutcomeError,
-		Error:   "2 tests failed",
-		DurMs:   4200,
+		Ts:         1000,
+		Kind:       trail.KindJob,
+		Actor:      "daemon",
+		Action:     "run test libs/authkit",
+		Outcome:    trail.OutcomeError,
+		Error:      "2 tests failed",
+		DurationMs: 4200,
 	})
 
 	rec := httptest.NewRecorder()

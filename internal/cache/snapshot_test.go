@@ -589,10 +589,10 @@ func TestReplayRefusesSymlinkEscape(t *testing.T) {
 	// really lets a nested write ESCAPE root, so a later refusal is meaningful and
 	// not an artifact of the path never actually leaving root.
 	require.NoError(t, os.Symlink(outside, filepath.Join(root, "probe")))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "probe", "canary"), []byte("x"), 0o644))
-	require.FileExists(t, filepath.Join(outside, "canary"), "control: write through symlink must escape root")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "probe", "escaped"), []byte("x"), 0o644))
+	require.FileExists(t, filepath.Join(outside, "escaped"), "control: write through symlink must escape root")
 	require.NoError(t, os.RemoveAll(filepath.Join(root, "probe")))
-	require.NoError(t, os.Remove(filepath.Join(outside, "canary")))
+	require.NoError(t, os.Remove(filepath.Join(outside, "escaped")))
 
 	// Attack A: a symlink output whose target escapes root is refused outright, so
 	// the symlink is never even created.

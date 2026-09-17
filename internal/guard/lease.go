@@ -204,20 +204,35 @@ func isGateCommand(args []string) bool {
 // gateRepeatAdvice names no target but the gate itself: a workspace calls its
 // narrower targets whatever it likes, so the advisory points at the command that
 // lists them rather than guessing.
+
+// gateCadence names the cost, the command that sizes the risk, and leaves the trade to
+// the caller.
+//
+// Not a threshold, and the earlier drafts that were one are the reason. A count alone
+// changes nothing: this fired eight times in one session at a caller who gated ten times
+// in two hours and narrowed nothing. "Once per branch, when the change is complete" fails
+// the other way, since complete is a judgment nobody can check. And a hard rule -- more
+// than one project, or the root -- is a refusal dressed as advice: this tier cannot
+// enforce anything, and the caller knows things magus does not, like whether the change
+// is load-bearing or what a red pull request costs today.
+//
+// What magus can contribute is the size of the blast radius, which is what --plan prints.
+// The caller weighs that against the wall clock above.
+var gateCadence = "`" + hint.Affected.With(string(types.TargetCI), "--plan") +
+	"` sizes the risk: one project is usually answered by that project's own `" + string(types.TargetCI) +
+	"`, while the root or several projects is the gate earning it."
+
 func gateRepeatAdvice(runs int, spent time.Duration) string {
-	return fmt.Sprintf(
-		"magus workspace: the `%s` gate has run %d times in this workspace in the last %s, about %s of wall clock. It runs everything the diff reaches, so it is the most expensive target here.\n",
-		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second)) +
-		"While you iterate, a narrower target answers the same question faster. `" + hint.LsTargets.With("<project>") + "` lists what this workspace calls them, and `" + hint.Affected.With("--plan") + "` shows what the gate would run.\n" +
-		"Save the full gate for the commit."
+	return fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock. %s\n",
+		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second), gateCadence)
 }
 
 // gateRepeatBrief is the repeat form, and it keeps the running cost rather than going
 // quiet: the count and the wall clock are the whole argument, and they are the part that
 // has changed since the caller last read the full text.
 func gateRepeatBrief(runs int, spent time.Duration) string {
-	return fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock. `%s` lists narrower targets.\n",
-		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second), hint.LsTargets.With("<project>"))
+	return fmt.Sprintf("magus workspace: `%s` has run %d times here, about %s of wall clock. %s\n",
+		types.TargetCI, runs, spent.Round(time.Second), gateCadence)
 }
 
 // denyLeaseScopedGate refuses the gate to a lease that was handed a narrower check, and
@@ -631,17 +646,39 @@ func shrinksWritePaths(params map[string]string, row types.Job) bool {
 // The check RECORD decides it whenever the row carries one: a target field cannot be
 // confused by a stray word the way a rendered line can.
 func LeaseOwnsGate(row types.Job) bool {
-	if row.Check != nil {
-		t, err := types.ParseTarget(row.Check.Target)
-		return err == nil && t.Name == types.TargetCI
-	}
-	for _, gate := range row.CompletionGates {
+	_, owns := LeaseGateSource(row)
+	return owns
+}
+
+// LeaseGateSource is LeaseOwnsGate plus WHICH declaration named the gate, so a refusal can
+// quote the offending one.
+//
+// It exists because the refusal quoted row.Validation whatever had actually matched, and a
+// row can now name the gate from any of several places: told that its check `go-test api`
+// names `ci`, a reader goes looking for a bug in a line that is fine while the completion
+// gate that really did it goes unmentioned.
+func LeaseGateSource(row types.Job) (string, bool) {
+	// EVERY gate is asked, and the primary check no longer answers for the row. Returning
+	// on row.Check alone meant a job whose check was some narrow target stopped the walk
+	// before its completion gates were read, so `--check go-test api --gate-check ci` --
+	// the shape the two flags invite -- took the gate through the door the check rule
+	// holds shut.
+	for _, gate := range row.EffectiveCompletionGates() {
+		if gate.Kind != types.GateKindCheck {
+			continue
+		}
 		t, err := types.ParseTarget(gate.Check.Target)
 		if err == nil && t.Name == types.TargetCI {
-			return true
+			if gate.ID == types.PrimaryCompletionGateID {
+				return gate.Check.String(), true
+			}
+			return fmt.Sprintf("completion gate %q (%s)", gate.ID, gate.Check.String()), true
 		}
 	}
-	return validationNamesGate(row.Validation)
+	if validationNamesGate(row.Validation) {
+		return row.Validation, true
+	}
+	return "", false
 }
 
 // compat(until: no ledger row is written without a check record): rows predating
@@ -770,7 +807,7 @@ func denyLeaseScopedLaneWrite(ctx context.Context, deps Dependencies, actingLeas
 	if len(live) == 0 {
 		return ""
 	}
-	for _, candidate := range writeTargetCandidates(command, 0) {
+	for _, candidate := range writeTargetCandidates(command, 0, effectiveDialect(deps.ShellDialect)) {
 		rel, inside := workspaceRelative(location.workspace, candidate)
 		if !inside || !declaredPath(live, rel) {
 			continue

@@ -53,13 +53,21 @@ magus\project({
     // watched. The client is TypeScript (esbuild strips the types) plus per-surface CSS and the
     // scaffold fragments the surfaces fetch; the hand-authored shell (index.html/manifest/sw) and the
     // build manifests (package.json + pnpm-lock.yaml, where the esbuild deps are pinned) round it out.
-    // pnpm is the package manager - NOT npm; .npmrc's minimum-release-age gate is the reason.
+    // pnpm is the package manager - NOT npm; pnpm-workspace.yaml's minimumReleaseAge gate is the reason.
     "sources": ["*.buzz",
                 "../badge.buzz", "../coverage.buzz",
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs", "stylelint-label-token.mjs",
+                // The icons and favicons build assembles into the bundle. src/**/*.ts
+                // above stops at the code; these are the rest of what it ships.
+                "src/assets/**",
+                // The authored changeset diffdemo-generate compiles into the committed
+                // src/console/diff/gen/demo.ts. Undeclared, editing the patch left the
+                // key where it was, so the generator replayed and the committed TS kept
+                // the old changeset.
+                "src/console/diff/demo.patch",
                 "../gen/knowledge-graph.json", "../gen/target-graph.json"],
     // gen/** alone: the esbuild bundle, which this project actually produces. src/gen/** lands
     // here too, but proto writes it (see proto/buf.gen.yaml) and declares it there against this
@@ -86,7 +94,7 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
-// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
 // that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation
@@ -139,7 +147,6 @@ fun install() > void !> any {
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight, textsearch\test);
     ctx.writesFiles("coverage.svg");
-    final before = drift\hashes(["coverage.svg"]);
     install();
     proc\exec("pnpm", ["run", "test"], ".", {});
 
@@ -154,9 +161,15 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     final pct = lcov\mergePercent(
         [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov"), textsearch_report],
         keep: "src/");
-    fs\writeFile("coverage.svg", badge\coverage("typescript coverage", percent: pct, radius: 3));
-    if (ctx.hasCharm("rw")) { return; }
-    if (drift\changedSince(before, ["coverage.svg"]).len() > 0) {
+    final wanted = badge\coverage("typescript coverage", percent: pct, radius: 3);
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("coverage.svg", content: wanted);
+        return;
+    }
+    // Compared, never written (MGS1035). Writing the badge and then noticing it changed
+    // leaves this run's own output in the tree, so the next gate reads it as an edit
+    // nobody made and a re-run passes because the first run fixed what it reported.
+    if (fs\readFile("coverage.svg") != wanted) {
         // Names the figure this run measured. Node's line coverage differs by a fraction
         // of a point between platforms, so a badge committed from a developer machine can
         // be stale on CI by a rounding step nobody can see from the message alone.
@@ -239,7 +252,7 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 // It is NOT folded into lint: lint is cached on the tree, and this answer changes when the
 // advisory database does. Its own target keeps that honest (see skip_cache above).
 //
-// The cooling period in .npmrc is the other half and the stronger one: this catches a
+// The cooling period in pnpm-workspace.yaml is the other half and the stronger one: this catches a
 // KNOWN advisory, minimum-release-age keeps an unknown compromise out of the build for ten
 // days in the first place.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {

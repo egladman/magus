@@ -15,7 +15,7 @@ func briefRow() types.Job {
 	return types.Job{
 		ID:     "harness/ledger-per-repo",
 		Parent: "harness",
-		Goal: "Move the lease ledger to the per-repository state dir.\n" +
+		Criteria: "Move the lease ledger to the per-repository state dir.\n" +
 			"Done when a row put from one checkout is listed from a second worktree of the same repo.",
 		Checkpoint: "cf5509d09",
 		WritePaths: []string{"internal/ledger", "cmd/magus/ledger.go"},
@@ -56,7 +56,7 @@ func TestTermsNamesAWorkspaceThatWouldNotLoad(t *testing.T) {
 
 	b := NewTerms(briefRow(), TermsFacts{WorkspaceCold: true})
 	assert.Contains(t, b.String(), "this workspace would not load")
-	assert.Contains(t, b.String(), briefRow().Goal, "the row is rendered whatever the workspace does")
+	assert.Contains(t, b.String(), briefRow().Criteria, "the row is rendered whatever the workspace does")
 }
 
 // Nothing outside the fixed order reaches the worker, which is how the gate stops leaking
@@ -65,7 +65,7 @@ func TestTermsRendersOnlyTheRow(t *testing.T) {
 	t.Parallel()
 
 	row := briefRow()
-	row.Goal, row.DependsOn, row.DenyPaths = "", nil, nil
+	row.Criteria, row.DependsOn, row.DenyPaths = "", nil, nil
 	got := NewTerms(row, TermsFacts{}).String()
 
 	assert.NotContains(t, got, "goal")

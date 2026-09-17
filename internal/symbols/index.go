@@ -7,17 +7,15 @@ import (
 )
 
 // The symbol index is a build artifact, never a source file: it lives under the magus
-// cache dir, not the working tree. magus reserves the op name IndexOp; when it runs that
-// op it hands the indexer the destination via the IndexEnvVar environment variable, so
-// the spell's command writes straight into the cache and the tree stays clean. The
-// knowledge graph reads the same path back. Op-run and ingestion agree by both calling
-// IndexPath with the same (cacheDir, projectAbsDir).
+// cache dir, not the working tree. A spell declares its indexer with
+// mgs_getSymbolIndexer (see spells.SymbolIndexer); when magus runs it, it hands the
+// indexer the destination via the IndexEnvVar environment variable, so the command
+// writes straight into the cache and the tree stays clean. The knowledge graph reads
+// the same path back. The run and ingestion agree by both calling IndexPath with the
+// same (cacheDir, projectAbsDir).
 const (
-	// IndexOp is the reserved per-language op name that runs a SCIP indexer. A spell
-	// that exposes it is symbol-capable; magus injects IndexEnvVar into its run.
-	IndexOp = "scip"
 	// IndexEnvVar names the environment variable magus sets to the index's cache
-	// destination when running an IndexOp. The spell op writes its index there.
+	// destination when running a declared symbol indexer, which writes its index there.
 	IndexEnvVar = "MAGUS_SYMBOL_INDEX"
 	// indexFileName is the basename of every project's cached SCIP index.
 	indexFileName = "index.scip"

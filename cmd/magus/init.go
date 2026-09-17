@@ -40,7 +40,10 @@ var starterMagusfileBuzz string
 //
 // With --global only the global XDG config is written; the workspace
 // bootstrap (magusfile stub + merge driver) is per-clone and skipped.
-// With --local the config is written into the repo (CWD) instead of XDG.
+// With --local the config is written into the repo (root) instead of XDG.
+// The magusfile stub and merge driver are always scoped to root; the default
+// (non-local) config path is not, so --root without --local or --global is
+// refused rather than silently writing the real global config.
 func initCmd(ctx context.Context, root string, args []string) error {
 	// `magus init spell <name>` is a noun subcommand: scaffold a spell rather than
 	// bootstrap the workspace. Consistent with the describe/config noun grammar.
@@ -61,6 +64,8 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "The VCS is taken from --vcs, or picked interactively when stdin is a")
 		fmt.Fprintln(os.Stderr, "terminal. With --global only the global config is written.")
+		fmt.Fprintln(os.Stderr, "--root scopes the magusfile stub and merge driver; combine it with --local")
+		fmt.Fprintln(os.Stderr, "or --global too, since --root alone does not change the default config path.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  magus init spell <name>   scaffold a new spell at spells/<name>/spell.buzz")
@@ -76,10 +81,20 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("init: --global and --local are mutually exclusive")
 	}
 
+	// --root only ever scoped the merge-driver workspace load; the config write (the
+	// default target) stayed at $XDG_CONFIG_HOME regardless. An agent pointing --root
+	// at a scratch workspace has no reason to expect that combination to touch the
+	// real user's global config, so refuse rather than silently writing there: make
+	// the caller say which config --root's scoping should mean.
+	if root != "" && !inf.Global && !inf.Local {
+		return fmt.Errorf("init: --root requires --local or --global (--root does not scope the default config path; " +
+			"pass --local to write magus.yaml into --root, or --global to confirm the write to $XDG_CONFIG_HOME/magus/)")
+	}
+
 	// Ahead of every write: init touches three places at once, and two are outside
 	// the repo: the config, and the merge driver in the VCS's own config.
 	if inf.DryRun {
-		return printInitPlan(inf.Global, inf.Local, inf.Force)
+		return printInitPlan(root, inf.Global, inf.Local, inf.Force)
 	}
 
 	// --global: write XDG config only, skip workspace bootstrap.
@@ -96,11 +111,11 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 
-	// Resolve config path: XDG (default) or CWD (--local).
+	// Resolve config path: XDG (default) or --root/CWD (--local).
 	var cfgPath string
 	var isLocal bool
 	if inf.Local {
-		cfgPath = config.Filename
+		cfgPath = filepath.Join(root, config.Filename)
 		isLocal = true
 	} else {
 		p, err := xdgConfigPath()
@@ -110,18 +125,23 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		cfgPath = p
 	}
 
-	if err := config.Init(cfgPath, inf.Force); err != nil {
-		return err
-	}
-	slog.InfoContext(ctx, "init: wrote config", slog.String("path", cfgPath))
-
-	if err := writeMagusfileStub("."); err != nil {
+	// Workspace bootstrap (magusfile stub + merge driver) before the config write:
+	// both are scoped to root and neither destroys anything on retry, while the
+	// default config target sits outside the repo entirely ($XDG_CONFIG_HOME).
+	// Writing the config first left an orphaned global config behind whenever a
+	// later step (e.g. a bad --root) failed.
+	if err := writeMagusfileStub(root); err != nil {
 		return err
 	}
 
 	if err := installMergeDriverForInit(ctx, root, inf.VCS); err != nil {
 		return err
 	}
+
+	if err := config.Init(cfgPath, inf.Force); err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "init: wrote config", slog.String("path", cfgPath))
 
 	printInitNextSteps(ctx, cfgPath, true, isLocal)
 	return nil
@@ -154,14 +174,14 @@ func xdgConfigPath() (string, error) {
 // printInitPlan names every destination a real init would touch, creating none.
 // It reads state rather than assuming: a config is only overwritten with --force
 // and a magusfile never is, so a flat "would write" would overstate both.
-func printInitPlan(global, local, force bool) error {
+func printInitPlan(root string, global, local, force bool) error {
 	target, err := xdgConfigTarget()
 	if err != nil {
 		return err
 	}
 	cfgPath := target
 	if local {
-		cfgPath = config.Filename
+		cfgPath = filepath.Join(root, config.Filename)
 	}
 
 	verb := "would write"
@@ -180,7 +200,7 @@ func printInitPlan(global, local, force bool) error {
 		return nil
 	}
 
-	if magusfilePresent(".") {
+	if magusfilePresent(root) {
 		fmt.Fprintln(os.Stdout, "magusfile:    already present, would be left alone")
 	} else {
 		fmt.Fprintln(os.Stdout, "magusfile:    magusfile.buzz - would write a starter")

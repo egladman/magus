@@ -21,7 +21,8 @@ import (
 // the two sides together.
 var mcpJudgedParams = []string{
 	"op", "id", "write_paths", "deny_paths", "read_paths", "depends_on",
-	"validation", "read_only", "parent", "state", "checkpoint", "model", "goal", "check",
+	"validation", "read_only", "parent", "state", "checkpoint", "model", "criteria",
+	"check", "completion_gates",
 }
 
 // writePathsParam is the one list a bound caller may shrink. writePathsLegacyParam is the
@@ -35,10 +36,10 @@ const (
 )
 
 // mcpElidedParams render as a presence marker instead of their value. No rule reads this
-// one, and a goal is free prose: the rendered line is recorded in the activity trail, so
+// one, and criteria are free prose: the rendered line is recorded in the activity trail, so
 // copying it there would put a caller's sentences into an audit record shaped like a
 // command. Presence is all the rebind rule needs, since naming it at all is a rewrite.
-var mcpElidedParams = map[string]bool{"goal": true}
+var mcpElidedParams = map[string]bool{"criteria": true}
 
 // mcpElidedValue stands in for an elided value. A word rather than an empty string: an
 // empty value is how the merge spells an explicit clear, and the two must not render alike.

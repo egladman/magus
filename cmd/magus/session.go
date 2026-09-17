@@ -67,12 +67,17 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		return attentionDispose(root, rest)
 	case "checkpoint":
 		return checkpointCmd(ctx, root, os.Stdin, os.Stdout, rest)
-	case "hook":
-		return hookCmd(ctx, os.Stdin, os.Stdout, rest)
 	case "notify":
 		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
+	case "hook":
+		// Removed, not renamed-in-place: the verdict was never session-scoped, and the
+		// one thing worse than moving it is leaving a second door onto the same rules.
+		// Named here rather than falling through to the generic unknown-subcommand
+		// message because the caller is usually installed host wiring, not a person,
+		// and "unknown subcommand" does not tell whoever reads that log what to re-run.
+		return usagef("magus session hook is now `%s`, which takes the same flags and stdin. Re-run `%s` to rewrite host wiring that still calls the old path", hint.Shell, hint.AgentHarnessInstall)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
+		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
 	}
 }
 
@@ -158,10 +163,11 @@ func sessionList(ctx context.Context, root string, args []string) error {
 	case outputText:
 		return renderSessionsText(ctx, root, summaries, fold, dir, !cutoff.IsZero())
 	case outputName:
+		names := make([]string, 0, len(summaries))
 		for _, s := range summaries {
-			fmt.Println(s.Session)
+			names = append(names, s.Session)
 		}
-		return nil
+		return emitNames(names)
 	}
 	out := map[string]any{
 		"sessions":    summaries,
@@ -712,10 +718,14 @@ func storedEvent(ev loadEvent) sessions.AgentEvent {
 // argv, which is the content this whole path exists to keep out of the store.
 func rejudgeCommand(text string) (program, verdict, rule string) {
 	program = commandProgram(text)
-	// hookDependencies() would also do, but it builds closures for facts this replay never
-	// touches (Inspect, CacheDir, graph staleness); the raw-tool rule needs only the
-	// catalog, so that is the only member set.
-	v := guard.Evaluate(guard.Dependencies{Spells: project.DefaultSpellRegistry().All}, text)
+	// Same catalog + workspace bash rules the live hook uses; Inspect and cache
+	// facts are unused on this pure command path.
+	shellRules, shellDialect := loadWorkspaceShellRules(context.Background())
+	v := guard.Evaluate(guard.Dependencies{
+		Spells:       project.DefaultSpellRegistry().All,
+		ShellRules:   shellRules,
+		ShellDialect: shellDialect,
+	}, text)
 	switch {
 	case v.Deny != "":
 		return program, sessions.VerdictDeny, v.RuleName()
@@ -1016,6 +1026,13 @@ func renderSessionShow(w io.Writer, s sessionShowOutput) {
 			if sp.Lease != "" {
 				fmt.Fprintf(w, " (lease %s)", sp.Lease)
 			}
+			// "none declared" reads as a fact about the spawn; a blank field here
+			// would read as a producer that forgot to fill it in.
+			model := sp.DeclaredModel
+			if model == "" {
+				model = "none declared"
+			}
+			fmt.Fprintf(w, "  model %s", model)
 			fmt.Fprintf(w, "  %s\n", sp.At.Format("2006-01-02 15:04:05"))
 		}
 	}

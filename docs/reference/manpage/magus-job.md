@@ -42,6 +42,13 @@ the checkpoint the job was handed, with the divergence between them as a fact
 rather than a refusal. Two acts under one verb, because splitting them left the
 base unrecorded on every job anybody took by hand.
 
+exec --vacate gives that marker up instead of writing one, so the checkout can
+exec a different job. Refused while the job is still declared or running, since
+walking away mid-flight would leave the checkout's next write ungraded; a job
+already exited, one the store no longer carries, or no binding at all, all
+vacate cleanly, which is what a checkout stuck on a lease nobody will ever wait
+on needs.
+
 exit returns a job with its result, FILED ONTO THE JOB so whoever waits on it
 reads the same record from any checkout. The run behind the result's output ref is
 resolved in the holder's own checkout and its record filed alongside, because an
@@ -77,14 +84,38 @@ them and magus describe job prints one job's terms.
 **--checkpoint** *magus vcs checkpoint -o name*
 : The working state this job is handed, as \`magus vcs checkpoint -o name\` prints it
 
+**--criteria** *string*
+: What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths
+
 **--deny-paths** *string*
 : A path inside the lane this job may not write; repeatable or comma-separated
 
 **--depends-on** *string*
 : A job this one waits on; repeatable or comma-separated
 
-**--goal** *string*
-: The goal and its observable acceptance criteria
+**--gate-check** *\<id\>=\<target\> \<project\>*
+: A further check this job must pass, as \`\<id\>=\<target\> \<project\>\`; repeatable
+
+**--gate-paths** *\<id\>=\<glob\>[,\<glob\>...]*
+: Files this job must have CHANGED, as \`\<id\>=\<glob\>[,\<glob\>...]\`, proven against its checkpoint; repeatable
+
+**--gate-paths-absent** *\<id\>=\<glob\>[,\<glob\>...]*
+: Files that must be GONE when the job is done, as \`\<id\>=\<glob\>[,\<glob\>...]\`; repeatable
+
+**--gate-paths-present** *\<id\>=\<glob\>[,\<glob\>...]*
+: Files that must EXIST when the job is done, as \`\<id\>=\<glob\>[,\<glob\>...]\`; repeatable
+
+**--gate-symbol** *\<id\>=\<name\>[,\<name\>...]*
+: Symbols whose definition this job must have CHANGED, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
+
+**--gate-symbol-absent** *\<id\>=\<name\>[,\<name\>...]*
+: Symbols that must resolve NOWHERE when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
+
+**--gate-symbol-present** *\<id\>=\<name\>[,\<name\>...]*
+: Symbols that must resolve when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
+
+**--gate-symbol-unreferenced** *\<id\>=\<name\>[,\<name\>...]*
+: Symbols nothing may reference when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
 
 **--model** *string*
 : The model the work was matched to
@@ -112,6 +143,9 @@ them and magus describe job prints one job's terms.
 **--base** *magus vcs checkpoint -o name*
 : The base this checkout landed on, as \`magus vcs checkpoint -o name\` prints it (default: read from this checkout)
 
+**--vacate**
+: Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running
+
 ### job exit options
 
 **--schema**
@@ -127,6 +161,11 @@ them and magus describe job prints one job's terms.
 
 **--stdin**
 : Read the result from stdin instead of from the job, for one that was never filed
+
+### job rm options
+
+**--force**
+: Remove a row that already ended, destroying the record of what happened
 
 ## Subcommands
 
@@ -144,6 +183,9 @@ them and magus describe job prints one job's terms.
 
 **run**
 : Submit one of the daemon's own jobs and return
+
+**rm**
+: Remove one job from the plan
 
 ## Examples
 
@@ -163,6 +205,12 @@ magus job fork --stdin < job.json
 
 ```sh
 magus job exec session-load/core
+```
+
+*Give up this checkout's binding*
+
+```sh
+magus job exec --vacate
 ```
 
 *Return it with its result*
@@ -191,5 +239,5 @@ magus job run sync-graph
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

@@ -191,6 +191,150 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 	assert.Contains(t, s, gitHookBegin, "the managed section is appended")
 }
 
+// TestInstallDriftHookInstallsBoth pins that both post-commit and pre-push get the
+// managed section, that it is idempotent, and that a fail-open one-liner is what got
+// written: no shell logic beyond the command and its `|| true`.
+func TestInstallDriftHookInstallsBoth(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+
+	installed, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"post-commit", "pre-push"}, installed)
+
+	for _, name := range []string{"post-commit", "pre-push"} {
+		body, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", name))
+		require.NoError(t, err, name)
+		s := string(body)
+		assert.Contains(t, s, gitDriftHookBegin, name)
+		assert.Contains(t, s, "magus job run check-drift >/dev/null 2>&1 || true", name)
+
+		info, err := os.Stat(filepath.Join(dir, ".git", "hooks", name))
+		require.NoError(t, err, name)
+		assert.NotZero(t, info.Mode()&0o100, "%s must be executable", name)
+	}
+
+	again, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
+	require.NoError(t, err)
+	assert.Empty(t, again, "re-installing an unchanged drift hook reports no install")
+}
+
+// TestInstallDriftHookCoexistsWithRefreshHook pins that the two managed sections this
+// repo can carry in one hook file (refresh and drift) never overwrite each other, in
+// either install order.
+func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+
+	_, err := gitVCS{}.InstallRefreshHook(t.Context(), dir, "magus job run sync-graph")
+	require.NoError(t, err)
+	_, err = gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
+	require.NoError(t, err)
+
+	// post-commit is drift-only and post-checkout/post-merge/post-rewrite are
+	// refresh-only, but a repository could plausibly grow both kinds of hook someday;
+	// the section markers are what keep them apart, not the file each happens to live
+	// in today. Assert on the one file relevant to both today's hook sets share: none,
+	// so assert each manager wrote its own file untouched by the other's markers.
+	postCommit, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", "post-commit"))
+	require.NoError(t, err)
+	assert.Contains(t, string(postCommit), gitDriftHookBegin)
+	assert.NotContains(t, string(postCommit), gitHookBegin)
+
+	postCheckout, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", "post-checkout"))
+	require.NoError(t, err)
+	assert.Contains(t, string(postCheckout), gitHookBegin)
+	assert.NotContains(t, string(postCheckout), gitDriftHookBegin)
+}
+
+// TestCommitPushed covers the three answers CommitPushed can give: not pushed (ahead of
+// upstream), pushed (upstream contains it), and unknown (no upstream configured at all).
+func TestCommitPushed(t *testing.T) {
+	remote := t.TempDir()
+	gitRun(t, remote, "init", "-q", "--bare")
+
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	gitRun(t, dir, "remote", "add", "origin", remote)
+	gitRun(t, dir, "push", "-q", "-u", "origin", "HEAD")
+
+	pushedSHA := gitRun2(t, dir, "rev-parse", "HEAD")
+
+	gitRun(t, dir, "commit", "-q", "--allow-empty", "-m", "second")
+	unpushedSHA := gitRun2(t, dir, "rev-parse", "HEAD")
+
+	pushed, ok, err := gitVCS{}.CommitPushed(t.Context(), dir, pushedSHA)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.True(t, pushed, "the pushed commit must report pushed")
+
+	pushed, ok, err = gitVCS{}.CommitPushed(t.Context(), dir, unpushedSHA)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.False(t, pushed, "the local-only commit must report not pushed")
+
+	noUpstream := t.TempDir()
+	gitInitRepo(t, noUpstream, map[string]string{"a.txt": "a\n"})
+	sha := gitRun2(t, noUpstream, "rev-parse", "HEAD")
+	_, ok, err = gitVCS{}.CommitPushed(t.Context(), noUpstream, sha)
+	require.NoError(t, err)
+	assert.False(t, ok, "no upstream configured means unknown, not a guess")
+}
+
+// TestCommitPushedRefusesToAnswerFromAnAbsentHistory pins the shallow-clone case, where
+// merge-base exits 128 rather than 1: the history that would decide is not in the object
+// store. Reading that as merge-base's "not an ancestor" answer is what makes the drift
+// notice offer --amend on a commit the remote already carries.
+func TestCommitPushedRefusesToAnswerFromAnAbsentHistory(t *testing.T) {
+	remote := t.TempDir()
+	gitRun(t, remote, "init", "-q", "--bare")
+
+	origin := t.TempDir()
+	gitInitRepo(t, origin, map[string]string{"a.txt": "a\n"})
+	firstSHA := gitRun2(t, origin, "rev-parse", "HEAD")
+	gitRun(t, origin, "commit", "-q", "--allow-empty", "-m", "second")
+	gitRun(t, origin, "remote", "add", "origin", remote)
+	gitRun(t, origin, "push", "-q", "-u", "origin", "HEAD")
+
+	shallow := t.TempDir()
+	gitRun(t, shallow, "clone", "-q", "--depth", "1", "file://"+remote, ".")
+
+	pushed, ok, err := gitVCS{}.CommitPushed(t.Context(), shallow, firstSHA)
+	require.Error(t, err, "a history that cannot decide must surface as an error, never as an answer")
+	assert.False(t, ok)
+	assert.False(t, pushed)
+}
+
+// gitRun2 is gitRun for the one case that needs the command's stdout back.
+func gitRun2(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = gitEnv()
+	out, err := cmd.Output()
+	require.NoError(t, err, "git %s", strings.Join(args, " "))
+	return strings.TrimSpace(string(out))
+}
+
+// TestDriftHookBodyNeverBlocksAndNeedsNoDaemon runs the installed hook scripts directly,
+// with a command that cannot possibly succeed and no daemon anywhere nearby, and pins
+// that both still exit 0. This is the whole safety contract types.DriftHookInstaller
+// promises: whatever the command does, the hook itself never fails a commit or a push.
+func TestDriftHookBodyNeverBlocksAndNeedsNoDaemon(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+
+	_, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "definitely-not-a-real-command-xyz")
+	require.NoError(t, err)
+
+	for _, name := range gitDriftHooks {
+		hookPath := filepath.Join(dir, ".git", "hooks", name)
+		cmd := exec.Command("sh", hookPath)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		assert.NoError(t, err, "%s must exit 0 even when its command fails: %s", name, out)
+	}
+}
+
 // TestParseChangesByCommit verifies the NUL-delimited `git log -M --name-status` parse:
 // a NUL line opens a commit (hash, author, date); following non-empty lines are one
 // status-prefixed entry each.

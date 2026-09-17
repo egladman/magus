@@ -16,7 +16,7 @@
 # naming your host's own instruction file. It judges nothing, reads no event, and
 # exits 0 whatever happens. Override:
 #
-#   GUARD_MAGUS_BIN   path to the binary, when it is not on PATH
+#   __MAGUS_BIN   path to the binary, when it is not on PATH
 #   REHYDRATE_RULES   your host's instruction file, relative to the workspace root
 #   REHYDRATE_FORMAT  set it to `json` for a host that reads stdout as a reply
 #
@@ -41,7 +41,7 @@
 # carries no verdict on no surface. It never denies, never advises, and cannot
 # change what your host does next.
 #
-# magus-guard-template: 13
+# magus-guard-template: 14
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to help.
@@ -56,15 +56,15 @@ guard_root=$PWD
 while [ -n "$guard_root" ] && [ ! -f "$guard_root/magusfile.buzz" ]; do
   guard_root=${guard_root%/*}
 done
-if [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ] && [ -x "$guard_root/magus" ]; then
-  GUARD_MAGUS_BIN=$guard_root/magus
+if [ -n "$guard_root" ] && [ -z "$__MAGUS_BIN" ] && [ -x "$guard_root/magus" ]; then
+  __MAGUS_BIN=$guard_root/magus
 fi
-[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 # An absent magus is SILENT, where an absent guard is loud. Nothing here is
 # unenforced (there is no rule), so announcing it would open every compacted
 # session with a report that an optional context block was not written.
-if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+if [ -z "$__MAGUS_BIN" ] || [ ! -x "$__MAGUS_BIN" ]; then
   exit 0
 fi
 
@@ -89,7 +89,7 @@ rehydrate_escape() {
 # Captured rather than streamed, because the json arm has to wrap it. stderr is
 # discarded: a magus too old for `session --brief` prints its usage there, and
 # that would otherwise be injected as this hook's answer.
-brief=$("$GUARD_MAGUS_BIN" session --brief 2>/dev/null)
+brief=$("$__MAGUS_BIN" session --brief 2>/dev/null)
 
 # Nothing from magus is nothing to say, in either channel. The rules line trails
 # the brief and points back at it, so on its own it is a sentence about a block

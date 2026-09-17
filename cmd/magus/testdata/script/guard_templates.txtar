@@ -7,12 +7,12 @@
 # verdict to have a stance about, and every session it guarded ran unguarded.
 #
 # These cases close that hole for the POSIX sh templates. They run the real files
-# (GUARD_TEMPLATES is an absolute path to docs/guides/integrations/agents, never a
+# (__MAGUS_TEMPLATES is an absolute path to docs/guides/integrations/agents, never a
 # copy) against the event shapes their hosts actually send, and assert the response
 # a host would receive. `magus` here is the CLI under test, resolved off PATH the
 # same way the templates resolve it in a session.
 #
-# Every case is labeled `# case: <surface>/<decision>`; TestTransportCorpusCoversTheContract
+# Every case is labeled `# case: <surface>/<decision>`; TestTransportCasesCoverTheContract
 # in conventions_test.go fails when the guard contract grows a cell no case covers.
 
 # jq comes from the machine, not from mise, and that is deliberate: jq is a runtime
@@ -24,27 +24,27 @@
 [!exec:jq] skip 'the guard templates pipe events through jq, which is not installed'
 [windows] skip 'POSIX sh templates; Windows hosts wire the same verdict differently'
 
-env GUARD_AGENT_NAME=testscript
+env __MAGUS_AGENT_NAME=testscript
 
 # The shared templates serve these two hosts with the same documented envelope
-# fields and reply dialect. Keep the hosts explicit: TestShellTransportCorpusCovers-
+# fields and reply dialect. Keep the hosts explicit: TestShellTransportCasesCover-
 # TheHostContract reads this marker and refuses a coverage claim that no executed
 # fixture reaches. A shared fixture is intentional here; copying the identical
 # JSON would create two opportunities for the recorded contract to drift.
 # hosts: claude-code,codex
 
-# --- magus-guard-command.sh: the shared Claude Code / Codex shape ------------
+# --- magus-hook-command.sh: the shared Claude Code / Codex shape ------------
 
 # case: command/deny
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"permissionDecision":"deny"'
 stdout '"permissionDecisionReason":"Verify in place'
 stdout 'whole-tree git stash'
 
 # case: command/advise
 stdin advise-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"additionalContext":"'
 ! stdout 'permissionDecision'
 
@@ -56,27 +56,27 @@ stdout '"additionalContext":"'
 # reference contradicts, so the flag has no user and this case is what keeps it
 # working for the host you wire. Suppressed, the advise must render NOTHING, not an
 # empty envelope, which is still a key the host would parse.
-env GUARD_NO_ADVISE=1
+env __MAGUS_NO_ADVISE=1
 stdin advise-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 ! stdout .
 
 # case: command/deny
 # Suppression must not touch the deny arm, which is the whole point of splitting it.
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"permissionDecision":"deny"'
-env GUARD_NO_ADVISE=
+env __MAGUS_NO_ADVISE=
 
 # case: command/pass
 # An allowed call must produce NOTHING. A host reads an empty response as allow, so
 # a template that emitted an envelope here would turn every benign command into a
 # decision the host has to interpret.
 stdin pass-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 ! stdout .
 
-# --- magus-guard-command.sh: MCP tool calls, via HOST_EVENT_RAW ---------------
+# --- magus-hook-command.sh: MCP tool calls, via HOST_EVENT_RAW ---------------
 
 # Both MCP cases run under a BOUND lease, in the one fixture workspace this archive
 # carries, because the rule that reads an MCP call is lease-scoped. The row is declared
@@ -89,7 +89,7 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
-exec magus job fork harness/mcp-worker --goal 'the transport test set, held so the rebind rule has a job to read'
+exec magus job fork harness/mcp-worker --criteria 'the transport test set, held so the rebind rule has a job to read'
 exec magus job exec harness/mcp-worker
 
 # case: mcp/pass
@@ -98,7 +98,7 @@ exec magus job exec harness/mcp-worker
 # rather than a tool call: it passes. Paired with the deny below, this is what pins the raw
 # arm, since a case that passes either way pins none of the transport it was added for.
 stdin $WORK/mcp-call.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 ! stdout .
 
 # case: mcp/deny
@@ -107,7 +107,7 @@ exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 # hookSpecificOutput reply this file renders for the command surface carries the deny here.
 env HOST_EVENT_RAW=1
 stdin $WORK/mcp-call.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"permissionDecision":"deny"'
 stdout 'leave your own job alone'
 env HOST_EVENT_RAW=
@@ -125,26 +125,26 @@ rm notes-ws/.magus/lease
 # cannot make deterministic: the gate-repeat count, the stale symbol index, the stale
 # binary. A case here would pass for a reason that is not this transport.
 
-# --- magus-guard-path.sh: the same hosts, their file-writing tool -------------
+# --- magus-hook-path.sh: the same hosts, their file-writing tool -------------
 
 # case: path/advise
 stdin advise-path.json
-exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
 stdout '"additionalContext":"'
 stdout 'magus memory put'
 
 # case: path/advise
 # The same suppression on the other surface, so a host that needs the flag gets it
 # on both rather than half-silenced.
-env GUARD_NO_ADVISE=1
+env __MAGUS_NO_ADVISE=1
 stdin advise-path.json
-exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
 ! stdout .
-env GUARD_NO_ADVISE=
+env __MAGUS_NO_ADVISE=
 
 # case: path/pass
 stdin pass-path.json
-exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
 ! stdout .
 
 # case: path/deny
@@ -158,13 +158,13 @@ exec sh $GUARD_TEMPLATES/magus-guard-path.sh
 # rule looked enforced and blocked nothing.
 cd notes-ws
 stdin $WORK/deny-path.json
-exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
 stdout '"permissionDecision":"deny"'
 stdout 'NOTES store'
 stdout 'magus memory put'
 cd $WORK
 
-# --- cursor-guard.sh: one file, five events, a different response dialect -----
+# --- cursor-hook.sh: one file, five events, a different response dialect -----
 #
 # Cursor splits a verdict across two events: a gating event carries a deny and no
 # message on an allow, so the advisory has to ride the post-tool event. These cases
@@ -174,7 +174,7 @@ cd $WORK
 
 # case: command/deny
 stdin cursor-shell-deny.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"deny"'
 stdout '"agent_message":"Verify in place'
 stdout 'whole-tree git stash'
@@ -182,25 +182,25 @@ stdout 'whole-tree git stash'
 # case: command/pass
 # Cursor is the one host that must answer on an allow rather than stay silent.
 stdin cursor-shell-pass.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 
 # case: command/advise
 # The gating event allows and says nothing, which is all it can do; the same call's
 # postToolUse is what carries the explanation.
 stdin cursor-shell-advise.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 ! stdout 'additional_context'
 
 stdin cursor-post-command.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"additional_context":"'
 
 # A postToolUse on a command the rules pass renders a reply Cursor can parse and
 # nothing else. An empty stdout would be a second thing for the host to interpret.
 stdin cursor-post-command-pass.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '\{\}'
 ! stdout 'additional_context'
 
@@ -209,25 +209,25 @@ stdout '\{\}'
 # verdict arrives before the file changes, so a deny is a block rather than a report.
 cd notes-ws
 stdin $WORK/cursor-pre-write-deny.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"deny"'
 stdout 'NOTES store'
 cd $WORK
 
 # case: path/pass
 stdin cursor-pre-write-pass.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 
 # case: path/advise
 # The declared-output rule advises rather than denies, so the gate lets it through
 # and postToolUse delivers the explanation to the model.
 stdin cursor-pre-write-advise.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 
 stdin cursor-post-write.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"additional_context":"'
 stdout 'magus memory put'
 
@@ -235,24 +235,24 @@ stdout 'magus memory put'
 # anything. Cursor's preToolUse fires for every tool, and the shell tool in
 # particular is beforeShellExecution's to judge, and twice would record two verdicts.
 stdin cursor-pre-other.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 
 # sessionEnd records where the work stopped and says nothing at all. A checkpoint
 # is not a verdict, so any reply here would be one the host has to interpret.
 stdin cursor-session-end.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 ! stdout .
 
 # subagentStart records the handed work and always allows. A lease prompt is prose,
 # so nothing judges it; the reshape is what makes Cursor's `task` field legible as
 # the spawn magus records.
 stdin cursor-subagent.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 ! stdout 'deny'
 
-# --- magus-guard-observe.sh: the verdict-free one ------------------------------
+# --- magus-hook-observe.sh: the verdict-free one ------------------------------
 #
 # It declares no guard coverage, so the contract gate above owes it no case and
 # would never have asked for one. That exemption is exactly how an untested shell
@@ -260,13 +260,13 @@ stdout '"permission":"allow"'
 # and was still broken, because nothing ran it. These cases run it.
 #
 # There is no `# case: <surface>/<decision>` label on purpose. An observation is
-# not a verdict on a surface, and labeling it would make TestTransportCorpusCovers-
+# not a verdict on a surface, and labeling it would make TestTransportCasesCover-
 # TheContract count a cell the guard contract does not have.
 
 # It records a read and says NOTHING to the host. A read is not a decision, so any
 # stdout here would be a response the host has to interpret on every file it opens.
 stdin observe-read.json
-exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
 ! stdout .
 ! stderr .
 
@@ -274,48 +274,48 @@ exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
 # with jq's parse error on stderr, on EVERY read - and some hosts read a non-zero
 # pre-tool hook as "block this call", which would stop the agent reading anything.
 stdin observe-garbage.json
-exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
 ! stdout .
 ! stderr .
 
 # A search event names no read path, so there is nothing to record and nothing to
 # say. Recording the event whole here would put the query text in the trail.
 stdin observe-search.json
-exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
 ! stdout .
 ! stderr .
 
 # --- fail-open: a missing magus must degrade the way each template promises ---
 
-env GUARD_MAGUS_BIN=$WORK/nonexistent-magus
+env __MAGUS_BIN=$WORK/nonexistent-magus
 
 # The observer stays silent and exits 0 when magus is absent. Unlike a guard, it
 # enforces nothing, so an announcement per read would report only that an optional
 # record was skipped.
 stdin observe-read.json
-exec sh $GUARD_TEMPLATES/magus-guard-observe.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
 ! stdout .
 ! stderr .
 
 # The command template announces itself. An unguarded session you know about beats
 # one you do not.
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout 'magus guard is NOT running'
 
 # The path template stays silent by default: for most hosts an empty response means
 # allow. That is the deliberate trade - this surface can now DENY, so failing open here
 # means an unavailable guard lets a notes write through, and announcing it on every file
-# edit was judged the worse noise. GUARD_FAILED_RESPONSE is the opt-in for a host that
+# edit was judged the worse noise. __MAGUS_FAILED_RESPONSE is the opt-in for a host that
 # would rather hear about it.
 stdin advise-path.json
-exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
 ! stdout .
 
 # Cursor allows explicitly, because Cursor fails open on a hook crash anyway and
 # pretending otherwise would give false assurance.
 stdin cursor-shell-deny.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 
 # --- found, but cannot judge: the notice carries its own evidence -------------
@@ -325,7 +325,7 @@ stdout '"permission":"allow"'
 # "cannot load this workspace", is not even a cause: the deny rules need no workspace.
 # So these assert the three facts that END the search, and that the guess is gone.
 
-env GUARD_MAGUS_BIN=$WORK/stale-magus
+env __MAGUS_BIN=$WORK/stale-magus
 chmod 0755 $WORK/stale-magus
 
 # One notice directory per case below, because the notice is now held to one firing per
@@ -333,7 +333,7 @@ chmod 0755 $WORK/stale-magus
 # make each case assert on whether the case above it had already spoken.
 env TMPDIR=$WORK/n-stale-command
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout 'magus guard is NOT running'
 stdout 'stale-magus'
 stdout 'v0.0.1-stale'
@@ -346,7 +346,7 @@ stdout 'unknown subcommand'
 # Cursor's template is self-contained, so it carries the same evidence or none at all.
 env TMPDIR=$WORK/n-stale-cursor
 stdin cursor-shell-deny.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 stderr 'stale-magus'
 stderr 'v0.0.1-stale'
@@ -355,12 +355,12 @@ stderr 'unknown subcommand'
 # A host that set its own response still gets exactly that: the evidence is the DEFAULT,
 # not something the template forces on a host that made another choice.
 env TMPDIR=$WORK/n-stale-host
-env GUARD_FAILED_RESPONSE=host-chose-this
+env __MAGUS_FAILED_RESPONSE=host-chose-this
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout 'host-chose-this'
 ! stdout 'stale-magus'
-env GUARD_FAILED_RESPONSE=
+env __MAGUS_FAILED_RESPONSE=
 
 # --- the notice is said once per session -------------------------------------
 #
@@ -371,36 +371,36 @@ env GUARD_FAILED_RESPONSE=
 # A second call in the SAME session says nothing at all, and the verdict still fails open.
 env TMPDIR=$WORK/n-once
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout 'magus guard is NOT running'
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 ! stdout .
 
 # A DIFFERENT session is owed the fact once, or the first session of the day would
 # silence every session after it.
 stdin deny-command-s2.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout 'magus guard is NOT running'
 
 # The families are independent: a spent could-not-judge marker must not silence the
 # missing-binary notice, which reports a different broken installation.
-env GUARD_MAGUS_BIN=$WORK/does-not-exist
+env __MAGUS_BIN=$WORK/does-not-exist
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout 'magus is not on PATH'
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 ! stdout .
-env GUARD_MAGUS_BIN=$WORK/stale-magus
+env __MAGUS_BIN=$WORK/stale-magus
 
 # Cursor holds its own notices the same way, on the stderr channel it uses.
 env TMPDIR=$WORK/n-once-cursor
 stdin cursor-shell-deny.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stderr 'magus guard is NOT running'
 stdin cursor-shell-deny.json
-exec sh $GUARD_TEMPLATES/cursor-guard.sh
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 ! stderr 'magus guard is NOT running'
 
 # --- a DENY never goes quiet, whatever any marker says -----------------------
@@ -410,31 +410,31 @@ exec sh $GUARD_TEMPLATES/cursor-guard.sh
 # past, so it carries its whole reason every time. Asserted after the advisory family
 # for this session has already been spent, which is the state a delegated worker
 # arrives in - a Claude Code subagent shares its orchestrator's session id.
-env GUARD_MAGUS_BIN=
+env __MAGUS_BIN=
 env TMPDIR=$WORK/n-deny
 
 stdin advise-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"additionalContext":"'
 
 stdin advise-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"additionalContext":"'
 
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
 stdin deny-command.json
-exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
 -- stale-magus --
 #!/bin/sh
 # Stands in for the binary a month behind the workspace: it answers `version` and knows
-# nothing about `session hook`, which is what silences the guard.
+# nothing about `magus shell`, which is what silences the guard.
 [ "$1" = version ] && { echo 'magus v0.0.1-stale (deadbeef) built 2026-08-02T01:05:00Z'; exit 0; }
 echo 'magus: WARN config: unknown or unexpected keys in config file' >&2
 echo 'magus: unknown subcommand "session"' >&2

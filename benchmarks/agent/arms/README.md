@@ -21,16 +21,16 @@ Both provisioning scripts are idempotent: they clear `.benchmark/`, `.claude/`,
 
 ## Switches, as implemented
 
-| Component      | rampant (ARM-0)                                     | full (ARM-1)                                                                                                                                       |
-| -------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Skills         | none installed; no `.claude/skills` at all          | `magus agent install .claude/skills --force --prune` with the given binary (30 files: a short body per skill plus its `-full` twin)                |
-| Guard hooks    | 3 PreToolUse entries kept, each `"command": "true"` | the shipped `magus-guard-{command,path,observe}.sh` copied to `.claude/hooks/`, wired by matcher, pinned to the given binary via `GUARD_MAGUS_BIN` |
-| MAGUS.md       | absent                                              | `magus describe graph -o markdown`, rendered with the given binary                                                                                 |
-| CLAUDE.md      | `repo-description.md` verbatim                      | the same file plus the marker-bounded block `magus agent starter` prints                                                                           |
-| CLI hints      | `MAGUS_HINTS_ENABLED=false`                         | on (unset)                                                                                                                                         |
-| MCP            | not registered                                      | not registered (see below)                                                                                                                         |
-| Activity trail | rotation off                                        | rotation off                                                                                                                                       |
-| magus binary   | first on PATH                                       | first on PATH                                                                                                                                      |
+| Component      | rampant (ARM-0)                                     | full (ARM-1)                                                                                                                                   |
+| -------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Skills         | none installed; no `.claude/skills` at all          | `magus agent install .claude/skills --force --prune` with the given binary (30 files: a short body per skill plus its `-full` twin)            |
+| Guard hooks    | 3 PreToolUse entries kept, each `"command": "true"` | the shipped `magus-guard-{command,path,observe}.sh` copied to `.claude/hooks/`, wired by matcher, pinned to the given binary via `__MAGUS_BIN` |
+| MAGUS.md       | absent                                              | `magus describe graph -o markdown`, rendered with the given binary                                                                             |
+| CLAUDE.md      | `repo-description.md` verbatim                      | the same file plus the marker-bounded block `magus agent starter` prints                                                                       |
+| CLI hints      | `MAGUS_HINTS_ENABLED=false`                         | on (unset)                                                                                                                                     |
+| MCP            | not registered                                      | not registered (see below)                                                                                                                     |
+| Activity trail | rotation off                                        | rotation off                                                                                                                                   |
+| magus binary   | first on PATH                                       | first on PATH                                                                                                                                  |
 
 The hook entries survive in the rampant arm on purpose. Removing them would
 change the shape of `settings.json` as well as its behavior, and pointing them
@@ -101,6 +101,6 @@ Two limits worth knowing:
 - Doctor decides "installed" from ONE anchor skill and grades the skills it
   finds, so a skill that goes missing after provisioning is invisible to it.
   Provisioning records the installed count and the probe re-counts.
-- `magus-guard-observe.sh` is not among the basenames doctor grades. The probe
+- `magus-hook-observe.sh` is not among the basenames doctor grades. The probe
   checks that it exists and carries a version marker; its currency rides on the
   other two, since all three are copied from one checkout in one step.

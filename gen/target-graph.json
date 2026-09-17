@@ -234,17 +234,20 @@
         {
           "name": "types-generate",
           "declared": "types_generate",
-          "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding.",
+          "doc": "Regenerates everything derived from the boundary registry: the enum helpers (Values/Valid/String for each boundaryEnum), the runtime boundary list, and the Go-to-Buzz encoders.",
           "reads_secrets": false,
           "writes_files": [
-            {
-              "glob": "types/buzzobject_gen.go"
-            },
             {
               "glob": "types/enum_gen.go"
             },
             {
               "glob": "spells/enum_gen.go"
+            },
+            {
+              "glob": "internal/interp/bindings/gen/boundary_list.go"
+            },
+            {
+              "glob": "internal/interp/bindings/gen/boundary_objects.go"
             }
           ]
         },
@@ -342,7 +345,7 @@
         {
           "name": "spells-generate",
           "declared": "spells_generate",
-          "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.",
+          "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen), the Buzz value-type mirrors (internal/spell/gen/types) and the per-module host declarations (internal/spell/gen/decls), all driven by the go:generate directives in internal/spell.",
           "dependencies": [
             "types-generate"
           ],
@@ -354,13 +357,13 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "internal/spellruntime/gen/*.bo"
+              "glob": "internal/spell/gen/*.bo"
             },
             {
-              "glob": "internal/spellruntime/gen/types/*.buzz"
+              "glob": "internal/spell/gen/types/*.buzz"
             },
             {
-              "glob": "internal/spellruntime/gen/decls/*.buzz"
+              "glob": "internal/spell/gen/decls/*.buzz"
             }
           ]
         },
@@ -569,7 +572,13 @@
           "name": "graph-generate",
           "declared": "graph_generate",
           "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.",
-          "reads_secrets": false,
+          "charms": [
+            "cd",
+            "stable",
+            "tagged",
+            "unstable"
+          ],
+          "reads_secrets": true,
           "writes_files": [
             {
               "glob": "gen/*.json"
@@ -1053,6 +1062,30 @@
             },
             {
               "project": ".",
+              "glob": "internal/hint/testdata/*"
+            },
+            {
+              "project": ".",
+              "glob": "internal/job/testdata/*"
+            },
+            {
+              "project": ".",
+              "glob": "internal/registry/testdata/*"
+            },
+            {
+              "project": ".",
+              "glob": "benchmarks/agent/internal/bench/testdata/*"
+            },
+            {
+              "project": ".",
+              "glob": "internal/registry/registry-keys.json"
+            },
+            {
+              "project": ".",
+              "glob": "internal/selfupdate/release-keys.json"
+            },
+            {
+              "project": ".",
               "glob": "console/src/styles/tokens.css"
             },
             {
@@ -1154,10 +1187,6 @@
             },
             {
               "project": ".",
-              "glob": "assets/coverage.svg"
-            },
-            {
-              "project": ".",
               "glob": "badge.buzz"
             },
             {
@@ -1169,7 +1198,9 @@
           "writes_files": [
             {
               "glob": "assets/coverage.svg"
-            },
+            }
+          ],
+          "modifies_existing_files": [
             {
               "glob": "coverage/*.json"
             }
@@ -1179,6 +1210,9 @@
           "name": "buzz-test",
           "declared": "buzz_test",
           "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.",
+          "charms": [
+            "rw"
+          ],
           "reads_files": [
             {
               "project": ".",
@@ -1209,7 +1243,15 @@
               "glob": "tools/*.buzz"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "assets/buzz-coverage.svg"
+            },
+            {
+              "glob": "coverage/buzz/*.lcov"
+            }
+          ]
         },
         {
           "name": "build",
@@ -1677,12 +1719,6 @@
           "reads_secrets": false
         },
         {
-          "name": "session-load",
-          "declared": "session_load",
-          "doc": "Loads this checkout's own Claude Code sessions, so the repository dogfoods the recipe it ships the same way it invokes the guard template it ships rather than keeping a private copy.",
-          "reads_secrets": false
-        },
-        {
           "name": "serve",
           "reads_secrets": false
         }
@@ -1976,7 +2012,7 @@
             },
             {
               "project": ".",
-              "glob": "internal/spellruntime/**/*.go"
+              "glob": "internal/spell/**/*.go"
             },
             {
               "project": ".",
@@ -2028,6 +2064,14 @@
             },
             {
               "project": ".",
+              "glob": "cmd/magus-ruledocs/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/guard/**/*.go"
+            },
+            {
+              "project": ".",
               "glob": "proto/magus/**/*.proto"
             },
             {
@@ -2063,6 +2107,9 @@
             },
             {
               "glob": "reference/skills/*.md"
+            },
+            {
+              "glob": "reference/rules/*.md"
             },
             {
               "glob": "reference/api/**/*.md"
@@ -2312,7 +2359,7 @@
         },
         {
           "name": "conventions",
-          "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.",
+          "doc": "conventions holds every doc page to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.",
           "reads_files": [
             {
               "project": "docs",
@@ -2578,6 +2625,25 @@
           "reads_secrets": false
         },
         {
+          "name": "cursor-schemas-generate",
+          "declared": "cursor_schemas_generate",
+          "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.",
+          "dependencies": [
+            "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "../../../../testdata/hosts/cursor/gen/*.schema.json"
+            }
+          ]
+        },
+        {
           "name": "lint",
           "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way).",
           "dependencies": [
@@ -2749,10 +2815,24 @@
           "reads_files": [
             {
               "project": "libs/commentdash",
-              "glob": "**/*.md"
+              "glob": "dprint.json"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.md"
+            },
+            {
+              "glob": "**/*.go"
+            },
+            {
+              "glob": "go.mod"
+            },
+            {
+              "glob": "go.sum"
+            }
+          ]
         },
         {
           "name": "lint",
@@ -3100,10 +3180,24 @@
           "reads_files": [
             {
               "project": "libs/gopherbuzz",
-              "glob": "**/*.md"
+              "glob": "dprint.json"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.md"
+            },
+            {
+              "glob": "**/*.go"
+            },
+            {
+              "glob": "go.mod"
+            },
+            {
+              "glob": "go.sum"
+            }
+          ]
         },
         {
           "name": "lint",
@@ -3301,10 +3395,24 @@
           "reads_files": [
             {
               "project": "libs/testlayout",
-              "glob": "**/*.md"
+              "glob": "dprint.json"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.md"
+            },
+            {
+              "glob": "**/*.go"
+            },
+            {
+              "glob": "go.mod"
+            },
+            {
+              "glob": "go.sum"
+            }
+          ]
         },
         {
           "name": "lint",

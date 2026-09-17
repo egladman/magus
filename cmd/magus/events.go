@@ -19,7 +19,7 @@ import (
 // integrations build against: an editor plugin, a status bar, a notifier.
 //
 // It is the OUTBOUND half of magus's machine surface and the dual of `magus
-// session hook`, which is inbound and returns a verdict. Nothing a subscriber
+// shell`, which is inbound and returns a verdict. Nothing a subscriber
 // does here can change what magus decides; docs/scope.md seals that seam, and
 // this command has no reply channel by construction.
 //

@@ -88,6 +88,14 @@ type Spell struct {
 	// Its absence is not cosmetic: with every spell reporting identically whether or
 	// not it probed, the inventory reads as though none of them do.
 	VersionProbe bool `json:"version_probe,omitempty" yaml:"version_probe,omitempty"`
+	// SymbolFormat is the code-index format the spell's declared symbol indexer emits
+	// (mgs_getSymbolIndexer), empty for a spell that declares none. Non-empty is what
+	// makes a project bound to this spell symbol-capable.
+	//
+	// The format rather than a bool, unlike VersionProbe above, because ingestion has
+	// to pick a reader for it: "symbol-capable" and "emits SCIP" were one implicit fact
+	// before this field, and only the second one tells a reader what the index IS.
+	SymbolFormat string `json:"symbol_format,omitempty" yaml:"symbol_format,omitempty"`
 	// Versions are the probes' OBSERVED results, populated only when the caller asks
 	// for them (they shell out, so they are never gathered by default).
 	//

@@ -15,8 +15,8 @@ brief.{{if .Full}} The output is a decision aid, not a chronological commit dump
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   If no VCS merge history is available, say so.{{if .Full}} Use `magus_insight lens=trend`
-   and `magus_insight lens=files` for activity, but do not call that a merge summary.{{end}}
+   If no VCS merge history is available, say so.{{if .Full}} Use `{{tool "insight"}} lens=trend`
+   and `{{tool "insight"}} lens=files` for activity, but do not call that a merge summary.{{end}}
 3. For each candidate change, list its files, then classify them before reading:
 
    ```sh
@@ -27,7 +27,7 @@ brief.{{if .Full}} The output is a decision aid, not a chronological commit dump
    Ignore generated outputs when identifying the change{{if .Full}}; trace them to their
    declared source and generator instead{{end}}.
 4. Map the source files to projects and graph entities. Prefer MCP
-   `magus_query`, `magus_explain`, and `magus_describe_file`; otherwise use:
+   `{{tool "query"}}`, `{{tool "explain"}}`, and `{{tool "describe_file"}}`; otherwise use:
 
    ```sh
    magus query "<project or feature terms>"
@@ -35,7 +35,7 @@ brief.{{if .Full}} The output is a decision aid, not a chronological commit dump
    magus graph diff --rev <base> -o markdown
    ```
 
-5. Use `magus_insight` with lens=affinity, ownership, or trend only to add context:
+5. Use `{{tool "insight"}}` with lens=affinity, ownership, or trend only to add context:
    hidden coupling, ownership risk, or unusually rising activity.{{if .Full}} They do not
    prove that a feature landed.{{end}}
 

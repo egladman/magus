@@ -197,6 +197,38 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 	return out, nil
 }
 
+// RangeDiff implements types.RangeDiffReporter via `hg diff -r "ancestor(base,head)" -r
+// head`. Mercurial's ancestor() revset function is the two revisions' merge base, so
+// diffing FROM there TO head is the symmetric difference the interface promises: what head
+// added since it diverged, never base's own changes since the fork. Verified against
+// Mercurial 7.2.3 with a repository forked into two single-file branches: `hg diff -r base
+// -r head` (the naive two-point form) reported base's own new file as a deletion, and the
+// ancestor-based form did not.
+//
+// --git for the reason DirtyDiff sets it. No -U flag, unlike DirtyDiff's -U1: this is a
+// reviewed range rather than a diff squeezed into a CI log, so Mercurial's default context
+// applies, matching git's and jj's RangeDiff.
+func (v hgVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
+	// checkRevsetRef, not checkRef: both refs are interpolated INTO the ancestor()
+	// expression below, where a comma or a paren rewrites it rather than naming a revision.
+	if err := checkRevsetRef(base); err != nil {
+		return "", err
+	}
+	if err := checkRevsetRef(head); err != nil {
+		return "", err
+	}
+	args := []string{"diff", "--git", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, hgFamilyGlobs(paths)...)
+	}
+	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
+	if err != nil {
+		return "", fmt.Errorf("hg diff ancestor(%s,%s)-%s: %w", base, head, head, err)
+	}
+	return out, nil
+}
+
 // Describe returns the working revision's latest reachable tag (Mercurial's
 // {latesttag}), with a -dirty suffix for a modified tree. A repo with no tags
 // reports "" (Mercurial's "null" sentinel is normalized away), matching the
@@ -375,7 +407,19 @@ const (
 	hgHookBegin     = "# BEGIN magus-refresh"
 	hgHookBeginLine = hgHookBegin + " - do not edit this section manually"
 	hgHookEnd       = "# END magus-refresh"
+
+	hgDriftHookBegin     = "# BEGIN magus-drift-notice"
+	hgDriftHookBeginLine = hgDriftHookBegin + " - do not edit this section manually"
+	hgDriftHookEnd       = "# END magus-drift-notice"
 )
+
+// hgDriftHooks: "commit" fires right after a local commit is created; "outgoing" fires
+// in the source repo once a push (or pull/bundle) has determined which changesets are
+// leaving it, the closest hg has to git's pre-push. Verified against hg 6.x: both fire
+// with a plain shell hook value and neither can block (a non-zero "commit" hook cannot
+// undo the commit; "outgoing" firing after the changeset set is already decided is why
+// it, not "preoutgoing", is the one used here).
+var hgDriftHooks = []string{"commit", "outgoing"}
 
 // InstallMergeDriver writes [merge-patterns] and [merge-tools] to .hg/hgrc.
 func (v hgVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []string) error {
@@ -441,6 +485,33 @@ func (v hgVCS) InstallRefreshHook(_ context.Context, root, command string) ([]st
 		return nil, fmt.Errorf("vcs: write %s: %w", hgrcPath, err)
 	}
 	return []string{"update"}, nil
+}
+
+// InstallDriftHook implements types.DriftHookInstaller: it registers hg's `commit` and
+// `outgoing` hooks (see hgDriftHooks) to run command. It shares replaceManagedSection
+// with the merge-driver and refresh-hook installs, under its own markers so all three
+// managed sections coexist in .hg/hgrc. Returns the labels of the hooks it installed.
+func (v hgVCS) InstallDriftHook(_ context.Context, root, command string) ([]string, error) {
+	hgrcPath := filepath.Join(root, ".hg", "hgrc")
+	var section strings.Builder
+	section.WriteString(hgDriftHookBeginLine + "\n")
+	section.WriteString("[hooks]\n")
+	for _, name := range hgDriftHooks {
+		fmt.Fprintf(&section, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
+	}
+	section.WriteString(hgDriftHookEnd + "\n")
+	existing, err := os.ReadFile(hgrcPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("vcs: read %s: %w", hgrcPath, err)
+	}
+	updated := replaceManagedSection(string(existing), section.String(), hgDriftHookBegin, hgDriftHookEnd)
+	if updated == string(existing) {
+		return nil, nil
+	}
+	if err := os.WriteFile(hgrcPath, []byte(updated), 0o644); err != nil {
+		return nil, fmt.Errorf("vcs: write %s: %w", hgrcPath, err)
+	}
+	return slices.Clone(hgDriftHooks), nil
 }
 
 // ConflictResolver (below) is implemented for hg so `magus vcs resolve` is not a
@@ -658,14 +729,32 @@ func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (m
 // against Mercurial 7.x rather than ported from sapling.go on the assumption that a fork
 // keeps its parent's behavior: Sapling and Mercurial diverge in both directions, and the
 // notes on the individual methods say where.
+//
+// BranchChangeReporter is the one optional capability hg does not implement. It is not a
+// technical wall the way jj's gaps are (see vcs/jj.go): a bookmark could stand in for git's
+// "other branch", and ChangedFiles already shows how to diff one hg revision against
+// another. It is simply unbuilt, and the caller (Magus.BranchChanges) reports a named
+// types.VCSCapabilityMissing diagnostic rather than silence for exactly this reason, so an
+// hg repository is told the report is missing rather than shown an empty one.
+//
+// Every assertion below is compile-time on purpose: each interface is reached by type
+// assertion at its call site, so dropping a method would not fail the build, it would
+// silently demote hg to whatever the caller's fallback answers.
 var (
-	_ types.RemoteReporter      = hgVCS{}
-	_ types.DefaultRefReporter  = hgVCS{}
-	_ types.TrackedFileReporter = hgVCS{}
-	_ types.IgnoredFileReporter = hgVCS{}
-	_ types.ChurnReporter       = hgVCS{}
-	_ types.RevisionExporter    = hgVCS{}
-	_ types.MergeStarter        = hgVCS{}
+	_ types.MergeDriverInstaller = hgVCS{}
+	_ types.RefreshHookInstaller = hgVCS{}
+	_ types.DriftHookInstaller   = hgVCS{}
+	_ types.RemoteReporter       = hgVCS{}
+	_ types.DefaultRefReporter   = hgVCS{}
+	_ types.PushStatusReporter   = hgVCS{}
+	_ types.RevTimeReporter      = hgVCS{}
+	_ types.TrackedFileReporter  = hgVCS{}
+	_ types.IgnoredFileReporter  = hgVCS{}
+	_ types.ChurnReporter        = hgVCS{}
+	_ types.RangeDiffReporter    = hgVCS{}
+	_ types.RevisionExporter     = hgVCS{}
+	_ types.RevisionFileReader   = hgVCS{}
+	_ types.MergeStarter         = hgVCS{}
 )
 
 // RemoteURL implements types.RemoteReporter. `hg paths default` prints the default
@@ -690,6 +779,28 @@ func (v hgVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 		return "", types.ErrVCSUnsupported
 	}
 	return "default", nil
+}
+
+// RevTime implements types.RevTimeReporter with the same {date|rfc3339date} filter
+// hgCommitTemplate already carries for FindCommit's Date field, parsed by the same
+// parseWhen commit.go uses; verified live against Mercurial 7.2.3 rather than assumed from
+// that shared template.
+//
+// The lookup error is discarded, mirroring git's RevTime: `hg log -r <rev>` for a revision
+// this clone lacks aborts non-zero with nothing on stdout (Mercurial writes "abort: unknown
+// revision" to stderr), which is the ordinary "you have never fetched this" answer a base
+// branch gives in a fresh clone, not a probe failure. The one error left is a date hg
+// printed that did not parse.
+func (v hgVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	out, _ := vcsOutput(ctx, dir, "hg", "log", "-r", rev, "--template", "{date|rfc3339date}")
+	if out == "" {
+		return time.Time{}, false, nil
+	}
+	t := parseWhen(out)
+	if t.IsZero() {
+		return time.Time{}, false, fmt.Errorf("hg log -r %s: parse %q: unrecognized date format", rev, out)
+	}
+	return t, true, nil
 }
 
 // TrackedFiles implements types.TrackedFileReporter. `hg files -- <paths>` prints the
@@ -764,56 +875,9 @@ const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n` + hgC
 // arrives as a delete plus an add, costing lineage but staying correct.
 const hgChurnFileTail = `{file_mods % "M\t{file}\n"}{file_adds % "A\t{file}\n"}{file_dels % "D\t{file}\n"}`
 
-// ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
-// directory's ancestors so a repository with several heads cannot attribute churn from a
-// line of development this checkout is not on, and `not merge()` keeps a merge's sprawling
-// file list from skewing attribution, matching git's --no-merges.
-//
-// reverse() is load-bearing: a bare `hg log` is newest-first, but `hg log -r <revset>`
-// follows the REVSET's order, and ancestors() is ascending, so without it `-l N` returns
-// the N OLDEST commits while the interface promises the newest.
-//
-// The `.` pathspec limits which COMMITS appear but NOT the files each lists: the template's
-// file keywords cover the changeset whole, so a commit touching both root.txt and sub/a.txt
-// reports both even when the log runs in sub/, where git's --name-status reports only
-// sub/a.txt.
-// Measured, and it matters because churn is attributed per project: the unfiltered list
-// credits a nested workspace with edits made outside it. Hence the subtree filter here.
+// ChangesByCommit implements types.ChurnReporter; see hgFamilyChangesByCommit.
 func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
-	if commits <= 0 {
-		commits = 1
-	}
-	scope := "ancestors(.)"
-	if since != "" {
-		if err := checkRef(since); err != nil {
-			return nil, err
-		}
-		scope = fmt.Sprintf("ancestors(.) and date('>%s')", since)
-	}
-	revset := fmt.Sprintf("reverse(%s) and not merge()", scope)
-	out, err := vcsOutput(ctx, dir, "hg", "log", "-r", revset,
-		"-l", fmt.Sprintf("%d", commits), "--template", hgChurnTemplate, "--", ".")
-	if err != nil {
-		return nil, fmt.Errorf("hg log: %w", err)
-	}
-	changes := parseChangesByCommit(out)
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
-	if err != nil {
-		return nil, err
-	}
-	if prefix == "" {
-		return changes, nil // dir IS the repository root; every file is in the subtree
-	}
-	for i := range changes {
-		kept := changes[i].Files[:0]
-		for _, f := range changes[i].Files {
-			if strings.HasPrefix(f.Path, prefix) {
-				kept = append(kept, f)
-			}
-		}
-		changes[i].Files = kept
-	}
-	return changes, nil
+	return hgFamilyChangesByCommit(ctx, v, "hg", hgChurnTemplate, dir, commits, since)
 }
 
 // hgArchivalMeta is the provenance file `hg archive` injects into every export. It belongs
@@ -821,12 +885,6 @@ func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 // contains, which a graph diff reads as a change.
 const hgArchivalMeta = ".hg_archival.txt"
 
-// ExportRevision implements types.RevisionExporter via `hg archive -t files`.
-//
-// Unlike Sapling's, hg's archive needs no explicit include set: `sl archive` refuses a
-// whole-tree export without one, and hg does not. Both inject a provenance file, and both
-// keep repository-relative paths where git's `archive <rev> -- .` re-roots them, so dir's
-// prefix is stripped here to give the caller the subtree it asked about.
 // ReadFileAt implements types.RevisionFileReader via `hg cat -r <rev>`. "" is `.`, hg's
 // spelling of the working directory's parent: the committed revision, as HEAD is for git.
 func (v hgVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
@@ -841,37 +899,12 @@ func (v hgVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, 
 	return revFileOutput(cmd, fmt.Sprintf("hg cat -r %s %s", rev, path))
 }
 
+// ExportRevision implements types.RevisionExporter via `hg archive -t files`.
+//
+// Unlike Sapling's, hg's archive needs no explicit include set: `sl archive` refuses a
+// whole-tree export without one, and hg does not.
 func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
-	if rev == "" {
-		rev = "."
-	}
-	if err := checkRef(rev); err != nil {
-		return err
-	}
-	staging, err := os.MkdirTemp("", "magus-hg-export-")
-	if err != nil {
-		return fmt.Errorf("hg archive: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(staging) }()
-
-	cmd := vcsExec(ctx, "hg", "archive", "-r", rev, "-t", "files",
-		"-X", hgArchivalMeta, staging)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("hg archive %q: %w\n%s", rev, err, strings.TrimSpace(string(out)))
-	}
-
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
-	if err != nil {
-		return err
-	}
-	// A revision predating dir yields no subtree. That is an empty tree, not a failure;
-	// git reports the same case as "everything was added".
-	staged := filepath.Join(staging, filepath.FromSlash(prefix))
-	if _, err := os.Stat(staged); os.IsNotExist(err) {
-		return os.MkdirAll(dstDir, 0o755)
-	}
-	return copyTree(staged, dstDir)
+	return hgFamilyExportRevision(ctx, v, "hg", dir, rev, dstDir, "-X", hgArchivalMeta)
 }
 
 // StartMerge begins a merge of ref without committing it. See types.MergeStarter.
@@ -1053,4 +1086,11 @@ func hgShelfListing(out string) map[string]string {
 		}
 	}
 	return shelves
+}
+
+// CommitPushed implements types.PushStatusReporter via Mercurial's phases; see
+// hgFamilyCommitPushed for why a phase answers this question exactly where git's
+// reachability walk only approximates it.
+func (v hgVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
+	return hgFamilyCommitPushed(ctx, "hg", dir, id)
 }

@@ -33,7 +33,7 @@ fun projectPageDesc(name: str) > str {
     return "Target catalog and run-order graph for the " + name + " project, generated from its magusfile.";
 }
 
-// registerDevPage adds a synthesized /development/ page to docPages, the corpus
+// registerDevPage adds a synthesized /development/ page to docPages, the collection
 // every navigation helper walks. addRecord alone only feeds the search index, so
 // without this these pages were reachable by search and invisible to Related,
 // the section list, and the subtree.
@@ -57,8 +57,8 @@ fun registerDevPage(title: str, desc: str, url: str, srcRel: str, site: Site) > 
 // Registering at render time (which is what renderDevelopmentPage used to do) cannot work
 // here, because the section's two navigation directions point at each other: the landing's
 // "In this section" list is built from its children, and every child's list is built from
-// the landing that governs it. Whichever rendered second was the only one with a complete
-// corpus to read. Splitting registration out satisfies both.
+// the landing that governs it. Whichever rendered second was the only one with the complete
+// page set to read. Splitting registration out satisfies both.
 //
 // The landing is README.md - the repository's front door renders at /development/, not at
 // gen's root (see renderRoot). It is the section overview, and it is registered whether or

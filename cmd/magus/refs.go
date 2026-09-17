@@ -22,10 +22,17 @@ import (
 // rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
 func refsCmd(ctx context.Context, root string, args []string) error {
 	var rf *gen.RefsFlags
+	// --no-generated stays hand-bound, like watch's --ignore: it is declared in
+	// internal/cli/registry.go (Kind: FlagCustom) for the man page, but bound here
+	// directly rather than through gen.RefsFlags.
+	var noGenerated bool
 	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {
 		rf = gen.BindRefs(fs)
+		fs.BoolVar(&noGenerated, "no-generated", false,
+			"Exclude declared-output files from the fallback text search entirely, instead of searching them and marking the ones that match")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
+			fmt.Fprintln(os.Stderr, "       magus refs --text <pattern> [<path>...] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeRefsDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -39,8 +46,25 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) == 0 {
-		fmt.Fprintln(os.Stderr, "magus refs: requires a symbol ID or name")
+		if rf.Text {
+			fmt.Fprintln(os.Stderr, "magus refs --text: requires a search pattern")
+		} else {
+			fmt.Fprintln(os.Stderr, "magus refs: requires a symbol ID or name")
+		}
 		return errSilent{exitCode: 2}
+	}
+
+	if rf.Text {
+		// Computed here, once, and passed down: the same shape the symbol-miss
+		// branch below uses classify in. inspectWorkspace memoizes globally per
+		// process (see helpers.go), so it belongs at the call site that runs once
+		// per invocation, not inside a function a test may call several times
+		// with different roots.
+		var classify classifyFunc
+		if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
+			classify = ws.ClassifyFiles
+		}
+		return refsTextCmd(ctx, root, pos[0], pos[1:], noGenerated, rf.Limit, classify)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -64,13 +88,49 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		// it answers about the subset, not the workspace. The declared-index probe is the
 		// authority.
 		//
-		// indexOnly: this is the miss where a stale index IS the explanation. A name refs
-		// cannot resolve is exactly what a build older than the tree would hide, and until
-		// now this path reported it byte-identically to a typo for something that never
-		// existed.
-		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], true, true))
+		// This is the miss where a stale index IS the explanation. A name refs cannot
+		// resolve is exactly what a build older than the tree would hide, and this path once
+		// reported it byte-identically to a typo for something that never existed.
+		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], true))
+		// `absent` is true of SYMBOLS and says nothing about the tree. A string literal,
+		// a comment body or a config value is in no symbol index, so a bare absent here
+		// reads as "not in this repository" for exactly the names that are. Counting the
+		// text occurrences corrects that without minting a fourth verdict: the verdict
+		// still classifies the symbol lookup, and this rides beside it.
+		// The resolved root, not the --root override: that argument is empty unless the
+		// caller passed one, and walking "" searches nothing while reporting nothing.
+		var searched, skipped, generated int
+		var classifiedFiles bool
+		if searchRoot := resolveRootOrEmpty(root); searchRoot != "" {
+			// The same workspace loadKnowledgeGraphForRefs already opened above (memoized
+			// by inspectWorkspace), so this costs nothing extra when it is available, and
+			// a failure here just means classification degrades to "unavailable" below:
+			// the search itself must never fail because classification did.
+			var classify classifyFunc
+			if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
+				classify = ws.ClassifyFiles
+			}
+			hits, files, n, s, g, cls, textErr := textPresence(ctx, searchRoot, pos[0], noGenerated, classify)
+			searched, skipped, generated, classifiedFiles = n, s, g, cls
+			if textErr == nil && hits > 0 {
+				ans.Text = &types.KnowledgeTextPresence{Hits: hits, Files: files}
+			}
+		}
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, "")
+		if ans.Text != nil {
+			fmt.Fprintf(os.Stderr, "  not a symbol, but present as TEXT: %d occurrence(s) in %d file(s) of %d searched",
+				ans.Text.Hits, ans.Text.Files, searched)
+			// One parenthetical, not a second line: a count that does not say what it
+			// declined to read, or declined to exclude, is one a reader cannot tell from
+			// a small or an unfiltered answer.
+			notes := textPresenceNotes(skipped, generated, ans.Text.Files, classifiedFiles, noGenerated)
+			if len(notes) > 0 {
+				fmt.Fprintf(os.Stderr, " (%s)", strings.Join(notes, "; "))
+			}
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
+		}
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(os.Stderr, "  the daemon's auto-indexer also keeps indexes current while `%s` runs\n", hint.ServerStart)
 		}
@@ -78,12 +138,10 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		return exitForVerdict(ans.Verdict)
 	}
 	// A resolved symbol still carries the coverage verdict: an uncovered project could
-	// hold references this list does not show, whether or not it showed any.
-	//
-	// NOT indexOnly, unlike the unresolved branch above: the symbol resolved, so the index
-	// answered, and its age is a caveat on the rows rather than the reason there are none.
-	// It rides the answer as StaleIndexes either way, which is what -o json was missing.
-	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, symbolCoverage(ctx, root, pos[0], true, false))
+	// hold references this list does not show, whether or not it showed any. A stale index
+	// caveats a list that has rows and explains one that does not, so the age rides the
+	// answer as StaleIndexes either way and only downgrades the empty case.
+	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, symbolCoverage(ctx, root, pos[0], true))
 
 	if rf.Occurrences {
 		return emitOccurrences(ctx, root, opts, out)
@@ -91,12 +149,21 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
-	case outputName:
-		for _, r := range out.Refs {
-			fmt.Println(r.File)
+		if err := emitFormatted(opts, out); err != nil {
+			return err
 		}
-		return nil
+		// stderr, because the record on stdout must stay parseable; the exit status is
+		// what a script reads, and it is the only channel a structured caller has.
+		return reportIndexStaleness(os.Stderr, out.Answer)
+	case outputName:
+		names := make([]string, 0, len(out.Refs))
+		for _, r := range out.Refs {
+			names = append(names, r.File)
+		}
+		if err := emitNames(names); err != nil {
+			return err
+		}
+		return reportIndexStaleness(os.Stderr, out.Answer)
 	}
 
 	fmt.Printf("symbol: %s", out.Symbol)
@@ -113,7 +180,9 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
 		printVerdict(os.Stdout, out.Answer, "")
-		printIndexStaleness(ctx, os.Stdout, root)
+		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
+			return err
+		}
 		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
 		// an unresolved name does: exit 1 when magus could not verify it. Absent stays 0
 		// here, unlike the unresolved branch above: the symbol resolved and its empty
@@ -129,7 +198,86 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
-	printIndexStaleness(ctx, os.Stdout, root)
+	return reportIndexStaleness(os.Stdout, out.Answer)
+}
+
+// refsTextCmd implements `magus refs <pattern> --text`: a raw substring search that
+// PRINTS matching lines, the shape a guard pipe deny routes a recursive grep to (see
+// internal/guard's trimmableMagus). It runs textScan directly (no symbol index, no
+// knowledge graph) so it answers on a cold worktree with no index built, which is the
+// one thing a grep replacement may never fail to do: textindex.Scan is index-free by
+// design for exactly this reason.
+//
+// Its exit code is grep's: 0 matched, 1 no match, 2 error. Deliberately NOT
+// exitForVerdict (see verdict.go): that contract states what magus VERIFIED about a
+// SYMBOL (absent=2, unknown=1), and a raw text search asks no such question, so
+// reusing it would make "exit 1" mean opposite things depending on a flag on the same
+// command. refs' own -o name format already carves out its own exit meaning per mode
+// for the same reason (see emitOccurrences); this is that same move made explicit
+// for --text rather than left to collide silently with the verdict path.
+func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, noGenerated bool, limit int, classify classifyFunc) error {
+	searchRoot := resolveRootOrEmpty(root)
+	if searchRoot == "" {
+		fmt.Fprintln(os.Stderr, "magus refs --text: cannot resolve a workspace root to search")
+		return errSilent{exitCode: 2}
+	}
+	scopes, err := resolveSearchScopes(searchRoot, scopeArgs)
+	if err != nil {
+		// Exit 2, never 1: a scope magus could not resolve is a search that never ran,
+		// and reporting it as "no match" would answer a question nobody asked.
+		fmt.Fprintf(os.Stderr, "magus refs --text: %v\n", err)
+		return errSilent{exitCode: 2}
+	}
+	// A root that cannot be listed at all (missing, not a directory, permission
+	// denied) is a search that never ran, and must not read as "ran and found
+	// nothing" (exit 1). searchableFiles skips an individual entry that vanishes
+	// mid-walk (a live checkout's ordinary churn); this is the coarser check that
+	// the walk never had anything to do in the first place.
+	if _, err := os.ReadDir(searchRoot); err != nil {
+		fmt.Fprintf(os.Stderr, "magus refs --text: cannot search %s: %v\n", searchRoot, err)
+		return errSilent{exitCode: 2}
+	}
+
+	matches, _, skipped, generated, classified, err := textScan(ctx, searchRoot, pattern, scopes, noGenerated, classify)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "magus refs --text: %v\n", err)
+		return errSilent{exitCode: 2}
+	}
+
+	// --limit is what `| head` was reaching for, without the two things head costs: the
+	// count of what it cut, and the exit code, which a pipeline takes from the last stage
+	// so a match becomes head's 0 and a no-match becomes head's 0 as well.
+	//
+	// The elision is COUNTED and said out loud on stderr, for the same reason the filtering
+	// notes below are: a silent under-report is the one failure that would make this worse
+	// than the grep it replaces. Truncation happens at PRINT time, never in the scan, so
+	// the match total and the per-file accounting describe the whole search.
+	matchedFiles := map[string]bool{}
+	shown := matches
+	if limit > 0 && len(shown) > limit {
+		shown = shown[:limit]
+	}
+	for _, m := range shown {
+		fmt.Printf("%s:%d:%s\n", m.Path, m.Line, m.Text)
+	}
+	for _, m := range matches {
+		matchedFiles[m.Path] = true
+	}
+	if len(shown) < len(matches) {
+		fmt.Fprintf(os.Stderr, "magus refs --text: showing %d of %d matches (--limit); raise --limit or pass 0 for all\n",
+			len(shown), len(matches))
+	}
+	// Same accounting textPresence prints beside a symbol miss, on stderr so stdout
+	// stays exactly the match stream a pipe or xargs expects: any filtering must be
+	// counted and said out loud, because a silent under-report is the one failure
+	// that makes this worse than the grep it replaces.
+	if notes := textPresenceNotes(skipped, generated, len(matchedFiles), classified, noGenerated); len(notes) > 0 {
+		fmt.Fprintf(os.Stderr, "magus refs --text: %s\n", strings.Join(notes, "; "))
+	}
+
+	if len(matches) == 0 {
+		return errSilent{exitCode: 1}
+	}
 	return nil
 }
 
@@ -188,26 +336,41 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		if err := emitFormatted(opts, out); err != nil {
+			return err
+		}
+		// stale_files and verified_count are in the record, and a reader who does not
+		// compare them against occurrence_count gets a list of ranges that no longer
+		// point at the symbol. The notice rides stderr, where it cannot corrupt the
+		// record, and the exit status matches the two arms below.
+		if out.VerifiedCount < out.OccurrenceCount {
+			fmt.Fprint(os.Stderr, unverifiedNotice(out))
+			return errSilent{exitCode: 1}
+		}
+		return nil
 	case outputName:
 		// file:line:col, the form every editor and `xargs` already understands. Only
 		// verified sites: -o name has nowhere to put a status, and emitting an unverified
 		// range in a list that looks actionable is exactly the confusion the status exists
 		// to prevent.
+		var names []string
 		for _, f := range out.Files {
 			for _, occ := range f.Occurrences {
 				if occ.Status == types.SymbolOccurrenceVerified {
-					fmt.Printf("%s:%d:%d\n", f.File, occ.Line, occ.Column)
+					names = append(names, fmt.Sprintf("%s:%d:%d", f.File, occ.Line, occ.Column))
 				}
 			}
+		}
+		if err := emitNames(names); err != nil {
+			return err
 		}
 		// Filtering to verified sites is what makes this format safe to pipe, and it is also
 		// what makes a wholly stale index print NOTHING: byte-identical to a symbol with no
 		// occurrences at all. This is the format a script reads, so the difference has to
 		// live in the exit status, which is the only channel it has left.
 		if out.VerifiedCount < out.OccurrenceCount {
-			fmt.Fprintf(os.Stderr, "magus refs: %d of %d site(s) did not verify and were not listed; re-run this project's scip target\n",
-				out.OccurrenceCount-out.VerifiedCount, out.OccurrenceCount)
+			fmt.Fprintf(os.Stderr, "magus refs: %d of %d site(s) did not verify and were not listed; refresh with `%s`\n",
+				out.OccurrenceCount-out.VerifiedCount, out.OccurrenceCount, hint.GraphBuild)
 			return errSilent{exitCode: 1}
 		}
 		// Deliberately NOT exitForVerdict here. The coverage verdict is `unknown` whenever any
@@ -256,9 +419,7 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 		// The count alone does not say what to do about it, and the wrong response (edit
 		// the good ones, skip the rest) produces a half-renamed tree that still compiles
 		// in some languages.
-		fmt.Printf("\n%d site(s) in %d file(s) did not verify: the index no longer matches the tree.\n",
-			out.OccurrenceCount-out.VerifiedCount, out.StaleFiles)
-		fmt.Println("Re-run this project's scip target and try again; sites may also be MISSING from a stale index.")
+		fmt.Print(unverifiedNotice(out))
 		printVerdict(os.Stdout, out.Answer, "")
 		return errSilent{exitCode: 1}
 	}

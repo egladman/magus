@@ -18,7 +18,6 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
@@ -293,13 +292,13 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 		root = resolved
 	}
 	ev := trail.Event{
-		Ts:        time.Now().Add(-dur).UnixMilli(),
-		Kind:      trail.KindJob,
-		Actor:     "daemon",
-		Workspace: root,
-		Action:    jobs.ActionString(args),
-		Outcome:   trail.OutcomeOK,
-		DurMs:     dur.Milliseconds(),
+		Ts:         time.Now().Add(-dur).UnixMilli(),
+		Kind:       trail.KindJob,
+		Actor:      "daemon",
+		Workspace:  root,
+		Action:     job.ActionString(args),
+		Outcome:    trail.OutcomeOK,
+		DurationMs: dur.Milliseconds(),
 	}
 	if err != nil {
 		ev.Outcome = trail.OutcomeError
@@ -324,14 +323,14 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 	if daemonJobStore == nil {
 		return
 	}
-	i := slices.IndexFunc(jobs.All(), func(j jobs.Job) bool { return slices.Equal(j.Argv, args) })
+	i := slices.IndexFunc(job.All(), func(j job.CatalogEntry) bool { return slices.Equal(j.Argv, args) })
 	if i < 0 {
 		return // an adopted run rather than one of the daemon's own, so there is no row
 	}
-	catalog := jobs.All()[i]
+	catalog := job.All()[i]
 	if _, err := daemonJobStore.Update(ctx, catalog.Name, func(row *types.Job) {
 		row.Holder = types.HolderDaemon
-		row.Goal = catalog.Desc
+		row.Criteria = catalog.Desc
 		row.State = types.StatePass
 		if jobErr != nil {
 			row.State = types.StateFail

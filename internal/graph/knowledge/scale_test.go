@@ -16,7 +16,7 @@ import (
 // buys CI flakes.
 
 // largeGraph builds the 16k-target synthetic fixture once per test. It is the
-// same corpus the benchmarks use, so a scale regression trips here too.
+// same fixture the benchmarks use, so a scale regression trips here too.
 func largeGraph(tb testing.TB) *Graph {
 	tb.Helper()
 	if testing.Short() {

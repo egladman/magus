@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,16 +23,13 @@ import (
 // registry that emits the mirrors, so a new boundary type is covered when it is
 // declared rather than when someone remembers.
 func TestEveryBoundaryTypeEncodes(t *testing.T) {
-	for _, zero := range RuntimeBoundaryTypes {
-		rt := reflect.TypeOf(zero)
+	for _, bt := range RuntimeBoundaryTypes {
+		rt := reflect.TypeOf(bt.Zero)
 		t.Run(rt.Name(), func(t *testing.T) {
 			v := reflect.New(rt).Elem()
 			populate(v)
 
-			obj, ok := v.Interface().(interface{ BuzzObject() types.BuzzObject })
-			require.True(t, ok, "%s is registered as a runtime object but has no BuzzObject", rt.Name())
-
-			encoded := AnyVal(obj.BuzzObject())
+			encoded := bt.Encode(v.Interface())
 			require.True(t, encoded.IsMap(), "%s encoded as %s, not a map", rt.Name(), encoded.Kind())
 
 			for _, key := range encoded.MapKeys() {

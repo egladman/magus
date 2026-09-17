@@ -21,11 +21,18 @@ fun git(argv: [str], tolerate: bool) > proc\ExecResult !> any {
     return proc\exec("git", args: argv, dir: ".", opts: {"allow_failure": tolerate});
 }
 
+// labelled reports whether the PR carries the consent label. See the twin in
+// fix-generated-drift.buzz for why this projects the names instead of searching the body:
+// the search form could not match gh's compact JSON, so neither fixer has ever run.
 fun labelled(repo: str, pr: str, want: str) > bool !> any {
-    final listed = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+    final listed = proc\exec("gh",
+        args: ["api", "repos/" + repo + "/issues/" + pr + "/labels", "--jq", ".[].name"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!listed.ok) { return false; }
-    return listed.stdout.indexOf("\"name\": \"" + want + "\"") != null;
+    foreach (name in listed.stdout.split("\n")) {
+        if (name.trim() == want) { return true; }
+    }
+    return false;
 }
 
 // Not `ls-files -u`: it reports one line per stage, naming a path up to three times.

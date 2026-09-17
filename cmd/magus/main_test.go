@@ -397,12 +397,10 @@ func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 	var buf bytes.Buffer
 	agentUsage(&buf)
-	want := "Usage: magus agent <install|hook|harness|improve|starter|adoption> [flags] Subcommands: " +
+	want := "Usage: magus agent <install|harness|starter|adoption> [flags] Subcommands: " +
 		"install render the embedded skills and write or stream them into named destinations " +
 		"(<skills-dir>, ...) " +
-		"hook translate a descriptor-defined guard event without a copied shell wrapper " +
 		"harness apply or verify a user-owned harness descriptor in this workspace " +
-		"improve review recurring guard feedback; --apply updates a named workspace-local harness " +
 		"starter print a starter AGENTS.md to stdout to own and tweak; never writes a file " +
 		"adoption report how often agents used the graph versus grep, over shell commands piped in (stdin or --commands) " +
 		"magus never writes your AGENTS.md. That file is yours, and an installer that edits a file you own " +
@@ -713,7 +711,7 @@ func TestScripts(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			e.Setenv("GUARD_TEMPLATES", templates)
+			e.Setenv("__MAGUS_TEMPLATES", templates)
 			return nil
 		},
 	})

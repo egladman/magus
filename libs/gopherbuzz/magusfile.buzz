@@ -29,6 +29,14 @@ import "env";
 
 magus\project({
     "spells": [go],
+    // The two upstream allowlists, which the tests beside them read: conformance_test.go
+    // treats testdata/upstream-behavior-allowlist.txt as the single authority for what
+    // upstream behavior gopherbuzz does not match, so a line removed from it is a claim
+    // the suite has to re-check rather than replay. *.txt matches no go spell glob (it
+    // takes *.go and *.txtar). Project-wide because test declares no ctx.readsFiles of
+    // its own, so the baseline is what keys it; dprint.json is per-target instead, on
+    // the one target that reads it.
+    "sources": ["testdata/*.txt"],
     // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
@@ -90,8 +98,22 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // one that is missing.
     //
     // The glob mirrors this project's dprint.json `includes` (./**/*.md); keep the two
-    // in step. Go sources need no declaration here - the go ops declare their own.
-    ctx.readsFiles("**/*.md");
+    // dprint.json is named beside it because the rules are an input too, and this is the
+    // only target that reads them: an explicit ctx.readsFiles REPLACES the project
+    // baseline, so a project-wide declaration would never reach this key.
+    ctx.readsFiles("dprint.json");
+    // What this target EDITS, restated. Not writesFiles: dprint, gofmt and go-mod-tidy
+    // amend authored files rather than producing them, so the bytes stay off the
+    // snapshot/replay path.
+    //
+    // The line this replaced said the go ops declare their own globs. They do not: the go
+    // spell contributes them project-wide (mgs_listRequiredGlobs takes no target), so the
+    // replacement above dropped **/*.go and go.mod out of this key and go-fmt replayed on
+    // a pure-Go edit. See the same block in libs/commentdash.
+    //
+    // The markdown glob mirrors this project's dprint.json `includes` (./**/*.md); keep
+    // the two in step.
+    ctx.modifiesExistingFiles("**/*.md", "**/*.go", "go.mod", "go.sum");
     ctx.needs(generate);
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);

@@ -105,7 +105,7 @@ and the one check it runs. It replaces any job with the same id.
 
 ```sh
 magus job fork <job> \
-  --goal 'move the store' \
+  --criteria 'move the store' \
   --write-paths internal/job \
   --check 'test internal/job'
 
@@ -114,9 +114,10 @@ magus job fork --schema             # what that record must satisfy
 ```
 
 A row carries `id` and optionally `parent` (the job this one was forked from),
-`goal` with its observable acceptance criteria, `checkpoint` (as
-`magus vcs checkpoint -o name` prints it), `write_paths`, `deny_paths`,
-`read_paths`, `depends_on`, `model`, `check`, `state`, and `read_only`. The
+`criteria` (the prose half; the machine-checkable half is `completion_gates`),
+`checkpoint` (as `magus vcs checkpoint -o name` prints it), `write_paths`,
+`deny_paths`, `read_paths`, `depends_on`, `model`, `check`, `state`, and
+`read_only`. The
 store adds `schema_version`, the actor that recorded the row, `created`,
 `updated`, `releases`, and `unattributed` (paths this job owns that somebody
 outside it wrote, noticed by the guard), all output-only: a timestamp a client
@@ -144,6 +145,16 @@ the orchestrator or a person at a terminal, writes anything.
 a different job is refused. Retaking is how a holder would be graded against
 another job's paths, and it costs nothing to a holder that runs its bootstrap
 twice: taking the lease it already holds is allowed and does nothing.
+
+**`magus job exec --vacate` gives the binding up.** One-way means one-way until
+something releases it, and nothing did: the marker outlives the job it names,
+so a checkout bound to one that finished (exited, passed, failed, or was never
+returned) stayed stuck until a person deleted the file by hand. `--vacate`
+clears it instead, refusing only while the job is still `declared` or
+`running` - walking away from those two would leave the checkout's next write
+ungraded. A job already exited, one the store no longer carries, or no binding
+at all all vacate cleanly, and a checkout with nothing bound reports that
+rather than erroring.
 
 **A declared boundary is enforced elsewhere.** Beyond the row ownership above,
 this store gates nothing: it records the text an orchestrator put in a holder's
@@ -299,7 +310,7 @@ None of that table is visible from the verdict a worker sees, which is exactly
 what makes a wrong lease dangerous: a checkout holding an unknown id, a terminal
 row, or a live row whose base was never recorded all render as an ordinary
 advisory, indistinguishable from a session these rules are actually enforcing
-on. `magus doctor`'s **lease-binding** check is the other end of that gap. It
+on. `magus doctor`'s **bound-lease** check is the other end of that gap. It
 reads the same row the guard would and says, in one line, whether this
 checkout's lease is live and therefore actually judged, or names why it is not.
 
@@ -384,8 +395,127 @@ a status: the result was read and rejected, and every rule that failed is named.
 Exit 2 is magus unable to answer: nothing was filed and nothing was piped in,
 the result would not decode, or the job would not write.
 
-It checks what is mechanical. Whether the work is GOOD, and whether the job's
-acceptance criteria are met, stay the reading of whoever forked it.
+It checks what is mechanical. Whether the work is GOOD stays the reading of
+whoever forked it. How much of the job's acceptance criteria magus checks for
+you is the next section's subject.
+
+## Completion gates
+
+A job's acceptance criteria are prose a person grades. A **completion gate** is
+the part magus grades itself, and `magus job wait` will not record `pass` until
+every one verifies. Declare them when the job is forked:
+
+```sh
+magus job fork api/migrate \
+  --criteria "move the accounts table to the new schema" \
+  --write-paths 'db/**,api/**' \
+  --gate-check green='go-test api' \
+  --gate-paths migration='db/migrations/**' \
+  --gate-symbol-unreferenced unused='LegacyAccountStore'
+```
+
+A gate names a **kind** (what it examines) and an **expect** (what must be true
+of it). Two fields rather than a kind per pair, so `absent` means the same thing
+of a file and of a symbol:
+
+| kind     | expect                                         | proven by                                                                   |
+| -------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
+| `check`  | `passed`                                       | a recorded, PASSING run of that target, captured after the job was declared |
+| `paths`  | `changed`, `present`, `absent`                 | the diff since the checkpoint, or the tree as it is now                     |
+| `symbol` | `changed`, `present`, `absent`, `unreferenced` | the knowledge graph, at the granularity below a file                        |
+
+Each kind has a natural expectation, so the common gate declares only its
+subject: a check is asked whether it passed, files and symbols whether this job
+changed them. The flags spell the others out (`--gate-paths-present`,
+`--gate-symbol-absent`, `--gate-symbol-unreferenced`), and `magus job fork -h`
+lists them.
+
+Every kind reads something magus already holds, which is what separates a gate
+from an attestation. There is deliberately no escape hatch for "this command
+exited 0": magus did not record that run and cannot attribute it, so such a gate
+would be the easiest of all to satisfy falsely. Declare a target and use `check`.
+
+`symbol` + `unreferenced` is the one worth knowing about: the symbol may still
+exist, and nothing may name it. That is the remainder a partitioned rename leaks.
+Split the work per project and the callers that live in no project belong to no
+job, so every job passes and the rename is unfinished.
+
+The single `--check` is one of these gates, under the id `check`.
+
+A gate is graded against what magus observes and never against the result's own
+`changed_paths`. The holder's account of its work is the thing the gate replaces,
+so a result claiming a file the tree does not carry is rejected, and the refusal
+names each subject that failed rather than only that the gate failed:
+
+```text
+rejected api/migrate, and its state is unchanged
+  completion gate "migration": nothing matching "db/migrations/**" changed since
+  4a1c0cc8, so this gate is unmet
+```
+
+An observation magus could not make FAILS the gate: an unreadable diff, a symbol
+graph that will not open. That is the opposite of how the guard treats an
+unanswerable question, and deliberately: a guard that cannot ask must not refuse
+a person's own command, while a gate that cannot verify must not certify, or the
+cheapest way past it is to break the observation.
+
+### Asking where a job stands
+
+`magus job wait` verifies and RECORDS. To ask the same question without advancing
+anything:
+
+```sh
+magus describe job api/migrate --gates
+```
+
+It grades every gate against the evidence magus holds right now, writes nothing,
+and exits 1 while any gate is unmet. Because it runs the same grading `wait`
+does, the two cannot disagree; because it records nothing, an orchestrator may
+ask while the holder is still working, and asking never blocks that holder. The
+gates that read the tree and the graph answer even for a job that has filed no
+result at all.
+
+Sequence gates with `depends_on` between them when one has to be cleared before
+another is approached. A failed prerequisite propagates, and the declaration
+refuses a cycle. Gates do not nest: one wanting children is a JOB wanting
+splitting, which the multi-agent skill's "every level narrows" rule already
+covers, and keeping gates flat leaves the job tree as the only hierarchy with an
+owner.
+
+A gate may not name the release gate. `--gate-check ci` is refused by the same
+rule that refuses `--check ci`, for the same reason: the gate runs once, in the
+forking session's tree, after every job lands.
+
+### Declaring gates from Buzz
+
+A magusfile or a `magus buzz` script declares them through the same store, as
+records rather than flags:
+
+```buzz
+import "magus";
+import "std";
+
+fun declare() > void {
+  try {
+    magus\job.put("api/migrate", {
+      "criteria": "move the accounts table to the new schema",
+      "write_paths": ["db", "api"],
+      "completion_gates": [
+        {"id": "green", "check": {"target": "go-test", "project": "api"}},
+        {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
+        {"id": "old-gone", "kind": "symbol", "expect": "unreferenced", "symbols": ["LegacyAccountStore"]},
+      ],
+    });
+  } catch (e) {
+    std\print("could not declare the job: {e}");
+  }
+}
+```
+
+`kind` defaults to `check` and `expect` to the kind's natural expectation, so
+the first gate above needs neither. The records are validated on the way in: a gate
+carrying both a check and paths is refused, and so is one naming paths nothing
+could ever match.
 
 ## Watch it: the console Jobs view
 

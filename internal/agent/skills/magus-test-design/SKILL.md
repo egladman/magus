@@ -6,8 +6,8 @@ real/fake/stub decision, complete observable assertion, or coverage placement
 is undecided or under review.
 
 Do not use it for routine implementation of an already-scoped test, merely to
-run or diagnose tests (`magus-run` owns that), or to choose a package boundary
-(`magus-architecture-review` owns that). Use it with architecture review only
+run or diagnose tests (`{{skill "run"}}` owns that), or to choose a package boundary
+(`{{skill "architecture-review"}}` owns that). Use it with architecture review only
 when a package refactor is deliberately intended to improve testability.
 
 This skill observes evidence and makes recommendations. It does not choose the
@@ -37,8 +37,8 @@ runs locally, on a commit, or in CI.
    change what a lower boundary can prove: process/runtime execution,
    filesystem, network, time, scheduling, persistence, or a language boundary.
 
-Prefer connected MCP tools (`magus_describe`, `magus_explain`, `magus_refs`,
-`magus_path`); use the CLI commands above as fallback. Do not start a server
+Prefer connected MCP tools (`{{tool "describe"}}`, `{{tool "explain"}}`, `{{tool "refs"}}`,
+`{{tool "path"}}`); use the CLI commands above as fallback. Do not start a server
 solely to review test design.
 
 An `unknown` result from `magus refs` is missing evidence, not proof of no
@@ -134,7 +134,7 @@ Report, for each behavior:
    target/invocation.
 9. Owning Magus test target, final affected-CI route, and complementary coverage.
 
-Hand execution to `magus-run`; this skill chooses the proof and does not bypass
+Hand execution to `{{skill "run"}}`; this skill chooses the proof and does not bypass
 Magus with raw language test commands.
 
 {{if .Full}}

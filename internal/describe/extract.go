@@ -432,6 +432,122 @@ func RemovedContextMethods(source string) []RemovedContextMethod {
 	return found
 }
 
+// FileWrite is one fs\writeFile call a target makes, located for a reader.
+type FileWrite struct {
+	Fn   string
+	Line int
+}
+
+// WritesOutsideRWCharm returns every fs\writeFile a target body performs outside an
+// `if (ctx.hasCharm("rw"))` branch, in targets that HAVE such a branch.
+//
+// Both halves are the finding. A target that branches on rw is one that runs two ways, and
+// magus's contract for the run WITHOUT rw is that it does not touch the tree: that is what
+// makes `--no-default-charms` a verdict rather than an edit. A write outside the branch
+// means the run that was supposed to only look at the file edits it instead, then reports a
+// change it made itself, and leaves that change behind for a later run to blame on a target
+// that did nothing. It reads as harmless because the write looks like part of computing the
+// answer.
+//
+// A target with NO rw branch is not reported: it never claimed to run two ways, and a target
+// that always writes is an ordinary generator.
+//
+// Conservative by construction. Only `fs\writeFile` counts, only a plain
+// `if (ctx.hasCharm("rw"))` counts, and a write reached through a helper is not followed.
+// It under-reports rather than over-reports, the same trade UnreachedIO makes.
+func WritesOutsideRWCharm(source string) []FileWrite {
+	prog, err := buzz.ParseEmbedded(source)
+	if err != nil || prog == nil {
+		return nil
+	}
+	var found []FileWrite
+	for _, stmt := range prog.Stmts {
+		fn, ok := stmt.(*ast.FunDecl)
+		if !ok || !fn.IsExported || fn.Body == nil {
+			continue
+		}
+		blocks := rwCharmBlocks(fn.Body)
+		if len(blocks) == 0 {
+			continue
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || !isFSWriteFile(call) {
+				return true
+			}
+			pos := ast.NodePos(call)
+			for _, b := range blocks {
+				if pos.Line >= b.from && pos.Line <= b.to {
+					return true
+				}
+			}
+			found = append(found, FileWrite{Fn: fn.Name, Line: pos.Line})
+			return true
+		})
+	}
+	return found
+}
+
+// lineSpan is the inclusive line range of one rw-charm block.
+type lineSpan struct{ from, to int }
+
+// rwCharmBlocks returns the line span of every `if (ctx.hasCharm("rw"))` THEN block in
+// body. Spans rather than node identity because ast.Inspect gives no parent pointer, and a
+// line range is enough to answer the one question asked of it.
+//
+// The ELSE branch is deliberately excluded: it is what runs WITHOUT rw.
+func rwCharmBlocks(body *ast.BlockStmt) []lineSpan {
+	var spans []lineSpan
+	ast.Inspect(body, func(n ast.Node) bool {
+		stmt, ok := n.(*ast.IfStmt)
+		if !ok || stmt.Then == nil {
+			return true
+		}
+		if !condReadsRWCharm(stmt.Cond) {
+			return true
+		}
+		spans = append(spans, lineSpan{from: ast.NodePos(stmt.Then).Line, to: blockEndLine(stmt.Then)})
+		return true
+	})
+	return spans
+}
+
+// condReadsRWCharm reports whether cond is a bare read of the rw charm. A negated or
+// compound condition returns false, so the block it guards is treated as unguarded: a
+// wrong answer there would be the silent kind.
+func condReadsRWCharm(cond ast.Node) bool {
+	call, ok := cond.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	name, ok := charmCall(call)
+	return ok && name == "rw"
+}
+
+// blockEndLine is the last line any node in b occupies. The parser records a block's start
+// but not its end, and the closing brace is not a node.
+func blockEndLine(b *ast.BlockStmt) int {
+	last := ast.NodePos(b).Line
+	ast.Inspect(b, func(n ast.Node) bool {
+		if line := ast.NodePos(n).Line; line > last {
+			last = line
+		}
+		return true
+	})
+	return last
+}
+
+// isFSWriteFile reports whether e is `fs\writeFile(...)`, the one host call that creates or
+// replaces a file's whole content.
+func isFSWriteFile(e *ast.CallExpr) bool {
+	me, ok := e.Callee.(*ast.MemberExpr)
+	if !ok || me.Name != "writeFile" {
+		return false
+	}
+	id, ok := me.Object.(*ast.IdentExpr)
+	return ok && id.Name == "fs"
+}
+
 // UnreachedIO returns every ctx.readsFiles/writesFiles member access in source that the
 // per-target walk did not reach: a call in an unreferenced or indirectly-dispatched
 // helper, or the identifier used as a value. Such a declaration never enters any cache

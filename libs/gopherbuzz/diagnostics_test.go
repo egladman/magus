@@ -148,7 +148,7 @@ fun readN(v: lib\Foo) > int { return v.n; }
 }
 
 // TestSession_Diagnostics_NonAliasedFileImportNeverWarnsUnused reproduces the false-
-// positive class found calibrating against this repo's real .buzz corpus: EVERY
+// positive class found calibrating against this repo's real .buzz files: EVERY
 // spells/*/spell.buzz does `import "magus/spell";` (no alias) and then uses that
 // module's exported object types completely bare (`Command{...}`, `target: Target`),
 // never once writing `spell\Command`. resolveImport's own alias-semantics comment

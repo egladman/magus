@@ -335,6 +335,18 @@ type RefreshHookInstaller interface {
 	InstallRefreshHook(ctx context.Context, root, command string) ([]string, error)
 }
 
+// DriftHookInstaller is an optional capability (sibling of RefreshHookInstaller) for
+// VCSDriver implementations that can install a hook firing after a commit is made and
+// again before it is pushed, to report generated output a commit left stale. It shares
+// the managed-section convention (and the fail-open, one-line hook body) the refresh
+// hook uses, under its own markers so the two coexist without one clobbering the other.
+// Callers type-assert for it and skip gracefully when a backend lacks it (jj has no
+// native hooks, same gap RefreshHookInstaller documents). It returns the labels of the
+// hooks it installed, for a notice.
+type DriftHookInstaller interface {
+	InstallDriftHook(ctx context.Context, root, command string) ([]string, error)
+}
+
 // RemoteReporter is an optional capability for VCSDriver implementations that can
 // report the repository's default remote URL (e.g. git's "origin" fetch URL). It
 // lets callers derive a forge browse/blob URL for turning a workspace-relative
@@ -357,6 +369,20 @@ type DefaultRefReporter interface {
 	// branch, hg's "default", jj's trunk()) for the repo containing dir, or ""
 	// with ErrVCSUnsupported when it cannot be determined.
 	DefaultRef(ctx context.Context, dir string) (string, error)
+}
+
+// PushStatusReporter is an optional capability for VCSDriver implementations that can
+// report whether a commit has already left the repository for its configured remote. It
+// answers the one question a history-rewrite suggestion must never guess at: amending or
+// rebasing a commit already pushed rewrites published history. Callers type-assert for
+// it; ok=false means the backend could not determine an answer (no remote/upstream
+// configured, or the question does not resolve here), and a caller must treat that the
+// same as "pushed": the safe direction, since the one unrecoverable mistake is treating
+// a published commit as safe to rewrite.
+type PushStatusReporter interface {
+	// CommitPushed reports whether id is reachable from the repository's
+	// remote/upstream tracking state.
+	CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error)
 }
 
 // RevTimeReporter is an optional capability (sibling of RemoteReporter) for VCSDriver
@@ -838,6 +864,36 @@ func SourceProjects(files []FileEntry) map[string]bool {
 		}
 	}
 	return out
+}
+
+// StaleSourceProjects returns the projects whose declared SOURCE changed in files but
+// whose declared OUTPUT did not move at all in the same files: the change updated an
+// input and left the generated form behind.
+//
+// It is SplitExplainedOutputs read from the other direction. That function starts from a
+// changed OUTPUT and asks whether a source explains it; this one starts from a changed
+// SOURCE and asks whether ANY of its project's outputs moved too. Neither answers the
+// other's question: a project that regenerated only SOME of its declared outputs passes
+// this check (some output did move) while still leaving the rest stale, a gap this
+// function does not claim to see.
+func StaleSourceProjects(files []FileEntry) []string {
+	movedOutput := map[string]bool{}
+	for _, f := range files {
+		if f.Role != "output" {
+			continue
+		}
+		for _, p := range f.OutputOf {
+			movedOutput[p] = true
+		}
+	}
+	var stale []string
+	for p := range SourceProjects(files) {
+		if !movedOutput[p] {
+			stale = append(stale, p)
+		}
+	}
+	slices.Sort(stale)
+	return stale
 }
 
 // StagingPlan is what `magus vcs add` decided about a working tree, as a value.

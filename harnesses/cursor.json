@@ -1,0 +1,61 @@
+{
+  "schema_version": 2,
+  "id": "cursor",
+  "display": {
+    "name": "Cursor"
+  },
+  "config": {
+    "path": ".cursor/hooks.json"
+  },
+  "config_defaults": {
+    "version": 1
+  },
+  "skills": {
+    "paths": [],
+    "form": "short"
+  },
+  "managed_entries": [
+    {
+      "path": ["hooks", "beforeShellExecution"],
+      "entries": [
+        {
+          "command": "sh docs/guides/integrations/agents/cursor-hook.sh"
+        }
+      ]
+    },
+    {
+      "path": ["hooks", "preToolUse"],
+      "entries": [
+        {
+          "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit",
+          "command": "sh docs/guides/integrations/agents/cursor-hook.sh"
+        }
+      ]
+    },
+    {
+      "path": ["hooks", "postToolUse"],
+      "entries": [
+        {
+          "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch",
+          "command": "sh docs/guides/integrations/agents/cursor-hook.sh"
+        }
+      ]
+    },
+    {
+      "path": ["hooks", "subagentStart"],
+      "entries": [
+        {
+          "command": "sh docs/guides/integrations/agents/cursor-hook.sh"
+        }
+      ]
+    },
+    {
+      "path": ["hooks", "sessionEnd"],
+      "entries": [
+        {
+          "command": "sh docs/guides/integrations/agents/cursor-hook.sh"
+        }
+      ]
+    }
+  ]
+}

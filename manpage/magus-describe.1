@@ -24,6 +24,12 @@ magusfile; a cross\-project step reads as "project:target". It lists DIRECT step
 only, so a step that itself composes is described by its own ref. Add a charm
 and \-\-explain (e.g. "lint:rw \-\-explain") to see each charm reshape the command one
 step at a time.
+.SS describe job options
+.RS
+.TP
+\fB\-\-gates\fR
+Grade this job's completion gates against the evidence magus holds now, and record nothing
+.RE
 .SS describe target options
 .RS
 .TP
@@ -67,7 +73,7 @@ Probe each spell's tools and report the versions that would key a run
 List every target the workspace defines
 .TP
 \fBjob\fR
-Print one job's terms: its goal, lanes, check and dependencies
+Print one job's terms: its criteria, lanes, check and dependencies
 .TP
 \fBtarget\fR
 Detail one target ref: its dispatch plan, globs, spells and policy
@@ -101,12 +107,30 @@ Classify paths as generated output, declared source, maintained, or unclaimed
 .TP
 \fBgraph\fR
 Emit the target catalog and dependency graph
+.TP
+\fBrules\fR
+List the guard rules this workspace enforces, and what each one catches
+.TP
+\fBrule\fR
+Detail one guard rule, by the name a verdict reported
 .RE
 .SH EXAMPLES
 \fIList every target\fR
 .PP
 .EX
 magus describe targets
+.EE
+.PP
+\fIList what the guard enforces\fR
+.PP
+.EX
+magus describe rules
+.EE
+.PP
+\fILook up the rule a verdict named\fR
+.PP
+.EX
+magus describe rule stage-all
 .EE
 .PP
 \fIList a charm's declaring targets\fR
@@ -149,6 +173,7 @@ magus describe target --explain lint:rw,debug
 \fBmagus\-events\fR(1),
 \fBmagus\-status\fR(1),
 \fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
 \fBmagus\-vcs\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),

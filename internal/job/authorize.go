@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -197,6 +198,28 @@ func runsTheGate(row types.Job) bool {
 	})
 }
 
+// gateCommand renders the command whose output will SATISFY a check, which is not
+// types.LeaseCheck.String(): that renders the DECLARATION. A check naming no charm means
+// the charmless run, so in a workspace setting default_charms the declaration's bare
+// `magus run generate .` produces a `generate:rw` descriptor that the same check then
+// refuses (see bindsTo). Quoting a command guaranteed to fail its own gate is the failure
+// this avoids. Built through hint.Run so a subcommand rename is one edit; types renders
+// its own form because it imports no CLI surface.
+func gateCommand(c types.LeaseCheck) string {
+	project := c.Project
+	if project == "" {
+		project = "."
+	}
+	args := []string{c.Target, project}
+	if !c.NamesCharm() {
+		args = append(args, "--no-default-charms")
+	}
+	if len(c.Args) > 0 {
+		args = append(args, append([]string{"--"}, c.Args...)...)
+	}
+	return hint.Run.With(args...)
+}
+
 // checkLine names a row's check as a refusal quotes it.
 func checkLine(row types.Job) string {
 	gates := row.EffectiveCompletionGates()
@@ -205,7 +228,7 @@ func checkLine(row types.Job) string {
 	}
 	lines := make([]string, 0, len(gates))
 	for _, gate := range gates {
-		lines = append(lines, gate.Check.String())
+		lines = append(lines, gateCommand(gate.Check))
 	}
 	return strings.Join(lines, ", ")
 }
@@ -240,7 +263,7 @@ func changedFields(prev, next types.Job) []string {
 		}
 	}
 	add("parent", prev.Parent != next.Parent)
-	add("goal", prev.Goal != next.Goal)
+	add("criteria", prev.Criteria != next.Criteria)
 	add("checkpoint", prev.Checkpoint != next.Checkpoint)
 	add("write_paths", !slices.Equal(prev.WritePaths, next.WritePaths))
 	add("deny_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
@@ -288,4 +311,18 @@ func subset(inner, outer []string) bool {
 		}
 	}
 	return true
+}
+
+// authorizeDelete refuses a bound holder deleting a row.
+//
+// Its OWN row included, and that is the difference from ending one: a holder may end its
+// job (fail, no_return, exited) because that is the report it owes, and the row it leaves
+// is what the orchestrator reads. Deleting it instead removes the evidence that the work
+// was ever handed out, which is the one outcome no holder should be able to produce.
+func authorizeDelete(actor Actor, id string) error {
+	if !actor.Bound() {
+		return nil
+	}
+	return refuse(actor, id, "deleting a row removes the record that the work was handed out, so it belongs to whoever declared the plan;"+
+		" a holder ENDS its job instead")
 }

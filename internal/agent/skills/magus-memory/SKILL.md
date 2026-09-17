@@ -1,6 +1,6 @@
 # Repository memory
 
-`magus memory` and `magus_memory` are two frontends to a small, user-owned
+`magus memory` and `{{tool "memory"}}` are two frontends to a small, user-owned
 memory.{{if .Full}} It lives outside the repo, is shared by its worktrees, and is
 visible in the console.{{end}} It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
@@ -38,7 +38,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Read and write deliberately
 
-- When picking work up, use `magus_memory` `{op: "list"}` or
+- When picking work up, use `{{tool "memory"}}` `{op: "list"}` or
   `magus memory ls`.{{if .Full}} Empty is normal; do not manufacture entries.{{end}}
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
@@ -63,7 +63,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 
 ## Recording
 
-- `magus_memory` {op: "put", name, type, refs, body?, excerpt?, status?} creates a record
+- `{{tool "memory"}}` {op: "put", name, type, refs, body?, excerpt?, status?} creates a record
   by `name` (a kebab slug), and on a name that exists writes the fields you send and
   keeps the rest. Pass `refs` as one per line, `kind: target` (e.g.
   `query: kind=op depends cache` or `node: file:internal/hash/hasher.go`); sending
@@ -91,7 +91,7 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Intra-session scratch (checklists, partial findings) stays in the
   session{{if .Full}} - it is disposable by definition{{end}}, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
-  belong in memory; record the `magus_query` that surfaces them instead.
+  belong in memory; record the `{{tool "query"}}` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity.{{if .Full}} The console,
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one

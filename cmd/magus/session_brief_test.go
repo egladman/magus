@@ -38,7 +38,7 @@ func TestSessionBriefSurfacesOneRecurringFeedbackReview(t *testing.T) {
 	}}
 	text := brief.Text()
 	assert.Contains(t, text, "improvement review: raw-tool denied 3 times")
-	assert.Contains(t, text, "magus agent improve")
+	assert.Contains(t, text, "recurring-guard-denials")
 	assert.NotContains(t, text, "output-pipe", "rehydration gets one bounded review, not a table")
 	assertBriefIsContextSafe(t, text)
 }
@@ -62,7 +62,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 			State: string(types.StateRunning),
 			Exec:  hint.JobExec.With("f2-guard"),
 			// Longer than a line on purpose: the clip is part of the contract.
-			Goal:       strings.Repeat("hold the boundary ", 20),
+			Criteria:   strings.Repeat("hold the boundary ", 20),
 			Validation: "magus run test internal/ledger",
 		}},
 		Failures: []briefFailure{{
@@ -133,24 +133,26 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
   "display": {"name": "Brief Host"},
   "config": {"path": "host/hooks.json"},
   "skills": {"paths": [".agents/skills"], "form": "both"},
-  "pre_tool_use": {
+  "managed_entries": [{
     "path": ["hooks", "before"],
-    "matcher_key": "match",
-    "hooks_key": "commands",
-    "response_template": "{{toJson .}}",
-    "entries": [{"matcher":"run","hook":{"type":"command"}}]
-  }
+    "entries": [{"match":"run","commands":[{"type":"command","command":"sh magus-hook-command.sh"}]}]
+  }]
 }`), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "host", "hooks.json"),
-		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"magus agent hook --host brief-host"}]}]}}`), 0o644))
+		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-hook-command.sh"}]}]}}`), 0o644))
+	// VerifyHarness now actually runs the wired command (internal/agent's
+	// harness_probe.go) instead of trusting its mere presence in the config, so
+	// the brief's guard-wiring section needs something real behind it.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-hook-command.sh"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)
 	guardRow := types.Job{
 		ID:         "f2-guard",
 		State:      types.StateRunning,
-		Goal:       "hold the boundary\nsecond line nobody reads here",
+		Criteria:   "hold the boundary\nsecond line nobody reads here",
 		Validation: "magus run test internal/ledger",
 		WritePaths: []string{"internal/ledger"},
 	}
@@ -170,7 +172,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	assert.Equal(t, root, brief.Workspace)
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "f2-guard", brief.Leases[0].ID)
-	assert.Equal(t, "hold the boundary", brief.Leases[0].Goal, "a lease's goal reads as one line here; the rest is `magus describe job`")
+	assert.Equal(t, "hold the boundary", brief.Leases[0].Criteria, "a lease's goal reads as one line here; the rest is `magus describe job`")
 	assert.Equal(t, hint.JobExec.With("f2-guard"), brief.Leases[0].Exec)
 
 	require.Len(t, brief.Failures, 1)

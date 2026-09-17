@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -151,6 +151,9 @@ func TestScriptWithholdsDeclaringMembers(t *testing.T) {
 		`magus\project({})`,
 		`magus\cache.remote({"name": "s3"})`,
 		`magus\ci.provider({"name": "actions"})`,
+		`magus\guard.shell({"name": "x", "decision": "deny", "program": "curl", "reason": "r"})`,
+		`magus\guard.bash({"name": "x", "decision": "deny", "program": "curl", "reason": "r"})`,
+		`magus\harness.provider({"name": "cursor"})`,
 	} {
 		t.Run(call, func(t *testing.T) {
 			sess := scriptSession(t)
@@ -183,7 +186,7 @@ main();
 }
 
 // TestMagusSurfacesExposeSameMembers is the lock-step guard between the two
-// surfaces buildMagusNS serves. They must carry the SAME member names (a script
+// surfaces buildMagus serves. They must carry the SAME member names (a script
 // that cannot see a member has no way to learn it exists), so the surfaces differ
 // only in what a member does when called, which is what MGS1022 reports.
 func TestMagusSurfacesExposeSameMembers(t *testing.T) {
@@ -271,7 +274,7 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
-	got, ok := bindinggen.ValueToAny(bindinggen.MapsVal(core)).([]any)
+	got, ok := bindinggen.ValueToAny(bindinggen.ObjectSlice(core, bindinggen.ObjectModuleEntry)).([]any)
 	require.True(t, ok)
 	require.Len(t, got, len(core))
 	for i, m := range core {
@@ -1548,29 +1551,29 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 const testBoundaryTypesPath = "test/boundary-types"
 
 var testBoundaryTypesSource = strings.Join([]string{
-	spellruntime.ExecResultSource,
-	spellruntime.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
-	spellruntime.CommitSource,
-	spellruntime.FileInfoSource,
-	spellruntime.HTTPResponseSource,
-	spellruntime.SemverVersionSource,
-	spellruntime.SemverNextSource,
-	spellruntime.URLSource,
-	spellruntime.TagSource, // Tag.version is SemverVersion, so it must follow that source
-	spellruntime.ProjectEntrySource,
-	spellruntime.ProjectsSource,
-	spellruntime.AffectedSource,
-	spellruntime.GraphSource,
-	spellruntime.CrossTargetRefSource,
-	spellruntime.TargetSpellUseSource,
-	spellruntime.InputRefSource,
-	spellruntime.OutputRefSource,
-	spellruntime.TargetGraphNodeSource,
-	spellruntime.TargetGraphProjectSource,
-	spellruntime.TargetGraphSource,
-	spellruntime.ModuleFieldEntrySource,
-	spellruntime.ModuleMethodEntrySource,
-	spellruntime.ModuleSource,
+	spell.ExecResultSource,
+	spell.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
+	spell.CommitSource,
+	spell.FileInfoSource,
+	spell.HTTPResponseSource,
+	spell.SemverVersionSource,
+	spell.SemverNextSource,
+	spell.URLSource,
+	spell.TagSource, // Tag.version is SemverVersion, so it must follow that source
+	spell.ProjectEntrySource,
+	spell.ProjectsSource,
+	spell.AffectedSource,
+	spell.GraphSource,
+	spell.CrossTargetRefSource,
+	spell.TargetSpellUseSource,
+	spell.InputRefSource,
+	spell.OutputRefSource,
+	spell.TargetGraphNodeSource,
+	spell.TargetGraphProjectSource,
+	spell.TargetGraphSource,
+	spell.ModuleFieldEntrySource,
+	spell.ModuleMethodEntrySource,
+	spell.ModuleSource,
 }, "\n")
 
 // TestEveryBoundaryTypeHasAMirror is the completeness gate. A BuzzObject method on a
@@ -1626,29 +1629,34 @@ func assertMirrorConstructs(t *testing.T, object string) {
 	require.NotNil(t, s.GetGlobal("__r"), "%s{} produced nothing", object)
 }
 
-// TestMirrorFieldsMatchBuzzObject pins each mirror against the map its Go type
-// actually produces. A mirror that merely parses is not enough: a field the Buzz
-// value never carries (or one it carries under another name) is a type that lies,
-// and the checker would reject correct code or accept a typo.
-func TestMirrorFieldsMatchBuzzObject(t *testing.T) {
+// TestMirrorFieldsMatchEncoder pins each mirror against the map its encoder actually
+// produces. A mirror that merely parses is not enough: a field the Buzz value never
+// carries (or one it carries under another name) is a type that lies, and the checker
+// would reject correct code or accept a typo.
+func TestMirrorFieldsMatchEncoder(t *testing.T) {
 	t.Parallel()
+	// The types testBoundaryTypesSource bundles, and only those: that bundle is
+	// hand-ordered (a mirror must follow every mirror it references), so a type absent
+	// from it reads as having no fields at all rather than as a disagreement.
 	for _, tc := range []struct {
-		object string
-		toMap  map[string]any
+		object  string
+		encoded vm.Value
 	}{
-		{"Tag", types.VCSTag{}.BuzzObject()},
-		{"Affected", types.AffectedResult{}.BuzzObject()},
-		{"Graph", types.GraphView{}.BuzzObject()},
-		{"Projects", types.ProjectsOutput{}.BuzzObject()},
-		{"ProjectEntry", types.ProjectEntry{}.BuzzObject()},
-		{"Module", types.ModuleEntry{}.BuzzObject()},
-		{"ModuleFieldEntry", types.ModuleFieldEntry{}.BuzzObject()},
-		{"ModuleMethodEntry", types.ModuleMethodEntry{}.BuzzObject()},
-		{"ExecResult", types.ExecResult{}.BuzzObject()},
+		{"Tag", bindinggen.ObjectVCSTag(types.VCSTag{})},
+		{"Affected", bindinggen.ObjectAffectedResult(types.AffectedResult{})},
+		{"Graph", bindinggen.ObjectGraphView(types.GraphView{})},
+		{"Projects", bindinggen.ObjectProjectsOutput(types.ProjectsOutput{})},
+		{"ProjectEntry", bindinggen.ObjectProjectEntry(types.ProjectEntry{})},
+		{"Module", bindinggen.ObjectModuleEntry(types.ModuleEntry{})},
+		{"ModuleFieldEntry", bindinggen.ObjectModuleFieldEntry(types.ModuleFieldEntry{})},
+		{"ModuleMethodEntry", bindinggen.ObjectModuleMethodEntry(types.ModuleMethodEntry{})},
+		{"ExecResult", bindinggen.ObjectExecResult(types.ExecResult{})},
 	} {
 		t.Run(tc.object, func(t *testing.T) {
 			t.Parallel()
-			for key := range tc.toMap {
+			encoded, ok := bindinggen.ValueToAny(tc.encoded).(map[string]any)
+			require.True(t, ok, "%s encoded as something other than a map", tc.object)
+			for key := range encoded {
 				assertMirrorReadsField(t, tc.object, key)
 			}
 		})
@@ -1669,32 +1677,34 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 	assert.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)
 }
 
-// TestEveryBuzzObjectOwnerIsMirrored guards the LIST above rather than the mirrors.
-// BuzzObject is the marker that a value crosses into Buzz, so every type carrying one
-// owes the module a mirror; adding a BuzzObject without adding the mirror would leave
-// the gate above passing while the new type stayed untyped.
+// TestEveryEncodedTypeIsMirrored guards the LIST above rather than the mirrors. An
+// encoder is the marker that a value crosses into Buzz, so every type carrying one owes
+// the module a mirror; adding the encoder without the mirror would leave the gate above
+// passing while the new type stayed untyped.
 //
-// A mirror is not always generated from the BuzzObject owner. Commit owns BuzzObject while
-// CommitRecord is a dedicated struct describing the map it emits (Author is
+// A mirror is not always generated from the same struct as the encoder. Commit is
+// encoded from CommitRecord, a dedicated struct describing the map it emits (Author is
 // CommitAuthor, not Commit's own Person, so the generated Buzz type reads as
-// CommitAuthor rather than Person). Either arrangement is fine; what must hold
-// is that each owner below has a Buzz object, which the tests above check by
-// construction.
-func TestEveryBuzzObjectOwnerIsMirrored(t *testing.T) {
+// CommitAuthor rather than Person). Either arrangement is fine; what must hold is that
+// each type below has an encoder, which the registry is now the single answer for.
+func TestEveryEncodedTypeIsMirrored(t *testing.T) {
 	t.Parallel()
+	encoded := map[string]bool{}
+	for _, bt := range bindinggen.RuntimeBoundaryTypes {
+		encoded[reflect.TypeOf(bt.Zero).Name()] = true
+	}
 	owners := []any{
-		types.ExecResult{}, types.Commit{}, types.FileInfo{}, types.HTTPResponse{},
+		types.ExecResult{}, types.CommitRecord{}, types.FileInfo{}, types.HTTPResponse{},
 		types.SemverVersion{}, types.URL{}, types.VCSTag{}, types.ProjectEntry{},
 		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{}, types.TargetGraphOutput{},
 		types.ModuleFieldEntry{}, types.ModuleMethodEntry{}, types.ModuleEntry{},
 	}
 	for _, v := range owners {
-		rt := reflect.TypeOf(v)
-		_, ok := rt.MethodByName("BuzzObject")
-		assert.True(t, ok, "%s is listed as a boundary type but has no BuzzObject; drop it from this list", rt.Name())
+		name := reflect.TypeOf(v).Name()
+		assert.True(t, encoded[name], "%s is listed as a boundary type but the registry gives it no encoder; drop it from this list", name)
 	}
 	assert.Len(t, owners, 15,
-		"a types/ struct gained or lost BuzzObject: add it to the mirror registry (cmd/magus-utils/types.go), generate it, wire it into RegisterSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
+		"a types/ struct gained or lost its encoder: add it to the boundary registry (cmd/magus-utils/boundary_types.go), generate it, wire it into RegisterSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
 }
 
 // TestMagusNamespaceIsTyped is the guard for the half of the typed-host-module work

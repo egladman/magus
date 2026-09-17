@@ -140,14 +140,19 @@ func TestAdviseRepeatGateFiresOnceItHasCost(t *testing.T) {
 	got, brief := adviseRepeatGate(dir, now)
 	assert.Contains(t, got, "3 times")
 	assert.Contains(t, got, "7m30s")
-	assert.Contains(t, got, "magus ls targets", "the advisory must not name a target")
+	// The cost, then the command that SIZES the decision. It names --plan rather than a
+	// target because the plan is what says whether the gate is worth it; naming a target
+	// would be magus choosing for the caller, and this tier cannot enforce that choice
+	// anyway.
+	assert.Contains(t, got, "--plan", "the advisory must hand back the command that sizes the risk")
+	assert.NotContains(t, got, "magus ls targets", "the advisory must not name a target")
 
 	// The repeat keeps the two facts that moved since the caller last read the full text,
 	// and the command that acts on them. A repeat nobody can act on is noise.
 	assert.Contains(t, brief, "3 times")
 	assert.Contains(t, brief, "7m30s")
-	assert.Contains(t, brief, "magus ls targets")
-	assert.Less(t, len(brief), len(got)/2, "the repeat form must be substantially shorter than the full text")
+	assert.Contains(t, brief, "--plan")
+	assert.Less(t, len(brief), len(got), "the repeat form must not be longer than the full text")
 }
 
 // A single run is the practice working, not something to interrupt.
@@ -185,7 +190,7 @@ func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
 func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
-		Goal:       "lease-scoped denies in the guard",
+		Criteria:   "lease-scoped denies in the guard",
 		WritePaths: []string{"cmd/magus/**"},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
@@ -525,14 +530,14 @@ func laneFleet() []types.Job {
 	return []types.Job{
 		{
 			ID:         "lease-a",
-			Goal:       "own the ledger store",
+			Criteria:   "own the ledger store",
 			WritePaths: []string{"internal/ledger"},
 			State:      types.StateRunning,
 			Registered: 1,
 		},
 		{
 			ID:         "lease-b",
-			Goal:       "grade writes in the guard",
+			Criteria:   "grade writes in the guard",
 			WritePaths: []string{"cmd/magus"},
 			DenyPaths:  []string{"cmd/magus/gen"},
 			State:      types.StateRunning,
@@ -622,6 +627,12 @@ func TestDenyLeaseScopedLaneWriteStaysQuiet(t *testing.T) {
 		"find internal/ledger -name '*.go'",
 		"cp internal/ledger/store.go /tmp/x",
 		`echo "rm -rf internal/ledger"`,
+
+		// A pure print: awk's range/comparison operators share a character with its
+		// redirect operator, but neither follows a print/printf statement here, so
+		// this is a read like any other.
+		"awk 'NR>=1,NR<=20' internal/ledger/store.go",
+		"awk '$1 > 5' internal/ledger/store.go",
 
 		// magus's own argv is never a target: it writes in there by construction, and the
 		// guard grades the agent's tool calls rather than magus's own processes.

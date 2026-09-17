@@ -39,31 +39,31 @@ Job is the full picture of one job: what it is, who holds it, whether an instanc
 
 ONE message for both kinds. A catalog job fills the description and target; a delegated one fills the lanes and the check it was given; both carry id, holder and state, which is what lets a client render the two in one list without branching on which it has.
 
-Source: [job.proto:70](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L70).
+Source: [job.proto:74](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L74).
 
-| Field         | Type                               | #  | Description                                                                                                                                                                                                                                |
-| ------------- | ---------------------------------- | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`        | string                             | 1  | name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id is the last segment, and is what the CLI's `job run <name>` leaf takes.                                                                           |
-| `description` | string                             | 2  |                                                                                                                                                                                                                                            |
-| `running`     | bool                               | 3  | an instance is in flight right now                                                                                                                                                                                                         |
-| `last_run`    | [JobRun](#jobrun)                  | 4  | most recent run; unset if the job has never been submitted                                                                                                                                                                                 |
-| `target`      | [ResourceSize](#resourcesize)      | 5  | current size of what the job operates on (trail, cache, or logs)                                                                                                                                                                           |
-| `id`          | string                             | 6  | the bare row id, without the "jobs/" collection segment                                                                                                                                                                                    |
-| `holder`      | [JobHolder](#jobholder)            | 7  | who runs it                                                                                                                                                                                                                                |
-| `state`       | string                             | 8  | state is the row's lifecycle position: declared, running, exited, pass, fail or no\_return. A string rather than an enum because the vocabulary is the job store's and a second closed set here would be a second place to add a value to. |
-| `goal`        | string                             | 9  | The facts a DELEGATED job carries, empty on a catalog job. These are what an orchestrator declared, never a verdict magus reached.                                                                                                         |
-| `parent`      | string                             | 10 | the job this one was handed out under, empty for a root                                                                                                                                                                                    |
-| `model`       | string                             | 11 |                                                                                                                                                                                                                                            |
-| `check`       | string                             | 12 | the one check this job runs, rendered as the command that runs it                                                                                                                                                                          |
-| `write_paths` | repeated string                    | 13 |                                                                                                                                                                                                                                            |
-| `deny_paths`  | repeated string                    | 14 |                                                                                                                                                                                                                                            |
-| `read_paths`  | repeated string                    | 15 |                                                                                                                                                                                                                                            |
-| `depends_on`  | repeated string                    | 16 |                                                                                                                                                                                                                                            |
-| `read_only`   | bool                               | 17 |                                                                                                                                                                                                                                            |
-| `checkpoint`  | string                             | 18 |                                                                                                                                                                                                                                            |
-| `releases`    | [repeated JobRelease](#jobrelease) | 19 |                                                                                                                                                                                                                                            |
-| `created`     | int64                              | 20 | unix SECONDS, as the store records them                                                                                                                                                                                                    |
-| `updated`     | int64                              | 21 |                                                                                                                                                                                                                                            |
+| Field         | Type                               | #  | Description                                                                                                                                                                                                                                                         |
+| ------------- | ---------------------------------- | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | string                             | 1  | name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id is the last segment, and is what the CLI's `job run <name>` leaf takes.                                                                                                    |
+| `description` | string                             | 2  |                                                                                                                                                                                                                                                                     |
+| `running`     | bool                               | 3  | an instance is in flight right now                                                                                                                                                                                                                                  |
+| `last_run`    | [JobRun](#jobrun)                  | 4  | most recent run; unset if the job has never been submitted                                                                                                                                                                                                          |
+| `target`      | [ResourceSize](#resourcesize)      | 5  | current size of what the job operates on (trail, cache, or logs)                                                                                                                                                                                                    |
+| `id`          | string                             | 6  | the bare row id, without the "jobs/" collection segment                                                                                                                                                                                                             |
+| `holder`      | [JobHolder](#jobholder)            | 7  | who runs it                                                                                                                                                                                                                                                         |
+| `state`       | string                             | 8  | state is the row's lifecycle position: declared, running, exited, pass, fail or no\_return. A string rather than an enum because the vocabulary is the job store's and a second closed set here would be a second place to add a value to.                          |
+| `criteria`    | string                             | 9  | The facts a DELEGATED job carries, empty on a catalog job. These are what an orchestrator declared, never a verdict magus reached. Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before the rename still reads and writes this field. |
+| `parent`      | string                             | 10 | the job this one was handed out under, empty for a root                                                                                                                                                                                                             |
+| `model`       | string                             | 11 |                                                                                                                                                                                                                                                                     |
+| `check`       | string                             | 12 | the one check this job runs, rendered as the command that runs it                                                                                                                                                                                                   |
+| `write_paths` | repeated string                    | 13 |                                                                                                                                                                                                                                                                     |
+| `deny_paths`  | repeated string                    | 14 |                                                                                                                                                                                                                                                                     |
+| `read_paths`  | repeated string                    | 15 |                                                                                                                                                                                                                                                                     |
+| `depends_on`  | repeated string                    | 16 |                                                                                                                                                                                                                                                                     |
+| `read_only`   | bool                               | 17 |                                                                                                                                                                                                                                                                     |
+| `checkpoint`  | string                             | 18 |                                                                                                                                                                                                                                                                     |
+| `releases`    | [repeated JobRelease](#jobrelease) | 19 |                                                                                                                                                                                                                                                                     |
+| `created`     | int64                              | 20 | unix SECONDS, as the store records them                                                                                                                                                                                                                             |
+| `updated`     | int64                              | 21 |                                                                                                                                                                                                                                                                     |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -73,7 +73,7 @@ JobOverlap is one pair of jobs whose declared write paths intersect. Derived on 
 
 Each side's intersecting declarations come separately, because the two are rarely the same string ("internal/job" and "internal/job/store.go" intersect) and a reader who cannot tell which job claimed which has nothing to act on.
 
-Source: [job.proto:119](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L119).
+Source: [job.proto:125](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L125).
 
 | Field     | Type            | # | Description |
 | --------- | --------------- | - | ----------- |
@@ -88,7 +88,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 JobRelease is a path a job gave up, and the version of it the next one inherits. The digest is the file's sha256 when there was a file; "absent" and "dir" are carried through as they are rather than turned into a hash-shaped lie.
 
-Source: [job.proto:106](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L106).
+Source: [job.proto:112](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L112).
 
 | Field         | Type   | # | Description  |
 | ------------- | ------ | - | ------------ |
@@ -102,7 +102,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobRun is one completed execution of a job.
 
-Source: [job.proto:127](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L127).
+Source: [job.proto:133](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L133).
 
 | Field             | Type      | # | Description                                                                                                                                                                                                                                                           |
 | ----------------- | --------- | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,7 +120,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 Paginated by contract so growth never forces a breaking change, though the registry is a fixed handful today and one page always holds it.
 
-Source: [job.proto:157](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L157).
+Source: [job.proto:163](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L163).
 
 | Field        | Type   | # | Description                     |
 | ------------ | ------ | - | ------------------------------- |
@@ -131,7 +131,7 @@ Used by: [ListJobs (request)](job.md#listjobs).
 
 ### ListJobsResponse
 
-Source: [job.proto:161](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L161).
+Source: [job.proto:167](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L167).
 
 | Field             | Type                               | # | Description                                                                             |
 | ----------------- | ---------------------------------- | - | --------------------------------------------------------------------------------------- |
@@ -145,7 +145,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 ResourceSize is the current magnitude of a job's target resource, for a caller to show how much there is to maintain (and to judge whether a rotate/clear is worth running).
 
-Source: [job.proto:143](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L143).
+Source: [job.proto:149](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L149).
 
 | Field        | Type  | # | Description                                                 |
 | ------------ | ----- | - | ----------------------------------------------------------- |
@@ -156,7 +156,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 ### RunJobRequest
 
-Source: [job.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L148).
+Source: [job.proto:154](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L154).
 
 | Field  | Type   | # | Description                                                                                                                                                                                                                                                       |
 | ------ | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -166,16 +166,16 @@ Used by: [RunJob (request)](job.md#runjob).
 
 ### RunJobResponse
 
-RunJobResponse reports what the submission did: whether the job started or coalesced, the invocation id and console deep-link for its live log, and the job's fresh metadata snapshot so a caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
+RunJobResponse reports what the submission did: whether the job started or coalesced, the invocation id, and the job's fresh metadata snapshot so a caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
 
 Source: [job.proto:49](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L49).
 
-| Field           | Type                        | # | Description                                                               |
-| --------------- | --------------------------- | - | ------------------------------------------------------------------------- |
-| `state`         | [SubmitState](#submitstate) | 1 |                                                                           |
-| `invocation_id` | string                      | 2 | the running job's invocation id (the new one, or the coalesced one)       |
-| `console_url`   | string                      | 3 | deep-link to this invocation's live log; empty when no console is mounted |
-| `job`           | [Job](#job)                 | 4 | the job's descriptor plus its last-run and current-size metadata          |
+| Field           | Type                        | # | Description                                                                                                                                                                                                                                                                                                         |
+| --------------- | --------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`         | [SubmitState](#submitstate) | 1 |                                                                                                                                                                                                                                                                                                                     |
+| `invocation_id` | string                      | 2 | the running job's invocation id (the new one, or the coalesced one)                                                                                                                                                                                                                                                 |
+| `console_url`   | string                      | 3 | Where to watch this job: the console's runs surface scoped to invocation\_id. A PATH, not an absolute URL, because the reader is the console itself and resolves it against its own origin. Empty only when the daemon coalesced a submit it could not name, since a run with no invocation has nothing to link to. |
+| `job`           | [Job](#job)                 | 4 | the job's descriptor plus its last-run and current-size metadata                                                                                                                                                                                                                                                    |
 
 Used by: [RunJob (response)](job.md#runjob).
 
@@ -185,7 +185,7 @@ Used by: [RunJob (response)](job.md#runjob).
 
 JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the daemon's own housekeeping from work a session was handed without asking a second door.
 
-Source: [job.proto:58](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L58).
+Source: [job.proto:62](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L62).
 
 | Value                    | # | Description                                             |
 | ------------------------ | - | ------------------------------------------------------- |

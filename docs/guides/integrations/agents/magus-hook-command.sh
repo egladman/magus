@@ -1,0 +1,248 @@
+#!/usr/bin/env sh
+# magus guard hook: judges ONE shell command an agent is about to run.
+#
+# This file is the source of truth. The docs site embeds it, magus's own
+# repository invokes it, and you can download it and do the same. POSIX sh, no
+# bashisms; nothing in it is magus-internal.
+#
+# Contract: reads the host's event as JSON on stdin, selects its command with
+# jq, then pipes the command into magus session hook. It writes the host's response on
+# stdout and exits 0 either way. Override any of the variables below:
+#
+#   HOST_EVENT_PATH  dot-path to the command inside your host's event
+#   HOST_EVENT_RAW   when set, hand the WHOLE host event to magus session hook
+#                    instead of selecting HOST_EVENT_PATH out of it - for a
+#                    surface whose payload is not one string, such as an MCP
+#                    tool call (a tool name plus a params object)
+#   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+#   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+#   HOST_RESPONSE    Go template rendering your host's reply
+#   HOST_ADVISE_BRANCH  the advise arm of that template
+#   __MAGUS_NO_ADVISE  set it when the host has no context-injection channel, so
+#                    an advise renders nothing rather than a reply it rejects
+#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
+#   __MAGUS_SHELL_FLAGS  extra `magus shell` flags this wiring declares about itself,
+#                    space-separated. Capabilities, not policy: a config that also
+#                    matches its host's skill tool passes --observes-skill-loads, and
+#                    rules that require a skill load stand down where it is absent
+#   __MAGUS_BIN  path to the binary, when it is not on PATH
+#   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
+#                    host can choose its own fail-open or fail-closed stance
+#   __MAGUS_FAILED_RESPONSE  the same, for a magus that IS found but cannot judge
+#                    the command. Left unset, this file builds one from evidence:
+#                    which binary it resolved, that binary's version, and the
+#                    error it actually printed
+#
+# The defaults are Claude Code's event and response shape.
+#
+# __MAGUS_AGENT_NAME and the session are ATTRIBUTION, not policy. magus records them on
+# its activity event so a reader can tell which host produced an observation;
+# neither one can change the verdict, and a host whose event carries no session
+# id records none and is judged exactly the same.
+#
+# __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
+# magus's own configuration surface, so a variable this template invents must stay
+# out of it rather than look like a setting magus reads.
+#
+# On a missing magus this prints a visible notice rather than exiting quietly. A
+# bare `command -v magus || exit 0` fails SILENTLY - the guard never runs and
+# nothing says so - and an unguarded session you know about beats one you do not.
+#
+# The line below declares, per guard surface, how much of a verdict this file
+# can carry: model (reaches the agent), human (reaches the person only), or none
+# (not delivered). It is machine-read by the host-parity gate, which fails the
+# build when a decision or surface exists in the guard contract that some host
+# was never asked about. Keep it true to what HOST_RESPONSE actually renders.
+# magus-guard-template: 14
+# magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none
+# claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
+# so HOST_EVENT_RAW forwards the whole event instead, and the same hookSpecificOutput reply this
+# file already renders for the command surface carries a deny or an advise on this one too.
+# magus-guard-coverage: schema=1 host=codex surface=mcp deny=model advise=model pass=none
+# Codex PreToolUse matches canonical MCP names such as mcp__magus__*, whose tool_input is
+# an arguments object rather than a command string. The Codex template therefore sets
+# HOST_EVENT_RAW=1 so magus session hook can judge the complete event and render the same
+# hookSpecificOutput deny or advisory as it does for Bash.
+
+# Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
+# the first one would terminate a ${...} expansion, silently truncating it.
+[ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.command'
+[ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
+[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+# The advise arm is split out because not every host has one, and because a host
+# that REJECTS the key is worse off than one that ignores it: an unsupported field
+# can make the host mark the hook run failed and continue the call, so an advisory
+# it cannot take disarms the guard rather than merely going unread. No host shipped
+# here is in that position today, since both hosts wired to this file take
+# additionalContext, so the flag has no user and is kept for the one you may wire.
+# A plain `[ -n ... ] ||` cannot express "deliberately empty" - an empty value looks
+# unset and gets the default back - and ${VAR-default} is unusable here for the same
+# `}` reason as above. So the suppression is its own flag.
+if [ -n "$__MAGUS_NO_ADVISE" ]; then
+  HOST_ADVISE_BRANCH=''
+else
+  [ -n "$HOST_ADVISE_BRANCH" ] || HOST_ADVISE_BRANCH='{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}'
+fi
+[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}'"$HOST_ADVISE_BRANCH"'{{end}}'
+# Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
+# newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
+# not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
+# warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
+# 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
+# the knowledge.notes key while `magus doctor` reported the guard as fine.
+#
+# Found by walking UP to the magusfile, not by testing ./magus alone. A hook runs in the
+# host's session directory, and that is not always the workspace root: a session opened in
+# a subdirectory, or opened in one checkout while the work happens in another, tests a
+# ./magus that is not there and falls through to PATH. Where PATH's copy cannot load the
+# workspace at all, that is the entire guard failing open - measured 2026-08-27, when a
+# piped `magus affected ci` that the rules DO deny ran unjudged. Same upward search for a
+# project root that every other ecosystem's runner does.
+guard_root=$PWD
+while [ -n "$guard_root" ] && [ -z "$__MAGUS_BIN" ]; do
+  if [ -f "$guard_root/magusfile.buzz" ]; then
+    [ -x "$guard_root/magus" ] && __MAGUS_BIN=$guard_root/magus
+    break
+  fi
+  guard_root=${guard_root%/*}
+done
+[ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$__MAGUS_UNAVAILABLE_RESPONSE" ] || __MAGUS_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard."}}'
+
+# stdin is a pipe and can only be drained once, so the event is read into a
+# variable and selected from twice - the command to judge, and the session id to
+# attribute it to. `// empty` keeps a host without that field at the empty
+# string rather than the literal "null".
+#
+# Read BEFORE the availability check below, because the notices that check prints are
+# held to one firing per session and the session id is what keys them. jq failing here
+# leaves the session empty, which guard_notice_once handles as an unidentified session.
+event=$(cat)
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
+transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
+
+# guard_notice_once succeeds the first time $1 fires in this session and fails on every
+# repeat, so a caller writes `guard_notice_once <family> && printf ...`.
+#
+# The notices it holds report a BROKEN INSTALLATION. That is a fact for the person, and
+# there is nothing in it an agent can act on, so a repeat is pure noise: measured at 2,741
+# firings over recent sessions, 99% of them same-session repeats of text already declined.
+#
+# The marker lives under TMPDIR rather than in magus's own state because this runs when
+# magus is missing or too broken to judge, so it cannot ask magus for anything. cksum and
+# mkdir are POSIX; creating the marker is idempotent, so two concurrent tool calls race to
+# the same harmless result.
+#
+# A host that reports no session id shares one marker aged out after __MAGUS_NOTICE_WINDOW
+# minutes, so the first session on such a host cannot silence every session after it.
+guard_notice_once() {
+  notice_dir=${TMPDIR:-/tmp}/magus-guard-notices
+  notice_key=$(printf '%s' "${session:-anon}" | cksum | cut -d' ' -f1)
+  notice_marker=$notice_dir/$notice_key.$1
+  mkdir -p "$notice_dir" 2>/dev/null || return 0
+  if [ -f "$notice_marker" ]; then
+    [ -n "$session" ] && return 1
+    find "$notice_marker" -mmin +"${__MAGUS_NOTICE_WINDOW:-120}" 2>/dev/null | grep -q . || return 1
+  fi
+  : > "$notice_marker" 2>/dev/null
+  return 0
+}
+
+if [ -z "$__MAGUS_BIN" ] || [ ! -x "$__MAGUS_BIN" ]; then
+  guard_notice_once unavailable && printf '%s' "$__MAGUS_UNAVAILABLE_RESPONSE"
+  exit 0
+fi
+
+# Attribution is BEST EFFORT; the verdict is not.
+#
+# --agent-name and --session postdate the current magus release, and this template is downloaded and run
+# against whatever binary a reader already has. Passing them unconditionally does not degrade the
+# guard, it BREAKS it: an older binary rejects the unknown flag, prints its usage to stdout, and
+# exits non-zero, so the host receives no verdict at all and every deny and advise rule silently
+# stops being enforced. A guard that fails because of a metadata flag has its priorities backwards.
+#
+# So: try with attribution, and on any failure re-run without it - exactly the call this script made
+# before attribution existed. One extra process only on an older binary, and none once the flags are
+# in a release.
+#
+# __MAGUS_SHELL_FLAGS rides the same retry. It is how a wiring DECLARES a capability it
+# provides - today `--observes-skill-loads`, set by a config that also matches the host's
+# skill tool - and a rule that needs one stands down when it is absent. That makes the
+# fallback below the correct degradation rather than a loss: a binary too old for the flag
+# drops it, magus hears no claim, and the rule it would have armed goes quiet instead of
+# denying something the reader cannot fix. Word-split on purpose, so a wiring may pass more
+# than one; keep the values flag-shaped and space-separated.
+# shellcheck disable=SC2086
+guard() {
+  if [ -n "$HOST_EVENT_RAW" ]; then
+    printf '%s' "$event" | "$__MAGUS_BIN" shell $__MAGUS_SHELL_FLAGS "$@" -o "template=$HOST_RESPONSE"
+  else
+    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$__MAGUS_BIN" shell $__MAGUS_SHELL_FLAGS "$@" -o "template=$HOST_RESPONSE"
+  fi
+}
+
+# guard_failure_notice states WHICH binary went silent, what version it is, and what it
+# actually said - the three facts a reader otherwise spends a session collecting.
+#
+# The text this replaces offered two suspects, "too old for session hook, or cannot load
+# this workspace", and the second is not a cause at all: the deny rules need no workspace,
+# and a current binary run from an empty directory still denies. Naming a suspect the
+# evidence does not support is worse than naming none, because the reader goes and checks it.
+#
+# It re-runs the guard to capture stderr, which the verdict path discards. One extra
+# process, only on the path that is already broken - the same trade the attribution retry
+# above makes. WARN lines are dropped because a config the binary is too old to parse warns
+# BEFORE it fails, and that warning is a symptom of the same staleness, not the error.
+guard_failure_notice() {
+  ver=$("$__MAGUS_BIN" version 2>/dev/null | head -n 1)
+  [ -n "$ver" ] || ver='version unreadable'
+  why=$(guard 2>&1 >/dev/null | grep -v 'WARN' | head -n 1)
+  [ -n "$why" ] || why='it printed no error'
+  printf 'magus guard is NOT running: %s (%s) could not judge this command, so its deny and advise rules are unenforced. It said: %s. Rebuild or update THAT binary to restore the guard.' \
+    "$__MAGUS_BIN" "$ver" "$why"
+}
+# A DENY exits non-zero (2) with the verdict on stdout, so a bare `||` retry would treat
+# every blocked command as "this binary rejected the attribution flags" and judge it a
+# second time - unattributed, and recorded twice in the activity trail. Emptiness alone
+# cannot tell the cases apart either, because a pass renders empty on purpose. Both
+# together can: a rejected flag prints its usage to STDERR and leaves stdout empty, while
+# any real verdict that is not a pass leaves something on stdout.
+verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" 2>/dev/null)
+status=$?
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  verdict=$(guard 2>/dev/null)
+  status=$?
+fi
+
+# A PASS and a BROKEN GUARD both render nothing, and telling them apart is the whole
+# point of this block. A pass exits 0 with empty output because there was nothing to
+# say; a binary that cannot run - too old for `session hook`, unable to load the workspace,
+# half-written by a concurrent build - exits non-zero with empty output, and printing
+# that as a pass silently disables every rule with nothing anywhere saying so.
+#
+# That silence is the failure mode this guard can least afford, because it looks
+# exactly like a clean session. The same reasoning is already spelled out above for a
+# MISSING binary; a broken one had been left to fail quietly, which is the case that
+# actually occurs - a stale binary on PATH outlives a missing one.
+#
+# Fail OPEN either way. A guard that blocks work because it cannot judge it has its
+# priorities backwards, and an unguarded session you know about beats one you do not.
+#
+# Said once per session. The line above used to repeat on every tool call, on the
+# reasoning that nothing survives between two of them; guard_notice_once is what does,
+# without asking the binary that just failed to run for anything. Twenty copies of
+# identical text is wallpaper, and wallpaper is how a real failure goes unread.
+if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
+  if guard_notice_once failed; then
+    if [ -n "$__MAGUS_FAILED_RESPONSE" ]; then
+      printf '%s' "$__MAGUS_FAILED_RESPONSE"
+    else
+      guard_failure_notice | jq -Rc '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:.}}'
+    fi
+  fi
+  exit 0
+fi
+printf '%s' "$verdict"

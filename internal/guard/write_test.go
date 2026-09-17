@@ -73,7 +73,7 @@ func fleetLeases() []types.Job {
 	return []types.Job{
 		{
 			ID:           "lease-a",
-			Goal:         "own the ledger store\nacceptance: List stays cheap",
+			Criteria:     "own the ledger store\nacceptance: List stays cheap",
 			WritePaths:   []string{"internal/ledger/**"},
 			State:        types.StateRunning,
 			Checkpoint:   "rev-a",
@@ -83,7 +83,7 @@ func fleetLeases() []types.Job {
 		},
 		{
 			ID:           "lease-b",
-			Goal:         "grade writes in the guard",
+			Criteria:     "grade writes in the guard",
 			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
 			DenyPaths:    []string{"cmd/magus/gen/**"},
 			State:        types.StateDeclared,
@@ -137,7 +137,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
 		leases := append(fleetLeases(), types.Job{
 			ID:       "scout",
-			Goal:     "inventory the guard rules",
+			Criteria: "inventory the guard rules",
 			ReadOnly: true,
 			State:    types.StateRunning,
 		})
@@ -735,8 +735,8 @@ func TestAdviseAgentSurfaceWrite(t *testing.T) {
 	for _, rel := range []string{
 		"internal/agent/skills/magus-run/SKILL.md",
 		"internal/handler/mcp/registry.go",
-		"internal/hint/mcptool.go",
-		"internal/hint/clicommand.go",
+		"internal/hint/mcp_tool.go",
+		"internal/hint/cli_command.go",
 	} {
 		got := adviseAgentSurfaceWrite(rel)
 		assert.Contains(t, got, "magus-skill-authoring", rel)

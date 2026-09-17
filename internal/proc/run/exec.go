@@ -94,7 +94,7 @@ type ExecResult struct {
 	// rather than what the tree held together.
 	//
 	// So a sampler also totals the live process tree while the command runs (see
-	// treesample.go), which catches concurrency but only at the instants it looks.
+	// tree_sample.go), which catches concurrency but only at the instants it looks.
 	// The maximum of the two cannot be smaller than what magus reported before
 	// sampling existed, and is a floor rather than a true peak either way.
 	MaxRSSBytes int64

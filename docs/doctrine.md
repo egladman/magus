@@ -81,6 +81,36 @@ one answered question at a time.
 enforcement half - helpful, never so helpful that the operator stops
 learning.
 
+### A cache is an accelerator, never a dependency
+
+Every cache magus has - the local one, the remote one shared through CI, a
+published knowledge graph pulled as an OCI artifact - skips work that the
+machine in front of you could do itself. That is the whole contract. Delete
+the cache directory, revoke the registry credential, unplug the network, and
+a clean clone still builds, still gates, still answers. It is slower. It is
+not broken.
+
+The line to hold: a cache may shorten a derivation, never be the only copy of
+one. The moment a clean clone cannot proceed without fetching something, the
+artifact has stopped being a cache and become an undeclared build input, and
+the questions that follow are the ones no cache should raise. Who can serve
+it. What happens when they do not. Whether the bytes are the ones the source
+would have produced, or the ones somebody uploaded. A tool that installs
+through none of the toolchains it drives, for reasons
+[Scope](scope.md) states as a rule, does not get to quietly depend on a
+registry for its own derived state either.
+
+This is why the remote cache is verified by a trust set rather than trusted
+for being reachable, why an unverifiable artifact is a miss rather than a
+warning, and why `magus graph pull` is an optimization over
+`magus graph build` rather than a step before it. It is also the test for any
+future store: if switching it off changes an answer rather than a duration,
+it was never a cache.
+
+The failure it prevents is quiet. A cache that becomes load-bearing does not
+announce the change; it works, for months, until someone clones fresh on a
+plane and discovers the build was distributed all along.
+
 ### Human-first is the AI integration
 
 magus was built for humans, and agents drive it well anyway, because an
@@ -315,6 +345,30 @@ workaround runs outside the cache and the sandbox, where magus can no longer
 account for the work. An error that leaves you with no next step is a doctrine
 bug; file it as one.
 
+### Misconfiguration is an error, never a warning
+
+A setting magus cannot honor fails the command that read it. It is not logged
+and stepped over, not repaired with a default, not carried as a warning nobody
+reads in a CI log that scrolled past an hour ago.
+
+The reason is what a warning actually communicates. You wrote the setting, so
+you believe it is in effect; a warning leaves that belief standing while the
+behavior underneath it is something else. Every subsequent decision rests on
+a premise the tool already knew was false, and the failure surfaces somewhere
+far away, as something else, long after the edit that caused it. A tool that
+knows a value is wrong and proceeds anyway has chosen to be misleading.
+
+So the test for any warning is one question: is the value honored? If it is
+not, the warning is a bug in disguise, and the fix is to fail. If it is, say
+nothing, because a warning about something that works is noise that teaches
+people to skim past the warnings that matter.
+
+The corollary binds the other direction: a knob magus accepts is a knob magus
+must obey. A field that reads as a retention window while the code enforces a
+fixed cap, or a flag documented as repeatable that silently keeps the last
+value, is the same defect as the ignored setting. It just fails later, and
+reads as a lie rather than an oversight.
+
 ### Automation you can interrogate
 
 Each automated verdict has a lens that shows its inputs. `affected --explain`
@@ -447,19 +501,19 @@ tool owes them is a record that makes each one visible and cheap to revisit.
 Below is that record: capabilities magus could have had and does not, or had and
 removed, with what decided each and where to check it.
 
-| what                                                                   | what was decided                                                                                                                                                                 | where                                                     |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| an advisory when an agent edits a file it never looked up              | not built: 0.8% of 3,560 first edits were never anchored, and all 27 cases read by hand were matcher artifacts                                                                   | transcript measurement, 2026-09-02                        |
-| denying a recursive grep of a bare identifier, to force `refs`         | measured and refused: 45 such greps in the whole corpus, and `refs` answered roughly 60% of them; an advisory routed by the pattern's shape shipped instead, and it never blocks | `f963a9f1b`, measured with `9519797b3`                    |
-| an `ask` verdict, so a denial could be waved through in the moment     | built across 14 files and reverted the same day: two of the four host glues would have silently PERMITTED every raw-tool denial instead of prompting                             | `internal/agent/guard.go:25`, still three decisions       |
-| 47 half-built features found in an audit before the project was shared | each one killed, finished, or pinned with its reason; one kill was wrong and the person reversed it                                                                              | `4f8cc295a`                                               |
-| machine-wide memory admission control                                  | deleted; `memory_mb` kept as a slot weight                                                                                                                                       | `b6abdfe43`                                               |
-| rotating the activity trail from its write path                        | deleted rather than keep promising bounded retention to a workspace running no daemon                                                                                            | `42a0996c5`                                               |
-| `magus graph verify`                                                   | folded into `doctor`: no in-tree consumer, absent from the CLI registry, and filed under a graph it never read                                                                   | `3f805e159`                                               |
-| `magus_tail_log`                                                       | named in public as a duplicate of `magus_output` and shipped for two more weeks as a debt; deleted when the tool catalog became generated from the descriptor                    | `blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md` |
-| a model adapter                                                        | never built; the one extension seam that is absent rather than sealed                                                                                                            | [Scope](scope.md#where-others-drew-it)                    |
-| a paid tier, an account, a capability behind either                    | never built; there is nothing to upsell                                                                                                                                          | [Scope](scope.md#the-line)                                |
-| generating code your build depends on                                  | never built; nothing magus writes into your repository has to exist for `magus run build` to work                                                                                | [Scope](scope.md#the-line)                                |
+| what                                                                   | what was decided                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | where                                                                                                                    |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| an advisory when an agent edits a file it never looked up              | not built: 0.8% of 3,560 first edits were never anchored, and all 27 cases read by hand were matcher artifacts                                                                                                                                                                                                                                                                                                                                                                                                                   | transcript measurement, 2026-09-02                                                                                       |
+| denying a recursive grep of a bare identifier, to force `refs`         | measured and partly reversed: the original count (45 such greps, denominator unstated) undercounted the sample - a 2026-09-15 remeasurement over 1,116 transcripts found 699 matching the guard's own shape (about 2,700 individual greps), the same roughly-60%-answered-by-`refs` ratio holding on the larger sample; an advisory still ships for raw text the graph cannot vouch for, but since `a05b4c414` a recursive grep of a DEFINITIVELY-indexed symbol is DENIED outright (`denyRuleSymbolSearch`), not merely advised | `f963a9f1b`, measured with `9519797b3`, remeasured 2026-09-15; denied since `a05b4c414` (`internal/guard/shell.go:1228`) |
+| an `ask` verdict, so a denial could be waved through in the moment     | built across 14 files and reverted the same day: two of the four host glues would have silently PERMITTED every raw-tool denial instead of prompting                                                                                                                                                                                                                                                                                                                                                                             | `internal/agent/guard.go:25`, still three decisions                                                                      |
+| 47 half-built features found in an audit before the project was shared | each one killed, finished, or pinned with its reason; one kill was wrong and the person reversed it                                                                                                                                                                                                                                                                                                                                                                                                                              | `4f8cc295a`                                                                                                              |
+| machine-wide memory admission control                                  | deleted; `memory_mb` kept as a slot weight                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `b6abdfe43`                                                                                                              |
+| rotating the activity trail from its write path                        | deleted rather than keep promising bounded retention to a workspace running no daemon                                                                                                                                                                                                                                                                                                                                                                                                                                            | `42a0996c5`                                                                                                              |
+| `magus graph verify`                                                   | folded into `doctor`: no in-tree consumer, absent from the CLI registry, and filed under a graph it never read                                                                                                                                                                                                                                                                                                                                                                                                                   | `3f805e159`                                                                                                              |
+| `magus_tail_log`                                                       | named in public as a duplicate of `magus_output` and shipped for two more weeks as a debt; deleted when the tool catalog became generated from the descriptor                                                                                                                                                                                                                                                                                                                                                                    | `blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md`                                                                |
+| a model adapter                                                        | never built; the one extension seam that is absent rather than sealed                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [Scope](scope.md#where-others-drew-it)                                                                                   |
+| a paid tier, an account, a capability behind either                    | never built; there is nothing to upsell                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Scope](scope.md#the-line)                                                                                               |
+| generating code your build depends on                                  | never built; nothing magus writes into your repository has to exist for `magus run build` to work                                                                                                                                                                                                                                                                                                                                                                                                                                | [Scope](scope.md#the-line)                                                                                               |
 
 Two of those rows record a measurement that killed an idea somebody wanted,
 which is the only reason the rest of the list is worth anything. A ledger of

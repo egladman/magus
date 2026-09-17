@@ -746,3 +746,41 @@ export fun lookalike(ctx: magus\Context, args: [str]) > void {
 		assert.False(t, n.ReadsSecrets, "target %q was flagged without touching a credential", name)
 	}
 }
+
+// TestWritesOutsideRWCharm pins the shape that shipped in this repo's own buzz-test target:
+// the badge was written before the rw branch, so a run given no rw charm rewrote the file it
+// was about to judge.
+func TestWritesOutsideRWCharm(t *testing.T) {
+	t.Run("a write before the rw branch is the finding", func(t *testing.T) {
+		got := WritesOutsideRWCharm(`export fun badge(ctx: magus\Context, args: [str]) > void {
+    final wanted = render();
+    fs\writeFile("assets/badge.svg", content: wanted);
+    if (ctx.hasCharm("rw")) { return; }
+    throw "stale";
+}
+`)
+		require.Len(t, got, 1)
+		assert.Equal(t, "badge", got[0].Fn)
+	})
+
+	t.Run("a write inside the rw branch is correct and silent", func(t *testing.T) {
+		got := WritesOutsideRWCharm(`export fun badge(ctx: magus\Context, args: [str]) > void {
+    final wanted = render();
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("assets/badge.svg", content: wanted);
+        return;
+    }
+    throw "stale";
+}
+`)
+		assert.Empty(t, got)
+	})
+
+	t.Run("a target with no rw branch is never reported", func(t *testing.T) {
+		got := WritesOutsideRWCharm(`export fun generate(ctx: magus\Context, args: [str]) > void {
+    fs\writeFile("gen/out.json", content: "{}");
+}
+`)
+		assert.Empty(t, got, "a target that always writes is an ordinary generator, and never claimed to run two ways")
+	})
+}

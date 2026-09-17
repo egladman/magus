@@ -8,7 +8,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 )
 
 // RegisterSemver builds the "semver" module map and returns it.
@@ -73,7 +72,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueSemverSemverVersion(ret0), nil
+		return ObjectSemverVersion(ret0), nil
 	}))
 	m.MapSet("next", vm.DirectValue("semver.next", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		v := Str(bzArgs, 0)
@@ -81,25 +80,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueSemverSemverNext(ret0), nil
+		return ObjectSemverNext(ret0), nil
 	}))
 	return m
-}
-func buzzValueSemverSemverVersion(v types.SemverVersion) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("major", vm.IntValue(int64(v.Major)))
-	out.MapSet("minor", vm.IntValue(int64(v.Minor)))
-	out.MapSet("patch", vm.IntValue(int64(v.Patch)))
-	out.MapSet("prerelease", vm.StrValue(v.Prerelease))
-	out.MapSet("metadata", vm.StrValue(v.Metadata))
-	out.MapSet("original", vm.StrValue(v.Original))
-	return out
-}
-
-func buzzValueSemverSemverNext(v types.SemverNext) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("major", vm.StrValue(v.Major))
-	out.MapSet("minor", vm.StrValue(v.Minor))
-	out.MapSet("patch", vm.StrValue(v.Patch))
-	return out
 }

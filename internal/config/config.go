@@ -378,25 +378,32 @@ type Daemon struct {
 // survives a daemon restart. A zero (or negative) interval disables that job's scheduling.
 // clear-cache is intentionally absent: wiping the cache is user-triggered only, never scheduled.
 type Maintenance struct {
-	// RotateActivities is how often the daemon trims the activity trail.
-	//
-	// It is that trail's only bound, so this job owns rotation outright, and it runs hourly
-	// because a rotate on an already-small trail costs one stat. A write-triggered rotate
-	// running off a producer's own append counter cannot share the job: a counter only bounds
-	// the producer that owns it, and an agent hook is a short-lived process with nowhere to
-	// keep one, so a hook-fed trail would be bounded by nothing at all.
-	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 1h (its only bound)
-	RotateLogs       time.Duration `json:"rotate_logs" yaml:"rotate_logs"`             // trim the run-log journals; default 7d (their only bound, so weekly)
-	// PrunePreserved drops the working-copy captures `vcs checkpoint --preserve` minted
-	// once they outlive the thirty days that flag promises.
-	//
+	// RotateActivities is only how often the daemon CHECKS whether the activity trail is due
+	// for a trim; it is not a retention age. The trail rotates on event count instead (10000
+	// events, with a per-kind floor that keeps a rare kind's newest entries no matter how loud
+	// its neighbors are; see maxEvents and perKindFloor in internal/trail), so there is no age
+	// cutoff this field could hand it: an age cutoff would have to decide whether it or the
+	// per-kind floor wins when the two disagree, and that policy does not exist. It runs
+	// hourly because a rotate on an already-small trail costs one stat.
+	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // poll cadence only; retention is trail.maxEvents (10000), not this
+	// RotateLogs is both how often the daemon checks the run-log journals AND, since the
+	// check doubles as the enforcement, the maximum age a kept journal may reach: a journal
+	// older than this is dropped even when the workspace is well under the count (500) and
+	// size (2GB) caps those also enforce, and the tightest of the three wins. Weekly by
+	// default, because run-logs otherwise have no age bound at all.
+	RotateLogs time.Duration `json:"rotate_logs" yaml:"rotate_logs"` // trim run-log journals older than this; default 7d
+	// PrunePreserved is only how often the daemon checks for expired `vcs checkpoint
+	// --preserve` captures; it is not the retention window. That window is fixed at 30 days
+	// (vcs.preserveRetention) and stays out of this field on purpose: the days a preserved
+	// capture survives is a promise the `--preserve` flag itself advertises, and letting a
+	// per-daemon poll knob also change what gets deleted would make that promise mean
+	// whatever this config happened to say (see the rationale on vcs.PrunePreserved).
 	// Preserve prunes on its own call too, but only a repository preserved a SECOND time
-	// ever reaches that pass, so this is what makes the promise true for one preserved
-	// once. Daily, because the window it enforces is thirty days: a capture surviving an
-	// extra day costs nothing, and the pass is one listing on a repository that has never
-	// preserved anything.
-	PrunePreserved time.Duration `json:"prune_preserved" yaml:"prune_preserved"`
-	SyncGraph      time.Duration `json:"sync_graph" yaml:"sync_graph"` // reconcile the graph; default 6h (a safety net behind the VCS hook)
+	// ever reaches that pass, so this scheduled job is what makes the promise hold for a
+	// repository preserved once and never again. Daily, since a capture surviving an
+	// extra day past the fixed window costs nothing.
+	PrunePreserved time.Duration `json:"prune_preserved" yaml:"prune_preserved"` // poll cadence only; retention is vcs.preserveRetention (30d), not this
+	SyncGraph      time.Duration `json:"sync_graph" yaml:"sync_graph"`           // reconcile the graph; default 6h (a safety net behind the VCS hook)
 	// CheckReview notices a merge or a new remark on a review this tree took part in. The only
 	// scheduled job that leaves the machine, so its default is the longest here: a pull request
 	// merges once, and a remark waiting fifteen minutes costs nobody anything.
@@ -419,6 +426,20 @@ type Knowledge struct {
 	// IDs from different repos cannot collide. Empty means --global covers only the
 	// current workspace.
 	Workspaces []string `json:"workspaces" yaml:"workspaces"`
+	// PublishedRef is the OCI artifact a published knowledge graph is READ from, as
+	// <registry>/<repository>:<tag>. Empty (the default) means this workspace pulls
+	// nothing and every graph is built locally.
+	//
+	// Opt-in per repository and never derived. A derived destination would mean a fork
+	// silently reading a namespace nobody chose, and the graph decides what magus answers
+	// about this tree, so it is not a thing to guess at. `magus graph push` writes it (see
+	// the magusfile's own registry declaration); this is the read side.
+	//
+	// When set, a history change (branch switch, merge, rebase) tries the pull before
+	// rebuilding, which is what makes a fresh worktree cheap: the SCIP shards are the
+	// expensive half and are never committed. A pull that fails for any reason is not an
+	// error, it is a local build.
+	PublishedRef string `json:"published_ref" yaml:"published_ref"`
 	// MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When
 	// exceeded after a build, least-recently-used shard files are evicted; an evicted
 	// shard is restored from the remote cache or rebuilt on the next query. 0
@@ -446,6 +467,22 @@ type Knowledge struct {
 	// one-shot CLI never auto-indexes); throttled and idle-gated so it never delays
 	// your own work. Set disabled to opt out.
 	SymbolIndexing SymbolIndexingConfig `json:"symbol_indexing" yaml:"symbol_indexing"`
+	// Duplication tunes the insight lens that ranks copied functions from the call graph.
+	// The defaults were set against this repository; a codebase of many small helpers
+	// will want MinShared higher, one of large functions may want MinScore lower.
+	Duplication DuplicationConfig `json:"duplication" yaml:"duplication"`
+	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
+	// the layer that answers which code agents actually touch. `magus graph build` runs
+	// each declared adapter before assembling, so the daemon's sync-graph job keeps it
+	// current without a second schedule.
+	//
+	// Nothing is derived: an adapter reads a transcript store outside the workspace,
+	// usually under $HOME, and magus does not go looking through a person's home
+	// directory because a config key was left blank. The ingest is also deliberately
+	// LOCAL. Everything it produces lives in the per-repo session store and the local
+	// shard, never in a committed graph, because a transcript carries the paths someone
+	// worked on and the prose their host recorded.
+	Sessions SessionsConfig `json:"sessions" yaml:"sessions"`
 	// Notes declares where this workspace keeps its human-authored notes (see
 	// NotesConfig). Empty (the default) means no notes store at all and every part of the
 	// feature is inert.
@@ -515,6 +552,27 @@ type NotesConfig struct {
 	Private string `json:"private" yaml:"private"`
 }
 
+// DuplicationConfig is knowledge.duplication in magus.yaml. See types.DuplicationOptions for
+// what each threshold filters and why each can err in both directions.
+type DuplicationConfig struct {
+	MinCallees   int     `json:"min_callees" yaml:"min_callees" validate:"gte=1"`
+	MinShared    int     `json:"min_shared" yaml:"min_shared" validate:"gte=1"`
+	MinScore     float64 `json:"min_score" yaml:"min_score" validate:"gte=0,lte=1"`
+	MinSpanRatio float64 `json:"min_span_ratio" yaml:"min_span_ratio" validate:"gte=0,lte=1"`
+	IncludeTests bool    `json:"include_tests" yaml:"include_tests"`
+}
+
+// Options is the config as the graph package reads it, which cannot import this one.
+func (c DuplicationConfig) Options() types.DuplicationOptions {
+	return types.DuplicationOptions{
+		MinCallees:   c.MinCallees,
+		MinShared:    c.MinShared,
+		MinScore:     c.MinScore,
+		MinSpanRatio: c.MinSpanRatio,
+		IncludeTests: c.IncludeTests,
+	}
+}
+
 // SymbolIndexingConfig tunes daemon background symbol auto-indexing (see
 // Knowledge.SymbolIndexing). Zero value = enabled with built-in timings.
 type SymbolIndexingConfig struct {
@@ -544,6 +602,43 @@ type KnowledgeVCSConfig struct {
 	// an agent, and the edges are already bounded by MaxCommits. Set false to keep only
 	// the per-file vcs_* attrs and omit the author layer.
 	Authorship *bool `json:"authorship" yaml:"authorship"`
+}
+
+// SessionsConfig configures agent-session ingestion (see Knowledge.Sessions). Zero value
+// = enabled, with nothing to run until an adapter is declared.
+type SessionsConfig struct {
+	// Disabled opts out entirely, so `graph build` runs no adapter and `--no-sessions`
+	// becomes the permanent answer. The switch to reach for when the transcripts on this
+	// machine are not yours to read.
+	Disabled bool `json:"disabled" yaml:"disabled"`
+	// Adapters are the commands that load each host's transcripts, run in the workspace
+	// root before the graph is assembled.
+	Adapters []SessionAdapter `json:"adapters" yaml:"adapters"`
+}
+
+// SessionAdapter declares one agent host's transcript loader.
+//
+// It is a COMMAND rather than a host magus knows how to read, and that is the whole
+// design: transcript formats belong to the hosts, so a host renaming a tool costs this
+// one line instead of a magus release. magus ships a ready adapter per host it documents
+// (docs/guides/integrations/agents/magus-session-load-*.sh); declaring one here is how a
+// workspace opts in, and writing your own is how an undocumented host gets supported
+// without waiting for anybody.
+//
+// The command's contract is `magus session load`'s: normalize the host's transcripts into
+// the event stream and load them. It owns its own incremental state, so re-running it is
+// expected to be cheap and to load only what is new.
+type SessionAdapter struct {
+	Host string `json:"host" yaml:"host"` // the host whose transcripts this reads, for reporting
+	// Command is the program and its arguments, run from the workspace root. A LIST, not a
+	// command line: magus executes this directly, with no shell, so a declared adapter
+	// runs the one program it names. That is both how magus represents every command it
+	// runs (see job.CatalogEntry.Argv) and what keeps a committed config value from
+	// becoming a second command on a machine that merely pulled the branch.
+	//
+	// Something needing a pipeline or a variable writes a script and names the script,
+	// which is what the adapters magus documents already are.
+	Command []string `json:"command" yaml:"command"`
 }
 
 // SymbolIndex declares one project's SCIP index for symbol ingestion.
@@ -626,6 +721,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_SANDBOX_ENABLED", "sandbox.enabled", "false", "When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
 		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
 		{"MAGUS_NO_WAIT", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, a run that finds a project's workspace lock held by another magus process fails immediately instead of queuing behind it, naming the holder and exiting 75 (EX_TEMPFAIL) so a caller can tell a busy machine from a broken build"},
+		{"MAGUS_NO_BOOTSTRAP_EXEC", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
 	}
 }
 
@@ -636,9 +732,9 @@ func Defaults() Config {
 		Daemon: Daemon{
 			Enabled: true,
 			Maintenance: Maintenance{
-				RotateActivities: time.Hour,          // the trail's only bound; cheap to run often (one stat when small)
-				RotateLogs:       7 * 24 * time.Hour, // run-logs have no other bound, so trim weekly
-				PrunePreserved:   24 * time.Hour,     // enforces a thirty-day window; a day's lag costs nothing
+				RotateActivities: time.Hour,          // poll cadence; cheap to check often (one stat when small)
+				RotateLogs:       7 * 24 * time.Hour, // poll cadence AND the age cap it enforces: weekly
+				PrunePreserved:   24 * time.Hour,     // poll cadence only; the 30-day window is fixed elsewhere
 				SyncGraph:        6 * time.Hour,      // safety net behind the VCS refresh hook
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
@@ -657,8 +753,13 @@ func Defaults() Config {
 			Threshold:        0.05,
 			AnnotateGHA:      true,
 		},
-		Hints:     Hints{Enabled: boolPtr(true)},
-		Knowledge: Knowledge{VCS: KnowledgeVCSConfig{Authorship: boolPtr(true)}},
+		Hints: Hints{Enabled: boolPtr(true)},
+		Knowledge: Knowledge{
+			VCS: KnowledgeVCSConfig{Authorship: boolPtr(true)},
+			// MinShared 4 is the line that mattered: at 3, identical triples of small
+			// helpers scored a perfect 1.0 and were most of the list.
+			Duplication: DuplicationConfig{MinCallees: 3, MinShared: 4, MinScore: 0.7, MinSpanRatio: 0.5},
+		},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",
 			ServiceName: "magus",

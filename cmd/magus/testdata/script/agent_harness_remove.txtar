@@ -1,0 +1,59 @@
+# magus agent harness remove is apply's inverse (defect 1: there was no way to
+# undo `harness apply` at all). It deletes only the managed entries and
+# config_defaults values apply wrote, leaves a person's own hooks alone, asks no
+# confirmation, and honors --dry-run.
+
+exec magus agent harness apply --id demo-host
+stdout 'updated demo-host harness'
+grep 'magus-hook-command.sh' host/hooks.json
+grep 'their-own-hook' host/hooks.json
+grep '"version": 1' host/hooks.json
+
+exec magus agent harness verify --id demo-host
+stdout 'verified demo-host harness'
+
+# --dry-run plans without touching the file. It is a global flag (internal/config),
+# not a per-subcommand one, so it precedes the verb.
+exec magus --dry-run agent harness remove --id demo-host
+stdout 'would remove demo-host harness'
+grep 'magus-hook-command.sh' host/hooks.json
+
+# the real removal: magus's entry and its config_default are gone, the user's own
+# hook and their own edited key survive untouched
+exec magus agent harness remove --id demo-host
+stdout 'removed demo-host harness'
+! grep 'magus-hook-command.sh' host/hooks.json
+grep 'their-own-hook' host/hooks.json
+! grep '"version": 1' host/hooks.json
+
+! exec magus agent harness verify --id demo-host
+stdout 'uncovered demo-host harness'
+
+# nothing left of ours: a second remove is a no-op, not an error
+exec magus agent harness remove --id demo-host
+stdout 'nothing to remove for demo-host harness'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+magus.project({"sources": ["*.md"]});
+-- harnesses/demo-host.json --
+{
+  "schema_version": 2,
+  "id": "demo-host",
+  "display": {"name": "Demo Host"},
+  "config": {"path": "host/hooks.json"},
+  "config_defaults": {"version": 1},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [{
+    "path": ["hooks", "before"],
+    "entries": [{"match": "run", "commands": [{"type": "command", "command": "sh magus-hook-command.sh"}]}]
+  }]
+}
+-- magus-hook-command.sh --
+#!/bin/sh
+cat >/dev/null
+printf 'deny'
+-- host/hooks.json --
+{"hooks":{"before":[{"match":"other","commands":[{"type":"command","command":"their-own-hook"}]}]}}

@@ -6,16 +6,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -96,14 +101,14 @@ func writeSCIP(t *testing.T, path string) {
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 }
 
-// goWorkspace describes a workspace whose "go" spell is symbol-capable (it exposes the
-// reserved scip op) and one project bound to it: the auto-enable inputs, no config.
+// goWorkspace describes a workspace whose "go" spell is symbol-capable (it declares a
+// symbol indexer) and one project bound to it: the auto-enable inputs, no config.
 func goWorkspace(project string) (types.ProjectsOutput, []types.Spell) {
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
 		{Path: project, Spell: "go", Spells: []string{"go"}},
 	}}
 	spells := []types.Spell{
-		{Name: "go", Targets: []string{"go-build", symbols.IndexOp}},
+		{Name: "go", Targets: []string{"go-build"}, SymbolFormat: "scip"},
 	}
 	return projects, spells
 }
@@ -214,7 +219,7 @@ func TestLoadKnowledgeSymbolsCarriesDeclaredLanguage(t *testing.T) {
 		{Path: "web", Spell: "typescript", Spells: []string{"typescript"}},
 	}}
 	spells := []types.Spell{
-		{Name: "typescript", Language: "typescript", Targets: []string{symbols.IndexOp}},
+		{Name: "typescript", Language: "typescript", SymbolFormat: "scip"},
 	}
 	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 
@@ -606,4 +611,83 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 
 	assert.Equal(t, want, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()),
 		"a file in the old shape must miss, not decode as zeros")
+}
+
+// unreachableRegistry is a host nothing listens on, so a fetch fails at connect. Port 1 is
+// reserved and never bound; the .invalid TLD would resolve differently per resolver.
+const unreachableRegistry = "127.0.0.1:1"
+
+// TestPublishedShardsTreatEveryFailureAsAMiss is the constraint that keeps a registry out
+// of a command's exit code: a workspace that names a published graph must build exactly as
+// it would have if the registry were never mentioned.
+func TestPublishedShardsTreatEveryFailureAsAMiss(t *testing.T) {
+	ref := oci.Reference{Registry: unreachableRegistry, Repository: "team/graph", Tag: "latest"}
+	p := PublishedShards(&oci.Client{HTTP: &http.Client{Timeout: time.Second}}, ref, "application/vnd.magus.test.v1+json", slog.New(slog.DiscardHandler))
+
+	rc, err := p.GetShard(t.Context(), "fp-anything")
+	assert.Nil(t, rc)
+	assert.ErrorIs(t, err, knowledge.ErrShardMiss)
+
+	// The artifact is opened once, so a second ask still reports a miss rather than
+	// paying the connect timeout again.
+	_, err = p.GetShard(t.Context(), "fp-other")
+	assert.ErrorIs(t, err, knowledge.ErrShardMiss)
+}
+
+// TestPublishedShardsRefuseToWrite pins the honest half of the read-only adapter: a
+// registry has no per-blob append, so reporting a successful write would be a lie.
+func TestPublishedShardsRefuseToWrite(t *testing.T) {
+	p := PublishedShards(&oci.Client{}, oci.Reference{Registry: unreachableRegistry, Repository: "team/graph", Tag: "latest"}, "", slog.New(slog.DiscardHandler))
+	err := p.PutShard(t.Context(), "fp-anything", bytes.NewReader([]byte("{}")))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "graph push")
+}
+
+// stubShards answers from a fixed map, for the chain's ordering properties.
+type stubShards struct {
+	blobs map[string]string
+	puts  map[string]string
+}
+
+func (s stubShards) GetShard(_ context.Context, key string) (io.ReadCloser, error) {
+	b, ok := s.blobs[key]
+	if !ok {
+		return nil, knowledge.ErrShardMiss
+	}
+	return io.NopCloser(strings.NewReader(b)), nil
+}
+
+func (s stubShards) PutShard(_ context.Context, key string, r io.Reader) error {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	s.puts[key] = string(b)
+	return nil
+}
+
+func TestShardChainReadsInOrderAndWritesToTheFirst(t *testing.T) {
+	first := stubShards{blobs: map[string]string{"shared": "from-cache"}, puts: map[string]string{}}
+	second := stubShards{blobs: map[string]string{"shared": "from-registry", "only-published": "published"}, puts: map[string]string{}}
+	chain := shardChain{first, second}
+
+	assert.Equal(t, "from-cache", readShard(t, chain, "shared"), "the first backing wins a key both hold")
+	assert.Equal(t, "published", readShard(t, chain, "only-published"), "a miss falls through to the next backing")
+
+	_, err := chain.GetShard(t.Context(), "nowhere")
+	assert.ErrorIs(t, err, knowledge.ErrShardMiss)
+
+	require.NoError(t, chain.PutShard(t.Context(), "new", strings.NewReader("body")))
+	assert.Equal(t, map[string]string{"new": "body"}, first.puts)
+	assert.Empty(t, second.puts, "a published artifact is republished whole, never one shard at a time")
+}
+
+func readShard(t *testing.T, s knowledge.RemoteShards, key string) string {
+	t.Helper()
+	rc, err := s.GetShard(t.Context(), key)
+	require.NoError(t, err)
+	defer rc.Close()
+	b, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	return string(b)
 }

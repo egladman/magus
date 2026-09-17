@@ -46,6 +46,15 @@ type Dependencies struct {
 	CacheDir func(root string) (string, error)
 	// NotesShared is the workspace's declared shared notes store, empty when it declares none.
 	NotesShared string
+	// ShellRules are workspace-declared additive shell rules from
+	// magus\guard.shell. Empty means only the compiled built-ins apply. They
+	// strengthen only: a built-in deny always wins; a workspace deny may
+	// escalate a built-in advise or a pass; a workspace advise fills silence
+	// only.
+	ShellRules []WorkspaceShellRule
+	// ShellDialect is the outer-parse dialect for Evaluate when a workspace
+	// declared one on its shell rules. Empty means bash.
+	ShellDialect Dialect
 	// GraphStaleAdvice is what to say to a graph read about to answer from an index older
 	// than the tree, or "" when every built index is current.
 	GraphStaleAdvice func(ctx context.Context) string
@@ -56,6 +65,15 @@ type Dependencies struct {
 	// and says so to nobody. What is injected is the CATALOG, not a list of tools, so a
 	// newly registered spell op still needs no guard edit.
 	Spells func() []*spells.Spell
+	// SymbolDefined reports whether ident is a symbol the workspace has indexed, and
+	// whether that answer is DEFINITIVE. A stale index answers "unknown, not absent",
+	// which is not proof of anything: the guard may only deny a search when it can
+	// show the replacement returns the same sites.
+	SymbolDefined func(ident string) (defined, definitive bool)
+	// HeadCommit is this checkout's current revision, abbreviated, or "" when there is no
+	// VCS to ask. The push gate matches it against the commit each recorded gate run was
+	// built from; with no answer that rule stands down rather than refusing on an absence.
+	HeadCommit func(ctx context.Context) string
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -83,11 +101,27 @@ func (d Dependencies) graphStaleAdvice(ctx context.Context) string {
 	return d.GraphStaleAdvice(ctx)
 }
 
+func (d Dependencies) headCommit(ctx context.Context) string {
+	if d.HeadCommit == nil {
+		return ""
+	}
+	return d.HeadCommit(ctx)
+}
+
 func (d Dependencies) spells() []*spells.Spell {
 	if d.Spells == nil {
 		return nil
 	}
 	return d.Spells()
+}
+
+// symbolDefined answers false for an unset resolver, so a caller that supplies none
+// keeps the advisory it had rather than gaining a deny nothing can substantiate.
+func (d Dependencies) symbolDefined(ident string) (defined, definitive bool) {
+	if d.SymbolDefined == nil {
+		return false, false
+	}
+	return d.SymbolDefined(ident)
 }
 
 // Request is one call the guard was asked to judge: the payload, plus what the caller's
@@ -105,6 +139,14 @@ type Request struct {
 	Session    string
 	Transcript string
 	Event      string
+	// ObservesSkillLoads is the one CAPABILITY on this struct rather than attribution: the
+	// host's wiring reports skill loads to magus, so a rule may require one. It is set by
+	// the wiring that provides the observation, never inferred from Host, because guard
+	// code may not branch on a host's name and a name would not prove the wiring anyway.
+	//
+	// False is the safe answer: rules that need it stand down, which is what keeps them
+	// from denying forever on a host that can never satisfy them.
+	ObservesSkillLoads bool
 }
 
 // Verdict is the neutral result of evaluating one shell command: exactly
@@ -117,9 +159,14 @@ type Verdict struct {
 	Decision      string `json:"decision"`          // one of agent.GuardDecisions
 	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
-	// Rule names the stable guard rule that denied the call, when the rule can
-	// identify itself. It is evidence for later review, not text for the host to
-	// render: host adapters keep using Reason and Context.
+	// Rule names the stable rule or advisory that produced this verdict, when it can
+	// identify itself. Host adapters still render Reason and Context; this is what a
+	// PERSON looks up, reports as a false positive, or greps a trail for, and the text
+	// arm prints it beside the decision for exactly that reason.
+	//
+	// Empty is an honest answer, not a gap to paper over: several path advisories are
+	// heuristics with no marker kind of their own, and inventing a slug for one would
+	// promise a catalog entry that does not exist.
 	Rule string `json:"rule,omitempty"`
 	// Lease is the row this verdict was graded under, empty when the call named none.
 	//
@@ -144,6 +191,25 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
 	if env, isEnvelope := decodeHookEnvelope(input); isEnvelope {
+		// Attribution is resolved BEFORE the nothing-to-judge arm below returns: a skill
+		// load is a nothing-to-judge envelope that still has to be recorded against the
+		// session that made it, and a session read after the return is read too late.
+		ctx = hookContextAt(ctx, deps, env.Cwd)
+		if who.Session == "" {
+			who.Session = env.Who.Session
+		}
+		if who.Transcript == "" {
+			who.Transcript = env.Who.Transcript
+		}
+		if who.Event == "" {
+			who.Event = env.Who.Event
+		}
+		if env.LoadedSkill != "" {
+			// Recorded, never judged. The gate is built here rather than reusing the one
+			// below because this arm returns before it: same cacheDir, same session.
+			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.Session), env.LoadedSkill)
+			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+		}
 		if env.NothingToJudge {
 			// A host envelope whose tool_input carries no command, path or prompt (a todo
 			// list, a search) has nothing any rule can read. Falling through judged the raw
@@ -156,22 +222,25 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if env.IsPath {
 			isPath = true
 		}
-		ctx = hookContextAt(ctx, deps, env.Cwd)
-		if who.Session == "" {
-			who.Session = env.Who.Session
-		}
-		if who.Transcript == "" {
-			who.Transcript = env.Who.Transcript
-		}
-		if who.Event == "" {
-			who.Event = env.Who.Event
-		}
 		if env.IsSpawn {
-			// A spawn carries no verdict, so it returns the pass every other
-			// non-finding does and never reaches the guard. Handled here rather than
-			// beside the two guard arms because the whole point is that nothing judges
-			// it: the handed context is prose, and a prompt that merely MENTIONS a
-			// denied command would otherwise block the spawn that describes it.
+			// A spawn's PROMPT carries no verdict, so it returns the pass every other
+			// non-finding does. Handled here rather than beside the two guard arms
+			// because nothing judges the prose: a prompt that merely MENTIONS a denied
+			// command would otherwise block the spawn that describes it.
+			//
+			// The one question asked is about the SESSION, not the prompt: whether the
+			// multi-agent brief was read before work was handed out. That reads a marker
+			// file and no prose, which is what lets it live on this path.
+			spawnGate := hint.NewGate(hookLocation(ctx, deps).cacheDir, who.Session)
+			if reason := denySpawnWithoutBrief(spawnGate, req.ObservesSkillLoads); reason != "" {
+				appendHookSpawn(ctx, deps, env, who)
+				return Verdict{
+					SchemaVersion: agent.GuardSchemaVersion,
+					Decision:      "deny",
+					Reason:        reason,
+					Rule:          string(denySpawnUnbriefed),
+				}
+			}
 			appendHookSpawn(ctx, deps, env, who)
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
@@ -235,6 +304,19 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// advisory about editing a file the agent opened read-only.
 	case isPath:
 		advice := ""
+		// adviceKind is which rung spoke, for the verdict to name.
+		//
+		// NAMING IS NOT HOLDING. A kind is both an identity and a marker key, and the
+		// two are separable: a rung sets this to be nameable, and separately chooses
+		// whether to route its text through markers.Once.
+		//
+		// Enrolling these rungs in the gate as a side effect of naming them broke the
+		// harness probe, which fires the AGENTS.md advisory once per wired harness and
+		// reads the verdict: the first firing spent the marker and the other three
+		// harnesses read `pass`, so `magus doctor` reported the guard uncovered. The
+		// rungs below name themselves and speak every time, which is what they did
+		// before they had names.
+		adviceKind := hint.MarkerKind("")
 		// Graded ahead of the rules, though it speaks near the end of them: the project
 		// this write lands in is recorded whatever verdict they reach, so it cannot be
 		// resolved inside a rung that a louder rule skips.
@@ -259,7 +341,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision = "deny"
 				verdict.Reason = g.Reason
 			case "advise":
-				advice, spoken = markers.Once(g.Kind, g.Context), true
+				advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
 			}
 		}
 		if verdict.Decision != "deny" {
@@ -268,8 +350,17 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision, verdict.Reason = "deny", g.Reason
 			case "advise":
 				if !spoken {
-					advice, spoken = markers.Once(g.Kind, g.Context), true
+					advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
 				}
+			}
+		}
+		// Last of the denies and first thing a Buzz write meets, in that order for a
+		// reason: the two above answer whether this agent may touch the file at all, and
+		// there is nothing to learn before a write that is refused anyway.
+		if verdict.Decision != "deny" {
+			if reason := denyBuzzWriteWithoutSkill(markers, req.ObservesSkillLoads, input); reason != "" {
+				verdict.Decision, verdict.Reason = "deny", reason
+				verdict.Rule = string(denyBuzzUnbriefed)
 			}
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
@@ -277,7 +368,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// filename and only fills the silence it leaves.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseGeneratedWrite(ctx, deps, input); text != "" {
-				advice, spoken = text, true
+				advice, adviceKind, spoken = text, advisoryGeneratedWrite, true
 			}
 		}
 		// The notes rule DENIES, so it is checked before the advisories: a verdict that
@@ -290,29 +381,32 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseInstalledSkillWrite(input); text != "" {
-				advice, spoken = text, true
+				advice, adviceKind, spoken = text, advisoryInstalledSkill, true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseMemoryWrite(input); text != "" {
-				advice, spoken = text, true
+				advice, adviceKind, spoken = text, advisoryMemoryWrite, true
 			}
 		}
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseAgentSurfaceWrite(input); text != "" {
-				advice, spoken = markers.Once(advisorySkillSource, text), true
+				advice, adviceKind, spoken = markers.Once(advisorySkillSource, text), advisorySkillSource, true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseDescriptorWrite(input); text != "" {
-				advice, spoken = markers.Once(advisoryRegenSource, text), true
+				advice, adviceKind, spoken = markers.Once(advisoryRegenSource, text), advisoryRegenSource, true
 			}
 		}
 		// Above the new-directory rule because it is the wider question: whether this
 		// write belongs in this session at all outranks how its unit is laid out.
 		if verdict.Decision == "pass" && !spoken && drift.advice != "" {
-			advice, spoken = drift.advice, true
+			// Not held here: gradeScopeDrift already gates its own firing, on the PROJECT
+			// as well as the kind, because a second drift into a different project is a
+			// second fact. Re-holding it on the kind alone would report only the first.
+			advice, adviceKind, spoken = drift.advice, advisoryScopeDrift, true
 		}
 		// Mutually exclusive with the rung below: that one answers an empty directory,
 		// this one a populated one. Held to one firing per session, where the new-directory
@@ -320,16 +414,23 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// is not (internal/guard/file.go).
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseNewFileName(input); text != "" {
-				advice, spoken = markers.Once(advisoryNewFile, text), true
+				advice, adviceKind, spoken = markers.Once(advisoryNewFile, text), advisoryNewFile, true
 			}
 		}
 		// Last rung, so it sets no flag: there is nothing below it to hold back.
+		//
+		// Not held, unlike its siblings: creating a boundary is not ordinary work, and the
+		// rung above (new-file) is the one held for exactly that contrast. It carries a
+		// kind anyway, because the kind is also the NAME a verdict reports.
 		if verdict.Decision == "pass" && !spoken {
-			advice = adviseNewSourceDir(input)
+			if text := adviseNewSourceDir(input); text != "" {
+				advice, adviceKind = text, advisoryNewSourceDir
+			}
 		}
 		if verdict.Decision == "pass" && advice != "" {
 			verdict.Decision = "advise"
 			verdict.Context = advice
+			verdict.Rule = string(adviceKind)
 		}
 		// A denied write never happens, so it never touched anything.
 		if verdict.Decision != "deny" {
@@ -339,10 +440,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// The sibling-checkout and cache-dir rules read the FILESYSTEM, so neither can
 		// live inside Evaluate's pure rule set; ranking them is pure, and is
 		// where the ordering is tested. The cache dir is outermost: what it refuses
-		// outranks every other deny on the line (internal/guard/cachedir.go).
-		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input))
-		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input))
-		switch v = rankCacheDirWrite(v, denyCacheDirCommand(location, input)); {
+		// outranks every other deny on the line (internal/guard/cache.go).
+		shellD := effectiveDialect(deps.ShellDialect)
+		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input, shellD))
+		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
+		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
+		// Outside Evaluate for the same reason the two rules above are: it reads session
+		// state (which skills have loaded) rather than the line alone, and Evaluate's
+		// verdict is a pure function of what was handed in.
+		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(markers, req.ObservesSkillLoads, input, shellD)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
@@ -355,6 +461,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if held := markers.OnceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
 				verdict.Context = held
+				verdict.Rule = v.advisoryName()
 			}
 		}
 		denyUndeclared(input)
@@ -382,8 +489,27 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", focus.Reason, ""
 			case verdict.Decision == "pass" && focus.Decision == "advise" && !markers.MarkFired(advisoryFocusPath(focus.Rel)):
 				if held := markers.OnceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
-					verdict.Decision, verdict.Context = "advise", held
+					verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryFocus)
 				}
+			}
+		}
+		// The push gate, upgraded from the advisory gitGuard returned to a DENY when the
+		// run log proves no green gate covers this commit.
+		//
+		// Here rather than in gitGuard because that function is pure over the parsed
+		// command and this reads the run log and the revision. The rule is split the same
+		// way the skill gates are: the parser decides WHAT the command is, and the arm
+		// with a location decides what the workspace knows about it.
+		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
+			commit := deps.headCommit(ctx)
+			cover := gateVerdictAt(location.workspace, commit)
+			if cover == gateUnknown {
+				cover = gateCoverageAt(workspaceRunsDir(location.cacheDir), commit)
+			}
+			if reason := denyPushWithoutGate(cover); reason != "" {
+				verdict.Decision, verdict.Context = "deny", ""
+				verdict.Reason = reason
+				verdict.Rule = string(denyRulePushUngated)
 			}
 		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
@@ -394,16 +520,18 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if notice := markers.OnceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
+				verdict.Rule = string(advisoryGateRepeat)
 			}
 		}
 		// The guard's half of the index-staleness fact; the load-bearing half rides the
-		// command's own output (staleindex.go). alreadyFired is asked BEFORE the rule, not
+		// command's own output (stale_index.go). alreadyFired is asked BEFORE the rule, not
 		// after: producing this text costs a directory walk, and once the session has been
 		// told, paying for it again only to discard the answer is the cost nobody sees.
 		if verdict.Decision == "pass" && preauth == "" && !markers.AlreadyFired(advisoryGraphStale) && commandReadsGraph(input) {
 			if notice := markers.Once(advisoryGraphStale, deps.graphStaleAdvice(ctx)); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
+				verdict.Rule = string(advisoryGraphStale)
 			}
 		}
 	}
@@ -426,7 +554,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Context += "\n\n" + held
 			continue
 		}
-		verdict.Decision, verdict.Context = "advise", held
+		verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(kind)
 	}
 	// Said last and on EVERY surface: a stale binary's verdicts are all suspect, not
 	// just the ones that matched a rule.
@@ -445,9 +573,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Reason += "\n\n" + notice
 		} else if held := markers.Once(advisoryStaleBinary, notice); held != "" {
 			if verdict.Decision == "advise" {
+				// Appended, so the rule stays whatever MATCHED the command: this notice
+				// is a standing fact about the binary, and naming it here would report
+				// the footnote instead of the finding.
 				verdict.Context += "\n\n" + held
 			} else {
-				verdict.Decision, verdict.Context = "advise", held
+				verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryStaleBinary)
 			}
 		}
 	}
@@ -470,6 +601,19 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 type hookEnvelope struct {
 	HookEventName string `json:"hook_event_name"`
 	SessionID     string `json:"session_id"`
+	// ConversationID is an alternate session pointer some hosts put on the envelope
+	// instead of session_id. HostAttribution prefers session_id when both are set.
+	ConversationID string `json:"conversation_id"`
+	// ParentConversationID is the orchestrator session on a spawn event. When set,
+	// a spawn is attributed to the parent rather than the child conversation.
+	ParentConversationID string `json:"parent_conversation_id"`
+	// Command is a shell line at the envelope root. The tool_input.command spelling
+	// is preferred when both are present.
+	Command string `json:"command"`
+	// Task is a spawn prompt at the envelope root. tool_input.prompt is preferred
+	// when both are present.
+	Task         string `json:"task"`
+	SubagentType string `json:"subagent_type"`
 	// Cwd is the directory the host reports the tool call runs in. It is what locates the
 	// WORKER's checkout when the host runs its hooks somewhere else, such as the
 	// orchestrator's directory, and with it the lease marker bound there.
@@ -563,7 +707,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		return hookRequest{}, false
 	}
 	req := hookRequest{Cwd: env.Cwd, Who: hookAttribution{
-		Session:    env.SessionID,
+		Session:    envelopeSession(env),
 		Transcript: env.TranscriptPath,
 		Event:      env.HookEventName,
 	}}
@@ -579,16 +723,39 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value = renderMCPCall(tool, env.ToolInput)
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
+	case env.Command != "":
+		req.Value = env.Command
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
-	case envelopeString(env.ToolInput, "prompt") != "":
-		req.Value, req.IsSpawn = envelopeString(env.ToolInput, "prompt"), true
+	case envelopeString(env.ToolInput, "skill") != "":
+		// A skill load carries nothing to judge; it is recorded so a later spawn can ask
+		// whether the session read the brief. The FIELD name is magus's contract with the
+		// host config, the way `command` and `file_path` are; the host's tool name stays
+		// in its own matcher.
+		req.LoadedSkill = envelopeString(env.ToolInput, "skill")
+		req.NothingToJudge = true
+	case envelopeString(env.ToolInput, "prompt") != "" || env.Task != "":
+		if p := envelopeString(env.ToolInput, "prompt"); p != "" {
+			req.Value = p
+		} else {
+			req.Value = env.Task
+		}
+		req.IsSpawn = true
 		req.Tool = env.ToolName
+		// The caller's own model choice, when it named one. Absent when the spawn
+		// inherits the parent's model, which is a legitimate choice this guard
+		// takes no position on: it is recorded so the question can be asked at
+		// all, not so an answer can be graded.
+		req.DeclaredModel = envelopeString(env.ToolInput, "model")
+		if env.ParentConversationID != "" {
+			req.Who.Session = env.ParentConversationID
+		}
 		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
 		// across spawns, so it groups a spawn feed; a description is per-spawn prose; the
 		// tool name is the last resort that at least says a spawn happened.
 		for _, label := range []string{
 			envelopeString(env.ToolInput, "subagent_type"),
+			env.SubagentType,
 			envelopeString(env.ToolInput, "description"),
 			env.ToolName,
 		} {
@@ -605,12 +772,21 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		//
 		// Keyed on the envelope's OWN fields, so a bare `{"tool_input":{}}` (which names no
 		// host event and could be anything) still falls through to the literal form.
-		if env.HookEventName == "" && env.ToolName == "" && env.SessionID == "" {
+		if env.HookEventName == "" && env.ToolName == "" && env.SessionID == "" && env.ConversationID == "" {
 			return hookRequest{}, false
 		}
 		req.NothingToJudge = true
 	}
 	return req, true
+}
+
+// envelopeSession picks the session pointer from the fields a host may send.
+// session_id wins when both it and conversation_id are present.
+func envelopeSession(env hookEnvelope) string {
+	if env.SessionID != "" {
+		return env.SessionID
+	}
+	return env.ConversationID
 }
 
 // HostAttribution reads the two pointers only a host knows out of its hook payload: its
@@ -629,7 +805,10 @@ func HostAttribution(raw string) (session, transcript string) {
 	if json.Unmarshal([]byte(raw), &env) != nil {
 		return "", ""
 	}
-	return env.SessionID, env.TranscriptPath
+	if env.SessionID != "" {
+		return env.SessionID, env.TranscriptPath
+	}
+	return env.ConversationID, env.TranscriptPath
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
@@ -646,7 +825,16 @@ type hookRequest struct {
 	IsSpawn        bool
 	Tool           string
 	Child          string
-	Who            hookAttribution
+	// DeclaredModel is the model the spawning tool_input named, or "" when it named
+	// none. Not called Model: that word already means the reply CHANNEL in this
+	// guard's coverage vocabulary (deny=model, advise=model), so a bare Model field
+	// here would read as a verdict channel rather than a spawn's own claim.
+	DeclaredModel string
+	// LoadedSkill is the skill this envelope reports as loaded, or "" when it reports
+	// none. Recorded rather than judged: it is what lets a later spawn ask whether the
+	// session read its brief. See denySpawnWithoutBrief.
+	LoadedSkill string
+	Who         hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be
@@ -766,14 +954,15 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		return
 	}
 	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
-		Actor:     "agent",
-		Workspace: location.workspace,
-		Host:      who.Host,
-		Session:   who.Session,
-		Event:     who.Event,
-		Tool:      req.Tool,
-		Child:     req.Child,
-		Context:   req.Value,
+		Actor:         "agent",
+		Workspace:     location.workspace,
+		Host:          who.Host,
+		Session:       who.Session,
+		Event:         who.Event,
+		Tool:          req.Tool,
+		Child:         req.Child,
+		Context:       req.Value,
+		DeclaredModel: req.DeclaredModel,
 	})
 }
 

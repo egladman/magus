@@ -40,7 +40,7 @@ func tmpStore(t *testing.T, root string) *Store {
 func lease(id string) types.Job {
 	return types.Job{
 		ID:         id,
-		Goal:       "goal for " + id,
+		Criteria:   "goal for " + id,
 		Checkpoint: "abc123",
 		WritePaths: []string{"internal/" + id},
 		DenyPaths:  []string{"MAGUS.md"},
@@ -79,13 +79,13 @@ func TestStoreRoundTrip(t *testing.T) {
 			name: "a second put on the same id replaces the row in place",
 			puts: []types.Job{
 				lease("a"), lease("b"),
-				{ID: "a", Goal: "revised", State: types.StatePass},
+				{ID: "a", Criteria: "revised", State: types.StatePass},
 			},
 			want: []types.Job{
 				// The replacement carries no write paths, so the row's paths were
 				// released by it; see TestStorePutRecordsReleasedPaths.
 				{
-					ID: "a", Goal: "revised", State: types.StatePass,
+					ID: "a", Criteria: "revised", State: types.StatePass,
 					Releases: []types.JobRelease{{Path: "internal/a", Digest: types.DigestAbsent}},
 				},
 				lease("b"),
@@ -93,8 +93,8 @@ func TestStoreRoundTrip(t *testing.T) {
 		},
 		{
 			name: "a read-only row carries no paths by design",
-			puts: []types.Job{{ID: "scout", Goal: "inventory", ReadOnly: true, State: types.StateRunning}},
-			want: []types.Job{{ID: "scout", Goal: "inventory", ReadOnly: true, State: types.StateRunning}},
+			puts: []types.Job{{ID: "scout", Criteria: "inventory", ReadOnly: true, State: types.StateRunning}},
+			want: []types.Job{{ID: "scout", Criteria: "inventory", ReadOnly: true, State: types.StateRunning}},
 		},
 		{
 			name: "no_return is stored as its own terminal state",
@@ -136,7 +136,7 @@ func TestStorePutRequiresAnID(t *testing.T) {
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	row := types.Job{Goal: "no id"}
+	row := types.Job{Criteria: "no id"}
 	_, err := s.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
 	require.ErrorIs(t, err, ErrNoID, "a row with no id could never be updated or referred to again")
 
@@ -200,7 +200,7 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, types.StatePass, got[0].State, "the state advance survived the concurrent checkpoint write")
 	assert.Equal(t, "deadbeef", got[0].Checkpoint, "and the checkpoint survived the concurrent state advance")
-	assert.Equal(t, "goal for a", got[0].Goal, "neither merge erased the row it did not name")
+	assert.Equal(t, "goal for a", got[0].Criteria, "neither merge erased the row it did not name")
 }
 
 // TestStoreUpdateSurvivesSeparateStores is the CROSS-PROCESS half, and the one the
@@ -667,12 +667,12 @@ func TestStoreListReturnsCopies(t *testing.T) {
 	got, err := s.List()
 	require.NoError(t, err)
 	got[0].WritePaths[0] = "mutated"
-	got[0].Goal = "mutated"
+	got[0].Criteria = "mutated"
 
 	again, err := s.List()
 	require.NoError(t, err)
 	assert.Equal(t, []string{"internal/a"}, again[0].WritePaths, "a caller mutating a returned row cannot reach the store")
-	assert.Equal(t, "goal for a", again[0].Goal)
+	assert.Equal(t, "goal for a", again[0].Criteria)
 }
 
 func TestStoreReportsAnUnreadableFile(t *testing.T) {

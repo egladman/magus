@@ -41,6 +41,7 @@ var describeAlias = map[string]string{
 	"file": "file", "files": "file",
 	"tool": "tool", "tools": "tool",
 	"job": "job", "jobs": "job",
+	"rule": "rule", "rules": "rule",
 }
 
 func describeCmd(ctx context.Context, root string, args []string) error {
@@ -73,6 +74,8 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 		return describeTools(ctx, root, rest)
 	case "job":
 		return describeJob(ctx, root, rest)
+	case "rule":
+		return describeRules(rest)
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.
@@ -112,6 +115,7 @@ func describeUsage() {
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  mcp-tool     ", "tools exposed to AI agents via the MCP daemon")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  file         ", "classify paths against declared globs: generated output, source, maintained, or unclaimed")
 	tty.ProseItem(os.Stderr, tty.SystemProbe, "  tool         ", "binaries the spells drive, their probed versions, and the window each is held to")
+	tty.ProseItem(os.Stderr, tty.SystemProbe, "  rule         ", "the guard rules enforced here; `rule <name>` details the one a verdict named")
 	fmt.Fprintln(os.Stderr, "")
 	tty.Prose(os.Stderr, tty.SystemProbe, "Each noun accepts -o text|json|yaml|name|wide|template=<go-template>")
 	tty.Prose(os.Stderr, tty.SystemProbe,
@@ -173,12 +177,13 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
+		var names []string
 		for _, p := range out.Projects {
 			for _, n := range p.Nodes {
-				fmt.Println(n.Name)
+				names = append(names, n.Name)
 			}
 		}
-		return nil
+		return emitNames(names)
 	case outputDot:
 		return render.WriteTargetGraphDOT(os.Stdout, out)
 	case outputMermaid:
@@ -310,10 +315,11 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, types.SpellReport{Definition: types.SpellDefinition, Count: len(inventory), Spells: inventory})
 	case outputName:
+		names := make([]string, 0, len(inventory))
 		for _, t := range inventory {
-			fmt.Println(t.Name)
+			names = append(names, t.Name)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide
@@ -492,10 +498,11 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		// a wrong count.
 		return emitFormatted(opts, types.CharmReport{Definition: types.CharmDefinition, Count: len(charms), Charms: charms})
 	case outputName:
+		names := make([]string, 0, len(charms))
 		for _, c := range charms {
-			fmt.Println(c.Name)
+			names = append(names, c.Name)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide
@@ -794,8 +801,12 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		}
 		return nil
 	case outputName:
+		names := make([]string, 0, len(reports))
 		for _, r := range reports {
-			fmt.Println(r.Ref)
+			names = append(names, r.Ref)
+		}
+		if err := emitNames(names); err != nil {
+			return err
 		}
 		if mismatched {
 			return errSilent{exitCode: 1}
@@ -998,10 +1009,11 @@ func describeTargets(ctx context.Context, root string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, types.TargetReport{Definition: types.TargetDefinition, Count: len(targets), Targets: targets})
 	case outputName:
+		names := make([]string, 0, len(targets))
 		for _, t := range targets {
-			fmt.Println(t.Name)
+			names = append(names, t.Name)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide
@@ -1067,10 +1079,11 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		case outputJSON, outputYAML, outputJSONL, outputTemplate:
 			return emitFormatted(opts, out)
 		case outputName:
+			names := make([]string, 0, len(out.Projects))
 			for _, p := range out.Projects {
-				fmt.Println(p.Path)
+				names = append(names, p.Path)
 			}
-			return nil
+			return emitNames(names)
 		}
 
 		// text / wide
@@ -1150,10 +1163,11 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
+		names := make([]string, 0, len(out.Projects))
 		for _, p := range out.Projects {
-			fmt.Println(p.Path)
+			names = append(names, p.Path)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide
@@ -1219,10 +1233,11 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, types.EvaluatedTargetReport{Definition: types.EvaluatedTargetDefinition, Count: len(out), Targets: out})
 	case outputName:
+		names := make([]string, 0, len(out))
 		for _, e := range out {
-			fmt.Printf("%s:%s\n", e.Project, e.Target)
+			names = append(names, e.Project+":"+e.Target)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide
@@ -1376,10 +1391,11 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, types.WorkspaceReport{Definition: types.WorkspaceDefinition, Count: len(out), Workspaces: out})
 	case outputName:
+		names := make([]string, 0, len(out))
 		for _, w := range out {
-			fmt.Println(w.Root)
+			names = append(names, w.Root)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide
@@ -1476,10 +1492,11 @@ func describeMCPTools(args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
+		names := make([]string, 0, len(out.MCPTools))
 		for _, t := range out.MCPTools {
-			fmt.Println(t.Name)
+			names = append(names, t.Name)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide

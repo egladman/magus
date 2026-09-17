@@ -2,7 +2,7 @@
 //
 // That file proves the plugin ASKS magus correctly (the argv shape, stdin-not-argv,
 // the top-level `hook` subcommand) against a Bun.spawn shim that never runs a real
-// process. It cannot catch the other half: a future `magus session hook` flag or behavior
+// process. It cannot catch the other half: a future `magus shell` flag or behavior
 // change that the plugin's call no longer matches. That is the OpenCode incident's
 // exact class - the plugin invoked a removed subcommand for weeks because nothing
 // executed it against a real binary.
@@ -28,8 +28,10 @@ import { MagusGuard } from "./opencode-plugin.ts";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // docs/guides/integrations/agents -> repo root.
 const WORKSPACE_ROOT = path.resolve(HERE, "../../../..");
-// One empty job store for every case in this file; see the env pin in the spawn shim.
+// One empty job store and one empty cache for every case in this file; see the env pins in
+// the spawn shim.
 const stateHome = mkdtempSync(path.join(os.tmpdir(), "magus-guard-live-"));
+const cacheHome = mkdtempSync(path.join(os.tmpdir(), "magus-guard-live-cache-"));
 
 function isExecutable(candidate: string): boolean {
   try {
@@ -50,14 +52,14 @@ function resolveOnPath(name: string): string | null {
 }
 
 /**
- * GUARD_MAGUS_BIN, else ./magus at the workspace root, else magus on PATH -
- * the same order docs/guides/integrations/agents.md documents for GUARD_MAGUS_BIN
+ * __MAGUS_BIN, else ./magus at the workspace root, else magus on PATH -
+ * the same order docs/guides/integrations/agents.md documents for __MAGUS_BIN
  * itself. Returns null when none resolves; every case below skips rather than
  * fails, because a fresh clone has no binary and a gate that needed one would
  * fail on checkout.
  */
 function resolveMagusBinary(): string | null {
-  const envBin = process.env.GUARD_MAGUS_BIN;
+  const envBin = process.env.__MAGUS_BIN;
   if (envBin && isExecutable(envBin)) return envBin;
   const rootBin = path.join(WORKSPACE_ROOT, "magus");
   if (isExecutable(rootBin)) return rootBin;
@@ -67,7 +69,7 @@ function resolveMagusBinary(): string | null {
 const magusBin = resolveMagusBinary();
 const skip =
   magusBin === null
-    ? "no magus binary found (set GUARD_MAGUS_BIN, build ./magus at the workspace root, or put magus on PATH)"
+    ? "no magus binary found (set __MAGUS_BIN, build ./magus at the workspace root, or put magus on PATH)"
     : false;
 if (magusBin === null) {
   console.warn(`[opencode-plugin.live.test] skipping: ${skip}`);
@@ -83,10 +85,10 @@ type SpawnCall = { bin: string; argv: string[]; stdin: string };
  * magus binary instead of a canned reply.
  */
 function stubBunWithRealChild(bin: string): SpawnCall[] {
-  // The plugin resolves its own binary (GUARD_MAGUS_BIN, ./magus from ITS cwd, PATH).
+  // The plugin resolves its own binary (__MAGUS_BIN, ./magus from ITS cwd, PATH).
   // Under the test runner the cwd is this directory, so without the env pin it falls
   // through to PATH - a released magus that may predate the subcommands under test.
-  process.env.GUARD_MAGUS_BIN = bin;
+  process.env.__MAGUS_BIN = bin;
   const calls: SpawnCall[] = [];
   const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
     const stdin = opts.stdin ? new TextDecoder().decode(opts.stdin) : "";
@@ -99,7 +101,10 @@ function stubBunWithRealChild(bin: string): SpawnCall[] {
       // advisory is appended to a PASS, so a developer holding any lease over the paths
       // below turns these cases red on a tree that is fine; the store resolves from
       // <XDG state>/magus/jobs and offers no other seam to redirect it.
-      env: { ...process.env, XDG_STATE_HOME: stateHome },
+      //
+      // An EMPTY cache for the same reason: the push rule reads the workspace's run log, so
+      // a failed gate at this commit turns the push advisory into a refusal.
+      env: { ...process.env, XDG_STATE_HOME: stateHome, MAGUS_CACHE_DIR: cacheHome },
     });
     child.stdin.end(opts.stdin ?? new Uint8Array());
 
@@ -156,8 +161,8 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
 
 // go test ./... now has an exact magus equivalent (magus run go::go-test) and is
 // DENIED, not advised - the plan this test was written from predates that rule.
-// git push stays an advise: a push can legitimately carry work-in-progress, so the
-// guard only reminds rather than blocks (see guardPushRe in cmd/magus/agent.go).
+// git push with no run log to read is an advise: the push rule refuses only a commit whose
+// gate it can prove did not pass (internal/guard/push.go).
 test("live: bash arm advises on git push and appends non-empty context", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();

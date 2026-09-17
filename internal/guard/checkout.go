@@ -20,14 +20,18 @@ import (
 // rankSiblingCheckout ranks the sibling-checkout reason against the verdict the
 // pure rules already reached.
 //
-// An existing deny wins: that line has a second thing wrong with it, and one block
-// is enough. An ADVISE does not: cdMagusRe fires on exactly these lines, and
-// "name the project instead" badly understates a command pointed at another tree.
-func rankSiblingCheckout(v BashVerdict, reason string) BashVerdict {
-	if reason == "" || v.Deny != "" {
+// An existing deny wins unless it is the general cd deny: every sibling case is
+// itself a `cd`, and "do not cd" understates a command aimed at another tree of
+// this repository. Other denies (pipe, throwaway handled inside Evaluate) stand;
+// one block is enough.
+func rankSiblingCheckout(v ShellVerdict, reason string) ShellVerdict {
+	if reason == "" {
 		return v
 	}
-	return BashVerdict{Deny: reason, Rule: denyRule{Name: denyRuleSiblingCheckout}}
+	if v.Deny != "" && v.Rule.Name != denyRuleCd {
+		return v
+	}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleSiblingCheckout}}
 }
 
 // denySiblingCheckout returns the deny reason for a magus command relocated into
@@ -37,12 +41,13 @@ func rankSiblingCheckout(v BashVerdict, reason string) BashVerdict {
 // is not in a checkout at all. A guard that blocks because it could not read
 // something has its priorities backwards.
 //
-// A cd into a DIFFERENT repository is deliberately not denied. That is legitimate
-// in a multi-repo session, and it already draws the `--root <path>` advisory.
-// Denying it would export a false positive to every consumer of this guard to
-// catch a mistake nobody makes.
-func denySiblingCheckout(command string) string {
-	targets := magusCdTargets(command)
+// A cd into a DIFFERENT repository is deliberately not denied by THIS rule.
+// That is legitimate in a multi-repo session; the general cd deny still refuses
+// the relocation itself and points at `--root`. Denying "other repository" here
+// would export a false positive about sibling checkouts to every consumer of
+// this guard to catch a mistake nobody makes.
+func denySiblingCheckout(command string, d Dialect) string {
+	targets := magusCdTargets(command, d)
 	if len(targets) == 0 {
 		return ""
 	}

@@ -4,11 +4,11 @@
 // who already has a page open and produces NOTHING for discovery: a client-side query is not a
 // URL a crawler follows, not a link the orphan gate can count, and not somewhere another page
 // can point. Giving a tag its own page turns every chip into a real inbound link and gives the
-// corpus a topic axis that cuts ACROSS the directory tree - the one thing section indexes,
+// docs a topic axis that cuts ACROSS the directory tree - the one thing section indexes,
 // breadcrumbs, and the pager all cannot do, because each of those only ever walks the tree.
 //
 // Runs after the walk: every page's frontmatter has to be collected before a tag knows its
-// members. The pages are NOT registered in docPages - they are an index over the corpus, not
+// members. The pages are NOT registered in docPages - they are an index over docPages, not
 // part of it, and listing them as content would put them in Related cards and the section
 // subtree, where they would crowd out the pages they exist to point at.
 namespace tags;
@@ -75,8 +75,8 @@ export fun renderTagPages(site: Site) > void !> any {
 
     foreach (slug in orderedSlugs) {
         final name = label[slug]!;
-        // Second pass over docPages per tag rather than a slug->pages map built up front: the
-        // corpus is a couple of hundred pages, and this keeps the grouping in one obvious place.
+        // Second pass over docPages per tag rather than a slug->pages map built up front: docPages
+        // is a couple of hundred pages, and this keeps the grouping in one obvious place.
         var cards: mut [{str: any}] = mut [<{str: any}>];
         foreach (p in site.docPages) {
             var carries = false;

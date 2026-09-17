@@ -26,7 +26,7 @@ func BenchmarkEmitOutput(b *testing.B) {
 // unmeasured claim on a path that runs once per target.
 func BenchmarkEmitResult(b *testing.B) {
 	ctx := WithInvocationID(WithLogger(context.Background(), NewLogger(NewFileHandler(io.Discard))), "invbench")
-	ev := Event{Kind: KindResult, Project: "web", Target: "build", Status: StatusPass, Ref: "outa1b2c3d4e5f6", DurMs: 1200}
+	ev := Event{Kind: KindResult, Project: "web", Target: "build", Status: StatusPass, Ref: "outa1b2c3d4e5f6", DurationMs: 1200}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -49,7 +49,7 @@ func BenchmarkEmitResultFile(b *testing.B) {
 	defer func() { _ = f.Close() }()
 
 	ctx := WithInvocationID(WithLogger(context.Background(), NewLogger(NewFileHandler(f))), "invbench")
-	ev := Event{Kind: KindResult, Project: "web", Target: "build", Status: StatusPass, Ref: "outa1b2c3d4e5f6", DurMs: 1200}
+	ev := Event{Kind: KindResult, Project: "web", Target: "build", Status: StatusPass, Ref: "outa1b2c3d4e5f6", DurationMs: 1200}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

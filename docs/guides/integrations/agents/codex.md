@@ -42,7 +42,12 @@ new task after changing any of them.
 ## MCP
 
 Register the daemon in your user-level `~/.codex/config.toml`, never in the
-repository:
+repository. `magus agent harness apply --id codex` prints the fragment to paste
+(secret ref `MAGUS_MCP_TOKEN`); Magus does not write that file:
+
+```sh
+magus agent harness apply --id codex
+```
 
 ```toml
 [mcp_servers.magus]
@@ -74,18 +79,34 @@ codex features list
 The `hooks` row reports the stage and whether it is enabled. Hooks are stable and
 enabled by default; read the row when working with an older local build.
 
-The shipped `codex` harness descriptor owns the host `PreToolUse` wiring: its
-workspace config path, matchers, and response template are data in
-`harnesses/codex.json`. Apply and verify it from the workspace root. The
-lifecycle entries below remain portable scripts because they are not guard
-verdicts:
+Prefer wiring the Codex harness from the root magusfile when you bounce between
+hosts; apply then covers every wired provider:
 
-```sh
-magus agent harness apply --host codex
-magus agent harness verify --host codex
+```buzz
+import "spells/harness/codex" as codex
+magus\harness.provider(codex)
 ```
 
-The descriptor writes `.codex/hooks.json` and installs the three guard entries
+```sh
+magus agent harness apply
+magus agent harness verify
+```
+
+To adapt that Buzz harness without modifying Magus source: copy the spell into
+the workspace, change only the import path (for example
+`import "harness/codex" as codex`), edit the workspace Buzz, then re-run apply
+and verify. Details:
+[Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
+[Improving recurring friction](guard.md#improving-recurring-friction).
+
+Or target Codex alone (spell or `harnesses/codex.json` fallback):
+
+```sh
+magus agent harness apply --id codex
+magus agent harness verify --id codex
+```
+
+The spell writes `.codex/hooks.json` and installs the guard entries
 shown here:
 
 ```json
@@ -97,7 +118,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -107,7 +128,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-path.sh",
             "statusMessage": "magus guard: checking file"
           }
         ]
@@ -117,8 +138,18 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
             "statusMessage": "magus guard: checking MCP tool call"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-observe.sh",
+            "statusMessage": "magus: recording read"
           }
         ]
       }
@@ -140,7 +171,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
+            "command": "__MAGUS_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
             "statusMessage": "magus: recording where the work stands"
           }
         ]
@@ -150,35 +181,40 @@ shown here:
 }
 ```
 
-`magus agent hook` derives the path, command, and MCP surfaces from the raw
-event and emits Codex's hook reply. It replaces the `magus-guard-command.sh`
-and `magus-guard-path.sh` templates. It requires `magus` on `PATH`; otherwise
-use [Guard hook templates](guard-templates.md).
+The shipped scripts talk to `magus session hook`. The harness descriptor only
+merges those opaque fragments into `.codex/hooks.json`; Magus does not inject a
+codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the repository,
+or apply the descriptor.
 
-The two `PreToolUse` entries used to carry `GUARD_NO_ADVISE=1`, which rendered
+The two `PreToolUse` entries used to carry `__MAGUS_NO_ADVISE=1`, which rendered
 every advisory as nothing. That rested on a claim OpenAI's current hooks
 reference contradicts: `additionalContext` is a supported `PreToolUse` field, and
 the response keys Codex rejects, the ones that make it mark a hook run failed and
 continue the call, are `continue`, `stopReason` and `suppressOutput`. Suppression
 cost this host every explanation the guard had to give while enforcing every deny,
 which is the half of the contract nothing in a session reports missing. If your own
-build behaves otherwise, `GUARD_NO_ADVISE=1` still suppresses the arm.
+build behaves otherwise, `__MAGUS_NO_ADVISE=1` still suppresses the arm.
 
 ### Maintaining the workspace harness
 
-When repeated guard evidence identifies an outdated Codex harness, review the
-proposal with `magus agent improve`, then explicitly apply it:
+This host is a Buzz harness spell. Adapt without Magus source edits by forking
+the spell and changing only the import path; then `magus agent harness apply`
+and `verify`. See
+[Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
+[Improving recurring friction](guard.md#improving-recurring-friction).
+
+`harnesses/codex.json` remains as a fallback when the magusfile does not wire
+the spell. Recurring Magus-owned fragment merges for that JSON path still use:
 
 ```sh
-magus agent improve --apply --host codex
+magus agent improve --apply --id codex
 ```
 
-That command delegates the write to the `codex` descriptor. It updates only its
-Magus-owned host `PreToolUse` entries in the descriptor's workspace
-configuration path; it preserves unrelated settings and does not touch
+That writes only Magus-owned native `PreToolUse` entries in the workspace-local
+JSON configuration and preserves every other setting. It never writes
 user-level configuration, lifecycle entries, templates, compiled guard rules,
-skills, memory, or `AGENTS.md`. Review the normal JSON diff before committing
-it, then run `magus agent harness verify --host codex`.
+skills, memory, or `AGENTS.md`. Review the JSON diff, then `magus agent harness
+verify --id codex`.
 
 The `Stop` entry is not a guard. It records where the work stands each time a
 turn ends, which is worth having here in particular: a Codex session that runs

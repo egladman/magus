@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -511,6 +512,91 @@ func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
 	if err := s.remote.PutShard(ctx, fp, bytes.NewReader(b)); err != nil {
 		s.log.DebugContext(ctx, "knowledge: remote shard push failed", slog.String("shard", name), slog.String("error", err.Error()))
 	}
+}
+
+// ShardBlob is one persisted shard as a publisher sends it.
+type ShardBlob struct {
+	Name  string // the shard name, which decides merge order
+	Key   string // the content fingerprint, the same key GetShard and PutShard use
+	Bytes []byte // the shard file verbatim
+}
+
+// StoreExport is the persisted store in publishable form: the routing manifest plus one
+// blob per shard it names.
+type StoreExport struct {
+	Manifest []byte
+	Shards   []ShardBlob // sorted by shard name
+}
+
+// ReadStoreExport reads the persisted store so a publisher can upload it whole.
+//
+// Machine-local shards are dropped, for the reason pushShard skips them: personal notes,
+// loaded transcripts and run history are not the repository's to share. So is any shard
+// whose file is gone (LRU-evicted) or whose fingerprint is blank, because neither can be
+// addressed by key. All three are dropped from the returned MANIFEST as well, so every
+// shard the published routing names has a blob beside it.
+//
+// Returns ErrNoStore when no readable manifest exists.
+func ReadStoreExport(cacheDir string) (StoreExport, error) {
+	s := NewStore(cacheDir, true, 0, nil, nil)
+	man := s.readManifestOrNil()
+	if man == nil {
+		return StoreExport{}, ErrNoStore
+	}
+	kept := manifest{SchemaVersion: man.SchemaVersion, Shards: map[string]shardMeta{}}
+	out := StoreExport{}
+	for _, name := range slices.Sorted(maps.Keys(man.Shards)) {
+		meta := man.Shards[name]
+		if isMachineLocalShard(name) || meta.Fingerprint == "" {
+			continue
+		}
+		b, err := os.ReadFile(s.shardPath(name))
+		if err != nil {
+			continue
+		}
+		kept.Shards[name] = meta
+		out.Shards = append(out.Shards, ShardBlob{Name: name, Key: meta.Fingerprint, Bytes: b})
+	}
+	b, err := json.MarshalIndent(kept, "", "  ")
+	if err != nil {
+		return StoreExport{}, err
+	}
+	out.Manifest = b
+	return out, nil
+}
+
+// ShardKeys reads a store manifest and maps each shard name to the content fingerprint a
+// remote addresses it by. It is how a reader holding a published manifest decides what to
+// ask GetShard for.
+//
+// A manifest written by a different schema is refused rather than partially read: the
+// shard files behind it carry that schema's node and edge shapes.
+func ShardKeys(manifestJSON []byte) (map[string]string, error) {
+	var m manifest
+	if err := json.Unmarshal(manifestJSON, &m); err != nil {
+		return nil, fmt.Errorf("knowledge: decode store manifest: %w", err)
+	}
+	if m.SchemaVersion != types.KnowledgeSchemaVersion {
+		return nil, fmt.Errorf("knowledge: store manifest is schema %d, this binary reads %d", m.SchemaVersion, types.KnowledgeSchemaVersion)
+	}
+	out := make(map[string]string, len(m.Shards))
+	for name, meta := range m.Shards {
+		out[name] = meta.Fingerprint
+	}
+	return out, nil
+}
+
+// MergeShardFile merges one persisted shard file's bytes into g, for a reader holding
+// shard blobs with no store on disk. Merge is first-writer-wins, so a caller merging
+// several shards decides provenance by the order it calls this in; the store's own Load
+// sorts by shard name.
+func MergeShardFile(g *Graph, b []byte) error {
+	var sf shardFile
+	if err := json.Unmarshal(b, &sf); err != nil {
+		return fmt.Errorf("knowledge: decode shard: %w", err)
+	}
+	g.Merge(sf.Nodes, sf.Edges)
+	return nil
 }
 
 func (s *Store) readShard(name string) (shardFile, error) {

@@ -187,6 +187,19 @@ jobs:
       - name: Build, push, and sign the per-commit image
         run: magus run image-build:cd --no-default-charms
 
+      # The knowledge graph of the same commit, as an OCI artifact under the same account
+      # and the same short-commit tag, so one string addresses both. It carries the SCIP
+      # shards, which are never committed and are the expensive half to rebuild, so a
+      # collaborator or a later job pulls them instead of reindexing.
+      #
+      # After the image on purpose: the image is what a consumer blocks on, and a graph
+      # this job failed to publish costs a rebuild rather than a release.
+      - name: Publish the knowledge graph
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: magus run graph-generate:cd,rw --no-default-charms
+
       # No summary step here on purpose: image-build writes $GITHUB_STEP_SUMMARY itself,
       # from the references it actually pushed. A step that re-derived them would be
       # parsing magus's own output back out of a file magus wrote.

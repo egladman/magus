@@ -2,8 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -32,19 +30,6 @@ func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 	}
 }
 
-func TestAgentHookRequiresARuntimeLoadedHarness(t *testing.T) {
-	err := agentHookCmd(context.Background(), t.TempDir(), strings.NewReader("{}"), io.Discard, []string{"--host", "missing-host"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no harness descriptor")
-}
-
-func TestNativeAgentHookTreatsDeliveredDenyAsSuccess(t *testing.T) {
-	assert.NoError(t, agentHookDeliveryResult(errSilent{exitCode: guardDenyExitCode}))
-
-	sentinel := errors.New("could not parse host event")
-	assert.ErrorIs(t, agentHookDeliveryResult(sentinel), sentinel)
-}
-
 func TestRenderAgentSkill(t *testing.T) {
 	got := string(agentSkills.RenderSkill(agent.AgentSkill{Name: "magus-test", Description: "Does one thing.", Body: "# Test\n\nDo it."}))
 	want := "---\nname: magus-test\ndescription: \"Does one thing.\"\n---\n\n# Test\n\nDo it.\n"
@@ -61,7 +46,7 @@ func TestAgentsSectionIsPlainASCII(t *testing.T) {
 
 func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 	dir := t.TempDir()
-	written, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
+	written, _, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 	require.NotEmpty(t, written)
 
@@ -90,7 +75,7 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 	dir := t.TempDir()
 	dests := []string{"first-harness/skills", "second-harness/skills"}
 	for _, dest := range dests {
-		_, err := agentSkills.WriteSkillTree(dir, dest, false, agent.FormFull)
+		_, _, err := agentSkills.WriteSkillTree(dir, dest, false, agent.FormFull)
 		require.NoError(t, err)
 	}
 	first, err := os.ReadFile(filepath.Join(dir, dests[0], "magus-query/SKILL.md"))
@@ -104,24 +89,24 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 
 func TestInstallSkillTreeRefusesThenForces(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
+	_, _, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 
-	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
+	_, _, err = agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.Error(t, err, "a second install without --force must refuse")
 	assert.Contains(t, err.Error(), "already exists")
 
-	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true, agent.FormFull)
+	_, _, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true, agent.FormFull)
 	assert.NoError(t, err, "--force overwrites")
 }
 
 func TestInstallSkillTreeRefusesAbsoluteDestination(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.WriteSkillTree(dir, "/tmp/abs/skills", false, agent.FormFull)
+	_, _, err := agentSkills.WriteSkillTree(dir, "/tmp/abs/skills", false, agent.FormFull)
 	require.Error(t, err, "an absolute destination must be refused")
 	assert.Contains(t, err.Error(), "outside the working tree")
 
-	_, err = agentSkills.WriteSkillTree(dir, "~/.config/skills", false, agent.FormFull)
+	_, _, err = agentSkills.WriteSkillTree(dir, "~/.config/skills", false, agent.FormFull)
 	require.Error(t, err, "a tilde-prefixed destination must be refused")
 	assert.Contains(t, err.Error(), "outside the working tree")
 }
@@ -159,12 +144,13 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 	path := filepath.Join(dir, "AGENTS.md")
 	const theirs = "# My agents notes\n\nkeep me\n"
 	require.NoError(t, os.WriteFile(path, []byte(theirs), 0o644))
-	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
+	_, _, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 
 	before := dirSnapshot(t, dir)
 	out := captureStderr(t, func() {
-		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, nil, agent.FormFull, false)
+		written := []string{".claude/skills/magus-query/SKILL.md"}
+		printAgentInstallNextSteps(dir, written, written, nil, agent.FormFull, false)
 	})
 
 	assert.Contains(t, out, "magus does not write AGENTS.md")
@@ -259,7 +245,7 @@ func TestCheckSkillStatusesCurrent(t *testing.T) {
 	dir := t.TempDir()
 	const skillsDir = "harness-skills"
 	writeStatusHarness(t, dir, skillsDir)
-	_, err := agentSkills.WriteSkillTree(dir, skillsDir, false, agent.FormFull)
+	_, _, err := agentSkills.WriteSkillTree(dir, skillsDir, false, agent.FormFull)
 	require.NoError(t, err)
 	// Pasted the way a developer would, since magus no longer writes this file.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Their notes\n\n"+agentSkills.AgentsBlock()), 0o644))
@@ -302,7 +288,7 @@ func TestCheckSkillStatusesNoFooter(t *testing.T) {
 func writeStatusHarness(t *testing.T, root, skillsDir string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "harnesses"), 0o755))
-	const descriptor = `{"schema_version":2,"id":"status-test","display":{"name":"Status test"},"skills":{"paths":[%q],"form":"full"},"config":{"path":".status-test/config.json"},"pre_tool_use":{"path":["hooks","PreToolUse"],"matcher_key":"matcher","hooks_key":"hooks","response_template":"{{toJson .reason}}","entries":[{"matcher":"Bash","hook":{"type":"command"}}]}}`
+	const descriptor = `{"schema_version":2,"id":"status-test","display":{"name":"Status test"},"skills":{"paths":[%q],"form":"full"},"config":{"path":".status-test/config.json"}}`
 	require.NoError(t, os.WriteFile(filepath.Join(root, "harnesses", "status-test.json"), []byte(fmt.Sprintf(descriptor, skillsDir)), 0o644))
 }
 
@@ -368,15 +354,25 @@ func TestShortInstallShipsAFullTwinForEverySkill(t *testing.T) {
 		assert.Contains(t, string(agentSkills.StampSkill(twin.Name, agentSkills.RenderSkill(twin), twin.Variant)),
 			"skill-variant: full", "%s must stamp itself full", twin.Name)
 
-		// The twin announces itself; the primary does not carry a pointer to it.
-		// The short form exists to spend less context, so the discoverability
-		// cost is paid once on the twin's own listing entry, not on every skill.
-		assert.Contains(t, twin.Description, "delegated",
-			"%s must tell a delegated model to prefer it, or nothing routes to it", twin.Name)
+		// The twins point AT EACH OTHER, and neither restates the other.
+		//
+		// This reverses what the pair used to assert, and the measurement is why. The twin's
+		// description was this one's verbatim plus a sentence asking the model to decide
+		// whether it is "smaller" (not a fact a model has), and the primary named no twin at
+		// all. So nothing routed: 12 of 15 twins were never loaded once across 2,147 sessions,
+		// while the restatement spent 10,105 of the 19,113 description bytes a host loads into
+		// every prompt.
+		//
+		// Now the twin is standalone and the primary carries one clause naming it. That is the
+		// only path by which a reader holding the short copy can learn the fuller one exists.
+		assert.NotContains(t, twin.Description, def.Description,
+			"%s must stand alone, not restate %s: the restatement was half of every session's skill-description budget", twin.Name, def.Name)
+		assert.Contains(t, twin.Description, def.Name,
+			"%s must name the skill it is a fuller copy of", twin.Name)
 		primary, ok := byName[def.Name]
 		require.True(t, ok)
-		assert.NotContains(t, primary.Description, agent.FullTwinName(def.Name),
-			"%s must not spend the short form's context pointing at its twin; the twin's own entry does that", def.Name)
+		assert.Contains(t, primary.Description, agent.FullTwinName(def.Name),
+			"%s must name its twin, or a reader holding the short copy can never discover it", def.Name)
 	}
 }
 

@@ -1,0 +1,14 @@
+# pnpm settings for the build-only bundle deps. NOT a workspace: there is no `packages:`
+# key and this is one package.
+#
+# This replaced a .npmrc whose comment argued the opposite, that a single package keeps its
+# settings in .npmrc rather than here. That held when pnpm read them from both; 10.16 moved
+# the settings pnpm actually honors into this file, and carrying two spellings of one
+# policy across four projects cost more than the distinction was worth. Verified rather
+# than assumed: `pnpm config get minimumReleaseAge` answers 14400 from here, in a package
+# with no `packages:` key.
+
+# In MINUTES; 14400 = 10 days. Supply-chain guard: never install a version published less
+# than 10 days ago, giving a compromised release time to be caught before it can enter a
+# build. Bumping a dep means it must be >= 10 days old.
+minimumReleaseAge: 14400

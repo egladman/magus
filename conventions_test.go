@@ -12,21 +12,29 @@ package magus
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
+	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -296,6 +304,28 @@ func TestGuardAdviceHasSkillCoverage(t *testing.T) {
 	}
 }
 
+// TestGenerateDriftThrowNamesTheEngineDriftCode pins completion-gates plan step 4:
+// the root magusfile's whole-tree drift throw and the engine's declared-output path
+// (types.ClassifyDrift, types/vcs.go) both diagnose "generated output drifted", and
+// must name it with the same code so a reader does not learn two spellings of one
+// condition. The magusfile throw deliberately does not CALL ClassifyDrift (see the
+// comment above it: whole-tree drift has no single target's inputs to classify
+// against), so this only pins the code text, not the classification call.
+func TestGenerateDriftThrowNamesTheEngineDriftCode(t *testing.T) {
+	body, err := os.ReadFile(rootMagusfile)
+	require.NoError(t, err, "read %s", rootMagusfile)
+
+	i := strings.Index(string(body), "regeneration changed generated files")
+	require.NotEqual(t, -1, i, "%s: the whole-tree drift throw moved or was reworded", rootMagusfile)
+	// The code is a plain-text prefix on the throw (the same idiom
+	// spells/golang/gomod.buzz uses for MGS1016), not a magus\raise call:
+	// magus\raise refuses the MGS namespace as reserved for magus's own diagnostics.
+	line := string(body[max(0, i-80):i])
+	assert.Contains(t, line, string(types.StaleGeneratedOutput),
+		"%s: whole-tree drift throw must carry %s, the same code the engine's declared-output path emits via types.ClassifyDrift",
+		rootMagusfile, types.StaleGeneratedOutput)
+}
+
 func TestSkillsGenerateDeclaresEveryShippedSkill(t *testing.T) {
 	body, err := os.ReadFile(rootMagusfile)
 	require.NoError(t, err, "read %s", rootMagusfile)
@@ -355,14 +385,14 @@ func TestSkillsGenerateDeclaresEveryShippedSkill(t *testing.T) {
 // The two generic sh templates share a page because two hosts share the files;
 // Cursor's and OpenCode's are self-contained and sit with their host.
 var templatePage = map[string]string{
-	"magus-guard-command.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-guard-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
-	"magus-guard-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-checkpoint.sh":    "docs/guides/integrations/agents/guard-templates.md",
-	"magus-rehydrate.sh":     "docs/guides/integrations/agents/guard-templates.md",
-	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
-	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
-	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
+	"magus-hook-command.sh": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-hook-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-hook-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.sh":   "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"codex-hooks.json":      "docs/guides/integrations/agents/codex.md",
+	"cursor-hook.sh":        "docs/guides/integrations/agents/cursor.md",
+	"opencode-plugin.ts":    "docs/guides/integrations/agents/opencode.md",
 	// The three session-load adapters share a page with the contract they emit and
 	// the coverage table that compares them, because choosing between hosts is
 	// exactly the question that page answers.
@@ -377,19 +407,19 @@ var templatePage = map[string]string{
 // something anyone copies into a host, so the list is explicit rather than a
 // directory walk that would drag all of it into the guide.
 var hookTemplates = []string{
-	"magus-guard-command.sh",
-	"magus-guard-path.sh",
+	"magus-hook-command.sh",
+	"magus-hook-path.sh",
 	// The two templates that carry no verdict: one records a path an agent reached,
 	// the other where the work stood when a session stopped, and neither judges
 	// anything. So they declare no guard coverage and owe no parity row. See the note
 	// at the top of each for why that absence is deliberate rather than a hole.
-	"magus-guard-observe.sh",
+	"magus-hook-observe.sh",
 	"magus-checkpoint.sh",
 	// The third of them: it reports where a checkout stands to a session that lost
 	// its history, and judges nothing either.
 	"magus-rehydrate.sh",
 	"codex-hooks.json",
-	"cursor-guard.sh",
+	"cursor-hook.sh",
 	"opencode-plugin.ts",
 	// The session-load adapters are shipped artifacts too: version-stamped, embedded
 	// in their page, and registered here so a new one cannot arrive unnoticed. They
@@ -455,12 +485,7 @@ var hookConfigPage = map[string]string{
 // hookConfigExemptions records a template one config deliberately does not run,
 // with the reason it does not. An exemption is the sanctioned way to differ; the
 // unsanctioned way is to differ silently, which is what the gate refuses.
-var hookConfigExemptions = map[string]map[string]string{
-	"codex": {
-		"magus-guard-observe.sh": "the read surface records a path for the activity trail and changes no verdict, " +
-			"so it earns one host's wiring rather than four; nothing in the hook contract prevents it",
-	},
-}
+var hookConfigExemptions = map[string]map[string]string{}
 
 // mcpToolMatcherPrefix is how a host config selects magus's own MCP tools. A job
 // wired under it guards a different surface from the same template, so the name
@@ -482,7 +507,7 @@ func configTemplates(t *testing.T, path string) map[string]bool {
 // and, where the matcher selects magus's MCP tools, by that surface too.
 //
 // Keyed by job rather than by file because a template wired twice under different
-// matchers is two jobs: claude-code runs magus-guard-command.sh on Bash AND on the
+// matchers is two jobs: claude-code runs magus-hook-command.sh on Bash AND on the
 // MCP tool call, and a gate collecting basenames alone reads the second as nothing
 // new, which is the whole absence it exists to report.
 func configJobs(t *testing.T, path string) map[string]bool {
@@ -497,17 +522,6 @@ func configJobs(t *testing.T, path string) map[string]bool {
 	for _, entries := range cfg.Hooks {
 		for _, entry := range entries {
 			for _, h := range entry.Hooks {
-				if nativeAgentHookFor(h.Command, "claude-code") || nativeAgentHookFor(h.Command, "codex") {
-					name := "magus-guard-command.sh"
-					if strings.Contains(entry.Matcher, "Edit") || strings.Contains(entry.Matcher, "Write") {
-						name = "magus-guard-path.sh"
-					}
-					if strings.Contains(entry.Matcher, "mcp__") {
-						name += " on " + mcpToolMatcherPrefix
-					}
-					found[name] = true
-					continue
-				}
 				for _, template := range hookTemplates {
 					if filepath.Ext(template) != ".sh" || !strings.Contains(h.Command, template) {
 						continue
@@ -629,11 +643,6 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 		for _, entry := range entries {
 			require.NotEmpty(t, entry.Hooks, "%s matcher %q has no hooks", event, entry.Matcher)
 			for _, h := range entry.Hooks {
-				if nativeAgentHookFor(h.Command, "claude-code") {
-					assert.Equal(t, "PreToolUse", event,
-						"the native guard adapter is only a PreToolUse transport; lifecycle hooks need their own commands")
-					continue
-				}
 				assert.Contains(t, h.Command, hookTemplateDir,
 					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
 						"so dogfooding exercises the file readers download", event, entry.Matcher, hookTemplateDir)
@@ -671,6 +680,10 @@ var templateDirScaffolding = map[string]bool{
 	"opencode-plugin.test.ts": true,
 	"host-e2e.ts":             true,
 	"host-e2e.test.ts":        true,
+	// Emits testdata/hosts/cursor/gen from @cursor/sdk's published zod. A generator
+	// magus runs, not an artifact a reader installs into a host, so it owes the parity
+	// gates nothing: no guide embeds it and no host wires it.
+	"cursor-schemas.ts": true,
 	// The binary-interface twin: proves the recorded shim's argv shape still gets
 	// a real verdict from a real magus, but is not itself something a reader
 	// copies into a host; see the note at its top for the split with the file
@@ -848,19 +861,12 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 		}
 	}
 
-	// Codex either points at the generic templates or at the native adapter.
-	// The adapter covers every guard surface session hook understands, so it is
-	// a checkable replacement for copied shell glue, not an untested shortcut.
-	//
-	// The claim is read off the GUARD declaration rather than off the file's text.
-	// A session-load adapter names the same host on a contract this config has
-	// nothing to do with, and matching that would demand a hook wiring for a file
-	// nobody wires to a hook.
+	// Codex points at the generic templates. The claim is read off the GUARD
+	// declaration rather than off the file's text: a session-load adapter names
+	// the same host on a contract this config has nothing to do with, and matching
+	// that would demand a hook wiring for a file nobody wires to a hook.
 	wiring, err := os.ReadFile(filepath.Join(hookTemplateDir, "codex-hooks.json"))
 	require.NoError(t, err)
-	if nativeAgentHookFor(string(wiring), "codex") {
-		return
-	}
 	for _, name := range hookTemplates {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err)
@@ -870,10 +876,6 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 		assert.Contains(t, string(wiring), name,
 			"%s claims to cover the codex host, but codex-hooks.json never invokes it", name)
 	}
-}
-
-func nativeAgentHookFor(command, host string) bool {
-	return strings.Contains(command, "magus agent hook --host "+host)
 }
 
 // claimsGuardHost reports whether a template names host in one of its guard
@@ -900,7 +902,7 @@ func claimsGuardHost(body, host string) bool {
 // failOpenArmRe matches the tests a shipped template makes before answering
 // WITHOUT a verdict from magus: the binary is missing or not executable, or it
 // ran and left nothing to report. Both spellings the templates use, sh and TS.
-var failOpenArmRe = regexp.MustCompile(`! -x "\$GUARD_MAGUS_BIN"|-z "\$verdict"|stdout === null`)
+var failOpenArmRe = regexp.MustCompile(`! -x "\$__MAGUS_BIN"|-z "\$verdict"|stdout === null`)
 
 // failOpenRetryRe marks a block that re-invokes magus rather than answering. Two
 // of the templates test the same `-z "$verdict"` condition twice (once to retry
@@ -909,16 +911,16 @@ var failOpenArmRe = regexp.MustCompile(`! -x "\$GUARD_MAGUS_BIN"|-z "\$verdict"|
 var failOpenRetryRe = regexp.MustCompile(`\$\(guard\b|runOnce\(`)
 
 // failOpenNoticeRe matches an arm SAYING it did not judge the call: prose on
-// stderr, a console warning, or one of the GUARD_*_RESPONSE envelopes.
-var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$GUARD_[A-Z_]+_RESPONSE`)
+// stderr, a console warning, or one of the __MAGUS_*_RESPONSE envelopes.
+var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$__MAGUS_[A-Z_]+_RESPONSE`)
 
 // failOpenOptInRe matches the shape that makes a notice OPT-IN: the arm prints
 // only when the reader has set the variable, so by default it prints nothing.
-var failOpenOptInRe = regexp.MustCompile(`^\[ -n "\$GUARD_[A-Z_]+" \] &&`)
+var failOpenOptInRe = regexp.MustCompile(`^\[ -n "\$__MAGUS_[A-Z_]+" \] &&`)
 
 // failOpenDefaultRe extracts the variable an arm's notice comes from, so the
 // default assigned to it can be checked for emptiness.
-var failOpenDefaultRe = regexp.MustCompile(`\$(GUARD_[A-Z_]+_RESPONSE)`)
+var failOpenDefaultRe = regexp.MustCompile(`\$(__MAGUS_[A-Z_]+_RESPONSE)`)
 
 // failOpenComputedNoticeRe matches an arm that BUILDS its notice from what it observed
 // rather than printing a canned string. There is no variable to give a default to, and
@@ -936,7 +938,7 @@ var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\
 // worse noise. Overturning that is a decision for whoever made it; leaving it
 // undeclared here is what this table refuses.
 var failOpenSilentByDesign = map[string]string{
-	"magus-guard-path.sh": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; GUARD_UNAVAILABLE_RESPONSE and GUARD_FAILED_RESPONSE are the opt-in",
+	"magus-hook-path.sh": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
 }
 
 // TestFailOpenArmsAnnounceThemselves is the doctrine's enforcement point: a
@@ -950,7 +952,7 @@ var failOpenSilentByDesign = map[string]string{
 // Structural on purpose: it finds the arms by the conditions the templates test
 // and asks each one for an unconditional notice, so rewording a message costs
 // nothing and DELETING one fails. A template with no coverage declaration is not
-// asked, which is how magus-guard-observe.sh is exempt: it carries no verdict,
+// asked, which is how magus-hook-observe.sh is exempt: it carries no verdict,
 // so it has no fail-open to announce.
 func TestFailOpenArmsAnnounceThemselves(t *testing.T) {
 	for _, name := range hookTemplates {
@@ -1027,9 +1029,45 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 	assert.Fail(t, "fail-open arm says nothing",
 		"%s answers without a magus verdict at line %d and emits no default notice.\n"+
 			"A guard that stopped enforcing looks exactly like a clean session, so every fail-open arm\n"+
-			"announces itself (see magus-guard-command.sh's GUARD_UNAVAILABLE_RESPONSE). Add a notice,\n"+
+			"announces itself (see magus-hook-command.sh's __MAGUS_UNAVAILABLE_RESPONSE). Add a notice,\n"+
 			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
 		name, line)
+}
+
+// TestCursorGuardAnnouncesAMissingJq runs the template with no jq on PATH, which
+// is the one dependency failure the text scan above cannot see.
+//
+// Every field that template branches on is selected with jq. Without it they all
+// come back empty, the shape fallback has nothing left to infer from, and the
+// event reaches the default arm: exit 0, no reply, every deny rule off, and
+// nothing saying so, which is indistinguishable from a guarded session.
+func TestCursorGuardAnnouncesAMissingJq(t *testing.T) {
+	script, err := filepath.Abs(filepath.Join(hookTemplateDir, "cursor-hook.sh"))
+	require.NoError(t, err)
+
+	// A PATH holding only what the template needs before it reads the event, plus
+	// a magus stub so a missing binary cannot be what answers. jq is not in it.
+	bin := t.TempDir()
+	for _, tool := range []string{"cat", "printf", "mkdir", "cksum", "cut", "find", "grep"} {
+		real, err := exec.LookPath(tool)
+		require.NoError(t, err, "this test needs %s", tool)
+		require.NoError(t, os.Symlink(real, filepath.Join(bin, tool)))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
+	cmd := exec.Command("sh", script)
+	cmd.Dir = t.TempDir()
+	cmd.Env = []string{"PATH=" + bin, "TMPDIR=" + t.TempDir()}
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeShellExecution","command":"rm -rf /","cwd":"/ws"}`)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	require.NoError(t, cmd.Run(),
+		"the hook must exit 0: a non-zero status reads as a crash and fails open. stderr: %s", stderr.String())
+
+	assert.Contains(t, stderr.String(), "jq is not on PATH",
+		"a guard that cannot read the event must say so, or a disarmed guard looks like a clean session")
+	assert.Equal(t, `{"permission":"allow"}`, stdout.String(),
+		"a gating event needs an explicit reply; an empty one is read as no opinion")
 }
 
 // TestEverySessionAdapterIsRegistered gives the session adapters the property the
@@ -1779,7 +1817,7 @@ var wholeTreeFootprints = map[string][]string{
 // ctx.readsFiles REPLACES a target's footprint rather than adding to it: buildStep keeps
 // the magusfiles and the target's spell sources, drops the project and spell globs, then
 // folds the declared refs in. So a call added to key four files the project does not
-// claim (the console palette that types/kindpalette_drift_test.go reads) silently
+// claim (the console palette that types/kind_palette_drift_test.go reads) silently
 // deleted **/*.go from the key of the target that runs every Go test. It held long enough
 // for ~8,400 new lines of *_test.go to land and replay against the cached verdict with the
 // coverage profile untouched; only --no-cache re-measured. `magus affected` still selected
@@ -1949,7 +1987,7 @@ func TestHostSpecificLineMatcher(t *testing.T) {
 		{`cursor := paramString(req.Params, "cursor", "")`, false},
 		{`// Cursor reports where the cursor is, in 1-based terminal coordinates.`, false},
 		{"\tCursor DiffCursor `json:\"cursor\" yaml:\"cursor\"`", false},
-		{`"cursor-guard.sh",`, false},
+		{`"cursor-hook.sh",`, false},
 		{`filepath.Join(root, ".cursor", "hooks.json"),`, false},
 		{`filepath.Join(root, ".claude", "settings.json"),`, false},
 	} {
@@ -1971,7 +2009,8 @@ func TestHostSpecificLineMatcher(t *testing.T) {
 // branch that is not deciding a verdict is not the failure this exists to prevent.
 var hostToolVocabularyScope = []string{
 	filepath.Join("internal", "guard", "*.go"),
-	filepath.Join("cmd", "magus", "hook*.go"),
+	filepath.Join("cmd", "magus", "shell*.go"),
+	filepath.Join("cmd", "magus", "guard_*.go"),
 	filepath.Join("internal", "agent", "*.go"),
 }
 
@@ -2061,14 +2100,14 @@ func TestGuardDoesNotBranchOnHostToolVocabulary(t *testing.T) {
 // literal carrying it is a RULE wherever it sits.
 const verdictTextPrefix = "magus workspace:"
 
-// TestTheHookCommandCarriesNoRuleText keeps the rules on the importable side of the
-// split. A rule written into cmd/magus/hook.go would work, and would be invisible to
+// TestTheShellCommandCarriesNoRuleText keeps the rules on the importable side of the
+// split. A rule written into cmd/magus/shell.go would work, and would be invisible to
 // both the rule suite and the replay path that re-grades a recorded command, because
 // neither can reach package main. Nothing else marks which side a new rule belongs on,
 // and a boundary that lives only in prose is one with roughly even odds.
-func TestTheHookCommandCarriesNoRuleText(t *testing.T) {
+func TestTheShellCommandCarriesNoRuleText(t *testing.T) {
 	fset := token.NewFileSet()
-	const path = "cmd/magus/hook.go"
+	const path = "cmd/magus/shell.go"
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	require.NoErrorf(t, err, "parse %s: the guard's CLI half moved and this gate stopped looking", path)
 
@@ -2195,7 +2234,7 @@ var nonASCIIGlyphs = map[rune]string{
 // reverting any one fix here fails it.
 var asciiScanFiles = []string{
 	"types/describe.go",
-	"internal/render/targetgraph.go",
+	"internal/render/target_graph.go",
 	"cmd/magus-docs/main.go",
 	"internal/observability/otlp/provider.go",
 	"internal/handler/mcp/registry.go",
@@ -2493,4 +2532,390 @@ func containsAny(haystack string, needles []string) bool {
 		}
 	}
 	return false
+}
+
+// TestTypesStaysPureDomain gives types/doc.go's contract an enforcement point. It said
+// "no filesystem, VCS, or process-execution dependencies" and nothing checked it, so the
+// rule lived on whoever last read the file.
+//
+// What it forbids is REACHING THE WORLD: opening a file, running a process, dialing a
+// host, asking a VCS. What it permits is string work over paths and host:port, which is
+// why path/filepath and net are here rather than banned. types.Path resolves and
+// relativizes (types/path.go:40) and types.SecretGrant splits a host (types/secret.go:138);
+// both are pure computation over values a caller already had, and banning them would push
+// path arithmetic into every caller that has a Path.
+//
+// magus's own packages are forbidden with one exception, internal/json, and the exception
+// is not a compromise: TestNoDirectEncodingJSONImport REQUIRES every package that encodes
+// JSON to use it, so banning it here would leave types unable to marshal at all. It is a
+// codec over encoding/json/v2 with no I/O of its own.
+//
+// CLAUDE.md says types imports "only spells and libs/diagnostics", which is stricter than
+// the contract and has been false since types learned to marshal. The doc comment is the
+// rule; this test is what makes it one.
+func TestTypesStaysPureDomain(t *testing.T) {
+	t.Parallel()
+	forbidden := []string{
+		"os", "os/exec", "io/fs", "net/http", "database/sql", "os/user",
+		"github.com/egladman/magus/vcs",
+		"github.com/egladman/magus/project",
+	}
+	allowedMagus := []string{
+		"github.com/egladman/magus/spells",
+		"github.com/egladman/magus/libs/diagnostics",
+		"github.com/egladman/magus/internal/json",
+	}
+
+	entries, err := os.ReadDir("types")
+	require.NoError(t, err)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join("types", e.Name())
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		require.NoError(t, err, "parsing %s", path)
+		for _, imp := range f.Imports {
+			p := strings.Trim(imp.Path.Value, `"`)
+			assert.NotContains(t, forbidden, p,
+				"%s imports %q: types is the near-leaf domain package and may not reach the world", path, p)
+			if strings.HasPrefix(p, "github.com/egladman/magus/") {
+				assert.Contains(t, allowedMagus, p,
+					"%s imports %q: types may depend on spells, libs/diagnostics and internal/json, nothing else in magus", path, p)
+			}
+		}
+	}
+}
+
+// cmdMagusInternalCeiling is the number of internal/ packages cmd/magus imports today.
+// It is a RATCHET: the number may fall, never rise.
+//
+// Measured over this repository's history, it was 25 in May, 36 in July, 48 in August and
+// 63 now, while cmd/magus's references to the root package rose 71 -> 189 over the same
+// span. Both doors into the engine are widening, and the cost is not abstract: the
+// concurrency clamp exists in cmd/magus/main.go AND magus.go, with a comment in the
+// former admitting the latter "never runs".
+//
+// This test decides nothing about which door is right. It only stops the drift being
+// invisible. Lowering the number is the win; raising it should be a sentence in a commit
+// message explaining why the composition root could not hold the new dependency.
+const cmdMagusInternalCeiling = 63
+
+func TestCmdMagusInternalImportsOnlyShrink(t *testing.T) {
+	t.Parallel()
+	entries, err := os.ReadDir(filepath.Join("cmd", "magus"))
+	require.NoError(t, err)
+
+	seen := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join("cmd", "magus", e.Name())
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		require.NoError(t, err, "parsing %s", path)
+		for _, imp := range f.Imports {
+			if p := strings.Trim(imp.Path.Value, `"`); strings.HasPrefix(p, "github.com/egladman/magus/internal/") {
+				seen[p] = true
+			}
+		}
+	}
+
+	assert.LessOrEqual(t, len(seen), cmdMagusInternalCeiling,
+		"cmd/magus now imports %d internal packages, over the %d ceiling: put the new dependency behind the root package, "+
+			"or lower the ceiling deliberately and say why", len(seen), cmdMagusInternalCeiling)
+}
+
+// establishedCompoundNames are Go filename segments that LOOK like two words mashed
+// together and are single established terms. They are exempt from the check below.
+//
+// An allowlist rather than a cleverer test, because no rule distinguishes "runtime" from
+// "pushgate": both are two known words with the separator dropped, and only a person
+// knows the first is a word and the second is a mistake. Adding an entry is the deliberate
+// act of saying "this is one word"; it is not a place to park a name you did not want to
+// think about.
+var establishedCompoundNames = map[string]bool{
+	"runtime": true, // Go's own term
+	"stdlib":  true,
+	"keyring": true,
+	"jsonv2":  true, // names the GOEXPERIMENT
+	"libproc": true, // the Darwin API
+	"vmstat":  true, // the Darwin tool
+}
+
+// grandfatheredCompoundNames are concatenations already in the tree when this check
+// landed. They are NOT exemptions: each is a rename waiting for a session with room for
+// it, and the list is meant to shrink.
+//
+// Recorded rather than fixed on the spot because a rename touches every importer, and a
+// gate that forced twenty of them at once would be turned off instead of satisfied.
+var grandfatheredCompoundNames = map[string]bool{
+	"magusfile":   true, // the file it names is called magusfile.buzz, so this may be right
+	"eventstream": true,
+	"hostmodules": true,
+	"promptcache": true,
+	"selfupdate":  true,
+	"toolref":     true,
+	"refidentity": true,
+}
+
+// TestGoFileNamesDoNotMashWordsTogether keeps new filenames readable: one word, or words
+// separated by an underscore the way workspace_shell.go and prompt_cache.go do it. Never
+// wordsmashedtogether.
+//
+// The vocabulary is built FROM THE TREE, which is what makes this checkable without a
+// dictionary: a segment is suspect when it splits into two segments this repository
+// already uses as filenames. skillgate is skill plus gate, pushgate is push plus gate,
+// hostschemas is hosts plus schemas -- all three shipped in one session, each one after
+// the last had been corrected by hand, which is the argument for a gate over a habit.
+//
+// Deliberately narrow: it can only see a mash of two words the tree already knows, so it
+// misses a compound of words that appear nowhere else. A check that catches the common
+// case and never lies is worth more than one that tries to catch everything.
+func TestGoFileNamesDoNotMashWordsTogether(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Dir(thisFile)
+
+	suffixes := regexp.MustCompile(`_(test|linux|darwin|windows|unix|other|amd64|arm64|js|wasm|freebsd|openbsd|netbsd)$`)
+	segments := map[string]bool{}
+	type goFile struct{ path, base string }
+	var files []goFile
+
+	require.NoError(t, filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if name == ".git" || name == "node_modules" || name == ".claude" || name == "gen" || name == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(name, ".go") {
+			return nil
+		}
+		base := strings.TrimSuffix(name, ".go")
+		for prev := ""; prev != base; {
+			prev, base = base, suffixes.ReplaceAllString(base, "")
+		}
+		rel, rerr := filepath.Rel(root, path)
+		if rerr != nil {
+			return rerr
+		}
+		files = append(files, goFile{path: rel, base: base})
+		for _, seg := range strings.Split(base, "_") {
+			if seg != "" {
+				segments[seg] = true
+			}
+		}
+		return nil
+	}))
+	require.NotEmpty(t, files, "walked no Go files; this gate went quiet rather than red")
+
+	for _, f := range files {
+		for _, seg := range strings.Split(f.base, "_") {
+			if establishedCompoundNames[seg] || grandfatheredCompoundNames[seg] {
+				continue
+			}
+			for i := 2; i < len(seg)-1; i++ {
+				head, tail := seg[:i], seg[i:]
+				if !segments[head] || !segments[tail] {
+					continue
+				}
+				assert.Fail(t, "filename mashes two words together",
+					"%s: %q is %q + %q, both of which this repository already uses as filenames.\n"+
+						"Name it %s.go, or %s_%s.go if it genuinely covers both. If %q is one established word,\n"+
+						"add it to establishedCompoundNames and say why.",
+					f.path, seg, head, tail, tail, head, tail, seg)
+				break
+			}
+		}
+	}
+}
+
+// symbolIDPackage pulls the package path and symbol name out of a SCIP symbol ID, whose
+// shape is `symbol:gomod <module> ` + "`" + `<package path>` + "`" + `/<name>...`.
+//
+// Parsed rather than recomputed from the filesystem: the package a symbol belongs to and
+// the name it carries are facts the index already holds, and deriving them again from
+// paths would be a second answer to drift from the first.
+var symbolIDPackage = regexp.MustCompile("^symbol:gomod \\S+ `([^`]+)`/(.+)$")
+
+// TestExportedNamesDoNotStutter reads the SYMBOL GRAPH, not the filesystem.
+//
+// This is the check that cannot be written any other way. Stutter is a property of a
+// package name together with a symbol name (sessions.SessionAdapter reads as
+// sessions.Session... at every call site), and a test that walked files would have the
+// filenames and none of the symbols. magus indexes both, so the question is a query.
+//
+// It SKIPS when the index has nothing for this module, and that is deliberate rather than
+// lenient: the symbol index is built by the scip op and is stale or absent until it runs,
+// so a test that quietly passed on an empty index would report "no stutter" for a tree it
+// never read. Skipping says which.
+func TestExportedNamesDoNotStutter(t *testing.T) {
+	ctx := context.Background()
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Dir(thisFile)
+
+	ws, err := Inspect(ctx, root)
+	require.NoError(t, err)
+	g, err := BuildKnowledgeGraph(ctx, ws, root, config.Config{}, false, slog.Default())
+	require.NoError(t, err)
+	require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, config.Config{}, g, slog.Default()))
+
+	const module = "github.com/egladman/magus"
+	found := map[string][]string{}
+	indexed := 0
+	for _, n := range g.Nodes() {
+		if n.Kind != types.KindSymbol {
+			continue
+		}
+		m := symbolIDPackage.FindStringSubmatch(n.ID)
+		if m == nil || !strings.HasPrefix(m[1], module) {
+			continue
+		}
+		indexed++
+		// The name is everything before the first descriptor suffix SCIP appends: `.`
+		// for a term, `()` for a method, `#` for a type.
+		name := m[2]
+		for _, cut := range []string{".", "(", "#", "/"} {
+			if i := strings.Index(name, cut); i >= 0 {
+				name = name[:i]
+			}
+		}
+		pkg := m[1][strings.LastIndex(m[1], "/")+1:]
+		if name == "" || !unicode.IsUpper(rune(name[0])) || len(pkg) < minStutterPackage {
+			continue
+		}
+		if len(name) > len(pkg) && strings.EqualFold(name[:len(pkg)], pkg) {
+			found[pkg] = append(found[pkg], name)
+		}
+	}
+
+	if indexed == 0 {
+		t.Skip("no symbols indexed for this module: run `magus graph build`, which is what this reads")
+	}
+	for pkg, names := range found {
+		if stutterAllowed[pkg] {
+			continue
+		}
+		slices.Sort(names)
+		assert.Fail(t, "exported names stutter against their package",
+			"package %q exports %v, which read as %s.%s... at every call site.\n"+
+				"Drop the package name from the symbol, or add %q to stutterAllowed and say why.",
+			pkg, slices.Compact(names), pkg, pkg, pkg)
+	}
+}
+
+// minStutterPackage is the shortest package name worth testing. A two-letter package
+// shares a prefix with too many ordinary words for the match to mean anything.
+const minStutterPackage = 3
+
+// stutterAllowed are packages whose exported names repeat the package name on purpose.
+var stutterAllowed = map[string]bool{}
+
+// TestNameOutputGoesThroughEmitNames keeps `-o name` on the structured-output
+// destination. writeFormatted cannot render outputName, so every command answers
+// that format in its own switch arm, and an arm that reaches for fmt.Println prints
+// to stdout directly: --tee accepts the flag, writes nothing, and says nothing.
+// Twenty-five arms had drifted that way before emitNames existed to point at.
+func TestNameOutputGoesThroughEmitNames(t *testing.T) {
+	paths, err := filepath.Glob("cmd/magus/*.go")
+	require.NoError(t, err)
+	require.NotEmpty(t, paths, "cmd/magus moved and this gate stopped looking")
+
+	fset := token.NewFileSet()
+	files := make([]*ast.File, 0, len(paths))
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		f, perr := parser.ParseFile(fset, path, nil, 0)
+		require.NoErrorf(t, perr, "parse %s", path)
+		files = append(files, f)
+	}
+
+	emitters := nameEmitters(files)
+	var violations []string
+	arms := 0
+	for _, f := range files {
+		ast.Inspect(f, func(n ast.Node) bool {
+			clause, ok := n.(*ast.CaseClause)
+			if !ok || !casePicks(clause, "outputName") {
+				return true
+			}
+			arms++
+			if !callsAny(clause.Body, emitters) {
+				violations = append(violations, fset.Position(clause.Pos()).String())
+			}
+			return true
+		})
+	}
+
+	require.NotZero(t, arms, "no `case outputName:` arm found: the format constant was renamed")
+	assert.Empty(t, violations,
+		"every `case outputName:` arm must render through emitNames or emitNamesOf.\n"+
+			"Printing to stdout directly bypasses --tee, which then accepts the flag and writes an\n"+
+			"empty file. A single value is emitNames([]string{v}); a slice of records is\n"+
+			"emitNamesOf(records, func(r T) string { return r.Field }).\n\narms:\n%s",
+		strings.Join(violations, "\n"))
+}
+
+// casePicks reports whether the clause selects exactly the given identifier, so
+// `case outputJSON, outputName:` is not read as a name arm.
+func casePicks(clause *ast.CaseClause, name string) bool {
+	if len(clause.List) != 1 {
+		return false
+	}
+	id, ok := clause.List[0].(*ast.Ident)
+	return ok && id.Name == name
+}
+
+// nameEmitters returns every function in the package that reaches the structured-output
+// destination, seeded with the three that ARE it and closed under calls.
+//
+// The closure is what keeps this from becoming an allowlist. Several arms delegate to a
+// helper of their own (emitProjectNames, diffNames) which is correct and which a check
+// looking for a literal emitNames call reports as a violation; growing a list of blessed
+// helper names instead would go stale the first time somebody adds a fourth.
+func nameEmitters(files []*ast.File) map[string]bool {
+	emitters := map[string]bool{"emitNames": true, "emitNamesOf": true, "outputDst": true}
+	for changed := true; changed; {
+		changed = false
+		for _, f := range files {
+			for _, decl := range f.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Body == nil || emitters[fn.Name.Name] {
+					continue
+				}
+				if callsAny(fn.Body.List, emitters) {
+					emitters[fn.Name.Name] = true
+					changed = true
+				}
+			}
+		}
+	}
+	return emitters
+}
+
+// callsAny reports whether any statement calls one of the named functions directly.
+func callsAny(stmts []ast.Stmt, names map[string]bool) bool {
+	found := false
+	for _, stmt := range stmts {
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if id, ok := call.Fun.(*ast.Ident); ok && names[id.Name] {
+				found = true
+				return false
+			}
+			return true
+		})
+	}
+	return found
 }

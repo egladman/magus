@@ -51,7 +51,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/jobs"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
@@ -71,6 +71,12 @@ func main() {
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
+	// Ahead of everything, including log setup: a binary below the workspace's
+	// required_version floor cannot get far enough into startup to discover that on
+	// its own, so this has to work on nothing but os.Args and a directory walk. See
+	// bootstrap_exec.go.
+	maybeBootstrapExec(os.Args)
+
 	log.SetFlags(0)
 	log.SetPrefix("magus: ")
 
@@ -341,7 +347,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// workspace to make that promise is work nobody asked for, and it breaks the
 		// promise out loud: a checkout carrying one unparsable local spell logs the load
 		// error on every hook. It resolves the daemon socket itself, exactly as
-		// `server job` did before this verb replaced it. Every other job verb reads the
+		// `magus job run` did before this verb replaced it. Every other job verb reads the
 		// workspace and takes the default.
 		if len(subArgs) > 0 && subArgs[0] == hint.JobRun.Leaf() {
 			return dispatchProfile{needsConfig: true}
@@ -696,7 +702,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		cfgPath string
 	)
 	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
-	fs.StringVar(&root, "root", "", "Workspace root (must precede subcommand; default: walk up from cwd to find go.mod)")
+	fs.StringVar(&root, "root", "", "Path to start the workspace search from, -C after make (must precede subcommand; default: cwd)")
 	fs.StringVar(&root, "C", "", "Short for --root")
 	fs.StringVar(&cfgPath, "config", "", "Config file path (must precede subcommand; default: search magus.yaml in CWD / XDG)")
 	fs.StringVar(&cfgPath, "c", "", "Short for --config")
@@ -894,6 +900,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return configCmd(ctx, root, globalCfg, subArgs)
 	case "session":
 		return sessionCmd(ctx, root, subArgs)
+	case "shell":
+		return shellCmd(ctx, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
 	case "job":
@@ -1031,7 +1039,7 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 // dispatch half that makes `graph build`, `clean --cache`, and the rotate workers actually run
 // as jobs; without it they returned ErrNotAdoptable and the submitted job was a silent no-op.
 func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) error {
-	if !jobs.IsWorkerArgv(args) && !isDeclaredRun(ctx, args) {
+	if !job.IsWorkerArgv(args) && !isDeclaredRun(ctx, args) {
 		return fmt.Errorf("%w: %q is not a registered job worker", proc.ErrNotAdoptable, strings.Join(args, " "))
 	}
 	return dispatchSub(ctx, root, rc, args[0], args[1:])

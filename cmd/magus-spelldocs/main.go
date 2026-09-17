@@ -1,5 +1,5 @@
 // Command magus-spelldocs generates Markdown reference documentation for every
-// built-in spell in the internal/spellruntime registry. It mirrors cmd/magus-docs: walk
+// built-in spell in the internal/spell registry. It mirrors cmd/magus-docs: walk
 // the registry, emit one page per spell to docs/spells/<name>.md (injecting a
 // per-op example from spells/examples/<name>/<op>.buzz), and refresh the
 // built-in-spell table on the /spells/ landing (docs/spells.md) between its marker
@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/internal/docs"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
 )
 
@@ -50,6 +50,12 @@ type spellInfo struct {
 // Every built-in must have an entry; main() exits non-zero on a spell with no
 // entry, so a newly added spell can't ship an unlabeled page.
 var spellMeta = map[string]spellInfo{
+	"buzz": {
+		dir: "buzz", language: "Buzz",
+		description: "Buzz language identity: the .buzz extension and the comment and string syntax magus reads source with.",
+		intro:       "The `buzz` spell declares what a Buzz file IS and declares no ops. It is what lets the knowledge graph and the symbol index tell code from a comment or a string in a `.buzz` source, and what binds the extension to its project. Running Buzz needs no spell: `magus buzz -t <file>` executes a file's in-file `test` blocks through magus's own embedded engine.",
+		tags:        []string{"buzz", "language"},
+	},
 	"go": {
 		dir: "golang", language: "Go",
 		description: "Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.",
@@ -104,12 +110,6 @@ var spellMeta = map[string]spellInfo{
 		intro:       "The `cosign` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts. Signing and attestation pass `--yes` for non-interactive (CI) use.",
 		tags:        []string{"cosign", "sigstore", "signing", "supply-chain"},
 	},
-	"buzz": {
-		dir: "buzz", language: "Buzz",
-		description: "Buzz spell: check and test .buzz sources, plus run them through the magus interpreter.",
-		intro:       "The `buzz` spell checks and tests Buzz sources. Each op finds every `.buzz` file and runs `buzz --check`, `buzz --test`, or the magus interpreter over it.",
-		tags:        []string{"buzz", "gopherbuzz", "check", "test"},
-	},
 	"bash": {
 		dir: "bash", language: "Shell",
 		description: "Bash spell: shellcheck linting for shell scripts.",
@@ -142,7 +142,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	builtins := spellruntime.Builtins()
+	builtins := spell.Builtins()
 	names := make([]string, 0, len(builtins))
 	for name := range builtins {
 		if _, ok := spellMeta[name]; !ok {
@@ -427,6 +427,12 @@ func parseOpDocs(dir string) map[string]string {
 		if doc := funcDoc[handler]; doc != "" {
 			out[op] = doc
 		}
+	}
+	// The symbol indexer has no entry in mgs_listTargets to walk: magus synthesizes its
+	// op from mgs_getSymbolIndexer, so that export's own comment is the prose describing
+	// it, and without this the page renders the indexer's argv with nothing said about it.
+	if doc := funcDoc["mgs_getSymbolIndexer"]; doc != "" {
+		out[spells.SymbolIndexOp] = doc
 	}
 	return out
 }

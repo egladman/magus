@@ -154,6 +154,28 @@ func Link(opts LinkOpts) string {
 	return "http://" + opts.Host + "/console/" + opts.Surface + "/" + frag
 }
 
+// SurfaceLink is Link without an origin: /console/<surface>/#<directives>.
+//
+// For a response the CONSOLE ITSELF reads. The console is served from the daemon it is
+// asking, so it already knows the origin; sending an absolute URL would mean the handler
+// guessing a host it does not otherwise need, and guessing it wrong behind a proxy or a
+// forwarded port. It also carries no token, because a caller already inside the console
+// has one.
+//
+// Here rather than hand-built at the handler for the reason Link's own doc gives: the
+// grammar has one home, so both forms share the one escaping policy.
+func SurfaceLink(surface string, fragment ...FragmentParam) string {
+	parts := make([]string, 0, len(fragment))
+	for _, p := range fragment {
+		parts = append(parts, p.Key+"="+encodeComponent(p.Value))
+	}
+	frag := ""
+	if len(parts) > 0 {
+		frag = "#" + strings.Join(parts, "&")
+	}
+	return "/console/" + surface + "/" + frag
+}
+
 // encodeComponent percent-encodes s the way the browser's encodeURIComponent does, which is what
 // the page's hash parser reverses with decodeURIComponent. url.QueryEscape is
 // application/x-www-form-urlencoded, which encodes a space as "+"; decodeURIComponent would leave

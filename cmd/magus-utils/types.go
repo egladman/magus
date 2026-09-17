@@ -2,7 +2,7 @@
 // github.com/egladman/magus/types, so the Go struct stays the single source of
 // truth and the two shapes can never drift. The emitted file is shipped as part
 // of the declarations for whichever host import path returns the type: os for
-// ExecResult, vcs for Tag, magus for TargetGraph, and so on (see internal/spellruntime
+// ExecResult, vcs for Tag, magus for TargetGraph, and so on (see internal/spell
 // and internal/interp/bindings/modules.go), so importing that path already
 // brings the type into a magusfile's or spell's scope for annotations and
 // literals, with no separate import required.
@@ -86,7 +86,7 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	// there, Project being the case where the wrong path names a REAL other type.
 	fmt.Fprintf(&b, "// Buzz mirror of %s.%s, bundled into\n", rt.PkgPath(), rt.Name())
 	fmt.Fprintln(&b, "// whichever module owns it (magus/spell, or the host module that returns it -")
-	fmt.Fprintln(&b, "// see internal/spellruntime/target.go and hosttypes.go). Edit the Go struct and rerun")
+	fmt.Fprintln(&b, "// see internal/spell/target.go and host_types.go). Edit the Go struct and rerun")
 	fmt.Fprintln(&b, "// `go generate`, never this file.")
 	fmt.Fprintln(&b)
 	// An enum a field references must be declared before the object that uses it,

@@ -1,7 +1,7 @@
 /* ui-panels.css - the shared nav-triggered UI panels used by BOTH the documentation site and
    the console apps: the settings gear dropdown (theme cycle + the console-only refresh/host
    prefs) and the reference slide-out drawer (trigger, sections, inline doc browsing). Extracted
-   from console.css so the docs corpus + 404 + offline can drop console.css entirely - they need
+   from console.css so the docs pages + 404 + offline can drop console.css entirely - they need
    these panels but none of the console-app chrome (app bar, launcher, status bar, full-height
    layout, empty states). Bundled/minified to gen root like site.css and console.css and loaded
    by every page; console.css now holds ONLY console-app-only rules. --ref-w and --accent-warm
