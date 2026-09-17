@@ -204,7 +204,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	worker.ID, worker.Parent = "harness/worker", "harness/root"
 
 	reviewer := types.Job{
-		ID: "harness/reviewer", Goal: "read the guard surface",
+		ID: "harness/reviewer", Criteria: "read the guard surface",
 		ReadOnly: true, ReadPaths: []string{"cmd/magus/**"},
 		State: types.StateRunning, Registered: 1,
 	}

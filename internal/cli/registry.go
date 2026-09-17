@@ -123,8 +123,8 @@ step at a time.`,
 		{Name: "targets", Short: "List every target the workspace defines"},
 		{
 			Name:        "job",
-			Short:       "Print one job's terms: its goal, lanes, check and dependencies",
-			Description: "Print what one job grants its holder: the goal and acceptance criteria, the write and read lanes, the one check, the dependencies, the paths this workspace puts out of reach, and the graph's blast radius for each write path.",
+			Short:       "Print one job's terms: its criteria, lanes, check and dependencies",
+			Description: "Print what one job grants its holder: the criteria, the write and read lanes, the one check, its completion gates, the dependencies, the paths this workspace puts out of reach, and the graph's blast radius for each write path.",
 			Long: `Print one job's terms, which is what a holder reads on arrival.
 
 It carries no procedure. Taking a job is ` + "`magus job exec`" + `'s work to DO, and a
@@ -138,7 +138,15 @@ workspace config that have one owner, and the projects that change alongside the
 held ones without declaring a dependency. It is context and never a status, the
 same shape magus diff --prompt has, with one refusal: a job whose check is the ci
 gate, or a target that chains to it, has no terms printed at all. The gate runs
-once, in the forking session's tree, after every job lands.`,
+once, in the forking session's tree, after every job lands.
+
+--gates is the one exception to "context, never a status", and it is still a
+READ: it grades the job's completion gates against the evidence magus holds now
+and records nothing, so asking never advances a job and never blocks the holder
+still working on it. Exit 1 means a gate is unmet.`,
+			Flags: []Flag{
+				{Name: "gates", Kind: FlagBool, Doc: "Grade this job's completion gates against the evidence magus holds now, and record nothing"},
+			},
 			Usage: "magus describe job <job> [flags]",
 		},
 		{
@@ -1831,7 +1839,7 @@ them and magus describe job prints one job's terms.`,
 			Flags: []Flag{
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
-				{Name: "goal", Kind: FlagString, Doc: "The goal and its observable acceptance criteria"},
+				{Name: "criteria", Kind: FlagString, Doc: "What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths"},
 				{Name: "parent", Kind: FlagString, Doc: "The job this one is forked from"},
 				{Name: "checkpoint", Kind: FlagString, Doc: "The working state this job is handed, as `magus vcs checkpoint -o name` prints it"},
 				{Name: "write-paths", Kind: FlagCustom, Doc: "A path this job may write; repeatable or comma-separated"},
@@ -1839,6 +1847,14 @@ them and magus describe job prints one job's terms.`,
 				{Name: "read-paths", Kind: FlagCustom, Doc: "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)"},
 				{Name: "depends-on", Kind: FlagCustom, Doc: "A job this one waits on; repeatable or comma-separated"},
 				{Name: "check", Kind: FlagString, Doc: "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)"},
+				{Name: "gate-check", Kind: FlagCustom, Doc: "A further check this job must pass, as `<id>=<target> <project>`; repeatable"},
+				{Name: "gate-paths", Kind: FlagCustom, Doc: "Files this job must have CHANGED, as `<id>=<glob>[,<glob>...]`, proven against its checkpoint; repeatable"},
+				{Name: "gate-paths-present", Kind: FlagCustom, Doc: "Files that must EXIST when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable"},
+				{Name: "gate-paths-absent", Kind: FlagCustom, Doc: "Files that must be GONE when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable"},
+				{Name: "gate-symbol", Kind: FlagCustom, Doc: "Symbols whose definition this job must have CHANGED, as `<id>=<name>[,<name>...]`; repeatable"},
+				{Name: "gate-symbol-present", Kind: FlagCustom, Doc: "Symbols that must resolve when the job is done, as `<id>=<name>[,<name>...]`; repeatable"},
+				{Name: "gate-symbol-absent", Kind: FlagCustom, Doc: "Symbols that must resolve NOWHERE when the job is done, as `<id>=<name>[,<name>...]`; repeatable"},
+				{Name: "gate-symbol-unreferenced", Kind: FlagCustom, Doc: "Symbols nothing may reference when the job is done, as `<id>=<name>[,<name>...]`; repeatable"},
 				{Name: "model", Kind: FlagString, Doc: "The model the work was matched to"},
 				{Name: "read-only", Kind: FlagBool, Doc: "A job that gathers evidence and writes nothing"},
 			},
@@ -1869,6 +1885,18 @@ them and magus describe job prints one job's terms.`,
 			},
 		},
 		{Name: "run", Short: "Submit one of the daemon's own jobs and return"},
+		{
+			Name:  "rm",
+			Short: "Remove one job from the plan",
+			Description: "Remove ONE job from the plan, leaving every other row alone. This is not how a job ends: " +
+				"`magus job exit` records what happened and leaves the row as the account of it, while rm is for a row " +
+				"that should never have been written. A row that already ended is refused unless --force, because " +
+				"deleting it destroys the only record that the work ran. The dropped rows are archived beside the plan first.",
+			Flags: []Flag{
+				{Name: "force", Kind: FlagBool, Doc: "Remove a row that already ended, destroying the record of what happened"},
+			},
+			Usage: "magus job rm <job> [flags]",
+		},
 	},
 	Examples: []Example{
 		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions --check 'test internal/sessions'"},

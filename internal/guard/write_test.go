@@ -73,7 +73,7 @@ func fleetLeases() []types.Job {
 	return []types.Job{
 		{
 			ID:           "lease-a",
-			Goal:         "own the ledger store\nacceptance: List stays cheap",
+			Criteria:     "own the ledger store\nacceptance: List stays cheap",
 			WritePaths:   []string{"internal/ledger/**"},
 			State:        types.StateRunning,
 			Checkpoint:   "rev-a",
@@ -83,7 +83,7 @@ func fleetLeases() []types.Job {
 		},
 		{
 			ID:           "lease-b",
-			Goal:         "grade writes in the guard",
+			Criteria:     "grade writes in the guard",
 			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
 			DenyPaths:    []string{"cmd/magus/gen/**"},
 			State:        types.StateDeclared,
@@ -137,7 +137,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
 		leases := append(fleetLeases(), types.Job{
 			ID:       "scout",
-			Goal:     "inventory the guard rules",
+			Criteria: "inventory the guard rules",
 			ReadOnly: true,
 			State:    types.StateRunning,
 		})

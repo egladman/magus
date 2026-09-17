@@ -89,7 +89,7 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
-exec magus job fork harness/mcp-worker --goal 'the transport test set, held so the rebind rule has a job to read'
+exec magus job fork harness/mcp-worker --criteria 'the transport test set, held so the rebind rule has a job to read'
 exec magus job exec harness/mcp-worker
 
 # case: mcp/pass

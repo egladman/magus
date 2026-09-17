@@ -188,7 +188,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	dir := t.TempDir()
 	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 	_, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
-		row.Goal = "ship the store"
+		row.Criteria = "ship the store"
 		row.Checkpoint = "60dc9151"
 		row.WritePaths = []string{"internal/job", "types/job.go"}
 		row.State = types.StateRunning
@@ -219,7 +219,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 
 	got := byID["job-a"]
 	require.NotNil(t, got, "the delegated row is missing from the listing")
-	require.Equal(t, "ship the store", got.Goal)
+	require.Equal(t, "ship the store", got.Criteria)
 	require.Equal(t, "60dc9151", got.Checkpoint)
 	require.Equal(t, []string{"internal/job"}, got.WritePaths)
 	require.Equal(t, stored.Updated, got.Updated, "the row's own stamp, not the moment it was read")

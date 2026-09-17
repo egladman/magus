@@ -137,6 +137,8 @@ const (
 	FlagConfigSetGlobal = "global"
 	// config token generate: --force
 	FlagConfigTokenGenerateForce = "force"
+	// describe job: --gates
+	FlagDescribeJobGates = "gates"
 	// describe projects: --e
 	FlagDescribeProjectsE = "e"
 	// describe projects: --evaluated
@@ -275,12 +277,28 @@ const (
 	FlagJobForkCheck = "check"
 	// job fork: --checkpoint
 	FlagJobForkCheckpoint = "checkpoint"
+	// job fork: --criteria
+	FlagJobForkCriteria = "criteria"
 	// job fork: --deny-paths
 	FlagJobForkDenyPaths = "deny-paths"
 	// job fork: --depends-on
 	FlagJobForkDependsOn = "depends-on"
-	// job fork: --goal
-	FlagJobForkGoal = "goal"
+	// job fork: --gate-check
+	FlagJobForkGateCheck = "gate-check"
+	// job fork: --gate-paths
+	FlagJobForkGatePaths = "gate-paths"
+	// job fork: --gate-paths-absent
+	FlagJobForkGatePathsAbsent = "gate-paths-absent"
+	// job fork: --gate-paths-present
+	FlagJobForkGatePathsPresent = "gate-paths-present"
+	// job fork: --gate-symbol
+	FlagJobForkGateSymbol = "gate-symbol"
+	// job fork: --gate-symbol-absent
+	FlagJobForkGateSymbolAbsent = "gate-symbol-absent"
+	// job fork: --gate-symbol-present
+	FlagJobForkGateSymbolPresent = "gate-symbol-present"
+	// job fork: --gate-symbol-unreferenced
+	FlagJobForkGateSymbolUnreferenced = "gate-symbol-unreferenced"
 	// job fork: --model
 	FlagJobForkModel = "model"
 	// job fork: --parent
@@ -295,6 +313,8 @@ const (
 	FlagJobForkStdin = "stdin"
 	// job fork: --write-paths
 	FlagJobForkWritePaths = "write-paths"
+	// job rm: --force
+	FlagJobRmForce = "force"
 	// job wait: --schema
 	FlagJobWaitSchema = "schema"
 	// job wait: --stdin
@@ -512,6 +532,18 @@ const (
 	// where: --regex
 	FlagWhereRegex = "regex"
 )
+
+// DescribeJobFlags are the flags declared for `magus describe job`.
+type DescribeJobFlags struct {
+	Gates bool // --gates
+}
+
+// BindDescribeJob registers `magus describe job`'s flags on fs and returns the destination.
+func BindDescribeJob(fs *flag.FlagSet) *DescribeJobFlags {
+	var f DescribeJobFlags
+	fs.BoolVar(&f.Gates, FlagDescribeJobGates, false, "Grade this job's completion gates against the evidence magus holds now, and record nothing")
+	return &f
+}
 
 // DescribeTargetFlags are the flags declared for `magus describe target`.
 type DescribeTargetFlags struct {
@@ -1334,12 +1366,12 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 
 // JobForkFlags are the flags declared for `magus job fork`.
 //
-// It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
+// It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on, --gate-check, --gate-paths, --gate-paths-present, --gate-paths-absent, --gate-symbol, --gate-symbol-present, --gate-symbol-absent, --gate-symbol-unreferenced: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobForkFlags struct {
 	Schema     bool   // --schema
 	Stdin      bool   // --stdin
-	Goal       string // --goal
+	Criteria   string // --criteria
 	Parent     string // --parent
 	Checkpoint string // --checkpoint
 	Check      string // --check
@@ -1352,7 +1384,7 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	var f JobForkFlags
 	fs.BoolVar(&f.Schema, FlagJobForkSchema, false, "Print the JSON schema a job must satisfy, and exit")
 	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
-	fs.StringVar(&f.Goal, FlagJobForkGoal, "", "The goal and its observable acceptance criteria")
+	fs.StringVar(&f.Criteria, FlagJobForkCriteria, "", "What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths")
 	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
 	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
@@ -1400,6 +1432,18 @@ func BindJobWait(fs *flag.FlagSet) *JobWaitFlags {
 	var f JobWaitFlags
 	fs.BoolVar(&f.Schema, FlagJobWaitSchema, false, "Print the JSON schema a result must satisfy, and exit")
 	fs.BoolVar(&f.Stdin, FlagJobWaitStdin, false, "Read the result from stdin instead of from the job, for one that was never filed")
+	return &f
+}
+
+// JobRmFlags are the flags declared for `magus job rm`.
+type JobRmFlags struct {
+	Force bool // --force
+}
+
+// BindJobRm registers `magus job rm`'s flags on fs and returns the destination.
+func BindJobRm(fs *flag.FlagSet) *JobRmFlags {
+	var f JobRmFlags
+	fs.BoolVar(&f.Force, FlagJobRmForce, false, "Remove a row that already ended, destroying the record of what happened")
 	return &f
 }
 

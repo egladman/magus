@@ -507,7 +507,7 @@ var Magus = Module{
 				{
 					Name: "put",
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
-						"goal, checkpoint, write_paths, deny_paths, read_paths, depends_on, model, " +
+						"criteria, checkpoint, write_paths, deny_paths, read_paths, depends_on, model, " +
 						"check (`<target> <project> [-- args]`, or the rendered `magus run` line as " +
 						"validation, never both), state (declared, running, exited, pass, fail, no_return), read_only. A " +
 						"key opts omits is left untouched, so a later put in a job's lifecycle (e.g. " +
@@ -656,9 +656,9 @@ var magusMCPTools = []MCPTool{
 	{
 		Name:   hint.ToolInsight.String(),
 		Member: "insight",
-		Doc:    "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn x complexity, with authors/recency/blast-radius), files (per-file churn x complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). One lens reads the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names). Read its answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
+		Doc:    "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn x complexity, with authors/recency/blast-radius), files (per-file churn x complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). Two lenses read the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names) and duplication (pairs of functions calling the same rare workspace symbols in the same proportions, which is what copied logic looks like; it cannot see logic duplicated entirely in standard-library calls). Read answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
 		Params: []MCPParam{
-			{Name: "lens", Type: TypeString, Doc: "One of: hotspots (default), files, affinity, ownership, trend, unreferenced."},
+			{Name: "lens", Type: TypeString, Doc: "One of: hotspots (default), files, affinity, ownership, trend, unreferenced, duplication."},
 			{Name: "commits", Type: TypeInt, Doc: "Cap on how many recent commits to scan (default 500)."},
 			{Name: "since", Type: TypeString, Doc: "Only commits within this window, e.g. \"90d\", \"12w\", \"6mo\", \"1y\"."},
 		},
@@ -809,14 +809,14 @@ var magusMCPTools = []MCPTool{
 	{
 		Name:   hint.ToolJob.String(),
 		Member: "job",
-		Doc:    "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, and typed completion gates. Write and deny paths are a DECLARATION the store never acts on; the agent guard reads these facts to grade an agent's file writes. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY means every worktree and clone reads the same rows. The op set is list, fork, exec, exit, wait, and clear; exit and wait use the same strict evidence contract as the CLI and Buzz, and a pass is derived from captured Magus output, never an agent assertion.",
+		Doc:    "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: the criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, and typed completion gates. Write and deny paths are a DECLARATION the store never acts on; the agent guard reads these facts to grade an agent's file writes. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY means every worktree and clone reads the same rows. The op set is list, fork, exec, exit, wait, and clear; exit and wait use the same strict evidence contract as the CLI and Buzz, and a pass is derived from captured Magus output, never an agent assertion.",
 		Params: []MCPParam{
 			{Name: "op", Type: TypeString, Doc: "One of: list (default; every row plus derived live-job overlaps), fork (create or replace one row by id), exec (a holder reports its landed base), exit (file a result or record no_return), wait (verify evidence and record pass only if every completion gate holds), clear (drop every row to start a fresh plan)."},
 			{Name: "reported_base", Type: TypeString, Doc: "exec only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the job was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
 			{Name: "id", Type: TypeString, Doc: "fork, exec, exit, and wait: the job id. Use the same id in the worker's prompt and result."},
 			{Name: "result", Type: TypeAnyMap, Doc: "exit or wait only: an optional strict JobResult object. It must carry the current schema_version and cite output_ref evidence for every declared completion gate; omit it from exit to record no_return, or from wait to verify the result exit filed."},
 			{Name: "parent", Type: TypeString, Doc: "fork only: the id of the job this one was handed out under. Omit for a job the root spawned."},
-			{Name: "goal", Type: TypeString, Doc: "fork only: the job's goal and its observable acceptance criteria (named tests, artifacts, diagnostics, review checks - not \"works correctly\")."},
+			{Name: "criteria", Type: TypeString, Doc: "fork only: what the job is for and what done means, as prose. The machine-checkable half belongs in completion_gates, where it is graded rather than read."},
 			{Name: "checkpoint", Type: TypeString, Doc: "fork only: the working state this job was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
 			{Name: "write_paths", Type: TypeString, Doc: "fork only: space-separated paths the job may edit. Empty on a read-only job by design. Shrinking this set IS how a job announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed, which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits: a digest that no longer matches at verification time means it built on a tree the releaser never saw."},
 			{Name: "deny_paths", Type: TypeString, Doc: "fork only: space-separated paths the job must not touch. Empty on a read-only job by design."},
@@ -1206,6 +1206,9 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 	if ur, uerr := a.Unreferenced(ctx); uerr == nil {
 		report.Unreferenced = ur
 	}
+	if dr, derr := a.Duplication(ctx); derr == nil {
+		report.Duplication = dr
+	}
 	return report, nil
 }
 
@@ -1380,14 +1383,20 @@ func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.
 	if err != nil {
 		return types.JobStatus{}, err
 	}
+	// No symbol reader on this path: the workspace on the context carries the PROJECT
+	// graph, and a symbol gate needs the knowledge graph, which a magusfile has no
+	// in-process handle on. A symbol gate verified from Buzz therefore REFUSES, naming
+	// the graph it could not read, rather than passing on an observation nobody made.
+	// The CLI and the MCP tool both hold one and wire it.
+	observe := job.CheckpointObserver(types.WorkspaceFromContext(ctx).Root(), nil)
 	if result == nil {
-		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil)
+		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil, observe)
 	}
 	report, err := jobResultFromMap(result)
 	if err != nil {
 		return types.JobStatus{}, err
 	}
-	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext)
+	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext, observe)
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or

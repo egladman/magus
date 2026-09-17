@@ -2625,6 +2625,25 @@
           "reads_secrets": false
         },
         {
+          "name": "cursor-schemas-generate",
+          "declared": "cursor_schemas_generate",
+          "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.",
+          "dependencies": [
+            "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "../../../../testdata/hosts/cursor/gen/*.schema.json"
+            }
+          ]
+        },
+        {
           "name": "lint",
           "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way).",
           "dependencies": [

@@ -74,14 +74,38 @@ The one check this job runs, as `<target> <project> [\-\- args]` (the `magus run
 \fB\-\-checkpoint\fR \fImagus vcs checkpoint -o name\fR
 The working state this job is handed, as `magus vcs checkpoint \-o name` prints it
 .TP
+\fB\-\-criteria\fR \fIstring\fR
+What this job is for and what done means, as prose; the machine\-checkable half is \-\-gate\-check and \-\-gate\-paths
+.TP
 \fB\-\-deny\-paths\fR \fIstring\fR
 A path inside the lane this job may not write; repeatable or comma\-separated
 .TP
 \fB\-\-depends\-on\fR \fIstring\fR
 A job this one waits on; repeatable or comma\-separated
 .TP
-\fB\-\-goal\fR \fIstring\fR
-The goal and its observable acceptance criteria
+\fB\-\-gate\-check\fR \fI<id>=<target> <project>\fR
+A further check this job must pass, as `<id>=<target> <project>`; repeatable
+.TP
+\fB\-\-gate\-paths\fR \fI<id>=<glob>[,<glob>...]\fR
+Files this job must have CHANGED, as `<id>=<glob>[,<glob>...]`, proven against its checkpoint; repeatable
+.TP
+\fB\-\-gate\-paths\-absent\fR \fI<id>=<glob>[,<glob>...]\fR
+Files that must be GONE when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable
+.TP
+\fB\-\-gate\-paths\-present\fR \fI<id>=<glob>[,<glob>...]\fR
+Files that must EXIST when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable
+.TP
+\fB\-\-gate\-symbol\fR \fI<id>=<name>[,<name>...]\fR
+Symbols whose definition this job must have CHANGED, as `<id>=<name>[,<name>...]`; repeatable
+.TP
+\fB\-\-gate\-symbol\-absent\fR \fI<id>=<name>[,<name>...]\fR
+Symbols that must resolve NOWHERE when the job is done, as `<id>=<name>[,<name>...]`; repeatable
+.TP
+\fB\-\-gate\-symbol\-present\fR \fI<id>=<name>[,<name>...]\fR
+Symbols that must resolve when the job is done, as `<id>=<name>[,<name>...]`; repeatable
+.TP
+\fB\-\-gate\-symbol\-unreferenced\fR \fI<id>=<name>[,<name>...]\fR
+Symbols nothing may reference when the job is done, as `<id>=<name>[,<name>...]`; repeatable
 .TP
 \fB\-\-model\fR \fIstring\fR
 The model the work was matched to
@@ -131,6 +155,12 @@ Print the JSON schema a result must satisfy, and exit
 \fB\-\-stdin\fR
 Read the result from stdin instead of from the job, for one that was never filed
 .RE
+.SS job rm options
+.RS
+.TP
+\fB\-\-force\fR
+Remove a row that already ended, destroying the record of what happened
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -148,6 +178,9 @@ Verify the result a job was exited with
 .TP
 \fBrun\fR
 Submit one of the daemon's own jobs and return
+.TP
+\fBrm\fR
+Remove one job from the plan
 .RE
 .SH EXAMPLES
 \fIDeclare a job\fR

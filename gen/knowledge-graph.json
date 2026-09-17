@@ -1,10 +1,10 @@
 {
   "definition": "The knowledge graph is a deterministic, cache-backed graph of the magus domain: projects, targets, spells, ops, charms, modules, methods, and diagnostics, connected by verified relations (depends_on, contains, uses, references, documents). Every node and edge is extracted or rubric-inferred from workspace sources - no LLM pass - so it is safe to rebuild implicitly and query instead of grepping.",
-  "schema_version": 12,
+  "schema_version": 13,
   "directed": true,
   "multigraph": false,
-  "node_count": 6274,
-  "edge_count": 11184,
+  "node_count": 6290,
+  "edge_count": 11204,
   "relations": [
     {
       "id": "annotates",
@@ -1705,7 +1705,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1902",
+        "dir_files": "1910",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -2075,7 +2075,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "292",
+        "dir_files": "294",
         "dir_languages": "markdown,md#agent-adoption-options,md#agent-harness-apply-options,md#agent-harness-install-options,md#agent-harness-remove-options,md#agent-harness-verify-options,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-o"
       }
     },
@@ -2085,7 +2085,7 @@
       "label": "docs/reference/rules",
       "source": "docs/reference/rules",
       "attrs": {
-        "dir_files": "271",
+        "dir_files": "277",
         "dir_languages": "markdown,md#busy-wait,md#buzz-unbriefed,md#cache-dir-write,md#capture-filter,md#cd,md#checkpoint-state,md#ci-watch,md#code-search,md#doc-search,md#explains,md#focus,md#gate-repeat,md#generated-write,md#graph-stale,md#guard-rules,md#hook-wiring,md#installed"
       }
     },
@@ -2157,7 +2157,7 @@
       "label": "internal",
       "source": "internal",
       "attrs": {
-        "dir_files": "172",
+        "dir_files": "173",
         "dir_languages": "buzz,markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-"
       }
     },
@@ -2167,7 +2167,7 @@
       "label": "internal/agent",
       "source": "internal/agent",
       "attrs": {
-        "dir_files": "162",
+        "dir_files": "163",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph"
       }
     },
@@ -2177,7 +2177,7 @@
       "label": "internal/agent/skills",
       "source": "internal/agent/skills",
       "attrs": {
-        "dir_files": "159",
+        "dir_files": "160",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph"
       }
     },
@@ -2267,8 +2267,8 @@
       "label": "internal/agent/skills/magus-multi-agent",
       "source": "internal/agent/skills/magus-multi-agent",
       "attrs": {
-        "dir_files": "10",
-        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#fork-one-job-per-unit-of-work,md#integrate-and-verify,md#observe-through-the-correct-control-plane,md#prove-that-jobs-do-not-collide,md#run-the-graph-engineering-loop,md#seed-the-partition-with-magus,md#set"
+        "dir_files": "11",
+        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#declare-the-criteria-magus-can-check-for-you,md#fork-one-job-per-unit-of-work,md#integrate-and-verify,md#observe-through-the-correct-control-plane,md#prove-that-jobs-do-not-collide,md#run-the-graph-engineer"
       }
     },
     {
@@ -3213,8 +3213,8 @@
       "label": "testdata",
       "source": "testdata",
       "attrs": {
-        "dir_files": "8",
-        "dir_languages": "markdown,md#cursors-hook-events,md#host-schemas,md#refreshing,md#table,md#upstream-artifacts,md#what-each-host-publishes"
+        "dir_files": "10",
+        "dir_languages": "markdown,md#codex-publishes-23-of-these-we-take-6,md#cursors-hook-events,md#generated-from-cursorsdk,md#host-schemas,md#refreshing,md#table,md#upstream-artifacts,md#what-each-host-publishes"
       }
     },
     {
@@ -3223,8 +3223,8 @@
       "label": "testdata/hosts",
       "source": "testdata/hosts",
       "attrs": {
-        "dir_files": "7",
-        "dir_languages": "markdown,md#cursors-hook-events,md#host-schemas,md#refreshing,md#table,md#upstream-artifacts,md#what-each-host-publishes"
+        "dir_files": "9",
+        "dir_languages": "markdown,md#codex-publishes-23-of-these-we-take-6,md#cursors-hook-events,md#generated-from-cursorsdk,md#host-schemas,md#refreshing,md#table,md#upstream-artifacts,md#what-each-host-publishes"
       }
     },
     {
@@ -6864,7 +6864,7 @@
         "role": "doc",
         "section": "reference",
         "tags": "guard,rules,buzz-unbriefed,deny",
-        "title": "buzz-unbriefed: the first write to a .buzz file in a session that has not read the Buzz skill"
+        "title": "buzz-unbriefed: the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill"
       }
     },
     {
@@ -7189,6 +7189,18 @@
         "section": "reference",
         "tags": "guard,rules,push-gate,advise",
         "title": "push-gate: a push with no gate run since the last change"
+      }
+    },
+    {
+      "id": "doc:docs/reference/rules/push-ungated.md",
+      "kind": "doc",
+      "label": "docs/reference/rules/push-ungated.md",
+      "source": "docs/reference/rules/push-ungated.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "guard,rules,push-ungated,deny",
+        "title": "push-ungated: a push at a commit the run log records no green gate for"
       }
     },
     {
@@ -19774,6 +19786,26 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/leases.md#asking-where-a-job-stands",
+      "kind": "docsection",
+      "label": "Asking where a job stands",
+      "source": "docs/guides/integrations/agents/leases.md#asking-where-a-job-stands",
+      "attrs": {
+        "anchor": "asking-where-a-job-stands",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/leases.md#completion-gates",
+      "kind": "docsection",
+      "label": "Completion gates",
+      "source": "docs/guides/integrations/agents/leases.md#completion-gates",
+      "attrs": {
+        "anchor": "completion-gates",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/leases.md#declare-the-work",
       "kind": "docsection",
       "label": "Declare the work",
@@ -19781,6 +19813,16 @@
       "attrs": {
         "anchor": "declare-the-work",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/leases.md#declaring-gates-from-buzz",
+      "kind": "docsection",
+      "label": "Declaring gates from Buzz",
+      "source": "docs/guides/integrations/agents/leases.md#declaring-gates-from-buzz",
+      "attrs": {
+        "anchor": "declaring-gates-from-buzz",
+        "level": "3"
       }
     },
     {
@@ -33624,6 +33666,16 @@
       }
     },
     {
+      "id": "docsection:docs/reference/manpage/magus-describe.md#describe-job-options",
+      "kind": "docsection",
+      "label": "describe job options",
+      "source": "docs/reference/manpage/magus-describe.md#describe-job-options",
+      "attrs": {
+        "anchor": "describe-job-options",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/manpage/magus-describe.md#describe-projects-options",
       "kind": "docsection",
       "label": "describe projects options",
@@ -34200,6 +34252,16 @@
       "source": "docs/reference/manpage/magus-job.md#job-fork-options",
       "attrs": {
         "anchor": "job-fork-options",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/manpage/magus-job.md#job-rm-options",
+      "kind": "docsection",
+      "label": "job rm options",
+      "source": "docs/reference/manpage/magus-job.md#job-rm-options",
+      "attrs": {
+        "anchor": "job-rm-options",
         "level": "3"
       }
     },
@@ -36964,6 +37026,56 @@
       }
     },
     {
+      "id": "docsection:docs/reference/rules/push-ungated.md#push-ungated",
+      "kind": "docsection",
+      "label": "push-ungated",
+      "source": "docs/reference/rules/push-ungated.md#push-ungated",
+      "attrs": {
+        "anchor": "push-ungated",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/rules/push-ungated.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/rules/push-ungated.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/rules/push-ungated.md#seeing-it",
+      "kind": "docsection",
+      "label": "Seeing it",
+      "source": "docs/reference/rules/push-ungated.md#seeing-it",
+      "attrs": {
+        "anchor": "seeing-it",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/rules/push-ungated.md#what-it-catches",
+      "kind": "docsection",
+      "label": "What it catches",
+      "source": "docs/reference/rules/push-ungated.md#what-it-catches",
+      "attrs": {
+        "anchor": "what-it-catches",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/rules/push-ungated.md#why",
+      "kind": "docsection",
+      "label": "Why",
+      "source": "docs/reference/rules/push-ungated.md#why",
+      "attrs": {
+        "anchor": "why",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/reference/rules/raw-tool.md#raw-tool",
       "kind": "docsection",
       "label": "raw-tool",
@@ -39634,6 +39746,16 @@
       }
     },
     {
+      "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#declare-the-criteria-magus-can-check-for-you",
+      "kind": "docsection",
+      "label": "Declare the criteria magus can check for you",
+      "source": "internal/agent/skills/magus-multi-agent/SKILL.md#declare-the-criteria-magus-can-check-for-you",
+      "attrs": {
+        "anchor": "declare-the-criteria-magus-can-check-for-you",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#fork-one-job-per-unit-of-work",
       "kind": "docsection",
       "label": "Fork one job per unit of work",
@@ -41534,12 +41656,32 @@
       }
     },
     {
+      "id": "docsection:testdata/hosts/SOURCES.md#codex-publishes-23-of-these-we-take-6",
+      "kind": "docsection",
+      "label": "Codex publishes 23 of these; we take 6",
+      "source": "testdata/hosts/SOURCES.md#codex-publishes-23-of-these-we-take-6",
+      "attrs": {
+        "anchor": "codex-publishes-23-of-these-we-take-6",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:testdata/hosts/SOURCES.md#cursors-hook-events",
       "kind": "docsection",
       "label": "Cursor's hook events",
       "source": "testdata/hosts/SOURCES.md#cursors-hook-events",
       "attrs": {
         "anchor": "cursors-hook-events",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:testdata/hosts/SOURCES.md#generated-from-cursorsdk",
+      "kind": "docsection",
+      "label": "Generated from @cursor/sdk",
+      "source": "testdata/hosts/SOURCES.md#generated-from-cursorsdk",
+      "attrs": {
+        "anchor": "generated-from-cursorsdk",
         "level": "3"
       }
     },
@@ -45557,7 +45699,17 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked at the repo root: conventions_test.go verifies that this repository's own hook config invokes them, that the guide embeds them verbatim, and that each declares a stance for every decision and surface in the guard contract (the magus-guard-coverage lines).  This comment used to claim the templates' behavior was asserted",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:135",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:151",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magusfile.buzz:cursor_schemas_generate",
+      "kind": "function",
+      "label": "cursor_schemas_generate",
+      "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.  A GENERATOR where every other Cursor schema in that tree is a hand transcription, which is the point: a transcription is partial by construction and goes stale in silence, and this one cannot, because its source is a pinned package and the drift gate compares the output byte for byte.  The output lands in the ROOT project's testdata, because that is where the host schemas live and where host_schema_test.go reads them. Declared with",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:66",
       "attrs": {
         "exported": "true"
       }
@@ -45567,7 +45719,7 @@
       "kind": "function",
       "label": "format",
       "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates. The docs project cannot do it: dprint discovers this project's dprint.json and would format the subtree under it, which is a parent target writing into a descendant project (MGS3001). So the pages are formatted by the project that owns them, which is the same rule every other project with Markdown follows.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:146",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:162",
       "attrs": {
         "exported": "true"
       }
@@ -45577,7 +45729,7 @@
       "kind": "function",
       "label": "host_integration",
       "doc": "host-integration is deliberately NOT a dependency of ci. It starts real, locally installed agent hosts, so it can consume the caller's authentication and quota. A person opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness descriptors explicitly:  MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \\ host-e2e/example.json  The runner creates a disposable workspace and applies each descriptor's config. A missing local host is a structured skip; a present host t",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:118",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:134",
       "attrs": {
         "exported": "true"
       }
@@ -45587,14 +45739,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:62"
+      "source": "docs/guides/integrations/agents/magusfile.buzz:78"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). proc.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:70",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:86",
       "attrs": {
         "exported": "true"
       }
@@ -45613,7 +45765,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.  It runs under node, not bun, even though the plugin's runtime is bun. The test supplies Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified, which is a better trade than putting a second JS runtime in every contributor's toolchain for one file. The residual gap is bun-versus-node spawn semant",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:100",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:116",
       "attrs": {
         "exported": "true"
       }
@@ -53116,13 +53268,13 @@
       "kind": "function",
       "label": "digestInsideTarball",
       "doc": "digestInsideTarball fetches an npm tarball and returns the sha256 of a WINDOW of one file inside it, starting at marker.  archive\\readFile rather than uncompress: only one entry is wanted, and unpacking a whole package to read it costs the disk and leaves a tree to clean up. The tarball still lands on disk because the archive module works on paths, and it is removed before returning.  `package/` is the prefix npm gives every entry, so the recorded path stays the one a reader sees in the published package ra",
-      "source": "tools/host-schemas.buzz:124"
+      "source": "tools/host-schemas.buzz:135"
     },
     {
       "id": "function:tools/host-schemas.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "tools/host-schemas.buzz:144",
+      "source": "tools/host-schemas.buzz:155",
       "attrs": {
         "exported": "true"
       }
@@ -58800,7 +58952,7 @@
       "source": "docs/guides/integrations/agents",
       "attrs": {
         "engine": "buzz",
-        "target_count": "6"
+        "target_count": "7"
       }
     },
     {
@@ -59644,6 +59796,17 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs/guides/integrations/agents",
       "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:docs/guides/integrations/agents:cursor-schemas-generate",
+      "kind": "target",
+      "label": "cursor-schemas-generate",
+      "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.",
+      "source": "docs/guides/integrations/agents",
+      "attrs": {
+        "declared_as": "cursor_schemas_generate",
         "engine": "buzz"
       }
     },
@@ -64137,6 +64300,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/rules/push-gate.md"
+    },
+    {
+      "source": "dir:docs/reference/rules",
+      "target": "doc:docs/reference/rules/push-ungated.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/push-ungated.md"
     },
     {
       "source": "dir:docs/reference/rules",
@@ -94244,6 +94415,14 @@
     },
     {
       "source": "doc:docs/reference/rules/index.md",
+      "target": "doc:docs/reference/rules/push-ungated.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/index.md"
+    },
+    {
+      "source": "doc:docs/reference/rules/index.md",
       "target": "doc:docs/reference/rules/raw-tool.md",
       "relation": "references",
       "confidence": "extracted",
@@ -94745,6 +94924,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/rules/push-gate.md"
+    },
+    {
+      "source": "doc:docs/reference/rules/push-ungated.md",
+      "target": "doc:docs/guides/integrations/agents/guard.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/push-ungated.md"
+    },
+    {
+      "source": "doc:docs/reference/rules/push-ungated.md",
+      "target": "doc:docs/reference/rules/index.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/push-ungated.md"
+    },
+    {
+      "source": "doc:docs/reference/rules/push-ungated.md",
+      "target": "docsection:docs/reference/rules/push-ungated.md#push-ungated",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/push-ungated.md"
     },
     {
       "source": "doc:docs/reference/rules/raw-tool.md",
@@ -105979,8 +106182,32 @@
       "provenance": "docs/guides/integrations/agents/guard.md"
     },
     {
+      "source": "docsection:docs/guides/integrations/agents/leases.md#completion-gates",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#asking-where-a-job-stands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/leases.md#completion-gates",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#declaring-gates-from-buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
       "source": "docsection:docs/guides/integrations/agents/leases.md#declare-the-work",
       "target": "docsection:docs/guides/integrations/agents/leases.md#two-answers-the-store-gives-back",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#completion-gates",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -115596,6 +115823,14 @@
     },
     {
       "source": "docsection:docs/reference/manpage/magus-describe.md#description",
+      "target": "docsection:docs/reference/manpage/magus-describe.md#describe-job-options",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-describe.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-describe.md#description",
       "target": "docsection:docs/reference/manpage/magus-describe.md#describe-projects-options",
       "relation": "contains",
       "confidence": "extracted",
@@ -115981,6 +116216,14 @@
     {
       "source": "docsection:docs/reference/manpage/magus-job.md#description",
       "target": "docsection:docs/reference/manpage/magus-job.md#job-fork-options",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-job.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-job.md#description",
+      "target": "docsection:docs/reference/manpage/magus-job.md#job-rm-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -117811,6 +118054,38 @@
       "provenance": "docs/reference/rules/push-gate.md"
     },
     {
+      "source": "docsection:docs/reference/rules/push-ungated.md#push-ungated",
+      "target": "docsection:docs/reference/rules/push-ungated.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/push-ungated.md"
+    },
+    {
+      "source": "docsection:docs/reference/rules/push-ungated.md#push-ungated",
+      "target": "docsection:docs/reference/rules/push-ungated.md#seeing-it",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/push-ungated.md"
+    },
+    {
+      "source": "docsection:docs/reference/rules/push-ungated.md#push-ungated",
+      "target": "docsection:docs/reference/rules/push-ungated.md#what-it-catches",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/push-ungated.md"
+    },
+    {
+      "source": "docsection:docs/reference/rules/push-ungated.md#push-ungated",
+      "target": "docsection:docs/reference/rules/push-ungated.md#why",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/push-ungated.md"
+    },
+    {
       "source": "docsection:docs/reference/rules/raw-tool.md#raw-tool",
       "target": "docsection:docs/reference/rules/raw-tool.md#see-also",
       "relation": "contains",
@@ -119500,6 +119775,14 @@
     },
     {
       "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
+      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#declare-the-criteria-magus-can-check-for-you",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
+    },
+    {
+      "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
       "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#fork-one-job-per-unit-of-work",
       "relation": "contains",
       "confidence": "extracted",
@@ -120796,7 +121079,23 @@
     },
     {
       "source": "docsection:testdata/hosts/SOURCES.md#what-each-host-publishes",
+      "target": "docsection:testdata/hosts/SOURCES.md#codex-publishes-23-of-these-we-take-6",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "testdata/hosts/SOURCES.md"
+    },
+    {
+      "source": "docsection:testdata/hosts/SOURCES.md#what-each-host-publishes",
       "target": "docsection:testdata/hosts/SOURCES.md#cursors-hook-events",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "testdata/hosts/SOURCES.md"
+    },
+    {
+      "source": "docsection:testdata/hosts/SOURCES.md#what-each-host-publishes",
+      "target": "docsection:testdata/hosts/SOURCES.md#generated-from-cursorsdk",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -123021,6 +123320,14 @@
     {
       "source": "file:docs/guides/integrations/agents/magusfile.buzz",
       "target": "function:docs/guides/integrations/agents/magusfile.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:cursor_schemas_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -135320,7 +135627,7 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "types/knowledge.go:1144"
+      "provenance": "types/knowledge.go:1153"
     },
     {
       "source": "file:vcs/sapling.go",
@@ -143870,6 +144177,14 @@
     },
     {
       "source": "project:docs/guides/integrations/agents",
+      "target": "target:docs/guides/integrations/agents:cursor-schemas-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
       "target": "target:docs/guides/integrations/agents:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -146614,6 +146929,14 @@
     {
       "source": "target:docs/guides/integrations/agents:ci",
       "target": "target:docs/guides/integrations/agents:test",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:cursor-schemas-generate",
+      "target": "target:docs/guides/integrations/agents:preflight",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,

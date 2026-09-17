@@ -46,7 +46,7 @@ type Terms struct {
 	// memory had bounded.
 	DerivedDenyPaths []TermsBoundary `json:"derived_deny_paths,omitempty" yaml:"derived_deny_paths,omitempty"`
 	// WorkspaceCold marks a brief rendered without a loadable workspace, so an empty
-	// DerivedDenyPaths reads as "not asked". The row alone carries the goal, the boundary
+	// DerivedDenyPaths reads as "not asked". The row alone carries the criteria, the boundary
 	// and the check, and a worker in a tree whose magusfile is mid-edit still needs them.
 	WorkspaceCold bool `json:"workspace_cold,omitempty" yaml:"workspace_cold,omitempty"`
 	// Affinity is the co-change evidence for the lease's projects against projects it
@@ -125,7 +125,7 @@ func (b Terms) String() string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "job: %s\n", b.Lease.ID)
 
-	writeBlock(&s, "goal and acceptance criteria", b.Lease.Goal)
+	writeBlock(&s, "criteria", b.Lease.Criteria)
 	writeList(&s, "write paths", b.Lease.WritePaths)
 	writeList(&s, "deny paths", b.Lease.DenyPaths)
 	writeList(&s, "projects", b.Projects)
@@ -166,7 +166,7 @@ func (b Terms) String() string {
 	return s.String()
 }
 
-// writeBlock emits a heading and a verbatim body. Verbatim is deliberate for the goal:
+// writeBlock emits a heading and a verbatim body. Verbatim is deliberate for the criteria:
 // acceptance criteria the orchestrator wrote are the contract, and reflowing them is the
 // paraphrase this whole type exists to remove.
 func writeBlock(s *strings.Builder, heading, body string) {

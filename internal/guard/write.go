@@ -294,7 +294,7 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, set %s=%s (or pass --lease %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
-			owner.ID, envHookLease, owner.ID, owner.ID, rel, owner.ID, goalLine(owner), owner.State)}
+			owner.ID, envHookLease, owner.ID, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State)}
 	}
 	return writeGrade{}
 }
@@ -343,7 +343,7 @@ func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: put what you found in your report instead of writing it. "+leaseActorClause("clear read_only and declare write_paths for lease "+me.ID)+"\n"+
 				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
-			me.ID, goalLine(me), rel)}
+			me.ID, criteriaLine(me), rel)}
 	}
 	// BEFORE the path checks, because a lease that has not exec'd should not be writing anywhere,
 	// not merely outside its lane. A checkpoint is what says which base the work applies to and
@@ -359,7 +359,7 @@ func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: run `"+hint.VCSCheckpoint.With("-o", "name")+"` in this tree and exec what it prints with the "+hint.ToolJob.String()+" tool (op exec, lease %s), then retry this write.\n"+
 				"Lease %s (%s) has not reported the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
-			me.ID, me.ID, goalLine(me))}
+			me.ID, me.ID, criteriaLine(me))}
 	}
 	decl, denied, err := declarationCovering(me.DenyPaths, rel)
 	if err != nil {
@@ -369,7 +369,7 @@ func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: work inside your own write paths, or report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this.\n"+
 				"%s is covered by %q, which your lease %s (%s) declared DENIED. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
-			rel, decl, me.ID, goalLine(me))}
+			rel, decl, me.ID, criteriaLine(me))}
 	}
 	_, mine, err := declarationCovering(me.WritePaths, rel)
 	if err != nil {
@@ -395,7 +395,7 @@ func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: edit inside your own write paths. "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.",
-			rel, owner.ID, goalLine(owner), owner.State, me.ID)}
+			rel, owner.ID, criteriaLine(owner), owner.State, me.ID)}
 	}
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
@@ -404,7 +404,7 @@ func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade
 		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen this lane")+"\n"+
 			"%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
 			"Report it as this call, which is the whole widening:\n  %s",
-		me.ID, strings.Join(me.WritePaths, ", "), rel, me.ID, goalLine(me), widenCall(me, rel))}
+		me.ID, strings.Join(me.WritePaths, ", "), rel, me.ID, criteriaLine(me), widenCall(me, rel))}
 }
 
 // widenCall renders the job-store call that adds rel to the row's declared paths, so a
@@ -558,13 +558,13 @@ func workspaceRelative(root, p string) (string, bool) {
 	return filepath.ToSlash(rel), true
 }
 
-// goalLine is the lease's goal reduced to its first line. Goal holds the goal AND its
-// acceptance criteria as one block (see types.Job), and pasting all of that
+// criteriaLine is the lease's criteria reduced to its first line. Criteria holds what the
+// lease is for AND what done means as one block (see types.Job), and pasting all of that
 // into a denial would bury the next step under it.
-func goalLine(u types.Job) string {
-	line, _, _ := strings.Cut(strings.TrimSpace(u.Goal), "\n")
+func criteriaLine(u types.Job) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(u.Criteria), "\n")
 	if line == "" {
-		return "no goal recorded"
+		return "no criteria recorded"
 	}
 	return line
 }

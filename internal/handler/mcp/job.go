@@ -33,6 +33,7 @@ import (
 type jobTool struct {
 	store   *job.Store
 	resolve job.AttemptResolver
+	observe job.Observer
 }
 
 func (t *jobTool) Name() string { return hint.ToolJob.String() }
@@ -99,7 +100,7 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
-		status, err := job.Wait(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve)
+		status, err := job.Wait(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve, t.observe)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -143,3 +144,18 @@ func jobResultParam(params map[string]any) (*types.JobResult, error) {
 }
 
 var _ spells.Driver = (*jobTool)(nil)
+
+// symbolReader answers a symbol gate from the graph this daemon already serves.
+//
+// Resolved per name rather than loaded once, because the resolver shards the symbol index
+// and routes an exact symbol id to the shards that can hold it; asking for the whole graph
+// to answer about one name would load every shard to read one.
+func symbolReader(g graphResolver) job.SymbolReader {
+	return func(ctx context.Context, name string) (job.SymbolFact, bool) {
+		loaded, err := g.KnowledgeGraphWithSymbolsForRef(ctx, name)
+		if err != nil {
+			return job.SymbolFact{}, false
+		}
+		return job.GraphSymbols(loaded)(ctx, name)
+	}
+}

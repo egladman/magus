@@ -55,7 +55,7 @@ func TestJobTool(t *testing.T) {
 
 	t.Run("fork records the declared row", func(t *testing.T) {
 		resp := invoke(t, map[string]any{
-			"op": "fork", "id": "job-a", "goal": "ship the store; TestStoreRoundTrip passes",
+			"op": "fork", "id": "job-a", "criteria": "ship the store; TestStoreRoundTrip passes",
 			"checkpoint": "60dc9151", "write_paths": "internal/job types/job.go",
 			"deny_paths": "MAGUS.md", "model": "standard", "validation": "magus run test",
 			"state": "running",
@@ -97,14 +97,14 @@ func TestJobTool(t *testing.T) {
 
 	t.Run("a lifecycle fork touches only the fields it names", func(t *testing.T) {
 		invoke(t, map[string]any{
-			"op": "fork", "id": "job-life", "goal": "the declared goal",
+			"op": "fork", "id": "job-life", "criteria": "the declared goal",
 			"checkpoint": "abc123", "write_paths": "internal/job", "model": "opus",
 		})
 		resp := invoke(t, map[string]any{"op": "fork", "id": "job-life", "state": "pass"})
 		got, ok := resp.Data.(types.Job)
 		require.True(t, ok)
 		assert.Equal(t, types.StatePass, got.State)
-		assert.Equal(t, "the declared goal", got.Goal, "state advance must not erase the row")
+		assert.Equal(t, "the declared goal", got.Criteria, "state advance must not erase the row")
 		assert.Equal(t, "abc123", got.Checkpoint)
 		assert.Equal(t, []string{"internal/job"}, got.WritePaths)
 		assert.Equal(t, "opus", got.Model)
@@ -128,7 +128,7 @@ func TestJobTool(t *testing.T) {
 	})
 
 	t.Run("fork with no id is rejected", func(t *testing.T) {
-		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"op": "fork", "goal": "nameless"}})
+		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"op": "fork", "criteria": "nameless"}})
 		require.ErrorIs(t, err, job.ErrNoID)
 	})
 
@@ -178,7 +178,7 @@ func TestJobTool(t *testing.T) {
 	// read_only error would tell a client sending goal=3 that its fork succeeded and hand
 	// back a row without the field it thought it wrote.
 	for name, params := range map[string]map[string]any{
-		"a non-string goal":        {"op": "fork", "id": "job-typed", "goal": 3},
+		"a non-string goal":        {"op": "fork", "id": "job-typed", "criteria": 3},
 		"a non-string model":       {"op": "fork", "id": "job-typed", "model": true},
 		"a non-list write_paths":   {"op": "fork", "id": "job-typed", "write_paths": 7},
 		"a list with a non-string": {"op": "fork", "id": "job-typed", "depends_on": []any{"a", 2}},
@@ -199,10 +199,10 @@ func TestJobTool(t *testing.T) {
 
 	t.Run("every mistyped param is reported at once", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
-			"op": "fork", "id": "job-typed", "goal": 3, "read_only": "yes",
+			"op": "fork", "id": "job-typed", "criteria": 3, "read_only": "yes",
 		}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "goal")
+		assert.Contains(t, err.Error(), "criteria")
 		assert.Contains(t, err.Error(), "read_only", "a client that mistyped two params learns both in one round trip")
 	})
 }
@@ -350,7 +350,7 @@ func TestJobToolForkMergesConcurrently(t *testing.T) {
 		return err
 	}
 	require.NoError(t, fork(map[string]any{
-		"op": "fork", "id": "u1", "goal": "the declared goal", "state": "declared",
+		"op": "fork", "id": "u1", "criteria": "the declared goal", "state": "declared",
 	}))
 
 	const rounds = 25
@@ -379,7 +379,7 @@ func TestJobToolForkMergesConcurrently(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, types.StateRunning, got[0].State, "the state advance survived the concurrent checkpoint write")
 	assert.Equal(t, "deadbeef", got[0].Checkpoint, "and the checkpoint survived the concurrent state advance")
-	assert.Equal(t, "the declared goal", got[0].Goal, "neither fork erased the field it did not name")
+	assert.Equal(t, "the declared goal", got[0].Criteria, "neither fork erased the field it did not name")
 }
 
 // tmpWorkspace is a JobService workspace whose trail and cache live under a temp

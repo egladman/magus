@@ -35,6 +35,11 @@ only, so a step that itself composes is described by its own ref. Add a charm
 and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
 step at a time.
 
+### describe job options
+
+**--gates**
+: Grade this job's completion gates against the evidence magus holds now, and record nothing
+
 ### describe target options
 
 **--against** *ref*
@@ -74,7 +79,7 @@ step at a time.
 : List every target the workspace defines
 
 **job**
-: Print one job's terms: its goal, lanes, check and dependencies
+: Print one job's terms: its criteria, lanes, check and dependencies
 
 **target**
 : Detail one target ref: its dispatch plan, globs, spells and policy

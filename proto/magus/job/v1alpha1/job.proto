@@ -89,7 +89,9 @@ message Job {
 
   // The facts a DELEGATED job carries, empty on a catalog job. These are what an
   // orchestrator declared, never a verdict magus reached.
-  string goal = 9;
+  // Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before
+  // the rename still reads and writes this field.
+  string criteria = 9;
   string parent = 10; // the job this one was handed out under, empty for a root
   string model = 11;
   string check = 12; // the one check this job runs, rendered as the command that runs it

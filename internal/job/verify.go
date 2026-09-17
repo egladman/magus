@@ -1,12 +1,14 @@
 package job
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"path"
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,21 +36,160 @@ type Status = types.JobStatus
 //
 // IT VERIFIES EVIDENCE, NOT ASSERTIONS, which is the difference between this and reading
 // the result: every rule turns on something magus already holds. Whether the work is GOOD,
-// and whether the criteria in Goal were met, stay the reading of whoever forked the job.
+// and whether the prose Criteria were met, stay the reading of whoever forked the job.
 //
 // att is what an output store recorded for the result's ref, filed on the job by `job
 // exit` or resolved by the caller; resolving it is never done here, so no rule reads a
 // file while the store's lock is held. declared is the rest of the plan, which is what the
 // result's descendant ids are checked against.
 func Verify(row types.Job, rep types.JobResult, att types.JobAttempt, declared []types.Job) Status {
-	return VerifyGates(row, rep, att, nil, declared)
+	return VerifyGates(row, rep, att, nil, declared, Observed{})
+}
+
+// Observer answers what magus itself saw of a job, for the gates that are graded against
+// the tree rather than against the output store. Supplied by the caller for the same
+// reason AttemptResolver is: the work is IO, and the store's lock must not be held across
+// it. A nil Observer means nobody looked, which is what leaves Observed zero and fails any
+// gate that needed the answer.
+type Observer func(ctx context.Context, row types.Job) (Observed, error)
+
+// Observed is what magus itself saw of the job, as opposed to what the holder reported.
+//
+// Every observation carries a Known flag, so its absence is stated rather than assumed: a
+// gate that needed an observation nobody could make fails naming it, instead of passing
+// on an empty value.
+type Observed struct {
+	// Changed are the paths that actually differ from the job's checkpoint, as the
+	// CALLER computed them. The caller resolves it for the same reason it resolves an
+	// attempt: nothing here reads a VCS, a file or a graph while the store's lock is held.
+	Changed []string
+	// ChangedKnown says the diff was computed, so an empty Changed means "this job
+	// changed nothing" rather than "nobody looked". Without it the two are one value
+	// and a gate would be satisfied by a failed observation.
+	ChangedKnown bool
+	// ChangedFrom is the checkpoint the diff was taken against, named in violations so
+	// a reader can re-run the comparison.
+	ChangedFrom string
+	// Present are the paths that exist in the tree right now, and PresentKnown says
+	// somebody looked. Separate from Changed because they answer different questions: a
+	// file can exist and be untouched, or be deleted and therefore changed.
+	Present      []string
+	PresentKnown bool
+	// Symbols is what the knowledge graph says about each symbol a gate named, keyed by
+	// the name as declared. SymbolsKnown says the graph was readable; a name the graph
+	// could answer for but did not find is present in the map with Defined false, which
+	// is a real answer and not a missing one.
+	Symbols      map[string]SymbolFact
+	SymbolsKnown bool
+}
+
+// SymbolFact is what the graph knows about one symbol a gate named.
+type SymbolFact struct {
+	// Files are where the symbol is defined, so a `symbol` + `changed` gate can ask
+	// whether the diff touched one of them. Empty means the graph resolved nothing.
+	Files []string
+	// Refs is how many places reference it, which is what `unreferenced` grades.
+	Refs int
+}
+
+// Defined reports whether the symbol resolves at all. Derived rather than stored: a bool
+// beside Files is a second copy of len(Files) > 0, and the two can disagree.
+func (f SymbolFact) Defined() bool { return len(f.Files) > 0 }
+
+// missing names the observation this kind and condition need and did not get, or "" when
+// magus looked. Absence of evidence never satisfies a gate: a guard that cannot ask must
+// stand down, and a gate that cannot verify must refuse, or the cheapest way to pass one
+// is to break the observation.
+func (o Observed) missing(kind types.GateKind, expect types.GateExpect) string {
+	switch {
+	case kind == types.GateKindPaths && expect == types.ExpectChanged && !o.ChangedKnown:
+		return "magus could not read what this job changed, so there is no diff to hold the declared paths against"
+	case kind == types.GateKindPaths && expect != types.ExpectChanged && !o.PresentKnown:
+		return "magus could not read the tree, so it cannot say whether the declared paths are there"
+	case kind == types.GateKindSymbol && expect == types.ExpectChanged && !o.ChangedKnown:
+		return "magus could not read what this job changed, so it cannot say whether the declared symbols moved"
+	case kind == types.GateKindSymbol && !o.SymbolsKnown:
+		return "magus could not read the symbol graph, so it cannot say what the declared symbols are. `" + hint.GraphBuild.String() + "` builds it"
+	}
+	return ""
+}
+
+// holds grades ONE declared subject, and returns the reason when it does not. The reason
+// is per subject rather than per gate because a partial result is the common case: the
+// migration lands and the test beside it does not, and a verdict naming only the gate
+// makes the reader re-derive which half is missing.
+func (o Observed) holds(kind types.GateKind, expect types.GateExpect, declared string) (bool, string) {
+	from := o.ChangedFrom
+	if from == "" {
+		from = "the job's checkpoint"
+	}
+	switch kind {
+	case types.GateKindPaths:
+		switch expect {
+		case types.ExpectChanged:
+			if o.covering(declared, o.Changed) {
+				return true, ""
+			}
+			return false, fmt.Sprintf("nothing matching %q changed since %s, so this gate is unmet", declared, from)
+		case types.ExpectPresent:
+			if o.covering(declared, o.Present) {
+				return true, ""
+			}
+			return false, fmt.Sprintf("nothing matching %q is in the tree, so this gate is unmet", declared)
+		default:
+			if !o.covering(declared, o.Present) {
+				return true, ""
+			}
+			return false, fmt.Sprintf("%q is still in the tree, and this gate expects it gone", declared)
+		}
+	default:
+		return o.symbolHolds(expect, declared, from)
+	}
+}
+
+func (o Observed) symbolHolds(expect types.GateExpect, declared, from string) (bool, string) {
+	fact := o.Symbols[declared]
+	switch expect {
+	case types.ExpectPresent:
+		if fact.Defined() {
+			return true, ""
+		}
+		return false, fmt.Sprintf("%q is defined nowhere the graph can see, so this gate is unmet", declared)
+	case types.ExpectAbsent:
+		if !fact.Defined() {
+			return true, ""
+		}
+		return false, fmt.Sprintf("%q is still defined in %s, and this gate expects it gone", declared, strings.Join(fact.Files, ", "))
+	case types.ExpectUnreferenced:
+		if fact.Refs == 0 {
+			return true, ""
+		}
+		return false, fmt.Sprintf("%d place(s) still reference %q, and this gate expects none", fact.Refs, declared)
+	default:
+		if !fact.Defined() {
+			return false, fmt.Sprintf("%q is defined nowhere the graph can see, so nothing of it could have changed", declared)
+		}
+		// covers(), not a bare equality: a definition file is compared with the same
+		// matcher a paths gate uses, so one question is not answered two ways.
+		for _, file := range fact.Files {
+			if o.covering(file, o.Changed) {
+				return true, ""
+			}
+		}
+		return false, fmt.Sprintf("%q is defined in %s, and none of that changed since %s", declared, strings.Join(fact.Files, ", "), from)
+	}
+}
+
+// covering reports whether any observed path is covered by the declared glob.
+func (o Observed) covering(declared string, paths []string) bool {
+	return slices.ContainsFunc(paths, func(p string) bool { return covers(declared, p) })
 }
 
 // VerifyGates checks the primary check plus every explicit completion gate. It
 // derives every verdict from output-store snapshots; GateEvidence has no passed bit
 // by design. Callers that only carry the historical primary attempt may keep using
 // Verify while Exit/Wait use this complete form.
-func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateAttempts []types.JobGateAttempt, declared []types.Job) Status {
+func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateAttempts []types.JobGateAttempt, declared []types.Job, seen Observed) Status {
 	v := Status{Job: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command}
 
 	if rep.Job != "" && rep.Job != row.ID {
@@ -120,19 +261,24 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 		evidenceByGate[evidence.GateID] = evidence.OutputRef
 	}
 
+	// ONE list, from EffectiveCompletionGates, so the primary check is graded by the same
+	// loop as every other gate and lands in Gates like one. Grading it separately meant a
+	// job declaring only `--check` reported no gates at all to anything that read Gates,
+	// which is how `describe job --gates` came to exit 0 on a job with a gate.
+	gates := row.EffectiveCompletionGates()
+	evidenceByGate[types.PrimaryCompletionGateID] = rep.Validation.OutputRef
+	attemptByGate[types.PrimaryCompletionGateID] = att
+
 	statusByGate := map[string]types.GateStatus{}
-	if row.Check != nil {
-		statusByGate[types.PrimaryCompletionGateID] = verifyGate(row, types.CompletionGate{ID: types.PrimaryCompletionGateID, Check: *row.Check}, rep.Validation.OutputRef, att)
-	}
-	for _, gate := range row.CompletionGates {
-		statusByGate[gate.ID] = verifyGate(row, gate, evidenceByGate[gate.ID], attemptByGate[gate.ID])
+	for _, gate := range gates {
+		statusByGate[gate.ID] = verifyGate(row, gate, evidenceByGate[gate.ID], attemptByGate[gate.ID], seen)
 	}
 	// A dependency may appear after its consumer in the declaration. Re-evaluate until
 	// no status changes so a failed prerequisite propagates through the whole typed
 	// graph. Declaration.Validate rejects cycles, so this always reaches a fixed point.
 	for changed := true; changed; {
 		changed = false
-		for _, gate := range row.CompletionGates {
+		for _, gate := range gates {
 			status := statusByGate[gate.ID]
 			for _, dependency := range gate.DependsOn {
 				dependencyStatus, ok := statusByGate[dependency]
@@ -151,13 +297,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 			statusByGate[gate.ID] = status
 		}
 	}
-	if row.Check != nil && len(row.CompletionGates) > 0 {
-		v.Gates = append(v.Gates, statusByGate[types.PrimaryCompletionGateID])
-	}
-	if row.Check != nil {
-		v.Violations = append(v.Violations, prefixedGateViolations(statusByGate[types.PrimaryCompletionGateID])...)
-	}
-	for _, gate := range row.CompletionGates {
+	for _, gate := range gates {
 		status := statusByGate[gate.ID]
 		v.Gates = append(v.Gates, status)
 		v.Violations = append(v.Violations, prefixedGateViolations(status)...)
@@ -186,7 +326,10 @@ func prefixedGateViolations(status types.GateStatus) []string {
 	return out
 }
 
-func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt types.JobAttempt) types.GateStatus {
+func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt types.JobAttempt, seen Observed) types.GateStatus {
+	if kind := gate.Kind; kind != types.GateKindCheck {
+		return verifySubjectGate(gate, seen)
+	}
 	status := types.GateStatus{ID: gate.ID, OutputRef: strings.TrimSpace(ref)}
 	if status.OutputRef == "" {
 		status.Violations = append(status.Violations, "carries no output_ref, so there is no run to reopen")
@@ -289,4 +432,39 @@ func covers(declared, p string) bool {
 		return types.MatchesAnyGlob([]string{declared}, p)
 	}
 	return p == declared || strings.HasPrefix(p, declared+"/")
+}
+
+// verifyPathsGate grades a gate against the DIFF, which is the half a holder cannot
+// assert its way past.
+//
+// Every declared glob must be matched by something that actually changed, and a glob
+// matched by nothing is named individually: told only that the gate failed, a reader has
+// to re-derive which half of the gate is unmet, and a partial result is the common case
+// (the migration landed, the test beside it did not).
+//
+// The diff NOT being available is a failure and never a pass. Absence of evidence is the
+// one thing a gate must not read as evidence, and a caller that could not compute the diff
+// says so through ChangedKnown rather than by handing back an empty list that looks like a
+// job which changed nothing.
+func verifySubjectGate(gate types.CompletionGate, seen Observed) types.GateStatus {
+	status := types.GateStatus{ID: gate.ID}
+	kind, expect := gate.Kind, gate.Expect
+
+	// The observation this pair needs, and whether magus actually made it. Asked once, up
+	// front, because every arm below has the same answer for the same reason: a subject
+	// nobody looked at is not a subject that satisfies anything.
+	if why := seen.missing(kind, expect); why != "" {
+		status.Violations = append(status.Violations, why)
+		return status
+	}
+	for _, declared := range gate.Subject() {
+		if declared = strings.TrimSpace(declared); declared == "" {
+			continue
+		}
+		if held, why := seen.holds(kind, expect, declared); !held {
+			status.Violations = append(status.Violations, why)
+		}
+	}
+	status.Verified = len(status.Violations) == 0
+	return status
 }

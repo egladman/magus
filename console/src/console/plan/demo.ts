@@ -58,7 +58,7 @@ export function demoJobs(nowMs: number): Job[] {
   const at = (minsAgo: number): bigint => BigInt(now - minsAgo * MIN);
 
   return [
-    // The daemon's own catalog: no goal, no parent, nothing declared it - the daemon maintains its
+    // The daemon's own catalog: no criteria, no parent, nothing declared it - the daemon maintains its
     // own house, and a reader sees that beside the work a session was handed.
     create(JobSchema, {
       name: "jobs/rotate-activities",
@@ -86,7 +86,7 @@ export function demoJobs(nowMs: number): Job[] {
     // The root of the session work. Still running because one child never reported - see
     // dashboard-client below.
     session("claims-audience", {
-      goal: "Carry an audience through the token path, and fix every reader of the old field",
+      criteria: "Carry an audience through the token path, and fix every reader of the old field",
       checkpoint: "services/identity:test and apps/dashboard:typecheck both green",
       model: "principal",
       state: "running",
@@ -98,7 +98,7 @@ export function demoJobs(nowMs: number): Job[] {
     // on, which is what the release digest records.
     session("authkit-type", {
       parent: "claims-audience",
-      goal: "Replace Claims.Scope with an Audience slice and document the wire contract",
+      criteria: "Replace Claims.Scope with an Audience slice and document the wire contract",
       checkpoint: "libs/authkit builds and its own tests pass",
       model: "standard",
       state: "pass",
@@ -123,7 +123,7 @@ export function demoJobs(nowMs: number): Job[] {
     // The Go reader. Green, and it waited on the type above.
     session("identity-verify", {
       parent: "claims-audience",
-      goal: "Assert on the audience in the token verifier instead of the removed scope",
+      criteria: "Assert on the audience in the token verifier instead of the removed scope",
       checkpoint: "services/identity:test green",
       model: "standard",
       state: "pass",
@@ -138,7 +138,7 @@ export function demoJobs(nowMs: number): Job[] {
     // the reader decides whether the work was meant to be cut that way.
     session("verify-tests", {
       parent: "claims-audience",
-      goal: "Cover the two-service audience case the old scope test could not express",
+      criteria: "Cover the two-service audience case the old scope test could not express",
       checkpoint: "a test that fails before authkit-type and passes after",
       model: "standard",
       state: "fail",
@@ -153,7 +153,7 @@ export function demoJobs(nowMs: number): Job[] {
     // stale mark belongs to docs-rename below, which is non-terminal and untouched.
     session("dashboard-client", {
       parent: "claims-audience",
-      goal: "Read the audience array in the web client's session claims",
+      criteria: "Read the audience array in the web client's session claims",
       checkpoint: "apps/dashboard:typecheck clean",
       model: "standard",
       state: "no_return",
@@ -166,7 +166,7 @@ export function demoJobs(nowMs: number): Job[] {
     // Never started: the work is declared and waiting on the two readers landing.
     session("docs-rename", {
       parent: "claims-audience",
-      goal: "Rename the JWT page to tokens and fix the links that point at the old name",
+      criteria: "Rename the JWT page to tokens and fix the links that point at the old name",
       checkpoint: "no link in docs/ resolves to docs/auth/jwt.md",
       model: "economy",
       state: "declared",
@@ -179,7 +179,7 @@ export function demoJobs(nowMs: number): Job[] {
     // no paths" a rendered case rather than a theoretical one.
     session("reach-survey", {
       parent: "claims-audience",
-      goal: "Report every project referencing the claims type before anything is renamed",
+      criteria: "Report every project referencing the claims type before anything is renamed",
       checkpoint: "a list the parent can work from",
       model: "economy",
       state: "pass",

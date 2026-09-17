@@ -66,7 +66,7 @@ func fleetLeases() []types.Job {
 	return []types.Job{
 		{
 			ID:           "lease-a",
-			Goal:         "own the ledger store\nacceptance: List stays cheap",
+			Criteria:     "own the ledger store\nacceptance: List stays cheap",
 			WritePaths:   []string{"internal/ledger/**"},
 			State:        types.StateRunning,
 			Checkpoint:   "rev-a",
@@ -76,7 +76,7 @@ func fleetLeases() []types.Job {
 		},
 		{
 			ID:           "lease-b",
-			Goal:         "grade writes in the guard",
+			Criteria:     "grade writes in the guard",
 			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
 			DenyPaths:    []string{"cmd/magus/gen/**"},
 			State:        types.StateDeclared,
@@ -94,7 +94,7 @@ func fleetLeases() []types.Job {
 func narrowLease() types.Job {
 	return types.Job{
 		ID:         "harness/lease-scoped-deny",
-		Goal:       "lease-scoped denies in the guard",
+		Criteria:   "lease-scoped denies in the guard",
 		WritePaths: []string{"cmd/magus/**"},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
@@ -1044,8 +1044,8 @@ func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
 		"giving a lane back":    {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"]}`, "pass\n"},
 		// The rewrite the rendered line used to drop on the floor: judged only on the keys
 		// the renderer carried, a shrink beside a forged checkpoint read as a plain shrink.
-		"forging its own base": {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
-		"rewriting its goal":   {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"goal":"something else"}`, "deny\n"},
+		"forging its own base":   {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
+		"rewriting its criteria": {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"criteria":"something else"}`, "deny\n"},
 	} {
 		envelope := `{"hook_event_name":"PreToolUse","session_id":"mcp-` + name +
 			`","tool_name":"mcp__magus__magus_job","tool_input":` + tc.toolInput + `}`

@@ -84,14 +84,38 @@ them and magus describe job prints one job's terms.
 **--checkpoint** *magus vcs checkpoint -o name*
 : The working state this job is handed, as \`magus vcs checkpoint -o name\` prints it
 
+**--criteria** *string*
+: What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths
+
 **--deny-paths** *string*
 : A path inside the lane this job may not write; repeatable or comma-separated
 
 **--depends-on** *string*
 : A job this one waits on; repeatable or comma-separated
 
-**--goal** *string*
-: The goal and its observable acceptance criteria
+**--gate-check** *\<id\>=\<target\> \<project\>*
+: A further check this job must pass, as \`\<id\>=\<target\> \<project\>\`; repeatable
+
+**--gate-paths** *\<id\>=\<glob\>[,\<glob\>...]*
+: Files this job must have CHANGED, as \`\<id\>=\<glob\>[,\<glob\>...]\`, proven against its checkpoint; repeatable
+
+**--gate-paths-absent** *\<id\>=\<glob\>[,\<glob\>...]*
+: Files that must be GONE when the job is done, as \`\<id\>=\<glob\>[,\<glob\>...]\`; repeatable
+
+**--gate-paths-present** *\<id\>=\<glob\>[,\<glob\>...]*
+: Files that must EXIST when the job is done, as \`\<id\>=\<glob\>[,\<glob\>...]\`; repeatable
+
+**--gate-symbol** *\<id\>=\<name\>[,\<name\>...]*
+: Symbols whose definition this job must have CHANGED, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
+
+**--gate-symbol-absent** *\<id\>=\<name\>[,\<name\>...]*
+: Symbols that must resolve NOWHERE when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
+
+**--gate-symbol-present** *\<id\>=\<name\>[,\<name\>...]*
+: Symbols that must resolve when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
+
+**--gate-symbol-unreferenced** *\<id\>=\<name\>[,\<name\>...]*
+: Symbols nothing may reference when the job is done, as \`\<id\>=\<name\>[,\<name\>...]\`; repeatable
 
 **--model** *string*
 : The model the work was matched to
@@ -138,6 +162,11 @@ them and magus describe job prints one job's terms.
 **--stdin**
 : Read the result from stdin instead of from the job, for one that was never filed
 
+### job rm options
+
+**--force**
+: Remove a row that already ended, destroying the record of what happened
+
 ## Subcommands
 
 **fork**
@@ -154,6 +183,9 @@ them and magus describe job prints one job's terms.
 
 **run**
 : Submit one of the daemon's own jobs and return
+
+**rm**
+: Remove one job from the plan
 
 ## Examples
 

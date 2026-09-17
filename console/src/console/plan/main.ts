@@ -4,7 +4,7 @@
 // orchestrator hands out are the same shape - a job with a HOLDER - so they are ONE list here
 // (JobService.ListJobs returns both), told apart by the holder on the row rather than by living on
 // two different screens. A catalog job carries a description and the size of what it maintains and
-// can be RUN from its row; a session job carries the goal, the lanes and the check it was given.
+// can be RUN from its row; a session job carries its criteria, the lanes and the check it was given.
 // Neither is a different view.
 //
 // TWO SOURCES, ONE GRAMMAR. The second tenant is not a job at all, and shares the stage, the
@@ -832,7 +832,7 @@ export function activate(host: HTMLElement): JobsInstance {
         n.parent,
         n.danglingParent,
         n.holder,
-        n.job.goal,
+        n.job.criteria,
         n.job.description,
         n.job.checkpoint,
         n.job.model,
@@ -1097,7 +1097,7 @@ export function activate(host: HTMLElement): JobsInstance {
     field(dl, "What it does", n.job.description);
     field(dl, "Size", sizeLine(n.job));
     field(dl, "Last run", lastRunLine(n.job, Date.now()));
-    field(dl, "Goal", n.job.goal);
+    field(dl, "Criteria", n.job.criteria);
     field(dl, "Checkpoint", n.job.checkpoint);
     field(dl, "Model", n.job.model);
     field(dl, "Check", n.job.check);

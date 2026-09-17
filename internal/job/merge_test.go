@@ -19,19 +19,19 @@ func applyMerge(t *testing.T, params map[string]any, base types.Job) types.Job {
 func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	t.Parallel()
 
-	base := types.Job{ID: "u1", Goal: "original goal", Model: "standard"}
+	base := types.Job{ID: "u1", Criteria: "original goal", Model: "standard"}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
 	assert.Equal(t, types.StateRunning, got.State)
-	assert.Equal(t, "original goal", got.Goal, "an absent key must not erase what an earlier put set")
+	assert.Equal(t, "original goal", got.Criteria, "an absent key must not erase what an earlier put set")
 	assert.Equal(t, "standard", got.Model)
 }
 
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 	t.Parallel()
 
-	base := types.Job{ID: "u1", Goal: "original goal"}
-	got := applyMerge(t, map[string]any{"goal": ""}, base)
-	assert.Empty(t, got.Goal, "goal present with an empty value clears it, unlike an absent key")
+	base := types.Job{ID: "u1", Criteria: "original goal"}
+	got := applyMerge(t, map[string]any{"criteria": ""}, base)
+	assert.Empty(t, got.Criteria, "goal present with an empty value clears it, unlike an absent key")
 }
 
 func TestMergeListAcceptsBothWireForms(t *testing.T) {
@@ -56,9 +56,9 @@ func TestMergeRejectsAnUnknownState(t *testing.T) {
 func TestMergeReportsEveryMistypedFieldTogether(t *testing.T) {
 	t.Parallel()
 
-	_, err := ParseMerge(map[string]any{"goal": 3, "read_only": "yes"})
+	_, err := ParseMerge(map[string]any{"criteria": 3, "read_only": "yes"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "goal")
+	assert.Contains(t, err.Error(), "criteria")
 	assert.Contains(t, err.Error(), "read_only")
 }
 

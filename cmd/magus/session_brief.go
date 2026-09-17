@@ -30,7 +30,7 @@ import (
 // templates keep. Nothing here knows what a session is, when one compacts, or
 // which host asked.
 
-// briefTextWidth is the longest line the text view emits. A goal and a validation
+// briefTextWidth is the longest line the text view emits. Criteria and a validation
 // command are as long as their author made them, and this lands
 // in a context window through a hook, so the bound is on the rendered LINE rather
 // than on the fields behind it.
@@ -133,7 +133,7 @@ type briefLease struct {
 	ID         string `json:"id"`
 	State      string `json:"state,omitempty"`
 	Exec       string `json:"exec"`
-	Goal       string `json:"goal,omitempty"`
+	Criteria   string `json:"criteria,omitempty"`
 	Validation string `json:"validation,omitempty"`
 }
 
@@ -327,15 +327,15 @@ func briefLeases(root string) []briefLease {
 		if !row.State.Live() {
 			continue
 		}
-		goal, _, _ := strings.Cut(strings.TrimSpace(row.Goal), "\n")
-		if goal == "" {
-			goal = "no goal recorded"
+		criteria, _, _ := strings.Cut(strings.TrimSpace(row.Criteria), "\n")
+		if criteria == "" {
+			criteria = "no criteria recorded"
 		}
 		out = append(out, briefLease{
 			ID:         row.ID,
 			State:      string(row.State),
 			Exec:       hint.JobExec.With(row.ID),
-			Goal:       goal,
+			Criteria:   criteria,
 			Validation: row.Validation,
 		})
 	}
@@ -540,7 +540,7 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 	}
 	briefLine(s, "leases live here:")
 	for _, l := range b.Leases {
-		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Goal))
+		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Criteria))
 		briefLine(s, "    exec: %s", l.Exec)
 		if l.Validation != "" {
 			briefLine(s, "    validation: %s", l.Validation)

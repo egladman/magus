@@ -349,6 +349,42 @@ export object Unreferenced {
     answer: KnowledgeAnswer = KnowledgeAnswer{},
 }
 
+export object DuplicationSite {
+    id: str = "",
+    label: str = "",
+    source: str = "",
+    endLine: int = 0,
+    distinct: [str] = [],
+    callers: int = 0,
+    foreignFiles: int = 0,
+    tested: bool = false,
+}
+
+export object DuplicationHistory {
+    commits: int = 0,
+    together: int = 0,
+    apart: int = 0,
+}
+
+export object DuplicationGroup {
+    members: [DuplicationSite] = [],
+    score: double = 0.0,
+    shared: [str] = [],
+    packages: [str] = [],
+    placement: str = "",
+    home: str = "",
+    shape: str = "",
+    removable: int = 0,
+    siblings: bool = false,
+    history: DuplicationHistory? = null,
+}
+
+export object Duplication {
+    definition: str = "",
+    groups: [DuplicationGroup] = [],
+    answer: KnowledgeAnswer = KnowledgeAnswer{},
+}
+
 export object InsightReport {
     hotspots: Hotspots = Hotspots{},
     affinity: Affinity = Affinity{},
@@ -356,6 +392,7 @@ export object InsightReport {
     trend: Trend = Trend{},
     volatility: Volatility = Volatility{},
     unreferenced: Unreferenced = Unreferenced{},
+    duplication: Duplication = Duplication{},
 }
 
 export object Graph {
@@ -457,8 +494,12 @@ export object LeaseCheck {
 export object CompletionGate {
     id: str = "",
     description: str = "",
-    check: LeaseCheck = LeaseCheck{},
     dependsOn: [str] = [],
+    kind: str = "",
+    expect: str = "",
+    check: LeaseCheck = LeaseCheck{},
+    paths: [str] = [],
+    symbols: [str] = [],
 }
 
 export object JobRelease {
@@ -527,7 +568,7 @@ export object Job {
     schemaVersion: int = 0,
     id: str = "",
     parent: str = "",
-    goal: str = "",
+    criteria: str = "",
     checkpoint: str = "",
     writePaths: [str] = [],
     denyPaths: [str] = [],

@@ -328,7 +328,7 @@ func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 func TestWriteBinderNamesTheFlagsItCannotCarry(t *testing.T) {
 	var b bytes.Buffer
 	writeBinder(&b, "demo", "demo", []cli.Flag{
-		{Name: "goal", Kind: cli.FlagString},
+		{Name: "criteria", Kind: cli.FlagString},
 		{Name: "write-paths", Kind: cli.FlagCustom},
 		{Name: "deny-paths", Kind: cli.FlagCustom},
 	})

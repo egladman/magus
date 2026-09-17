@@ -28,7 +28,7 @@ func declared(t *testing.T, rows ...types.Job) Location {
 func workerRow() types.Job {
 	return types.Job{
 		ID:         "adj/store",
-		Goal:       "the store is the enforcement point",
+		Criteria:   "the store is the enforcement point",
 		WritePaths: []string{"internal/ledger", "types/lease.go"},
 		Validation: "magus run test internal/ledger",
 		State:      types.StateRunning,
@@ -127,7 +127,7 @@ func TestBoundWorkerWritesOnlyItsOwnRowAndChildren(t *testing.T) {
 	loc := declared(t, workerRow(), types.Job{ID: "adj/other", WritePaths: []string{"internal/sessions"}})
 
 	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/other", func(u *types.Job) {
-		u.Goal = "rewritten by a neighbour"
+		u.Criteria = "rewritten by a neighbour"
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no row but its own")
@@ -261,7 +261,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 
 	require.NoError(t, BindLease(loc.CacheDir, "adj/other"))
 
-	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Goal = "rewritten" })
+	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Criteria = "rewritten" })
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
 	_, err = s.Clear(t.Context())
@@ -270,7 +270,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, workerRow().Goal, rows[0].Goal)
+	assert.Equal(t, workerRow().Criteria, rows[0].Criteria)
 }
 
 // The row records who declared it, which is the provenance a refusal names.

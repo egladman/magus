@@ -203,7 +203,7 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 	}
 	if _, err := s.store.Update(ctx, j.Name, func(row *types.Job) {
 		row.Holder = types.HolderDaemon
-		row.Goal = j.Desc
+		row.Criteria = j.Desc
 		row.State = types.StateRunning
 		if row.LastRun == nil {
 			row.LastRun = &types.JobRun{}
@@ -245,7 +245,7 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 
 // delegatedJob maps a stored row to the wire Job: what an orchestrator DECLARED about work
 // it handed out. It carries no description or target size, which are a catalog job's; a
-// delegated job's equivalents are its goal and the lanes it was given.
+// delegated job's equivalents are its criteria and the lanes it was given.
 //
 // Running is left unset rather than derived from the state. Nothing here watched the
 // worker, and a row still reading `running` after its holder died would be the stored
@@ -256,7 +256,7 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		Id:         row.ID,
 		Holder:     jobv1.JobHolder_JOB_HOLDER_SESSION,
 		State:      string(row.State),
-		Goal:       row.Goal,
+		Criteria:   row.Criteria,
 		Parent:     row.Parent,
 		Model:      row.Model,
 		Check:      row.Validation,

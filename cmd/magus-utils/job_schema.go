@@ -65,7 +65,11 @@ const (
 // closedSets are the named types whose values are a published vocabulary, keyed by the
 // name a field is declared with. The values come from the package that owns the set, so
 // a state added there reaches the schema with nothing here to change.
-var closedSets = map[string][]string{"JobState": leaseStateNames()}
+var closedSets = map[string][]string{
+	"JobState":   leaseStateNames(),
+	"GateKind":   gateKindNames(),
+	"GateExpect": gateExpectNames(),
+}
 
 func runJobSchema(args []string) error {
 	fs := flag.NewFlagSet("jobschema", flag.ExitOnError)
@@ -328,6 +332,24 @@ func leaseStateNames() []string {
 	names := make([]string, len(states))
 	for i, s := range states {
 		names[i] = string(s)
+	}
+	return names
+}
+
+func gateKindNames() []string {
+	kinds := types.GateKinds()
+	names := make([]string, len(kinds))
+	for i, k := range kinds {
+		names[i] = string(k)
+	}
+	return names
+}
+
+func gateExpectNames() []string {
+	expects := types.GateExpects()
+	names := make([]string, len(expects))
+	for i, e := range expects {
+		names[i] = string(e)
 	}
 	return names
 }

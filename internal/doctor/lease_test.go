@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,12 +66,28 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 	require.Equal(t, types.DoctorCheck{
 		Name:    "bound-lease",
 		Status:  types.DoctorFail,
-		Message: `this session acts as lease "adj/from-env" while this checkout's marker binds "adj/marker"`,
+		Message: `this checkout's marker binds lease "adj/marker" while the environment claims "adj/from-env"`,
 		Details: []string{
-			"a host runs its hooks with its own environment, so the guard reads the marker while this session reads BAGGAGE: the two grade different rows",
-			"unset BAGGAGE, or bind this checkout to the lease the session acts as",
+			"the marker is what `magus job exec` wrote here, so magus grades every write under adj/marker and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
+			"unset BAGGAGE, or take the lease you mean here with `magus job exec adj/from-env`",
 		},
 	}, got)
+}
+
+// TestActingLeasePrefersTheMarkerOverTheEnvironment pins the precedence the check above
+// reports on. The marker is written into a checkout by `job exec`; the environment member
+// is a claim the worker makes about itself, and letting the claim win meant a worker
+// bound to one job could be graded against another's lanes by exporting its id.
+func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
+	cacheDir, _, _ := tmpLedger(t)
+	require.NoError(t, job.BindLease(cacheDir, "adj/marker"))
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
+
+	assert.Equal(t, "adj/marker", job.ActingLease(cacheDir))
+
+	// With no marker the environment is the only answer there is, which stays true: a
+	// checkout nobody bound is the unattributed case the guard fails open on.
+	assert.Equal(t, "adj/from-env", job.ActingLease(t.TempDir()))
 }
 
 func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
@@ -100,7 +117,7 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 		Message: `lease "adj/no-such-lease" is bound here, and no row declares it`,
 		Details: []string{
 			"the guard grades every write here as an unattributed edit: advisory, never denied",
-			"declare the row under this id: " + hint.JobFork.With("adj/no-such-lease", "--goal", "<goal>"),
+			"declare the row under this id: " + hint.JobFork.With("adj/no-such-lease", "--criteria", "<criteria>"),
 		},
 	}, got)
 }

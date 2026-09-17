@@ -20,7 +20,7 @@ import (
 // the same review as the field change, rather than in a second file a reviewer has to
 // remember to open.
 var jobFieldNames = []string{
-	"schema_version", "id", "parent", "goal", "checkpoint", "write_paths", "deny_paths",
+	"schema_version", "id", "parent", "criteria", "checkpoint", "write_paths", "deny_paths",
 	"read_paths", "depends_on", "model", "check", "validation", "completion_gates", "state", "holder",
 	"read_only", "releases", "unattributed", "reported_base", "base_verdict",
 	"registered_by", "registered", "created", "updated", "result", "attempt", "gate_attempts", "last_run",

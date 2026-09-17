@@ -33,18 +33,18 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 	if id == "" {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no lease bound; the guard advises only"}
 	}
-	// A host runs its hooks with its own environment, so the guard resolves the marker
-	// while a worker's shell resolves what it exported: the two then grade different rows
-	// and every verdict in this checkout is about a lease nobody here is acting under.
-	if marker := job.LeaseFromMarker(cacheDir); marker != "" && marker != id {
+	// Asked through job.LeaseConflict rather than compared here: since the marker WINS,
+	// a comparison against the resolved id can never differ from the marker, so a second
+	// copy of this rule in this file would be one that silently stopped firing.
+	if marker, claimed, conflicted := job.LeaseConflict(cacheDir); conflicted {
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
-			Message: fmt.Sprintf("this session acts as lease %q while this checkout's marker binds %q", id, marker),
+			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", marker, claimed),
 			Details: []string{
-				"a host runs its hooks with its own environment, so the guard reads the marker while this session reads " +
-					trail.EnvBaggage + ": the two grade different rows",
-				"unset " + trail.EnvBaggage + ", or bind this checkout to the lease the session acts as",
+				"the marker is what `" + hint.JobExec.String() + "` wrote here, so magus grades every write under " +
+					marker + " and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
+				"unset " + trail.EnvBaggage + ", or take the lease you mean here with `" + hint.JobExec.With(claimed) + "`",
 			},
 		}
 	}
@@ -66,7 +66,7 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 			Message: fmt.Sprintf("lease %q is bound here, and no row declares it", id),
 			Details: []string{
 				"the guard grades every write here as an unattributed edit: advisory, never denied",
-				"declare the row under this id: " + hint.JobFork.With(id, "--goal", "<goal>"),
+				"declare the row under this id: " + hint.JobFork.With(id, "--criteria", "<criteria>"),
 			},
 		}
 	}

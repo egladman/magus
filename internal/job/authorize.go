@@ -263,7 +263,7 @@ func changedFields(prev, next types.Job) []string {
 		}
 	}
 	add("parent", prev.Parent != next.Parent)
-	add("goal", prev.Goal != next.Goal)
+	add("criteria", prev.Criteria != next.Criteria)
 	add("checkpoint", prev.Checkpoint != next.Checkpoint)
 	add("write_paths", !slices.Equal(prev.WritePaths, next.WritePaths))
 	add("deny_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
@@ -311,4 +311,18 @@ func subset(inner, outer []string) bool {
 		}
 	}
 	return true
+}
+
+// authorizeDelete refuses a bound holder deleting a row.
+//
+// Its OWN row included, and that is the difference from ending one: a holder may end its
+// job (fail, no_return, exited) because that is the report it owes, and the row it leaves
+// is what the orchestrator reads. Deleting it instead removes the evidence that the work
+// was ever handed out, which is the one outcome no holder should be able to produce.
+func authorizeDelete(actor Actor, id string) error {
+	if !actor.Bound() {
+		return nil
+	}
+	return refuse(actor, id, "deleting a row removes the record that the work was handed out, so it belongs to whoever declared the plan;"+
+		" a holder ENDS its job instead")
 }

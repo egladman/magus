@@ -77,7 +77,7 @@ Run this control loop:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
-3. Give every job its own goal, ownership boundary, and acceptance criteria.
+3. Give every job its own criteria, ownership boundary, and completion gates.
 4. Hand out work within one global cost and concurrency budget.
 5. Observe agents and Magus processes through their separate control planes.
 6. Evaluate evidence, revise ownership or ordering when assumptions change, and
@@ -273,11 +273,11 @@ The same checkpoint is what a later incremental re-review diffs from (see the
 {{skill "change-summary"}} skill) - review time and pickup time read the same object.
 {{end}}
 
-| Job | Parent | Checkpoint | Goal and acceptance criteria | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
+| Job | Parent | Checkpoint | Criteria | Completion gates | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
 |---|---|---|---|---|---|---|---|---|---|---|
 
 Render the prompt FROM the row rather than typing it: `magus describe job <job>`
-prints the job's own goal, boundary and check, plus what the workspace knows
+prints the job's own criteria, boundary and check, plus what the workspace knows
 and nobody wrote down{{if .Full}} - the projects the write paths reach, the declared
 output globs that land inside them, the paths a sibling job is holding, the build
 inputs and workspace configuration that have one owner, and the projects that
@@ -425,6 +425,64 @@ its descendants before reporting upward. The root still verifies the combined
 result independently.{{else}}Make acceptance criteria observable: named tests,
 artifacts, diagnostics, API behavior, or review checks. A child that hands work on must
 evaluate its descendants before reporting upward.{{end}}
+
+## Declare the criteria magus can check for you
+
+A job's acceptance criteria are prose a reader grades. A COMPLETION GATE is the
+part magus grades itself, from evidence the worker cannot author, and `magus job
+wait` refuses to record pass until every one verifies. Declare them at fork:
+
+```sh
+magus job fork api/migrate \
+  --gate-check green='go-test api' \
+  --gate-paths migration='db/migrations/**' \
+  --gate-symbol-unreferenced unused='LegacyAccountStore'
+```
+
+A gate names WHAT it examines and what must be true of it:
+
+| kind     | expects                                         | read from                                      |
+| -------- | ----------------------------------------------- | ---------------------------------------------- |
+| `check`  | `passed`                                        | a recorded run, captured after the declaration |
+| `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
+| `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
+
+Each kind has a default expectation, so the common gate declares only its
+subject; the other flags spell it out (`--gate-paths-present`,
+`--gate-symbol-absent`, ...). `magus job fork -h` lists them all.
+
+Reach for `symbol` + `unreferenced` when partitioning a rename. It is the REMAINDER rule
+made checkable: split per project and the callers in no project belong to no job,
+so every job passes and the rename is unfinished.
+
+Every kind reads what magus already holds, which is what makes a gate a contract
+rather than an attestation. There is no escape hatch for "this command exited 0",
+deliberately: magus did not record that run and cannot attribute it, so it would
+be the easiest gate of all to satisfy falsely. Declare a target and use `check`.
+
+The worker's own `changed_paths` is its account of its work and is never the
+evidence. An observation magus could not MAKE fails the gate rather than passing
+it, because the cheapest way past a gate that shrugged would be to break the
+observation.
+
+Ask where a job stands without advancing it:
+
+```sh
+magus describe job <job> --gates
+```
+
+Same grading `magus job wait` does, recording nothing, exit 1 while any gate is
+unmet. Use it instead of asking a worker how it is going: the answer is graded
+from evidence rather than composed by the thing being asked about.
+
+SEQUENCE gates with `depends_on` between them, which is how one is cleared
+before another is approached; a failed prerequisite propagates. Do NOT nest
+them: a gate that wants children is a JOB that wants splitting, and the rule
+above already covers it. Gates stay flat so the job tree stays the only
+hierarchy with an owner.
+
+A gate is not the gate. `--gate-check` still may not name `ci` or anything that
+chains to it, for the reason the check rule gives above.
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the

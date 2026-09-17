@@ -62,7 +62,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 			State: string(types.StateRunning),
 			Exec:  hint.JobExec.With("f2-guard"),
 			// Longer than a line on purpose: the clip is part of the contract.
-			Goal:       strings.Repeat("hold the boundary ", 20),
+			Criteria:   strings.Repeat("hold the boundary ", 20),
 			Validation: "magus run test internal/ledger",
 		}},
 		Failures: []briefFailure{{
@@ -152,7 +152,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	guardRow := types.Job{
 		ID:         "f2-guard",
 		State:      types.StateRunning,
-		Goal:       "hold the boundary\nsecond line nobody reads here",
+		Criteria:   "hold the boundary\nsecond line nobody reads here",
 		Validation: "magus run test internal/ledger",
 		WritePaths: []string{"internal/ledger"},
 	}
@@ -172,7 +172,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	assert.Equal(t, root, brief.Workspace)
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "f2-guard", brief.Leases[0].ID)
-	assert.Equal(t, "hold the boundary", brief.Leases[0].Goal, "a lease's goal reads as one line here; the rest is `magus describe job`")
+	assert.Equal(t, "hold the boundary", brief.Leases[0].Criteria, "a lease's goal reads as one line here; the rest is `magus describe job`")
 	assert.Equal(t, hint.JobExec.With("f2-guard"), brief.Leases[0].Exec)
 
 	require.Len(t, brief.Failures, 1)

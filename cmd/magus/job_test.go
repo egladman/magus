@@ -161,21 +161,21 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	t.Parallel()
 
 	flags := forkFlags{
-		goal:       "the store is the enforcement point",
+		criteria:   "the store is the enforcement point",
 		parent:     "adjacency",
 		checkpoint: "cf5509d09",
-		writePaths: pathList{"internal/ledger", "types/lease.go"},
-		denyPaths:  pathList{"MAGUS.md"},
-		readPaths:  pathList{"internal/trail"},
-		dependsOn:  pathList{"adj/guard"},
+		writePaths: listFlag{"internal/ledger", "types/lease.go"},
+		denyPaths:  listFlag{"MAGUS.md"},
+		readPaths:  listFlag{"internal/trail"},
+		dependsOn:  listFlag{"adj/guard"},
 		check:      "test internal/ledger",
 		model:      "principal",
 	}
 	piped, err := job.DecodeDeclaration(strings.NewReader(`{
-	  "schema_version": 5,
+	  "schema_version": 6,
 	  "id": "adj/store",
 	  "parent": "adjacency",
-	  "goal": "the store is the enforcement point",
+	  "criteria": "the store is the enforcement point",
 	  "checkpoint": "cf5509d09",
 	  "write_paths": ["internal/ledger", "types/lease.go"],
 	  "deny_paths": ["MAGUS.md"],
@@ -201,13 +201,13 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
 	t.Parallel()
 
-	var repeated, combined pathList
+	var repeated, combined listFlag
 	require.NoError(t, repeated.Set("internal/ledger"))
 	require.NoError(t, repeated.Set("types/lease.go"))
 	require.NoError(t, combined.Set("internal/ledger, types/lease.go"))
 	assert.Equal(t, repeated, combined)
 
-	var refused pathList
+	var refused listFlag
 	require.Error(t, refused.Set("internal/ledger,"))
 	require.Error(t, refused.Set(""))
 }

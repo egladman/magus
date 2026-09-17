@@ -816,10 +816,30 @@ const LeaseMarkerName = "lease"
 // else "". The guard hook and the sandbox both resolve through this one function so the
 // two enforcement tiers cannot disagree about who is acting.
 func ActingLease(cacheDir string) string {
-	if lease := trail.LeaseFromEnv(); lease != "" {
-		return lease
+	lease, marker := trail.LeaseFromEnv(), LeaseFromMarker(cacheDir)
+	// The MARKER wins. It is written by `magus job exec` into the checkout that took the
+	// lease, so it is a fact about where the work is happening; the env member is a claim
+	// the worker makes about itself, and letting a claim override the record meant a
+	// worker bound to one job could be graded against another job's lanes by exporting
+	// its id.
+	//
+	// Not a fail-open case: a checkout with neither answer is a question magus cannot ask
+	// and stays advisory, which is unchanged. This is the case where magus CAN ask and got
+	// two answers, and preferring the one nobody can rewrite from a shell is the whole of
+	// the fix. LeaseConflict reports the disagreement so a caller can say so.
+	if marker != "" {
+		return marker
 	}
-	return LeaseFromMarker(cacheDir)
+	return lease
+}
+
+// LeaseConflict names the two ids when a checkout's marker and the environment disagree,
+// or returns false. The env member is ignored in that case (see ActingLease); this is how
+// a surface tells the reader that, rather than grading against one and never mentioning
+// the other.
+func LeaseConflict(cacheDir string) (marker, claimed string, conflicted bool) {
+	marker, claimed = LeaseFromMarker(cacheDir), trail.LeaseFromEnv()
+	return marker, claimed, marker != "" && claimed != "" && marker != claimed
 }
 
 // LeaseFromMarker reads the lease bound to the checkout whose cache dir is cacheDir,
@@ -885,4 +905,54 @@ func VacateLease(cacheDir string) (string, error) {
 		return "", fmt.Errorf("job: vacate lease: %w", err)
 	}
 	return id, nil
+}
+
+// Delete removes ONE row and returns it, or reports that no such row exists.
+//
+// A row that is over is still a row: `job exit` moves a job to a terminal state, which is
+// the RECORD of what happened and is what a later reader wants. Delete is for a row that
+// should never have been written -- a demo, a typo, a plan abandoned before it began --
+// and it is the only way to take one out without Clear taking every other lease's row
+// with it.
+//
+// It refuses a TERMINAL row by default. Deleting the record of a job that actually ran
+// destroys the only account of it, and the caller who wants that says so with force. A
+// live row is the opposite case: nothing has happened yet, so there is nothing to lose.
+//
+// Archived first, exactly as Clear archives, so a delete is recoverable from the sibling
+// file rather than only from whatever the caller remembers.
+func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, error) {
+	id = strings.TrimSpace(id)
+	if err := authorizeDelete(s.Actor(), id); err != nil {
+		return types.Job{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var dropped types.Job
+	err := s.withFileLock(ctx, func() error {
+		f, rawByID, err := s.read()
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(f.Jobs, func(row types.Job) bool { return row.ID == id })
+		if i < 0 {
+			return fmt.Errorf("job: there is no job %q", id)
+		}
+		dropped = f.Jobs[i]
+		if dropped.State.Terminal() && !force {
+			return fmt.Errorf("job: %s is %s, and that row is the record of what happened."+
+				" Delete it anyway with --force, or leave it where a later reader can find it",
+				id, dropped.State)
+		}
+		if err := s.archive(f, rawByID); err != nil {
+			return err
+		}
+		f.Jobs = slices.Delete(f.Jobs, i, i+1)
+		return s.write(f, rawByID)
+	})
+	if err != nil {
+		return types.Job{}, err
+	}
+	return dropped, nil
 }

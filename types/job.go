@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -90,15 +91,147 @@ type LeaseCheck struct {
 const PrimaryCompletionGateID = "check"
 
 // CompletionGate is one machine-verifiable condition a job must satisfy before it
-// can pass. Goal remains the human-readable objective; gates bind that objective to
+// can pass. Criteria remains the human-readable objective; gates bind that objective to
 // recorded Magus output rather than a holder's boolean attestation. The output
 // must have been captured after the job was declared; target execution limits
 // remain the target's run policy rather than a second gate timeout.
 type CompletionGate struct {
-	ID          string     `json:"id"                     yaml:"id"`
-	Description string     `json:"description,omitempty" yaml:"description,omitempty"`
-	Check       LeaseCheck `json:"check"                  yaml:"check"`
-	DependsOn   []string   `json:"depends_on,omitempty"  yaml:"depends_on,omitempty"`
+	ID          string   `json:"id"                     yaml:"id"`
+	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
+	DependsOn   []string `json:"depends_on,omitempty"  yaml:"depends_on,omitempty"`
+	// Kind names WHAT this gate examines and Expect names what must be true of it. Two
+	// fields rather than one, because the alternative is a kind per pair: `paths` beside
+	// `exists` beside `absent` beside `no-symbol`, which is a vocabulary that grows by
+	// multiplication and reads inconsistently the moment it has four members.
+	//
+	// Both are RESOLVED before a row is stored: Resolve fills a gate that named neither,
+	// so a reader never applies a default and the published enums carry no empty member.
+	// A default applied on read is a default every reader has to know about, and the
+	// readers here are the verifier, the guard, the observer and two schemas.
+	Kind   GateKind   `json:"kind"   yaml:"kind"`
+	Expect GateExpect `json:"expect" yaml:"expect"`
+	// Check is the run a GateKindCheck gate examines. Zero on every other kind.
+	Check LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
+	// Paths are the globs a GateKindPaths gate examines. Zero on every other kind.
+	Paths []string `json:"paths,omitempty" yaml:"paths,omitempty"`
+	// Symbols are the names a GateKindSymbol gate examines, as the knowledge graph
+	// resolves them. Zero on every other kind.
+	Symbols []string `json:"symbols,omitempty" yaml:"symbols,omitempty"`
+}
+
+// Resolve fills a gate's kind and expectation from what it declared, so every stored gate
+// names both. A gate that named neither is a check, which is what the single Check field
+// meant before gates existed; a gate that named a kind and no expectation takes that
+// kind's natural one.
+//
+// Called at the WRITE boundary (Declaration.Apply, ParseMerge, the stored-row fold), never
+// on read. That is the whole reason the enums have no empty member.
+func (g CompletionGate) Resolve() CompletionGate {
+	if g.Kind == "" {
+		g.Kind = GateKindCheck
+	}
+	if g.Expect == "" {
+		g.Expect = g.Kind.DefaultExpect()
+	}
+	return g
+}
+
+// GateKind names WHAT a completion gate examines, because not every condition a job can be
+// held to is a target run.
+//
+// Each kind names an evidence source magus already holds: the output store, the VCS diff,
+// the knowledge graph. A condition magus can observe no evidence for is not declarable
+// here on purpose, and there is deliberately no escape hatch for one. A gate accepting an
+// unrecorded exit status would be the easiest kind to satisfy falsely, which is the
+// attestation the whole mechanism replaces; declare a target and use GateKindCheck.
+type GateKind string
+
+const (
+	// GateKindCheck examines a recorded run of the gate's check. It is a return code, and
+	// what raises it above one is that magus RECORDED it: the output store holds the
+	// target, the project, the timestamp and the failure bit, so the run can be reopened
+	// and attributed to this job rather than taken on the holder's word.
+	GateKindCheck GateKind = "check"
+	// GateKindPaths examines files, by glob. It is what "this job must actually produce
+	// the migration" looks like when no target can say so.
+	GateKindPaths GateKind = "paths"
+	// GateKindSymbol examines named symbols in the knowledge graph, which is the
+	// granularity below a file: a function added, renamed or deleted is a fact the graph
+	// holds even when the file it lives in changed for ten other reasons.
+	GateKindSymbol GateKind = "symbol"
+)
+
+// GateKinds is the closed set, for the same reason JobStates is one: the validator, the
+// published schema and the error each of them raises all quote it, and a vocabulary that
+// drifts rejects a client for a value the schema told it to send.
+func GateKinds() []GateKind {
+	return []GateKind{GateKindCheck, GateKindPaths, GateKindSymbol}
+}
+
+// GateExpect names what must be TRUE of what a gate examines. One vocabulary across every
+// kind, so `absent` means the same thing of a file, a symbol and a reference.
+type GateExpect string
+
+const (
+	// ExpectPassed is a recorded run that finished without failing. GateKindCheck only.
+	ExpectPassed GateExpect = "passed"
+	// ExpectChanged is "the diff since the job's checkpoint touches this".
+	ExpectChanged GateExpect = "changed"
+	// ExpectPresent is "this is here now", whether or not this job is what put it here.
+	ExpectPresent GateExpect = "present"
+	// ExpectAbsent is "this is not here now", which is how a deletion or a removal is
+	// declared as a condition rather than reported as one.
+	ExpectAbsent GateExpect = "absent"
+	// ExpectUnreferenced is "nothing names this any more", and it belongs to symbols. It
+	// is the one that answers the remainder a partitioned rename leaks: split the work per
+	// project and the callers in no project belong to no job, so every job passes and the
+	// rename is unfinished.
+	//
+	// An EXPECTATION rather than a kind of its own, because the subject it examines is
+	// still the symbol. A `refs` kind read the same field as `symbol` and forced every
+	// reader to treat the two as one, which is a vocabulary that says it has four members
+	// and behaves as though it has three.
+	ExpectUnreferenced GateExpect = "unreferenced"
+)
+
+// GateExpects is the closed set. See GateKinds.
+func GateExpects() []GateExpect {
+	return []GateExpect{ExpectPassed, ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced}
+}
+
+// DefaultExpect is what a kind means when a gate names no condition, so the common gate of
+// each kind declares only its subject. A check is asked whether it passed; files and
+// symbols are asked whether this job changed them, which is the question a job is for.
+func (k GateKind) DefaultExpect() GateExpect {
+	if k == GateKindCheck {
+		return ExpectPassed
+	}
+	return ExpectChanged
+}
+
+// Subject is what the gate examines, rendered for a message that has to name it.
+func (g CompletionGate) Subject() []string {
+	switch g.Kind {
+	case GateKindCheck:
+		if g.Check.Target == "" {
+			return nil
+		}
+		return []string{g.Check.String()}
+	case GateKindPaths:
+		return g.Paths
+	default:
+		return g.Symbols
+	}
+}
+
+// gateAccepts is the kind-to-condition matrix, and the one place it is written down.
+// Anything outside it is refused at declaration rather than graded into a verdict nobody
+// can act on: `check` + `absent` has no meaning, and a gate nobody can satisfy reads as a
+// job nobody can finish.
+var gateAccepts = map[GateKind][]GateExpect{
+	GateKindCheck:  {ExpectPassed},
+	GateKindPaths:  {ExpectChanged, ExpectPresent, ExpectAbsent},
+	GateKindSymbol: {ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced},
 }
 
 // EffectiveCompletionGates returns the declared gates plus the historical primary
@@ -108,7 +241,8 @@ type CompletionGate struct {
 func (u Job) EffectiveCompletionGates() []CompletionGate {
 	gates := cloneCompletionGates(u.CompletionGates)
 	if u.Check != nil {
-		gates = append([]CompletionGate{{ID: PrimaryCompletionGateID, Check: *u.Check}}, gates...)
+		primary := CompletionGate{ID: PrimaryCompletionGateID, Check: *u.Check}.Resolve()
+		gates = append([]CompletionGate{primary}, gates...)
 	}
 	return gates
 }
@@ -281,7 +415,7 @@ func ValidJobID(id string) bool {
 // its rewrite; the version is what tells such a reader to stop instead of proceeding.
 // TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
 // golden list, so a field added without a bump fails a test instead of failing a store.
-const JobSchemaVersion = 5
+const JobSchemaVersion = 6
 
 // JobActor identifies the session that wrote a row: the same pair the trail records
 // for an agent's actions, so a row and the actions that followed it join on one identity.
@@ -398,11 +532,15 @@ type Job struct {
 	// root spawned. Depth is read off this chain rather than stored, so a mis-stamped depth
 	// cannot disagree with the tree.
 	Parent string `json:"parent,omitempty" yaml:"parent,omitempty"`
-	// Goal is the lease's goal and its observable acceptance criteria, as one block of
-	// text. Not split into two fields: the skill requires criteria to be observable and
-	// a separate empty Criteria field would read as "none required" rather than as
-	// "the author did not write any".
-	Goal string `json:"goal,omitempty" yaml:"goal,omitempty"`
+	// Criteria is what this lease is for and what done means, as one block of prose. Not
+	// split into two fields: the skill requires criteria to be observable, and a separate
+	// empty field would read as "none required" rather than as "the author did not write
+	// any".
+	//
+	// PROSE, graded by a reader. The machine-checkable half is CompletionGates, and the
+	// two are deliberately separate: a condition magus can verify belongs in a gate, where
+	// it is a contract, rather than in a sentence here that nothing reads.
+	Criteria string `json:"criteria,omitempty" yaml:"criteria,omitempty"`
 	// Checkpoint is the working state this lease was handed, in the form
 	// `magus vcs checkpoint -o name` prints: the revision, plus a dirty-patch digest
 	// when the tree was not clean. A string rather than an embedded VCSCheckpoint
@@ -550,8 +688,9 @@ type Declaration struct {
 	ID string `json:"id" schema:"leaseid"`
 	// Parent is the lease this one was spawned under, empty for a lease the root declared.
 	Parent string `json:"parent,omitempty"`
-	// Goal is the goal and its observable acceptance criteria, as one block of text.
-	Goal string `json:"goal,omitempty"`
+	// Criteria is what this lease is for and what done means, as one block of prose. The
+	// machine-checkable half is CompletionGates.
+	Criteria string `json:"criteria,omitempty"`
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
@@ -621,14 +760,18 @@ func (r *Declaration) FoldLegacyLanes() error {
 	fold("owned_paths", &r.WritePaths, r.LegacyWritePaths)
 	fold("forbidden_paths", &r.DenyPaths, r.LegacyDenyPaths)
 	fold("focus", &r.ReadPaths, r.LegacyReadPaths)
-	switch {
-	case r.LegacyModel == "":
-	case r.Model != "":
-		err = errors.Join(err, errors.New("job: a row declares tier or its renamed spelling, not both"))
-	default:
-		r.Model = r.LegacyModel
+	foldString := func(name string, into *string, from string) {
+		switch {
+		case from == "":
+		case *into != "":
+			err = errors.Join(err, fmt.Errorf("job: a row declares %s or its renamed spelling, not both", name))
+		default:
+			*into = from
+		}
 	}
-	r.LegacyWritePaths, r.LegacyDenyPaths, r.LegacyReadPaths, r.LegacyModel = nil, nil, nil, ""
+	foldString("tier", &r.Model, r.LegacyModel)
+	r.LegacyWritePaths, r.LegacyDenyPaths, r.LegacyReadPaths = nil, nil, nil
+	r.LegacyModel = ""
 	return err
 }
 
@@ -709,14 +852,49 @@ func (g CompletionGate) Validate() error {
 	if !ValidJobID(strings.TrimSpace(g.ID)) {
 		return fmt.Errorf("id %q is not a gate id", g.ID)
 	}
-	parsed, err := ParseLeaseCheck(g.Check.Target + " " + g.Check.Project)
-	if err != nil {
-		return err
+	// Validates what the row WILL BE, not what arrived: a declaration off the wire has not
+	// been through Resolve yet, and refusing it for naming no kind would refuse the
+	// shorthand the defaults exist to allow. Resolving here is not read-time defaulting;
+	// the stored row is resolved by cloneCompletionGates on the way in.
+	g = g.Resolve()
+	accepted, known := gateAccepts[g.Kind]
+	if !known {
+		return fmt.Errorf("gate %q names kind %q, and the kinds are %s", g.ID, g.Kind, quoteJoin(GateKinds(), ", "))
 	}
-	if len(g.Check.Args) > 0 {
-		parsed.Args = g.Check.Args
+	if !slices.Contains(accepted, g.Expect) {
+		return fmt.Errorf("gate %q is a %s gate expecting %q, and a %s gate expects %s",
+			g.ID, g.Kind, g.Expect, g.Kind, quoteJoin(accepted, " or "))
+	}
+	// Exactly one subject, named by the kind. A gate carrying two is one whose author
+	// changed their mind, and grading the one the kind happens to read would silently
+	// ignore the other.
+	if g.Kind != GateKindCheck && g.Check.Target != "" {
+		return fmt.Errorf("gate %q is a %s gate and also carries a check; a gate examines one subject", g.ID, g.Kind)
+	}
+	if g.Kind != GateKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
+		return fmt.Errorf("gate %q is a %s gate and also carries paths; a gate examines one subject", g.ID, g.Kind)
+	}
+	if g.Kind != GateKindSymbol && len(trimmedNonEmpty(g.Symbols)) > 0 {
+		return fmt.Errorf("gate %q is a %s gate and also carries symbols; a gate examines one subject", g.ID, g.Kind)
+	}
+	if len(trimmedNonEmpty(g.Subject())) == 0 {
+		return fmt.Errorf("gate %q is a %s gate and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
+	}
+	if g.Kind == GateKindCheck {
+		if _, err := ParseLeaseCheck(g.Check.Target + " " + g.Check.Project); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// quoteJoin renders a closed set for an error that has to list what it would accept.
+func quoteJoin[T ~string](items []T, sep string) string {
+	out := make([]string, len(items))
+	for i, item := range items {
+		out[i] = strconv.Quote(string(item))
+	}
+	return strings.Join(out, sep)
 }
 
 // check is the row's declared check, from either spelling, and whether it declares one at
@@ -760,7 +938,7 @@ func JobStateVocabulary() string {
 // untouched: a row that already carries releases or a registration keeps them.
 func (r Declaration) Apply(u *Job) {
 	u.Parent = strings.TrimSpace(r.Parent)
-	u.Goal = r.Goal
+	u.Criteria = r.Criteria
 	u.Checkpoint = strings.TrimSpace(r.Checkpoint)
 	u.WritePaths = trimmedNonEmpty(r.WritePaths)
 	u.DenyPaths = trimmedNonEmpty(r.DenyPaths)
@@ -785,8 +963,13 @@ func cloneCompletionGates(in []CompletionGate) []CompletionGate {
 	}
 	out := make([]CompletionGate, len(in))
 	for i, gate := range in {
-		out[i] = gate
+		// RESOLVED on the way through, which is what makes this the write boundary the
+		// enums' no-empty-member rule depends on: every path that stores gates (Apply,
+		// ParseMerge, the stored-row fold) clones them through here.
+		out[i] = gate.Resolve()
 		out[i].Check.Args = slices.Clone(gate.Check.Args)
+		out[i].Paths = slices.Clone(gate.Paths)
+		out[i].Symbols = slices.Clone(gate.Symbols)
 		out[i].DependsOn = slices.Clone(gate.DependsOn)
 	}
 	return out

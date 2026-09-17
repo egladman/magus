@@ -1,6 +1,6 @@
 job: harness/ledger-per-repo
 
-goal and acceptance criteria
+criteria
 Move the lease ledger to the per-repository state dir.
 Done when a row put from one checkout is listed from a second worktree of the same repo.
 

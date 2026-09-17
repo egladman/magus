@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"text/tabwriter"
 
 	"github.com/egladman/magus"
@@ -41,7 +42,7 @@ import (
 func jobCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		jobUsage()
-		return usagef("magus job: requires a subcommand (fork, exec, exit, wait or run)")
+		return usagef("magus job: requires a subcommand (fork, exec, exit, wait, run or rm)")
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
@@ -57,8 +58,10 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobWait(ctx, root, args[1:])
 	case hint.JobRun.Leaf():
 		return jobRunCatalog(ctx, args[1:])
+	case hint.JobRm.Leaf():
+		return jobDelete(ctx, root, args[1:])
 	default:
-		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait or run; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, run or rm; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
@@ -76,6 +79,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
 	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
 	fmt.Fprintln(os.Stderr, "  run   submit one of the daemon's own jobs and return")
+	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "`"+hint.LsJobs.String()+"` lists every job in flight, and `"+hint.DescribeJob.With("<job>")+"` prints one job's terms.")
 	fmt.Fprintln(os.Stderr, "")
@@ -211,20 +215,30 @@ func jobTreeOrder(leases []types.Job) []jobTreeLine {
 }
 
 // describeJob is `magus describe job`: one job's terms, which is what a holder reads on
-// arrival. It prints the goal, the lanes, the check, the model, the checkpoint, the
+// arrival. It prints the criteria, the lanes, the check, the model, the checkpoint, the
 // dependencies, what the workspace itself puts out of reach, and the graph's blast radius
 // for each write path, and it prints no procedure: taking the job is `magus job exec`'s
 // work to DO, not a paragraph for somebody to follow by hand.
 func describeJob(ctx context.Context, root string, args []string) error {
+	var gates bool
 	pos, err := cmdParse("describe job", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&gates, "gates", false, "Grade this job's completion gates against the evidence magus holds now, and record nothing")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe job <job> [flags]")
+			fmt.Fprintln(os.Stderr, "       magus describe job <job> --gates")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Print one job's terms: its goal, lanes, check and dependencies, the paths this")
+			fmt.Fprintln(os.Stderr, "Print one job's terms: its criteria, lanes, check and dependencies, the paths this")
 			fmt.Fprintln(os.Stderr, "workspace puts out of reach, and the graph's blast radius for each write path.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It renders context and never a status: magus assembles what it holds and you")
 			fmt.Fprintln(os.Stderr, "hand it to whoever takes the job, the way `magus diff --prompt` does.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--gates is the exception, and it is still a READ: it grades this job's completion")
+			fmt.Fprintln(os.Stderr, "gates against the evidence magus holds right now and records nothing, so asking")
+			fmt.Fprintln(os.Stderr, "never advances a job and never blocks the holder still working on it. It is the")
+			fmt.Fprintln(os.Stderr, "same grading `"+hint.JobWait.String()+"` does, so the two cannot disagree.")
+			fmt.Fprintln(os.Stderr, "Exit 1 means a gate is unmet, so a caller branches on the status rather than")
+			fmt.Fprintln(os.Stderr, "reading the text.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -232,6 +246,9 @@ func describeJob(ctx context.Context, root string, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+	if gates {
+		return jobGates(ctx, root, pos)
 	}
 	if len(pos) != 1 {
 		return usagef("magus describe job: requires exactly one job")
@@ -296,17 +313,23 @@ func checkoutBaseToken(ctx context.Context, root string) (string, error) {
 	return checkpointToken(cp), nil
 }
 
-// pathList accumulates one repeatable, comma-separated flag, on the same rule --skip
+// listFlag accumulates one repeatable, comma-separated flag, on the same rule --skip
 // follows (cmd/magus/run.go): an empty segment is refused rather than dropped, so a
 // trailing comma cannot silently shrink a lease's lane.
-type pathList []string
+//
+// Not named for paths: --depends-on holds job ids and the gate flags hold symbols, and a
+// type called pathList holding neither is a name that has to be read past.
+type listFlag []string
 
-func (l *pathList) String() string { return strings.Join(*l, ",") }
+func (l *listFlag) String() string { return strings.Join(*l, ",") }
 
-func (l *pathList) Set(value string) error {
-	for _, part := range strings.Split(value, ",") {
+// SplitSeq rather than Split: the intermediate slice is never used for anything but this
+// loop, and this file already had three copies of the same split before they were folded
+// back into this one.
+func (l *listFlag) Set(value string) error {
+	for part := range strings.SplitSeq(value, ",") {
 		if part = strings.TrimSpace(part); part == "" {
-			return errors.New("empty path")
+			return errors.New("empty entry")
 		}
 		*l = append(*l, part)
 	}
@@ -317,26 +340,28 @@ func (l *pathList) Set(value string) error {
 // One conversion rather than two paths into the store, so a job typed at a terminal and a
 // job piped in are the same declaration.
 type forkFlags struct {
-	goal, parent, check, model, checkpoint string
-	writePaths, readPaths, denyPaths       pathList
-	dependsOn                              pathList
-	readOnly                               bool
+	criteria, parent, check, model, checkpoint string
+	writePaths, readPaths, denyPaths           listFlag
+	dependsOn                                  listFlag
+	gates                                      []types.CompletionGate
+	readOnly                                   bool
 }
 
 func (f forkFlags) row(id string) types.Declaration {
 	return types.Declaration{
-		SchemaVersion: types.JobSchemaVersion,
-		ID:            id,
-		Parent:        f.parent,
-		Goal:          f.goal,
-		Checkpoint:    f.checkpoint,
-		WritePaths:    f.writePaths,
-		DenyPaths:     f.denyPaths,
-		ReadPaths:     f.readPaths,
-		DependsOn:     f.dependsOn,
-		Check:         f.declaredCheck(),
-		Model:         f.model,
-		ReadOnly:      f.readOnly,
+		SchemaVersion:   types.JobSchemaVersion,
+		ID:              id,
+		Parent:          f.parent,
+		Criteria:        f.criteria,
+		Checkpoint:      f.checkpoint,
+		WritePaths:      f.writePaths,
+		DenyPaths:       f.denyPaths,
+		ReadPaths:       f.readPaths,
+		DependsOn:       f.dependsOn,
+		Check:           f.declaredCheck(),
+		CompletionGates: f.gates,
+		Model:           f.model,
+		ReadOnly:        f.readOnly,
 		// A row a person declares is one nobody has picked up yet, which is what the
 		// state vocabulary already has a word for.
 		State: types.StateDeclared,
@@ -379,7 +404,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	pos, err := cmdParse("job fork", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a job must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read one job as JSON on stdin instead of taking it from flags")
-		fs.StringVar(&declared.goal, "goal", "", "The goal and its observable acceptance criteria")
+		fs.StringVar(&declared.criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths")
 		fs.StringVar(&declared.parent, "parent", "", "The job this one is forked from")
 		fs.StringVar(&declared.checkpoint, "checkpoint", "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 		fs.Var(&declared.writePaths, "write-paths", "A path this job may write; repeatable or comma-separated")
@@ -387,6 +412,14 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.Var(&declared.readPaths, "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
 		fs.Var(&declared.dependsOn, "depends-on", "A job this one waits on; repeatable or comma-separated")
 		fs.StringVar(&declared.check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
+		fs.Var(gateList{kind: types.GateKindCheck, gates: &declared.gates}, "gate-check", "A further check this job must pass, as `<id>=<target> <project>`; repeatable")
+		fs.Var(gateList{kind: types.GateKindPaths, gates: &declared.gates}, "gate-paths", "Files this job must have CHANGED, as `<id>=<glob>[,<glob>...]`, proven against its checkpoint; repeatable")
+		fs.Var(gateList{kind: types.GateKindPaths, expect: types.ExpectPresent, gates: &declared.gates}, "gate-paths-present", "Files that must EXIST when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable")
+		fs.Var(gateList{kind: types.GateKindPaths, expect: types.ExpectAbsent, gates: &declared.gates}, "gate-paths-absent", "Files that must be GONE when the job is done, as `<id>=<glob>[,<glob>...]`; repeatable")
+		fs.Var(gateList{kind: types.GateKindSymbol, gates: &declared.gates}, "gate-symbol", "Symbols whose definition this job must have CHANGED, as `<id>=<name>[,<name>...]`; repeatable")
+		fs.Var(gateList{kind: types.GateKindSymbol, expect: types.ExpectPresent, gates: &declared.gates}, "gate-symbol-present", "Symbols that must resolve when the job is done, as `<id>=<name>[,<name>...]`; repeatable")
+		fs.Var(gateList{kind: types.GateKindSymbol, expect: types.ExpectAbsent, gates: &declared.gates}, "gate-symbol-absent", "Symbols that must resolve NOWHERE when the job is done, as `<id>=<name>[,<name>...]`; repeatable")
+		fs.Var(gateList{kind: types.GateKindSymbol, expect: types.ExpectUnreferenced, gates: &declared.gates}, "gate-symbol-unreferenced", "Symbols nothing may reference when the job is done, as `<id>=<name>[,<name>...]`; repeatable")
 		fs.StringVar(&declared.model, "model", "", "The model the work was matched to")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A job that gathers evidence and writes nothing")
 		fs.Usage = func() {
@@ -783,7 +816,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	}
 	status, err := job.Wait(ctx, store, pos[0], result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
 		return storedAttempt(ctx, flagRoot, ref)
-	})
+	}, job.CheckpointObserver(root, jobSymbolReader(root)))
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
@@ -887,7 +920,7 @@ const leaseAffinityCommits = 200
 // outside the collision analysis entirely.
 //
 // A workspace that will not load DEGRADES rather than failing, the way the graph evidence
-// already does: the row alone carries the goal, the boundary and the check, and a worker
+// already does: the row alone carries the criteria, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
 func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job) job.TermsFacts {
 	if len(row.WritePaths) == 0 {
@@ -1061,8 +1094,8 @@ func jobRefusesTheGate(ctx context.Context, root string, row types.Job) error {
 		" Give this job the narrowest target covering its paths (`%s` decomposes what the gate chains) with `%s`, then ask for the terms again.",
 		hint.DescribeTarget.With(types.TargetCI+" <project>"), hint.JobFork)
 
-	if guard.LeaseOwnsGate(row) {
-		return fmt.Errorf("magus describe job: job %s is assigned %q, which names the `%s` gate.%s", row.ID, row.Validation, types.TargetCI, fix)
+	if source, owns := guard.LeaseGateSource(row); owns {
+		return fmt.Errorf("magus describe job: job %s is assigned %s, which names the `%s` gate.%s", row.ID, source, types.TargetCI, fix)
 	}
 	if chain := validationReachesGate(ctx, root, row.Validation); len(chain) > 0 {
 		return fmt.Errorf("magus describe job: job %s is assigned %q, and that target reaches the `%s` gate through %s.%s",
@@ -1175,4 +1208,225 @@ func pathEvidence(g *knowledge.Graph, declared string) (job.TermsEvidence, bool)
 		return job.TermsEvidence{Path: declared, Node: out.Node.ID, BlastRadius: out.BlastRadius}, true
 	}
 	return job.TermsEvidence{}, false
+}
+
+// gateList collects `--gate-paths` and `--gate-check`, each `<id>=<spec>` and repeatable.
+//
+// Two flags rather than one taking a kind, because the spec after the `=` has a different
+// shape per kind and a single flag would have to name the kind inside its own value. A
+// reader would then be typing `--gate done=paths:db/**` where the word `paths` is neither
+// the id nor the spec, which is the shape that gets mistyped.
+type gateList struct {
+	kind   types.GateKind
+	expect types.GateExpect
+	gates  *[]types.CompletionGate
+}
+
+func (g gateList) String() string {
+	if g.gates == nil {
+		return ""
+	}
+	var ids []string
+	for _, gate := range *g.gates {
+		if gate.Kind == g.kind {
+			ids = append(ids, gate.ID)
+		}
+	}
+	return strings.Join(ids, ",")
+}
+
+// Set parses one `<id>=<spec>`. A spec that does not parse is carried through rather than
+// refused here, so types.Declaration.Validate stays the one place a declaration is
+// refused: the same rule declaredCheck follows.
+func (g gateList) Set(value string) error {
+	id, spec, ok := strings.Cut(value, "=")
+	if !ok {
+		return fmt.Errorf("a gate is `<id>=<spec>` and %q names no id", value)
+	}
+	gate := types.CompletionGate{ID: strings.TrimSpace(id), Kind: g.kind, Expect: g.expect}
+	if g.kind == types.GateKindCheck {
+		// A check is one `<target> <project>`, not a list, and a spec that does not parse
+		// is carried through rather than refused here so types.Declaration.Validate stays
+		// the one place a declaration is refused: the same rule declaredCheck follows.
+		parsed, err := types.ParseLeaseCheck(spec)
+		if err != nil {
+			gate.Check = types.LeaseCheck{Target: spec}
+		} else {
+			gate.Check = parsed
+		}
+		*g.gates = append(*g.gates, gate)
+		return nil
+	}
+	var items listFlag
+	if err := items.Set(spec); err != nil {
+		return fmt.Errorf("gate %q: %w", gate.ID, err)
+	}
+	if g.kind == types.GateKindPaths {
+		gate.Paths = items
+	} else {
+		gate.Symbols = items
+	}
+	*g.gates = append(*g.gates, gate)
+	return nil
+}
+
+// jobSymbolReader loads the knowledge graph ONCE and answers every symbol a job's gates
+// name from it.
+//
+// Lazy and memoized because a verification reads several names and the graph is the
+// expensive part; loading per name would reopen it once per symbol. A load failure is
+// remembered too, so a verification does not retry a graph that is not there once per
+// gate and report the same failure five times.
+func jobSymbolReader(root string) job.SymbolReader {
+	var (
+		once   sync.Once
+		loaded job.SymbolReader
+	)
+	return func(ctx context.Context, name string) (job.SymbolFact, bool) {
+		once.Do(func() {
+			g, err := loadKnowledgeGraphForRefs(ctx, root, false, "")
+			if err != nil {
+				return
+			}
+			loaded = job.GraphSymbols(g)
+		})
+		if loaded == nil {
+			return job.SymbolFact{}, false
+		}
+		return loaded(ctx, name)
+	}
+}
+
+// jobGates is `magus describe job <job> --gates`: each completion gate graded against the
+// evidence magus holds right now.
+//
+// A READ. It records nothing, so an orchestrator may ask while the holder is still
+// working, and asking never advances a job the way `job wait` does. Exit 1 when a gate is
+// unmet, so a script can branch without parsing the text; exit 0 means every gate this
+// job declared is satisfied, which is not the same as the job being recorded pass.
+func jobGates(ctx context.Context, root string, pos []string) error {
+	if len(pos) != 1 {
+		return usagef("magus describe job --gates: requires exactly one job")
+	}
+	root = resolveRootOrEmpty(root)
+	store, err := openJobs(root)
+	if err != nil {
+		return err
+	}
+	status, err := job.GradeGates(ctx, store, pos[0], job.CheckpointObserver(root, jobSymbolReader(root)))
+	if err != nil {
+		return usagef("magus describe job --gates: %s", err)
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		// The unmet gates, one id per line: what a caller filters for, and empty when
+		// every gate is met.
+		var unmet []string
+		for _, gate := range status.Gates {
+			if !gate.Verified {
+				unmet = append(unmet, gate.ID)
+			}
+		}
+		err = emitNames(unmet)
+	case outputText:
+		printJobGates(os.Stdout, status)
+	default:
+		err = emitFormatted(opts, status)
+	}
+	if err != nil || status.Verified {
+		return err
+	}
+	return errSilent{exitCode: 1}
+}
+
+// printJobGates renders one gate per line, each unmet one followed by why.
+func printJobGates(out io.Writer, status types.JobStatus) {
+	if len(status.Gates) == 0 {
+		fmt.Fprintf(out, "%s declares no completion gate, so there is nothing here to grade.\n", status.Job)
+		fmt.Fprintf(out, "Declare one with `%s`.\n", hint.JobFork.With(status.Job, "--gate-paths", "<id>=<glob>"))
+		return
+	}
+	met := 0
+	for _, gate := range status.Gates {
+		if gate.Verified {
+			met++
+		}
+	}
+	fmt.Fprintf(out, "%s: %d of %d completion gate(s) met\n", status.Job, met, len(status.Gates))
+	for _, gate := range status.Gates {
+		mark := "unmet"
+		if gate.Verified {
+			mark = "met"
+		}
+		fmt.Fprintf(out, "  [%s] %s\n", mark, gate.ID)
+		for _, why := range gate.Violations {
+			fmt.Fprintf(out, "      %s\n", why)
+		}
+	}
+}
+
+// jobDelete is `magus job rm <job>`: take one row out of the plan.
+//
+// Named rm rather than delete because that is the verb a person types for this everywhere
+// else, and the surface it sits beside (fork, exec, exit, wait) is the shell's own
+// vocabulary.
+//
+// It is NOT how a job ends. `job exit` records what happened and leaves the row as the
+// account of it; this removes a row that should not exist -- a demo, a typo, a plan
+// abandoned before it began. A terminal row is refused without --force for exactly that
+// reason: deleting the record of work that ran destroys the only account of it.
+func jobDelete(ctx context.Context, root string, args []string) error {
+	var force bool
+	pos, err := cmdParse("job rm", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&force, "force", false, "Remove a row that already ended, destroying the record of what happened")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus job rm <job> [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Remove ONE job from the plan. The rows it leaves alone are the difference from")
+			fmt.Fprintln(os.Stderr, "`"+hint.ToolJob.String()+"` op=clear, which drops every row in the repository.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "This is not how a job ENDS. `"+hint.JobExit.String()+"` records what happened and")
+			fmt.Fprintln(os.Stderr, "leaves the row as the account of it; rm is for a row that should never have been")
+			fmt.Fprintln(os.Stderr, "written. A row that already ended is refused unless --force, because deleting it")
+			fmt.Fprintln(os.Stderr, "destroys the only record that the work ran.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "The dropped rows are archived beside the plan first, so this is recoverable.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return usagef("magus job rm: requires exactly one job")
+	}
+	store, err := openJobs(resolveRootOrEmpty(root))
+	if err != nil {
+		return err
+	}
+	dropped, err := store.Delete(ctx, pos[0], force)
+	if err != nil {
+		return usagef("magus job rm: %s", err)
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames([]string{dropped.ID})
+	case outputText:
+		fmt.Printf("removed %s (%s); the plan it was part of is archived beside it\n", dropped.ID, orDash(string(dropped.State)))
+		return nil
+	default:
+		return emitFormatted(opts, dropped)
+	}
 }

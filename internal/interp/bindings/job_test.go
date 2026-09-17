@@ -37,7 +37,7 @@ func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
 import "magus";
 
 export fun abandon() > str !> any {
-    magus\job\put("optional-exit", opts: {"goal": "exercise omitted result"});
+    magus\job\put("optional-exit", opts: {"criteria": "exercise omitted result"});
     final row = magus\job\exit("optional-exit");
     return row.state;
 }

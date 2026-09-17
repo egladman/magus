@@ -330,7 +330,7 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 	catalog := job.All()[i]
 	if _, err := daemonJobStore.Update(ctx, catalog.Name, func(row *types.Job) {
 		row.Holder = types.HolderDaemon
-		row.Goal = catalog.Desc
+		row.Criteria = catalog.Desc
 		row.State = types.StatePass
 		if jobErr != nil {
 			row.State = types.StateFail

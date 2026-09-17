@@ -32,9 +32,18 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	require.NotNil(t, exited.Attempt)
 	assert.Equal(t, attempt, *exited.Attempt)
 
-	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil)
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.JobStatus{Job: result.Job, Verified: true, Risks: []string{}, Command: result.Validation.Command}, status)
+	// The primary check is LISTED, like any other gate: it is one, and reporting it only
+	// when other gates existed is what let `describe job --gates` say a check-only job had
+	// none.
+	assert.Equal(t, types.JobStatus{
+		Job:      result.Job,
+		Verified: true,
+		Risks:    []string{},
+		Command:  result.Validation.Command,
+		Gates:    []types.GateStatus{{ID: types.PrimaryCompletionGateID, OutputRef: result.Validation.OutputRef, Verified: true}},
+	}, status)
 
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
@@ -60,7 +69,7 @@ func TestExitFilesEveryCompletionGateForAWaitInAnotherCheckout(t *testing.T) {
 	require.Len(t, exited.GateAttempts, 2)
 	assert.Nil(t, exited.Attempt, "a gate-only job has no synthetic primary attempt")
 
-	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil)
+	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, nil)
 	require.NoError(t, err)
 	assert.True(t, status.Verified, status.Violations)
 	require.Len(t, status.Gates, 2)
@@ -88,7 +97,7 @@ func TestWaitKeepsARejectedJobOpen(t *testing.T) {
 
 	status, err := Wait(t.Context(), NewStore(loc), row.ID, &result, func(_ context.Context, _ string) (types.JobAttempt, error) {
 		return passingRun, nil
-	})
+	}, nil)
 	require.NoError(t, err)
 	assert.False(t, status.Verified)
 	assert.Contains(t, status.Violations, "job harness/ledger-accept is not read-only and the result claims no changed paths at all")
@@ -103,7 +112,7 @@ func TestWaitRefusesTheBoundHolder(t *testing.T) {
 
 	row := acceptRow()
 	loc := declared(t, row)
-	_, err := Wait(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil)
+	_, err := Wait(t.Context(), boundStore(loc, row.ID), row.ID, nil, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not verify its own work")
 }

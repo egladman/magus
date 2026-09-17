@@ -52,7 +52,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	}
 
 	str("parent", func(u *types.Job, v string) { u.Parent = strings.TrimSpace(v) })
-	str("goal", func(u *types.Job, v string) { u.Goal = v })
+	str("criteria", func(u *types.Job, v string) { u.Criteria = v })
 	str("checkpoint", func(u *types.Job, v string) { u.Checkpoint = strings.TrimSpace(v) })
 	list("write_paths", func(u *types.Job, v []string) { u.WritePaths = v })
 	list("deny_paths", func(u *types.Job, v []string) { u.DenyPaths = v })
@@ -129,7 +129,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 // mergeFields are the row fields a put may carry. `op` and `id` ride alongside them
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
-	"parent", "goal", "checkpoint", "write_paths", "deny_paths", "read_paths",
+	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
 	"depends_on", "model", "check", "validation", "completion_gates", "state", "read_only",
 }
 

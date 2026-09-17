@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v12). Query it instead of grepping:
+This workspace has a knowledge graph (schema v13). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -68,7 +68,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | .                               |      49 | `magus query project=.`                               | `test`, `generate`, `buzz-test`                          |
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       6 | `magus query project=docs/guides/integrations/agents` | `format`, `preflight`, `ci`                              |
+| docs/guides/integrations/agents |       7 | `magus query project=docs/guides/integrations/agents` | `format`, `preflight`, `ci`                              |
 | libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `test`, `build`                                |
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |

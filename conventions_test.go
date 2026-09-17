@@ -13,22 +13,28 @@ package magus
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -674,6 +680,10 @@ var templateDirScaffolding = map[string]bool{
 	"opencode-plugin.test.ts": true,
 	"host-e2e.ts":             true,
 	"host-e2e.test.ts":        true,
+	// Emits testdata/hosts/cursor/gen from @cursor/sdk's published zod. A generator
+	// magus runs, not an artifact a reader installs into a host, so it owes the parity
+	// gates nothing: no guide embeds it and no host wires it.
+	"cursor-schemas.ts": true,
 	// The binary-interface twin: proves the recorded shim's argv shape still gets
 	// a real verdict from a real magus, but is not itself something a reader
 	// copies into a host; see the note at its top for the split with the file
@@ -2614,4 +2624,298 @@ func TestCmdMagusInternalImportsOnlyShrink(t *testing.T) {
 	assert.LessOrEqual(t, len(seen), cmdMagusInternalCeiling,
 		"cmd/magus now imports %d internal packages, over the %d ceiling: put the new dependency behind the root package, "+
 			"or lower the ceiling deliberately and say why", len(seen), cmdMagusInternalCeiling)
+}
+
+// establishedCompoundNames are Go filename segments that LOOK like two words mashed
+// together and are single established terms. They are exempt from the check below.
+//
+// An allowlist rather than a cleverer test, because no rule distinguishes "runtime" from
+// "pushgate": both are two known words with the separator dropped, and only a person
+// knows the first is a word and the second is a mistake. Adding an entry is the deliberate
+// act of saying "this is one word"; it is not a place to park a name you did not want to
+// think about.
+var establishedCompoundNames = map[string]bool{
+	"runtime": true, // Go's own term
+	"stdlib":  true,
+	"keyring": true,
+	"jsonv2":  true, // names the GOEXPERIMENT
+	"libproc": true, // the Darwin API
+	"vmstat":  true, // the Darwin tool
+}
+
+// grandfatheredCompoundNames are concatenations already in the tree when this check
+// landed. They are NOT exemptions: each is a rename waiting for a session with room for
+// it, and the list is meant to shrink.
+//
+// Recorded rather than fixed on the spot because a rename touches every importer, and a
+// gate that forced twenty of them at once would be turned off instead of satisfied.
+var grandfatheredCompoundNames = map[string]bool{
+	"magusfile":   true, // the file it names is called magusfile.buzz, so this may be right
+	"eventstream": true,
+	"hostmodules": true,
+	"promptcache": true,
+	"selfupdate":  true,
+	"toolref":     true,
+	"refidentity": true,
+}
+
+// TestGoFileNamesDoNotMashWordsTogether keeps new filenames readable: one word, or words
+// separated by an underscore the way workspace_shell.go and prompt_cache.go do it. Never
+// wordsmashedtogether.
+//
+// The vocabulary is built FROM THE TREE, which is what makes this checkable without a
+// dictionary: a segment is suspect when it splits into two segments this repository
+// already uses as filenames. skillgate is skill plus gate, pushgate is push plus gate,
+// hostschemas is hosts plus schemas -- all three shipped in one session, each one after
+// the last had been corrected by hand, which is the argument for a gate over a habit.
+//
+// Deliberately narrow: it can only see a mash of two words the tree already knows, so it
+// misses a compound of words that appear nowhere else. A check that catches the common
+// case and never lies is worth more than one that tries to catch everything.
+func TestGoFileNamesDoNotMashWordsTogether(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Dir(thisFile)
+
+	suffixes := regexp.MustCompile(`_(test|linux|darwin|windows|unix|other|amd64|arm64|js|wasm|freebsd|openbsd|netbsd)$`)
+	segments := map[string]bool{}
+	type goFile struct{ path, base string }
+	var files []goFile
+
+	require.NoError(t, filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if name == ".git" || name == "node_modules" || name == ".claude" || name == "gen" || name == "testdata" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(name, ".go") {
+			return nil
+		}
+		base := strings.TrimSuffix(name, ".go")
+		for prev := ""; prev != base; {
+			prev, base = base, suffixes.ReplaceAllString(base, "")
+		}
+		rel, rerr := filepath.Rel(root, path)
+		if rerr != nil {
+			return rerr
+		}
+		files = append(files, goFile{path: rel, base: base})
+		for _, seg := range strings.Split(base, "_") {
+			if seg != "" {
+				segments[seg] = true
+			}
+		}
+		return nil
+	}))
+	require.NotEmpty(t, files, "walked no Go files; this gate went quiet rather than red")
+
+	for _, f := range files {
+		for _, seg := range strings.Split(f.base, "_") {
+			if establishedCompoundNames[seg] || grandfatheredCompoundNames[seg] {
+				continue
+			}
+			for i := 2; i < len(seg)-1; i++ {
+				head, tail := seg[:i], seg[i:]
+				if !segments[head] || !segments[tail] {
+					continue
+				}
+				assert.Fail(t, "filename mashes two words together",
+					"%s: %q is %q + %q, both of which this repository already uses as filenames.\n"+
+						"Name it %s.go, or %s_%s.go if it genuinely covers both. If %q is one established word,\n"+
+						"add it to establishedCompoundNames and say why.",
+					f.path, seg, head, tail, tail, head, tail, seg)
+				break
+			}
+		}
+	}
+}
+
+// symbolIDPackage pulls the package path and symbol name out of a SCIP symbol ID, whose
+// shape is `symbol:gomod <module> ` + "`" + `<package path>` + "`" + `/<name>...`.
+//
+// Parsed rather than recomputed from the filesystem: the package a symbol belongs to and
+// the name it carries are facts the index already holds, and deriving them again from
+// paths would be a second answer to drift from the first.
+var symbolIDPackage = regexp.MustCompile("^symbol:gomod \\S+ `([^`]+)`/(.+)$")
+
+// TestExportedNamesDoNotStutter reads the SYMBOL GRAPH, not the filesystem.
+//
+// This is the check that cannot be written any other way. Stutter is a property of a
+// package name together with a symbol name (sessions.SessionAdapter reads as
+// sessions.Session... at every call site), and a test that walked files would have the
+// filenames and none of the symbols. magus indexes both, so the question is a query.
+//
+// It SKIPS when the index has nothing for this module, and that is deliberate rather than
+// lenient: the symbol index is built by the scip op and is stale or absent until it runs,
+// so a test that quietly passed on an empty index would report "no stutter" for a tree it
+// never read. Skipping says which.
+func TestExportedNamesDoNotStutter(t *testing.T) {
+	ctx := context.Background()
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Dir(thisFile)
+
+	ws, err := Inspect(ctx, root)
+	require.NoError(t, err)
+	g, err := BuildKnowledgeGraph(ctx, ws, root, config.Config{}, false, slog.Default())
+	require.NoError(t, err)
+	require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, config.Config{}, g, slog.Default()))
+
+	const module = "github.com/egladman/magus"
+	found := map[string][]string{}
+	indexed := 0
+	for _, n := range g.Nodes() {
+		if n.Kind != types.KindSymbol {
+			continue
+		}
+		m := symbolIDPackage.FindStringSubmatch(n.ID)
+		if m == nil || !strings.HasPrefix(m[1], module) {
+			continue
+		}
+		indexed++
+		// The name is everything before the first descriptor suffix SCIP appends: `.`
+		// for a term, `()` for a method, `#` for a type.
+		name := m[2]
+		for _, cut := range []string{".", "(", "#", "/"} {
+			if i := strings.Index(name, cut); i >= 0 {
+				name = name[:i]
+			}
+		}
+		pkg := m[1][strings.LastIndex(m[1], "/")+1:]
+		if name == "" || !unicode.IsUpper(rune(name[0])) || len(pkg) < minStutterPackage {
+			continue
+		}
+		if len(name) > len(pkg) && strings.EqualFold(name[:len(pkg)], pkg) {
+			found[pkg] = append(found[pkg], name)
+		}
+	}
+
+	if indexed == 0 {
+		t.Skip("no symbols indexed for this module: run `magus graph build`, which is what this reads")
+	}
+	for pkg, names := range found {
+		if stutterAllowed[pkg] {
+			continue
+		}
+		slices.Sort(names)
+		assert.Fail(t, "exported names stutter against their package",
+			"package %q exports %v, which read as %s.%s... at every call site.\n"+
+				"Drop the package name from the symbol, or add %q to stutterAllowed and say why.",
+			pkg, slices.Compact(names), pkg, pkg, pkg)
+	}
+}
+
+// minStutterPackage is the shortest package name worth testing. A two-letter package
+// shares a prefix with too many ordinary words for the match to mean anything.
+const minStutterPackage = 3
+
+// stutterAllowed are packages whose exported names repeat the package name on purpose.
+var stutterAllowed = map[string]bool{}
+
+// TestNameOutputGoesThroughEmitNames keeps `-o name` on the structured-output
+// destination. writeFormatted cannot render outputName, so every command answers
+// that format in its own switch arm, and an arm that reaches for fmt.Println prints
+// to stdout directly: --tee accepts the flag, writes nothing, and says nothing.
+// Twenty-five arms had drifted that way before emitNames existed to point at.
+func TestNameOutputGoesThroughEmitNames(t *testing.T) {
+	paths, err := filepath.Glob("cmd/magus/*.go")
+	require.NoError(t, err)
+	require.NotEmpty(t, paths, "cmd/magus moved and this gate stopped looking")
+
+	fset := token.NewFileSet()
+	files := make([]*ast.File, 0, len(paths))
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		f, perr := parser.ParseFile(fset, path, nil, 0)
+		require.NoErrorf(t, perr, "parse %s", path)
+		files = append(files, f)
+	}
+
+	emitters := nameEmitters(files)
+	var violations []string
+	arms := 0
+	for _, f := range files {
+		ast.Inspect(f, func(n ast.Node) bool {
+			clause, ok := n.(*ast.CaseClause)
+			if !ok || !casePicks(clause, "outputName") {
+				return true
+			}
+			arms++
+			if !callsAny(clause.Body, emitters) {
+				violations = append(violations, fset.Position(clause.Pos()).String())
+			}
+			return true
+		})
+	}
+
+	require.NotZero(t, arms, "no `case outputName:` arm found: the format constant was renamed")
+	assert.Empty(t, violations,
+		"every `case outputName:` arm must render through emitNames or emitNamesOf.\n"+
+			"Printing to stdout directly bypasses --tee, which then accepts the flag and writes an\n"+
+			"empty file. A single value is emitNames([]string{v}); a slice of records is\n"+
+			"emitNamesOf(records, func(r T) string { return r.Field }).\n\narms:\n%s",
+		strings.Join(violations, "\n"))
+}
+
+// casePicks reports whether the clause selects exactly the given identifier, so
+// `case outputJSON, outputName:` is not read as a name arm.
+func casePicks(clause *ast.CaseClause, name string) bool {
+	if len(clause.List) != 1 {
+		return false
+	}
+	id, ok := clause.List[0].(*ast.Ident)
+	return ok && id.Name == name
+}
+
+// nameEmitters returns every function in the package that reaches the structured-output
+// destination, seeded with the three that ARE it and closed under calls.
+//
+// The closure is what keeps this from becoming an allowlist. Several arms delegate to a
+// helper of their own (emitProjectNames, diffNames) which is correct and which a check
+// looking for a literal emitNames call reports as a violation; growing a list of blessed
+// helper names instead would go stale the first time somebody adds a fourth.
+func nameEmitters(files []*ast.File) map[string]bool {
+	emitters := map[string]bool{"emitNames": true, "emitNamesOf": true, "outputDst": true}
+	for changed := true; changed; {
+		changed = false
+		for _, f := range files {
+			for _, decl := range f.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Body == nil || emitters[fn.Name.Name] {
+					continue
+				}
+				if callsAny(fn.Body.List, emitters) {
+					emitters[fn.Name.Name] = true
+					changed = true
+				}
+			}
+		}
+	}
+	return emitters
+}
+
+// callsAny reports whether any statement calls one of the named functions directly.
+func callsAny(stmts []ast.Stmt, names map[string]bool) bool {
+	found := false
+	for _, stmt := range stmts {
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if id, ok := call.Fun.(*ast.Ident); ok && names[id.Name] {
+				found = true
+				return false
+			}
+			return true
+		})
+	}
+	return found
 }
