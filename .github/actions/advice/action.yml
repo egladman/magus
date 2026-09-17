@@ -147,11 +147,10 @@ inputs:
       magus instead of doing it locally.
 
       Its own input rather than a consequence of `fix-merge-conflict`, because the two
-      run in different jobs: the comment is written by a read-only advisor on the pull
-      request's checks, and the fixer needs `contents: write` and a label event, so a
-      repository that honours the label does so from a SEPARATE workflow this one cannot
-      see. Set it where such a workflow exists - an offer nobody can accept is worse than
-      no offer.
+      run in different jobs: the comment is written by a read-only advisor, and the fixer
+      needs `contents: write` and the head branch checked out, so a repository that
+      honours the label does so from a job this one cannot see. Set it where such a job
+      exists - an offer nobody can accept is worse than no offer.
     required: false
     default: 'false'
   fix-merge-conflict:
