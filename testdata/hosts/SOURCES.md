@@ -7,6 +7,9 @@ refresh.
 
 Two origins, and the difference is the whole point of the table:
 
+- `generated` is EMITTED from a declaration the host publishes, by a target in this repository. Nobody
+  transcribed it, so it cannot be partial or stale the way a reading can: its source is a pinned package and the drift
+  gate compares the bytes. Prefer this over `derived` wherever a host exports anything machine-readable.
 - `published` is the host's own artifact, fetched verbatim. A failure against one of these is ours.
 - `derived` is OURS, transcribed by hand because that host publishes no schema for that surface. A failure against one of
   these means either magus drifted or our transcription is stale, and the `url` is where to settle it. Do not present
@@ -20,6 +23,11 @@ Two origins, and the difference is the whole point of the table:
 | `claude-code/hook-output.schema.json` | derived | `https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk` | 2026-09-10 | `7b928f72b0f43ba6ac978512791df374cb5f2d7fa9cd69df313c1357fc8e9b9d` | ours |
 | `codex/hooks.schema.json` | published | `https://www.schemastore.org/codex-hooks.json` | 2026-09-10 | `3833ef241453facf45f941caff9e246d74eb8c85d7796d2e099dbebb8fe8ed37` | Apache-2.0 (SchemaStore) |
 | `codex/pre-tool-use.command.output.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/pre-tool-use.command.output.schema.json` | 2026-09-10 | `e684f81c63fbb5972892f6a848b49fec68c8ce137931651093d2dd1da56a1dd6` | Apache-2.0 (openai/codex) |
+| `codex/pre-tool-use.command.input.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/pre-tool-use.command.input.schema.json` | 2026-09-16 | `fabed428f0fe75767c5700208b166da5faef4e031d601dfc8bff2f96d340c682` | Apache-2.0 (openai/codex) |
+| `codex/session-start.command.input.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/session-start.command.input.schema.json` | 2026-09-16 | `54168cf0bb3641bbc55dcdc58aa3803651d4f24499339061f3e9bb0ef9095633` | Apache-2.0 (openai/codex) |
+| `codex/session-start.command.output.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/session-start.command.output.schema.json` | 2026-09-16 | `f375e6de1c59ecbabd8c1aff05a67976d0f3aa2ef061808838de4c7c20be1c71` | Apache-2.0 (openai/codex) |
+| `codex/stop.command.input.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/stop.command.input.schema.json` | 2026-09-16 | `7db4793c404b5c46b230c27b9507eb1a558fd958689d8715221c5dd81351a06a` | Apache-2.0 (openai/codex) |
+| `codex/stop.command.output.schema.json` | published | `https://raw.githubusercontent.com/openai/codex/main/codex-rs/hooks/schema/generated/stop.command.output.schema.json` | 2026-09-16 | `dc2b30e84c97beca5825aa64ca46e1337e402781dc5a9142b67111d10523f15c` | Apache-2.0 (openai/codex) |
 | `cursor/hooks.schema.json` | derived-from-binary | `https://downloads.cursor.com/lab/2026.09.08-6caf4ff/darwin/arm64/agent-cli-package.tar.gz` | 2026-09-10 | `9df2d5591a4a0dd83f030037f313ea40b6281c7ae217ec16f6fec623d1333333` | ours |
 | `cursor/hook-output.schema.json` | derived-from-binary | `https://downloads.cursor.com/lab/2026.09.08-6caf4ff/darwin/arm64/agent-cli-package.tar.gz` | 2026-09-10 | `3fa77adf5158ad5551a1cd1763e8bb44db4c059b26721fbbed5f2ed036c98671` | ours |
 | `cursor/post-tool-use.output.schema.json` | derived-from-binary | `https://downloads.cursor.com/lab/2026.09.08-6caf4ff/darwin/arm64/agent-cli-package.tar.gz` | 2026-09-10 | `7696693a85b717d9f51db735b122203aa8071514784d50e17cf7cb640632f2af` | ours |
@@ -59,9 +67,60 @@ offers `.`, `./agent` and `./sqlite` only, the validator is a mangled symbol, an
 moves whenever the bundler reorders. What the upstream table buys is a tripwire, not a generator: when the recorded
 digest stops matching, a human re-reads the bundle.
 
-`@cursor/sdk` was checked for exported hook TYPES on 2026-09-16 and has none, so it cannot serve the role
-`@anthropic-ai/claude-agent-sdk` serves for Claude Code. Recorded because the absence is the kind of thing that invites
-the same search twice: the package is a TypeScript SDK, it obviously ought to carry them, and it does not.
+CORRECTION, 2026-09-16. This paragraph previously recorded that `@cursor/sdk` exports no hook types. It was WRONG, and
+wrong in the way that does the most damage: it told the next reader not to look.
+
+`@cursor/sdk` 1.0.31 declares `types: ./dist/esm/index.d.ts` and ships 120 exported zod schemas under
+`dist/esm/vendor/cursor-sdk-shared/`, including `ShellArgsSchema`, `ShellToolCallSchema`, `EditArgsSchema` and
+`EditToolCallSchema` -- the payload shapes behind the two events magus wires here. The search that produced the old claim
+looked for the word `hook`. Cursor's vocabulary is `*Schema`, so it found nothing and the nothing got written down as a
+fact.
+
+READ THIS BEFORE RECORDING ANOTHER ABSENCE. An absence is only worth recording with the search that produced it, and a
+search by one vendor's word for a thing is not a search. Grep the package for the EVENT NAMES and for the shapes
+(`z.object`, `export declare const .*Schema`, `export declare type .*Input`), and list the declaration files before
+concluding a package carries nothing. The same mistake had already been made once on this package and corrected once;
+this is its second recurrence, which is why the instruction is here and not in a commit message.
+
+What is still open, and must not be written down as settled until somebody checks: whether the hook ENVELOPE (the stdout
+contract carrying `permission`, `user_message`, `agentInitiated`) is among those 120, or whether only the tool-call
+payloads are and the envelope stays internal to the bundle. The first case makes Cursor fully derivable; the second
+makes the payloads derivable and leaves the envelope a tripwire.
+
+### Codex publishes 23 of these; we take 6
+
+`codex-rs/hooks/schema/generated/` in openai/codex holds a generated input AND output schema for each of its 12 hook
+events. The six rows above are the three events magus wires -- `PreToolUse`, `SessionStart`, `Stop` -- in both
+directions. The other sixteen are not taken, deliberately: they describe events magus does not wire, so nothing here
+would grade anything against them, and a vendored schema no test reads is a file that rots.
+
+Recorded rather than left to be rediscovered, because that is the failure this file already suffered once: the
+directory is real, first-party, machine-generated, and complete, so wiring a new Codex event starts by taking its two
+rows from there, never by reading prose. It also answers capability questions outright. `pre-compact.command.output` is
+`additionalProperties: false` over `continue`, `stopReason`, `suppressOutput` and `systemMessage` with no
+`hookSpecificOutput`, which is why magus does not try to steer compaction on Codex -- proven from OpenAI's own artifact
+rather than inferred from a docs page.
+
+The `*.input` rows are new in kind. Every other schema here grades what magus WRITES; these grade what a host SENDS it,
+which nothing checked on any host before.
+
+### Generated from @cursor/sdk
+
+`testdata/hosts/cursor/gen/` holds twelve schemas emitted from the zod `@cursor/sdk` exports at its package root,
+by `magus run cursor-schemas-generate docs/guides/integrations/agents`. They are the SDK's conversation, message and
+delta shapes, and they are NOT the hook config or the hook stdout envelope -- Cursor exports no schema for either, so
+those two stay `derived` from the validator binary above. Read the generated files for what the SDK sends, never for
+what a hook receives.
+
+The converter is `zod-to-json-schema`, and that choice is against the grain, so here is why. Zod 4 ships conversion
+first-party as `z.toJSONSchema`, which is the path to use for anything on zod 4 and what any new code here should reach
+for. It does not work on these: `@cursor/sdk` pins `zod: ^3.25.0`, zod 4 reads `._zod.def` while a v3 schema carries
+`._def`, and the first-party call throws `Cannot read properties of undefined (reading 'def')` on every one of them.
+Verified against the real package rather than reasoned about. `zod-to-json-schema` is the established converter for v3.
+The dependency retires itself the day Cursor moves to zod 4, and the call becomes `z.toJSONSchema`.
+
+The emitted list in `cursor-schemas.ts` is explicit rather than a wildcard over the module, so a schema appearing or
+vanishing upstream is a diff somebody reads instead of a silent change in what this repository claims to know.
 
 ### Cursor's hook events
 
@@ -91,13 +150,20 @@ A marker the tool cannot find is an ERROR, never a pass. That is the failure the
 declaration is renamed or the bundler reorders a chunk, the window silently becomes something else, so not finding it
 has to be loud.
 
-The window is 512 BYTES, not characters. Buzz indexes strings by byte, so a digest computed with character slicing
+The window is 2048 BYTES, not characters. Buzz indexes strings by byte, so a digest computed with character slicing
 disagrees with the one the tool computes as soon as the window covers anything outside ASCII, and `sdk.d.ts` does.
+
+It was 512, and 512 was too small to do the job. `SyncHookJSONOutput`'s scalar fields end near marker+490 while its
+`hookSpecificOutput` union runs to marker+1187, so the window stopped at that field's own colon and covered
+none of the twenty arms. A new arm on that union is precisely the upstream change worth catching, and the tripwire
+reported `same` for it. Both digests above were re-recorded when the window widened, which is the documented cost of
+changing it. A window that ends mid-declaration is worse than no window: it reports success for the change it exists to
+see.
 
 | package | version | file | marker | sha256 |
 | --- | --- | --- | --- | --- |
-| `@anthropic-ai/claude-agent-sdk` | 0.3.273 | `sdk.d.ts` | `export declare type SyncHookJSONOutput` | `184e4135dc77d5fc8c05683856b4c5ea0a83258a85ed37e5cc0ec965e3535ff8` |
-| `@cursor/sdk` | 1.0.31 | `dist/esm/357.js` | `beforeShellExecution:"beforeShellExecution"` | `4f6248c31d295f9fd2ee9ecaaea4898002b3790954761de161f900a5d8350860` |
+| `@anthropic-ai/claude-agent-sdk` | 0.3.273 | `sdk.d.ts` | `export declare type SyncHookJSONOutput` | `7a5eae6222c0508b9d2793b7a049f535087b0de702aafddd68fe16c69d5de052` |
+| `@cursor/sdk` | 1.0.31 | `dist/esm/357.js` | `beforeShellExecution:"beforeShellExecution"` | `5f626fef84ff0feba2b294dcb1029a59152ff743fbaffbfc9826defc8307544d` |
 
 OpenCode has no hook config file at all: a plugin intercepts tool calls, so there is nothing here to schema-check. Its
 plugin surface is typed instead, and the check already exists elsewhere: `docs/guides/integrations/agents` type-checks

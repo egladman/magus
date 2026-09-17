@@ -28,8 +28,10 @@ import { MagusGuard } from "./opencode-plugin.ts";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // docs/guides/integrations/agents -> repo root.
 const WORKSPACE_ROOT = path.resolve(HERE, "../../../..");
-// One empty job store for every case in this file; see the env pin in the spawn shim.
+// One empty job store and one empty cache for every case in this file; see the env pins in
+// the spawn shim.
 const stateHome = mkdtempSync(path.join(os.tmpdir(), "magus-guard-live-"));
+const cacheHome = mkdtempSync(path.join(os.tmpdir(), "magus-guard-live-cache-"));
 
 function isExecutable(candidate: string): boolean {
   try {
@@ -99,7 +101,10 @@ function stubBunWithRealChild(bin: string): SpawnCall[] {
       // advisory is appended to a PASS, so a developer holding any lease over the paths
       // below turns these cases red on a tree that is fine; the store resolves from
       // <XDG state>/magus/jobs and offers no other seam to redirect it.
-      env: { ...process.env, XDG_STATE_HOME: stateHome },
+      //
+      // An EMPTY cache for the same reason: the push rule reads the workspace's run log, so
+      // a failed gate at this commit turns the push advisory into a refusal.
+      env: { ...process.env, XDG_STATE_HOME: stateHome, MAGUS_CACHE_DIR: cacheHome },
     });
     child.stdin.end(opts.stdin ?? new Uint8Array());
 
@@ -156,8 +161,8 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
 
 // go test ./... now has an exact magus equivalent (magus run go::go-test) and is
 // DENIED, not advised - the plan this test was written from predates that rule.
-// git push stays an advise: a push can legitimately carry work-in-progress, so the
-// guard only reminds rather than blocks (see guardPushRe in cmd/magus/agent.go).
+// git push with no run log to read is an advise: the push rule refuses only a commit whose
+// gate it can prove did not pass (internal/guard/push.go).
 test("live: bash arm advises on git push and appends non-empty context", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();

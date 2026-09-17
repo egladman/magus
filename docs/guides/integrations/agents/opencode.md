@@ -399,14 +399,25 @@ uses; see [Attention hooks](notifications.md).
 
 `experimental.session.compacting` runs while OpenCode is building the summary
 that will replace a session's history, and takes `context: string[]` straight
-into the compaction prompt. The plugin puts `magus session --brief` there: branch
-and revision, commits not yet on the base ref, the dirty tree split into sources,
-generated outputs and unclaimed paths, the live leases, the last recorded run's
-failures, and where the rules live.
+into the compaction prompt. **The plugin deliberately does not use it**, and a
+compacted OpenCode session is therefore handed nothing.
 
-Every line is read off the disk at the moment it runs, so nothing in it is a
-retelling of a retelling. Run `magus session --brief` yourself to see what a
-compacting session will be handed.
+That hook feeds the SUMMARIZER, not the model that comes after it. The plugin
+used to push `magus session --brief` through it, which read as rehydration and
+was not: on Claude Code and Codex the brief lands verbatim after the summary,
+while here it went in as summarizer input and survived only as much of it as the
+summarizer kept. The brief is state read off the disk, and this was the one place
+it was retold.
+
+The second reason is parity. Of the four hosts, only OpenCode can shape a summary
+at all -- Claude Code exposes no `PreCompact` output arm, Codex's
+`pre-compact.command.output` schema is closed over four fields with no context
+channel, and Cursor's `preCompact` is observational. A behaviour available on one
+host of four is a difference nobody can reason about, and deciding what a model
+remembers is not magus's call to make.
+
+Run `magus session --brief` yourself after a compaction: it prints the same state
+on demand, which is the surface every host shares.
 
 ## Recording where the work stands
 

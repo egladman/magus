@@ -285,16 +285,29 @@ export const MagusGuard: Plugin = async () => {
       output.output = `${output.output}\n\n[magus guard] ${context}`;
     },
 
-    "experimental.session.compacting": async (_input, output) => {
-      // Compaction replaces a session's history with a summary, and the model then
-      // works from prose. This puts state back in front of it instead: branch,
-      // revision, unpushed commits, the classified dirty tree, live leases and the
-      // last run's failures, all read off the disk at the moment it runs.
-      const brief = await runOnce(["session", "--brief"], "");
-      if (brief === null) return;
-      const text = brief.trim();
-      if (text !== "") output.context.push(text);
-    },
+    // NO experimental.session.compacting handler, deliberately, and this comment is the
+    // record of why so it is not re-added as an obvious improvement.
+    //
+    // OpenCode's hook appends to the SUMMARIZER PROMPT (output.context) or replaces it
+    // (output.prompt). This plugin used to push `magus session --brief` into it, which
+    // read as rehydration and was not: on every other host the brief lands verbatim AFTER
+    // the summary, while here it went in as summarizer input and survived only as much of
+    // it as the summarizer chose to keep. The brief's own contract, in cmd/magus/session_brief.go,
+    // is that it is state read from disk and never prose retold -- so the one host where it
+    // was retold was the one host contradicting it.
+    //
+    // The second reason is parity. Of the four hosts magus wires, only OpenCode can steer
+    // a summary at all: Claude Code has no PreCompact arm on hookSpecificOutput, Codex's
+    // pre-compact.command.output.schema.json is additionalProperties:false over four fields
+    // with no context channel, and Cursor's preCompact is documented as observational. A
+    // behaviour available on one host of four is not a feature, it is a difference nobody
+    // can reason about, and magus's job is to stay out of the model's way rather than to
+    // shape what it remembers on whichever host happens to allow it.
+    //
+    // The cost is real and is accepted: OpenCode has no post-compaction hook (its Plugin
+    // type carries only the two pre-compaction ones), so a compacted OpenCode session gets
+    // no brief. It can still ask, and `magus session --brief` prints the same state on
+    // demand, which is the surface every host shares.
 
     event: async ({ event }) => {
       // OpenCode has no session-end event; session.idle is the proxy. The checkpoint

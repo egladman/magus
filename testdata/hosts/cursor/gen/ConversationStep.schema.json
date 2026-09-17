@@ -1,0 +1,1817 @@
+{
+  "$ref": "#/definitions/ConversationStep",
+  "definitions": {
+    "ConversationStep": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "assistantMessage"
+            },
+            "message": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "toolCall"
+            },
+            "message": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "shell"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "command": {
+                          "type": "string"
+                        },
+                        "workingDirectory": {
+                          "type": "string"
+                        },
+                        "timeout": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "command"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "exitCode": {
+                                  "type": "number"
+                                },
+                                "signal": {
+                                  "type": "string"
+                                },
+                                "stdout": {
+                                  "type": "string"
+                                },
+                                "stderr": {
+                                  "type": "string"
+                                },
+                                "executionTime": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "exitCode",
+                                "signal",
+                                "stdout",
+                                "stderr",
+                                "executionTime"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "message": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "message"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "write"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "fileText": {
+                          "type": "string"
+                        },
+                        "returnFileContentAfterWrite": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "fileText"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "linesCreated": {
+                                  "type": "number"
+                                },
+                                "fileSize": {
+                                  "type": "number"
+                                },
+                                "fileContentAfterWrite": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "path",
+                                "linesCreated",
+                                "fileSize"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "delete"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "fileSize": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "fileSize"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "glob"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "targetDirectory": {
+                          "type": "string"
+                        },
+                        "globPattern": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "globPattern"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "files": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "totalFiles": {
+                                  "type": "number"
+                                },
+                                "clientTruncated": {
+                                  "type": "boolean"
+                                },
+                                "ripgrepTruncated": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "files",
+                                "totalFiles",
+                                "clientTruncated",
+                                "ripgrepTruncated"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "grep"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "pattern": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "type": "string"
+                        },
+                        "glob": {
+                          "type": "string"
+                        },
+                        "outputMode": {
+                          "type": "string"
+                        },
+                        "contextBefore": {
+                          "type": "number"
+                        },
+                        "contextAfter": {
+                          "type": "number"
+                        },
+                        "context": {
+                          "type": "number"
+                        },
+                        "caseInsensitive": {
+                          "type": "boolean"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "headLimit": {
+                          "type": "number"
+                        },
+                        "offset": {
+                          "type": "number"
+                        },
+                        "multiline": {
+                          "type": "boolean"
+                        },
+                        "sort": {
+                          "type": "string"
+                        },
+                        "sortAscending": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "pattern"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "workspaceResults": {
+                                  "type": "object",
+                                  "additionalProperties": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "const": "content"
+                                          },
+                                          "output": {
+                                            "type": "object",
+                                            "properties": {
+                                              "matches": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "file": {
+                                                      "type": "string"
+                                                    },
+                                                    "lineNumber": {
+                                                      "type": "number"
+                                                    },
+                                                    "line": {
+                                                      "type": "string"
+                                                    },
+                                                    "beforeContext": {
+                                                      "type": "array",
+                                                      "items": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "afterContext": {
+                                                      "type": "array",
+                                                      "items": {
+                                                        "type": "string"
+                                                      }
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "file",
+                                                    "line"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "totalMatches": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "matches",
+                                              "totalMatches"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "output"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "const": "files"
+                                          },
+                                          "output": {
+                                            "type": "object",
+                                            "properties": {
+                                              "files": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "count": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "files",
+                                              "count"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "output"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string",
+                                            "const": "count"
+                                          },
+                                          "output": {
+                                            "type": "object",
+                                            "properties": {
+                                              "counts": {
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "file": {
+                                                      "type": "string"
+                                                    },
+                                                    "count": {
+                                                      "type": "number"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "file",
+                                                    "count"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "total": {
+                                                "type": "number"
+                                              }
+                                            },
+                                            "required": [
+                                              "counts",
+                                              "total"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        },
+                                        "required": [
+                                          "type",
+                                          "output"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
+                                  }
+                                },
+                                "activeEditorResult": {
+                                  "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/4/properties/result/anyOf/0/properties/value/properties/workspaceResults/additionalProperties"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "read"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "content": {
+                                  "type": "string"
+                                },
+                                "totalLines": {
+                                  "type": "number"
+                                },
+                                "fileSize": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "content",
+                                "totalLines",
+                                "fileSize"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "edit"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "path"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "linesAdded": {
+                                  "type": "number"
+                                },
+                                "linesRemoved": {
+                                  "type": "number"
+                                },
+                                "diffString": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "ls"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "ignore": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "path"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "directoryTreeRoot": {
+                                  "type": "object",
+                                  "properties": {
+                                    "absPath": {
+                                      "type": "string"
+                                    },
+                                    "childrenDirs": {
+                                      "type": "array",
+                                      "items": {
+                                        "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/7/properties/result/anyOf/0/properties/value/properties/directoryTreeRoot"
+                                      }
+                                    },
+                                    "childrenFiles": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "name"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "childrenWereProcessed": {
+                                      "type": "boolean"
+                                    },
+                                    "fullSubtreeExtensionCounts": {
+                                      "type": "object",
+                                      "additionalProperties": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "numFiles": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "absPath",
+                                    "childrenDirs",
+                                    "childrenFiles",
+                                    "childrenWereProcessed",
+                                    "fullSubtreeExtensionCounts",
+                                    "numFiles"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "directoryTreeRoot"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "readLints"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "paths": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "paths"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "fileDiagnostics": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "diagnostics": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "severity": {
+                                              "type": "string",
+                                              "enum": [
+                                                "error",
+                                                "warning",
+                                                "information",
+                                                "hint"
+                                              ]
+                                            },
+                                            "range": {
+                                              "type": "object",
+                                              "properties": {
+                                                "start": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "line": {
+                                                      "type": "number"
+                                                    },
+                                                    "character": {
+                                                      "type": "number"
+                                                    }
+                                                  },
+                                                  "additionalProperties": false
+                                                },
+                                                "end": {
+                                                  "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/8/properties/result/anyOf/0/properties/value/properties/fileDiagnostics/items/properties/diagnostics/items/properties/range/properties/start"
+                                                }
+                                              },
+                                              "additionalProperties": false
+                                            },
+                                            "message": {
+                                              "type": "string"
+                                            },
+                                            "source": {
+                                              "type": "string"
+                                            },
+                                            "code": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "severity",
+                                            "message",
+                                            "source",
+                                            "code"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "diagnosticsCount": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "required": [
+                                      "path",
+                                      "diagnostics",
+                                      "diagnosticsCount"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "totalFiles": {
+                                  "type": "number"
+                                },
+                                "totalDiagnostics": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "fileDiagnostics",
+                                "totalFiles",
+                                "totalDiagnostics"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "mcp"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "args": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "providerIdentifier": {
+                          "type": "string"
+                        },
+                        "toolName": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "content": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "text": {
+                                        "type": "object",
+                                        "properties": {
+                                          "text": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "text"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "image": {
+                                        "type": "object",
+                                        "properties": {
+                                          "data": {
+                                            "type": "string"
+                                          },
+                                          "mimeType": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "data"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "isError": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "content",
+                                "isError"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "generateImage"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "filePath": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "description"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "filePath": {
+                                  "type": "string"
+                                },
+                                "imageData": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "filePath",
+                                "imageData"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "error": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "error"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "recordScreen"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "START_RECORDING",
+                            "SAVE_RECORDING",
+                            "DISCARD_RECORDING"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "mode"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "wasPriorRecordingCancelled": {
+                                  "type": "boolean"
+                                },
+                                "path": {
+                                  "type": "string"
+                                },
+                                "recordingDurationMs": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "semSearch"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "query": {
+                          "type": "string"
+                        },
+                        "targetDirectories": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "explanation": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "query"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "results": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "results"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "createPlan"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "plan": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "plan"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {},
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "updateTodos"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "todos": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "content": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "inProgress",
+                                  "completed",
+                                  "cancelled"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "content",
+                              "status"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "todos"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "todos": {
+                                  "type": "array",
+                                  "items": {
+                                    "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/14/properties/args/properties/todos/items"
+                                  }
+                                },
+                                "totalCount": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "todos",
+                                "totalCount"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "task"
+                    },
+                    "args": {
+                      "type": "object",
+                      "properties": {
+                        "description": {
+                          "type": "string"
+                        },
+                        "prompt": {
+                          "type": "string"
+                        },
+                        "subagentType": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "resume": {
+                          "type": "string"
+                        },
+                        "agentId": {
+                          "type": "string"
+                        },
+                        "attachments": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "unspecified",
+                            "agent",
+                            "plan"
+                          ]
+                        },
+                        "respondingToMessageIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "description",
+                        "prompt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "success"
+                            },
+                            "value": {
+                              "type": "object",
+                              "properties": {
+                                "conversationSteps": {
+                                  "type": "array",
+                                  "items": {}
+                                },
+                                "agentId": {
+                                  "type": "string"
+                                },
+                                "isBackground": {
+                                  "type": "boolean"
+                                },
+                                "durationMs": {
+                                  "type": "number"
+                                },
+                                "resultSuffix": {
+                                  "type": "string"
+                                },
+                                "backgroundReason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "unspecified",
+                                    "agentRequest",
+                                    "userRequest",
+                                    "queuedFollowUp"
+                                  ]
+                                },
+                                "transcriptPath": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "isBackground",
+                                "backgroundReason"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "value"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "const": "error"
+                            },
+                            "error": {
+                              "$ref": "#/definitions/ConversationStep/anyOf/1/properties/message/anyOf/0/properties/result/anyOf/1/properties/error"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "error"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "args"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "thinkingMessage"
+            },
+            "message": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "thinkingDurationMs": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

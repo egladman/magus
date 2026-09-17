@@ -80,6 +80,20 @@ var hostConfigFile = map[string][]string{
 	"cursor":      {".cursor/hooks.json"},
 }
 
+// upstreamConfigDir holds configs the HOST's own people wrote, vendored from
+// github.com/cursor/plugins (the advisor, ralph-loop and continual-learning plugins).
+//
+// Every other input to these schemas is something magus produced, and a schema graded
+// only against its author's own output cannot fail: wrong in the same direction as the
+// thing it grades, it passes forever. These are the independent half. They exercise
+// fields magus never writes -- `loop_limit`, including its null form -- and they are the
+// only evidence here that the schema matches what Cursor actually loads rather than what
+// magus happens to emit.
+//
+// Refresh them when Cursor's plugin repository moves; a rejection here is a finding about
+// OUR schema, never about their config.
+const upstreamConfigDir = "testdata/hosts/cursor/upstream-configs"
+
 // hostGuidePage names the page whose embedded JSON configures each host.
 var hostGuidePage = map[string]string{
 	"claude-code": "claude-code.md",
@@ -193,6 +207,32 @@ func TestShippedHookConfigsValidateAgainstTheirHostSchema(t *testing.T) {
 				"nothing was graded for %s: either its page stopped embedding a hooks config or the\n"+
 					"fence stopped saying json, and either way this gate went quiet rather than red", host)
 		})
+	}
+}
+
+// TestCursorSchemaAcceptsCursorsOwnConfigs grades our Cursor schema against configs
+// Cursor's own people wrote, which is the only input here magus did not produce.
+//
+// The sibling test above proves the schema accepts what magus writes. That is compatible
+// with the schema being wrong, because magus writes a narrow subset: a rejection of a real
+// config is invisible to it. This is the half that catches a schema too strict to load
+// what the host actually loads -- the direction a hand transcription fails in, since a
+// reader transcribing a validator records the branches they happened to read.
+func TestCursorSchemaAcceptsCursorsOwnConfigs(t *testing.T) {
+	schema := loadHostSchema(t, hostConfigSchema["cursor"])
+
+	entries, err := os.ReadDir(upstreamConfigDir)
+	require.NoError(t, err, "read %s", upstreamConfigDir)
+	require.NotEmpty(t, entries,
+		"no upstream configs vendored: this gate went quiet rather than red, which is the\n"+
+			"failure it exists to prevent")
+
+	for _, entry := range entries {
+		file := filepath.Join(upstreamConfigDir, entry.Name())
+		body, err := os.ReadFile(file)
+		require.NoError(t, err, "read %s", file)
+		assert.NoError(t, schema.Validate(decodeJSON(t, file, string(body))),
+			"%s is a config Cursor ships and our schema rejects it, so the schema is wrong", file)
 	}
 }
 

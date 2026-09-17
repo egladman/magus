@@ -85,7 +85,8 @@ async function hooks() {
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
-    "experimental.session.compacting": (
+    // Optional, and asserted ABSENT below: magus registers no pre-compaction handler.
+    "experimental.session.compacting"?: (
       input: Record<string, never>,
       output: { context: string[] },
     ) => Promise<void>;
@@ -164,15 +165,19 @@ test("an advisory reaches only the call it judged", async () => {
   assert.equal(again.output, "matches");
 });
 
-test("a compacting session is handed the brief", async () => {
-  const calls = stubBun(() => null);
+test("nothing is written into the compaction prompt", async () => {
   const h = await hooks();
 
-  const output: { context: string[] } = { context: [] };
-  await h["experimental.session.compacting"]({}, output);
-
-  assert.deepEqual(calls[0].argv, ["session", "--brief"]);
-  assert.deepEqual(output.context, [], "an empty brief adds nothing to the compaction prompt");
+  // Pinned as an ABSENCE because the handler was there and was removed on purpose. The
+  // hook appends to OpenCode's summarizer prompt, so anything registered here shapes what
+  // the summary keeps -- which no other host magus wires can do, and which contradicts the
+  // brief's own contract that it is state read from disk rather than prose retold. See the
+  // comment where the handler used to be in opencode-plugin.ts.
+  assert.equal(
+    h["experimental.session.compacting"],
+    undefined,
+    "magus must not register a pre-compaction handler: it steers the summary on the one host that allows it",
+  );
 });
 
 test("a pass is silent and blocks nothing", async () => {

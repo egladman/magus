@@ -53,6 +53,22 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
+// Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.
+//
+// A GENERATOR where every other Cursor schema in that tree is a hand transcription, which
+// is the point: a transcription is partial by construction and goes stale in silence, and
+// this one cannot, because its source is a pinned package and the drift gate compares the
+// output byte for byte.
+//
+// The output lands in the ROOT project's testdata, because that is where the host schemas
+// live and where host_schema_test.go reads them. Declared with writesFiles so the snapshot
+// covers it and a cross-project write is not a surprise.
+export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(preflight);
+    ctx.writesFiles("../../../../testdata/hosts/cursor/gen/*.schema.json");
+    proc\exec("pnpm", ["run", "cursor-schemas"], ".", {});
+}
+
 // pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
 // that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,

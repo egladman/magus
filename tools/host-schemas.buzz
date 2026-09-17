@@ -106,11 +106,22 @@ fun checkUpstream() > int !> any {
 
 // SLICE is how much of the file after the marker gets digested.
 //
-// Arbitrary, and that is fine: what it has to be is STABLE and big enough to cover the
-// declaration a schema was read from. 512 bytes holds SyncHookJSONOutput's whole body and
-// Cursor's entire event map. Changing it invalidates every recorded digest at once, so it
-// is a constant rather than a per-row column nobody would tune correctly.
-final SLICE = 512;
+// It has to be STABLE and big enough to cover the declaration a schema was read from.
+// "Big enough" is the half that was got wrong: this was 512 bytes on the claim that it
+// "holds SyncHookJSONOutput's whole body", and it does not. Measured in sdk.d.ts, the body's
+// scalar fields end around marker+490 and the hookSpecificOutput union runs to marker+1187,
+// so a 512-byte window stopped at the literal text `hookSpecificOutput?: ` and digested none
+// of the twenty arms after it. Adding an arm -- the exact upstream change this tripwire was
+// built to catch -- moved nothing inside the window and reported `same`.
+//
+// 2048 covers that declaration with headroom and still fails closed, because a marker the
+// tool cannot find is an error. When a new row's declaration is longer than this, raise it
+// rather than trimming the row: a window that ends mid-declaration is a tripwire that
+// reports success for the change it exists to see.
+//
+// Changing it invalidates every recorded digest at once, so it is a constant rather than a
+// per-row column nobody would tune correctly.
+final SLICE = 2048;
 
 // digestInsideTarball fetches an npm tarball and returns the sha256 of a WINDOW of one file
 // inside it, starting at marker.
