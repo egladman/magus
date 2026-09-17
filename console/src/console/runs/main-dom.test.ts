@@ -83,8 +83,19 @@ function serve(outputs: unknown[], runs: unknown[]): void {
         json: () => Promise.resolve({ invocations: runs }),
       } as unknown as Response);
     }
+    // A daemon with nothing kept still answers its liveness route, which is what separates it from
+    // an address with nothing behind it.
+    if (url.endsWith("/livez")) {
+      return Promise.resolve({ ok: true, status: 200 } as unknown as Response);
+    }
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
+}
+
+// serveNothing is a configured daemon address with nothing listening behind it.
+function serveNothing(): void {
+  setDefaultHost(HOST);
+  globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
 }
 
 const NOW = Date.now();
@@ -245,6 +256,29 @@ test("no daemon, nothing kept, and nothing matching are three different empty st
   serve([], []);
   const bare = await remount();
   assert.match(text(bare.querySelector(".console-runs__empty-title")), /No runs kept yet/);
+
+  // The run feeds read a refused connection as an empty list; that must not pass for "nothing kept".
+  serveNothing();
+  const dead = await remount();
+  assert.match(
+    text(dead.querySelector(".console-runs__empty-title")),
+    /Could not reach the daemon/,
+  );
+  const labels = [
+    ...dead.querySelectorAll(".console-runs__empty [data-empty-way] .pf-v6-c-button"),
+  ];
+  assert.deepEqual(
+    labels.map((b) => text(b)),
+    ["Retry", "Change address", "Setup guide"],
+  );
+  // Retry against a daemon still down repaints the same prompt, and must keep the button the reader
+  // pressed rather than drop their focus with a rebuilt one.
+  (labels[0] as HTMLElement).click();
+  await settle();
+  assert.equal(
+    dead.querySelector(".console-runs__empty [data-empty-way] .pf-v6-c-button"),
+    labels[0],
+  );
 
   serve([output()], [runLog()]);
   const full = await remount();

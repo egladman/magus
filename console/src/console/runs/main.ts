@@ -39,9 +39,16 @@ import {
   adoptDaemonOrigin,
   getLiveToken,
   parseHash,
+  probeDaemon,
   resolveDaemonHost,
   wantsDemo,
 } from "../../lib/daemon";
+import { subscribeDefaultHost } from "../../lib/settings";
+import {
+  renderConnectPrompt,
+  type ConnectPromptState,
+  type EmptyStateSlots,
+} from "../connectPrompt";
 import { attachHelpPopover } from "../../ui/help-popover";
 import { REFRESH, svgGlyph } from "../../ui/glyph";
 import { h } from "../view";
@@ -67,7 +74,11 @@ interface Refs {
 export function activate(host: HTMLElement): SurfaceInstance {
   adoptDaemonOrigin();
   const demo = wantsDemo(parseHash());
-  const host_ = resolveDaemonHost(parseHash()) ?? "";
+  let host_ = resolveDaemonHost(parseHash()) ?? "";
+  // Set when both run feeds came back empty and nothing answered at the address either: fetchRuns
+  // reads a refused connection as an empty list, and "nothing kept yet" would send the reader to run
+  // a target.
+  let unreachable = false;
   const token = getLiveToken();
   // The demo scenario is written RELATIVE to one instant, so it is stamped once; the "how long ago"
   // labels read the clock at paint time. Sharing one frozen value made every label a lie the moment
@@ -79,11 +90,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
   let loaded = false;
   let selected: string | null = null;
   let stale = false;
+  let visible = true;
+  // Bumped by every load, so the answer from an address the reader has since moved off is dropped.
+  let loadGeneration = 0;
 
   const refs = build(host, {
     onQuery: () => paint(),
     onRefresh: () => void load(),
   });
+  // Built once and re-attached on each paint, so a repaint with the prompt already on screen keeps
+  // the same buttons and the reader's focus.
+  const promptSlots: EmptyStateSlots = {
+    title: h("h2", "console-runs__empty-title"),
+    message: h("p", "console-runs__note"),
+    actions: h("div"),
+  };
+  promptSlots.actions.dataset.emptyWays = "";
 
   function paint(): void {
     const now = Date.now();
@@ -103,7 +125,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
       });
     } else {
       renderEmpty(refs.list, {
-        connected: demo || !!host_,
+        connection: connectPromptState(),
+        promptSlots,
+        onRetry: () => void load(),
         loaded,
         filtered: !filter.empty,
         onClear: () => {
@@ -122,19 +146,52 @@ export function activate(host: HTMLElement): SurfaceInstance {
     refs.count.textContent = summary(rows, total, loaded, filter.empty);
   }
 
+  function connectPromptState(): ConnectPromptState | null {
+    if (demo) return null;
+    if (!host_) return { connection: "none" };
+    return unreachable ? { connection: "disconnected", host: host_ } : null;
+  }
+
   async function load(): Promise<void> {
+    const generation = ++loadGeneration;
+    let nextRuns: RunSummary[] = [];
+    let nextLogs: RunLog[] = [];
+    let nextUnreachable = false;
     if (demo) {
-      runs = demoRuns(demoNow);
-      logs = demoRunLogs(demoNow);
+      nextRuns = demoRuns(demoNow);
+      nextLogs = demoRunLogs(demoNow);
     } else if (host_) {
-      [runs, logs] = await Promise.all([fetchRuns(host_, token), fetchRunLogs(host_, token)]);
-    } else {
-      runs = [];
-      logs = [];
+      [nextRuns, nextLogs] = await Promise.all([
+        fetchRuns(host_, token),
+        fetchRunLogs(host_, token),
+      ]);
+      if (nextRuns.length === 0 && nextLogs.length === 0) {
+        nextUnreachable = !(await probeDaemon(host_)).ok;
+      }
     }
-    if (stale) return; // the tab closed while the fetch was in flight
+    // The tab closed, or a newer load (another address, a Retry) owns the page now.
+    if (stale || generation !== loadGeneration) return;
+    runs = nextRuns;
+    logs = nextLogs;
+    unreachable = nextUnreachable;
     loaded = true;
+    syncWatch();
     paint();
+  }
+
+  // The list keeps itself current while the tab is on screen: a run you kick off in a terminal
+  // appears here without anyone pressing Refresh, which is the difference between a page you check
+  // and a page you leave open. The stream is closed while the tab is backgrounded - a stream per
+  // hidden pane is a cost nobody asked for - and while nothing answers at the address, because the
+  // prompt on screen promises that nothing retries behind it.
+  let unwatch: (() => void) | null = null;
+  function syncWatch(): void {
+    const wanted = visible && !unreachable && host_ !== "";
+    if (wanted && !unwatch) unwatch = watchRuns(host_, token, () => void load());
+    if (!wanted && unwatch) {
+      unwatch();
+      unwatch = null;
+    }
   }
 
   function summary(rows: RunRow[], total: number, done: boolean, unfiltered: boolean): string {
@@ -147,33 +204,43 @@ export function activate(host: HTMLElement): SurfaceInstance {
   }
 
   paint();
+  syncWatch();
   void load();
 
-  // The list keeps itself current while the tab is on screen: a run you kick off in a terminal
-  // appears here without anyone pressing Refresh, which is the difference between a page you check
-  // and a page you leave open. The stream is torn down while the tab is backgrounded - a stream per
-  // hidden pane is a cost nobody asked for, and coming back re-opens it and catches up.
-  let unwatch: (() => void) | null = watchRuns(host_, token, () => void load());
   // Separate from the stream: the labels age whether or not anything runs, so the demo and an
   // offline page need this even though they never open a stream.
   let untick: (() => void) | null = tickRelativeTimes(host);
+  // A new address is followed only while no runs are on screen: a list the reader is reading keeps
+  // the daemon it came from until they refresh.
+  const unsubscribeHost = subscribeDefaultHost(() => {
+    if (runs.length > 0 || logs.length > 0) return;
+    unwatch?.();
+    unwatch = null;
+    host_ = resolveDaemonHost(parseHash()) ?? "";
+    unreachable = false;
+    loaded = false;
+    paint();
+    syncWatch();
+    void load();
+  });
   return {
-    setVisible: (visible: boolean): void => {
-      if (visible && !unwatch) {
-        unwatch = watchRuns(host_, token, () => void load());
+    setVisible: (nowVisible: boolean): void => {
+      visible = nowVisible;
+      if (visible && !untick) {
         untick = tickRelativeTimes(host);
+        syncWatch();
         void load(); // whatever happened while this pane was hidden
         return;
       }
-      if (!visible && unwatch) {
-        unwatch();
-        unwatch = null;
+      if (!visible) {
+        syncWatch();
         untick?.();
         untick = null;
       }
     },
     deactivate: () => {
       stale = true;
+      unsubscribeHost();
       unwatch?.();
       unwatch = null;
       untick?.();
@@ -440,19 +507,23 @@ function cmd(text: string): HTMLElement {
 // selecting text in a box.
 function renderEmpty(
   box: HTMLElement,
-  s: { connected: boolean; loaded: boolean; filtered: boolean; onClear: () => void },
+  s: {
+    connection: ConnectPromptState | null;
+    promptSlots: EmptyStateSlots;
+    onRetry: () => void;
+    loaded: boolean;
+    filtered: boolean;
+    onClear: () => void;
+  },
 ): void {
   box.replaceChildren();
   const card = h("div", "console-runs__empty");
-  if (!s.connected) {
-    card.append(h("h2", "console-runs__empty-title", "No daemon connected"));
-    card.append(
-      note(
-        "This page reads the runs your local daemon has kept. Start it with ",
-        cmd("magus server start"),
-        ", or set a daemon address in Settings.",
-      ),
-    );
+  if (s.connection) {
+    renderConnectPrompt(s.promptSlots, s.connection, {
+      purpose: "This page reads the runs your local daemon has kept.",
+      onRetry: s.onRetry,
+    });
+    card.append(s.promptSlots.title, s.promptSlots.message, s.promptSlots.actions);
   } else if (!s.loaded) {
     card.append(h("h2", "console-runs__empty-title", "Loading runs..."));
   } else if (s.filtered) {

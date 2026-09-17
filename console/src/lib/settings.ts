@@ -38,8 +38,45 @@ export function getDefaultHost(): string {
   return host.get().trim();
 }
 
+// Each surface bundle holds its own copy of the host cell, and the storage event reaches only OTHER
+// tabs, so a live change is also announced in-document for the copies in this one.
+export const DEFAULT_HOST_EVENT = "magus:default-host";
+
+if (typeof document !== "undefined") {
+  document.addEventListener(DEFAULT_HOST_EVENT, (e) => {
+    const next = (e as CustomEvent<unknown>).detail;
+    if (typeof next === "string" && host.get() !== next) host.set(next);
+  });
+}
+
+// setDefaultHost applies a host to the running session. Applying the host already in place is a
+// no-op, so subscribers fire only on a real change.
 export function setDefaultHost(value: string): void {
-  host.set(value.trim());
+  const next = value.trim();
+  if (host.get() === next) return;
+  host.set(next);
+  if (typeof document !== "undefined") {
+    document.dispatchEvent(new CustomEvent(DEFAULT_HOST_EVENT, { detail: next }));
+  }
+}
+
+// subscribeDefaultHost calls fn each time the default host is applied live, from Settings in this
+// document or another tab. A durable-only Save does not fire it in the tab that saved (see
+// persist.persistOnly for the cross-tab caveat). Returns the unsubscribe.
+export function subscribeDefaultHost(fn: () => void): () => void {
+  return host.subscribe(() => fn());
+}
+
+// The last daemon the dashboard reached, so a reload resumes it. The dashboard writes it; every
+// surface may read it as the fallback after the Settings address.
+const rememberedHost = persisted<string | null>("dashboard-daemon", null);
+
+export function getRememberedHost(): string | null {
+  return rememberedHost.get();
+}
+
+export function rememberHost(value: string): void {
+  rememberedHost.set(value);
 }
 
 // Durably save the default host WITHOUT applying it to the running session (Settings "Save").

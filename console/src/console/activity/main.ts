@@ -36,30 +36,33 @@ import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "
 import {
   parseHash,
   wantsDemo,
-  daemonAttach,
+  resolveDaemonHostOrRemembered,
+  isUnreachable,
   adoptDaemonOrigin,
-  validateLoopbackHost,
   consumeLiveToken,
   createDaemonTransport,
 } from "../../lib/daemon";
 import { errMessage } from "../../lib/guards";
 import { persisted } from "../../lib/persist";
+import { subscribeDefaultHost } from "../../lib/settings";
 import { h } from "../view";
+import {
+  renderConnectPrompt,
+  renderEmptyMessage,
+  type ConnectPromptState,
+  type EmptyStateSlots,
+} from "../connectPrompt";
 import type { SurfaceInstance } from "../standalone";
 import { demoEvents } from "./demo";
 
 const PAGE_SIZE = 100;
-
-// The SAME key the dashboard remembers its last daemon under, so opening Activity after connecting the
-// dashboard resumes the same loopback host without re-entering it. Read-only here.
-const daemonCell = persisted<string | null>("dashboard-daemon", null);
+const PURPOSE = "Activity records what the daemon did: MCP calls, jobs, config changes.";
 
 interface Refs {
   scroll: HTMLElement;
   body: HTMLElement;
   empty: HTMLElement;
-  emptyTitle: HTMLElement;
-  emptySub: HTMLElement;
+  emptySlots: EmptyStateSlots;
 }
 
 // buildScaffold assembles the surface DOM on PatternFly - the shared render frame plus a PF EmptyState
@@ -82,52 +85,24 @@ function buildScaffold(host: HTMLElement): Refs {
   emptyIcon.setAttribute("aria-hidden", "true");
   emptyIcon.innerHTML =
     '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/></svg>';
-  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "No daemon connected");
+  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text");
   const emptyBody = h("div", "pf-v6-c-empty-state__body");
-  const emptySub = h("p");
-  emptySub.textContent = "Activity records what the daemon did: MCP calls, jobs, config changes.";
-  // Two "ways" mirroring the log viewer / graph empty state - a command to go live, or the demo button.
-  // The data-empty-* hooks pick up the shared grid + mobile stacking from logs.css, so it matches logs.
+  const emptyMessage = h("p");
   const emptyActions = h("div", "pf-v6-c-empty-state__actions");
   emptyActions.dataset.emptyWays = "";
-
-  const wayLive = h("div");
-  wayLive.dataset.emptyWay = "";
-  const liveLabel = h("span", undefined, "Connect a daemon");
-  liveLabel.dataset.emptyWayLabel = "";
-  const liveCmd = h("pre");
-  liveCmd.dataset.emptyCmd = "";
-  liveCmd.append(h("code", undefined, "magus server start"));
-  const liveHint = h("span", undefined, "Then open the live link it prints.");
-  liveHint.dataset.emptyHint = "";
-  wayLive.append(liveLabel, liveCmd, liveHint);
-
-  const wayDemo = h("div");
-  wayDemo.dataset.emptyWay = "";
-  const demoLabel = h("span", undefined, "Try the demo");
-  demoLabel.dataset.emptyWayLabel = "";
-  // Inside the console this POINTS at the shell's workspace control instead of carrying its own
-  // button: six separate ways into one demo was five too many, and each showed a different amount of
-  // the product. Standalone (/console/activity/) there is no title bar and so no such control, and a
-  // button here is the only way in - a page that cannot show anything to someone without a daemon is
-  // a dead end, not a restrained one.
-  const demoHint = h(
-    "span",
-    undefined,
-    "Pick acme from the Workspace menu. A synthesized trail, no daemon needed.",
-  );
-  demoHint.dataset.emptyHint = "";
-  wayDemo.append(demoLabel, demoHint);
-
-  emptyActions.append(wayLive, wayDemo);
-  emptyBody.append(emptySub, emptyActions);
+  emptyBody.append(emptyMessage, emptyActions);
   emptyContent.append(emptyIcon, emptyTitle, emptyBody);
   empty.append(emptyContent);
 
   scroll.append(body, empty);
   panel.append(scroll);
   host.append(panel);
-  return { scroll, body, empty, emptyTitle, emptySub };
+  return {
+    scroll,
+    body,
+    empty,
+    emptySlots: { title: emptyTitle, message: emptyMessage, actions: emptyActions },
+  };
 }
 
 // notifyDenials raises a bell-tier notification for each sandbox denial in a freshly loaded page of
@@ -645,11 +620,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // lives in that panel's header, and applyDefault(false) with hideWhenEmpty hides the panel AND its
   // reopen rail - so on a failure the one affordance that could retry goes away with the data, and
   // this surface has no toolbar to fall back on. A cold or genuinely empty trail still collapses it.
-  function showEmpty(title: string, sub: string, connText: string, keepIndex = false): void {
+  function showEmptyTrail(connText: string, keepIndex: boolean): void {
     refs.body.replaceChildren();
     refs.empty.hidden = false;
-    refs.emptyTitle.textContent = title;
-    refs.emptySub.textContent = sub;
     conn.textContent = connText;
     indexEvents = [];
     indexSelect = (): void => {};
@@ -661,8 +634,25 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   }
 
+  function showEmpty(title: string, message: string, connText: string, keepIndex = false): void {
+    showEmptyTrail(connText, keepIndex);
+    renderEmptyMessage(refs.emptySlots, title, message);
+  }
+
+  function showConnectPrompt(state: ConnectPromptState, connText: string, keepIndex = false): void {
+    showEmptyTrail(connText, keepIndex);
+    renderConnectPrompt(refs.emptySlots, state, { purpose: PURPOSE, onRetry: load });
+  }
+
+  // Bumped by every first-page load, so the answer from an address the reader has since moved off
+  // is dropped instead of painted over the current one. A "load older" page keeps the generation
+  // it pages through.
+  let loadGeneration = 0;
+
   async function loadLive(daemonHost: string, pageToken = ""): Promise<void> {
-    if (loading) return;
+    if (pageToken && loading) return;
+    const generation = pageToken ? loadGeneration : ++loadGeneration;
+    const superseded = (): boolean => stale || generation !== loadGeneration;
     loading = true;
     if (!pageToken) {
       // COLD loads only. showEmpty clears the body, and this same branch is what the index panel's
@@ -673,24 +663,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
       loadedEvents = [];
       nextPageToken = "";
       conn.textContent = "connecting...";
-      // The card's default copy is "No daemon connected", and it is visible from the first paint.
-      // Until this request answers, that is a verdict nothing has reached: say what is happening
-      // instead of asserting an absence, and let the response replace it either way. keepIndex so
-      // the refresh control stays reachable while the request is in flight.
+      // keepIndex so the refresh control stays reachable while the request is in flight.
       if (cold) {
-        showEmpty(
-          "Connecting",
-          "Reading the activity trail from " + daemonHost + ".",
-          "connecting...",
-          true,
-        );
+        showConnectPrompt({ connection: "connecting", host: daemonHost }, "connecting...", true);
       }
     }
     try {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
       payloadClient = client;
       const resp = await client.listActivityEvents({ pageSize: PAGE_SIZE, pageToken });
-      if (stale) return;
+      if (superseded()) return;
       loadedEvents = loadedEvents.concat(resp.events);
       nextPageToken = resp.nextPageToken;
       loadMore = nextPageToken ? () => void loadLive(daemonHost, nextPageToken) : null;
@@ -704,7 +686,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         );
       }
     } catch (e) {
-      if (stale) return;
+      if (superseded()) return;
       const msg = e instanceof Error ? e.message : String(e);
       // A failed "load older" page must not take the pages already on screen with it. loadedEvents
       // still holds them, so re-render rather than clearing to an error card the reader would have
@@ -714,24 +696,28 @@ export function activate(host: HTMLElement): SurfaceInstance {
         conn.textContent = "could not load older activity";
         return;
       }
-      showEmpty(
-        "Could not reach the daemon",
-        "The daemon at " +
-          daemonHost +
-          " did not answer (" +
-          msg +
-          "). Start it with: magus server start",
+      if (!isUnreachable(e)) {
+        showEmpty(
+          "Could not read the activity trail",
+          "The daemon at " + daemonHost + " answered with an error (" + msg + ").",
+          "error",
+          true,
+        );
+        return;
+      }
+      showConnectPrompt(
+        { connection: "disconnected", host: daemonHost, reason: msg },
         "not connected",
         true,
       );
     } finally {
-      loading = false;
+      if (generation === loadGeneration) loading = false;
     }
   }
 
-  // load resolves which source to read: an explicit #demo, then an explicit daemon attach (a #port
-  // link or the daemon-origin/shared console), then the last daemon the dashboard remembered;
-  // otherwise the cold empty state.
+  // load resolves which source to read: an explicit #demo, then resolveDaemonHostOrRemembered (a
+  // #port link, the daemon-origin/shared console, the Settings address, or the last daemon the
+  // dashboard reached); otherwise the cold empty state.
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
@@ -746,21 +732,21 @@ export function activate(host: HTMLElement): SurfaceInstance {
       render(demoEvents(Date.now()));
       return;
     }
-    const linked = daemonAttach(params);
-    const remembered = daemonCell.get();
-    const daemonHost = linked ?? (remembered ? validateLoopbackHost(remembered) : null);
+    const daemonHost = resolveDaemonHostOrRemembered(params);
     if (daemonHost) {
       void loadLive(daemonHost);
       return;
     }
-    showEmpty(
-      "No daemon connected",
-      "Activity records what the daemon did: MCP calls, jobs, config changes.",
-      "not connected",
-    );
+    loadGeneration++; // any load still out belongs to an address that no longer resolves
+    showConnectPrompt({ connection: "none" }, "not connected");
   }
 
   load();
+  // A new address is followed only while no trail is on screen: a trail the reader is reading keeps
+  // the daemon it came from until they refresh.
+  const unsubscribeHost = subscribeDefaultHost(() => {
+    if (loadedEvents.length === 0) load();
+  });
 
   return {
     // Nothing to suppress yet: the trail reloads on demand and holds no timer, and it writes no part of the shared status bar. The hook is
@@ -768,6 +754,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     setVisible(): void {},
     deactivate(): void {
       stale = true;
+      unsubscribeHost();
     },
   };
 }

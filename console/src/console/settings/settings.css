@@ -221,6 +221,8 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
+.console-settings-form__help[data-kind="ok"] { color: var(--console-status-ok-text); }
+.console-settings-form__help[data-kind="error"] { color: var(--console-status-danger-text); }
 
 /* The theme button sits at its natural width, not stretched across the control column. PF buttons
  * default to align-items:baseline (sized for a text glyph); center the row and the inline <svg> glyph

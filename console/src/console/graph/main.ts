@@ -100,6 +100,7 @@ import { persisted } from "../../lib/persist";
 import { attachHelpPopover } from "../../ui/help-popover";
 import { signal } from "../view";
 import { publishStatus } from "../status";
+import { DAEMON_GUIDE_URL } from "../connectPrompt";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
 // refreshAffectedFromServer writes for the view code to read, and the PWA File Handling API
@@ -333,8 +334,6 @@ let liveETag: string | null = null; // last ETag from the currently loaded graph
 // other variant's body, silently downgrading (or upgrading) what is on screen.
 let liveGraphQuery = "";
 let liveSseAbort: AbortController | null = null; // AbortController for the SSE fetch
-let liveReconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let liveReconnectDelay = 1000; // ms; doubles on each failure up to 30000
 let liveWorkspaceName: string | null = null; // workspace name from StatusService GetStatus, for badge
 let liveConnected = false; // true while the SSE stream is open; drives the badge style
 let liveFlavor: string | null = null; // null (knowledge) or "targets"
@@ -554,13 +553,21 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
 
 // The notice is a PF Alert, so the text goes in the title slot and severity is a PF modifier -
 // an error then reads as an error everywhere in the console. Empty hides the whole notice.
-function setStatus(msg: string, isError?: boolean) {
+function setStatus(msg: string, isError?: boolean, action?: { label: string; run: () => void }) {
   if (!statusEl) return;
   const text = el("graph-status-text");
   if (text) text.textContent = msg;
   statusEl.classList.toggle("pf-m-danger", !!isError);
   statusEl.classList.toggle("pf-m-info", !isError);
   statusEl.hidden = !msg;
+  // Every write replaces the action with its own or none, so a control never outlives the message
+  // it belongs to.
+  const button = el("graph-status-action") as HTMLButtonElement | null;
+  if (button) {
+    button.textContent = action?.label ?? "";
+    button.onclick = action ? () => action.run() : null;
+    button.hidden = !action;
+  }
 }
 
 // ---- graph prep ------------------------------------------------------------
@@ -5145,8 +5152,6 @@ function liveConnect() {
   if (!liveHost || !liveToken) return;
   if (liveSseAbort) liveSseAbort.abort();
   liveSseAbort = new AbortController();
-  clearTimeout(liveReconnectTimer ?? undefined); // a fresh connect attempt supersedes any pending reconnect
-  liveReconnectTimer = null;
   const url = "http://" + liveHost + "/api/v1/events";
   const headers = authHeaders(liveToken);
 
@@ -5164,28 +5169,19 @@ function liveConnect() {
         fetchLiveStatus();
       }
     },
-    (err) => {
-      // Stream ended or errored: flip to disconnected, schedule reconnect.
+    () => {
+      // Stream ended or errored: flip to disconnected and say so. No reconnect is scheduled; the
+      // notice carries a Reconnect control, so nothing keeps asking a daemon that stopped answering.
       liveConnected = false;
       publishLiveStatus();
       showStaleNotice();
-      clearTimeout(liveReconnectTimer ?? undefined);
-      liveReconnectTimer = setTimeout(
-        () => {
-          liveConnect();
-        },
-        Math.min(liveReconnectDelay, 30000),
-      );
-      liveReconnectDelay = Math.min(liveReconnectDelay * 2, 30000);
     },
     liveSseAbort.signal,
     () => {
-      // Stream opened successfully: reset backoff, clear the disconnect banner,
-      // and refresh once. Without this, a reconnect after a gap (or the very
-      // first connect racing the skeleton render) leaves the view stale until
-      // the NEXT graph event, which may be minutes away.
+      // Stream opened successfully: clear the disconnect notice and refresh once. Without this, a
+      // Reconnect after a gap (or the very first connect racing the skeleton render) leaves the view
+      // stale until the NEXT graph event, which may be minutes away.
       liveConnected = true;
-      liveReconnectDelay = 1000;
       clearStaleNotice();
       publishLiveStatus();
       if (surfaceVisible) {
@@ -5217,8 +5213,8 @@ function showStaleNotice() {
   const now = new Date();
   const hhmm =
     now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-  staleNotice = "Showing this workspace as of " + hhmm + "; reconnecting.";
-  setStatus(staleNotice);
+  staleNotice = "Showing this workspace as of " + hhmm + "; the daemon stopped answering.";
+  setStatus(staleNotice, false, { label: "Reconnect", run: liveConnect });
 }
 
 function clearStaleNotice() {
@@ -6108,13 +6104,16 @@ async function bootLive() {
     bootWireEvents();
     return true;
   } catch (e) {
+    // Same words and the same guide as the connect prompt every daemon surface shows. No Retry:
+    // live mode here is entered from the link magus printed, so reopening that link is the retry.
     setStatus(
-      "live mode: could not connect to daemon at " +
+      "The console could not reach " +
         liveHost +
-        ": " +
+        " (" +
         errMessage(e) +
-        ". Start it with: magus server start",
+        "). Start it with magus server start, then reopen the link magus printed.",
       true,
+      { label: "Setup guide", run: () => window.open(DAEMON_GUIDE_URL, "_blank", "noopener") },
     );
     liveHost = null;
     liveToken = null;
@@ -6183,10 +6182,6 @@ export function deactivate(): void {
   if (liveSseAbort) {
     liveSseAbort.abort();
     liveSseAbort = null;
-  }
-  if (liveReconnectTimer) {
-    clearTimeout(liveReconnectTimer);
-    liveReconnectTimer = null;
   }
   if (stageResizeObserver) {
     stageResizeObserver.disconnect();

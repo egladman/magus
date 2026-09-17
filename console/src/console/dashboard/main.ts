@@ -10,14 +10,12 @@
 import {
   parseHash,
   daemonAttach,
-  validateLoopbackHost,
-  normalizeDaemonHost,
+  resolveDaemonHostOrRemembered,
   consumeLiveToken,
   wantsDemo,
   logsLink,
 } from "../../lib/daemon";
 import { createStore } from "../../lib/store";
-import { persisted } from "../../lib/persist";
 import { notify } from "../../lib/notifications";
 import { showCountdownToast, showRefreshToast } from "../../lib/refresh-toast";
 import { registerServiceWorker } from "../../lib/sw";
@@ -64,30 +62,21 @@ import { registerCommand, unregisterCommand } from "../commands";
 // docs page), so it wires NO docs-site chrome of its own - the console frame owns the title bar, tab
 // strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
 // initConsoleSettings self-wiring was dropped with the docs-page decoupling.)
-import { getDefaultHost } from "../../lib/settings";
+import { rememberHost, subscribeDefaultHost } from "../../lib/settings";
+import {
+  renderConnectPrompt,
+  renderEmptyMessage,
+  type ConnectPromptState,
+  type EmptyStateSlots,
+} from "../connectPrompt";
 import { activate as activateJobs } from "../plan/main";
 import type { SurfaceInstance } from "../standalone";
 import { publishStatus } from "../status";
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
-function setText(id: string, text: string): void {
-  const e = opt(id);
-  if (e) e.textContent = text;
-}
 
-// ---- daemon persistence ----------------------------------------------------
-const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const DISCONNECT_GRACE = 3; // consecutive stream failures before the pill flips to "disconnected"
-function saveDaemon(host: string): void {
-  daemonCell.set(host);
-}
-function savedDaemon(): string | null {
-  return daemonCell.get();
-}
-function forgetDaemon(): void {
-  daemonCell.set(null);
-}
 
 // ---- store + transport -----------------------------------------------------
 const store = createStore<DashboardState>(initialState());
@@ -99,6 +88,9 @@ const transport = new DashboardTransport(store, {
 // ---- connection state ------------------------------------------------------
 let everConnected = false;
 let failCount = 0;
+// The host the current connection attempt is for, which Retry reconnects to. Not
+// DashboardState.liveHost: that one is set only once a stream has opened.
+let attemptHost: string | null = null;
 
 function setConn(conn: ConnView): void {
   store.set({ conn });
@@ -533,7 +525,11 @@ function beginDemo(): void {
 
 // ---- live connection lifecycle ---------------------------------------------
 function connectLive(host: string): void {
-  if (!everConnected) setConn({ state: "connecting" });
+  attemptHost = host;
+  if (!everConnected) {
+    setConn({ state: "connecting" });
+    showConnectPrompt({ connection: "connecting", host });
+  }
   transport.connect(host);
 }
 
@@ -541,73 +537,47 @@ function onLiveOpen(host: string): void {
   failCount = 0;
   everConnected = true;
   setConn({ state: "connected" });
-  saveDaemon(host); // remember it so a reload resumes
+  rememberHost(host); // so a reload resumes it
 }
 
-// onLiveError debounces disconnection: a brief blip stays "reconnecting" and keeps the
-// last data on screen; only after DISCONNECT_GRACE consecutive failures does the pill go
-// "disconnected". A never-connected resume attempt that gives up shows the confirm form.
+// onLiveError decides when the dashboard stops asking. A stream that was open rides out a brief
+// blip (DISCONNECT_GRACE consecutive failures) with its last data on screen; a first connection
+// gets no retries at all. Either way, once it gives up it stops every feed and shows the prompt,
+// whose Retry is the only thing that reconnects: nothing keeps trying behind a screen that says
+// the daemon could not be reached.
 function onLiveError(host: string): void {
   failCount++;
-  if (everConnected) {
-    setConn({
-      state: "disconnected",
-      detail: failCount >= DISCONNECT_GRACE ? "disconnected" : "reconnecting",
-    });
-  } else if (failCount >= DISCONNECT_GRACE) {
-    setConn({ state: "disconnected", detail: "disconnected" });
-    showResume(host, true);
-    transport.stop(); // give up: tear down all feeds so nothing hammers an absent daemon
-  } else {
-    setConn({ state: "connecting" });
+  if (everConnected && failCount < DISCONNECT_GRACE) {
+    setConn({ state: "disconnected", detail: "reconnecting" });
+    return;
   }
+  transport.stop();
+  setConn({ state: "disconnected", detail: "disconnected" });
+  showConnectPrompt({ connection: "disconnected", host });
 }
 
-// showResume reveals the connect panel's reconnect form, pre-filled with host.
-function showResume(host: string | null, failed: boolean): void {
-  el("dash-connect").hidden = false;
-  el("dash-panels").hidden = true;
-  const form = el("dash-resume");
-  form.hidden = false;
-  (el("dash-resume-host") as HTMLInputElement).value = host || "";
-  setText("dash-connect-title", failed ? "Couldn't reach the daemon" : "Reconnect to the daemon");
-  setText(
-    "dash-connect-sub",
-    failed
-      ? "The saved address didn't respond. Confirm it below, or start the daemon and open the link it prints."
-      : "Resume your last daemon, or start a new one below.",
-  );
+// The scaffold is re-injected each time the console reopens this surface, so the slots are looked
+// up per call rather than held.
+function emptySlots(): EmptyStateSlots {
+  return {
+    title: el("dash-connect-title"),
+    message: el("dash-connect-message"),
+    actions: el("dash-connect-actions"),
+  };
 }
 
-// wireDemoButton wires the empty-state "See a demo" button. It enters the showcase in place by calling
-// beginDemo() directly - NOT by reloading. A reload was fine on the standalone page but wrong inside the
-// console, where it would tear down the whole SPA (every tab) instead of just this surface. The #demo
-// fragment is still recorded (via replaceState, so no reload and no hashchange that a sibling pane would
-function wireResumeForm(): void {
-  const form = opt("dash-resume") as HTMLFormElement | null;
-  if (!form) return;
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const host = normalizeDaemonHost((el("dash-resume-host") as HTMLInputElement).value.trim());
-    if (!host) {
-      setText("dash-connect-sub", "Enter a port (for example 8787) or a full 127.0.0.1:port.");
-      return;
-    }
-    everConnected = false;
-    failCount = 0;
-    setConn({ state: "connecting" });
-    connectLive(host);
+function showConnectPrompt(state: ConnectPromptState): void {
+  renderConnectPrompt(emptySlots(), state, {
+    purpose: "The dashboard streams a running daemon's pool, cache, and health.",
+    onRetry: retryLive,
   });
-  el("dash-resume-forget").addEventListener("click", () => {
-    forgetDaemon();
-    form.hidden = true;
-    setText("dash-connect-title", "No daemon connected");
-    setText(
-      "dash-connect-sub",
-      "The dashboard streams a running magus daemon's pool, cache, and health. Start the daemon, then open the live link it prints.",
-    );
-    setConn({ state: "none" });
-  });
+}
+
+function retryLive(): void {
+  if (!attemptHost) return;
+  everConnected = false;
+  failCount = 0;
+  connectLive(attemptHost);
 }
 
 // ---- service worker --------------------------------------------------------
@@ -743,6 +713,11 @@ export function activate(): void {
   disposeJobs();
   lifecycleAbort?.abort();
   lifecycleAbort = new AbortController();
+  // Connection state is per opening, not per page: a reopened dashboard has reached nothing yet, and
+  // treating it as connected would skip the prompt and leave a blank door when the daemon is down.
+  everConnected = false;
+  failCount = 0;
+  attemptHost = null;
   mountTiles();
   // Subscribe the notification watcher once per page lifetime: the module-scoped store outlives a
   // console tab close/reopen, so re-subscribing on every activate() would double-fire.
@@ -750,7 +725,6 @@ export function activate(): void {
     notificationsWired = true;
     wireNotifications();
   }
-  wireResumeForm();
   wireKeys();
   opt("dash-jobs-back")?.addEventListener("click", () => setDashboardMode("overview"), {
     signal: lifecycleAbort?.signal,
@@ -811,34 +785,40 @@ export function activate(): void {
   // A malformed #port is an explicit-but-broken attach: say so rather than silently resuming something else.
   if (params.port !== undefined) {
     setConn({ state: "disconnected", detail: "invalid port" });
-    setText("dash-connect-title", "Can't connect");
-    setText(
-      "dash-connect-sub",
+    renderEmptyMessage(
+      emptySlots(),
+      "Can't connect",
       "The #port must be a plain port number (1-65535). Re-open the link magus printed.",
     );
     return;
   }
 
-  // No link in the URL: optimistically resume the last daemon we connected to.
-  const saved = savedDaemon();
-  const savedHost = saved ? validateLoopbackHost(saved) : null;
-  if (savedHost) {
-    setText("dash-connect-title", "Reconnecting...");
-    setText("dash-connect-sub", "Resuming your last daemon at " + savedHost + ".");
-    connectLive(savedHost); // the normalized host, matching the #port and resume-form paths
-    return;
-  }
-  // No remembered daemon, but the operator set a default host in Settings (the loopback override):
-  // connect to it.
-  const configured = getDefaultHost();
-  const configuredHost = configured ? validateLoopbackHost(configured) : null;
-  if (configuredHost) {
-    setText("dash-connect-title", "Reconnecting...");
-    setText("dash-connect-sub", "Connecting to your configured daemon at " + configuredHost + ".");
-    connectLive(configuredHost);
+  // A new address only redirects a dashboard that has not reached a daemon yet: a live one keeps its
+  // stream until reload rather than dropping every tile mid-read.
+  const unsubscribeHost = subscribeDefaultHost(() => {
+    if (everConnected) return;
+    const next = resolveDaemonHostOrRemembered(params);
+    if (next) {
+      failCount = 0;
+      connectLive(next);
+    } else {
+      transport.stop();
+      attemptHost = null;
+      setConn({ state: "none" });
+      showConnectPrompt({ connection: "none" });
+    }
+  });
+  lifecycleAbort.signal.addEventListener("abort", unsubscribeHost, { once: true });
+
+  // The explicit-attach branch above already returned, so this is the Settings address, then the
+  // last daemon this dashboard reached.
+  const host = resolveDaemonHostOrRemembered(params);
+  if (host) {
+    connectLive(host);
     return;
   }
   setConn({ state: "none" });
+  showConnectPrompt({ connection: "none" });
 }
 
 // deactivate tears down the dashboard's live feeds and the demo timer, so closing its console tab or

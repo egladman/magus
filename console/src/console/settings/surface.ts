@@ -33,6 +33,7 @@ import {
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
 import { probeDaemon, normalizeDaemonHost, resolveDaemonHost } from "../../lib/daemon";
 import { h } from "../view";
+import { daemonGuideLink } from "../connectPrompt";
 import {
   bigPictureSplitCell,
   collapsedCardsCell,
@@ -542,31 +543,60 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   hostInput.autocomplete = "off";
   hostInput.value = draftScalar.host;
   hostControl.append(hostInput);
+  // The Test result stays under the field it describes, where a failure's instructions can be read
+  // while fixing the address, rather than in a toast that is gone in six seconds.
+  const hostTestStatus = h("p", "console-settings-form__help");
+  hostTestStatus.setAttribute("role", "status");
+  hostTestStatus.hidden = true;
+  // Bumped whenever the status is cleared, so a probe that answers after the field was edited, reset
+  // or imported does not write a verdict about an address no longer in it.
+  let hostTestGeneration = 0;
+  const showHostTestStatus = (message: string, kind: "pending" | "ok" | "error"): void => {
+    hostTestStatus.textContent = message;
+    hostTestStatus.dataset.kind = kind;
+    hostTestStatus.hidden = false;
+  };
+  const clearHostTestStatus = (): void => {
+    hostTestGeneration++;
+    testBtn.disabled = false;
+    hostTestStatus.textContent = "";
+    delete hostTestStatus.dataset.kind;
+    hostTestStatus.hidden = true;
+  };
+
   hostInput.addEventListener("input", () => {
     draftScalar.host = hostInput.value;
+    clearHostTestStatus();
     recompute();
   });
 
   // Test attaches to the field so a typed host can be checked BEFORE saving it - the draft value is what
-  // gets probed. It reports through a toast rather than the pending-changes bar: this is a one-off action,
-  // not a staged edit.
+  // gets probed.
   const testBtn = h("button", "pf-v6-c-button pf-m-secondary", "Test") as HTMLButtonElement;
   testBtn.type = "button";
   testBtn.title = "Try to reach a daemon at this address";
   testBtn.addEventListener("click", () => {
     const raw = hostInput.value.trim();
     if (!raw) {
-      showToast("Settings", "Enter a host to test, for example 127.0.0.1:7391.", "error");
+      showHostTestStatus("Enter an address to test, for example 127.0.0.1:7391.", "error");
       return;
     }
+    const generation = hostTestGeneration;
     testBtn.disabled = true;
+    showHostTestStatus("Testing...", "pending");
     void probeDaemon(raw).then((res) => {
+      if (generation !== hostTestGeneration) return;
       testBtn.disabled = false;
       // "Answered", not "connected" or "200": the response is opaque cross-origin, so the status code
       // and body are unreadable - this proves a server answered at that address, nothing more.
-      if (res.ok)
-        showToast("Settings", "Answered: " + res.url + " (status not readable cross-origin).");
-      else showToast("Settings", res.reason, "error");
+      if (res.ok) {
+        showHostTestStatus(
+          "A server answered at " + res.url + ". Save & Apply to connect the console to it.",
+          "ok",
+        );
+      } else {
+        showHostTestStatus(res.reason, "error");
+      }
     });
   });
 
@@ -575,7 +605,11 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   hostFill.append(hostControl);
   const testItem = h("div", "pf-v6-c-input-group__item");
   testItem.append(testBtn);
-  hostGroup.append(hostFill, testItem);
+  const guideItem = h("div", "pf-v6-c-input-group__item");
+  guideItem.append(daemonGuideLink());
+  hostGroup.append(hostFill, testItem, guideItem);
+  const hostField = h("div");
+  hostField.append(hostGroup, hostTestStatus);
 
   generalForm.append(
     buildFormGroup(
@@ -589,7 +623,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     buildFormGroup(
       "Daemon host",
       hostInput.id,
-      hostGroup,
+      hostField,
       "The loopback daemon to connect to by default. Enter a bare port (for example 8787) and it expands to 127.0.0.1:8787, or give a full 127.0.0.1:port. Leave empty for the default loopback.",
     ),
   );
@@ -981,6 +1015,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     draftScalar.nodeShapes = p.nodeShapes;
     pollSelect.value = String(p.poll);
     hostInput.value = p.host;
+    clearHostTestStatus();
     paintThemeToggle();
     paintFocusRingToggle();
     paintMotionToggle();
@@ -1028,11 +1063,18 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       ? "Applied changes to this session."
       : "Saved. Takes effect on the next load.";
     // Confirm the commit with a TOAST, not a lingering inline line: the reload prompt when a live change
-    // needs a reload to take effect (poll/host), otherwise a transient success toast so a save is never
-    // silent. Clear any prior inline status so a stale message does not sit under the heading.
+    // needs a reload to take effect, otherwise a transient success toast so a save is never silent.
+    // A host applies live only to views still waiting on a daemon (subscribeDefaultHost); a view
+    // already showing data keeps the daemon it came from, so the reload prompt stays for it too. Clear
+    // any prior inline status so a stale message does not sit under the heading.
     setStatus("", "ok");
-    if (applyLive && (keys.has("poll") || keys.has("host"))) {
+    if (applyLive && keys.has("poll")) {
       showRefreshToast("Settings", "Console settings changed. Reload to apply.");
+    } else if (applyLive && keys.has("host")) {
+      showRefreshToast(
+        "Settings",
+        "Daemon address applied. Views already showing data keep their daemon until you reload.",
+      );
     } else {
       showToast("Settings", msg);
     }
