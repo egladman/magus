@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,4 +121,20 @@ func insightTime(day int) time.Time {
 func insightTimePtr(day int) *time.Time {
 	t := insightTime(day)
 	return &t
+}
+
+// TestDuplicationHistoryCountsFilesChangingTogether pins the co-change evidence: copies in
+// separate files that always change together are drifting when one is edited alone, and
+// copies that share one file carry no evidence at all.
+func TestDuplicationHistoryCountsFilesChangingTogether(t *testing.T) {
+	group := types.DuplicationGroup{Members: []types.DuplicationSite{{Source: "a.go:1"}, {Source: "b.go:9"}}}
+	scan := []project.ScannedCommit{
+		{Files: []string{"a.go", "b.go"}},
+		{Files: []string{"a.go", "c.go"}},
+		{Files: []string{"c.go"}},
+	}
+	assert.Equal(t, &types.DuplicationHistory{Commits: 3, Together: 1, Apart: 1}, duplicationHistory(group, scan))
+
+	sameFile := types.DuplicationGroup{Members: []types.DuplicationSite{{Source: "a.go:1"}, {Source: "a.go:40"}}}
+	assert.Nil(t, duplicationHistory(sameFile, scan))
 }

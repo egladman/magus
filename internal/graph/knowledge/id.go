@@ -347,6 +347,10 @@ const attrTestRefs = "test_refs"
 // range, which is the honest answer rather than a guessed extent.
 const attrDefEndLine = "def_end_line"
 
+// attrNamespace is the node ID of the namespace symbol a symbol is declared in: its
+// package, read from the moniker rather than guessed from a directory.
+const attrNamespace = "namespace"
+
 // attrLanguage and attrSymbolKind are the attrs a symbol (and, for language, a file) node
 // carries from its index. Named because they are read from four places across two files
 // and a mistyped literal would silently match nothing rather than fail.

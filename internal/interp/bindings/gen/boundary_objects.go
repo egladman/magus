@@ -598,6 +598,74 @@ func ObjectUnreferencedOutput(v types.UnreferencedOutput) vm.Value {
 	return out
 }
 
+func ObjectDuplicationSite(v types.DuplicationSite) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("source", vm.StrValue(v.Source))
+	out.MapSet("endLine", vm.IntValue(int64(v.EndLine)))
+	itemsDistinct := make([]vm.Value, len(v.Distinct))
+	for indexDistinct := range v.Distinct {
+		itemsDistinct[indexDistinct] = vm.StrValue(v.Distinct[indexDistinct])
+	}
+	out.MapSet("distinct", vm.ListValue(itemsDistinct))
+	out.MapSet("callers", vm.IntValue(int64(v.Callers)))
+	out.MapSet("foreignFiles", vm.IntValue(int64(v.ForeignFiles)))
+	out.MapSet("tested", vm.BoolValue(v.Tested))
+	return out
+}
+
+func ObjectDuplicationHistory(v types.DuplicationHistory) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
+	out.MapSet("together", vm.IntValue(int64(v.Together)))
+	out.MapSet("apart", vm.IntValue(int64(v.Apart)))
+	return out
+}
+
+func ObjectDuplicationGroup(v types.DuplicationGroup) vm.Value {
+	out := vm.NewMap()
+	itemsMembers := make([]vm.Value, len(v.Members))
+	for indexMembers := range v.Members {
+		itemsMembers[indexMembers] = ObjectDuplicationSite(v.Members[indexMembers])
+	}
+	out.MapSet("members", vm.ListValue(itemsMembers))
+	out.MapSet("score", vm.FloatValue(float64(v.Score)))
+	itemsShared := make([]vm.Value, len(v.Shared))
+	for indexShared := range v.Shared {
+		itemsShared[indexShared] = vm.StrValue(v.Shared[indexShared])
+	}
+	out.MapSet("shared", vm.ListValue(itemsShared))
+	itemsPackages := make([]vm.Value, len(v.Packages))
+	for indexPackages := range v.Packages {
+		itemsPackages[indexPackages] = vm.StrValue(v.Packages[indexPackages])
+	}
+	out.MapSet("packages", vm.ListValue(itemsPackages))
+	out.MapSet("placement", vm.StrValue(string(v.Placement)))
+	out.MapSet("home", vm.StrValue(v.Home))
+	out.MapSet("shape", vm.StrValue(string(v.Shape)))
+	out.MapSet("removable", vm.IntValue(int64(v.Removable)))
+	out.MapSet("siblings", vm.BoolValue(v.Siblings))
+	optHistory := vm.Null
+	if v.History != nil {
+		optHistory = ObjectDuplicationHistory((*v.History))
+	}
+	out.MapSet("history", optHistory)
+	return out
+}
+
+func ObjectDuplicationOutput(v types.DuplicationOutput) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("definition", vm.StrValue(v.Definition))
+	itemsGroups := make([]vm.Value, len(v.Groups))
+	for indexGroups := range v.Groups {
+		itemsGroups[indexGroups] = ObjectDuplicationGroup(v.Groups[indexGroups])
+	}
+	out.MapSet("groups", vm.ListValue(itemsGroups))
+	out.MapSet("answer", ObjectKnowledgeAnswer(v.Answer))
+	return out
+}
+
 func ObjectInsightReport(v types.InsightReport) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("hotspots", ObjectHotspotOutput(v.Hotspots))
@@ -606,6 +674,7 @@ func ObjectInsightReport(v types.InsightReport) vm.Value {
 	out.MapSet("trend", ObjectTrendOutput(v.Trend))
 	out.MapSet("volatility", ObjectVolatilityReport(v.Volatility))
 	out.MapSet("unreferenced", ObjectUnreferencedOutput(v.Unreferenced))
+	out.MapSet("duplication", ObjectDuplicationOutput(v.Duplication))
 	return out
 }
 
@@ -1257,12 +1326,24 @@ func ObjectCompletionGate(v types.CompletionGate) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("description", vm.StrValue(v.Description))
-	out.MapSet("check", ObjectLeaseCheck(v.Check))
 	itemsDependsOn := make([]vm.Value, len(v.DependsOn))
 	for indexDependsOn := range v.DependsOn {
 		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
 	}
 	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
+	out.MapSet("kind", vm.StrValue(string(v.Kind)))
+	out.MapSet("expect", vm.StrValue(string(v.Expect)))
+	out.MapSet("check", ObjectLeaseCheck(v.Check))
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StrValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	itemsSymbols := make([]vm.Value, len(v.Symbols))
+	for indexSymbols := range v.Symbols {
+		itemsSymbols[indexSymbols] = vm.StrValue(v.Symbols[indexSymbols])
+	}
+	out.MapSet("symbols", vm.ListValue(itemsSymbols))
 	return out
 }
 
@@ -1344,7 +1425,7 @@ func ObjectJob(v types.Job) vm.Value {
 	out.MapSet("schemaVersion", vm.IntValue(int64(v.SchemaVersion)))
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("parent", vm.StrValue(v.Parent))
-	out.MapSet("goal", vm.StrValue(v.Goal))
+	out.MapSet("criteria", vm.StrValue(v.Criteria))
 	out.MapSet("checkpoint", vm.StrValue(v.Checkpoint))
 	itemsWritePaths := make([]vm.Value, len(v.WritePaths))
 	for indexWritePaths := range v.WritePaths {

@@ -43,6 +43,14 @@ func (h hotWorkspace) Unreferenced(context.Context) (types.UnreferencedOutput, e
 	return types.UnreferencedOutput{}, nil
 }
 
+// The check type-asserts the workspace, so a fake that falls behind the interface skips
+// the check instead of failing to compile; this makes it fail to compile.
+var _ types.InsightAnalyzer = hotWorkspace{}
+
+func (h hotWorkspace) Duplication(context.Context) (types.DuplicationOutput, error) {
+	return types.DuplicationOutput{}, nil
+}
+
 func hot(paths ...string) []types.FileHotspot {
 	out := make([]types.FileHotspot, 0, len(paths))
 	for _, p := range paths {

@@ -2,6 +2,7 @@ package symbols
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -476,6 +477,32 @@ func TestParseMonikerReportsCallableFromDescriptor(t *testing.T) {
 			info, ok := parseMoniker(tc.moniker)
 			require.True(t, ok, "moniker should parse")
 			assert.Equal(t, tc.callable, info.Callable)
+		})
+	}
+}
+
+// TestParseMonikerReportsNamespace pins the join the duplication lens reads imports
+// through: a symbol's namespace key must equal the key of the namespace symbol an import
+// statement references, in every language, or no import meets its package.
+func TestParseMonikerReportsNamespace(t *testing.T) {
+	for _, tc := range []struct {
+		name, moniker, namespace string
+	}{
+		{"go method", "scip-go gomod example.com/foo v1 `example.com/foo/pkg`/Holder#Method().", "gomod example.com/foo `example.com/foo/pkg`/"},
+		{"go package is its own", "scip-go gomod example.com/foo v1 `example.com/foo/pkg`/", "gomod example.com/foo `example.com/foo/pkg`/"},
+		{"typescript module", "scip-typescript npm console 0.0.1 `src/main.ts`/render().", "npm console `src/main.ts`/"},
+		{"python nested module", "scip-python python mypkg 1.0 mypkg/mymodule/handler().", "python mypkg mypkg/mymodule/"},
+		{"no namespace", "scip-go gomod example.com/foo v1 Caller().", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			info, ok := parseMoniker(tc.moniker)
+			require.True(t, ok, "moniker should parse")
+			assert.Equal(t, tc.namespace, info.Namespace)
+			if tc.namespace != "" {
+				ns, ok := parseMoniker(tc.moniker[:strings.LastIndex(tc.moniker, "/")+1])
+				require.True(t, ok)
+				assert.Equal(t, ns.Key, info.Namespace, "the namespace symbol's own key")
+			}
 		})
 	}
 }

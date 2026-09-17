@@ -467,6 +467,10 @@ type Knowledge struct {
 	// one-shot CLI never auto-indexes); throttled and idle-gated so it never delays
 	// your own work. Set disabled to opt out.
 	SymbolIndexing SymbolIndexingConfig `json:"symbol_indexing" yaml:"symbol_indexing"`
+	// Duplication tunes the insight lens that ranks copied functions from the call graph.
+	// The defaults were set against this repository; a codebase of many small helpers
+	// will want MinShared higher, one of large functions may want MinScore lower.
+	Duplication DuplicationConfig `json:"duplication" yaml:"duplication"`
 	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
 	// the layer that answers which code agents actually touch. `magus graph build` runs
 	// each declared adapter before assembling, so the daemon's sync-graph job keeps it
@@ -546,6 +550,27 @@ type NotesConfig struct {
 	// until then because the path may name someone's vault, and deleting the key would
 	// orphan real prose to save a struct field.
 	Private string `json:"private" yaml:"private"`
+}
+
+// DuplicationConfig is knowledge.duplication in magus.yaml. See types.DuplicationOptions for
+// what each threshold filters and why each can err in both directions.
+type DuplicationConfig struct {
+	MinCallees   int     `json:"min_callees" yaml:"min_callees" validate:"gte=1"`
+	MinShared    int     `json:"min_shared" yaml:"min_shared" validate:"gte=1"`
+	MinScore     float64 `json:"min_score" yaml:"min_score" validate:"gte=0,lte=1"`
+	MinSpanRatio float64 `json:"min_span_ratio" yaml:"min_span_ratio" validate:"gte=0,lte=1"`
+	IncludeTests bool    `json:"include_tests" yaml:"include_tests"`
+}
+
+// Options is the config as the graph package reads it, which cannot import this one.
+func (c DuplicationConfig) Options() types.DuplicationOptions {
+	return types.DuplicationOptions{
+		MinCallees:   c.MinCallees,
+		MinShared:    c.MinShared,
+		MinScore:     c.MinScore,
+		MinSpanRatio: c.MinSpanRatio,
+		IncludeTests: c.IncludeTests,
+	}
 }
 
 // SymbolIndexingConfig tunes daemon background symbol auto-indexing (see
@@ -728,8 +753,13 @@ func Defaults() Config {
 			Threshold:        0.05,
 			AnnotateGHA:      true,
 		},
-		Hints:     Hints{Enabled: boolPtr(true)},
-		Knowledge: Knowledge{VCS: KnowledgeVCSConfig{Authorship: boolPtr(true)}},
+		Hints: Hints{Enabled: boolPtr(true)},
+		Knowledge: Knowledge{
+			VCS: KnowledgeVCSConfig{Authorship: boolPtr(true)},
+			// MinShared 4 is the line that mattered: at 3, identical triples of small
+			// helpers scored a perfect 1.0 and were most of the list.
+			Duplication: DuplicationConfig{MinCallees: 3, MinShared: 4, MinScore: 0.7, MinSpanRatio: 0.5},
+		},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",
 			ServiceName: "magus",

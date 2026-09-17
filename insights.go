@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
@@ -174,7 +175,70 @@ func (m *Magus) Unreferenced(ctx context.Context) (types.UnreferencedOutput, err
 	}, nil
 }
 
-// Trend is// Trend is the rising/cooling lens: each project's churn in the recent vs earlier
+// Duplication is the copied-logic lens, over the same symbol graph and under the same
+// coverage verdict as Unreferenced: a workspace half of whose projects were never indexed
+// shows half its duplication, and the answer says so rather than reading as clean.
+func (m *Magus) Duplication(ctx context.Context) (types.DuplicationOutput, error) {
+	g, err := m.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return types.DuplicationOutput{}, err
+	}
+	groups := g.Duplicates(m.cfg.Knowledge.Duplication.Options())
+	// History is evidence, not a precondition: a workspace with no readable VCS still gets
+	// every group, without the co-change counts.
+	opts := types.InsightOptions{Commits: duplicationHistoryCommits}
+	if scan, err := m.insightScan(ctx, &opts); err == nil {
+		for i := range groups {
+			groups[i].History = duplicationHistory(groups[i], scan)
+		}
+	}
+	gaps, probed := m.SymbolGaps(ctx)
+	var reason types.KnowledgeUnknownReason
+	if !probed {
+		reason = types.ReasonCoverageUnknown
+	}
+	return types.DuplicationOutput{
+		Definition: types.DuplicationDefinition,
+		Groups:     groups,
+		Answer:     types.ClassifyAnswer(len(groups) > 0, reason, gaps),
+	}, nil
+}
+
+// duplicationHistoryCommits is the window co-change is counted over, the same one the
+// insight report defaults to.
+const duplicationHistoryCommits = 500
+
+// duplicationHistory counts how the files a group's members live in changed together over
+// scan, or nil when they all live in one file, where every commit touches all of them.
+func duplicationHistory(group types.DuplicationGroup, scan []project.ScannedCommit) *types.DuplicationHistory {
+	files := map[string]bool{}
+	for _, m := range group.Members {
+		if file, _, _ := strings.Cut(m.Source, ":"); file != "" {
+			files[file] = true
+		}
+	}
+	if len(files) < 2 {
+		return nil
+	}
+	h := &types.DuplicationHistory{Commits: len(scan)}
+	for _, c := range scan {
+		touched := 0
+		for _, f := range c.Files {
+			if files[f] {
+				touched++
+			}
+		}
+		switch {
+		case touched == len(files):
+			h.Together++
+		case touched > 0:
+			h.Apart++
+		}
+	}
+	return h
+}
+
+// Trend is the rising/cooling lens: each project's churn in the recent vs earlier
 // half of the window.
 func (m *Magus) Trend(ctx context.Context, opts types.InsightOptions) (types.TrendOutput, error) {
 	scan, err := m.insightScan(ctx, &opts)

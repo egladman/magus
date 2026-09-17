@@ -78,6 +78,11 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 | Config key                                       | Environment variable                                   | Flag                                               | Type                               |
 | ------------------------------------------------ | ------------------------------------------------------ | -------------------------------------------------- | ---------------------------------- |
+| `knowledge.duplication.include_tests`            | `MAGUS_KNOWLEDGE_DUPLICATION_INCLUDE_TESTS`            | `--knowledge-duplication-include-tests`            | bool                               |
+| `knowledge.duplication.min_callees`              | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_CALLEES`              | `--knowledge-duplication-min-callees`              | int                                |
+| `knowledge.duplication.min_score`                | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SCORE`                | `--knowledge-duplication-min-score`                | float                              |
+| `knowledge.duplication.min_shared`               | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SHARED`               | `--knowledge-duplication-min-shared`               | int                                |
+| `knowledge.duplication.min_span_ratio`           | `MAGUS_KNOWLEDGE_DUPLICATION_MIN_SPAN_RATIO`           | `--knowledge-duplication-min-span-ratio`           | float                              |
 | `knowledge.max_size_mb`                          | `MAGUS_KNOWLEDGE_MAX_SIZE_MB`                          | `--knowledge-max-size-mb`                          | int                                |
 | `knowledge.notes.private`                        | `MAGUS_KNOWLEDGE_NOTES_PRIVATE`                        | `--knowledge-notes-private`                        | string                             |
 | `knowledge.notes.shared`                         | `MAGUS_KNOWLEDGE_NOTES_SHARED`                         | `--knowledge-notes-shared`                         | string                             |

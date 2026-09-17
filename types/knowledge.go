@@ -78,7 +78,12 @@ import (
 // store on disk, whose doc and buzz shards were extracted before citations were indexed
 // and whose sources have not changed, and for the relation fingerprint, which the wider
 // shapes move.
-const KnowledgeSchemaVersion = 12
+// v13 adds a `namespace` attr to symbol nodes: the ID of the SCIP namespace symbol (a Go
+// package, a TypeScript or Python module, a Rust mod) the symbol is declared in. Additive,
+// so a v12 consumer parses a v13 graph unchanged; the bump is for a v12 store on disk,
+// whose symbol shards were extracted before the attr existed and whose indexes have not
+// changed.
+const KnowledgeSchemaVersion = 13
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -485,8 +490,12 @@ type KnowledgeSymbol struct {
 	// symbol occupies, so a consumer can tell "this symbol still exists" from "this symbol
 	// still exists and says the same thing".
 	DefEndLine int
-	Defs       []string
-	Refs       []KnowledgeSymbolRef
+	// Namespace is the key of the innermost namespace the moniker declares this symbol in
+	// (its own key for a namespace symbol), or empty when the moniker names none. It is what
+	// joins a symbol to its package without reading paths, which differ per language.
+	Namespace string
+	Defs      []string
+	Refs      []KnowledgeSymbolRef
 	// Calls are the workspace-defined symbols referenced from inside this symbol's own
 	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
 	// (caller, callee), the same scale decision Refs makes per (file, symbol), so a hot

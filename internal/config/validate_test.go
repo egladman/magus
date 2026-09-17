@@ -9,7 +9,8 @@ import (
 
 func TestValidate_ValidMinimal(t *testing.T) {
 	// ci.max_shards must be -1 (unlimited) or in [1,256]; use -1 for a minimal valid config.
-	cfg := Config{CI: CI{MaxShards: -1}}
+	// The duplication thresholds have no valid zero, so they carry their defaults.
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
 	assert.NoError(t, Validate(cfg), "Validate(minimal valid Config)")
 }
 
