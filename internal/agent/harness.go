@@ -70,6 +70,7 @@ type HarnessDescriptor struct {
 	Skills         HarnessSkills    `json:"skills"`
 	ManagedEntries []HarnessEntries `json:"managed_entries,omitempty"`
 	MCP            *HarnessMCP      `json:"mcp,omitempty"`
+	Prompts        []HarnessPrompt  `json:"prompts,omitempty"`
 }
 
 // HarnessDisplay is opaque metadata for host UIs. The core validates no
@@ -112,6 +113,9 @@ type HarnessUpdate struct {
 	// can print "removed"/"would remove" instead of "updated"/"would update"
 	// without a second, near-identical struct.
 	Removed bool `json:"removed,omitempty"`
+	// Prompts are the files outside Path whose host-native approval prompt this call wrote,
+	// removed, or would have.
+	Prompts []string `json:"prompts,omitempty"`
 }
 
 // HarnessRemoveOptions is RemoveHarness's sole input, mirroring
@@ -146,6 +150,11 @@ type HarnessVerification struct {
 	Guarded    bool          `json:"guarded,omitempty"`
 	MCPStatus  HarnessStatus `json:"mcp_status,omitempty"`
 	MCPReason  string        `json:"mcp_reason,omitempty"`
+	// PromptStatus is whether the host-native approval prompts the descriptor keeps are in
+	// place, empty when it keeps none. Uncovered means an ask verdict reaches nobody there,
+	// so the templates refuse the call instead.
+	PromptStatus HarnessStatus `json:"prompt_status,omitempty"`
+	PromptReason string        `json:"prompt_reason,omitempty"`
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -373,6 +382,11 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 	if err := validateHarnessMCP(d.MCP); err != nil {
 		return err
 	}
+	for i, p := range d.Prompts {
+		if err := validateHarnessPrompt(p); err != nil {
+			return fmt.Errorf("prompts[%d]: %w", i, err)
+		}
+	}
 	return nil
 }
 
@@ -493,6 +507,9 @@ func ApplyHarness(ctx context.Context, opts HarnessApplyOptions) (HarnessUpdate,
 		}
 	}
 
+	if err := applyHarnessPrompts(opts.Root, d, opts.DryRun, &update); err != nil {
+		return update, err
+	}
 	if err := applyHarnessMCP(d, &update); err != nil {
 		return update, err
 	}
@@ -540,6 +557,9 @@ func RemoveHarness(ctx context.Context, opts HarnessRemoveOptions) (HarnessUpdat
 		return HarnessUpdate{}, err
 	}
 	update := HarnessUpdate{ID: d.ID, Removed: true}
+	if err := removeHarnessPrompts(opts.Root, d, opts.DryRun, &update); err != nil {
+		return update, err
+	}
 	if d.Config.Path == "" {
 		// Skills-only: apply never wrote a config fragment, so there is nothing here
 		// for remove to undo.
@@ -666,7 +686,9 @@ func removeConfigDefaults(config map[string]any, defaults map[string]any) bool {
 // It reports an explicit status so callers cannot mistake an absent hook for a
 // healthy one. Coverage is a config that still carries the declared fragments
 // and invokes magus somehow (a shipped script basename, magus shell, or
-// magus session). A skills-only descriptor has nothing to wire.
+// magus session). A skills-only descriptor has nothing to wire. PromptStatus reports the
+// host-native approval prompts separately, since a host can guard every call and still
+// never ask the person about one.
 func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, error) {
 	if err := ctx.Err(); err != nil {
 		return HarnessVerification{}, err
@@ -676,6 +698,14 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 		//nolint:nilerr // a missing descriptor is a coverage verdict, carried in Reason, not a command failure
 		return HarnessVerification{ID: id, Status: HarnessUncovered, Reason: loadErr.Error()}, nil
 	}
+	result, err := verifyHarnessConfig(ctx, root, d, source)
+	if err == nil {
+		verifyHarnessPrompts(root, d, &result)
+	}
+	return result, err
+}
+
+func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, source string) (HarnessVerification, error) {
 	result := HarnessVerification{ID: d.ID, Descriptor: source}
 	if d.Config.Path == "" {
 		// A descriptor that names no config.path (skills-only) has wired no guard

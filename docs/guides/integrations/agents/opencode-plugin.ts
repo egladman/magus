@@ -26,10 +26,20 @@
 // handed this checkout back through the compaction prompt, and a checkpoint is
 // recorded when the session goes idle, since OpenCode has no session-end event and
 // idle is the proxy its own docs name.
-// magus-guard-template: 14
-// magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none
-// magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none
-// magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none
+//
+// An ASK puts the call in front of the person, and a plugin cannot prompt: throwing is
+// the only answer tool.execute.before has. So the prompt is OpenCode's own. The opencode
+// harness writes each backend's push verb (`git push`, `hg push`, `sl push`, `jj git push`) and
+// that verb with ` *` as "ask" under permission.bash in opencode.json, which makes OpenCode
+// ask before any push, and this plugin's permission.ask hook answers that
+// request from the verdict: allow for a push a gate covers, ask for an ungated one, deny
+// for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
+// call is not a plain push the pattern matches) an ask throws, naming the person's own
+// terminal. A decision this file does not know throws too, and never allows.
+// magus-guard-template: 15
+// magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none ask=model
+// magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none ask=none
 // NOT because tool.execute.before/.after cannot see an MCP call: they are generic and already
 // intercept every tool call OpenCode makes, MCP included - only the two branches below (bash,
 // edit/write) narrow that down by tool NAME. What is missing is knowing what name OpenCode
@@ -58,27 +68,66 @@ const SUPPORTED_SCHEMA = 1;
 type Verdict =
   | { schema_version: number; decision: "pass" }
   | { schema_version: number; decision: "advise"; context: string }
-  | { schema_version: number; decision: "deny"; reason: string };
+  | { schema_version: number; decision: "deny"; reason: string }
+  | { schema_version: number; decision: "ask"; reason: string };
+
+/** A verdict envelope before its decision is trusted: another process's stdout. */
+type Envelope = { schema_version: number; decision: unknown } & Record<string, unknown>;
+
+function isEnvelope(value: unknown): value is Envelope {
+  if (typeof value !== "object" || value === null) return false;
+  return typeof (value as Record<string, unknown>).schema_version === "number";
+}
 
 /**
- * Narrows untrusted JSON to a Verdict. A type guard rather than a cast because
- * this is another process's stdout: a cast would let a malformed payload reach
- * the branches below as though it had been checked.
+ * Narrows an envelope to a Verdict. Anything it cannot narrow becomes a deny: a decision
+ * this plugin does not know, or a known one missing the field it carries, is a verdict it
+ * cannot honor, and reading it as a pass would allow what magus did not.
  */
-function isVerdict(value: unknown): value is Verdict {
-  if (typeof value !== "object" || value === null) return false;
-  const fields = value as Record<string, unknown>;
-  if (typeof fields.schema_version !== "number") return false;
-  switch (fields.decision) {
+function toVerdict(envelope: Envelope): Verdict {
+  const { schema_version, decision, context, reason } = envelope;
+  switch (decision) {
     case "pass":
-      return true;
+      return { schema_version, decision };
     case "advise":
-      return typeof fields.context === "string";
+      if (typeof context === "string") return { schema_version, decision, context };
+      break;
     case "deny":
-      return typeof fields.reason === "string";
-    default:
-      return false;
+    case "ask":
+      if (typeof reason === "string") return { schema_version, decision, reason };
+      break;
   }
+  return {
+    schema_version,
+    decision: "deny",
+    reason:
+      `magus guard returned the decision ${JSON.stringify(decision)}, which this plugin does not know, ` +
+      "so it refuses the call rather than allow it. Update the plugin from the magus docs.",
+  };
+}
+
+/** The push verb of each backend magus drives, which is also the permission key for it. */
+const PUSH_VERBS = ["git push", "hg push", "sl push", "jj git push"] as const;
+
+/**
+ * The push verb a command is one bare push through, or null. Only a bare push is known to
+ * match its permission pattern. A compound line or `git -C dir push` may reach no pattern,
+ * and OpenCode would run it without asking anyone.
+ */
+function plainPushVerb(command: string): string | null {
+  if (/[;&|`$()<>\\\n]/.test(command)) return null;
+  return PUSH_VERBS.find((verb) => command === verb || command.startsWith(`${verb} `)) ?? null;
+}
+
+/** Whether OpenCode's loaded config makes it ask before a push through verb. */
+function asksBeforePush(config: unknown, verb: string): boolean {
+  if (typeof config !== "object" || config === null) return false;
+  const permission = (config as Record<string, unknown>).permission;
+  if (typeof permission !== "object" || permission === null) return false;
+  const bash = (permission as Record<string, unknown>).bash;
+  if (typeof bash !== "object" || bash === null) return false;
+  const patterns = bash as Record<string, unknown>;
+  return patterns[verb] === "ask" && patterns[`${verb} *`] === "ask";
 }
 
 /** First non-empty string among `keys` in a tool's untyped args, else "". */
@@ -203,8 +252,10 @@ export const MagusGuard: Plugin = async () => {
     }
     if (stdout.trim() === "") {
       const nameIndex = args.indexOf("--agent-name");
-      const withoutName =
-        nameIndex === -1 ? args : [...args.slice(0, nameIndex), ...args.slice(nameIndex + 2)];
+      // --renders-ask goes too: a binary that rejects it is too old to return an ask.
+      const withoutName = (
+        nameIndex === -1 ? args : [...args.slice(0, nameIndex), ...args.slice(nameIndex + 2)]
+      ).filter((arg) => arg !== "--renders-ask");
       stdout = await runOnce(withoutName, input);
       if (stdout === null) {
         unguarded();
@@ -219,7 +270,7 @@ export const MagusGuard: Plugin = async () => {
       console.warn("[magus guard] verdict was not JSON; allowing");
       return null;
     }
-    if (!isVerdict(parsed)) {
+    if (!isEnvelope(parsed)) {
       console.warn("[magus guard] unrecognized verdict shape; allowing");
       return null;
     }
@@ -230,19 +281,35 @@ export const MagusGuard: Plugin = async () => {
       );
       return null;
     }
-    return parsed;
+    return toVerdict(parsed);
   };
 
+  // OpenCode's loaded config, set by the config hook. Until it runs, nothing is known to ask
+  // before a push, so an ask throws rather than trusting a prompt that may not come.
+  let loadedConfig: unknown = null;
+
+  // --renders-ask: apply never lets an ask through unasked (it passes one to OpenCode's own
+  // prompt or throws), so this plugin may receive one. Without it magus answers with a deny.
+  const shellArgs = ["shell", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
+
   /**
-   * Throws on a deny, which is OpenCode's only way to stop a call. Returns an
-   * advise's context for the caller to hold until the call lands, and "" for
-   * everything else.
+   * Throws on a deny, which is OpenCode's only way to stop a call, and on an ask that
+   * OpenCode's own prompt will not reach. Returns an advise's context for the caller to
+   * hold until the call lands, and "" for everything else.
    */
-  const apply = (verdict: Verdict | null): string => {
+  const apply = (verdict: Verdict | null, promptable: boolean): string => {
     if (verdict === null) return "";
     switch (verdict.decision) {
       case "deny":
         throw new Error(`[magus guard] ${verdict.reason}`);
+      case "ask":
+        if (promptable) return "";
+        throw new Error(
+          `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
+            "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push reaches the prompt " +
+            'its own "permission.bash" entries configure, which magus agent harness apply --id opencode writes. ' +
+            "Ask them to run it from their own terminal.",
+        );
       case "advise":
         return verdict.context;
       case "pass":
@@ -260,8 +327,9 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        const args = ["shell", "--agent-name", "opencode", "-o", "json"];
-        remember(input.callID, apply(await judge(args, command)));
+        const verb = plainPushVerb(command);
+        const promptable = verb !== null && asksBeforePush(loadedConfig, verb);
+        remember(input.callID, apply(await judge(shellArgs, command), promptable));
         return;
       }
 
@@ -270,8 +338,36 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        const args = ["shell", "--path", "--agent-name", "opencode", "-o", "json"];
-        remember(input.callID, apply(await judge(args, path)));
+        const args = ["shell", "--path", "--agent-name", "opencode", "--renders-ask", "-o", "json"];
+        remember(input.callID, apply(await judge(args, path), false));
+      }
+    },
+
+    config: async (config) => {
+      loadedConfig = config;
+    },
+
+    // OpenCode raises this before its own prompt. Only a push, the prompt magus configured,
+    // is answered: any other request is the person's own rule, and a pass from the guard is
+    // not their consent to it. With no verdict at all the prompt stays, so a broken guard
+    // costs a question rather than an unasked push.
+    "permission.ask": async (input, output) => {
+      if (input.type !== "bash") return;
+      const command =
+        typeof input.metadata.command === "string" ? input.metadata.command : input.title;
+      if (plainPushVerb(command) === null) return;
+      const verdict = await judge(shellArgs, command);
+      switch (verdict?.decision) {
+        case "pass":
+        case "advise":
+          output.status = "allow";
+          return;
+        case "ask":
+          output.status = "ask";
+          return;
+        case "deny":
+          output.status = "deny";
+          return;
       }
     },
 

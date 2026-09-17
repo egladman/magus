@@ -242,6 +242,11 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		if result.Status != agent.HarnessVerified && result.Status != agent.HarnessSkillsOnly && firstFail == nil {
 			firstFail = fmt.Errorf("magus agent harness verify: %s (%s)", result.Status, result.Reason)
 		}
+		// A missing approval prompt fails even a skills-only host: the guard then refuses
+		// every call that needs the person's approval, and verify is where that is said.
+		if result.PromptStatus != "" && result.PromptStatus != agent.HarnessVerified && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s approval prompt for %s (%s)", result.PromptStatus, result.ID, result.PromptReason)
+		}
 	}
 	return firstFail
 }
@@ -304,7 +309,12 @@ func writeHarnessOutput(w io.Writer, value any) error {
 		if _, err = fmt.Fprintf(w, "%s %s harness: %s\n", verb, typed.ID, path); err != nil {
 			return err
 		}
-		if typed.MCPHint != "" {
+		for _, prompt := range typed.Prompts {
+			if err == nil {
+				_, err = fmt.Fprintf(w, "%s %s approval prompt: %s\n", verb, typed.ID, prompt)
+			}
+		}
+		if err == nil && typed.MCPHint != "" {
 			_, err = fmt.Fprintf(w, "mcp %s (user-owned; Magus does not write host MCP config):\n%s\n", typed.ID, typed.MCPHint)
 		}
 	case agent.HarnessVerification:
@@ -314,6 +324,15 @@ func writeHarnessOutput(w io.Writer, value any) error {
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)
+		}
+		if err == nil && typed.PromptStatus != "" {
+			_, err = fmt.Fprintf(w, "%s %s approval prompt", typed.PromptStatus, typed.ID)
+			if err == nil && typed.PromptReason != "" {
+				_, err = fmt.Fprintf(w, " (%s)", typed.PromptReason)
+			}
+			if err == nil {
+				_, err = fmt.Fprintln(w)
+			}
 		}
 		if err == nil && typed.MCPStatus != "" {
 			_, err = fmt.Fprintf(w, "%s %s mcp guidance: %s", typed.MCPStatus, typed.ID, typed.MCPReason)

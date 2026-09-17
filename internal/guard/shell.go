@@ -653,7 +653,9 @@ var (
 	// Publishing is where the work stops being yours alone, so that is where the
 	// reminder earns its place, and it stays an advise, because a push can
 	// legitimately carry a work-in-progress branch.
-	pushRe = regexp.MustCompile(`\bgit\s+push\b`)
+	// Every backend's push, with any global options before the subcommand (git -C <dir>,
+	// hg -R <repo>, jj -R <repo>): a relocated push the fallback misses publishes unasked.
+	pushRe = regexp.MustCompile(`\b(?:git|hg|sl|jj(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+git)(?:\s+-\S+(?:\s+[^\s-]\S*)?)*\s+push\b`)
 	// A SCOPED revert: `git checkout -- <paths>` / `git restore <paths>`. The
 	// whole-tree forms above already deny; this one is legitimate often enough
 	// that it only advises, but it is the shape of the most common wrong reflex

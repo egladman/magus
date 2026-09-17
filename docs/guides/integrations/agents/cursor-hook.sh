@@ -50,10 +50,10 @@
 # note in magus-hook-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
-# magus-guard-template: 14
-# magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none
+# magus-guard-template: 15
+# magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
+# magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
+# magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none ask=none
 # NOT because the transport is missing: testdata/hosts/cursor/hooks.schema.json DOES
 # declare beforeMCPExecution and afterMCPExecution, the MCP-call twins of beforeShellExecution
 # and preToolUse/postToolUse above. What is missing is the PAYLOAD: no vendored source (Cursor
@@ -154,7 +154,11 @@ fi
 # The two replies Cursor reads. A deny carries BOTH messages: user_message is shown
 # to the person and agent_message reaches the model. Neither is delivered on an
 # allow, which is why the advisory lives on a different event.
-gate_template='{{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
+#
+# An ask is Cursor's own approval prompt: the person sees user_message and decides. Only pass
+# and advise allow. Anything else, including a decision this file does not know, is refused,
+# because a copy older than the guard contract must not read a new verdict as consent.
+gate_template='{{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else if eq .decision "ask"}}{"permission":"ask","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else if eq .decision "pass"}}{"permission":"allow"}{{else if eq .decision "advise"}}{"permission":"allow"}{{else}}{"permission":"deny","user_message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know. Update .cursor/hooks/cursor-hook.sh from the magus docs.")}},"agent_message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it.")}}}{{end}}'
 advise_template='{{if eq .decision "advise"}}{"additional_context":{{toJson .context}}}{{else}}{}{{end}}'
 
 # guard_notice_once succeeds the first time $1 fires in this session and fails on every
@@ -337,14 +341,16 @@ preToolUse)
     printf '%s' '{"permission":"allow"}'
     exit 0
   fi
-  verdict=$(guard "$path" --path -o "template=$gate_template" 2>/dev/null)
+  # --renders-ask on the gating events only: gate_template answers an ask with Cursor's
+  # own prompt, and advise_template has no ask arm, so a postToolUse call makes no claim.
+  verdict=$(guard "$path" --path --renders-ask -o "template=$gate_template" 2>/dev/null)
   if [ -z "$verdict" ]; then
     guard_failure_notice "$path" --path
     verdict='{"permission":"allow"}'
   fi
   ;;
 beforeShellExecution)
-  verdict=$(guard "$shell_command" -o "template=$gate_template" 2>/dev/null)
+  verdict=$(guard "$shell_command" --renders-ask -o "template=$gate_template" 2>/dev/null)
   if [ -z "$verdict" ]; then
     guard_failure_notice "$shell_command"
     verdict='{"permission":"allow"}'

@@ -158,6 +158,12 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 	// Advisories, in a second pass so a deny anywhere in a compound command wins
 	// over an advisory earlier in it.
 	for _, c := range cmds {
+		// Every backend's push, relocated or not, ahead of the git-only arms below: it is
+		// the one advisory the push gate upgrades to an ask, so a push that slipped by here
+		// would publish without the person being asked.
+		if isPush(c) {
+			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
+		}
 		if c.Name != "git" || len(c.Args) == 0 {
 			continue
 		}

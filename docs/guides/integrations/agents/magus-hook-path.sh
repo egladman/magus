@@ -34,9 +34,14 @@
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-hook-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 14
-# magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none
+#
+# No rule asks on this surface today. The arm exists for the same reason the deny arm did
+# before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
+# Codex does not support a hook ask and no Codex rule prompts for a write, so there it
+# renders as a deny.
+# magus-guard-template: 15
+# magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
+# magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
@@ -54,7 +59,8 @@ if [ -n "$__MAGUS_NO_ADVISE" ]; then
 else
   [ -n "$HOST_ADVISE_BRANCH" ] || HOST_ADVISE_BRANCH='{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}'
 fi
-[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}'"$HOST_ADVISE_BRANCH"'{{end}}'
+# HOST_RESPONSE's default is assembled once the event is read, because telling Codex apart
+# reads the event; see magus-hook-command.sh.
 # Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
 # newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
 # not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
@@ -93,6 +99,24 @@ event=$(cat)
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 
+# Codex by name or by its event's turn_id, exactly as magus-hook-command.sh decides it. No
+# Codex rule prompts for a write, so there an ask renders as a deny.
+if [ -z "$HOST_ASK_BRANCH" ]; then
+  if [ "$__MAGUS_AGENT_NAME" = codex ] || [ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ]; then
+    HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason "\n\nThis write needs the approval of the person you work for, and Codex has no prompt for it. Ask them to make it themselves.")}}}}'
+  else
+    HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":{{toJson .reason}}}}'
+  fi
+fi
+# A decision this file does not know is refused, never allowed; see magus-hook-command.sh.
+# Only a reply assembled here claims --renders-ask: a HOST_RESPONSE the reader wrote gets a
+# deny from magus rather than an ask it may render as nothing.
+renders_ask=
+if [ -z "$HOST_RESPONSE" ]; then
+  HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}'"$HOST_ASK_BRANCH$HOST_ADVISE_BRANCH"'{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}{{else}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}{{end}}'
+  renders_ask=--renders-ask
+fi
+
 # Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate the current magus
 # release, and an older binary rejects the unknown flag outright - printing usage to stdout and
 # exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
@@ -107,7 +131,8 @@ guard() {
 # trail. Emptiness alone cannot tell the cases apart either, because a pass renders empty
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" 2>/dev/null)
+# shellcheck disable=SC2086
+verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

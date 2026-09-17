@@ -1261,6 +1261,7 @@ not block every tool call.`,
 		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
 		{Name: "observes-skill-loads", Kind: FlagBool, Doc: "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down"},
+		{Name: "renders-ask", Kind: FlagBool, Doc: "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny"},
 	},
 	Examples: []Example{
 		{"Check one command", "magus shell 'go test ./...'"},

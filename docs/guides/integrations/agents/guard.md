@@ -527,6 +527,30 @@ A deny exits 2 with the verdict on stdout; a pass and an advise exit 0. An
 empty event passes, but one the hook cannot read fails closed as a deny:
 nothing was judged, so the call is blocked rather than cleared.
 
+A fourth decision, `ask`, means only the person can clear the call. It also exits 2,
+so a glue that reads nothing but the exit status still stops. magus returns it only to a
+caller that passes `--renders-ask`, the claim that its reply puts the call in front of
+the person or refuses it. Every other caller gets `deny` with a reason saying the hook
+predates approval prompts, because a glue older than the decision renders an ask as
+nothing and its host reads nothing as allow. The shipped templates and the OpenCode
+plugin pass the flag; a `HOST_RESPONSE` you wrote yourself does not. Today the push gate
+is its one source: a push at a commit no passing gate covers, from a session no job
+lease binds, gets `ask`, and the reason names the commit and the gate state. The gate
+covers every backend magus drives: `git push`, `hg push`, `sl push` (with or without
+`--to`) and `jj git push`, relocated with `git -C`, `hg -R`, `sl -R` or `jj -R` too. It
+matches the gate to the revision by content hash (git and Mercurial nodes, jj commit
+ids); a revision it cannot match that way, such as a Mercurial local revision number or
+a jj change id, makes it stand down rather than guess. The
+host's own approval prompt shows it, and approving publishes the commit. Claude
+Code and Cursor prompt from the hook. Codex and OpenCode hooks cannot, so their
+harnesses write a native prompt rule (`.codex/rules/magus.rules`, and
+`permission.bash` in `opencode.json`) and the hook answers that prompt: allow for a
+push a gate covers, ask for an ungated one. Where no prompt can happen, those two
+refuse the push and name the person's own terminal. A session bound to a job lease
+always gets `deny`, because workers do not publish. Nothing the agent types clears
+an `ask`, and every shipped template refuses a decision it does not know rather
+than allowing it.
+
 Every verdict carries `lease`: the ledger row it was graded under, absent when the
 call named none. `--lease <id>` sets it and `magus.lease` in `$BAGGAGE` is the
 default, so a shell that exported one for a whole session is still overridable per

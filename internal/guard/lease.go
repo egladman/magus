@@ -744,31 +744,68 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	return ""
 }
 
-// vcsMutation names the git operation a parsed command performs when it is one a
-// worker must leave to the orchestrator, or "" for anything else. Global options
-// before the subcommand (-C <dir>, -c k=v, --work-tree <dir>) are skipped so a relocated
-// commit is still a commit. Only git is read: the guard's command grammar knows no other VCS, and a
-// name here that promised more would be a rule nothing enforces.
-//
-// `git stash list` and `git stash show` read the stash rather than moving work onto
-// it, so they pass; every other stash form is a mutation.
-func vcsMutation(c hint.Invocation) string {
-	if c.Name != "git" {
-		return ""
-	}
-	var sub string
-	var rest []string
+// vcsGlobalValueFlags are, per backend, the global options that take their value as the
+// NEXT word, so reading past them reaches the subcommand of a relocated call. A flag
+// spelled with `=` carries its own value and is skipped as one word.
+var vcsGlobalValueFlags = map[string][]string{
+	"git": {"-C", "-c", "--work-tree", "--git-dir", "--namespace"},
+	"hg":  {"-R", "--repository", "--repo", "--cwd", "--config"},
+	"sl":  {"-R", "--repository", "--repo", "--cwd", "--config"},
+	"jj":  {"-R", "--repository", "--at-operation", "--at-op", "--config", "--config-toml", "--config-file", "--color"},
+}
+
+// isPush reports whether a parsed command publishes: git push, hg push, sl push (with or
+// without --to) or jj git push, relocated or not.
+func isPush(c hint.Invocation) bool {
+	return strings.HasSuffix(vcsMutation(c), " push")
+}
+
+// vcsSubcommand splits a VCS invocation at its subcommand, past the global options before it.
+func vcsSubcommand(c hint.Invocation) (sub string, rest []string) {
+	valued := vcsGlobalValueFlags[c.Name]
 	for i := 0; i < len(c.Args); i++ {
 		a := c.Args[i]
 		if strings.HasPrefix(a, "-") {
-			switch a {
-			case "-C", "-c", "--work-tree", "--git-dir", "--namespace":
+			if slices.Contains(valued, a) {
 				i++
 			}
 			continue
 		}
-		sub, rest = a, c.Args[i+1:]
-		break
+		return a, c.Args[i+1:]
+	}
+	return "", nil
+}
+
+// vcsMutation names the version-control operation a parsed command performs when it is one
+// a worker must leave to the orchestrator, or "" for anything else. Global options before
+// the subcommand (git -C <dir>, hg -R <repo>, jj -R <repo>) are skipped so a relocated
+// commit is still a commit.
+//
+// Every backend's PUSH is read, because the push gate keys on it and a push it cannot see
+// publishes without the person being asked. The other mutations are git's alone: the
+// Mercurial, Sapling and Jujutsu arms of the guard grade their destructive verbs in
+// nonGitVCSGuard, and a name here that promised more would be a rule nothing enforces.
+//
+// `git stash list` and `git stash show` read the stash rather than moving work onto
+// it, so they pass; every other stash form is a mutation.
+func vcsMutation(c hint.Invocation) string {
+	sub, rest := vcsSubcommand(c)
+	switch c.Name {
+	case "hg", "sl":
+		if sub == "push" {
+			return c.Name + " push"
+		}
+		return ""
+	case "jj":
+		// `git` is a command group, so its own subcommand is read past jj's global options
+		// the same way.
+		if nested, _ := vcsSubcommand(hint.Invocation{Name: c.Name, Args: rest}); sub == "git" && nested == "push" {
+			return "jj git push"
+		}
+		return ""
+	case "git":
+	default:
+		return ""
 	}
 	switch sub {
 	case "commit", "push", "reset", "clean", "revert", "rebase", "merge", "cherry-pick":

@@ -147,6 +147,11 @@ type Request struct {
 	// False is the safe answer: rules that need it stand down, which is what keeps them
 	// from denying forever on a host that can never satisfy them.
 	ObservesSkillLoads bool
+	// RendersAsk is the second capability: the wiring puts an ask verdict in front of the
+	// person through the host's own prompt. Without it an ask is returned as a deny,
+	// because a glue that predates the decision renders it as nothing and its host reads
+	// nothing as allow.
+	RendersAsk bool
 }
 
 // Verdict is the neutral result of evaluating one shell command: exactly
@@ -494,8 +499,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				}
 			}
 		}
-		// The push gate, upgraded from the advisory gitGuard returned to a DENY when the
-		// run log proves no green gate covers this commit.
+		// The push gate, upgraded from the advisory gitGuard returned when the run log proves
+		// no green gate covers this commit: the person is asked through the host's prompt,
+		// or a leased worker is refused outright (see gradePushWithoutGate).
 		//
 		// Here rather than in gitGuard because that function is pure over the parsed
 		// command and this reads the run log and the revision. The rule is split the same
@@ -507,9 +513,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if cover == gateUnknown {
 				cover = gateCoverageAt(workspaceRunsDir(location.cacheDir), commit)
 			}
-			if reason := denyPushWithoutGate(cover); reason != "" {
-				verdict.Decision, verdict.Context = "deny", ""
-				verdict.Reason = reason
+			switch decision, reason := gradePushWithoutGate(cover, commit, actingLease); decision {
+			case "ask":
+				verdict.Decision, verdict.Context, verdict.Reason = "ask", "", reason
+				if !req.RendersAsk {
+					verdict.Decision, verdict.Reason = "deny", reason+"\n"+askUnrendered
+				}
+				verdict.Rule = string(denyRulePushUngated)
+			case "deny":
+				verdict.Decision, verdict.Context, verdict.Reason = "deny", "", reason
 				verdict.Rule = string(denyRulePushUngated)
 			}
 		}
@@ -544,7 +556,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		advisoryLeaseTerminal: adviseTerminalLease(standing, actingLease),
 		advisoryLeaseInvalid:  adviseInvalidLease(actingLease),
 	} {
-		if notice == "" || req.Observe || verdict.Decision == "deny" {
+		if notice == "" || req.Observe || verdict.Decision == "deny" || verdict.Decision == "ask" {
 			continue
 		}
 		held := markers.Once(kind, notice)
@@ -570,7 +582,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// A denial explains itself in full whenever it refuses, and this is the sentence that
 	// says the refusal may be coming from rules the caller has already changed.
 	if notice := staleGuardNotice(); notice != "" && !req.Observe {
-		if verdict.Decision == "deny" {
+		// An ask blocks until the person answers, so it is explained like a deny and never
+		// overwritten by the advise below, which a host renders as an allow.
+		if verdict.Decision == "deny" || verdict.Decision == "ask" {
 			verdict.Reason += "\n\n" + notice
 		} else if held := markers.Once(advisoryStaleBinary, notice); held != "" {
 			if verdict.Decision == "advise" {
