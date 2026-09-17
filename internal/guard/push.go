@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
 
@@ -92,6 +93,37 @@ func gateCoverageAt(runsDir, commit string) gateCoverage {
 		}
 	}
 	return out
+}
+
+// gateVerdictAt is the verdict the gate recorded for commit in the repository's session
+// store, or gateUnknown when there is none to read.
+//
+// Consulted before the run log, because the store is keyed by the commit a gate ran AT,
+// while a run log names only the commit its binary was BUILT from. A gate run by a binary
+// one commit behind HEAD, which is every gate after a commit that was not rebuilt, reads
+// as absent in the log while the redundancy check (MGS3010) refuses to run it again: two
+// rules each blocking the only way past the other.
+func gateVerdictAt(workspace, commit string) gateCoverage {
+	if workspace == "" || commit == "" {
+		return gateUnknown
+	}
+	dir, err := sessions.Dir(workspace)
+	if err != nil {
+		return gateUnknown
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return gateUnknown
+	}
+	rec, ok := sessions.GateAt(fold, commit, string(types.TargetCI))
+	switch {
+	case !ok:
+		return gateUnknown
+	case rec.Outcome == sessions.OutcomePass:
+		return gatePassed
+	default:
+		return gateFailed
+	}
 }
 
 // gatePassStatus is the overall outcome a finished gate writes. Journal statuses are

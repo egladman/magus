@@ -501,7 +501,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// way the skill gates are: the parser decides WHAT the command is, and the arm
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
-			cover := gateCoverageAt(workspaceRunsDir(location.cacheDir), deps.headCommit(ctx))
+			commit := deps.headCommit(ctx)
+			cover := gateVerdictAt(location.workspace, commit)
+			if cover == gateUnknown {
+				cover = gateCoverageAt(workspaceRunsDir(location.cacheDir), commit)
+			}
 			if reason := denyPushWithoutGate(cover); reason != "" {
 				verdict.Decision, verdict.Context = "deny", ""
 				verdict.Reason = reason
