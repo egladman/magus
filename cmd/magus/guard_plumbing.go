@@ -143,9 +143,11 @@ func loadWorkspaceShellRules(ctx context.Context) ([]guard.WorkspaceShellRule, g
 // parse its input has not judged the command either.
 const guardDenyExitCode = 2
 
-// enforceVerdict turns a deny into a blocking exit. Applies to every format: an
+// enforceVerdict turns a deny or an ask into a blocking exit. Applies to every format: an
 // `-o json` caller with a zero status would be told the same lie in a different
-// shape.
+// shape. An ask blocks too because the exit status cannot carry the person's approval: a
+// glue that reads only the status must stop, and one that renders the host's prompt reads
+// the decision off stdout.
 //
 // The reason reaches stderr only when stdout does not already carry it as prose,
 // i.e. every format but text. The guard templates read the verdict off stdout and
@@ -156,7 +158,7 @@ func enforceVerdict(opts OutputOptions, verdict guard.Verdict) error {
 }
 
 func enforceVerdictTo(errOut io.Writer, opts OutputOptions, verdict guard.Verdict) error {
-	if verdict.Decision != "deny" {
+	if verdict.Decision != "deny" && verdict.Decision != "ask" {
 		return nil
 	}
 	if opts.Format != FormatText {
@@ -172,6 +174,8 @@ func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict guard.Verdict)
 		switch verdict.Decision {
 		case "deny":
 			fmt.Fprintln(out, decisionLabel("deny", verdict.Rule)+" "+verdict.Reason)
+		case "ask":
+			fmt.Fprintln(out, decisionLabel("ask", verdict.Rule)+" "+verdict.Reason)
 		case "advise":
 			fmt.Fprintln(out, decisionLabel("advise", verdict.Rule)+" "+verdict.Context)
 		default:

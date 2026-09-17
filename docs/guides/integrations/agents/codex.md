@@ -13,17 +13,18 @@ verdict shape. Current Magus binaries therefore receive those events directly;
 the shared templates remain the portable fallback for hosts without that host
 contract.
 
-| what             | where                                                          |
-| ---------------- | -------------------------------------------------------------- |
-| skills           | `.agents/skills/`                                              |
-| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)       |
-| guard wiring     | `.codex/hooks.json`, `PreToolUse`                              |
-| command surface  | deny and advise both reach the model                           |
-| file surface     | deny and advise both reach the model                           |
-| MCP call surface | `PreToolUse` (`mcp__.*`), deny and advise both reach the model |
-| checkpoint       | `Stop`                                                         |
-| rehydration      | `SessionStart` (`compact`)                                     |
-| MCP              | `~/.codex/config.toml`, see [MCP](../mcp.md)                   |
+| what             | where                                                           |
+| ---------------- | --------------------------------------------------------------- |
+| skills           | `.agents/skills/`                                               |
+| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)        |
+| guard wiring     | `.codex/hooks.json`, `PreToolUse`                               |
+| command surface  | deny and advise both reach the model                            |
+| file surface     | deny and advise both reach the model                            |
+| MCP call surface | `PreToolUse` (`mcp__.*`), deny and advise both reach the model  |
+| push approval    | `.codex/rules/magus.rules` prompts, `PermissionRequest` answers |
+| checkpoint       | `Stop`                                                          |
+| rehydration      | `SessionStart` (`compact`)                                      |
+| MCP              | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
 
 ## Skills
 
@@ -154,6 +155,18 @@ shown here:
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "statusMessage": "magus guard: checking approval"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "compact",
@@ -194,6 +207,29 @@ continue the call, are `continue`, `stopReason` and `suppressOutput`. Suppressio
 cost this host every explanation the guard had to give while enforcing every deny,
 which is the half of the contract nothing in a session reports missing. If your own
 build behaves otherwise, `__MAGUS_NO_ADVISE=1` still suppresses the arm.
+
+### Push approval
+
+A push no passing gate covers needs the person's approval. Codex hooks cannot ask:
+Codex parses `permissionDecision: "ask"`, marks the hook run failed, and runs the
+call anyway, so the template never sends it. The prompt comes from
+`.codex/rules/magus.rules`, which apply writes: a `prefix_rule` with
+`decision = "prompt"` for each backend's push, `git push`, `hg push`, `sl push` and
+`jj git push`. Before that prompt Codex raises `PermissionRequest`, and the
+same command template answers it: allow for a push a gate covers, so nobody is
+asked, no decision for an ungated push, so the person decides, and deny for a
+session bound to a job lease, because workers do not publish. Project rules load
+only when the project's `.codex` layer is trusted, the same trust that loads its
+hooks. Where no prompt can happen (no rules file, `permission_mode` of
+`bypassPermissions` or `dontAsk`, or a push written as anything but a plain
+`git push`, `hg push`, `sl push` or `jj git push` command), the guard refuses the push and names the person's own
+terminal. One open Codex bug ignores a prompt rule under `danger-full-access` with
+granular rules, [openai/codex#25312](https://github.com/openai/codex/issues/25312).
+The template refuses a session whose hook input reports `bypassPermissions`, but
+nothing here has confirmed that full access reports that mode, so do not run pushes
+in full access until the bug closes. `magus agent harness
+verify --id codex` fails while the rules file or the `PermissionRequest` entry is
+missing.
 
 ### Maintaining the workspace harness
 

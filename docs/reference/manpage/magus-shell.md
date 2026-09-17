@@ -87,6 +87,9 @@ not block every tool call.
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command
 
+**--renders-ask**
+: This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
+
 **--session** *string*
 : The host's own session id for this invocation
 

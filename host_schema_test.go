@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -110,29 +111,31 @@ var jsonCodeBlock = regexp.MustCompile("(?ms)^```json\r?\n(.*?)^```")
 // on the next run instead of quietly going ungraded.
 var coverageHost = regexp.MustCompile(`magus-guard-coverage:.*\bhost=(\S+)`)
 
-// The shell assignments that carry a Go template body, and the literal JSON a template
-// prints without asking magus at all.
-//
-// HOST_RESPONSE is matched as two segments because the shell splices
-// "$HOST_ADVISE_BRANCH" between them. Composing it here rather than reading one string
-// is what lets the test render both supported arrangements. Claude Code and Codex
-// use the advise arm today; __MAGUS_NO_ADVISE remains an opt-in for a future host
-// that rejects additionalContext rather than silently ignoring it.
+// The literal JSON a template prints without asking magus at all, and the shell variables
+// cursor-hook.sh keeps its reply templates in.
 var (
-	adviseBranchAssign = regexp.MustCompile(`(?m)^\s*\[ -n "\$HOST_ADVISE_BRANCH" \] \|\| HOST_ADVISE_BRANCH='(.*)'$`)
-	hostResponseAssign = regexp.MustCompile(`(?m)^\[ -n "\$HOST_RESPONSE" \] \|\| HOST_RESPONSE='(.*)'"\$HOST_ADVISE_BRANCH"'(.*)'$`)
-	inlineTemplateArg  = regexp.MustCompile(`-o 'template=(.*)'`)
-	literalJSONObject  = regexp.MustCompile(`'(\{"[^'\n]*\})'`)
-	shellTemplateVar   = regexp.MustCompile(`(?m)^(\w+)_template='(.*)'$`)
+	literalJSONObject = regexp.MustCompile(`'(\{"[^'\n]*\})'`)
+	shellTemplateVar  = regexp.MustCompile(`(?m)^(\w+)_template='(.*)'$`)
 )
 
-// guardVerdicts are the three decisions `magus shell` renders. The values are
-// fixed here rather than taken from a run so the rendered bytes belong to the test, and
-// the reason carries the characters a naive template would break on.
+// permissionRequestEvent is the hookEventName of Codex's approval-request reply, which is
+// graded against its own schema rather than PreToolUse's.
+const (
+	permissionRequestEvent  = `"hookEventName":"PermissionRequest"`
+	permissionRequestSchema = "codex/permission-request.command.output.schema.json"
+)
+
+// guardVerdicts are the decisions `magus shell` renders, plus one it never does. The values
+// are fixed here rather than taken from a run so the rendered bytes belong to the test, and
+// the reason carries the characters a naive template would break on. The unknown decision
+// stands in for a contract that grew after a copy was installed: it must never render as
+// an allow.
 var guardVerdicts = []map[string]any{
 	{"decision": "deny", "reason": `git stash is denied here: "quoted" & <angled>`},
 	{"decision": "advise", "context": "magus workspace: `magus refs <sym>` for code"},
 	{"decision": "pass"},
+	{"decision": "ask", "reason": `pushing abc1234, which no passing gate covers: "quoted" & <angled>`},
+	{"decision": "maybe", "reason": "a decision no template knows"},
 }
 
 // loadHostSchema reads a vendored schema and prepares it for validation.
@@ -295,38 +298,130 @@ func TestCodexHookEventsAreNamedByItsSchema(t *testing.T) {
 	}
 }
 
-// guardResponses returns every JSON document a shipped sh template can print: the
-// literal ones, and the renderings of the Go templates it hands magus.
-func guardResponses(t *testing.T, name, body string) []string {
+// templateArrangement is one way a host reaches a shared sh template: the environment its
+// wiring sets, the event it sends, and whether a Codex prompt rule sits in the project.
+type templateArrangement struct {
+	label string
+	env   []string
+	event string
+	rules bool
+	// codex marks an arrangement whose PreToolUse reply must never carry permissionDecision
+	// "ask": Codex parses it, reports the hook failed, and runs the call anyway.
+	codex bool
+	// ownResponse is a reader-written HOST_RESPONSE, which cannot claim --renders-ask.
+	ownResponse bool
+}
+
+var templateArrangements = []templateArrangement{
+	{label: "claude-code", event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "claude-code without the advise arm", env: []string{"__MAGUS_NO_ADVISE=1"}, event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex with no prompt rule", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex with its prompt rule", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex in a mode that never prompts", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","permission_mode":"bypassPermissions","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex approval request for a push", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push origin HEAD"}}`},
+	{label: "codex approval request for anything else", env: []string{"__MAGUS_AGENT_NAME=codex"}, codex: true, rules: true, event: `{"hook_event_name":"PermissionRequest","session_id":"s","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`},
+	// A Codex wiring that forgot __MAGUS_AGENT_NAME. turn_id, required by Codex's published
+	// input schema and named by no other vendored host schema, is what gives it away.
+	{label: "codex by event shape alone", codex: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","turn_id":"t","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "codex by event shape alone, with its prompt rule", codex: true, rules: true, event: `{"hook_event_name":"PreToolUse","session_id":"s","turn_id":"t","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+	{label: "a reader's own HOST_RESPONSE", ownResponse: true, env: []string{`HOST_RESPONSE={{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}`}, event: `{"hook_event_name":"PreToolUse","session_id":"s","tool_name":"Bash","tool_input":{"command":"git push","file_path":"README.md"}}`},
+}
+
+// templateEcho stands in for magus: it prints the template it was handed and nothing else,
+// so what a script ASSEMBLES for a host is read from the script running rather than from
+// a regex over its source. It records whether the call claimed --renders-ask in the file
+// $RENDERS_ASK_RECORD names.
+const templateEcho = "#!/bin/sh\nclaim=no\nfor a in \"$@\"; do [ \"$a\" = --renders-ask ] && claim=yes; done\nprintf '%s' \"$claim\" > \"$RENDERS_ASK_RECORD\"\n" +
+	"while [ $# -gt 0 ]; do\n  if [ \"$1\" = -o ]; then printf '%s' \"${2#template=}\"; exit 0; fi\n  shift\ndone\nexit 1\n"
+
+// renderedTemplate is one template body a script assembled, the arrangement it came from,
+// and whether the call claimed --renders-ask.
+type renderedTemplate struct {
+	arrangement templateArrangement
+	body        string
+	rendersAsk  bool
+}
+
+// assembledTemplates runs a shipped sh template once per arrangement against templateEcho
+// and returns each template body it would hand magus.
+func assembledTemplates(t *testing.T, path string) []renderedTemplate {
 	t.Helper()
-
-	var bodies []string
-	if segments := hostResponseAssign.FindStringSubmatch(body); segments != nil {
-		advise := adviseBranchAssign.FindStringSubmatch(body)
-		require.NotNil(t, advise,
-			"%s splices $HOST_ADVISE_BRANCH into HOST_RESPONSE but never assigns it a default", name)
-		// Both arrangements remain valid template behavior. The advise arm is what
-		// Claude Code and Codex render; __MAGUS_NO_ADVISE is a supported host override.
-		bodies = append(bodies, segments[1]+advise[1]+segments[2], segments[1]+segments[2])
+	for _, tool := range []string{"sh", "jq"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("the shared templates run under sh and read the event with jq; %s is not installed", tool)
+		}
 	}
-	for _, match := range inlineTemplateArg.FindAllStringSubmatch(body, -1) {
-		bodies = append(bodies, match[1])
-	}
+	script, err := filepath.Abs(path)
+	require.NoError(t, err)
+	bin := filepath.Join(t.TempDir(), "magus")
+	require.NoError(t, os.WriteFile(bin, []byte(templateEcho), 0o755))
 
-	funcs := sprig.HermeticTxtFuncMap()
+	var out []renderedTemplate
+	for _, a := range templateArrangements {
+		dir := t.TempDir()
+		if a.rules {
+			rules := filepath.Join(dir, ".codex", "rules", "magus.rules")
+			require.NoError(t, os.MkdirAll(filepath.Dir(rules), 0o755))
+			require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"), 0o644))
+		}
+		record := filepath.Join(dir, "renders-ask")
+		cmd := exec.Command("sh", script)
+		cmd.Dir = dir
+		cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "TMPDIR=" + t.TempDir(), "__MAGUS_BIN=" + bin, "RENDERS_ASK_RECORD=" + record}, a.env...)
+		cmd.Stdin = strings.NewReader(a.event)
+		body, err := cmd.Output()
+		require.NoError(t, err, "%s (%s)", path, a.label)
+		require.NotEmpty(t, body, "%s (%s) handed magus no template", path, a.label)
+		claim, err := os.ReadFile(record)
+		require.NoError(t, err, "%s (%s) never called magus", path, a.label)
+		out = append(out, renderedTemplate{arrangement: a, body: string(body), rendersAsk: string(claim) == "yes"})
+	}
+	return out
+}
+
+// guardResponses returns every JSON document a shipped sh template can print: the literal
+// ones, and the renderings of the Go template it assembles for each arrangement.
+func guardResponses(t *testing.T, path, body string) []string {
+	t.Helper()
+	name := filepath.Base(path)
 	var out []string
 	for _, match := range literalJSONObject.FindAllStringSubmatch(body, -1) {
 		out = append(out, match[1])
 	}
-	for _, arrangement := range bodies {
-		tmpl, err := template.New(name).Funcs(funcs).Parse(arrangement)
-		require.NoError(t, err, "%s renders its verdict through this template, so it must parse", name)
+	// Only the shared templates assemble HOST_RESPONSE; cursor-hook.sh keeps its replies in
+	// variables TestCursorGuardRepliesValidateAgainstTheEventThatReadsThem grades.
+	if !strings.Contains(body, "HOST_RESPONSE") {
+		return out
+	}
+	funcs := sprig.HermeticTxtFuncMap()
+	for _, assembled := range assembledTemplates(t, path) {
+		a := assembled.arrangement
+		// The claim is what lets magus return an ask at all, so it must track exactly the
+		// replies that render one: every reply the template assembles, and none a reader wrote.
+		assert.Equal(t, !a.ownResponse, assembled.rendersAsk,
+			"%s (%s): --renders-ask claimed=%v; a template's own reply must claim it and a reader's must not", name, a.label, assembled.rendersAsk)
+		tmpl, err := template.New(name).Funcs(funcs).Parse(assembled.body)
+		require.NoError(t, err, "%s (%s) renders its verdict through this template, so it must parse", name, a.label)
 		for _, verdict := range guardVerdicts {
 			var rendered strings.Builder
-			require.NoError(t, tmpl.Execute(&rendered, verdict), "%s on a %s", name, verdict["decision"])
-			// A pass renders nothing, and one surface answers in prose rather than JSON
-			// because Cursor's post-write event has no verdict channel to answer on.
-			if text := rendered.String(); strings.HasPrefix(text, "{") {
+			require.NoError(t, tmpl.Execute(&rendered, verdict), "%s (%s) on a %s", name, a.label, verdict["decision"])
+			text := rendered.String()
+			// A reader's own reply is theirs to get right; magus sends it no ask.
+			decision := verdict["decision"]
+			if a.ownResponse {
+				decision = ""
+			}
+			switch decision {
+			case "maybe":
+				assert.Contains(t, text, "deny", "%s (%s) must refuse a decision it does not know, never allow it", name, a.label)
+			case "ask":
+				assert.NotEmpty(t, text, "%s (%s) renders an ask as nothing, which the host takes as allow", name, a.label)
+				if a.codex {
+					assert.NotContains(t, text, `"permissionDecision":"ask"`,
+						"%s (%s): Codex parses a hook ask, marks the hook failed, and runs the call", name, a.label)
+				}
+			}
+			if strings.HasPrefix(text, "{") {
 				out = append(out, text)
 			}
 		}
@@ -364,11 +459,22 @@ func TestRenderedGuardVerdictsValidateAgainstTheirHostSchema(t *testing.T) {
 		graded++
 
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			responses := guardResponses(t, filepath.Base(path), body)
+			responses := guardResponses(t, path, body)
 			require.NotEmpty(t, responses,
 				"%s prints no JSON at all, which means the extraction above stopped matching it\n"+
 					"rather than that the template stopped answering", path)
 
+			// A reply to Codex's approval request answers a different event, with its own
+			// published schema, and no other host is wired to raise it.
+			approvals := loadHostSchema(t, permissionRequestSchema)
+			for _, response := range responses {
+				if !strings.Contains(response, permissionRequestEvent) {
+					continue
+				}
+				require.True(t, hosts["codex"], "%s answers a PermissionRequest but declares no codex coverage", path)
+				assert.NoError(t, approvals.Validate(decodeJSON(t, path, response)),
+					"%s prints %s, which codex would not accept, per %s", path, response, permissionRequestSchema)
+			}
 			for host := range hosts {
 				schemaFile, ok := hostOutputSchema[host]
 				require.True(t, ok,
@@ -376,6 +482,9 @@ func TestRenderedGuardVerdictsValidateAgainstTheirHostSchema(t *testing.T) {
 						"and record it in SOURCES.md", path, host, hostSchemaDir)
 				schema := loadHostSchema(t, schemaFile)
 				for _, response := range responses {
+					if strings.Contains(response, permissionRequestEvent) {
+						continue
+					}
 					assert.NoError(t, schema.Validate(decodeJSON(t, path, response)),
 						"%s prints %s, which %s would not accept, per %s", path, response, host, schemaFile)
 				}
@@ -471,6 +580,16 @@ func TestCursorGuardRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 				require.NoError(t, tmpl.Execute(&out, verdict), "%s_template on a %s", name, verdict["decision"])
 				reply, isObject := decodeJSON(t, path, out.String()).(map[string]any)
 				require.True(t, isObject, "%s_template must render a JSON object", name)
+				if name == "gate" {
+					switch verdict["decision"] {
+					case "ask":
+						assert.Equal(t, "ask", reply["permission"], "an ask is Cursor's own approval prompt")
+					case "pass", "advise":
+						assert.Equal(t, "allow", reply["permission"])
+					default:
+						assert.Equal(t, "deny", reply["permission"], "only pass and advise may allow; %s must not", verdict["decision"])
+					}
+				}
 				assert.NoError(t, schema.Validate(reply),
 					"%s_template renders %s, which Cursor would not accept, per %s", name, out.String(), schemaFile)
 				for field := range reply {

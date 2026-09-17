@@ -92,11 +92,12 @@ var denyRuleDocs = []RuleDoc{
 			"Six errors in one session, by an agent with this repository open throughout: fs\\glob indexed as strings when it returns [Path]; .append on a list declared without mut; the ternary form, which upstream-strict parsing rejects outside --embedded; archive\\extract, which does not exist; a missing `import \"fs\"`; and .sub sliced by character on BYTE-indexed strings. Reading first supplies every one of them. " +
 			"It grades the session, not the file: one Skill(magus-buzz-write) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned, so `magus buzz <file>` and `magus buzz -t <file>` run something that already exists and go untouched."},
 	{Name: string(denyRulePushUngated), Decision: "deny",
-		Catches: "a push at a commit the run log records no green gate for",
+		Catches: "a push at a commit with no green gate: the person is asked, a leased worker refused",
 		Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
-			"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes refusing legitimate here where the rest of this tier only advises. " +
+			"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
 			"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
-			"Publishing work in progress is legitimate and indistinguishable from an oversight, so saying so lets the push through; what is refused is the silent case."},
+			"Publishing work in progress is legitimate and indistinguishable from an oversight, so a session no job lease binds gets the verdict `ask`: the host's own approval prompt puts the push in front of the person, and approving it publishes. A marker the agent types is not consent, so nothing it says clears this. " +
+			"A session bound to a lease is a worker, and workers do not publish: it gets `deny`, and nobody is asked."},
 	{Name: string(denyRuleMergeSideCheckout), Decision: "deny",
 		Catches: "a checkout of one merge side over a conflicted file, which discards the merge",
 		Why: "It reads like \"undo my edit to this file\" and is not: during a merge the working-tree copy IS the merge, and this replaces it wholesale with one side. " +
@@ -204,7 +205,7 @@ var advisoryDocs = []RuleDoc{
 		Catches: "a hunt for one distinctive name, which refs answers with verified sites",
 		Why: "A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits. " +
 			"Measured over 1,499 sessions: 42% of new files were preceded by one of these, 71% in subagent sessions, where only 12.9% reached for a magus verb at all."},
-	{Name: string(advisoryPushGate), Decision: "advise", Catches: "a push with no gate run since the last change"},
+	{Name: string(advisoryPushGate), Decision: "advise", Catches: "a push the run log does not prove ungated, which names the gate and lets it through"},
 	{Name: string(advisoryRegenSource), Decision: "advise", Catches: "a hand edit to a file a target regenerates"},
 	{Name: string(advisoryRevertClassify), Decision: "advise",
 		Catches: "a revert that has not classified what it is reverting",

@@ -1,0 +1,26 @@
+# Written by magus agent harness apply --id codex. magus agent harness remove deletes it.
+#
+# Every push raises an approval request, through git, Mercurial, Sapling or Jujutsu. The
+# magus PermissionRequest hook answers it: a push a passing gate covers is approved
+# without asking, an ungated push is left to the person, and a push from a leased worker
+# is refused.
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "magus: publishing a commit no passing gate covers needs your approval",
+)
+prefix_rule(
+    pattern = ["hg", "push"],
+    decision = "prompt",
+    justification = "magus: publishing a commit no passing gate covers needs your approval",
+)
+prefix_rule(
+    pattern = ["sl", "push"],
+    decision = "prompt",
+    justification = "magus: publishing a commit no passing gate covers needs your approval",
+)
+prefix_rule(
+    pattern = ["jj", "git", "push"],
+    decision = "prompt",
+    justification = "magus: publishing a commit no passing gate covers needs your approval",
+)
