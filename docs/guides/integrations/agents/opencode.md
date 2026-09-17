@@ -412,7 +412,7 @@ it was retold.
 The second reason is parity. Of the four hosts, only OpenCode can shape a summary
 at all -- Claude Code exposes no `PreCompact` output arm, Codex's
 `pre-compact.command.output` schema is closed over four fields with no context
-channel, and Cursor's `preCompact` is observational. A behaviour available on one
+channel, and Cursor's `preCompact` is observational. A behavior available on one
 host of four is a difference nobody can reason about, and deciding what a model
 remembers is not magus's call to make.
 

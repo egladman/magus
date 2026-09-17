@@ -300,7 +300,7 @@ export const MagusGuard: Plugin = async () => {
     // a summary at all: Claude Code has no PreCompact arm on hookSpecificOutput, Codex's
     // pre-compact.command.output.schema.json is additionalProperties:false over four fields
     // with no context channel, and Cursor's preCompact is documented as observational. A
-    // behaviour available on one host of four is not a feature, it is a difference nobody
+    // behavior available on one host of four is not a feature, it is a difference nobody
     // can reason about, and magus's job is to stay out of the model's way rather than to
     // shape what it remembers on whichever host happens to allow it.
     //
