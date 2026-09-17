@@ -868,3 +868,44 @@ func sourceReadFires(cmds []hint.Invocation) bool {
 		})
 	})
 }
+
+// redirectTargets names every file a line's shell REDIRECTS write to, and nothing else.
+//
+// Narrower than writeTargetCandidates on purpose. That one also offers every operand of a
+// command it cannot prove is a reader, and magus is not one it knows, so a file magus only
+// reads comes back as a write candidate. A rule keyed on the target's EXTENSION cannot
+// tolerate that: the same suffix sits on both sides of `magus buzz -t x.buzz`.
+// An `sh -c` or `eval` payload is scanned on its own afterwards, bounded the same way: a
+// redirect inside one belongs to the inner parse tree and is invisible to a walk of the
+// outer one, which is the whole shape of a wrapper that reaches a rule keyed on redirects.
+func redirectTargets(command string, depth int, d Dialect) []string {
+	if depth > writeScanDepth {
+		return nil
+	}
+	f, err := parseFile(command, d)
+	if err != nil {
+		return nil
+	}
+	var out, nested []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		for _, r := range stmt.Redirs {
+			if writesToFile(r.Op) {
+				out = append(out, literalWord(r.Word.Parts))
+			}
+		}
+		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
+			if script, ok := shellPayload(literalWords(call.Args)); ok {
+				nested = append(nested, script)
+			}
+		}
+		return true
+	})
+	for _, script := range nested {
+		out = append(out, redirectTargets(script, depth+1, d)...)
+	}
+	return out
+}

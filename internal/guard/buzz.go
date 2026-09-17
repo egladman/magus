@@ -54,3 +54,56 @@ func denyBuzzWriteWithoutSkill(markers hint.Gate, observesSkillLoads bool, write
 func isBuzzSource(writePath string) bool {
 	return strings.EqualFold(path.Ext(path.Base(writePath)), ".buzz")
 }
+
+// buzzAuthoredBy names what a command line is about to author in Buzz, or "" when it
+// authors none.
+//
+// The write rule above sees a host's write tool. This sees the same act arriving as a
+// COMMAND, which is the road `magus buzz -e` and a heredoc take, and which that rule is
+// structurally blind to: there is no write tool in the envelope to inspect. Both spellings
+// author the language nothing has taught this session yet, so both answer to the skill.
+//
+// `magus buzz -t <file>` and a bare `magus buzz <file>` deliberately do NOT fire. Running
+// Buzz that already exists is reading it, and the write rule's reasoning applies unchanged:
+// looking is how the language gets learned, and every mistake the skill prevents came from
+// writing on an assumption.
+func buzzAuthoredBy(command string, d Dialect) string {
+	cmds, parsed := ParseCommandsDialect(command, d)
+	if !parsed {
+		return ""
+	}
+	for _, c := range cmds {
+		if path.Base(c.Name) != "magus" || len(c.Args) == 0 || c.Args[0] != "buzz" {
+			continue
+		}
+		if hasFlag(c.Args, 'e', "eval") {
+			return "an inline program"
+		}
+	}
+	for _, target := range redirectTargets(command, 0, d) {
+		if isBuzzSource(target) {
+			return target
+		}
+	}
+	return ""
+}
+
+// denyBuzzAuthorWithoutSkill is buzz-unbriefed for a command line rather than a file write.
+func denyBuzzAuthorWithoutSkill(markers hint.Gate, observesSkillLoads bool, command string, d Dialect) string {
+	if buzzAuthoredBy(command, d) == "" {
+		return ""
+	}
+	return denyUntilSkillLoaded(markers, observesSkillLoads, buzzWriteSkill,
+		"writing Buzz",
+		"No model has Buzz in its weights, so the shape it guesses from Go or TypeScript parses just often enough to ship a bug.")
+}
+
+// rankBuzzAuthor ranks the reason UNDER every other deny, matching the write path's
+// ordering: the rules above answer whether this agent may run the line at all, and there
+// is nothing to learn before a command that is refused anyway.
+func rankBuzzAuthor(v ShellVerdict, reason string) ShellVerdict {
+	if reason == "" || v.Deny != "" {
+		return v
+	}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyBuzzUnbriefed}}
+}

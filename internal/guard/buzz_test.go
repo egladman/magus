@@ -137,3 +137,61 @@ func TestOnlyBuzzSourceIsGated(t *testing.T) {
 		assert.Empty(t, denyBuzzWriteWithoutSkill(hint.NewGate(t.TempDir(), "passed"), true, p), p)
 	}
 }
+
+// TestBuzzAuthoringOnACommandLineRequiresTheSkill covers the road the write rule cannot
+// see. Authoring Buzz through `magus buzz -e` or a heredoc reaches no write tool, so the
+// envelope carries no path and the rule above never runs; the language is just as unknown
+// either way.
+func TestBuzzAuthoringOnACommandLineRequiresTheSkill(t *testing.T) {
+	t.Parallel()
+
+	authors := map[string]string{
+		"inline eval":               `magus buzz -e 'import "std"; fun main() > void {}'`,
+		"inline eval, long flag":    `magus buzz --eval 'fun main() > void {}'`,
+		"inline eval via ./magus":   `./magus buzz -e 'fun main() > void {}'`,
+		"heredoc into a spell":      "cat > spells/ts/spell.buzz <<'EOF'\nfun main() > void {}\nEOF",
+		"append to a magusfile":     "echo 'x' >> magusfile.buzz",
+		"heredoc inside a subshell": "sh -c \"cat > tools/x.buzz <<'EOF'\nfun main() > void {}\nEOF\"",
+		"uppercase extension":       "cat > Tools/X.BUZZ <<'EOF'\nEOF",
+	}
+	for name, command := range authors {
+		t.Run(name, func(t *testing.T) {
+			g := hint.NewGate(t.TempDir(), "buzz-cmd-"+name)
+			reason := denyBuzzAuthorWithoutSkill(g, true, command, DialectBash)
+			require.NotEmpty(t, reason, "must demand the skill")
+			assert.Contains(t, reason, buzzWriteSkill.String())
+		})
+	}
+
+	// Running Buzz that already exists is READING it, which is how the language gets
+	// learned. `magus buzz -t x.buzz` names a .buzz path as an operand, so a rule built on
+	// write CANDIDATES rather than redirect targets would refuse exactly the act it wants.
+	reads := map[string]string{
+		"running a file":     "magus buzz magusfile.buzz",
+		"testing a file":     "magus buzz -t spells/go/spell.buzz",
+		"testing embedded":   "magus buzz -t --embedded magusfile.buzz",
+		"redirect elsewhere": "magus describe target ci -o json > out.json",
+		"no buzz at all":     "magus run go-build .",
+	}
+	for name, command := range reads {
+		t.Run(name, func(t *testing.T) {
+			g := hint.NewGate(t.TempDir(), "buzz-read-"+name)
+			assert.Empty(t, denyBuzzAuthorWithoutSkill(g, true, command, DialectBash))
+		})
+	}
+
+	t.Run("loading the skill clears the command road too", func(t *testing.T) {
+		const command = `magus buzz -e 'fun main() > void {}'`
+		g := hint.NewGate(t.TempDir(), "buzz-cmd-cleared")
+		require.NotEmpty(t, denyBuzzAuthorWithoutSkill(g, true, command, DialectBash))
+		require.True(t, recordSkillLoad(g, buzzWriteSkill.String()))
+		assert.Empty(t, denyBuzzAuthorWithoutSkill(g, true, command, DialectBash),
+			"the write road and the command road share one marker: reading the skill once is enough")
+	})
+
+	t.Run("the buzz deny never displaces another", func(t *testing.T) {
+		held := ShellVerdict{Deny: "something else", Rule: denyRule{Name: denyRuleCacheDirWrite}}
+		assert.Equal(t, held, rankBuzzAuthor(held, "buzz reason"),
+			"there is nothing to learn before a command that is refused anyway")
+	})
+}

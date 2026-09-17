@@ -70,6 +70,10 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
+	// HeadCommit is this checkout's current revision, abbreviated, or "" when there is no
+	// VCS to ask. The push gate matches it against the commit each recorded gate run was
+	// built from; with no answer that rule stands down rather than refusing on an absence.
+	HeadCommit func(ctx context.Context) string
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -95,6 +99,13 @@ func (d Dependencies) graphStaleAdvice(ctx context.Context) string {
 		return ""
 	}
 	return d.GraphStaleAdvice(ctx)
+}
+
+func (d Dependencies) headCommit(ctx context.Context) string {
+	if d.HeadCommit == nil {
+		return ""
+	}
+	return d.HeadCommit(ctx)
 }
 
 func (d Dependencies) spells() []*spells.Spell {
@@ -433,7 +444,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		shellD := effectiveDialect(deps.ShellDialect)
 		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
-		switch v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD)); {
+		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
+		// Outside Evaluate for the same reason the two rules above are: it reads session
+		// state (which skills have loaded) rather than the line alone, and Evaluate's
+		// verdict is a pure function of what was handed in.
+		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(markers, req.ObservesSkillLoads, input, shellD)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
@@ -476,6 +491,21 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				if held := markers.OnceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
 					verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryFocus)
 				}
+			}
+		}
+		// The push gate, upgraded from the advisory gitGuard returned to a DENY when the
+		// run log proves no green gate covers this commit.
+		//
+		// Here rather than in gitGuard because that function is pure over the parsed
+		// command and this reads the run log and the revision. The rule is split the same
+		// way the skill gates are: the parser decides WHAT the command is, and the arm
+		// with a location decides what the workspace knows about it.
+		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
+			cover := gateCoverageAt(workspaceRunsDir(location.cacheDir), deps.headCommit(ctx))
+			if reason := denyPushWithoutGate(cover); reason != "" {
+				verdict.Decision, verdict.Context = "deny", ""
+				verdict.Reason = reason
+				verdict.Rule = string(denyRulePushUngated)
 			}
 		}
 		// Gated on the command being the GATE, not on it merely spawning work: the

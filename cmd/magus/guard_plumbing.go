@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // The workspace facts and the output plumbing `magus shell` needs, kept out of shell.go
@@ -45,7 +46,35 @@ func guardDependencies() guard.Dependencies {
 		GraphStaleAdvice: staleGraphAdvice,
 		Spells:           project.DefaultSpellRegistry().All,
 		SymbolDefined:    symbolDefinedForGuard,
+		HeadCommit:       headCommitForGuard,
 	}
+}
+
+// headCommitForGuard answers this checkout's revision for the push gate, or "" when it
+// cannot be read.
+//
+// Resolved through the VCS layer rather than by shelling out to git, because magus drives
+// four backends and the hook runs in whichever the workspace uses. Every failure answers
+// "": no VCS, an unreadable one, or a repository with no commit yet all mean the push gate
+// has nothing to match a recorded run against, and it stands down rather than refusing on
+// an absence it cannot account for.
+func headCommitForGuard(ctx context.Context) string {
+	root, err := magus.FindRoot("")
+	if err != nil {
+		return ""
+	}
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return ""
+	}
+	// Metadata rather than FindCommit: it is the cheap call the brief already uses for
+	// exactly this field, and it answers the abbreviation the run log's version string
+	// carries.
+	meta, err := res.VCS.Metadata(ctx, root)
+	if err != nil {
+		return ""
+	}
+	return meta.Short
 }
 
 // symbolDefinedForGuard answers the one question that lets the guard deny a symbol

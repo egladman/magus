@@ -87,10 +87,16 @@ var denyRuleDocs = []RuleDoc{
 			"Measured across 2,147 session transcripts: zero loads, under every name and every variant, while the two skills a hook DEMANDS loaded 415 times. A skill nobody is required to read is a skill nobody reads, and this workspace had already written that down before measuring it again here. " +
 			"It grades the session, never the prompt: it asks whether a marker file exists, so a handed-over prompt that merely mentions a denied command is untouched. Load Skill(magus-multi-agent) once and every later spawn in the session passes."},
 	{Name: string(denyBuzzUnbriefed), Decision: "deny",
-		Catches: "the first write to a .buzz file in a session that has not read the Buzz skill",
+		Catches: "the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill",
 		Why: "Buzz is in no model's training data, so what gets written is Go or TypeScript with the serial numbers filed off, and enough of it parses to reach review. " +
 			"Six errors in one session, by an agent with this repository open throughout: fs\\glob indexed as strings when it returns [Path]; .append on a list declared without mut; the ternary form, which upstream-strict parsing rejects outside --embedded; archive\\extract, which does not exist; a missing `import \"fs\"`; and .sub sliced by character on BYTE-indexed strings. Reading first supplies every one of them. " +
-			"It grades the session, not the file: one Skill(magus-buzz-write) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned."},
+			"It grades the session, not the file: one Skill(magus-buzz-write) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned, so `magus buzz <file>` and `magus buzz -t <file>` run something that already exists and go untouched."},
+	{Name: string(denyRulePushUngated), Decision: "deny",
+		Catches: "a push at a commit the run log records no green gate for",
+		Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
+			"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes refusing legitimate here where the rest of this tier only advises. " +
+			"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
+			"Publishing work in progress is legitimate and indistinguishable from an oversight, so saying so lets the push through; what is refused is the silent case."},
 	{Name: string(denyRuleMergeSideCheckout), Decision: "deny",
 		Catches: "a checkout of one merge side over a conflicted file, which discards the merge",
 		Why: "It reads like \"undo my edit to this file\" and is not: during a merge the working-tree copy IS the merge, and this replaces it wholesale with one side. " +
