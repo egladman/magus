@@ -328,6 +328,59 @@ test("permission.ask answers a push prompt from the verdict", async () => {
   }
 });
 
+const everyPushPrompt = {
+  permission: {
+    bash: {
+      "git push": "ask",
+      "git push *": "ask",
+      "hg push": "ask",
+      "hg push *": "ask",
+      "sl push": "ask",
+      "sl push *": "ask",
+      "jj git push": "ask",
+      "jj git push *": "ask",
+    },
+  },
+};
+
+test("every backend's plain push reaches OpenCode's prompt when the config asks for it", async () => {
+  for (const command of ["hg push", "sl push --to main", "jj git push -b main"]) {
+    stubBun(() => ask);
+    const h = await hooks();
+    await h.config(everyPushPrompt);
+    await h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command } });
+  }
+});
+
+test("a push whose own backend is not asked about is refused", async () => {
+  stubBun(() => ask);
+  const h = await hooks();
+  await h.config(pushPrompt);
+  await assert.rejects(
+    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "hg push" } }),
+    /own terminal/,
+  );
+});
+
+test("permission.ask approves each backend's covered push, and nothing else", async () => {
+  for (const command of ["hg push", "sl push --to main", "jj git push -b main"]) {
+    const calls = stubBun(() => pass);
+    const h = await hooks();
+    const output: { status: Status } = { status: "ask" };
+    await h["permission.ask"]({ type: "bash", title: command, metadata: { command } }, output);
+    assert.equal(output.status, "allow", command);
+    assert.equal(calls[0].stdin, command);
+  }
+  for (const command of ["hg pull", "jj git fetch", "sl push && rm -rf x"]) {
+    const calls = stubBun(() => pass);
+    const h = await hooks();
+    const output: { status: Status } = { status: "ask" };
+    await h["permission.ask"]({ type: "bash", title: command, metadata: { command } }, output);
+    assert.equal(output.status, "ask", command);
+    assert.equal(calls.length, 0, `${command} is not a push magus configured`);
+  }
+});
+
 test("permission.ask leaves every other prompt to the person", async () => {
   const calls = stubBun(() => pass);
   const h = await hooks();

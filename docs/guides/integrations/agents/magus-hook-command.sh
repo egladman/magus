@@ -140,18 +140,24 @@ session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/nul
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
 event_name=$(printf '%s' "$event" | jq -r '.hook_event_name // empty' 2>/dev/null)
 
-# plain_push succeeds when the call is one bare `git push`, the only shape the Codex prompt
-# rule matches. Anything else (a compound line, `git -C dir push`, an MCP call) reaches no
-# rule, so Codex would run it unprompted, and no answer here may assume it prompts.
+# plain_push succeeds when the call is one bare push through a backend magus drives (`git
+# push`, `hg push`, `sl push`, `jj git push`), the only shapes the Codex prompt rules match,
+# and sets push_rule to the pattern its rule carries. Anything else (a compound line, `git
+# -C dir push`, an MCP call) reaches no rule, so Codex would run it unprompted, and no answer
+# here may assume it prompts.
 plain_push() {
   [ -z "$HOST_EVENT_RAW" ] || return 1
   push_line=$(printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH // empty" 2>/dev/null)
   case $push_line in
   *[\;\&\|\`\$\(\)\<\>\\]* | *"
 "*) return 1 ;;
-  "git push" | "git push "*) return 0 ;;
+  "git push" | "git push "*) push_rule='"git", *"push"' ;;
+  "hg push" | "hg push "*) push_rule='"hg", *"push"' ;;
+  "sl push" | "sl push "*) push_rule='"sl", *"push"' ;;
+  "jj git push" | "jj git push "*) push_rule='"jj", *"git", *"push"' ;;
+  *) return 1 ;;
   esac
-  return 1
+  return 0
 }
 
 # codex_cannot_prompt prints why Codex will not put this call in front of the person, and
@@ -166,18 +172,19 @@ codex_cannot_prompt() {
     ;;
   esac
   plain_push || {
-    printf 'no Codex approval rule matches this call, only a plain git push command'
+    printf 'no Codex approval rule matches this call, only a plain git push, hg push, sl push or jj git push command'
     return
   }
+  # Anchored on the opening bracket, so the git rule is not found inside jj's ["jj", "git", "push"].
   rules_dir=$PWD
   while [ -n "$rules_dir" ]; do
     if [ -f "$rules_dir/.codex/rules/magus.rules" ]; then
-      grep -q '"git", *"push"' "$rules_dir/.codex/rules/magus.rules" && return
+      grep -q "\[ *$push_rule *\]" "$rules_dir/.codex/rules/magus.rules" && return
       break
     fi
     rules_dir=${rules_dir%/*}
   done
-  printf 'no .codex/rules/magus.rules carries the git push prompt rule, which magus agent harness apply --id codex writes'
+  printf 'no .codex/rules/magus.rules carries the prompt rule for this push, which magus agent harness apply --id codex writes'
 }
 
 # Codex is recognized by its event as well as by name, so a Codex wiring that forgot

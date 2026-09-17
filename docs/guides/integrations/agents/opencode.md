@@ -103,8 +103,9 @@ other templates.
 //
 // An ASK puts the call in front of the person, and a plugin cannot prompt: throwing is
 // the only answer tool.execute.before has. So the prompt is OpenCode's own. The opencode
-// harness writes `"git push"` and `"git push *"` as "ask" under permission.bash in opencode.json, which
-// makes OpenCode ask before any push, and this plugin's permission.ask hook answers that
+// harness writes each backend's push verb (`git push`, `hg push`, `sl push`, `jj git push`) and
+// that verb with ` *` as "ask" under permission.bash in opencode.json, which makes OpenCode
+// ask before any push, and this plugin's permission.ask hook answers that
 // request from the verdict: allow for a push a gate covers, ask for an ungated one, deny
 // for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
@@ -179,25 +180,28 @@ function toVerdict(envelope: Envelope): Verdict {
   };
 }
 
+/** The push verb of each backend magus drives, which is also the permission key for it. */
+const PUSH_VERBS = ["git push", "hg push", "sl push", "jj git push"] as const;
+
 /**
- * Whether a command is one bare `git push`, the only shape the push permission pattern is
- * known to match. A compound line or `git -C dir push` may reach no pattern, and OpenCode
- * would run it without asking anyone.
+ * The push verb a command is one bare push through, or null. Only a bare push is known to
+ * match its permission pattern. A compound line or `git -C dir push` may reach no pattern,
+ * and OpenCode would run it without asking anyone.
  */
-function isPlainPush(command: string): boolean {
-  if (/[;&|`$()<>\\\n]/.test(command)) return false;
-  return command === "git push" || command.startsWith("git push ");
+function plainPushVerb(command: string): string | null {
+  if (/[;&|`$()<>\\\n]/.test(command)) return null;
+  return PUSH_VERBS.find((verb) => command === verb || command.startsWith(`${verb} `)) ?? null;
 }
 
-/** Whether OpenCode's loaded config makes it ask before a push. */
-function asksBeforePush(config: unknown): boolean {
+/** Whether OpenCode's loaded config makes it ask before a push through verb. */
+function asksBeforePush(config: unknown, verb: string): boolean {
   if (typeof config !== "object" || config === null) return false;
   const permission = (config as Record<string, unknown>).permission;
   if (typeof permission !== "object" || permission === null) return false;
   const bash = (permission as Record<string, unknown>).bash;
   if (typeof bash !== "object" || bash === null) return false;
   const patterns = bash as Record<string, unknown>;
-  return patterns["git push"] === "ask" && patterns["git push *"] === "ask";
+  return patterns[verb] === "ask" && patterns[`${verb} *`] === "ask";
 }
 
 /** First non-empty string among `keys` in a tool's untyped args, else "". */
@@ -354,9 +358,9 @@ export const MagusGuard: Plugin = async () => {
     return toVerdict(parsed);
   };
 
-  // Set by the config hook from OpenCode's loaded config. Until it runs, nothing is known
-  // to ask before a push, so an ask throws rather than trusting a prompt that may not come.
-  let pushPrompts = false;
+  // OpenCode's loaded config, set by the config hook. Until it runs, nothing is known to ask
+  // before a push, so an ask throws rather than trusting a prompt that may not come.
+  let loadedConfig: unknown = null;
 
   // --renders-ask: apply never lets an ask through unasked (it passes one to OpenCode's own
   // prompt or throws), so this plugin may receive one. Without it magus answers with a deny.
@@ -376,8 +380,9 @@ export const MagusGuard: Plugin = async () => {
         if (promptable) return "";
         throw new Error(
           `[magus guard] ${verdict.reason}\n\nThis call needs the approval of the person you work for, ` +
-            'and OpenCode will not ask them: only a plain git push reaches the prompt that `"permission": {"bash": {"git push": "ask", "git push *": "ask"}}` ' +
-            "configures, which magus agent harness apply --id opencode writes. Ask them to run it from their own terminal.",
+            "and OpenCode will not ask them: only a plain git push, hg push, sl push or jj git push reaches the prompt " +
+            'its own "permission.bash" entries configure, which magus agent harness apply --id opencode writes. ' +
+            "Ask them to run it from their own terminal.",
         );
       case "advise":
         return verdict.context;
@@ -396,7 +401,8 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        const promptable = pushPrompts && isPlainPush(command);
+        const verb = plainPushVerb(command);
+        const promptable = verb !== null && asksBeforePush(loadedConfig, verb);
         remember(input.callID, apply(await judge(shellArgs, command), promptable));
         return;
       }
@@ -412,7 +418,7 @@ export const MagusGuard: Plugin = async () => {
     },
 
     config: async (config) => {
-      pushPrompts = asksBeforePush(config);
+      loadedConfig = config;
     },
 
     // OpenCode raises this before its own prompt. Only a push, the prompt magus configured,
@@ -423,7 +429,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.type !== "bash") return;
       const command =
         typeof input.metadata.command === "string" ? input.metadata.command : input.title;
-      if (!isPlainPush(command)) return;
+      if (plainPushVerb(command) === null) return;
       const verdict = await judge(shellArgs, command);
       switch (verdict?.decision) {
         case "pass":
@@ -495,12 +501,13 @@ brew, asdf, `~/.local/bin`), set `__MAGUS_BIN` to an absolute path.
 
 A push at a commit no passing gate covers needs your approval, and a plugin cannot
 ask: `tool.execute.before` can only throw. `magus agent harness apply --id opencode`
-writes `"permission": {"bash": {"git push": "ask", "git push *": "ask"}}` into
-`opencode.json`, so OpenCode prompts before every push, and the plugin's
+writes an `"ask"` entry under `permission.bash` in `opencode.json` for each backend's
+push, bare and with arguments: `git push`, `hg push`, `sl push` and `jj git push`, each
+also as `<verb> *`. OpenCode then prompts before every push, and the plugin's
 `permission.ask` hook answers that prompt from the verdict: allow for a push a gate
 covers, ask for an ungated one, deny for a session bound to a job lease, because
-workers do not publish. Without that permission, or for a push written as anything
-but a plain `git push` command, the plugin refuses the push and names your own
+workers do not publish. Without the permission for that backend, or for a push written
+as anything but a plain `git push`, `hg push`, `sl push` or `jj git push` command, the plugin refuses the push and names your own
 terminal. `magus agent harness verify --id opencode` fails while the permission is
 missing. A decision the plugin does not know is refused, never allowed.
 

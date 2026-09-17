@@ -67,7 +67,7 @@ const (
 // Empty commit, or no run log, reports nothing known: this rule stands down rather than
 // refusing on an absence it cannot account for.
 func gateCoverageAt(runsDir, commit string) gateCoverage {
-	if runsDir == "" || commit == "" {
+	if runsDir == "" || !matchableRevision(commit) {
 		return gateUnknown
 	}
 	entries, err := os.ReadDir(runsDir)
@@ -104,7 +104,7 @@ func gateCoverageAt(runsDir, commit string) gateCoverage {
 // as absent in the log while the redundancy check (MGS3010) refuses to run it again: two
 // rules each blocking the only way past the other.
 func gateVerdictAt(workspace, commit string) gateCoverage {
-	if workspace == "" || commit == "" {
+	if workspace == "" || !matchableRevision(commit) {
 		return gateUnknown
 	}
 	dir, err := sessions.Dir(workspace)
@@ -186,6 +186,27 @@ func readGateOutcome(path, commit string) gateCoverage {
 // line can be long; past this it is not a journal event any reader here understands.
 const gateLogLineMax = 4 << 20
 
+// minRevisionPrefix is the shortest abbreviation a revision is matched by. git's describe
+// never abbreviates below it, and hg, Sapling and jj abbreviate to 12.
+const minRevisionPrefix = 7
+
+// matchableRevision reports whether id is a content hash abbreviation long enough to match
+// by prefix: git, hg and Sapling node hashes and jj commit ids are all hex. Anything else
+// cannot be matched against a recorded gate, so the rule stands down on it rather than
+// matching by accident: an hg local revision number like 42 prefixes every node that starts
+// with those digits, and a jj change id is spelled in k-z.
+func matchableRevision(id string) bool {
+	if len(id) < minRevisionPrefix {
+		return false
+	}
+	for _, r := range id {
+		if !strings.ContainsRune("0123456789abcdef", r) {
+			return false
+		}
+	}
+	return true
+}
+
 // builtFrom reports whether a magus version string names this commit.
 //
 // `git describe` renders it as v0.4.3-97-g4a1c0cc84, optionally with -dirty, so the
@@ -193,12 +214,12 @@ const gateLogLineMax = 4 << 20
 // because the two sides abbreviate to different lengths: the describe output picks its
 // own, and the caller passes whatever `vcs.Commit().short` gave it.
 func builtFrom(version, commit string) bool {
-	if version == "" || commit == "" {
+	if version == "" || !matchableRevision(commit) {
 		return false
 	}
 	for _, field := range strings.Split(version, "-") {
 		abbrev, ok := strings.CutPrefix(field, "g")
-		if !ok || abbrev == "" {
+		if !ok || !matchableRevision(abbrev) {
 			continue
 		}
 		if strings.HasPrefix(commit, abbrev) || strings.HasPrefix(abbrev, commit) {

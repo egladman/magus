@@ -2,7 +2,13 @@
   "permission": {
     "bash": {
       "git push": "ask",
-      "git push *": "ask"
+      "git push *": "ask",
+      "hg push": "ask",
+      "hg push *": "ask",
+      "jj git push": "ask",
+      "jj git push *": "ask",
+      "sl push": "ask",
+      "sl push *": "ask"
     }
   }
 }

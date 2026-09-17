@@ -3,8 +3,8 @@
   "schema_version": 13,
   "directed": true,
   "multigraph": false,
-  "node_count": 6316,
-  "edge_count": 11243,
+  "node_count": 6317,
+  "edge_count": 11245,
   "relations": [
     {
       "id": "annotates",
@@ -52482,7 +52482,14 @@
       "id": "function:spells/harness/codex/spell.buzz:codex_prompts",
       "kind": "function",
       "label": "codex_prompts",
-      "source": "spells/harness/codex/spell.buzz:171"
+      "source": "spells/harness/codex/spell.buzz:181"
+    },
+    {
+      "id": "function:spells/harness/codex/spell.buzz:codex_push_rule",
+      "kind": "function",
+      "label": "codex_push_rule",
+      "doc": "codex_rules makes Codex ask before every git push. Codex hooks cannot ask (a hook ask is parsed, reported as a failure, and the call continues), so the prompt is the rule's, and the PermissionRequest hook above decides whether it reaches the person.",
+      "source": "spells/harness/codex/spell.buzz:158"
     },
     {
       "id": "function:spells/harness/codex/spell.buzz:codex_rehydrate_command",
@@ -52494,8 +52501,8 @@
       "id": "function:spells/harness/codex/spell.buzz:codex_rules",
       "kind": "function",
       "label": "codex_rules",
-      "doc": "codex_rules makes Codex ask before every git push. Codex hooks cannot ask (a hook ask is parsed, reported as a failure, and the call continues), so the prompt is the rule's, and the PermissionRequest hook above decides whether it reaches the person.",
-      "source": "spells/harness/codex/spell.buzz:158"
+      "doc": "One rule per backend magus drives, since each publishes through its own verb. `sl push --to` is the Sapling push by prefix.",
+      "source": "spells/harness/codex/spell.buzz:168"
     },
     {
       "id": "function:spells/harness/codex/spell.buzz:codex_rules_path",
@@ -52552,7 +52559,7 @@
       "id": "function:spells/harness/codex/spell.buzz:harness_prompts",
       "kind": "function",
       "label": "harness_prompts",
-      "source": "spells/harness/codex/spell.buzz:180",
+      "source": "spells/harness/codex/spell.buzz:190",
       "attrs": {
         "exported": "true"
       }
@@ -52727,7 +52734,7 @@
       "id": "function:spells/harness/opencode/spell.buzz:harness_prompts",
       "kind": "function",
       "label": "harness_prompts",
-      "source": "spells/harness/opencode/spell.buzz:88",
+      "source": "spells/harness/opencode/spell.buzz:91",
       "attrs": {
         "exported": "true"
       }
@@ -133882,6 +133889,14 @@
     },
     {
       "source": "file:spells/harness/codex/spell.buzz",
+      "target": "function:spells/harness/codex/spell.buzz:codex_push_rule",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/codex/spell.buzz"
+    },
+    {
+      "source": "file:spells/harness/codex/spell.buzz",
       "target": "function:spells/harness/codex/spell.buzz:codex_rehydrate_command",
       "relation": "contains",
       "confidence": "extracted",
@@ -140107,6 +140122,14 @@
     {
       "source": "function:spells/harness/codex/spell.buzz:codex_prompts",
       "target": "function:spells/harness/codex/spell.buzz:codex_rules_path",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/codex/spell.buzz"
+    },
+    {
+      "source": "function:spells/harness/codex/spell.buzz:codex_rules",
+      "target": "function:spells/harness/codex/spell.buzz:codex_push_rule",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,

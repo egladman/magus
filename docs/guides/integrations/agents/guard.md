@@ -535,7 +535,12 @@ predates approval prompts, because a glue older than the decision renders an ask
 nothing and its host reads nothing as allow. The shipped templates and the OpenCode
 plugin pass the flag; a `HOST_RESPONSE` you wrote yourself does not. Today the push gate
 is its one source: a push at a commit no passing gate covers, from a session no job
-lease binds, gets `ask`, and the reason names the commit and the gate state. The
+lease binds, gets `ask`, and the reason names the commit and the gate state. The gate
+covers every backend magus drives: `git push`, `hg push`, `sl push` (with or without
+`--to`) and `jj git push`, relocated with `git -C`, `hg -R`, `sl -R` or `jj -R` too. It
+matches the gate to the revision by content hash (git and Mercurial nodes, jj commit
+ids); a revision it cannot match that way, such as a Mercurial local revision number or
+a jj change id, makes it stand down rather than guess. The
 host's own approval prompt shows it, and approving publishes the commit. Claude
 Code and Cursor prompt from the hook. Codex and OpenCode hooks cannot, so their
 harnesses write a native prompt rule (`.codex/rules/magus.rules`, and

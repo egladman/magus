@@ -213,15 +213,16 @@ build behaves otherwise, `__MAGUS_NO_ADVISE=1` still suppresses the arm.
 A push no passing gate covers needs the person's approval. Codex hooks cannot ask:
 Codex parses `permissionDecision: "ask"`, marks the hook run failed, and runs the
 call anyway, so the template never sends it. The prompt comes from
-`.codex/rules/magus.rules`, which apply writes: a `prefix_rule` on `git push` with
-`decision = "prompt"`. Before that prompt Codex raises `PermissionRequest`, and the
+`.codex/rules/magus.rules`, which apply writes: a `prefix_rule` with
+`decision = "prompt"` for each backend's push, `git push`, `hg push`, `sl push` and
+`jj git push`. Before that prompt Codex raises `PermissionRequest`, and the
 same command template answers it: allow for a push a gate covers, so nobody is
 asked, no decision for an ungated push, so the person decides, and deny for a
 session bound to a job lease, because workers do not publish. Project rules load
 only when the project's `.codex` layer is trusted, the same trust that loads its
 hooks. Where no prompt can happen (no rules file, `permission_mode` of
 `bypassPermissions` or `dontAsk`, or a push written as anything but a plain
-`git push` command), the guard refuses the push and names the person's own
+`git push`, `hg push`, `sl push` or `jj git push` command), the guard refuses the push and names the person's own
 terminal. One open Codex bug ignores a prompt rule under `danger-full-access` with
 granular rules, [openai/codex#25312](https://github.com/openai/codex/issues/25312).
 The template refuses a session whose hook input reports `bypassPermissions`, but

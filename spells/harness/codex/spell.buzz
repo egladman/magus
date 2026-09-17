@@ -155,17 +155,27 @@ fun codex_rules_path() > str { return ".codex/rules/magus.rules"; }
 // codex_rules makes Codex ask before every git push. Codex hooks cannot ask (a hook ask is
 // parsed, reported as a failure, and the call continues), so the prompt is the rule's, and
 // the PermissionRequest hook above decides whether it reaches the person.
-fun codex_rules() > str {
-    return "# Written by magus agent harness apply --id codex. magus agent harness remove deletes it.\n"
-        + "#\n"
-        + "# Every git push raises an approval request. The magus PermissionRequest hook answers it:\n"
-        + "# a push a passing gate covers is approved without asking, an ungated push is left to\n"
-        + "# the person, and a push from a leased worker is refused.\n"
-        + "prefix_rule(\n"
-        + "    pattern = [\"git\", \"push\"],\n"
+fun codex_push_rule(pattern: str) > str {
+    return "prefix_rule(\n"
+        + "    pattern = [{pattern}],\n"
         + "    decision = \"prompt\",\n"
         + "    justification = \"magus: publishing a commit no passing gate covers needs your approval\",\n"
         + ")\n";
+}
+
+// One rule per backend magus drives, since each publishes through its own verb. `sl push
+// --to` is the Sapling push by prefix.
+fun codex_rules() > str {
+    return "# Written by magus agent harness apply --id codex. magus agent harness remove deletes it.\n"
+        + "#\n"
+        + "# Every push raises an approval request, through git, Mercurial, Sapling or Jujutsu. The\n"
+        + "# magus PermissionRequest hook answers it: a push a passing gate covers is approved\n"
+        + "# without asking, an ungated push is left to the person, and a push from a leased worker\n"
+        + "# is refused.\n"
+        + codex_push_rule("\"git\", \"push\"")
+        + codex_push_rule("\"hg\", \"push\"")
+        + codex_push_rule("\"sl\", \"push\"")
+        + codex_push_rule("\"jj\", \"git\", \"push\"");
 }
 
 fun codex_prompts() > [any] {
@@ -217,6 +227,13 @@ test "harness_prompts keeps the git push prompt rule the shared template looks f
     assert\equal("{prompts[0]["path"]}", ".codex/rules/magus.rules", "project-local Codex rules");
     assert\isTrue(codex_rules().indexOf("[\"git\", \"push\"]") != null, "magus-hook-command.sh greps this exact pattern");
     assert\isTrue(codex_rules().indexOf("decision = \"prompt\"") != null, "the rule prompts rather than forbids");
+}
+
+test "harness_prompts prompts for every backend's push" {
+    final rules = codex_rules();
+    assert\isTrue(rules.indexOf("[\"hg\", \"push\"]") != null, "Mercurial push");
+    assert\isTrue(rules.indexOf("[\"sl\", \"push\"]") != null, "Sapling push, --to included by prefix");
+    assert\isTrue(rules.indexOf("[\"jj\", \"git\", \"push\"]") != null, "Jujutsu push");
 }
 
 test "PermissionRequest answers Codex's approval with the shared command template" {

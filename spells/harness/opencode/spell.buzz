@@ -71,35 +71,39 @@ export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
 // ungated one, deny for a leased worker. Both keys, because "git push *" does not match a
 // bare "git push".
 fun opencode_prompts() > [any] {
-    return [
-        {
+    final prompts: mut [any] = mut [];
+    // Every backend magus drives publishes through its own verb.
+    foreach (verb in ["git push", "hg push", "sl push", "jj git push"]) {
+        prompts.append({
             "path": "opencode.json",
-            "key": ["permission", "bash", "git push"],
+            "key": ["permission", "bash", verb],
             "value": "ask",
-        },
-        {
+        });
+        prompts.append({
             "path": "opencode.json",
-            "key": ["permission", "bash", "git push *"],
+            "key": ["permission", "bash", verb + " *"],
             "value": "ask",
-        },
-    ];
+        });
+    }
+    return prompts;
 }
 
 export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
     return opencode_prompts();
 }
 
-test "harness_prompts asks before a bare push and a push with arguments" {
+test "harness_prompts asks before every backend's bare push and push with arguments" {
     final prompts = opencode_prompts();
-    assert\equal(prompts.len(), 2, "two permission keys");
+    assert\equal(prompts.len(), 8, "a bare and an argument key per backend");
     foreach (p in prompts) {
         assert\equal("{p["path"]}", "opencode.json", "the project config OpenCode loads");
         assert\equal("{p["value"]}", "ask", "OpenCode prompts rather than refuses");
     }
-    final bare = prompts[0]["key"] as [str];
-    final args = prompts[1]["key"] as [str];
-    assert\equal(bare[2], "git push", "a bare push");
-    assert\equal(args[2], "git push *", "a push with arguments");
+    final want = ["git push", "git push *", "hg push", "hg push *", "sl push", "sl push *", "jj git push", "jj git push *"];
+    foreach (i, verb in want) {
+        final key = prompts[i]["key"] as [str];
+        assert\equal(key[2], verb, "permission key {i}");
+    }
 }
 
 test "mgs_getName is the harness id apply and verify look up" {

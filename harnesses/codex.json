@@ -102,7 +102,7 @@
   "prompts": [
     {
       "path": ".codex/rules/magus.rules",
-      "content": "# Written by magus agent harness apply --id codex. magus agent harness remove deletes it.\n#\n# Every git push raises an approval request. The magus PermissionRequest hook answers it:\n# a push a passing gate covers is approved without asking, an ungated push is left to\n# the person, and a push from a leased worker is refused.\nprefix_rule(\n    pattern = [\"git\", \"push\"],\n    decision = \"prompt\",\n    justification = \"magus: publishing a commit no passing gate covers needs your approval\",\n)\n"
+      "content": "# Written by magus agent harness apply --id codex. magus agent harness remove deletes it.\n#\n# Every push raises an approval request, through git, Mercurial, Sapling or Jujutsu. The\n# magus PermissionRequest hook answers it: a push a passing gate covers is approved\n# without asking, an ungated push is left to the person, and a push from a leased worker\n# is refused.\nprefix_rule(\n    pattern = [\"git\", \"push\"],\n    decision = \"prompt\",\n    justification = \"magus: publishing a commit no passing gate covers needs your approval\",\n)\nprefix_rule(\n    pattern = [\"hg\", \"push\"],\n    decision = \"prompt\",\n    justification = \"magus: publishing a commit no passing gate covers needs your approval\",\n)\nprefix_rule(\n    pattern = [\"sl\", \"push\"],\n    decision = \"prompt\",\n    justification = \"magus: publishing a commit no passing gate covers needs your approval\",\n)\nprefix_rule(\n    pattern = [\"jj\", \"git\", \"push\"],\n    decision = \"prompt\",\n    justification = \"magus: publishing a commit no passing gate covers needs your approval\",\n)\n"
     }
   ]
 }

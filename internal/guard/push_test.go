@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -120,6 +121,68 @@ func TestBuiltFromMatchesEitherAbbreviation(t *testing.T) {
 	assert.False(t, builtFrom("", "abc1234"))
 	assert.False(t, builtFrom("v0.4.3-97-gabc1234", ""))
 	assert.False(t, builtFrom("v0.4.3", "abc1234"), "a release build names no commit")
+}
+
+// backendRevisions are the ids each backend's Metadata reports for one revision: the Short
+// the guard reads as HEAD, and the full ID a gate records. Formats are the backends' own:
+// git's 7-hex describe abbreviation, hg and Sapling's `{short(node)}` / `{node|short}`
+// (12 hex) against the 40-hex node, and jj's `commit_id.short()` (12 hex) against commit_id.
+var backendRevisions = map[string]struct{ short, full string }{
+	"git":     {"5d17aa4", "5d17aa4e3c2b1f0a9d8c7b6a5f4e3d2c1b0a9f8e"},
+	"hg":      {"4a1c0cc84b21", "4a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8e7"},
+	"sapling": {"9e8d7c6b5a41", "9e8d7c6b5a41f2e3d4c5b6a7980e1f2a3b4c5d6e"},
+	"jj":      {"c0ffee12ab34", "c0ffee12ab34d56e78f90a1b2c3d4e5f60718293"},
+}
+
+// TestGateMatchesEachBackendsRevision pins that a gate recorded at a revision's full id
+// covers a push judged at that revision's short id, on every backend, through both the
+// session store and the run log.
+func TestGateMatchesEachBackendsRevision(t *testing.T) {
+	for backend, rev := range backendRevisions {
+		t.Run(backend, func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			root := t.TempDir()
+			dir, err := sessions.Dir(root)
+			require.NoError(t, err)
+			require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+				Target: types.TargetCI, Commit: rev.full, Outcome: sessions.OutcomePass,
+			}, sessions.SessionStart{Workspace: root}))
+			assert.Equal(t, gatePassed, gateVerdictAt(root, rev.short))
+
+			runs := t.TempDir()
+			runLog(t, runs, "a.jsonl", "v0.4.3-1-g"+rev.full, "pass", "affected", "ci")
+			assert.Equal(t, gatePassed, gateCoverageAt(runs, rev.short))
+		})
+	}
+}
+
+// TestGateStandsDownOnARevisionItCannotMatch pins the other half: an id that is not a
+// content hash cannot be prefix-matched against one, so the rule reports unknown and stands
+// down rather than matching by accident or asking on no evidence. hg's local revision
+// numbers are small integers that prefix-match any node starting with those digits, and a
+// jj change id is spelled in k-z, never hex.
+func TestGateStandsDownOnARevisionItCannotMatch(t *testing.T) {
+	for name, id := range map[string]string{
+		"hg local revision number": "42",
+		"jj change id":             "zyxwvutsrqpo",
+		"too short to be a prefix": "4a1",
+	} {
+		t.Run(name, func(t *testing.T) {
+			runs := t.TempDir()
+			runLog(t, runs, "a.jsonl", "v0.4.3-1-g42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", "pass", "affected", "ci")
+			assert.Equal(t, gateUnknown, gateCoverageAt(runs, id))
+			assert.False(t, builtFrom("v0.4.3-1-g42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", id))
+
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			root := t.TempDir()
+			dir, err := sessions.Dir(root)
+			require.NoError(t, err)
+			require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+				Target: types.TargetCI, Commit: "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8", Outcome: sessions.OutcomeFail,
+			}, sessions.SessionStart{Workspace: root}))
+			assert.Equal(t, gateUnknown, gateVerdictAt(root, id))
+		})
+	}
 }
 
 // judgePush runs one push through Judge in a workspace whose run log exists, so a gate

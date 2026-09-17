@@ -549,7 +549,36 @@ stdout '"decision":\{"behavior":"allow"\}'
 stdin $WORK/push-command.json
 exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 ! stdout 'permissionDecision'
+
+# case: command/pass
+# Every backend magus drives publishes through its own verb, and each plain push a gate
+# covers is approved the same way.
+stdin $WORK/push-approval-hg.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"decision":\{"behavior":"allow"\}'
+stdin $WORK/push-approval-sl.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"decision":\{"behavior":"allow"\}'
+stdin $WORK/push-approval-jj.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"decision":\{"behavior":"allow"\}'
 rm .magus/runs/gate.jsonl
+
+# case: command/ask
+# An ungated push on each of them reaches its own prompt rule, so PreToolUse lets it through
+# to that prompt rather than refusing it.
+stdin $WORK/push-command-hg.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"additionalContext":"pushing'
+! stdout 'permissionDecision'
+stdin $WORK/push-command-sl.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"additionalContext":"pushing'
+! stdout 'permissionDecision'
+stdin $WORK/push-command-jj.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"additionalContext":"pushing'
+! stdout 'permissionDecision'
 
 # case: command/deny
 # A session bound to a job lease is a worker, and workers do not publish: refused outright.
@@ -601,6 +630,30 @@ prefix_rule(
     pattern = ["git", "push"],
     decision = "prompt",
 )
+prefix_rule(
+    pattern = ["hg", "push"],
+    decision = "prompt",
+)
+prefix_rule(
+    pattern = ["sl", "push"],
+    decision = "prompt",
+)
+prefix_rule(
+    pattern = ["jj", "git", "push"],
+    decision = "prompt",
+)
+-- push-approval-hg.json --
+{"hook_event_name": "PermissionRequest", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "hg push -r ."}}
+-- push-approval-sl.json --
+{"hook_event_name": "PermissionRequest", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "sl push --to main"}}
+-- push-approval-jj.json --
+{"hook_event_name": "PermissionRequest", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "jj git push -b main"}}
+-- push-command-hg.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "hg push"}}
+-- push-command-sl.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "sl push --to main"}}
+-- push-command-jj.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "jj git push"}}
 -- push-command.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
 -- push-line.txt --
