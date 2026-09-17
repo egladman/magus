@@ -61,19 +61,38 @@ fun line(path: str, exports: [str], across: [str], reach: int) > str {
     return text + "\n";
 }
 
-fun body(count: int, lines: [str]) > str {
+// bump renders the semver floor, and the likely bump when a signature moved.
+//
+// A FLOOR and never a ceiling, which is the whole claim: a removed export proves a major, an
+// added one proves a minor, and nothing a graph holds can prove a change is small, because
+// behavior moves under an unchanged signature. So the reader may raise it and should never
+// lower it. The likely line is the one claim that can be wrong (a renamed parameter moves the
+// rendered signature too), so it carries its own count and stands apart from the floor.
+fun bump(api: obj) > str {
+    if (api == null) { return ""; }
+    var text = "**At least a " + api.floor.upper() + " bump.**";
+    if (api.likely != api.floor) {
+        text = text + " Likely **" + api.likely.upper() + "**: "
+            + "{api.signature}" + " public signature(s) changed.";
+    }
+    return text + "\n\n"
+        + "Public symbols: " + "{api.added}" + " added, " + "{api.removed}" + " removed, "
+        + "{api.signature}" + " re-signed, " + "{api.body}" + " changed in body only.\n\n"
+        + "A floor, not a verdict. Raise it freely: behavior changes under an unchanged "
+        + "signature, and magus cannot see those. Signatures are compared as the indexer "
+        + "rendered them, so a renamed parameter reads as a changed signature too.\n\n";
+}
+
+fun body(count: int, lines: [str], api: obj) > str {
     var noun = " changed files touch";
     if (count == 1) { noun = " changed file touches"; }
-    final parts = mut ["**" + "{count}" + noun + " API surface.**\n\n"];
+    final parts = mut [bump(api), "**" + "{count}" + noun + " API surface.**\n\n"];
     foreach (l in lines) { parts.append(l); }
     return parts.join("")
         + "\nThese symbols are reachable from outside the project that defines them, or "
         + "exported from the module, so a consumer can see them. That is what a version bump "
         + "is about.\n\n"
-        + "This is evidence, not a verdict: magus reports WHO can see what you changed and "
-        + "does not decide whether it broke. Deciding that needs signature compatibility "
-        + "against the base, which magus does not index.\n\n"
-        + "`magus diff` shows the same ranking locally.\n";
+        + "`magus diff --baseline` shows the same answer locally.\n";
 }
 
 fun main() > void !> any {
@@ -96,8 +115,15 @@ fun main() > void !> any {
         return;
     }
 
-    final review = magus\diff();
+    // BASELINE is the base's `graph export --symbols`, when the workflow built one. Without
+    // it every symbol's `change` is empty and `api` is null, so this reports who can see the
+    // change and stops there, which is what it did before a baseline was possible at all.
+    final baseline = advice\env("BASELINE");
+    var opts = mut {};
+    if (baseline != "") { opts["baseline"] = baseline; }
+    final review = magus\diff(opts);
     var lines = mut [];
+    var files = 0;
     foreach (f in review.files) {
         // Generated output is skipped even when it looks public. A regenerated binding file
         // can export a great deal, and none of it is a decision anyone made in this pull
@@ -105,14 +131,21 @@ fun main() > void !> any {
         if (f.surface != "public" or f.role == "output") { continue; }
         var exports = mut [];
         var across = mut [];
+        var changes = mut [];
         foreach (sym in f.symbols) {
             if (sym.moduleAPI) { exports.append(sym.label); }
             foreach (p in sym.externalProjects) { across.append(p); }
+            if (sym.change != "" and sym.change != "body") {
+                if (!sym.moduleAPI and sym.externalProjects.len() == 0) { continue; }
+                changes.append(sym.change + " `" + sym.qualified + "`");
+            }
         }
         lines.append(line(f.path, exports: exports, across: across, reach: f.reach));
+        foreach (c in changes) { lines.append("    - " + c + "\n"); }
+        files = files + 1;
     }
 
-    if (lines.len() == 0) {
+    if (files == 0) {
         // Publish an EMPTY body rather than skipping: a section that simply stops appearing
         // leaves the previous push's finding frozen on the page, which reads as still true.
         advice\publish(repo, pr: pr, name: section, title: "API surface", body: "");
@@ -121,8 +154,8 @@ fun main() > void !> any {
     }
 
     advice\publish(repo, pr: pr, name: section,
-        title: "API surface ({lines.len()})", body: body(lines.len(), lines: lines));
-    std\print("api-surface: advised on " + "{lines.len()}" + " files");
+        title: "API surface ({files})", body: body(files, lines: lines, api: review.api));
+    std\print("api-surface: advised on " + "{files}" + " files");
 }
 
 
@@ -146,15 +179,35 @@ test "dedupe keeps first-seen order and drops empties" {
     std\assert(kept[0] == "web", message: "first seen stays first");
 }
 
-test "body refuses to claim a break" {
-    final text = body(1, lines: [line("x.go", exports: ["A"], across: [], reach: 1)]);
-    std\assert(text.indexOf("evidence, not a verdict") != null, message: "states the limit");
-    std\assert(text.indexOf("breaking") == null, message: "never uses the word breaking");
+test "body without a baseline states the surface and claims no bump" {
+    final text = body(1, lines: [line("x.go", exports: ["A"], across: [], reach: 1)], api: null);
+    std\assert(text.indexOf("bump.**") == null, message: "no baseline, no bump");
+    std\assert(text.indexOf("API surface") != null, message: "still names the surface");
 }
 
 test "body counts one file in the singular" {
-    final one = body(1, lines: ["- `a.go`\n"]);
+    final one = body(1, lines: ["- `a.go`\n"], api: null);
     std\assert(one.indexOf("1 changed file touches") != null, message: "singular");
-    final many = body(3, lines: ["- `a.go`\n"]);
+    final many = body(3, lines: ["- `a.go`\n"], api: null);
     std\assert(many.indexOf("3 changed files touch") != null, message: "plural");
+}
+
+test "a removed export proves a major and says so without hedging" {
+    final text = bump({
+        "base": "main", "floor": "major", "likely": "major",
+        "added": 0, "removed": 1, "signature": 0, "body": 0,
+    });
+    std\assert(text.indexOf("At least a MAJOR bump.") != null, message: "states the floor");
+    std\assert(text.indexOf("Likely") == null, message: "the floor already carries it");
+    std\assert(text.indexOf("Raise it freely") != null, message: "names the direction it can be wrong in");
+}
+
+test "a changed signature raises the likely bump and never the floor" {
+    final text = bump({
+        "base": "main", "floor": "patch", "likely": "major",
+        "added": 0, "removed": 0, "signature": 2, "body": 1,
+    });
+    std\assert(text.indexOf("At least a PATCH bump.") != null, message: "the floor stays what was proven");
+    std\assert(text.indexOf("Likely **MAJOR**: 2 public signature(s) changed.") != null,
+        message: "names the count that raised it");
 }

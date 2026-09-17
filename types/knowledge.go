@@ -508,7 +508,7 @@ type KnowledgeSymbol struct {
 	// the lines could not be read.
 	BodyDigest string
 	Defs       []string
-	Refs      []KnowledgeSymbolRef
+	Refs       []KnowledgeSymbolRef
 	// Calls are the workspace-defined symbols referenced from inside this symbol's own
 	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
 	// (caller, callee), the same scale decision Refs makes per (file, symbol), so a hot

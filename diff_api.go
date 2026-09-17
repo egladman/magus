@@ -68,9 +68,13 @@ func hasMembers(id string, sides ...map[string]symbolDef) bool {
 	return false
 }
 
+// externalsFunc answers which other projects reference a symbol, and in how many files:
+// [Magus.externalReferents] in a review, a stub in a test.
+type externalsFunc func(g *knowledge.Graph, symbolID, owner string) ([]string, int)
+
 // attachAPIDelta classifies every symbol the changeset's files define on either side against
 // base, attaches the public ones to their files, and sets out.API.
-func (m *Magus) attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig) {
+func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) {
 	baseOut := *cfg.baseline
 	if baseOut.SchemaVersion < 14 {
 		out.Notes = append(out.Notes, fmt.Sprintf(
@@ -95,7 +99,7 @@ func (m *Magus) attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFil
 		anyChange = true
 		label := def.node.Label
 		exported := exportedFromModule(def.path, label, def.node.ID)
-		external, externalFiles := m.externalReferents(graph, def.node.ID, f.Project)
+		external, externalFiles := externals(graph, def.node.ID, f.Project)
 		public := exported || len(external) > 0
 		listed := slices.IndexFunc(f.Symbols, func(s types.DiffSymbol) bool { return s.ID == def.node.ID })
 		qualified := qualifiedName(def.node.ID, label)

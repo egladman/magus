@@ -1131,7 +1131,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	}
 	if cfg.baseline != nil {
 		if indexed {
-			m.attachAPIDelta(&out, byPath, graph, cfg)
+			attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
 		} else {
 			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
 		}

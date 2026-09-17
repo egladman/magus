@@ -1202,6 +1202,10 @@ func diffUsage(w io.Writer) {
 	tty.ProseItem(w, tty.SystemProbe, "  --patch       ", "review a patch file instead of the working tree; - reads stdin")
 	tty.ProseItem(w, tty.SystemProbe, "  --prompt      ",
 		"print a review prompt to paste into your own LLM: the context magus has, never a drafted review")
+	tty.ProseItem(w, tty.SystemProbe, "  --baseline    ",
+		"a `"+hint.GraphExport.With("--symbols", "-o", "json")+"` of the base, which adds what each changed symbol did to the API",
+		"and the smallest semver bump that proves. Signatures are compared as the indexer rendered them,",
+		"so the base must come from the same indexers this tree is indexed with.")
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the

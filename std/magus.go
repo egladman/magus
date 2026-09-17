@@ -202,7 +202,7 @@ var Magus = Module{
 		},
 		{
 			Name: "diff",
-			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
+			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. opts.baseline is a `magus graph export --symbols -o json` of the base: with it every changed symbol carries what the change did to it (`change` is added, removed, signature, or body) and `api` carries the semver bump that proves, a floor and never a ceiling. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
 			Args: []Arg{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
@@ -1430,7 +1430,13 @@ func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any)
 // comment and a terminal reader want different things from the generated set, and a host
 // module that pre-filtered would make the wider answer unreachable.
 func MagusDiff(ctx context.Context, opts map[string]any) (types.Diff, error) {
-	return runMagusJSON[types.Diff](ctx, "diff", []string{"--generated"}, opts)
+	args := []string{"--generated"}
+	// A flag rather than another opt to forward, because the nested magus is the one that
+	// knows how to read a baseline; this just names the file for it.
+	if baseline, ok := opts["baseline"].(string); ok && baseline != "" {
+		args = append(args, "--baseline", baseline)
+	}
+	return runMagusJSON[types.Diff](ctx, "diff", args, opts)
 }
 
 // runMagusJSON runs a nested magus subcommand and decodes its report into T.
