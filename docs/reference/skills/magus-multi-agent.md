@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 35407
-skill_short_bytes: 26595
+skill_full_bytes: 37438
+skill_short_bytes: 28238
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `83` |
+| `agent-skill-version` | `84` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `f2188b7e6672` |
+| `skill-content` | `5824dc921a21` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -278,6 +278,27 @@ Two jobs may run together only when:
 - Dependency and temporal-affinity evidence does not indicate that they should
   move together.
 
+ONE WORKTREE PER WORKER wherever a lane touches workspace configuration - any
+project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
+Those are the files magus READS to load the workspace, so a half-saved one is
+not a conflict between two workers: it stops the workspace loading for everybody
+in that checkout at once, and the rest lose `magus run`, `magus ls` and their own
+tests over an edit they cannot see.
+`magus job fork` refuses such a job outright while another live job with
+write paths is bound to the same checkout, naming the file and the holder. A
+separate worktree is the answer, not a narrower lane: the file has one owner, so
+the only way both jobs can be right is for one of them to be somewhere else.
+
+Fork records what it could prove in `lane_proof` - `alone`, `disjoint` or
+`overlapping` - and `magus ls jobs` prints it. An overlap is recorded rather than
+refused, because sequencing two jobs onto one path is a call only you can make;
+what the row settles is whether anybody checked.
+
+Spawning into a checkout that already holds a live job carries the same
+reminder from the guard, once per session, with the union of the lanes to
+classify. Answer it by running the call above or by handing the new worker its
+own worktree - a proof or a worktree, not a judgment that it looks fine.
+
 Project boundaries alone are insufficient. A declared dependency means group the
 work or serialize producer before consumer. Treat strong hidden affinity as a
 warning. When evidence is incomplete, reduce parallelism.
@@ -322,7 +343,12 @@ actually LANDED ON is a separate fact, because hosts that isolate workers in
 per-worker trees routinely branch them from an older revision than the tree you
 partitioned. A worker's first
 required act is `magus job exec <its id>`, which takes the lease in that checkout
-and records the base it landed on. The
+and records the base it landed on. Where the host names its session, the worker
+passes `--session <that id>` and the lease is the SESSION's rather than the
+checkout's, so workers sharing a tree each hold one and each has its own lane
+graded.
+Pass the same id the host reports to its guard hook, or the two halves bind and
+grade under different names. The
 answer is a status recorded on the row - match, revision-match (same revision,
 different uncommitted patch), diverged, or unknown - plus a reading of it that
 names both tokens and the next step. It is a FACT and not a gate: every status
@@ -837,6 +863,29 @@ Two jobs may run together only when:
 - Dependency and temporal-affinity evidence does not indicate that they should
   move together.
 
+ONE WORKTREE PER WORKER wherever a lane touches workspace configuration - any
+project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
+Those are the files magus READS to load the workspace, so a half-saved one is
+not a conflict between two workers: it stops the workspace loading for everybody
+in that checkout at once, and the rest lose `magus run`, `magus ls` and their own
+tests over an edit they cannot see. Measured 2026-09-17: three workers
+shared a checkout, one saved the root magusfile mid-edit, and all three were
+stopped for the duration by a file only one of them had ever opened.
+`magus job fork` refuses such a job outright while another live job with
+write paths is bound to the same checkout, naming the file and the holder. A
+separate worktree is the answer, not a narrower lane: the file has one owner, so
+the only way both jobs can be right is for one of them to be somewhere else.
+
+Fork records what it could prove in `lane_proof` - `alone`, `disjoint` or
+`overlapping` - and `magus ls jobs` prints it. An overlap is recorded rather than
+refused, because sequencing two jobs onto one path is a call only you can make;
+what the row settles is whether anybody checked.
+
+Spawning into a checkout that already holds a live job carries the same
+reminder from the guard, once per session, with the union of the lanes to
+classify. Answer it by running the call above or by handing the new worker its
+own worktree - a proof or a worktree, not a judgment that it looks fine.
+
 Project boundaries alone are insufficient. A declared dependency means group the
 work or serialize producer before consumer. Treat strong hidden affinity as a
 warning. When evidence is incomplete, reduce parallelism.
@@ -901,7 +950,14 @@ per-worker trees routinely branch them from an older revision than the tree you
 partitioned - and every diff-since-checkpoint in Integrate and verify
 silently lies when the recorded base is not the real one. A worker's first
 required act is `magus job exec <its id>`, which takes the lease in that checkout
-and records the base it landed on. The
+and records the base it landed on. Where the host names its session, the worker
+passes `--session <that id>` and the lease is the SESSION's rather than the
+checkout's, so workers sharing a tree each hold one and each has its own lane
+graded; without it the binding is the whole checkout's, the second
+worker's is refused as a rebind, and every worker after the first runs
+unattributed, which looks exactly like a guarded session and denies nothing.
+Pass the same id the host reports to its guard hook, or the two halves bind and
+grade under different names. The
 answer is a status recorded on the row - match, revision-match (same revision,
 different uncommitted patch), diverged, or unknown - plus a reading of it that
 names both tokens and the next step. It is a FACT and not a gate: every status

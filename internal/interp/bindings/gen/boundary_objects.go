@@ -1493,6 +1493,7 @@ func ObjectJob(v types.Job) vm.Value {
 		itemsUnattributed[indexUnattributed] = ObjectJobUnattributedWrite(v.Unattributed[indexUnattributed])
 	}
 	out.MapSet("unattributed", vm.ListValue(itemsUnattributed))
+	out.MapSet("laneProof", vm.StrValue(string(v.LaneProof)))
 	out.MapSet("reportedBase", vm.StrValue(v.ReportedBase))
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
 	out.MapSet("registeredBy", ObjectJobActor(v.RegisteredBy))

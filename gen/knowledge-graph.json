@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 6304,
-  "edge_count": 11216,
+  "edge_count": 11219,
   "relations": [
     {
       "id": "annotates",
@@ -44827,7 +44827,7 @@
       "id": "function:console/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "console/magusfile.buzz:187",
+      "source": "console/magusfile.buzz:186",
       "attrs": {
         "exported": "true"
       }
@@ -44837,7 +44837,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:248",
+      "source": "console/magusfile.buzz:247",
       "attrs": {
         "exported": "true"
       }
@@ -44847,7 +44847,7 @@
       "kind": "function",
       "label": "diffdemo_generate",
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds. Regenerates the Diff showcase's changeset from its .patch fixture.  The showcase renders with NO daemon, so it cannot a",
-      "source": "console/magusfile.buzz:180",
+      "source": "console/magusfile.buzz:179",
       "attrs": {
         "exported": "true"
       }
@@ -44857,7 +44857,7 @@
       "kind": "function",
       "label": "format",
       "doc": "`format:rw` maintains declared source inputs.",
-      "source": "console/magusfile.buzz:217",
+      "source": "console/magusfile.buzz:216",
       "attrs": {
         "exported": "true"
       }
@@ -44874,7 +44874,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:206",
+      "source": "console/magusfile.buzz:205",
       "attrs": {
         "exported": "true"
       }
@@ -44893,7 +44893,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:241",
+      "source": "console/magusfile.buzz:240",
       "attrs": {
         "exported": "true"
       }
@@ -49577,7 +49577,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
-      "source": "libs/textsearch/magusfile.buzz:152",
+      "source": "libs/textsearch/magusfile.buzz:151",
       "attrs": {
         "exported": "true"
       }
@@ -75937,6 +75937,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
       "target": "doc:docs/reference/manpage/magus-vcs.md",
       "relation": "references",
       "confidence": "extracted",
@@ -96033,7 +96041,23 @@
     },
     {
       "source": "doc:docs/reference/skills/magus-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-multi-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-multi-agent.md",
       "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-multi-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -97225,7 +97249,23 @@
     },
     {
       "source": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -135944,14 +135984,6 @@
       "provenance": "console/magusfile.buzz"
     },
     {
-      "source": "function:console/magusfile.buzz:test",
-      "target": "function:console/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "console/magusfile.buzz"
-    },
-    {
       "source": "function:coverage.buzz:blockTableForFile",
       "target": "function:coverage.buzz:parseBlockTable",
       "relation": "calls",
@@ -138105,14 +138137,6 @@
     },
     {
       "source": "function:libs/textsearch/magusfile.buzz:preflight",
-      "target": "function:libs/textsearch/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/textsearch/magusfile.buzz"
-    },
-    {
-      "source": "function:libs/textsearch/magusfile.buzz:test",
       "target": "function:libs/textsearch/magusfile.buzz:install",
       "relation": "calls",
       "confidence": "extracted",

@@ -127,7 +127,6 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // the console (the top of the TypeScript dependency graph) from this report and its
     // own. Declaring it keeps a cache hit restoring the report the console reads.
     ctx.writesFiles("coverage.lcov");
-    install();
 
     final tests = fs\glob("src/**/*.test.ts");
     var bundle = mut ["exec", "esbuild"];
