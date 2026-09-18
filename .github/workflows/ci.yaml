@@ -51,8 +51,10 @@ env:
   # A CEILING, not a target: the forecaster picks the count, and may raise it to
   # split a shard predicted to exceed the runner's memory. Shard count is not runner
   # spend, but it is runner *concurrency*, so it is raised on measurement rather than
-  # taste. At 2, the shard holding the root project ran 21m against the other's 2m,
-  # because the projects the derived order chains together all land on one shard.
+  # taste. At 2, the shard holding the root project ran 21m against the other's 2m:
+  # most of that skew was one project's tests blocking another's, which the member-level
+  # barrier now removes, and what is left is the root project simply being the biggest
+  # unit the planner has to place. A third shard is where that one lands alone.
   MAGUS_CI_MAX_SHARDS: '3'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you
