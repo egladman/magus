@@ -86,7 +86,7 @@ func TestDeriveTargetOrderMutualDeclarationsSettle(t *testing.T) {
 	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}}, d.Edges)
 	require.Equal(t, []DroppedEdge{{DerivedEdge: DerivedEdge{Writer: 1, Reader: 0}, Reason: "cycle"}}, d.Dropped)
 	changelog := DepKey(".", "changelog")
-	assert.Equal(t, map[string][]MemberWait{docs: {{Member: changelog, Step: root}}}, d.RunAfterMembers)
+	assert.Equal(t, map[string][]MemberWait{docs: {{Member: changelog, StepKey: root}}}, d.RunAfterMembers)
 	assert.Equal(t, map[string][]string{root: {changelog}}, d.Releases)
 	assert.Empty(t, d.RunAfter)
 }
@@ -112,7 +112,7 @@ func TestDeriveTargetOrderWaitsOnTheWriterNotItsStep(t *testing.T) {
 	d := DeriveTargetOrder(steps, nodes, nil)
 	member := DepKey("libs/a", "index-generate")
 	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 2, Ordered: true}}, d.Edges)
-	assert.Equal(t, map[string][]MemberWait{root: {{Member: member, Step: a}}}, d.RunAfterMembers)
+	assert.Equal(t, map[string][]MemberWait{root: {{Member: member, StepKey: a}}}, d.RunAfterMembers)
 	assert.Equal(t, map[string][]string{a: {member}}, d.Releases)
 }
 
@@ -134,7 +134,7 @@ func TestDeriveTargetOrderSharedMemberIsReleasedByEveryStepRunningIt(t *testing.
 			Reads: []string{"a/*.md"}, DeclaredReads: true},
 	}
 	d := DeriveTargetOrder(steps, nodes, nil)
-	assert.Equal(t, []MemberWait{{Member: member, Step: sa}, {Member: member, Step: sb}}, d.RunAfterMembers[sc])
+	assert.Equal(t, []MemberWait{{Member: member, StepKey: sa}, {Member: member, StepKey: sb}}, d.RunAfterMembers[sc])
 	assert.Equal(t, map[string][]string{sa: {member}, sb: {member}}, d.Releases)
 }
 
@@ -160,28 +160,31 @@ func TestDeriveTargetOrderFallsBackToTheWriterStep(t *testing.T) {
 	})
 }
 
-// TestDeriveTargetOrderSkipsCopiesTheScheduleCannotOrder: a writer member also reached
-// by a step that runs AFTER the reader. Waiting on that copy would be a cycle, so it is
-// left out and the edge is unordered, for settling.
+// TestDeriveTargetOrderSkipsCopiesTheScheduleCannotOrder: a writer member also reached by
+// a THIRD step that the schedule puts after the reader. Waiting on that copy would ask
+// the barrier for a cycle, so it is left out of the reader's waits while the orderable
+// copy stays.
 func TestDeriveTargetOrderSkipsCopiesTheScheduleCannotOrder(t *testing.T) {
-	steps := []Step{{ProjectPath: "a", Target: "ci"}, {ProjectPath: "c", Target: "ci"}}
-	sa, sc := stepKey(steps[0]), stepKey(steps[1])
+	steps := []Step{{ProjectPath: "a", Target: "ci"}, {ProjectPath: "b", Target: "ci"}, {ProjectPath: "c", Target: "ci"}}
+	sa, sb, sc := stepKey(steps[0]), stepKey(steps[1]), stepKey(steps[2])
+	member := DepKey("a", "gen")
 	nodes := []TargetNode{
-		// Also run by c's chain, which is ordered after a's by the edge below.
+		// Run by a's chain and by c's, and c is ordered AFTER b by the second edge.
 		{Project: "a", Target: "gen", Steps: []string{sa, sc},
 			Writes: []string{"a/out.md"}, DeclaredWrites: true},
-		{Project: "a", Target: "check", Steps: []string{sa},
-			Reads: []string{"c/*.md"}, DeclaredReads: true},
-		{Project: "c", Target: "check", Steps: []string{sc},
+		{Project: "b", Target: "check", Steps: []string{sb},
 			Reads: []string{"a/*.md"}, DeclaredReads: true},
-		{Project: "c", Target: "gen", Steps: []string{sc},
-			Writes: []string{"c/out.md"}, DeclaredWrites: true},
+		{Project: "b", Target: "gen", Steps: []string{sb},
+			Writes: []string{"b/out.md"}, DeclaredWrites: true},
+		{Project: "c", Target: "check", Steps: []string{sc},
+			Reads: []string{"b/*.md"}, DeclaredReads: true},
 	}
 	d := DeriveTargetOrder(steps, nodes, nil)
 	require.NoError(t, checkAcyclic(applyOrder(steps, d)), "the batch the derivation asks for must be schedulable")
-	for _, w := range d.RunAfterMembers[sa] {
-		assert.NotEqual(t, sc, w.Step, "a waits on no copy that runs inside the step ordered after it")
-	}
+	require.NotEmpty(t, d.RunAfterMembers[sb], "b waits on the copy of the member that a runs")
+	assert.Equal(t, []MemberWait{{Member: member, StepKey: sa}}, d.RunAfterMembers[sb],
+		"the copy inside c, which runs after b, is left out")
+	assert.NotContains(t, d.Releases[sc], member, "and c is not asked to report a copy nobody waits on")
 }
 
 // applyOrder is what a caller does with a DerivedOrder: fold it onto the steps.
@@ -210,7 +213,7 @@ func TestDeriveTargetOrderReaderRunningTheWriterWaitsOnTheOtherCopies(t *testing
 			Reads: []string{"a/*.md"}, DeclaredReads: true},
 	}
 	d := DeriveTargetOrder(steps, nodes, nil)
-	assert.Equal(t, []MemberWait{{Member: member, Step: sa}, {Member: member, Step: sc}}, d.RunAfterMembers[sc])
+	assert.Equal(t, []MemberWait{{Member: member, StepKey: sa}, {Member: member, StepKey: sc}}, d.RunAfterMembers[sc])
 	assert.Empty(t, d.RunAfter)
 }
 
@@ -293,7 +296,7 @@ func TestDeriveTargetOrderEntangledUnordered(t *testing.T) {
 		// The reader's step ran first and nothing can reorder it: settle after.
 		{Writer: 1, Reader: 2, weak: true, Ordered: false},
 	}, d.Edges)
-	assert.Equal(t, map[string][]MemberWait{docs: {{Member: DepKey(".", "changelog"), Step: root}}}, d.RunAfterMembers,
+	assert.Equal(t, map[string][]MemberWait{docs: {{Member: DepKey(".", "changelog"), StepKey: root}}}, d.RunAfterMembers,
 		"only the with-the-grain direction is admitted; the against-the-grain edge induces nothing")
 }
 
