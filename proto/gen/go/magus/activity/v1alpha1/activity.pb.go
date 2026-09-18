@@ -74,6 +74,17 @@ const (
 	// under this kind is a READ, audited because this is the only door that can serve the PRIVATE
 	// note store, which lives outside any repository and which nothing else attributes.
 	Kind_KIND_NOTES Kind = 10
+	// A path under a job's declared write lane changed, as the daemon's file watcher saw it.
+	// action is the repo-relative path and unit is the job whose lane covers it. The producer
+	// is the FILESYSTEM, not an agent: this is the one kind that needs no cooperation from
+	// the worker being watched, which is the whole reason a person can see what a worker is
+	// doing without asking it. An empty unit means no live lane covered the path.
+	Kind_KIND_FILE_CHANGE Kind = 11
+	// A run magus recorded against a job: its check, one of its completion gates, or the
+	// daemon's own last run of a catalog job. action is the rendered command and preview
+	// names which of the three it was. OUTCOME_ERROR means the run failed, which is the one
+	// kind here where the outcome is a fact about the work rather than about the recording.
+	Kind_KIND_RUN Kind = 12
 )
 
 // Enum value maps for Kind.
@@ -90,6 +101,8 @@ var (
 		8:  "KIND_CREDENTIAL_GRANT",
 		9:  "KIND_AGENT_SPAWN",
 		10: "KIND_NOTES",
+		11: "KIND_FILE_CHANGE",
+		12: "KIND_RUN",
 	}
 	Kind_value = map[string]int32{
 		"KIND_UNSPECIFIED":      0,
@@ -103,6 +116,8 @@ var (
 		"KIND_CREDENTIAL_GRANT": 8,
 		"KIND_AGENT_SPAWN":      9,
 		"KIND_NOTES":            10,
+		"KIND_FILE_CHANGE":      11,
+		"KIND_RUN":              12,
 	}
 )
 
@@ -230,7 +245,17 @@ type ActivityEvent struct {
 	// the join writes the marker, and one that does not leaves this empty, which is a missing join
 	// rather than a wrong one. It rides the event rather than the blob for the same reason host and
 	// session do: joining a page of rows to a ledger must not cost a GetPayload per row.
-	Unit          string `protobuf:"bytes,16,opt,name=unit,proto3" json:"unit,omitempty"`
+	Unit string `protobuf:"bytes,16,opt,name=unit,proto3" json:"unit,omitempty"`
+	// On a KIND_FILE_CHANGE, the leases that BOTH declared this path, set only when more than
+	// one did. unit is then empty, because there is no answer to "whose write is this": the
+	// lanes are meant to be disjoint and this path is the evidence they are not.
+	//
+	// A repeated field rather than a sentence in preview, because a reader watching one lease
+	// has to ask "am I one of these" on every row, and parsing prose to answer it is how the
+	// one event a damaged plan most needs to surface gets dropped. A filter on units matches a
+	// contested event that names one of them, which is deliberate: the event is attributed to
+	// nobody and is still that reader's business.
+	Contested     []string `protobuf:"bytes,17,rep,name=contested,proto3" json:"contested,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -377,14 +402,31 @@ func (x *ActivityEvent) GetUnit() string {
 	return ""
 }
 
+func (x *ActivityEvent) GetContested() []string {
+	if x != nil {
+		return x.Contested
+	}
+	return nil
+}
+
 // ActivityQuery narrows the listing server-side. Fields AND together; repeated values within
 // a field OR; the time window bounds it.
 type ActivityQuery struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kinds         []Kind                 `protobuf:"varint,1,rep,packed,name=kinds,proto3,enum=magus.activity.v1alpha1.Kind" json:"kinds,omitempty"` // restrict to these action kinds
-	Actors        []string               `protobuf:"bytes,2,rep,name=actors,proto3" json:"actors,omitempty"`                                         // restrict to these actors
-	Actions       []string               `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`                                       // restrict to these actions (e.g. tool names)
-	Time          *v1alpha1.TimeRange    `protobuf:"bytes,4,opt,name=time,proto3" json:"time,omitempty"`                                             // action-time window
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Kinds   []Kind                 `protobuf:"varint,1,rep,packed,name=kinds,proto3,enum=magus.activity.v1alpha1.Kind" json:"kinds,omitempty"` // restrict to these action kinds
+	Actors  []string               `protobuf:"bytes,2,rep,name=actors,proto3" json:"actors,omitempty"`                                         // restrict to these actors
+	Actions []string               `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`                                       // restrict to these actions (e.g. tool names)
+	Time    *v1alpha1.TimeRange    `protobuf:"bytes,4,opt,name=time,proto3" json:"time,omitempty"`                                             // action-time window
+	// The three narrowings a person watching a worker asks for. They are here rather than on
+	// the watch request alone because the same question is worth asking of history: "what has
+	// this job been doing" and "what is it doing now" differ only in which verb you call.
+	Units    []string `protobuf:"bytes,5,rep,name=units,proto3" json:"units,omitempty"`       // restrict to these leases (magus calls one a job)
+	Sessions []string `protobuf:"bytes,6,rep,name=sessions,proto3" json:"sessions,omitempty"` // restrict to these host session ids
+	// Restrict to file changes under these paths. A path matches the way a declared write
+	// lane does, so naming a directory answers for what is under it. It selects FILE events
+	// only: a tool call and a run are attributed by lease, not by path, and quietly returning
+	// them for a path filter would report reach nobody asked about.
+	Paths         []string `protobuf:"bytes,7,rep,name=paths,proto3" json:"paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -443,6 +485,27 @@ func (x *ActivityQuery) GetActions() []string {
 func (x *ActivityQuery) GetTime() *v1alpha1.TimeRange {
 	if x != nil {
 		return x.Time
+	}
+	return nil
+}
+
+func (x *ActivityQuery) GetUnits() []string {
+	if x != nil {
+		return x.Units
+	}
+	return nil
+}
+
+func (x *ActivityQuery) GetSessions() []string {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+func (x *ActivityQuery) GetPaths() []string {
+	if x != nil {
+		return x.Paths
 	}
 	return nil
 }
@@ -559,6 +622,63 @@ func (x *ListActivityEventsResponse) GetNextPageToken() string {
 	return ""
 }
 
+// WatchActivityEventsRequest subscribes to the merged feed.
+type WatchActivityEventsRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Filter *ActivityQuery         `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	// backfill is how many already-recorded matching events to send before following. It is
+	// what stops a reader opening a drawer onto a blank panel and reading it as "nothing has
+	// happened": a job that has been running for an hour has a past, and a stream that starts
+	// at now hides all of it. Zero means none; the server caps it.
+	Backfill      int32 `protobuf:"varint,2,opt,name=backfill,proto3" json:"backfill,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchActivityEventsRequest) Reset() {
+	*x = WatchActivityEventsRequest{}
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchActivityEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchActivityEventsRequest) ProtoMessage() {}
+
+func (x *WatchActivityEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchActivityEventsRequest.ProtoReflect.Descriptor instead.
+func (*WatchActivityEventsRequest) Descriptor() ([]byte, []int) {
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *WatchActivityEventsRequest) GetFilter() *ActivityQuery {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+func (x *WatchActivityEventsRequest) GetBackfill() int32 {
+	if x != nil {
+		return x.Backfill
+	}
+	return 0
+}
+
 type GetPayloadRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// A provenance-prefixed content ref: a short lowercase source tag followed by hex.
@@ -569,7 +689,7 @@ type GetPayloadRequest struct {
 
 func (x *GetPayloadRequest) Reset() {
 	*x = GetPayloadRequest{}
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[4]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -581,7 +701,7 @@ func (x *GetPayloadRequest) String() string {
 func (*GetPayloadRequest) ProtoMessage() {}
 
 func (x *GetPayloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[4]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -594,7 +714,7 @@ func (x *GetPayloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPayloadRequest.ProtoReflect.Descriptor instead.
 func (*GetPayloadRequest) Descriptor() ([]byte, []int) {
-	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{4}
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetPayloadRequest) GetRef() string {
@@ -615,7 +735,7 @@ type Payload struct {
 
 func (x *Payload) Reset() {
 	*x = Payload{}
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -627,7 +747,7 @@ func (x *Payload) String() string {
 func (*Payload) ProtoMessage() {}
 
 func (x *Payload) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -640,7 +760,7 @@ func (x *Payload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Payload.ProtoReflect.Descriptor instead.
 func (*Payload) Descriptor() ([]byte, []int) {
-	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{5}
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Payload) GetBody() []byte {
@@ -661,7 +781,7 @@ var File_magus_activity_v1alpha1_activity_proto protoreflect.FileDescriptor
 
 const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\n" +
-	"&magus/activity/v1alpha1/activity.proto\x12\x17magus.activity.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/query/v1alpha1/query.proto\"\xb3\x04\n" +
+	"&magus/activity/v1alpha1/activity.proto\x12\x17magus.activity.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/query/v1alpha1/query.proto\"\xd1\x04\n" +
 	"\rActivityEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.magus.activity.v1alpha1.KindR\x04kind\x12\x14\n" +
@@ -680,12 +800,16 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\tworkspace\x18\r \x01(\tR\tworkspace\x12\x12\n" +
 	"\x04host\x18\x0e \x01(\tR\x04host\x12\x18\n" +
 	"\asession\x18\x0f \x01(\tR\asession\x12\x12\n" +
-	"\x04unit\x18\x10 \x01(\tR\x04unit\"\xab\x01\n" +
+	"\x04unit\x18\x10 \x01(\tR\x04unit\x12\x1c\n" +
+	"\tcontested\x18\x11 \x03(\tR\tcontested\"\xf3\x01\n" +
 	"\rActivityQuery\x123\n" +
 	"\x05kinds\x18\x01 \x03(\x0e2\x1d.magus.activity.v1alpha1.KindR\x05kinds\x12\x16\n" +
 	"\x06actors\x18\x02 \x03(\tR\x06actors\x12\x18\n" +
 	"\aactions\x18\x03 \x03(\tR\aactions\x123\n" +
-	"\x04time\x18\x04 \x01(\v2\x1f.magus.query.v1alpha1.TimeRangeR\x04time\"\xa3\x01\n" +
+	"\x04time\x18\x04 \x01(\v2\x1f.magus.query.v1alpha1.TimeRangeR\x04time\x12\x14\n" +
+	"\x05units\x18\x05 \x03(\tR\x05units\x12\x1a\n" +
+	"\bsessions\x18\x06 \x03(\tR\bsessions\x12\x14\n" +
+	"\x05paths\x18\a \x03(\tR\x05paths\"\xa3\x01\n" +
 	"\x19ListActivityEventsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
@@ -694,13 +818,17 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x06filter\x18\x03 \x01(\v2&.magus.activity.v1alpha1.ActivityQueryR\x06filter\"\x84\x01\n" +
 	"\x1aListActivityEventsResponse\x12>\n" +
 	"\x06events\x18\x01 \x03(\v2&.magus.activity.v1alpha1.ActivityEventR\x06events\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"C\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x84\x01\n" +
+	"\x1aWatchActivityEventsRequest\x12>\n" +
+	"\x06filter\x18\x01 \x01(\v2&.magus.activity.v1alpha1.ActivityQueryR\x06filter\x12&\n" +
+	"\bbackfill\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bbackfill\"C\n" +
 	"\x11GetPayloadRequest\x12.\n" +
 	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\"<\n" +
 	"\aPayload\x12\x12\n" +
 	"\x04body\x18\x01 \x01(\fR\x04body\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes*\xf7\x01\n" +
+	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes*\x9b\x02\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12KIND_MCP_TOOL_CALL\x10\x01\x12\f\n" +
@@ -714,16 +842,19 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x10KIND_AGENT_SPAWN\x10\t\x12\x0e\n" +
 	"\n" +
 	"KIND_NOTES\x10\n" +
-	"*E\n" +
+	"\x12\x14\n" +
+	"\x10KIND_FILE_CHANGE\x10\v\x12\f\n" +
+	"\bKIND_RUN\x10\f*E\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
 	"OUTCOME_OK\x10\x01\x12\x11\n" +
-	"\rOUTCOME_ERROR\x10\x022\xec\x01\n" +
+	"\rOUTCOME_ERROR\x10\x022\xe2\x02\n" +
 	"\x0fActivityService\x12}\n" +
 	"\x12ListActivityEvents\x122.magus.activity.v1alpha1.ListActivityEventsRequest\x1a3.magus.activity.v1alpha1.ListActivityEventsResponse\x12Z\n" +
 	"\n" +
-	"GetPayload\x12*.magus.activity.v1alpha1.GetPayloadRequest\x1a .magus.activity.v1alpha1.PayloadB\xfb\x01\n" +
+	"GetPayload\x12*.magus.activity.v1alpha1.GetPayloadRequest\x1a .magus.activity.v1alpha1.Payload\x12t\n" +
+	"\x13WatchActivityEvents\x123.magus.activity.v1alpha1.WatchActivityEventsRequest\x1a&.magus.activity.v1alpha1.ActivityEvent0\x01B\xfb\x01\n" +
 	"\x1bcom.magus.activity.v1alpha1B\rActivityProtoP\x01ZOgithub.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1;activityv1alpha1\xa2\x02\x03MAX\xaa\x02\x17Magus.Activity.V1alpha1\xca\x02\x17Magus\\Activity\\V1alpha1\xe2\x02#Magus\\Activity\\V1alpha1\\GPBMetadata\xea\x02\x19Magus::Activity::V1alpha1b\x06proto3"
 
 var (
@@ -739,7 +870,7 @@ func file_magus_activity_v1alpha1_activity_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_activity_v1alpha1_activity_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_magus_activity_v1alpha1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_magus_activity_v1alpha1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_magus_activity_v1alpha1_activity_proto_goTypes = []any{
 	(Kind)(0),                          // 0: magus.activity.v1alpha1.Kind
 	(Outcome)(0),                       // 1: magus.activity.v1alpha1.Outcome
@@ -747,30 +878,34 @@ var file_magus_activity_v1alpha1_activity_proto_goTypes = []any{
 	(*ActivityQuery)(nil),              // 3: magus.activity.v1alpha1.ActivityQuery
 	(*ListActivityEventsRequest)(nil),  // 4: magus.activity.v1alpha1.ListActivityEventsRequest
 	(*ListActivityEventsResponse)(nil), // 5: magus.activity.v1alpha1.ListActivityEventsResponse
-	(*GetPayloadRequest)(nil),          // 6: magus.activity.v1alpha1.GetPayloadRequest
-	(*Payload)(nil),                    // 7: magus.activity.v1alpha1.Payload
-	(*timestamppb.Timestamp)(nil),      // 8: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),        // 9: google.protobuf.Duration
-	(*v1alpha1.TimeRange)(nil),         // 10: magus.query.v1alpha1.TimeRange
+	(*WatchActivityEventsRequest)(nil), // 6: magus.activity.v1alpha1.WatchActivityEventsRequest
+	(*GetPayloadRequest)(nil),          // 7: magus.activity.v1alpha1.GetPayloadRequest
+	(*Payload)(nil),                    // 8: magus.activity.v1alpha1.Payload
+	(*timestamppb.Timestamp)(nil),      // 9: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),        // 10: google.protobuf.Duration
+	(*v1alpha1.TimeRange)(nil),         // 11: magus.query.v1alpha1.TimeRange
 }
 var file_magus_activity_v1alpha1_activity_proto_depIdxs = []int32{
-	8,  // 0: magus.activity.v1alpha1.ActivityEvent.time:type_name -> google.protobuf.Timestamp
+	9,  // 0: magus.activity.v1alpha1.ActivityEvent.time:type_name -> google.protobuf.Timestamp
 	0,  // 1: magus.activity.v1alpha1.ActivityEvent.kind:type_name -> magus.activity.v1alpha1.Kind
 	1,  // 2: magus.activity.v1alpha1.ActivityEvent.outcome:type_name -> magus.activity.v1alpha1.Outcome
-	9,  // 3: magus.activity.v1alpha1.ActivityEvent.duration:type_name -> google.protobuf.Duration
+	10, // 3: magus.activity.v1alpha1.ActivityEvent.duration:type_name -> google.protobuf.Duration
 	0,  // 4: magus.activity.v1alpha1.ActivityQuery.kinds:type_name -> magus.activity.v1alpha1.Kind
-	10, // 5: magus.activity.v1alpha1.ActivityQuery.time:type_name -> magus.query.v1alpha1.TimeRange
+	11, // 5: magus.activity.v1alpha1.ActivityQuery.time:type_name -> magus.query.v1alpha1.TimeRange
 	3,  // 6: magus.activity.v1alpha1.ListActivityEventsRequest.filter:type_name -> magus.activity.v1alpha1.ActivityQuery
 	2,  // 7: magus.activity.v1alpha1.ListActivityEventsResponse.events:type_name -> magus.activity.v1alpha1.ActivityEvent
-	4,  // 8: magus.activity.v1alpha1.ActivityService.ListActivityEvents:input_type -> magus.activity.v1alpha1.ListActivityEventsRequest
-	6,  // 9: magus.activity.v1alpha1.ActivityService.GetPayload:input_type -> magus.activity.v1alpha1.GetPayloadRequest
-	5,  // 10: magus.activity.v1alpha1.ActivityService.ListActivityEvents:output_type -> magus.activity.v1alpha1.ListActivityEventsResponse
-	7,  // 11: magus.activity.v1alpha1.ActivityService.GetPayload:output_type -> magus.activity.v1alpha1.Payload
-	10, // [10:12] is the sub-list for method output_type
-	8,  // [8:10] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	3,  // 8: magus.activity.v1alpha1.WatchActivityEventsRequest.filter:type_name -> magus.activity.v1alpha1.ActivityQuery
+	4,  // 9: magus.activity.v1alpha1.ActivityService.ListActivityEvents:input_type -> magus.activity.v1alpha1.ListActivityEventsRequest
+	7,  // 10: magus.activity.v1alpha1.ActivityService.GetPayload:input_type -> magus.activity.v1alpha1.GetPayloadRequest
+	6,  // 11: magus.activity.v1alpha1.ActivityService.WatchActivityEvents:input_type -> magus.activity.v1alpha1.WatchActivityEventsRequest
+	5,  // 12: magus.activity.v1alpha1.ActivityService.ListActivityEvents:output_type -> magus.activity.v1alpha1.ListActivityEventsResponse
+	8,  // 13: magus.activity.v1alpha1.ActivityService.GetPayload:output_type -> magus.activity.v1alpha1.Payload
+	2,  // 14: magus.activity.v1alpha1.ActivityService.WatchActivityEvents:output_type -> magus.activity.v1alpha1.ActivityEvent
+	12, // [12:15] is the sub-list for method output_type
+	9,  // [9:12] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_magus_activity_v1alpha1_activity_proto_init() }
@@ -784,7 +919,7 @@ func file_magus_activity_v1alpha1_activity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_activity_v1alpha1_activity_proto_rawDesc), len(file_magus_activity_v1alpha1_activity_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

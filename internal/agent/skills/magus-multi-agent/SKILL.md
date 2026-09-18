@@ -579,6 +579,34 @@ state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
 
+### "How is it going" is a READ, never a message
+
+Never message a worker to find out how it is doing. The question costs it the
+turn it was in the middle of, and what comes back is its account of itself rather
+than what happened{{if .Full}}. Three reads answer it and none of them needs the
+worker's cooperation: a changed file is the filesystem reporting a fact, a tool
+call is what the guard already recorded, and a gate is graded against evidence
+magus is holding anyway{{else}}. Three reads answer it without touching the
+worker{{end}}.
+
+| you want | read |
+| --- | --- |
+| to hand the question to a person | the console link every verb that names a job prints |
+| to watch it happen | `{{cmd "job watch"}} <job>` |
+| to know whether it is finished | `{{cmd "describe job"}} <job> --gates` |
+
+`{{cmd "job watch"}}` merges files changed under the job's write lane, the tool
+calls the guard saw under its lease, and the runs recorded against it, one line
+each until you interrupt it. A file is attributed by LANE and by nothing the
+worker says{{if .Full}}: the lanes are proven disjoint when the job forks, so the
+path alone names the holder. Where two live lanes do cover one path the line says
+`contested`, names both, and attributes it to neither - there is nothing in a path
+to break that tie with, and naming one would tell you a file moved under a worker
+that never touched it{{else}}, so the worker cannot make it quiet{{end}}.
+
+Message a worker only to CHANGE what it was handed. Anything you merely want to
+KNOW is one of the three reads above.
+
 A blocked worker RAISES rather than stalling quietly. Piping the block to `magus
 session notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on
 approval) opens a durable request in this repository; no other outcome opens one.

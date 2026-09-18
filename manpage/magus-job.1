@@ -3,7 +3,7 @@
 magus\-job \- Fork a job, take it, return it with its result, and verify that result
 .SH SYNOPSIS
 .B magus
-.RI "job <fork|exec|exit|wait|run> [flags]"
+.RI "job <fork|exec|exit|wait|watch|run> [flags]"
 .SH DESCRIPTION
 Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read lanes, plus the one check
@@ -182,6 +182,9 @@ Return a job with its result, or abandon it
 .TP
 \fBwait\fR
 Verify the result a job was exited with
+.TP
+\fBwatch\fR
+Follow what a job's holder is doing, until interrupted
 .TP
 \fBrun\fR
 Submit one of the daemon's own jobs and return

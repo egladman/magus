@@ -18,10 +18,14 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -57,12 +61,14 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobExit(ctx, root, args[1:])
 	case hint.JobWait.Leaf():
 		return jobWait(ctx, root, args[1:])
+	case hint.JobWatch.Leaf():
+		return jobWatch(ctx, root, args[1:])
 	case hint.JobRun.Leaf():
 		return jobRunCatalog(ctx, args[1:])
 	case hint.JobRm.Leaf():
 		return jobDelete(ctx, root, args[1:])
 	default:
-		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, run or rm; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run or rm; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
@@ -81,6 +87,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "        --vacate gives it up instead")
 	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
 	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
+	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
 	fmt.Fprintln(os.Stderr, "  run   submit one of the daemon's own jobs and return")
 	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
 	fmt.Fprintln(os.Stderr, "")
@@ -90,6 +97,61 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "paths and end its own job, and nothing else. "+hint.ToolJob.String()+" is the")
 	fmt.Fprintln(os.Stderr, "same store through an agent's channel.")
 }
+
+// consoleJobLine is where to WATCH a job while it runs, printed under every verb that names
+// one. Somebody who wants to know how a worker is doing has two ways to find out, and only
+// one of them leaves the worker alone.
+//
+// An empty id asks for the Jobs view itself, which is what a listing wants.
+//
+// With no daemon serving there is no origin to build a link against, so the line says how to
+// start one instead. Printing the URL anyway would hand a person a page that never loads,
+// and a browser error page cannot tell them that nothing is listening rather than that the
+// console is broken.
+func consoleJobLine(id string) string {
+	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
+		return ""
+	}
+	if !daemonServing() {
+		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
+	}
+	host := mcpAddrString()
+	if id == "" {
+		return "console: " + console.Link(console.LinkOpts{Host: host, Surface: console.JobSurface})
+	}
+	return "console: " + console.JobLink(host, id)
+}
+
+// printConsoleJobLine writes that line, and nothing at all when the console is off: a
+// suppressed surface has no address, and a bare "console:" is worse than silence.
+func printConsoleJobLine(out io.Writer, id string) {
+	if line := consoleJobLine(id); line != "" {
+		fmt.Fprintln(out, line)
+	}
+}
+
+// daemonServing reports whether a PERSISTENT daemon is up. It is the two-step check
+// jobRunCatalog makes and for the same reason: a per-process proc server answers the socket
+// and serves no console, so its address would build a link to a page that never loads.
+//
+// It makes its OWN bounded context rather than taking the command's. The probe is a local
+// socket round trip on the way to printing one line, `magus ls jobs` reaches it through a
+// caller that has no context to pass, and a link nobody can build is not worth widening four
+// signatures for.
+func daemonServing() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), consoleProbeTimeout)
+	defer cancel()
+	addr, err := resolveDaemonAddr(ctx, "")
+	if err != nil || addr == "" {
+		return false
+	}
+	st, err := proc.QueryStatus(ctx, addr)
+	return err == nil && st != nil && st.Mode == "daemon"
+}
+
+// consoleProbeTimeout bounds that probe. A daemon on the same machine answers in
+// milliseconds; anything slower is one that cannot serve a console page either.
+const consoleProbeTimeout = 2 * time.Second
 
 func openJobs(root string) (*job.Store, error) {
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
@@ -148,6 +210,7 @@ func lsJobs(root string, args []string) error {
 		return emitNames(ids)
 	case outputText:
 		printJobTree(os.Stdout, list)
+		printConsoleJobLine(os.Stdout, "")
 		return nil
 	default:
 		return emitFormatted(opts, list)
@@ -326,6 +389,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
+		printConsoleJobLine(os.Stdout, row.ID)
 		return nil
 	default:
 		return emitFormatted(opts, brief)
@@ -557,6 +621,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
+		printConsoleJobLine(os.Stdout, stored.ID)
 		return nil
 	default:
 		return emitFormatted(opts, stored)
@@ -910,6 +975,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		err = emitNames([]string{status.Job})
 	case outputText:
 		printJobStatus(os.Stdout, status)
+		printConsoleJobLine(os.Stdout, status.Job)
 	default:
 		err = emitFormatted(opts, status)
 	}
@@ -917,6 +983,167 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	return errSilent{exitCode: 1}
+}
+
+// jobWatch follows one job's feed in this terminal, one line per event, until interrupted.
+//
+// THE POINT IS THAT IT ASKS THE HOLDER NOTHING. The three sources are the guard's trail,
+// the job's recorded runs, and the filesystem under the job's declared write lane, and none
+// of them needs the worker to cooperate or even to notice. Messaging a worker to ask how it
+// is going costs it the turn it was in the middle of.
+//
+// It reads LOCALLY rather than through the daemon's WatchActivityEvents, over the same
+// internal/job cursors that RPC follows with, so the two cannot disagree about what has
+// happened since you last looked. Local because this verb has to work in a checkout with no
+// daemon running, which is the same tree the holder is working in: requiring a server to
+// answer "what is that worker doing" would put the question out of reach exactly when
+// somebody is at a terminal wondering.
+func jobWatch(ctx context.Context, root string, args []string) error {
+	pos, err := cmdParse("job watch", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus job watch <job>")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Follow what a job's holder is doing, one line per event, until interrupted.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Three sources, merged in time order: files changed under the job's declared write")
+			fmt.Fprintln(os.Stderr, "lane, tool calls the guard observed under its lease, and the runs magus recorded")
+			fmt.Fprintln(os.Stderr, "against it. None of them asks the holder anything, so watching costs it nothing.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "`"+hint.DescribeJob.With("<job>", "--gates")+"` grades what it has finished; this shows what it is doing.")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return usagef("magus job watch: requires exactly one job")
+	}
+	id := pos[0]
+	root = resolveRootOrEmpty(root)
+	store, err := openJobs(root)
+	if err != nil {
+		return err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
+		return fmt.Errorf("magus job watch: there is no job %q (run `%s` to see them)", id, hint.LsJobs)
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return err
+	}
+
+	out := os.Stdout
+	printConsoleJobLine(out, id)
+	fmt.Fprintf(out, "watching %s in %s; interrupt to stop\n", id, root)
+
+	// The job plan is re-read per batch rather than captured: a holder releases paths as it
+	// goes, and a lane frozen here would keep attributing a file it gave up.
+	plan := func() []types.Job {
+		live, lerr := store.List()
+		if lerr != nil {
+			return nil
+		}
+		return live
+	}
+	changes := jobWatchFiles(ctx, out, root, plan)
+	cursor := job.CursorAt(job.Ascending(recentTrail(cacheDir)))
+	runs := job.NewRunCursor()
+	runs.Prime(rows)
+
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case e, ok := <-changes:
+			if !ok {
+				changes = nil // the watcher ended; the trail half keeps reporting
+				continue
+			}
+			// A contested path is attributed to nobody and is still this reader's business:
+			// their job declared it, somebody wrote it, and which of them did is precisely
+			// what nothing can say. Filtering on Job alone hid it.
+			if e.Job == id || slices.Contains(e.Contested, id) {
+				printFeedLine(out, e)
+			}
+		case <-tick.C:
+			for _, e := range job.ToolEvents(cursor.Next(job.Ascending(recentTrail(cacheDir)))) {
+				if e.Job == id {
+					printFeedLine(out, e)
+				}
+			}
+			for _, e := range runs.Next(plan()) {
+				if e.Job == id {
+					printFeedLine(out, e)
+				}
+			}
+		}
+	}
+}
+
+// jobWatchFiles starts this checkout's own file watcher and returns the attributed changes.
+// A watcher that will not start is REPORTED and then done without: the other two sources
+// still answer, and a silently missing third is how a feed comes to show a quiet tree.
+func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() []types.Job) <-chan job.FeedEvent {
+	// RelativeIgnore, not BuiltinIgnore: an agent worktree lives under a dot-directory, and
+	// the absolute form would skip every file in the very tree this verb exists to watch.
+	w, err := watch.New(ctx, watch.WithRoot(root), watch.WithIgnore(watch.RelativeIgnore(root, watch.BuiltinIgnore)))
+	if err != nil {
+		fmt.Fprintf(out, "note: no file watcher here (%s), so this shows tool calls and runs only\n", err)
+		return nil
+	}
+	go func() {
+		<-ctx.Done()
+		_ = w.Close()
+	}()
+	return console.NewJobFeed(ctx, w, root, plan).Subscribe(ctx)
+}
+
+// recentTrail is what this checkout's activity trail still holds, newest first. An
+// unreadable trail reads as empty: a watcher that refused to start because nothing had been
+// recorded yet would refuse exactly when a job has only just begun.
+func recentTrail(cacheDir string) []trail.Event {
+	events, err := trail.ReadRecent(cacheDir, jobWatchWindow)
+	if err != nil {
+		return nil
+	}
+	return events
+}
+
+// jobWatchWindow bounds one read of the trail. It is a follower's window, not a history:
+// every tick re-reads it and the cursor drops what it has already printed, so this only has
+// to be wider than one second of a very busy machine.
+const jobWatchWindow = 2000
+
+// printFeedLine writes one event as one line. Fixed columns rather than prose, because the
+// value of this surface is skimming a column: a person watching four workers is looking for
+// the word "deny" going past, not reading sentences.
+func printFeedLine(out io.Writer, e job.FeedEvent) {
+	stamp := time.UnixMilli(e.Ts).Format("15:04:05")
+	switch e.Kind {
+	case job.FeedFile:
+		fmt.Fprintf(out, "%s  file  %s\n", stamp, e.Action)
+	case job.FeedTool:
+		verdict := e.Decision
+		if verdict == "" {
+			verdict = "observed" // the guard judged nothing; see trail.AppendAgentCommand
+		}
+		fmt.Fprintf(out, "%s  tool  %-8s %s\n", stamp, verdict, e.Action)
+	default:
+		status := "ok"
+		if e.Outcome == trail.OutcomeError {
+			status = "failed"
+		}
+		fmt.Fprintf(out, "%s  run   %-8s %s  %s\n", stamp, status, e.Action, e.Ref)
+	}
+	if e.Note != "" && e.Kind == job.FeedFile {
+		fmt.Fprintf(out, "          %s\n", e.Note)
+	}
 }
 
 // storedAttempt is what the output store recorded about the run behind ref: which command

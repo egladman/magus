@@ -11,7 +11,7 @@ Fork a job, take it, return it with its result, and verify that result
 
 ## Synopsis
 
-**magus** job \<fork|exec|exit|wait|run\> [flags]
+**magus** job \<fork|exec|exit|wait|watch|run\> [flags]
 
 ## Description
 
@@ -187,6 +187,9 @@ them and magus describe job prints one job's terms.
 
 **wait**
 : Verify the result a job was exited with
+
+**watch**
+: Follow what a job's holder is doing, until interrupted
 
 **run**
 : Submit one of the daemon's own jobs and return

@@ -248,15 +248,31 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Start a file watcher for SSE graph-invalidation events. Non-fatal:
 			// if the watcher cannot start, the SSE stream emits only heartbeats.
 			var inv <-chan struct{}
+			var jobFeed *console.JobFeed
+			// RelativeIgnore, not BuiltinIgnore: the predicate skips any dot segment in the
+			// path, which is right for a directory inside the tree and wrong for one the
+			// tree sits inside. A workspace opened at <repo>/.claude/worktrees/<name> has a
+			// dot segment above its root, so every file in it matched and this watcher
+			// reported nothing at all, with nothing logged and nothing failing.
 			bWatcher, werr := watch.New(ctx,
 				watch.WithRoot(opts.Magus.Root()),
-				watch.WithIgnore(watch.BuiltinIgnore),
+				watch.WithIgnore(watch.RelativeIgnore(opts.Magus.Root(), watch.BuiltinIgnore)),
 			)
 			if werr != nil {
 				log.WarnContext(ctx, "[BRIDGE] file watcher unavailable; /api/v1/events will emit heartbeats only",
 					slog.String("error", werr.Error()))
 			} else {
-				inv = console.WatchInvalidate(ctx, bWatcher)
+				// ONE consumer of the watcher, two audiences: the SSE stream's graph
+				// invalidation and the activity feed's attributed file changes. Two read
+				// loops over one channel would take alternate batches.
+				jobFeed = console.NewJobFeed(ctx, bWatcher, opts.Magus.Root(), func() []types.Job {
+					rows, err := opts.Jobs.List()
+					if err != nil {
+						return nil
+					}
+					return rows
+				})
+				inv = jobFeed.Invalidate()
 				go func() {
 					<-ctx.Done()
 					_ = bWatcher.Close()
@@ -424,7 +440,23 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// and governance activity, read-only over every loaded workspace's trail. Mounted
 			// with the same cross-origin guards as metrics (the dashboard is a hosted-site
 			// browser client) and unconditionally: the trail is readable even when metrics are off.
-			activityPath, activityHandler := activityv1alpha1connect.NewActivityServiceHandler(activityhandler.NewService(s.activityWorkspaces()), connectReadMax)
+			// The two extra sources WatchActivityEvents merges with the trail: the job plan
+			// (so a file change can be attributed to the lane that covers it, and a job's
+			// recorded runs reach the feed) and the watcher fan-out above. Both degrade to
+			// nothing rather than failing the mount: without them the stream still serves
+			// the guard's observations, which is what this service served before.
+			activitySvc := activityhandler.NewService(s.activityWorkspaces(),
+				activityhandler.WithJobs(func() []types.Job {
+					rows, jerr := opts.Jobs.List()
+					if jerr != nil {
+						return nil
+					}
+					return rows
+				}))
+			if jobFeed != nil {
+				activityhandler.WithFileChanges(jobFeed.Subscribe)(activitySvc)
+			}
+			activityPath, activityHandler := activityv1alpha1connect.NewActivityServiceHandler(activitySvc, connectReadMax)
 			httpServer.Handle(activityPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, activityHandler))))
 			// ActivityService.ListActivityEvents is read-only, so it joins the share read surface.
 			shareGuarded[activityPath] = activityHandler

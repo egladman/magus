@@ -1834,7 +1834,7 @@ call it unconditionally.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|exec|exit|wait|run> [flags]",
+	Usage: "magus job <fork|exec|exit|wait|watch|run> [flags]",
 	Children: []Command{
 		{
 			Name:  "fork",
@@ -1894,6 +1894,28 @@ them and magus describe job prints one job's terms.`,
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a result must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read the result from stdin instead of from the job, for one that was never filed"},
 			},
+		},
+		{
+			Name:        "watch",
+			Short:       "Follow what a job's holder is doing, until interrupted",
+			Description: "Print one line per event as it happens: files changed under the job's declared write lane, tool calls the guard observed under its lease, and the runs magus recorded against it, merged in time order.",
+			Long: `Follow one job's holder without asking it anything.
+
+The three sources are the filesystem, the guard's activity trail, and the job's
+own recorded runs. None of them needs the holder to cooperate or even to notice,
+which is the point: messaging a worker to ask how it is going costs it the turn
+it was in the middle of, and the answer you get is the worker's account of
+itself rather than what happened.
+
+A changed file is attributed to the job whose declared write lane covers it. The
+lanes are disjoint, so the attribution is exact and needs nothing from the
+worker; where two live lanes somehow cover one path the line says so and
+attributes it to neither, because there is nothing in a path to break the tie.
+
+It reads this checkout and needs no daemon. The same feed is served over the
+console's Jobs view, which every verb that names a job prints a link to.` + "\n\n`magus describe job <job> --gates`" + ` grades what a job has finished; this
+shows what it is doing.`,
+			Usage: "magus job watch <job>",
 		},
 		{Name: "run", Short: "Submit one of the daemon's own jobs and return"},
 		{

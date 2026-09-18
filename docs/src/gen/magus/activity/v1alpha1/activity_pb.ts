@@ -27,7 +27,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/activity/v1alpha1/activity.proto.
  */
 export const file_magus_activity_v1alpha1_activity: GenFile = /*@__PURE__*/
-  fileDesc("CiZtYWd1cy9hY3Rpdml0eS92MWFscGhhMS9hY3Rpdml0eS5wcm90bxIXbWFndXMuYWN0aXZpdHkudjFhbHBoYTEinwMKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoEa2luZBgCIAEoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEjEKB291dGNvbWUYBSABKA4yIC5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJEgwKBGhvc3QYDiABKAkSDwoHc2Vzc2lvbhgPIAEoCRIMCgR1bml0GBAgASgJIo0BCg1BY3Rpdml0eVF1ZXJ5EiwKBWtpbmRzGAEgAygOMh0ubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuS2luZBIOCgZhY3RvcnMYAiADKAkSDwoHYWN0aW9ucxgDIAMoCRItCgR0aW1lGAQgASgLMh8ubWFndXMucXVlcnkudjFhbHBoYTEuVGltZVJhbmdlIoYBChlMaXN0QWN0aXZpdHlFdmVudHNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUY6AcoABISCgpwYWdlX3Rva2VuGAIgASgJEjYKBmZpbHRlchgDIAEoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5UXVlcnkibQoaTGlzdEFjdGl2aXR5RXZlbnRzUmVzcG9uc2USNgoGZXZlbnRzGAEgAygLMiYubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuQWN0aXZpdHlFdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiPgoRR2V0UGF5bG9hZFJlcXVlc3QSKQoDcmVmGAEgASgJQhy6SBlyFzIVXlthLXpdezIsOH1bMC05YS1mXSskIisKB1BheWxvYWQSDAoEYm9keRgBIAEoDBISCgpzaXplX2J5dGVzGAIgASgDKvcBCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIWChJLSU5EX01DUF9UT09MX0NBTEwQARIMCghLSU5EX0pPQhACEhYKEktJTkRfQ09ORklHX0NIQU5HRRADEhgKFEtJTkRfVE9LRU5fTElGRUNZQ0xFEAQSFwoTS0lORF9TQU5EQk9YX0RFTklBTBAFEg8KC0tJTkRfTUVNT1JZEAYSFgoSS0lORF9BR0VOVF9DT01NQU5EEAcSGQoVS0lORF9DUkVERU5USUFMX0dSQU5UEAgSFAoQS0lORF9BR0VOVF9TUEFXThAJEg4KCktJTkRfTk9URVMQCipFCgdPdXRjb21lEhcKE09VVENPTUVfVU5TUEVDSUZJRUQQABIOCgpPVVRDT01FX09LEAESEQoNT1VUQ09NRV9FUlJPUhACMuwBCg9BY3Rpdml0eVNlcnZpY2USfQoSTGlzdEFjdGl2aXR5RXZlbnRzEjIubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuTGlzdEFjdGl2aXR5RXZlbnRzUmVxdWVzdBozLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkxpc3RBY3Rpdml0eUV2ZW50c1Jlc3BvbnNlEloKCkdldFBheWxvYWQSKi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5HZXRQYXlsb2FkUmVxdWVzdBogLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLlBheWxvYWRC+wEKG2NvbS5tYWd1cy5hY3Rpdml0eS52MWFscGhhMUINQWN0aXZpdHlQcm90b1ABWk9naXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9hY3Rpdml0eS92MWFscGhhMTthY3Rpdml0eXYxYWxwaGExogIDTUFYqgIXTWFndXMuQWN0aXZpdHkuVjFhbHBoYTHKAhdNYWd1c1xBY3Rpdml0eVxWMWFscGhhMeICI01hZ3VzXEFjdGl2aXR5XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIZTWFndXM6OkFjdGl2aXR5OjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
+  fileDesc("CiZtYWd1cy9hY3Rpdml0eS92MWFscGhhMS9hY3Rpdml0eS5wcm90bxIXbWFndXMuYWN0aXZpdHkudjFhbHBoYTEisgMKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoEa2luZBgCIAEoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEjEKB291dGNvbWUYBSABKA4yIC5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJEgwKBGhvc3QYDiABKAkSDwoHc2Vzc2lvbhgPIAEoCRIMCgR1bml0GBAgASgJEhEKCWNvbnRlc3RlZBgRIAMoCSK9AQoNQWN0aXZpdHlRdWVyeRIsCgVraW5kcxgBIAMoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDgoGYWN0b3JzGAIgAygJEg8KB2FjdGlvbnMYAyADKAkSLQoEdGltZRgEIAEoCzIfLm1hZ3VzLnF1ZXJ5LnYxYWxwaGExLlRpbWVSYW5nZRINCgV1bml0cxgFIAMoCRIQCghzZXNzaW9ucxgGIAMoCRINCgVwYXRocxgHIAMoCSKGAQoZTGlzdEFjdGl2aXR5RXZlbnRzUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgCIAEoCRI2CgZmaWx0ZXIYAyABKAsyJi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5BY3Rpdml0eVF1ZXJ5Im0KGkxpc3RBY3Rpdml0eUV2ZW50c1Jlc3BvbnNlEjYKBmV2ZW50cxgBIAMoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5RXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJInIKGldhdGNoQWN0aXZpdHlFdmVudHNSZXF1ZXN0EjYKBmZpbHRlchgBIAEoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5UXVlcnkSHAoIYmFja2ZpbGwYAiABKAVCCrpIBxoFGOgHKAAiPgoRR2V0UGF5bG9hZFJlcXVlc3QSKQoDcmVmGAEgASgJQhy6SBlyFzIVXlthLXpdezIsOH1bMC05YS1mXSskIisKB1BheWxvYWQSDAoEYm9keRgBIAEoDBISCgpzaXplX2J5dGVzGAIgASgDKpsCCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIWChJLSU5EX01DUF9UT09MX0NBTEwQARIMCghLSU5EX0pPQhACEhYKEktJTkRfQ09ORklHX0NIQU5HRRADEhgKFEtJTkRfVE9LRU5fTElGRUNZQ0xFEAQSFwoTS0lORF9TQU5EQk9YX0RFTklBTBAFEg8KC0tJTkRfTUVNT1JZEAYSFgoSS0lORF9BR0VOVF9DT01NQU5EEAcSGQoVS0lORF9DUkVERU5USUFMX0dSQU5UEAgSFAoQS0lORF9BR0VOVF9TUEFXThAJEg4KCktJTkRfTk9URVMQChIUChBLSU5EX0ZJTEVfQ0hBTkdFEAsSDAoIS0lORF9SVU4QDCpFCgdPdXRjb21lEhcKE09VVENPTUVfVU5TUEVDSUZJRUQQABIOCgpPVVRDT01FX09LEAESEQoNT1VUQ09NRV9FUlJPUhACMuICCg9BY3Rpdml0eVNlcnZpY2USfQoSTGlzdEFjdGl2aXR5RXZlbnRzEjIubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuTGlzdEFjdGl2aXR5RXZlbnRzUmVxdWVzdBozLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkxpc3RBY3Rpdml0eUV2ZW50c1Jlc3BvbnNlEloKCkdldFBheWxvYWQSKi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5HZXRQYXlsb2FkUmVxdWVzdBogLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLlBheWxvYWQSdAoTV2F0Y2hBY3Rpdml0eUV2ZW50cxIzLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLldhdGNoQWN0aXZpdHlFdmVudHNSZXF1ZXN0GiYubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuQWN0aXZpdHlFdmVudDABQvsBChtjb20ubWFndXMuYWN0aXZpdHkudjFhbHBoYTFCDUFjdGl2aXR5UHJvdG9QAVpPZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvYWN0aXZpdHkvdjFhbHBoYTE7YWN0aXZpdHl2MWFscGhhMaICA01BWKoCF01hZ3VzLkFjdGl2aXR5LlYxYWxwaGExygIXTWFndXNcQWN0aXZpdHlcVjFhbHBoYTHiAiNNYWd1c1xBY3Rpdml0eVxWMWFscGhhMVxHUEJNZXRhZGF0YeoCGU1hZ3VzOjpBY3Rpdml0eTo6VjFhbHBoYTFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
 
 /**
  * ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
@@ -159,6 +159,21 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
    * @generated from field: string unit = 16;
    */
   unit: string;
+
+  /**
+   * On a KIND_FILE_CHANGE, the leases that BOTH declared this path, set only when more than
+   * one did. unit is then empty, because there is no answer to "whose write is this": the
+   * lanes are meant to be disjoint and this path is the evidence they are not.
+   *
+   * A repeated field rather than a sentence in preview, because a reader watching one lease
+   * has to ask "am I one of these" on every row, and parsing prose to answer it is how the
+   * one event a damaged plan most needs to surface gets dropped. A filter on units matches a
+   * contested event that names one of them, which is deliberate: the event is attributed to
+   * nobody and is still that reader's business.
+   *
+   * @generated from field: repeated string contested = 17;
+   */
+  contested: string[];
 };
 
 /**
@@ -202,6 +217,34 @@ export type ActivityQuery = Message<"magus.activity.v1alpha1.ActivityQuery"> & {
    * @generated from field: magus.query.v1alpha1.TimeRange time = 4;
    */
   time?: TimeRange;
+
+  /**
+   * The three narrowings a person watching a worker asks for. They are here rather than on
+   * the watch request alone because the same question is worth asking of history: "what has
+   * this job been doing" and "what is it doing now" differ only in which verb you call.
+   *
+   * restrict to these leases (magus calls one a job)
+   *
+   * @generated from field: repeated string units = 5;
+   */
+  units: string[];
+
+  /**
+   * restrict to these host session ids
+   *
+   * @generated from field: repeated string sessions = 6;
+   */
+  sessions: string[];
+
+  /**
+   * Restrict to file changes under these paths. A path matches the way a declared write
+   * lane does, so naming a directory answers for what is under it. It selects FILE events
+   * only: a tool call and a run are attributed by lease, not by path, and quietly returning
+   * them for a path filter would report reach nobody asked about.
+   *
+   * @generated from field: repeated string paths = 7;
+   */
+  paths: string[];
 };
 
 /**
@@ -263,6 +306,35 @@ export const ListActivityEventsResponseSchema: GenMessage<ListActivityEventsResp
   messageDesc(file_magus_activity_v1alpha1_activity, 3);
 
 /**
+ * WatchActivityEventsRequest subscribes to the merged feed.
+ *
+ * @generated from message magus.activity.v1alpha1.WatchActivityEventsRequest
+ */
+export type WatchActivityEventsRequest = Message<"magus.activity.v1alpha1.WatchActivityEventsRequest"> & {
+  /**
+   * @generated from field: magus.activity.v1alpha1.ActivityQuery filter = 1;
+   */
+  filter?: ActivityQuery;
+
+  /**
+   * backfill is how many already-recorded matching events to send before following. It is
+   * what stops a reader opening a drawer onto a blank panel and reading it as "nothing has
+   * happened": a job that has been running for an hour has a past, and a stream that starts
+   * at now hides all of it. Zero means none; the server caps it.
+   *
+   * @generated from field: int32 backfill = 2;
+   */
+  backfill: number;
+};
+
+/**
+ * Describes the message magus.activity.v1alpha1.WatchActivityEventsRequest.
+ * Use `create(WatchActivityEventsRequestSchema)` to create a new message.
+ */
+export const WatchActivityEventsRequestSchema: GenMessage<WatchActivityEventsRequest> = /*@__PURE__*/
+  messageDesc(file_magus_activity_v1alpha1_activity, 4);
+
+/**
  * @generated from message magus.activity.v1alpha1.GetPayloadRequest
  */
 export type GetPayloadRequest = Message<"magus.activity.v1alpha1.GetPayloadRequest"> & {
@@ -279,7 +351,7 @@ export type GetPayloadRequest = Message<"magus.activity.v1alpha1.GetPayloadReque
  * Use `create(GetPayloadRequestSchema)` to create a new message.
  */
 export const GetPayloadRequestSchema: GenMessage<GetPayloadRequest> = /*@__PURE__*/
-  messageDesc(file_magus_activity_v1alpha1_activity, 4);
+  messageDesc(file_magus_activity_v1alpha1_activity, 5);
 
 /**
  * Payload is one stored request or response body, resolved from an ActivityEvent's ref.
@@ -303,7 +375,7 @@ export type Payload = Message<"magus.activity.v1alpha1.Payload"> & {
  * Use `create(PayloadSchema)` to create a new message.
  */
 export const PayloadSchema: GenMessage<Payload> = /*@__PURE__*/
-  messageDesc(file_magus_activity_v1alpha1_activity, 5);
+  messageDesc(file_magus_activity_v1alpha1_activity, 6);
 
 /**
  * Kind classifies the recorded action by its source. A reader switches on kind; new sources
@@ -404,6 +476,27 @@ export enum Kind {
    * @generated from enum value: KIND_NOTES = 10;
    */
   NOTES = 10,
+
+  /**
+   * A path under a job's declared write lane changed, as the daemon's file watcher saw it.
+   * action is the repo-relative path and unit is the job whose lane covers it. The producer
+   * is the FILESYSTEM, not an agent: this is the one kind that needs no cooperation from
+   * the worker being watched, which is the whole reason a person can see what a worker is
+   * doing without asking it. An empty unit means no live lane covered the path.
+   *
+   * @generated from enum value: KIND_FILE_CHANGE = 11;
+   */
+  FILE_CHANGE = 11,
+
+  /**
+   * A run magus recorded against a job: its check, one of its completion gates, or the
+   * daemon's own last run of a catalog job. action is the rendered command and preview
+   * names which of the three it was. OUTCOME_ERROR means the run failed, which is the one
+   * kind here where the outcome is a fact about the work rather than about the recording.
+   *
+   * @generated from enum value: KIND_RUN = 12;
+   */
+  RUN = 12,
 }
 
 /**
@@ -467,6 +560,26 @@ export const ActivityService: GenService<{
     methodKind: "unary";
     input: typeof GetPayloadRequestSchema;
     output: typeof PayloadSchema;
+  },
+  /**
+   * WatchActivityEvents follows the same trail forward, OLDEST first, until the caller
+   * hangs up. It is the polling half of ListActivityEvents turned inside out: the console
+   * and `magus job watch` both want "tell me when something happens", and asking a list
+   * endpoint that question costs a full retained-window scan per second per reader.
+   *
+   * It merges three producers into the one envelope, which is why the filter is where it
+   * is rather than on the client: file changes the daemon's watcher saw, attributed to the
+   * job whose declared write lane covers the path; the guard's tool-call observations,
+   * attributed by the lease the hook resolved; and the runs recorded against a job. A
+   * reader narrows by job, session or path and gets one time-ordered stream of all three,
+   * so "what is that worker doing" is one subscription rather than three.
+   *
+   * @generated from rpc magus.activity.v1alpha1.ActivityService.WatchActivityEvents
+   */
+  watchActivityEvents: {
+    methodKind: "server_streaming";
+    input: typeof WatchActivityEventsRequestSchema;
+    output: typeof ActivityEventSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_activity_v1alpha1_activity, 0);
