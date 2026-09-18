@@ -19,7 +19,7 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 
 | Service                                          | Methods | Package                   |
 | ------------------------------------------------ | ------- | ------------------------- |
-| [ActivityService](activity/v1alpha1/activity.md) | 2       | `magus.activity.v1alpha1` |
+| [ActivityService](activity/v1alpha1/activity.md) | 3       | `magus.activity.v1alpha1` |
 | [GraphService](graph/v1alpha1/graph.md)          | 7       | `magus.graph.v1alpha1`    |
 | [InsightService](insight/v1alpha1/insight.md)    | 1       | `magus.insight.v1alpha1`  |
 | [JobService](job/v1alpha1/job.md)                | 2       | `magus.job.v1alpha1`      |
@@ -60,8 +60,9 @@ The path is always `/<package>.<Service>/<Method>`, which every page below state
 
 ## Streaming methods
 
-A server-streaming method returns a sequence of messages over one HTTP response rather than one body, so a single `curl -d` request cannot cleanly demux it. Use a generated Connect client, or a tool built for streaming RPCs such as [grpcurl](https://github.com/fullstorydev/grpcurl) (`grpcurl -plaintext ... /magus.metrics.v1alpha1.MetricsService/StreamMetrics`). Streaming methods:
+A server-streaming method returns a sequence of messages over one HTTP response rather than one body, so a single `curl -d` request cannot cleanly demux it. Use a generated Connect client, or a tool built for streaming RPCs such as [grpcurl](https://github.com/fullstorydev/grpcurl) (`grpcurl -plaintext ... /magus.activity.v1alpha1.ActivityService/WatchActivityEvents`). Streaming methods:
 
+- [ActivityService.WatchActivityEvents](activity/v1alpha1/activity.md#watchactivityevents) (server streaming)
 - [MetricsService.StreamMetrics](metrics/v1alpha1/metrics.md#streammetrics) (server streaming)
 - [StatusService.StreamStatus](status/v1alpha1/status.md#streamstatus) (server streaming)
 - [ViewerService.StreamEvents](viewer/v1alpha1/viewer.md#streamevents) (server streaming)

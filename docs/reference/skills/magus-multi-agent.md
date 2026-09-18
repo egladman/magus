@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 37438
-skill_short_bytes: 28238
+skill_full_bytes: 38842
+skill_short_bytes: 29169
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `84` |
+| `agent-skill-version` | `85` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `5824dc921a21` |
+| `skill-content` | `fcec9c3a04ca` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -514,6 +514,27 @@ This shows Magus process state, lock holders and waiters, and shared-service
 state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
+
+### "How is it going" is a READ, never a message
+
+Never message a worker to find out how it is doing. The question costs it the
+turn it was in the middle of, and what comes back is its account of itself rather
+than what happened. Three reads answer it without touching the
+worker.
+
+| you want | read |
+| --- | --- |
+| to hand the question to a person | the console link every verb that names a job prints |
+| to watch it happen | `magus job watch <job>` |
+| to know whether it is finished | `magus describe job <job> --gates` |
+
+`magus job watch` merges files changed under the job's write lane, the tool
+calls the guard saw under its lease, and the runs recorded against it, one line
+each until you interrupt it. A file is attributed by LANE and by nothing the
+worker says, so the worker cannot make it quiet.
+
+Message a worker only to CHANGE what it was handed. Anything you merely want to
+KNOW is one of the three reads above.
 
 A blocked worker RAISES rather than stalling quietly. Piping the block to `magus
 session notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on
@@ -1152,6 +1173,33 @@ This shows Magus process state, lock holders and waiters, and shared-service
 state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
+
+### "How is it going" is a READ, never a message
+
+Never message a worker to find out how it is doing. The question costs it the
+turn it was in the middle of, and what comes back is its account of itself rather
+than what happened. Three reads answer it and none of them needs the
+worker's cooperation: a changed file is the filesystem reporting a fact, a tool
+call is what the guard already recorded, and a gate is graded against evidence
+magus is holding anyway.
+
+| you want | read |
+| --- | --- |
+| to hand the question to a person | the console link every verb that names a job prints |
+| to watch it happen | `magus job watch <job>` |
+| to know whether it is finished | `magus describe job <job> --gates` |
+
+`magus job watch` merges files changed under the job's write lane, the tool
+calls the guard saw under its lease, and the runs recorded against it, one line
+each until you interrupt it. A file is attributed by LANE and by nothing the
+worker says: the lanes are proven disjoint when the job forks, so the
+path alone names the holder. Where two live lanes do cover one path the line says
+`contested`, names both, and attributes it to neither - there is nothing in a path
+to break that tie with, and naming one would tell you a file moved under a worker
+that never touched it.
+
+Message a worker only to CHANGE what it was handed. Anything you merely want to
+KNOW is one of the three reads above.
 
 A blocked worker RAISES rather than stalling quietly. Piping the block to `magus
 session notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on

@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6304,
-  "edge_count": 11219,
+  "node_count": 6307,
+  "edge_count": 11222,
   "relations": [
     {
       "id": "annotates",
@@ -1717,7 +1717,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1919",
+        "dir_files": "1921",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1727,7 +1727,7 @@
       "label": "docs/reference/api",
       "source": "docs/reference/api",
       "attrs": {
-        "dir_files": "277",
+        "dir_files": "279",
         "dir_languages": "markdown,md#activityevent,md#activityquery,md#activityservice,md#affected,md#affinityoutput,md#anchor,md#anchorkind,md#anchorstatus,md#answer,md#backfill,md#before-you-call-anything,md#buildinfo,md#buzz,md#cache,md#calling-a-method-without-a-generated-clie"
       }
     },
@@ -1737,8 +1737,8 @@
       "label": "docs/reference/api/activity",
       "source": "docs/reference/api/activity",
       "attrs": {
-        "dir_files": "16",
-        "dir_languages": "markdown,md#activityevent,md#activityquery,md#activityservice,md#enums,md#getpayload,md#getpayloadrequest,md#kind,md#listactivityevents,md#listactivityeventsrequest,md#listactivityeventsresponse,md#messages,md#methods,md#outcome,md#payload"
+        "dir_files": "18",
+        "dir_languages": "markdown,md#activityevent,md#activityquery,md#activityservice,md#enums,md#getpayload,md#getpayloadrequest,md#kind,md#listactivityevents,md#listactivityeventsrequest,md#listactivityeventsresponse,md#messages,md#methods,md#outcome,md#payload,md#watchactivity"
       }
     },
     {
@@ -1747,8 +1747,8 @@
       "label": "docs/reference/api/activity/v1alpha1",
       "source": "docs/reference/api/activity/v1alpha1",
       "attrs": {
-        "dir_files": "15",
-        "dir_languages": "markdown,md#activityevent,md#activityquery,md#activityservice,md#enums,md#getpayload,md#getpayloadrequest,md#kind,md#listactivityevents,md#listactivityeventsrequest,md#listactivityeventsresponse,md#messages,md#methods,md#outcome,md#payload"
+        "dir_files": "17",
+        "dir_languages": "markdown,md#activityevent,md#activityquery,md#activityservice,md#enums,md#getpayload,md#getpayloadrequest,md#kind,md#listactivityevents,md#listactivityeventsrequest,md#listactivityeventsresponse,md#messages,md#methods,md#outcome,md#payload,md#watchactivity"
       }
     },
     {
@@ -2175,7 +2175,7 @@
       "label": "internal",
       "source": "internal",
       "attrs": {
-        "dir_files": "174",
+        "dir_files": "175",
         "dir_languages": "buzz,markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-"
       }
     },
@@ -2185,7 +2185,7 @@
       "label": "internal/agent",
       "source": "internal/agent",
       "attrs": {
-        "dir_files": "164",
+        "dir_files": "165",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph"
       }
     },
@@ -2195,7 +2195,7 @@
       "label": "internal/agent/skills",
       "source": "internal/agent/skills",
       "attrs": {
-        "dir_files": "161",
+        "dir_files": "162",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph"
       }
     },
@@ -2285,8 +2285,8 @@
       "label": "internal/agent/skills/magus-multi-agent",
       "source": "internal/agent/skills/magus-multi-agent",
       "attrs": {
-        "dir_files": "12",
-        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#declare-the-criteria-magus-can-check-for-you,md#declare-the-interface-before-any-job-forks,md#fork-one-job-per-unit-of-work,md#integrate-and-verify,md#observe-through-the-correct-control-plane,md#prove-that"
+        "dir_files": "13",
+        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#declare-the-criteria-magus-can-check-for-you,md#declare-the-interface-before-any-job-forks,md#fork-one-job-per-unit-of-work,md#how-is-it-going-is-a-read-never-a-message,md#integrate-and-verify,md#observe-th"
       }
     },
     {
@@ -22494,6 +22494,26 @@
       }
     },
     {
+      "id": "docsection:docs/reference/api/activity/v1alpha1/activity.md#watchactivityevents",
+      "kind": "docsection",
+      "label": "WatchActivityEvents",
+      "source": "docs/reference/api/activity/v1alpha1/activity.md#watchactivityevents",
+      "attrs": {
+        "anchor": "watchactivityevents",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/api/activity/v1alpha1/activity.md#watchactivityeventsrequest",
+      "kind": "docsection",
+      "label": "WatchActivityEventsRequest",
+      "source": "docs/reference/api/activity/v1alpha1/activity.md#watchactivityeventsrequest",
+      "attrs": {
+        "anchor": "watchactivityeventsrequest",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/api/graph/v1alpha1/graph.md#affected",
       "kind": "docsection",
       "label": "Affected",
@@ -39921,6 +39941,16 @@
       "attrs": {
         "anchor": "fork-one-job-per-unit-of-work",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#how-is-it-going-is-a-read-never-a-message",
+      "kind": "docsection",
+      "label": "\"How is it going\" is a READ, never a message",
+      "source": "internal/agent/skills/magus-multi-agent/SKILL.md#how-is-it-going-is-a-read-never-a-message",
+      "attrs": {
+        "anchor": "how-is-it-going-is-a-read-never-a-message",
+        "level": "3"
       }
     },
     {
@@ -108360,6 +108390,14 @@
       "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
     },
     {
+      "source": "docsection:docs/reference/api/activity/v1alpha1/activity.md#messages",
+      "target": "docsection:docs/reference/api/activity/v1alpha1/activity.md#watchactivityeventsrequest",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
+    },
+    {
       "source": "docsection:docs/reference/api/activity/v1alpha1/activity.md#methods",
       "target": "docsection:docs/reference/api/activity/v1alpha1/activity.md#getpayload",
       "relation": "contains",
@@ -108370,6 +108408,14 @@
     {
       "source": "docsection:docs/reference/api/activity/v1alpha1/activity.md#methods",
       "target": "docsection:docs/reference/api/activity/v1alpha1/activity.md#listactivityevents",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/activity/v1alpha1/activity.md#methods",
+      "target": "docsection:docs/reference/api/activity/v1alpha1/activity.md#watchactivityevents",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -120110,6 +120156,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal/agent/skills/magus-memory/SKILL.md"
+    },
+    {
+      "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#observe-through-the-correct-control-plane",
+      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#how-is-it-going-is-a-read-never-a-message",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
     },
     {
       "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",

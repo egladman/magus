@@ -201,7 +201,12 @@ import (
 // job holds the checkout. It also teaches `magus job exec --session`, since a lease binds
 // per session rather than per checkout, and the once-per-session spawn advisory that
 // reports the union of the lanes already held here.
-const SkillVersion = 84
+// 85: magus-multi-agent makes "how is it going" a READ. Asking a worker costs it the turn
+// it was in and answers with its account of itself; the console link, `magus job watch` and
+// `magus describe job --gates` answer from the filesystem, the guard's trail and recorded
+// evidence, none of which the worker can make quiet. It also states what a contested path
+// means, since a file two live lanes cover is attributed to neither.
+const SkillVersion = 85
 
 const skillLicense = "GPL-3.0-or-later"
 

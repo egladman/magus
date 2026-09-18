@@ -37,5 +37,5 @@ Source: [query.proto:22](https://github.com/egladman/magus/blob/main/proto/magus
 | `since` | Timestamp | 1 |             |
 | `until` | Timestamp | 2 |             |
 
-Used by: [ListActivityEvents (request)](../../activity/v1alpha1/activity.md#listactivityevents), [ListEvents (request)](../../viewer/v1alpha1/viewer.md#listevents), [StreamEvents (request)](../../viewer/v1alpha1/viewer.md#streamevents).
+Used by: [ListActivityEvents (request)](../../activity/v1alpha1/activity.md#listactivityevents), [ListEvents (request)](../../viewer/v1alpha1/viewer.md#listevents), [StreamEvents (request)](../../viewer/v1alpha1/viewer.md#streamevents), [WatchActivityEvents (request)](../../activity/v1alpha1/activity.md#watchactivityevents).
 

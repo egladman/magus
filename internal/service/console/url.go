@@ -185,3 +185,31 @@ func SurfaceLink(surface string, fragment ...FragmentParam) string {
 func encodeComponent(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
+
+// JobSurface is the console surface a job's row lives on. The plan view holds two tenants,
+// the target plan and the Jobs stage; a job is named by the latter.
+const JobSurface = "plan"
+
+// jobFragment selects one job in the Jobs view. Shared by the two link forms so a path and
+// an absolute URL cannot disagree about which directive names a job.
+func jobFragment(id string) FragmentParam { return FragmentParam{Key: "job", Value: id} }
+
+// JobSurfaceLink is one job's row in the console Jobs view, without an origin: the form a
+// handler hands back to the console, which is already served from the daemon it is asking.
+// See [SurfaceLink].
+func JobSurfaceLink(id string) string { return SurfaceLink(JobSurface, jobFragment(id)) }
+
+// JobLink is [JobSurfaceLink] against the loopback origin of the daemon serving the
+// console: what a CLI hands a PERSON, who is not in the console already and for whom a
+// bare path resolves against nothing.
+//
+// An empty host returns "", and the caller then says how to start a daemon. That degrade is
+// the point rather than an oversight: a link to an origin nothing is listening on reads as
+// "the console is broken" instead of "nothing is serving it", and the person cannot tell
+// the two apart from a browser error page.
+func JobLink(host, id string) string {
+	if host == "" || id == "" {
+		return ""
+	}
+	return Link(LinkOpts{Host: host, Surface: JobSurface, Fragment: []FragmentParam{jobFragment(id)}})
+}
