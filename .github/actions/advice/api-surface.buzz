@@ -35,6 +35,17 @@ fun dedupe(values: [str]) > [str] {
     return kept;
 }
 
+// capped joins names, keeping the first `keep` and counting the rest.
+fun capped(names: [str], keep: int) > str {
+    if (names.len() <= keep) { return names.join(", "); }
+    var kept = mut [];
+    foreach (n in names) {
+        if (kept.len() == keep) { break; }
+        kept.append(n);
+    }
+    return kept.join(", ") + " and " + "{names.len() - keep}" + " more";
+}
+
 // line renders one file's evidence from PRIMITIVES rather than from the host object.
 //
 // Split that way so the rendering is testable: a host object cannot be constructed inside a
@@ -49,7 +60,9 @@ fun line(path: str, exports: [str], across: [str], reach: int) > str {
     var text = "- `" + path + "`";
     final api = dedupe(exports);
     if (api.len() > 0) {
-        text = text + " exports " + api.join(", ");
+        // Capped, like the terminal report's own list. A file such as types/diff.go exports
+        // fifty names and the reader needs to recognise the file, not to read its index.
+        text = text + " exports " + capped(api, keep: 6);
     }
     final consumers = dedupe(across);
     if (consumers.len() > 0) {
@@ -186,6 +199,13 @@ test "a line names the export, the consumer, and the reach in files" {
     std\assert(text.indexOf("exports Open, Close") != null, message: "names the exports");
     std\assert(text.indexOf("used by console") != null, message: "names the consuming project");
     std\assert(text.indexOf("43 files reference") != null, message: "states reach in FILES");
+}
+
+test "a long export list is capped and counts the rest" {
+    final text = line("types/diff.go",
+        exports: ["A", "B", "C", "D", "E", "F", "G", "H"], across: [], reach: 0);
+    std\assert(text.indexOf("exports A, B, C, D, E, F and 2 more") != null,
+        message: "six names and a count, not an index of the file");
 }
 
 test "a line with no exports and no consumers still names the file" {
