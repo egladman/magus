@@ -137,7 +137,6 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // coverage.txt is the merged figure, declared so a cache hit restores it for the
     // root's coverage-render, which publishes it and cannot import this project.
     ctx.writesFiles("coverage.plain.lcov", "coverage.dom.lcov", "coverage.txt");
-    install();
     proc\exec("pnpm", ["run", "test"], ".", {});
 
     // One figure per LANGUAGE, not per project: it spans every TypeScript project with a

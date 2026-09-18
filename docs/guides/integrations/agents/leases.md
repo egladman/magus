@@ -119,9 +119,9 @@ A row carries `id` and optionally `parent` (the job this one was forked from),
 `deny_paths`, `read_paths`, `depends_on`, `model`, `check`, `state`, and
 `read_only`. The
 store adds `schema_version`, the actor that recorded the row, `created`,
-`updated`, `releases`, and `unattributed` (paths this job owns that somebody
-outside it wrote, noticed by the guard), all output-only: a timestamp a client
-sent would be a fact about that client's clock.
+`updated`, `releases`, `unattributed` (paths this job owns that somebody
+outside it wrote, noticed by the guard), and `lane_proof`, all output-only: a
+timestamp a client sent would be a fact about that client's clock.
 
 There is no `--state` on `fork`. It declares a NEW job, and one nobody has taken
 is `declared`; a holder moves its own job with `magus job exec` and
@@ -141,7 +141,7 @@ the CLI, the `magus_job` MCP tool and `magus\job` all reach the same file and
 only one of them is a command a pattern can read. A session holding no lease,
 the orchestrator or a person at a terminal, writes anything.
 
-**Taking a lease is one-way.** `magus job exec` on a checkout that already holds
+**Taking a lease is one-way.** `magus job exec` for a session that already holds
 a different job is refused. Retaking is how a holder would be graded against
 another job's paths, and it costs nothing to a holder that runs its bootstrap
 twice: taking the lease it already holds is allowed and does nothing.
@@ -154,7 +154,27 @@ clears it instead, refusing only while the job is still `declared` or
 `running` - walking away from those two would leave the checkout's next write
 ungraded. A job already exited, one the store no longer carries, or no binding
 at all all vacate cleanly, and a checkout with nothing bound reports that
-rather than erroring.
+rather than erroring. It releases only the SESSION's own binding, so a sibling
+session working in the same checkout keeps its lease.
+
+**A workspace-load file needs a worktree of its own.** `fork` refuses a job
+whose `write_paths` cover a file magus must READ to load the workspace - any
+project's `magusfile.buzz` or `magusfiles/*.buzz`, its `magus.yaml`, and the
+workspace-local spell sources those magusfiles import - while another live job
+with write paths is already bound to the same checkout. The refusal names the
+file and the job that holds the checkout, and the fix it names is a worktree
+rather than a narrower lane. Half-saved, one of those files stops the workspace
+loading for EVERY worker in the checkout at once: they lose `magus run`, `magus
+ls` and their own tests, over an edit none of them made and none of them can
+see. The same three doors are covered, since `magus job fork`, `magus_job` and
+`magus\job.put` share one declaration path.
+
+Nothing else about a shared checkout is refused. Two lanes that merely overlap
+are the orchestrator's call - it may have sequenced them deliberately - so the
+fork RECORDS what it could prove instead, in `lane_proof`: `alone` when no other
+live job with write paths was bound to the checkout, else `disjoint` or
+`overlapping`. `magus ls jobs` prints it in the LANES column, so a plan read
+later says which forks were checked and which were not.
 
 **A declared boundary is enforced elsewhere.** Beyond the row ownership above,
 this store gates nothing: it records the text an orchestrator put in a holder's
@@ -254,12 +274,29 @@ says so rather than printing terms nobody may act on.
 
 ```sh
 magus job exec <job>
+magus job exec <job> --session <the host's session id>
 ```
 
 That takes the lease on the job in this checkout and records the base this tree
 landed on beside the checkpoint the job was handed, with the divergence between
 them as a fact rather than a refusal. With no job named, it prints the one this
 checkout holds.
+
+**A lease binds per SESSION, not per checkout.** `--session` names the session
+taking it, as the agent host names the conversation to its own hooks, and the
+binding is that session's. So several workers sharing one checkout each hold
+their own lease, each has its own lane graded, and each is denied outside it.
+Without it the binding is the whole checkout's, which is what every binding was
+before: a session that reports none, and a session nobody bound, both read the
+checkout-wide marker, so a worktree bound by hand still grades the sessions
+inside it. A session that HAS its own binding never reads the checkout-wide one,
+which is the boundary that matters - a worker bound to one job cannot silently
+act under another.
+
+Pass the same id your host reports to the guard hook, or the two halves bind and
+grade under different names. Where the host reports no session, the
+checkout-wide fallback is the honest answer: one worker per checkout, which is
+the arrangement the worktree rule asks for anyway.
 
 The base is the half a revision cannot supply on its own. The checkpoint is what
 the orchestrator HANDED the job; the base is what the checkout actually LANDED

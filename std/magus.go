@@ -516,7 +516,12 @@ var Magus = Module{
 						"declared; a key present with an empty value is an explicit clear. id is the " +
 						"row's identity to upsert on - the value an orchestrator should also put in " +
 						"the worker's prompt, so the console can join activity to the row. " +
-						"created/updated/releases are stamped by the store and cannot be set here. " +
+						"created/updated/releases/lane_proof are stamped by the store and cannot be set " +
+						"here. A put that CREATES a row raises when its write_paths cover a file the " +
+						"workspace has to load (a magusfile, a magus.yaml, an imported spell source) " +
+						"while another live job with write paths is bound to this checkout: that job " +
+						"needs a worktree of its own, since a half-saved one of those stops the " +
+						"workspace loading for every job here at once. " +
 						"Returns the stored row. Read straight off the workspace already open on the " +
 						"context - no subprocess. Works from a magusfile target and from a `magus " +
 						"buzz` script run inside a workspace; raises MGS1022 only when there is no " +

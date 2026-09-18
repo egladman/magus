@@ -416,7 +416,34 @@ func ValidJobID(id string) bool {
 // its rewrite; the version is what tells such a reader to stop instead of proceeding.
 // TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
 // golden list, so a field added without a bump fails a test instead of failing a store.
-const JobSchemaVersion = 7
+const JobSchemaVersion = 8
+
+// JobLaneProof is what the fork could prove about a job's write lane against the other
+// live jobs bound to the SAME CHECKOUT at the moment it was declared.
+//
+// Recorded rather than enforced, with one exception (a lane covering a workspace-load
+// file, which is refused outright). Two workers overlapping is a call only the
+// orchestrator can make: it may have sequenced them, or split one file deliberately. What
+// nobody could do before is READ that call back afterwards, so a plan full of overlapping
+// lanes and a plan whose lanes were checked looked identical.
+type JobLaneProof string
+
+const (
+	// LaneProofAlone is a fork made in a checkout no other live job with write paths was
+	// bound to. There was nothing to be disjoint FROM, which is not the same claim as
+	// disjoint and is why it is its own value.
+	LaneProofAlone JobLaneProof = "alone"
+	// LaneProofDisjoint is a lane that intersects no other bound job's lane here.
+	LaneProofDisjoint JobLaneProof = "disjoint"
+	// LaneProofOverlapping is a lane that intersects one. The fork stands; the row says so.
+	LaneProofOverlapping JobLaneProof = "overlapping"
+)
+
+// JobLaneProofs is the closed set, for the reason JobStates is one: the published schema
+// and every reader that renders a row quote it.
+func JobLaneProofs() []JobLaneProof {
+	return []JobLaneProof{LaneProofAlone, LaneProofDisjoint, LaneProofOverlapping}
+}
 
 // JobActor identifies the session that wrote a row: the same pair the trail records
 // for an agent's actions, so a row and the actions that followed it join on one identity.
@@ -612,6 +639,11 @@ type Job struct {
 	// afterwards, so the lease on the other side (the one whose file moved) was the one
 	// party never told.
 	Unattributed []JobUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
+	// LaneProof is what the fork could prove about this job's lane against the other live
+	// jobs bound to the checkout it was declared in. Store-computed and output-only like
+	// Releases: it is a fact about the plan at one instant, and a caller that could assert
+	// it could assert the proof it stands for. See [JobLaneProof].
+	LaneProof JobLaneProof `json:"lane_proof,omitempty" yaml:"lane_proof,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
 	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
 	// what the orchestrator handed out; this is what the worker found. Two fields rather

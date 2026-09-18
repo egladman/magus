@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,9 +207,12 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 		check:      "test internal/ledger",
 		model:      "principal",
 	}
-	piped, err := job.DecodeDeclaration(strings.NewReader(`{
-	  "schema_version": 7,
-	  "id": "adj/store",
+	// The version is READ from the constant, not typed as a digit: this case is about the
+	// two doors agreeing on the FIELDS, and a fixture whose version fell behind would fail
+	// it at the version check instead, naming nothing it came here to compare.
+	piped, err := job.DecodeDeclaration(strings.NewReader(fmt.Sprintf(`{
+	  "schema_version": %d,
+	  "id": "adj/store",`, types.JobSchemaVersion) + `
 	  "parent": "adjacency",
 	  "criteria": "the store is the enforcement point",
 	  "checkpoint": "cf5509d09",

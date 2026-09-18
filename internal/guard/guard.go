@@ -248,6 +248,17 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				}
 			}
 			appendHookSpawn(ctx, deps, env, who)
+			// The second session-state question, asked the same way and for the same reason:
+			// whether this checkout is already somebody's. It reads the markers and the plan,
+			// never the prompt, so it lives on this path beside the brief rule.
+			if note := adviseSharedCheckoutSpawn(withJobStoreRows(ctx, spawnLocation), spawnGate, spawnLocation); note != "" {
+				return Verdict{
+					SchemaVersion: agent.GuardSchemaVersion,
+					Decision:      "advise",
+					Context:       note,
+					Rule:          string(advisorySharedCheckout),
+				}
+			}
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 	}
@@ -262,7 +273,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	ctx = withJobStoreRows(ctx, location)
 	actingLease := req.Lease
 	if actingLease == "" {
-		actingLease = job.ActingLease(location.cacheDir)
+		// Keyed on the SESSION the host reported, so several sessions sharing one checkout
+		// each resolve their own binding. A host that reports none reads the checkout-wide
+		// marker, which is what every binding was before this.
+		actingLease = job.Checkout{CacheDir: location.cacheDir, Session: who.Session}.ActingLease()
 	}
 	markers := hint.NewGate(location.cacheDir, who.Session)
 	tool := hookToolCommand
