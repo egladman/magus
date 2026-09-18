@@ -618,14 +618,15 @@ func TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm(t *testing.T) {
 }
 
 // leaseAge matches the owner's age in a refusal, which is read from the clock as the
-// message is built.
-var leaseAge = regexp.MustCompile(`was last updated \S+ ago`)
+// message is built. The unit stays outside the capture, so two surfaces that render the
+// same elapsed time differently (0s against 0ms, 90s against 1m30s) still differ.
+var leaseAge = regexp.MustCompile(`was last updated \d+s ago`)
 
 // withoutLeaseAge blanks that figure. The two surfaces render their refusal at different
 // moments, so an age that ticks over between them is a difference in the clock, not in
 // the wording the comparison is about.
 func withoutLeaseAge(reason string) string {
-	return leaseAge.ReplaceAllString(reason, "was last updated <age> ago")
+	return leaseAge.ReplaceAllString(reason, "was last updated <n>s ago")
 }
 
 // TestDenyLeaseScopedLaneWriteStaysQuiet covers the silences. The rule is a seatbelt for
