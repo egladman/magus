@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -14,7 +14,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-hook-path.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-path.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -24,17 +24,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-hook-observe.sh",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Read"
-      },
-      {
-        "hooks": [
-          {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "HOST_EVENT_RAW=1 ./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -44,7 +34,17 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-observe.buzz",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Read"
+      },
+      {
+        "hooks": [
+          {
+            "command": "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads ./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -54,22 +54,12 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "HOST_EVENT_RAW=1 ./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
             "timeout": 10,
             "type": "command"
           }
         ],
         "matcher": "Skill"
-      },
-      {
-        "hooks": [
-          {
-            "command": "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads sh docs/guides/integrations/agents/magus-hook-command.sh",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Agent|Task"
       }
     ],
     "SessionStart": [

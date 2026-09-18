@@ -84,8 +84,12 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
       managed_entries: Array<Record<string, unknown>>;
     };
     const managed = JSON.stringify(harness.managed_entries);
+    // Either shipped form of the observer: the sh copy, or the Buzz port a
+    // `magus buzz` wiring names. They render the same behavior, and an executed
+    // case refuses a difference; what this asks is that the host records reads
+    // at all, not which of the two files it reached for.
     assert.ok(
-      managed.includes("magus-hook-observe.sh"),
+      managed.includes("magus-hook-observe.sh") || managed.includes("magus-hook-observe.buzz"),
       `${harness.id} must record read observations`,
     );
     assert.ok(

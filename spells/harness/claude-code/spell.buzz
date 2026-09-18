@@ -14,6 +14,7 @@
 
 import "magus/spell";
 import "assert";
+import "fs";
 
 export fun mgs_getName() > str { return "claude-code"; }
 
@@ -25,27 +26,60 @@ fun claude_skills_paths() > [str] {
     return [".claude/skills"];
 }
 
+// claude_interpreter picks which magus RUNS the glue.
+//
+// Moving the glue from sh to Buzz moves the interpreter from a program that is
+// always present and has no version to one that does. The sh copies resolved the
+// binary that renders the VERDICT by walking up to the magusfile, precisely so a
+// stale PATH copy could not answer with rules the tree no longer has; the same
+// argument applies to the interpreter, and more sharply, because a magus too old
+// to run the script renders no verdict at all.
+//
+// So a workspace that carries its own binary wires that one. It is chosen when the
+// harness is applied, because a hook command is one string with no shell to test a
+// file in, and re-applying is what moves a checkout between the two answers.
+// Workspace-relative, never absolute: this config is committed, and an absolute
+// path would ship one machine's layout to every clone.
+fun claude_interpreter() > str {
+    final own = fs\isFile("magus") catch false;
+    if (own) { return "./magus"; }
+    return "magus";
+}
+
+// The Buzz ports, not the sh copies beside them. Buzz needs neither jq nor a POSIX
+// shell, so the wiring works unchanged on Windows and a reader installs no runtime
+// dependency to be guarded. The sh copies stay for the hosts still wired to them
+// (codex, cursor, the any-host guide) and render byte-identical replies.
+//
+// `-s` keeps the interpreter quiet: `magus buzz` reports an unused import and other
+// BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an
+// error notice, so an advisory about the glue would read as a guard failure. Real
+// errors still print, which is what makes a broken hook visible rather than silent.
+fun claude_glue_command(surface: str) > str {
+    return "{claude_interpreter()} buzz -s docs/guides/integrations/agents/magus-hook-{surface}.buzz";
+}
+
 fun claude_guard_command() > str {
-    return "sh docs/guides/integrations/agents/magus-hook-command.sh";
+    return claude_glue_command("command");
 }
 
 fun claude_path_command() > str {
-    return "sh docs/guides/integrations/agents/magus-hook-path.sh";
+    return claude_glue_command("path");
 }
 
 fun claude_observe_command() > str {
-    return "sh docs/guides/integrations/agents/magus-hook-observe.sh";
+    return claude_glue_command("observe");
 }
 
 fun claude_mcp_command() > str {
-    return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh";
+    return "HOST_EVENT_RAW=1 " + claude_glue_command("command");
 }
 
 fun claude_skill_command() > str {
     // The guard records which skill loaded so a later spawn can ask whether this session
     // read its brief; it judges nothing here. HOST_EVENT_RAW for the same reason the two
     // below use it: the payload is a named field, not a shell line.
-    return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh";
+    return "HOST_EVENT_RAW=1 " + claude_glue_command("command");
 }
 
 fun claude_agent_command() > str {
@@ -61,7 +95,7 @@ fun claude_agent_command() > str {
     // __MAGUS_ and not MAGUS_: the template reserves the whole MAGUS_* space for magus's
     // own configuration, so a variable the template invents stays out of it.
     return "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads "
-        + "sh docs/guides/integrations/agents/magus-hook-command.sh";
+        + claude_glue_command("command");
 }
 
 fun claude_rehydrate_command() > str {
@@ -188,10 +222,28 @@ test "harness_skills installs both forms under .claude/skills" {
     assert\equal(paths[0], ".claude/skills", "Claude Code reads .claude/skills");
 }
 
-test "guard commands name the shared templates" {
-    assert\isTrue(claude_guard_command().indexOf("magus-hook-command.sh") != null, "command surface");
-    assert\isTrue(claude_path_command().indexOf("magus-hook-path.sh") != null, "path surface");
-    assert\isTrue(claude_observe_command().indexOf("magus-hook-observe.sh") != null, "read observe");
+test "guard commands name the Buzz glue, never the sh copies" {
+    assert\isTrue(claude_guard_command().indexOf("magus-hook-command.buzz") != null, "command surface");
+    assert\isTrue(claude_path_command().indexOf("magus-hook-path.buzz") != null, "path surface");
+    assert\isTrue(claude_observe_command().indexOf("magus-hook-observe.buzz") != null, "read observe");
+    assert\isTrue(claude_guard_command().indexOf(".sh") == null, "no POSIX shell dependency");
+    assert\isTrue(claude_guard_command().indexOf("buzz -s ") != null, "quiet interpreter");
+}
+
+test "the interpreter is the workspace binary where there is one" {
+    // Both shapes, because a clone that has not built magus yet wires PATH and a
+    // checkout that carries its own binary must never be sent to PATH's vintage.
+    final chosen = claude_interpreter();
+    assert\isTrue(chosen == "./magus" or chosen == "magus", "one of the two shapes");
+    assert\equal(chosen == "./magus", fs\isFile("magus"), "the workspace binary wins when it exists");
+    assert\isTrue(claude_glue_command("command").startsWith("{chosen} buzz -s "), "the command carries it");
+    assert\isTrue(claude_mcp_command().indexOf("HOST_EVENT_RAW=1 {chosen} buzz") != null, "so does the raw form");
+    // Every surface, because one command built by hand rather than through the helper
+    // is one entry apply keeps rewriting against a config that already holds it.
+    assert\isTrue(claude_skill_command().indexOf("{chosen} buzz") != null, "skill surface");
+    assert\isTrue(claude_agent_command().indexOf("{chosen} buzz") != null, "spawn surface");
+    assert\isTrue(claude_path_command().startsWith("{chosen} buzz"), "path surface");
+    assert\isTrue(claude_observe_command().startsWith("{chosen} buzz"), "read surface");
     assert\isTrue(claude_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
     assert\isTrue(claude_agent_command().indexOf("HOST_EVENT_RAW=1") != null, "spawn forwards the whole event");
     assert\isTrue(claude_rehydrate_command().indexOf("magus-rehydrate.sh") != null, "SessionStart rehydrate");

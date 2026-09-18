@@ -17,7 +17,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "sh docs/guides/integrations/agents/magus-hook-command.sh",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
               "timeout": 10
             }
           ]
@@ -27,7 +27,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "sh docs/guides/integrations/agents/magus-hook-path.sh",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-path.buzz",
               "timeout": 10
             }
           ]
@@ -37,7 +37,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+              "command": "HOST_EVENT_RAW=1 magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
               "timeout": 10
             }
           ]
@@ -47,7 +47,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "sh docs/guides/integrations/agents/magus-hook-observe.sh",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-observe.buzz",
               "timeout": 10
             }
           ]
@@ -57,7 +57,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+              "command": "HOST_EVENT_RAW=1 magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
               "timeout": 10
             }
           ]

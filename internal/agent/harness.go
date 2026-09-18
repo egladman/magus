@@ -845,6 +845,10 @@ func ensureManagedEntries(config map[string]any, groups []HarnessEntries) (bool,
 				groupChanged = true
 			}
 		}
+		if pruned, dropped := dropSupersededEntries(entries, group.Entries); dropped {
+			entries = pruned
+			groupChanged = true
+		}
 		if groupChanged {
 			setDescriptorEntries(config, group.Path, entries)
 			changed = true
@@ -888,6 +892,55 @@ func containsExactEntry(entries []any, wanted map[string]any) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// dropSupersededEntries removes, from one managed group, every entry that runs a
+// template magus ships and that this descriptor no longer wants.
+//
+// Without it apply APPENDS on any command rewrite, because managedIdentityKey is
+// built from the command: change the descriptor and the new entry matches nothing,
+// so both the old and the new wiring end up in the config and every tool call is
+// judged twice, recorded twice, and (where the old one is stale) answered by a
+// binary the tree replaced. A reader upgrading gets that silently.
+//
+// Narrower than invokesMagus on purpose. That one also answers true for a bare
+// `magus ...` line, and a reader's own `magus session notify` hook is theirs to
+// keep. An entry naming a SHIPPED template is one apply wrote, so it is one apply
+// owns and may retire.
+func dropSupersededEntries(entries []any, wanted []map[string]any) ([]any, bool) {
+	keep := make(map[string]bool, len(wanted))
+	for _, entry := range wanted {
+		keep[managedIdentityKey(entry)] = true
+	}
+	kept := make([]any, 0, len(entries))
+	dropped := false
+	for _, raw := range entries {
+		entry, ok := raw.(map[string]any)
+		if ok && runsAShippedTemplate(entry) && !keep[managedIdentityKey(entry)] {
+			dropped = true
+			continue
+		}
+		kept = append(kept, raw)
+	}
+	return kept, dropped
+}
+
+// runsAShippedTemplate reports whether any command inside entry names a template
+// this repository ships, in either form: the POSIX sh copies and the Buzz ports
+// beside them.
+func runsAShippedTemplate(entry map[string]any) bool {
+	var commands []string
+	collectCommands(entry, &commands)
+	for _, command := range commands {
+		switch {
+		case strings.Contains(command, "magus-hook-"),
+			strings.Contains(command, "cursor-hook."),
+			strings.Contains(command, "magus-checkpoint"),
+			strings.Contains(command, "magus-rehydrate"):
+			return true
+		}
+	}
+	return false
 }
 
 // sameManagedIdentity treats matcher/match (when present) plus collected command

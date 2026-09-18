@@ -1959,6 +1959,12 @@ func newestGoSource(root string) (time.Time, string) {
 var guardTemplateBasenames = []string{
 	"magus-hook-command.sh",
 	"magus-hook-path.sh",
+	// The Buzz ports of the two above, which a `magus buzz` wiring names instead.
+	// They carry the same verdicts, so a stale copy of one fails the same way a
+	// stale copy of its sh twin does, and both names have to be gradeable.
+	"magus-hook-command.buzz",
+	"magus-hook-path.buzz",
+	"magus-hook-observe.buzz",
 	"cursor-hook.sh",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository

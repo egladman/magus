@@ -55,13 +55,21 @@ const (
 // for those, and the exact-entry match VerifyHarness already ran is that check.
 func probeable(command string) bool {
 	switch {
-	case strings.Contains(command, "magus-hook-observe.sh"),
+	case namesTemplate(command, "magus-hook-observe"),
 		strings.Contains(command, "magus-checkpoint.sh"),
 		strings.Contains(command, "magus-rehydrate.sh"):
 		return false
 	default:
 		return invokesMagus(command) && runnableAsProbe(command)
 	}
+}
+
+// namesTemplate reports whether command invokes the shipped template called stem, in
+// either of the two forms magus ships it: the POSIX sh copy, and the Buzz port run by
+// `magus buzz`. The two render identical replies, so every classifier below asks about
+// the stem rather than about a suffix that says nothing about behavior.
+func namesTemplate(command, stem string) bool {
+	return strings.Contains(command, stem+".sh") || strings.Contains(command, stem+".buzz")
 }
 
 // probeMetacharacters are the characters that let one command line become several, or
@@ -85,7 +93,8 @@ const probeMetacharacters = ";&|<>()$`\n\r\\\"'{}*?[]~!#"
 // So the test is shape, not content: optional NAME=value assignments, then a program and
 // its arguments, and not one character that could start a second command, expand, or
 // redirect. Everything magus ships passes (`HOST_EVENT_RAW=1 sh docs/.../magus-hook-command.sh`),
-// and nothing that composes commands does. A command this rejects is still REPORTED by
+// and nothing that composes commands does, in either shipped form (`magus buzz -s
+// docs/.../magus-hook-command.buzz` too). A command this rejects is still REPORTED by
 // the coverage path; it is only never run.
 func runnableAsProbe(command string) bool {
 	if strings.ContainsAny(command, probeMetacharacters) {
@@ -126,7 +135,7 @@ func isEnvName(s string) bool {
 // host-neutral BY CONSTRUCTION: magus never has to parse a host's JSON envelope
 // to know what decision came back.
 func supportsHostResponseOverride(command string) bool {
-	return strings.Contains(command, "magus-hook-command.sh") || strings.Contains(command, "magus-hook-path.sh")
+	return namesTemplate(command, "magus-hook-command") || namesTemplate(command, "magus-hook-path")
 }
 
 // probeEventFor picks the synthetic event a command's own script expects, and
@@ -138,9 +147,9 @@ func supportsHostResponseOverride(command string) bool {
 // already uses: a filename is a shipped artifact, not a host.
 func probeEventFor(command string) (event string, wantDecisions []string) {
 	switch {
-	case strings.Contains(command, "magus-hook-command.sh"):
+	case namesTemplate(command, "magus-hook-command"):
 		return probeDenyCommandEvent, []string{"deny"}
-	case strings.Contains(command, "magus-hook-path.sh"):
+	case namesTemplate(command, "magus-hook-path"):
 		return probeAdvisePathEvent, []string{"advise"}
 	case strings.Contains(command, "cursor-hook.sh"):
 		return probeCursorShellDenyEvent, nil

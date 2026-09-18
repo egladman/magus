@@ -264,6 +264,52 @@ func TestApplyHarnessReplacesSameIdentityInPlace(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(string(body), "magus-hook-command.sh"), "identity match must replace, not append")
 }
 
+// TestApplyHarnessRetiresTheEntriesTheOldDescriptorWrote pins the upgrade path.
+//
+// managedIdentityKey is built from the COMMAND, so a descriptor that rewrites its
+// commands matches nothing already in the config and apply used to append beside
+// the old wiring. Both then fire: every tool call judged twice, recorded twice on
+// the activity trail, and answered in part by the version the tree just replaced.
+// A reader pulling the change got that with nothing saying so, which is the
+// failure this whole surface exists to refuse.
+//
+// The user's own hook survives. Only an entry naming a SHIPPED template is one
+// apply wrote, and therefore one apply may retire.
+func TestApplyHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
+	root := t.TempDir()
+	writeTestHarness(t, root)
+	path := filepath.Join(root, "test-host", "hooks.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{
+  "hooks": {
+    "before": [
+      {"match": "run", "commands": [{"type": "command", "command": "sh old/magus-hook-command.sh"}]},
+      {"match": "write", "commands": [{"type": "command", "command": "sh old/magus-hook-path.sh"}]},
+      {"match": "run", "commands": [{"type": "command", "command": "magus session notify"}]},
+      {"match": "run", "commands": [{"type": "command", "command": "my-own-hook"}]}
+    ]
+  }
+}`), 0o644))
+
+	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
+	require.NoError(t, err)
+	assert.True(t, update.Changed)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	doc := string(body)
+	assert.NotContains(t, doc, "old/magus-hook-command.sh", "the previous descriptor's entry is retired, not kept beside the new one")
+	assert.NotContains(t, doc, "old/magus-hook-path.sh")
+	assert.Equal(t, 1, strings.Count(doc, "magus-hook-command.sh"), "exactly one command entry")
+	assert.Equal(t, 1, strings.Count(doc, "magus-hook-path.sh"), "exactly one path entry")
+	assert.Contains(t, doc, "magus session notify", "a reader's own magus hook is theirs to keep")
+	assert.Contains(t, doc, "my-own-hook")
+
+	second, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
+	require.NoError(t, err)
+	assert.False(t, second.Changed, "applying again over the retired set changes nothing")
+}
+
 func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "harnesses")

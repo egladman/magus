@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus"
@@ -195,6 +196,100 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 	require.NoError(t, runErr)
 	assert.Equal(t, "1\n", stdout)
 	assert.Equal(t, 1, *opens)
+}
+
+// guardGlueScripts are the hook scripts a host wires to `magus buzz`, the highest-rate
+// callers `magus buzz` has: one runs on every shell command, every write and every file
+// an agent opens.
+var guardGlueScripts = []string{
+	"magus-hook-command.buzz",
+	"magus-hook-path.buzz",
+	"magus-hook-observe.buzz",
+}
+
+// withStdin feeds text to the process's standard input for the duration of fn, which
+// is what lets a hook script be driven the way its host drives it.
+func withStdin(t *testing.T, text string, fn func()) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	go func() {
+		_, _ = w.WriteString(text)
+		_ = w.Close()
+	}()
+	prev := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = prev })
+	fn()
+}
+
+// TestBuzzCmd_GuardGlueNeverOpensTheWorkspace is the load-bearing half of moving the
+// hook glue off POSIX sh.
+//
+// These scripts run on every tool call, so the only budget they have is the one a
+// closed workspace buys: about 10ms here against roughly 700ms for an open. An
+// `import "magus"` or a spell import added to any of them would be invisible in every
+// other test, because the reply would stay byte-identical and only the clock would
+// move. This counts the opens instead.
+//
+// __MAGUS_BIN names a path that does not exist, so the scripts take their
+// magus-is-unavailable arm and judge nothing: what is under test is which modules the
+// glue reaches for, not the verdict, which guard_templates.txtar executes for real.
+//
+// Read this with TestGuardGlueImportsNoWorkspaceReader, and delete neither as a
+// duplicate of the other. The open is LAZY, so this one only moves once a call reaches
+// through the import; that makes this the test that catches the incident and its
+// sibling the test that catches the cause.
+func TestBuzzCmd_GuardGlueNeverOpensTheWorkspace(t *testing.T) {
+	const event = `{"session_id":"s1","tool_name":"Bash","tool_input":{"command":"git stash"}}`
+	for _, name := range guardGlueScripts {
+		t.Run(name, func(t *testing.T) {
+			root, _ := buzzLazyWorkspace(t, buzzVanillaScript)
+			opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
+				return magus.Open(ctx, root)
+			})
+			script, err := filepath.Abs(filepath.Join("..", "..", "docs", "guides", "integrations", "agents", name))
+			require.NoError(t, err)
+			require.FileExists(t, script, "the shipped glue must be where the harness wires it")
+			t.Setenv("__MAGUS_BIN", filepath.Join(t.TempDir(), "absent-magus"))
+			t.Setenv("TMPDIR", t.TempDir())
+
+			var runErr error
+			withStdin(t, event, func() {
+				captureStdout(t, func() { runErr = buzzCmd(t.Context(), root, []string{"-s", script}) })
+			})
+
+			require.NoError(t, runErr, "a hook script must never fail: its host reads a non-zero exit as an error notice, and exit 2 as a block")
+			assert.Equal(t, 0, *opens,
+				"%s opened the workspace. A hook runs on every tool call, so it may import no magus\n"+
+					"module and no spell: either one pays the workspace open the lazy start exists to avoid.", name)
+		})
+	}
+}
+
+// TestGuardGlueImportsNoWorkspaceReader is the structural half of the gate above.
+//
+// The open is LAZY, so an unused `import "magus"` costs nothing and
+// TestBuzzCmd_GuardGlueNeverOpensTheWorkspace stays green until someone calls through
+// it. That makes the import the early warning and the call the incident: by the time
+// the count moves, the line that pays for it is already written. Refusing the import
+// refuses the call before it exists, which is why the two tests are a pair and neither
+// is a duplicate of the other.
+func TestGuardGlueImportsNoWorkspaceReader(t *testing.T) {
+	for _, name := range guardGlueScripts {
+		body, err := os.ReadFile(filepath.Join("..", "..", "docs", "guides", "integrations", "agents", name))
+		require.NoError(t, err, "read %s", name)
+		for i, line := range strings.Split(string(body), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmed, "import ") {
+				continue
+			}
+			assert.NotRegexp(t, `^import "(magus|spells/)`, trimmed,
+				"%s:%d imports a workspace reader. A hook runs on every tool call and may not pay for\n"+
+					"opening the workspace; reach the binary with proc\\exec instead, the way the glue\n"+
+					"resolves its verdict today.", name, i+1)
+		}
+	}
 }
 
 // TestBuzzCmd_OutsideAWorkspace pins both halves outside any workspace: a script that

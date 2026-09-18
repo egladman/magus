@@ -6,11 +6,18 @@
 # months while invoking a subcommand that no longer existed, so it never received a
 # verdict to have a stance about, and every session it guarded ran unguarded.
 #
-# These cases close that hole for the POSIX sh templates. They run the real files
+# These cases close that hole for the shipped templates. They run the real files
 # (__MAGUS_TEMPLATES is an absolute path to docs/guides/integrations/agents, never a
 # copy) against the event shapes their hosts actually send, and assert the response
 # a host would receive. `magus` here is the CLI under test, resolved off PATH the
 # same way the templates resolve it in a session.
+#
+# Each shipped template exists in two forms: the POSIX sh copy the codex, cursor and
+# any-host wirings invoke, and the Buzz port a `magus buzz` wiring names. Every case
+# below runs BOTH through $WORK/parity.sh and refuses any byte of difference, so the
+# port is graded against the arms these cases already exercise rather than against a
+# second block of cases that could fall behind them. The sh reply is what reaches the
+# assertions, so the cases read exactly as they did when one form existed.
 #
 # Every case is labeled `# case: <surface>/<decision>`; TestTransportCasesCoverTheContract
 # in conventions_test.go fails when the guard contract grows a cell no case covers.
@@ -37,14 +44,14 @@ env __MAGUS_AGENT_NAME=testscript
 
 # case: command/deny
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout '"permissionDecisionReason":"Verify in place'
 stdout 'whole-tree git stash'
 
 # case: command/advise
 stdin advise-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"additionalContext":"'
 ! stdout 'permissionDecision'
 
@@ -58,13 +65,13 @@ stdout '"additionalContext":"'
 # empty envelope, which is still a key the host would parse.
 env __MAGUS_NO_ADVISE=1
 stdin advise-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 ! stdout .
 
 # case: command/deny
 # Suppression must not touch the deny arm, which is the whole point of splitting it.
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 env __MAGUS_NO_ADVISE=
 
@@ -73,7 +80,7 @@ env __MAGUS_NO_ADVISE=
 # a template that emitted an envelope here would turn every benign command into a
 # decision the host has to interpret.
 stdin pass-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 ! stdout .
 
 # --- magus-hook-command.sh: MCP tool calls, via HOST_EVENT_RAW ---------------
@@ -98,7 +105,7 @@ exec magus job exec harness/mcp-worker
 # rather than a tool call: it passes. Paired with the deny below, this is what pins the raw
 # arm, since a case that passes either way pins none of the transport it was added for.
 stdin $WORK/mcp-call.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 ! stdout .
 
 # case: mcp/deny
@@ -107,7 +114,7 @@ exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 # hookSpecificOutput reply this file renders for the command surface carries the deny here.
 env HOST_EVENT_RAW=1
 stdin $WORK/mcp-call.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'leave your own job alone'
 env HOST_EVENT_RAW=
@@ -129,7 +136,7 @@ rm notes-ws/.magus/lease
 
 # case: path/advise
 stdin advise-path.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
+exec sh $WORK/parity.sh path
 stdout '"additionalContext":"'
 stdout 'magus memory put'
 
@@ -138,13 +145,13 @@ stdout 'magus memory put'
 # on both rather than half-silenced.
 env __MAGUS_NO_ADVISE=1
 stdin advise-path.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
+exec sh $WORK/parity.sh path
 ! stdout .
 env __MAGUS_NO_ADVISE=
 
 # case: path/pass
 stdin pass-path.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
+exec sh $WORK/parity.sh path
 ! stdout .
 
 # case: path/deny
@@ -158,7 +165,7 @@ exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
 # rule looked enforced and blocked nothing.
 cd notes-ws
 stdin $WORK/deny-path.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
+exec sh $WORK/parity.sh path
 stdout '"permissionDecision":"deny"'
 stdout 'NOTES store'
 stdout 'magus memory put'
@@ -266,7 +273,7 @@ stdout '"permission":"allow"'
 # It records a read and says NOTHING to the host. A read is not a decision, so any
 # stdout here would be a response the host has to interpret on every file it opens.
 stdin observe-read.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
+exec sh $WORK/parity.sh observe
 ! stdout .
 ! stderr .
 
@@ -274,14 +281,14 @@ exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
 # with jq's parse error on stderr, on EVERY read - and some hosts read a non-zero
 # pre-tool hook as "block this call", which would stop the agent reading anything.
 stdin observe-garbage.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
+exec sh $WORK/parity.sh observe
 ! stdout .
 ! stderr .
 
 # A search event names no read path, so there is nothing to record and nothing to
 # say. Recording the event whole here would put the query text in the trail.
 stdin observe-search.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
+exec sh $WORK/parity.sh observe
 ! stdout .
 ! stderr .
 
@@ -293,14 +300,14 @@ env __MAGUS_BIN=$WORK/nonexistent-magus
 # enforces nothing, so an announcement per read would report only that an optional
 # record was skipped.
 stdin observe-read.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-observe.sh
+exec sh $WORK/parity.sh observe
 ! stdout .
 ! stderr .
 
 # The command template announces itself. An unguarded session you know about beats
 # one you do not.
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout 'magus guard is NOT running'
 
 # The path template stays silent by default: for most hosts an empty response means
@@ -309,7 +316,7 @@ stdout 'magus guard is NOT running'
 # edit was judged the worse noise. __MAGUS_FAILED_RESPONSE is the opt-in for a host that
 # would rather hear about it.
 stdin advise-path.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-path.sh
+exec sh $WORK/parity.sh path
 ! stdout .
 
 # Cursor allows explicitly, because Cursor fails open on a hook crash anyway and
@@ -333,7 +340,7 @@ chmod 0755 $WORK/stale-magus
 # make each case assert on whether the case above it had already spoken.
 env TMPDIR=$WORK/n-stale-command
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout 'magus guard is NOT running'
 stdout 'stale-magus'
 stdout 'v0.0.1-stale'
@@ -357,7 +364,7 @@ stderr 'unknown subcommand'
 env TMPDIR=$WORK/n-stale-host
 env __MAGUS_FAILED_RESPONSE=host-chose-this
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout 'host-chose-this'
 ! stdout 'stale-magus'
 env __MAGUS_FAILED_RESPONSE=
@@ -371,26 +378,26 @@ env __MAGUS_FAILED_RESPONSE=
 # A second call in the SAME session says nothing at all, and the verdict still fails open.
 env TMPDIR=$WORK/n-once
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout 'magus guard is NOT running'
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 ! stdout .
 
 # A DIFFERENT session is owed the fact once, or the first session of the day would
 # silence every session after it.
 stdin deny-command-s2.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout 'magus guard is NOT running'
 
 # The families are independent: a spent could-not-judge marker must not silence the
 # missing-binary notice, which reports a different broken installation.
 env __MAGUS_BIN=$WORK/does-not-exist
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout 'magus is not on PATH'
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 ! stdout .
 env __MAGUS_BIN=$WORK/stale-magus
 
@@ -414,20 +421,20 @@ env __MAGUS_BIN=
 env TMPDIR=$WORK/n-deny
 
 stdin advise-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"additionalContext":"'
 
 stdin advise-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"additionalContext":"'
 
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
 stdin deny-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
@@ -453,7 +460,7 @@ mkdir .magus/runs
 
 # case: command/ask
 stdin $WORK/push-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"ask"'
 stdout 'Approving publishes'
 
@@ -473,7 +480,7 @@ stdout 'magus agent harness apply'
 # assembled claims the flag.
 env HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}'
 stdin $WORK/push-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'predates approval prompts'
 env HOST_RESPONSE=
@@ -486,7 +493,7 @@ env __MAGUS_AGENT_NAME=codex
 # sends it. With no prompt rule in the project nothing would ask the person either: the
 # push is refused, naming their own terminal.
 stdin $WORK/push-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'own terminal'
 stdout 'magus agent harness apply --id codex'
@@ -498,14 +505,14 @@ cp $WORK/push-rules.rules .codex/rules/magus.rules
 # case: command/ask
 # The rule prompts, so PreToolUse lets the call reach it and hands the model the reason.
 stdin $WORK/push-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 
 # case: command/ask
 # A permission mode that never prompts would skip the rule, so the push is refused.
 stdin $WORK/push-command-bypass.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'never prompts'
 ! stdout '"permissionDecision":"ask"'
@@ -513,14 +520,14 @@ stdout 'never prompts'
 # case: command/ask
 # A push no prefix rule matches would run unprompted, so it is refused too.
 stdin $WORK/push-command-dir.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'only a plain git push'
 
 # case: command/ask
 # The approval request Codex raises before its prompt gets no decision: the person decides.
 stdin $WORK/push-approval.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 
 # case: command/ask
@@ -528,7 +535,7 @@ stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 # and it still never receives permissionDecision "ask", which Codex would run unasked.
 env __MAGUS_AGENT_NAME=
 stdin $WORK/push-command-turn.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 ! stdout '"permissionDecision":"ask"'
 stdout '"additionalContext":"pushing'
 env __MAGUS_AGENT_NAME=codex
@@ -536,7 +543,7 @@ env __MAGUS_AGENT_NAME=codex
 # case: command/pass
 # A request magus did not configure is never approved on the guard's say-so.
 stdin $WORK/other-approval.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 ! stdout 'allow'
 
@@ -544,23 +551,23 @@ stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 # A push a passing gate covers is approved, so nobody is asked.
 exec sh -c 'printf "{\"ts\":1,\"inv\":\"g\",\"kind\":\"started\",\"command\":{\"arguments\":[\"affected\",\"ci\"]},\"magus_version\":\"v0.0.0-1-g%s\"}\n{\"ts\":2,\"inv\":\"g\",\"kind\":\"finished\",\"status\":\"pass\"}\n" "$(git rev-parse HEAD)" > .magus/runs/gate.jsonl'
 stdin $WORK/push-approval.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"decision":\{"behavior":"allow"\}'
 stdin $WORK/push-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 ! stdout 'permissionDecision'
 
 # case: command/pass
 # Every backend magus drives publishes through its own verb, and each plain push a gate
 # covers is approved the same way.
 stdin $WORK/push-approval-hg.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"decision":\{"behavior":"allow"\}'
 stdin $WORK/push-approval-sl.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"decision":\{"behavior":"allow"\}'
 stdin $WORK/push-approval-jj.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"decision":\{"behavior":"allow"\}'
 rm .magus/runs/gate.jsonl
 
@@ -568,15 +575,15 @@ rm .magus/runs/gate.jsonl
 # An ungated push on each of them reaches its own prompt rule, so PreToolUse lets it through
 # to that prompt rather than refusing it.
 stdin $WORK/push-command-hg.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 stdin $WORK/push-command-sl.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 stdin $WORK/push-command-jj.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"additionalContext":"pushing'
 ! stdout 'permissionDecision'
 
@@ -587,7 +594,7 @@ env XDG_STATE_HOME=$WORK/home/state
 exec magus job fork harness/push-worker --criteria 'the push transport cases, held so the push gate has a worker to refuse'
 exec magus job exec harness/push-worker
 stdin $WORK/push-approval.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"behavior":"deny"'
 stdout 'workers do not publish'
 
@@ -596,7 +603,7 @@ env __MAGUS_AGENT_NAME=testscript
 
 # case: command/deny
 stdin $WORK/push-command.json
-exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'workers do not publish'
 
@@ -618,6 +625,58 @@ stdout '"permission":"ask"'
 stdout 'Approving publishes'
 cd $WORK
 
+-- parity.sh --
+#!/bin/sh
+# Runs BOTH shipped forms of one template against the same event and refuses any
+# difference: the POSIX sh copy, and the Buzz port a `magus buzz` wiring names.
+#
+# Every case above goes through this rather than naming one form, so parity is not a
+# separate block of cases that could fall behind the ones that matter. The arms a case
+# exercises are the arms the comparison covers, and a port that drifts on the ask arm,
+# the fire-once markers or the evidence in a failure notice fails the case that pins
+# that behavior rather than a case somebody remembered to add.
+#
+# The sh reply is what reaches the assertions, so every existing case reads unchanged.
+#
+# $1 is the surface; the event arrives on stdin, and is read once because a pipe drains
+# once. Each form gets its own TMPDIR, because the fire-once notices are keyed per
+# implementation and sharing one would make the second form's silence depend on the
+# first form having already spoken.
+surface=$1
+event=$(cat)
+
+sh_tmp=${TMPDIR:-/tmp}/parity-sh
+bz_tmp=${TMPDIR:-/tmp}/parity-buzz
+mkdir -p "$sh_tmp" "$bz_tmp"
+
+printf '%s' "$event" | TMPDIR=$sh_tmp sh "$__MAGUS_TEMPLATES/magus-hook-$surface.sh" \
+  >"$sh_tmp/out" 2>"$sh_tmp/err"
+sh_status=$?
+printf '%s' "$event" | TMPDIR=$bz_tmp magus buzz -s "$__MAGUS_TEMPLATES/magus-hook-$surface.buzz" \
+  >"$bz_tmp/out" 2>"$bz_tmp/err"
+bz_status=$?
+
+if ! cmp -s "$sh_tmp/out" "$bz_tmp/out"; then
+  echo "PARITY: magus-hook-$surface.buzz replied differently from magus-hook-$surface.sh" >&2
+  echo "  sh  : $(cat "$sh_tmp/out")" >&2
+  echo "  buzz: $(cat "$bz_tmp/out")" >&2
+  exit 1
+fi
+if [ "$sh_status" -ne "$bz_status" ]; then
+  echo "PARITY: magus-hook-$surface exited $sh_status as sh and $bz_status as Buzz" >&2
+  exit 1
+fi
+# The Buzz form is run with -s, so anything on its stderr is a diagnostic the host would
+# show as a hook error. The sh form's stderr passes through, since the cases already
+# assert on it.
+if [ -s "$bz_tmp/err" ]; then
+  echo "PARITY: magus-hook-$surface.buzz wrote to stderr: $(cat "$bz_tmp/err")" >&2
+  exit 1
+fi
+
+cat "$sh_tmp/out"
+cat "$sh_tmp/err" >&2
+exit "$sh_status"
 -- push-ws/magusfile.buzz --
 import "magus";
 
