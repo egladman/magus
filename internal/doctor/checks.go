@@ -1979,6 +1979,11 @@ var guardTemplateBasenames = []string{
 	// compacted session a brief the current binary would not have written, and the only
 	// sign is a model working from a summary that looked complete.
 	"magus-rehydrate.sh",
+	// The Buzz ports of those two, for the reason the hook templates' ports are here:
+	// a config names one form or the other, and a name this list cannot match is a
+	// staleness check that silently grades nothing.
+	"magus-checkpoint.buzz",
+	"magus-rehydrate.buzz",
 }
 
 // workspaceHarnesses returns magusfile-wired harness spell names when ws

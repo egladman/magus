@@ -134,6 +134,13 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		return lspCmd(ctx, args[1:])
 	}
 
+	// Everything after `--` is the SCRIPT's argv, never magus's. The boundary is
+	// needed because cmdParse reorders flags ahead of positionals, so a bare
+	// `script.buzz --raw` would have magus parsing --raw and failing; it is also the
+	// separator this CLI already uses to forward args to a tool (`run go::go-test . --
+	// -run X`). A script reads them as main's [str], the way cmd/buzz and upstream do.
+	args, sep, forwarded := splitScriptArgs(args)
+
 	// Bound from the command registry rather than declared here. The -t/--test pair
 	// is ONE switch, which a generated binder can only express because the registry
 	// marks the second AliasOf the first; modeled as two flags they would get two
@@ -166,9 +173,12 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		return buzzRepl(ctx, bf.C, bf.NoAutoload)
 	}
 
-	code, name, err := buzzSource(bf.E, rest)
+	code, name, scriptArgs, err := buzzSource(bf.E, rest)
 	if err != nil {
 		return err
+	}
+	if sep {
+		scriptArgs = append(scriptArgs, forwarded...)
 	}
 
 	// Put the workspace on the script's context when there is one.
@@ -275,9 +285,13 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once
 		// its top level has. Without it a script had to call its own main, which strict
 		// mode cannot wrap: a top-level `try` is rejected and a bare call is BZZ1006.
-		// Empty: buzzSource rejects a second positional, so there is no script argv
-		// to pass yet. main still takes the parameter, as upstream declares it.
-		var items []vm.Value
+		// Everything after the script path is the script's own argv, the way upstream
+		// and cmd/buzz hand it over, so a caller parameterizes a script with arguments
+		// rather than an environment variable a shell has to set.
+		items := make([]vm.Value, 0, len(scriptArgs))
+		for _, a := range scriptArgs {
+			items = append(items, vm.StrValue(a))
+		}
 		ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(items)})
 		if err != nil {
 			testErr = fmt.Errorf("%s: %w", name, err)
@@ -369,29 +383,44 @@ func skipReason(reason string) string {
 // When a bare filename is given (no directory separator), BUZZ_INCLUDE_PATH is
 // searched if the file is not found in the working directory, matching the
 // upstream Buzz toolchain convention.
-func buzzSource(eval string, args []string) (code, name string, err error) {
+func buzzSource(eval string, args []string) (code, name string, scriptArgs []string, err error) {
 	switch {
 	case eval != "":
 		if len(args) > 0 {
-			return "", "", fmt.Errorf("cannot combine -e with a file argument")
+			return "", "", nil, fmt.Errorf("cannot combine -e with a file argument")
 		}
-		return eval, "-e", nil
-	case len(args) > 1:
-		return "", "", fmt.Errorf("expected at most one file argument, got %d", len(args))
-	case len(args) == 1 && args[0] != "-":
+		return eval, "-e", nil, nil
+	case len(args) >= 1 && args[0] != "-":
 		resolved := buzzResolveFile(args[0])
 		data, err := os.ReadFile(resolved)
 		if err != nil {
-			return "", "", err
+			return "", "", nil, err
 		}
-		return string(data), resolved, nil
+		return string(data), resolved, args[1:], nil
 	default: // no args, or "-": read stdin
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return "", "", fmt.Errorf("read stdin: %w", err)
+			return "", "", nil, fmt.Errorf("read stdin: %w", err)
 		}
-		return string(data), "<stdin>", nil
+		rest := args
+		if len(rest) > 0 { // drop the "-" that named stdin
+			rest = rest[1:]
+		}
+		return string(data), "<stdin>", rest, nil
 	}
+}
+
+// splitScriptArgs cuts the command line at the first `--`: what precedes it is
+// magus's to parse, what follows is the script's own argv. The bool reports whether
+// a separator was present at all, so an empty tail after `--` stays distinguishable
+// from no separator.
+func splitScriptArgs(args []string) (before []string, sep bool, after []string) {
+	for i, a := range args {
+		if a == "--" {
+			return args[:i], true, args[i+1:]
+		}
+	}
+	return args, false, nil
 }
 
 // buzzResolveFile returns the path to use for reading a script. If the path

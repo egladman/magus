@@ -201,10 +201,17 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 // guardGlueScripts are the hook scripts a host wires to `magus buzz`, the highest-rate
 // callers `magus buzz` has: one runs on every shell command, every write and every file
 // an agent opens.
+//
+// The last two run once per session rather than once per tool call, so the budget
+// argument alone would excuse them. They are held to the same rule anyway: the
+// exemption is what erodes, and a session-start hook that opens the workspace pays its
+// 700ms at the one moment a person is watching the model come back.
 var guardGlueScripts = []string{
 	"magus-hook-command.buzz",
 	"magus-hook-path.buzz",
 	"magus-hook-observe.buzz",
+	"magus-checkpoint.buzz",
+	"magus-rehydrate.buzz",
 }
 
 // withStdin feeds text to the process's standard input for the duration of fn, which
@@ -329,4 +336,35 @@ func TestBuzzCmd_OutsideAWorkspace(t *testing.T) {
 	assert.ErrorContains(t, runErr, string(types.MagusfileOnlyMember))
 	assert.Contains(t, stderr, "workspace not attached")
 	assert.Contains(t, stderr, noWorkspace.Error())
+}
+
+// TestBuzzCmd_ScriptArgvReachesMain pins the three shapes a caller has for handing a
+// script its own argv, which is what lets one file serve several callers without an
+// environment variable a shell has to set. The `--` form is the one that matters:
+// cmdParse reorders flags ahead of positionals, so a bare `script.buzz --raw` is
+// magus's flag to parse and fails, and the separator is what hands it to the script.
+func TestBuzzCmd_ScriptArgvReachesMain(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "argv.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(
+		"import \"std\";\nexport fun main(args: [str]) > void { std\\print(\"argv={args}\"); }\n"), 0o644))
+
+	for name, tc := range map[string]struct {
+		args []string
+		want string
+	}{
+		"after a separator":   {[]string{path, "--", "--raw", "-x"}, "argv=[--raw, -x]"},
+		"bare words":          {[]string{path, "one", "two"}, "argv=[one, two]"},
+		"none":                {[]string{path}, "argv=[]"},
+		"separator with none": {[]string{path, "--"}, "argv=[]"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var runErr error
+			stdout := captureStdout(t, func() {
+				runErr = buzzCmd(context.Background(), "", tc.args)
+			})
+			require.NoError(t, runErr)
+			assert.Contains(t, stdout, tc.want)
+		})
+	}
 }

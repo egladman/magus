@@ -292,6 +292,82 @@ exec sh $WORK/parity.sh observe
 ! stdout .
 ! stderr .
 
+# --- the two lifecycle wrappers: a stop record and a post-compaction brief ----
+#
+# They carry no verdict either, so the contract gate owes them no case and, until this
+# block, none existed: the Stop and SessionStart hooks this repository wires were the
+# only shipped glue nothing ever ran. That is precisely the exemption the OpenCode
+# plugin in the header note shipped behind, and porting them to Buzz is what made the
+# gap worth closing rather than merely noticing.
+#
+# No `# case: <surface>/<decision>` label, for the reason the observe block carries
+# none: a checkpoint and a brief are not verdicts on a surface.
+#
+# Both write to the user-global state dir, which the archive's read-only HOME is not.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+cd notes-ws
+
+# The Stop wrapper forwards the event whole and says NOTHING. Anything on either stream
+# would reach the host as this hook's reply at the end of every session.
+stdin $WORK/stop-event.json
+exec sh $WORK/parity.sh checkpoint
+! stdout .
+! stderr .
+
+# An envelope it cannot parse is still silent, and still exits 0. This wrapper selects
+# nothing out of the event, so a malformed one is magus's to ignore rather than the
+# wrapper's to choke on - and a Stop hook that exits non-zero is a session-ending error
+# notice in every host that shows one.
+stdin $WORK/observe-garbage.json
+exec sh $WORK/parity.sh checkpoint
+! stdout .
+! stderr .
+
+# It reached magus rather than being silent because it resolved nothing: the checkpoints
+# both forms just recorded are in the session the wrapper named.
+exec magus session
+stdout 'testscript'
+
+# The brief cases move to a workspace nothing above has touched, with a state dir of
+# their own. A brief reports how long ago the last tool call here was, and both forms are
+# graded byte for byte against the same one, so running them where the guard cases left a
+# trail would make the comparison turn on which second each of the two started in.
+cd $WORK/brief-ws
+env HOME=$WORK/brief-home
+env XDG_STATE_HOME=$WORK/brief-home/state
+
+# The SessionStart wrapper reads no event at all and hands back the brief. The rules line
+# is the one host-shaped part, and it prints only because this fixture carries the file.
+stdin $WORK/session-start.json
+exec sh $WORK/parity.sh rehydrate
+stdout 'standing rules: CLAUDE.md'
+! stderr .
+
+# The json channel, for a host that parses stdout as a reply rather than appending it.
+# The envelope is asserted whole: a host that got the text without the wrapper would drop
+# it silently, which looks exactly like a hook that never fired. The brief's own line
+# breaks arrive as the two characters a JSON string spells one with.
+env REHYDRATE_FORMAT=json
+stdin $WORK/session-start.json
+exec sh $WORK/parity.sh rehydrate
+stdout '^\{"hookSpecificOutput":\{"hookEventName":"SessionStart","additionalContext":"magus brief: '
+stdout 'standing rules: CLAUDE.md; re-read it, the summary above is not it\\n"\}\}$'
+! stderr .
+env REHYDRATE_FORMAT=
+
+# A host naming an instruction file this checkout does not carry gets the brief without
+# the line, rather than a sentence pointing at nothing.
+env REHYDRATE_RULES=NOT-HERE.md
+stdin $WORK/session-start.json
+exec sh $WORK/parity.sh rehydrate
+stdout 'magus brief: '
+! stdout 'standing rules'
+env REHYDRATE_RULES=
+cd $WORK
+env HOME=/no-home
+env XDG_STATE_HOME=
+
 # --- fail-open: a missing magus must degrade the way each template promises ---
 
 env __MAGUS_BIN=$WORK/nonexistent-magus
@@ -301,6 +377,19 @@ env __MAGUS_BIN=$WORK/nonexistent-magus
 # record was skipped.
 stdin observe-read.json
 exec sh $WORK/parity.sh observe
+! stdout .
+! stderr .
+
+# The two lifecycle wrappers degrade the same way and for the same reason: neither
+# enforces anything, so a notice would interrupt the end of every session, or open every
+# compacted one, to report that an optional record was not written.
+stdin $WORK/stop-event.json
+exec sh $WORK/parity.sh checkpoint
+! stdout .
+! stderr .
+
+stdin $WORK/session-start.json
+exec sh $WORK/parity.sh rehydrate
 ! stdout .
 ! stderr .
 
@@ -645,32 +734,40 @@ cd $WORK
 surface=$1
 event=$(cat)
 
+# A guard surface is one of three files named for it; the two verdict-free wrappers are
+# named for themselves. Resolving the stem here rather than at every call site keeps the
+# sixty cases above reading as they did when only the hook templates had a Buzz port.
+case $surface in
+  command|path|observe) stem=magus-hook-$surface ;;
+  *) stem=magus-$surface ;;
+esac
+
 sh_tmp=${TMPDIR:-/tmp}/parity-sh
 bz_tmp=${TMPDIR:-/tmp}/parity-buzz
 mkdir -p "$sh_tmp" "$bz_tmp"
 
-printf '%s' "$event" | TMPDIR=$sh_tmp sh "$__MAGUS_TEMPLATES/magus-hook-$surface.sh" \
+printf '%s' "$event" | TMPDIR=$sh_tmp sh "$__MAGUS_TEMPLATES/$stem.sh" \
   >"$sh_tmp/out" 2>"$sh_tmp/err"
 sh_status=$?
-printf '%s' "$event" | TMPDIR=$bz_tmp magus buzz -s "$__MAGUS_TEMPLATES/magus-hook-$surface.buzz" \
+printf '%s' "$event" | TMPDIR=$bz_tmp magus buzz -s "$__MAGUS_TEMPLATES/$stem.buzz" \
   >"$bz_tmp/out" 2>"$bz_tmp/err"
 bz_status=$?
 
 if ! cmp -s "$sh_tmp/out" "$bz_tmp/out"; then
-  echo "PARITY: magus-hook-$surface.buzz replied differently from magus-hook-$surface.sh" >&2
+  echo "PARITY: $stem.buzz replied differently from $stem.sh" >&2
   echo "  sh  : $(cat "$sh_tmp/out")" >&2
   echo "  buzz: $(cat "$bz_tmp/out")" >&2
   exit 1
 fi
 if [ "$sh_status" -ne "$bz_status" ]; then
-  echo "PARITY: magus-hook-$surface exited $sh_status as sh and $bz_status as Buzz" >&2
+  echo "PARITY: $stem exited $sh_status as sh and $bz_status as Buzz" >&2
   exit 1
 fi
 # The Buzz form is run with -s, so anything on its stderr is a diagnostic the host would
 # show as a hook error. The sh form's stderr passes through, since the cases already
 # assert on it.
 if [ -s "$bz_tmp/err" ]; then
-  echo "PARITY: magus-hook-$surface.buzz wrote to stderr: $(cat "$bz_tmp/err")" >&2
+  echo "PARITY: $stem.buzz wrote to stderr: $(cat "$bz_tmp/err")" >&2
   exit 1
 fi
 
@@ -775,6 +872,19 @@ magus:
 ---
 
 Prose a person wrote.
+-- brief-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the brief this checkout hands a compacted session matters here",
+});
+-- brief-ws/CLAUDE.md --
+The instruction file the rehydrate wrapper's rules line points back at.
+-- stop-event.json --
+{"session_id": "s1", "transcript_path": "/tmp/t.jsonl", "hook_event_name": "Stop", "stop_hook_active": false}
+-- session-start.json --
+{"session_id": "s1", "transcript_path": "/tmp/t.jsonl", "hook_event_name": "SessionStart", "source": "compact"}
 -- observe-read.json --
 {"session_id": "s1", "transcript_path": "/tmp/t.jsonl", "tool_name": "Read", "tool_input": {"file_path": "README.md"}}
 -- observe-garbage.json --
