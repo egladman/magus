@@ -135,6 +135,9 @@ type DerivedOrder struct {
 	// Step.RunAfterMembers.
 	RunAfterMembers map[string][]MemberRun
 	ReleasedMembers map[string][]string
+	// Narrowed holds the MGS4010 notices: an edge honored by member waits whose writer
+	// step also runs a target that declares no writes of its own.
+	Narrowed NarrowedWaits
 	// SameStep holds the overlaps inside one step that nothing sequences. They are not
 	// edges: no schedule can express them, and settling cannot repair them either, since
 	// both targets run in one window. The caller refuses the run over them.
@@ -159,10 +162,14 @@ type DerivedOrder struct {
 // DependsOn edges always win over derived ones: project-level ordering (and the
 // affected set) is never widened or narrowed here.
 func DeriveTargetOrder(steps []Step, nodes []TargetNode, witness OverlapWitness) *DerivedOrder {
+	// One settled model of what runs after what inside a chain, shared by the same-step
+	// refusal and by the scheduling below. Built once: the two answer the same question
+	// about the same nodes, and a second model is one that can disagree with the first.
+	order := newNodeOrder(nodes)
 	d := &DerivedOrder{
 		Nodes: nodes, RunAfter: map[string][]string{},
 		RunAfterMembers: map[string][]MemberRun{}, ReleasedMembers: map[string][]string{},
-		SameStep: FindSameStepConflicts(nodes, witness),
+		SameStep: findSameStepConflicts(order, nodes, witness),
 	}
 
 	for w := range nodes {
@@ -190,7 +197,7 @@ func DeriveTargetOrder(steps []Step, nodes []TargetNode, witness OverlapWitness)
 	}
 
 	d.resolveFineCycles()
-	d.projectOntoSteps(steps)
+	d.projectOntoSteps(steps, order, witness)
 	return d
 }
 
@@ -438,12 +445,40 @@ func (d *DerivedOrder) findCycle() []int {
 // between the targets they run.
 type stepEdge struct{ from, to string }
 
+// NarrowedWait is one reader step that waits on individual members of a writer step
+// which also runs a target declaring no writes of its own.
+type NarrowedWait struct {
+	// Reader and Writer are step keys; Undeclared is the writer step's member whose
+	// writes are the project baseline rather than its own declaration.
+	Reader, Writer, Undeclared string
+}
+
+// NarrowedWaits is every such pair in one batch, sorted.
+type NarrowedWaits []NarrowedWait
+
+// Advice is the one-line MGS4010 notice, or "" for none: the first pair named and the
+// rest counted, the way SameStepConflicts.Advice reports its own class.
+func (ns NarrowedWaits) Advice() string {
+	if len(ns) == 0 {
+		return ""
+	}
+	n := ns[0]
+	more := ""
+	if rest := len(ns) - 1; rest > 0 {
+		more = fmt.Sprintf("; %d more such pair(s)", rest)
+	}
+	return fmt.Sprintf("[%s] %s waits on the targets of %s it overlaps rather than all of it, and %s declares no writes of its own, so anything it writes outside %s's declared globs is no longer ordered against the reader%s; declare its ctx.writesFiles (see %s)",
+		types.NarrowedWaitPastBaselineWriter, DisplayNodeKey(n.Reader), DisplayNodeKey(n.Writer),
+		DisplayNodeKey(n.Undeclared), DisplayNodeKey(n.Writer), more,
+		types.CodeURL(types.NarrowedWaitPastBaselineWriter))
+}
+
 // projectOntoSteps turns fine edges into step-level RunAfter ordering where the
 // combined step graph stays acyclic, and marks the rest unordered. Coarse
 // DependsOn edges are never dropped: where a derived direction conflicts with
 // them (the entangled shape hand-wiring used to be the only answer for), the
 // fine edge is left to post-batch settling instead of deadlocking the barrier.
-func (d *DerivedOrder) projectOntoSteps(steps []Step) {
+func (d *DerivedOrder) projectOntoSteps(steps []Step, order *nodeOrder, witness OverlapWitness) {
 	inScope := make(map[string]bool, len(steps))
 	for _, s := range steps {
 		inScope[stepKey(s)] = true
@@ -459,6 +494,13 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 		}
 	}
 
+	// stepMembers is what each step runs, for the MGS4010 check below.
+	stepMembers := map[string][]int{}
+	for i, n := range d.Nodes {
+		for _, s := range n.Steps {
+			stepMembers[s] = append(stepMembers[s], i)
+		}
+	}
 	induced := map[stepEdge][]int{}
 	for ei, e := range d.Edges {
 		for _, sw := range d.Nodes[e.Writer].Steps {
@@ -533,13 +575,14 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 	// its own.
 	ordersBefore := func(step, reader string) bool { return reachable(step, reader) }
 	for e := range kept {
-		members := d.memberWaits(e, induced[e], inScope, ordersBefore)
+		members := d.memberWaits(e, induced[e], inScope, ordersBefore, order)
 		if len(members) == 0 {
 			if !slices.Contains(d.RunAfter[e.to], e.from) {
 				d.RunAfter[e.to] = append(d.RunAfter[e.to], e.from)
 			}
 			continue
 		}
+		d.Narrowed = append(d.Narrowed, d.narrowedPast(e, stepMembers[e.from], induced[e], witness)...)
 		for _, w := range members {
 			if !slices.Contains(d.RunAfterMembers[e.to], w) {
 				d.RunAfterMembers[e.to] = append(d.RunAfterMembers[e.to], w)
@@ -560,6 +603,10 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 			return strings.Compare(a.StepKey, b.StepKey)
 		})
 	}
+	slices.SortFunc(d.Narrowed, func(a, b NarrowedWait) int {
+		return strings.Compare(a.Reader+"\x00"+a.Writer+"\x00"+a.Undeclared,
+			b.Reader+"\x00"+b.Writer+"\x00"+b.Undeclared)
+	})
 	for k := range d.ReleasedMembers {
 		slices.Sort(d.ReleasedMembers[k])
 	}
@@ -590,12 +637,15 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 // still repairs a stale read of the second kind; neither is ordered by pretending a
 // whole-step wait was the declaration.
 func (d *DerivedOrder) memberWaits(e stepEdge, fine []int, inScope map[string]bool,
-	ordersBefore func(step, reader string) bool,
+	ordersBefore func(step, reader string) bool, order *nodeOrder,
 ) []MemberRun {
 	var waits []MemberRun
 	for _, ei := range fine {
 		w := d.Nodes[d.Edges[ei].Writer]
-		if inScope[w.Key()] {
+		// A writer that finishes only when its step does is the step's own end under
+		// another name, so the reader waits out the step and the batch carries no entry
+		// for it.
+		if inScope[w.Key()] || order.completesWithStep(w.Key(), e.from) {
 			return nil
 		}
 		for _, owner := range w.Steps {
@@ -606,7 +656,50 @@ func (d *DerivedOrder) memberWaits(e stepEdge, fine []int, inScope map[string]bo
 			waits = append(waits, m)
 		}
 	}
-	return waits
+	return implied(waits, order)
+}
+
+// narrowedPast is the MGS4010 notice for one converted edge: the writer step's members
+// that declare no writes of their own AND whose baseline footprint can reach what this
+// edge's readers read. The step's own target is not one of them; its footprint is the
+// composite's, folded from the chain.
+//
+// The overlap test is what keeps this a finding rather than a census. Most targets
+// declare no writes because they write nothing (a linter, a test), and naming every one
+// of them against every reader reports the shape of the workspace instead of a risk.
+func (d *DerivedOrder) narrowedPast(e stepEdge, members, fine []int, witness OverlapWitness) NarrowedWaits {
+	var out NarrowedWaits
+	for _, i := range members {
+		n := d.Nodes[i]
+		if n.DeclaredWrites || n.Key() == e.from {
+			continue
+		}
+		for _, ei := range fine {
+			r := d.Nodes[d.Edges[ei].Reader]
+			write, read, ok := n.overlap(r)
+			if !ok || (witness != nil && !witness(write, read, r.IgnoreDirs)) {
+				continue
+			}
+			out = append(out, NarrowedWait{Reader: e.to, Writer: e.from, Undeclared: n.Key()})
+			break
+		}
+	}
+	return out
+}
+
+// implied drops each wait another wait in the same step already covers: a member that
+// runs after it has completed cannot finish first, so the later one is the whole wait.
+func implied(waits []MemberRun, order *nodeOrder) []MemberRun {
+	var out []MemberRun
+	for _, w := range waits {
+		covered := slices.ContainsFunc(waits, func(later MemberRun) bool {
+			return later != w && later.StepKey == w.StepKey && order.runsAfter(later.Member, w.Member)
+		})
+		if !covered {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // SameStepConflict is one target reading, inside a single step, what another target of
@@ -729,7 +822,13 @@ func WorkspaceOverlapWitness(root string) OverlapWitness {
 //
 // Deterministic: results are sorted by step, then writer, then reader.
 func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) SameStepConflicts {
-	order := newNodeOrder(nodes)
+	return findSameStepConflicts(newNodeOrder(nodes), nodes, witness)
+}
+
+// findSameStepConflicts is FindSameStepConflicts against an order the caller already
+// settled, so a derivation that needs the same answers for scheduling builds one model
+// rather than two that cannot see each other.
+func findSameStepConflicts(order *nodeOrder, nodes []TargetNode, witness OverlapWitness) SameStepConflicts {
 	var out SameStepConflicts
 	for w := range nodes {
 		for r := range nodes {
@@ -845,6 +944,29 @@ func newNodeOrder(nodes []TargetNode) *nodeOrder {
 		}
 	}
 	return o
+}
+
+// completesWithStep reports whether member finishes only once everything else the step
+// runs has finished, which makes its completion the step's end by another name. A wait on
+// such a member buys the reader nothing over waiting out the step, and costs a barrier
+// entry and a release that has to be reported.
+func (o *nodeOrder) completesWithStep(member, step string) bool {
+	done, ok := o.done[step]
+	if !ok || !done[member] {
+		// The step's own target is not among the nodes, or does not reach this member:
+		// nothing here proves when the member finishes, and an unproven answer must not
+		// read as "it finishes last".
+		return false
+	}
+	for k := range done {
+		if k == step || k == member {
+			continue
+		}
+		if !o.done[member][k] {
+			return false
+		}
+	}
+	return true
 }
 
 // runsAfter reports whether later's own work runs after earlier has completed, so the

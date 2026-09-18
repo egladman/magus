@@ -3,8 +3,8 @@
   "schema_version": 13,
   "directed": true,
   "multigraph": false,
-  "node_count": 6317,
-  "edge_count": 11245,
+  "node_count": 6323,
+  "edge_count": 11255,
   "relations": [
     {
       "id": "annotates",
@@ -1082,6 +1082,14 @@
       }
     },
     {
+      "id": "diagnostic:MGS4010",
+      "kind": "diagnostic",
+      "label": "MGS4010",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4010/"
+      }
+    },
+    {
       "id": "diagnostic:MGS5001",
       "kind": "diagnostic",
       "label": "MGS5001",
@@ -1717,7 +1725,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1919",
+        "dir_files": "1924",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1987,7 +1995,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "551",
+        "dir_files": "556",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -2057,7 +2065,7 @@
       "label": "docs/reference/codes/race",
       "source": "docs/reference/codes/race",
       "attrs": {
-        "dir_files": "70",
+        "dir_files": "75",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -5995,6 +6003,18 @@
         "section": "reference",
         "tags": "MGS4009,drift,formatting,gofmt,commit,hooks",
         "title": "MGS4009: commit left formatting stale"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/race/MGS4010.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/race/MGS4010.md",
+      "source": "docs/reference/codes/race/MGS4010.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS4010,race,ordering,scheduling,declarations,footprints",
+        "title": "MGS4010: narrowed wait past a baseline writer"
       }
     },
     {
@@ -31170,6 +31190,46 @@
       "source": "docs/reference/codes/race/MGS4009.md#why-this-is-not-lints-question",
       "attrs": {
         "anchor": "why-this-is-not-lints-question",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/race/MGS4010.md#mgs4010-narrowed-wait-past-a-baseline-writer",
+      "kind": "docsection",
+      "label": "MGS4010: narrowed wait past a baseline writer",
+      "source": "docs/reference/codes/race/MGS4010.md#mgs4010-narrowed-wait-past-a-baseline-writer",
+      "attrs": {
+        "anchor": "mgs4010-narrowed-wait-past-a-baseline-writer",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/race/MGS4010.md#related",
+      "kind": "docsection",
+      "label": "Related",
+      "source": "docs/reference/codes/race/MGS4010.md#related",
+      "attrs": {
+        "anchor": "related",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/race/MGS4010.md#what-to-do",
+      "kind": "docsection",
+      "label": "What to do",
+      "source": "docs/reference/codes/race/MGS4010.md#what-to-do",
+      "attrs": {
+        "anchor": "what-to-do",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/race/MGS4010.md#why-it-fires",
+      "kind": "docsection",
+      "label": "Why it fires",
+      "source": "docs/reference/codes/race/MGS4010.md#why-it-fires",
+      "attrs": {
+        "anchor": "why-it-fires",
         "level": "2"
       }
     },
@@ -63793,6 +63853,14 @@
     },
     {
       "source": "dir:docs/reference/codes/race",
+      "target": "doc:docs/reference/codes/race/MGS4010.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/race",
       "target": "doc:docs/reference/codes/race/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -82630,6 +82698,54 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/race/MGS4009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4010.md",
+      "target": "diagnostic:MGS4007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4010.md",
+      "target": "diagnostic:MGS4008",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4010.md",
+      "target": "diagnostic:MGS4010",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4010.md",
+      "target": "doc:docs/reference/codes/race/MGS4007.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4010.md",
+      "target": "doc:docs/reference/codes/race/MGS4008.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4010.md",
+      "target": "docsection:docs/reference/codes/race/MGS4010.md#mgs4010-narrowed-wait-past-a-baseline-writer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
     },
     {
       "source": "doc:docs/reference/codes/race/README.md",
@@ -114494,6 +114610,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/race/MGS4009.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/race/MGS4010.md#mgs4010-narrowed-wait-past-a-baseline-writer",
+      "target": "docsection:docs/reference/codes/race/MGS4010.md#related",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/race/MGS4010.md#mgs4010-narrowed-wait-past-a-baseline-writer",
+      "target": "docsection:docs/reference/codes/race/MGS4010.md#what-to-do",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/race/MGS4010.md#mgs4010-narrowed-wait-past-a-baseline-writer",
+      "target": "docsection:docs/reference/codes/race/MGS4010.md#why-it-fires",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4010.md"
     },
     {
       "source": "docsection:docs/reference/codes/race/README.md#race-condition-diagnostics",
