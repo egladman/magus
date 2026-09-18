@@ -1572,7 +1572,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// In collapse mode the project's subprocess output is withheld, so attach a
 		// stage observer: it prints a progress line as each magus.needs sub-target
 		// completes, giving the reader a checklist of what ran in place of the wall.
-		release := releaseObserver{projectByDir: projectByDir}
+		release := releaseObserver{projectByDir: projectByDir, get: m.Get}
 		if m.cache.Collapsing() {
 			release.next = stageObserver{cache: m.cache, label: s.Label, policies: policiesOf(p)}
 		}
@@ -1611,8 +1611,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 					}
 					return invoke(workerCtx)
 				}, cacheOpts...)
-				// A replayed member never reaches the observer.
-				cache.ReleaseTarget(memberCtx, p.Path, name)
+				// A replayed member never reaches the observer. Same project by
+				// construction: CrossDispatch strips this interceptor before dispatching
+				// into another one, so name always belongs to p.
+				cache.ReleaseMember(memberCtx, cache.DepKey(p.Path, name), memberVerdict(m.Get, p.Path, name, err))
 				return err
 			}))
 		}
@@ -1705,18 +1707,33 @@ func (o stageObserver) TargetEnd(ctx context.Context, name string, elapsed time.
 // step: a cross-project dispatch runs the other project's members under this observer.
 type releaseObserver struct {
 	projectByDir map[string]string
+	get          func(path string) *types.Project
 	next         buzz.TargetObserver
 }
 
 func (o releaseObserver) TargetEnd(ctx context.Context, name string, elapsed time.Duration, err error) {
 	if src := interp.SourceFromContext(ctx); src != nil {
 		if project, ok := o.projectByDir[filepath.Clean(src.Dir)]; ok {
-			cache.ReleaseTarget(ctx, project, name)
+			cache.ReleaseMember(ctx, cache.DepKey(project, name), memberVerdict(o.get, project, name, err))
 		}
 	}
 	if o.next != nil {
 		o.next.TargetEnd(ctx, name, elapsed, err)
 	}
+}
+
+// memberVerdict is what a member's readers inherit. An advisory member's failure is not
+// theirs: the composite carries on past it, so the step passes and a reader that refused
+// to run would fail a batch nothing else fails. Every other failure propagates, or the
+// reader runs against bytes its writer never finished and caches the result.
+func memberVerdict(get func(path string) *types.Project, project, name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if p := get(project); p != nil && p.TargetPolicies[name].Advisory {
+		return nil
+	}
+	return err
 }
 
 // dedupeByProject returns one step per ProjectPath (first seen).

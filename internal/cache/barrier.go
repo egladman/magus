@@ -55,10 +55,11 @@ type depBarrier struct {
 
 // MemberWait is one step's run of a chain member: what a reader waits on when the
 // writer it overlaps is a member of another step's chain rather than that step's own
-// target. See Step.Releases.
+// target. See Step.RunAfterMembers.
 type MemberWait struct {
-	// Member is the member's node key (DepKey), Step the key of the step running it.
-	Member, Step string
+	// Member is the member's node key (DepKey); StepKey is the key of the step running
+	// it, spelled out because a bare Step beside cache.Step reads as that type.
+	Member, StepKey string
 }
 
 type barrierEntry struct {
@@ -81,28 +82,23 @@ func newDepBarrier(steps []Step) *depBarrier {
 		}
 	}
 	members := map[MemberWait]*barrierEntry{}
-	for _, w := range releaseWaits(steps) {
-		members[w] = &barrierEntry{ch: make(chan struct{})}
+	for _, s := range steps {
+		for _, k := range s.Releases {
+			members[MemberWait{Member: k, StepKey: stepKey(s)}] = &barrierEntry{ch: make(chan struct{})}
+		}
 	}
 	return &depBarrier{done: done, members: members}
 }
 
-// releaseWaits is every (member, step) pair the batch can open early.
-func releaseWaits(steps []Step) []MemberWait {
-	var out []MemberWait
-	for _, s := range steps {
-		for _, k := range s.Releases {
-			out = append(out, MemberWait{Member: k, Step: stepKey(s)})
-		}
-	}
-	return out
-}
-
-// release opens one step's run of a member. The member's own error is not recorded: an
-// advisory member fails without failing its step, and a reader waiting on it needs the
-// writer's bytes settled, not a verdict. A member failure that does fail its step fails
-// the batch through the step. err is the step's verdict when the step itself is what
-// ended, carrying "your writer never got there" to the waiter.
+// release opens one step's run of a member, recording the verdict its readers inherit:
+// the member's own error, nil once the caller has decided the failure does not speak for
+// the bytes (an advisory member fails without failing its step), or the step's verdict
+// when the step itself is what ended, which carries "your writer never got there".
+//
+// A reader released with a non-nil err fails instead of running, which is the same
+// contract a step-level upstream has. Releasing a failed member as a success would let
+// that reader run against half-written bytes and CACHE the result, and nothing would
+// cancel it: a batch tolerates failures by default (WithMaxFailures).
 func (b *depBarrier) release(w MemberWait, err error) {
 	e, ok := b.members[w]
 	if !ok {
@@ -128,13 +124,16 @@ func withReleaser(ctx context.Context, b *depBarrier, step string) context.Conte
 	return context.WithValue(ctx, barrierCtxKey{}, releaser{barrier: b, step: step})
 }
 
-// ReleaseTarget reports that project's target finished inside the running batch step, so
-// a step whose RunAfter names it may start before the step running it ends. Safe to call
-// for any target, from any goroutine, any number of times: a target no step Releases is
-// ignored, as is a ctx outside RunAll.
-func ReleaseTarget(ctx context.Context, project, target string) {
+// ReleaseMember reports that the chain member named by key (a DepKey) finished inside
+// the running batch step, so a step whose RunAfterMembers names it may start before the
+// step running it ends. err is what its readers inherit: the member's own error, or nil
+// when the caller has decided that failure does not speak for the bytes (see release).
+//
+// Safe to call for any member, from any goroutine, any number of times: a member no step
+// Releases is ignored, as is a ctx outside RunAll, and the first call wins.
+func ReleaseMember(ctx context.Context, key string, err error) {
 	if r, ok := ctx.Value(barrierCtxKey{}).(releaser); ok {
-		r.barrier.release(MemberWait{Member: DepKey(project, target), Step: r.step}, nil)
+		r.barrier.release(MemberWait{Member: key, StepKey: r.step}, err)
 	}
 }
 
@@ -205,10 +204,20 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 	for _, w := range s.RunAfterMembers {
 		// This step's own run of the member is its own body's business: waiting on it
 		// would be waiting on itself, and that overlap is the same-step question.
-		if w.Step == self {
+		if w.StepKey == self {
 			continue
 		}
 		e, ok := b.members[w]
+		if !ok {
+			// The step running it never declared the release, so nothing will open this
+			// key. Waiting out that whole step is what the edge meant before it was
+			// narrowed, which makes a derivation that emits half the pair slower rather
+			// than unordered; skipping instead would drop the edge silently.
+			if err := step(w.StepKey); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := wait(w.Member, e, ok); err != nil {
 			return err
 		}
@@ -292,7 +301,7 @@ func checkAcyclic(steps []Step) error {
 		// is a wait on that step for deadlock purposes. A step waiting on its own run of
 		// a member does not wait at all (see waitForDeps).
 		for _, w := range s.RunAfterMembers {
-			add(w.Step)
+			add(w.StepKey)
 		}
 	}
 

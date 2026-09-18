@@ -168,12 +168,15 @@ type Step struct {
 	// never hashed, never folded into Deps, never part of the affected set.
 	RunAfter []string
 	// RunAfterMembers holds the chain members this step must wait for, each named with
-	// the step that runs it: a writer inside another step's chain, waited out on its
-	// own rather than by that step's whole run.
+	// the step that runs it: a writer inside another step's chain, waited out on its own
+	// rather than by that step's whole run. This step's own runs of a member are skipped
+	// (that overlap is the same-step question). Scheduling only, like RunAfter: never
+	// hashed, never folded into Deps, never part of the affected set.
 	RunAfterMembers []MemberWait
-	// Releases are node keys of this step's chain members that some RunAfterMembers
-	// names. Each opens when ReleaseTarget reports the member finished, and at the
-	// latest when this step ends.
+	// Releases are node keys of this step's chain members that some other step's
+	// RunAfterMembers names. Each opens when ReleaseMember reports the member finished,
+	// and at the latest when this step ends. A step that names one without the other
+	// leaves its readers waiting out the whole step (see waitForDeps).
 	Releases      []string
 	WorkspaceRoot string
 	Target        string   // mixed into key to distinguish targets on the same sources
@@ -1180,7 +1183,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			defer func() {
 				// A member the step never reached, or replayed from cache, opens here.
 				for _, k := range s.Releases {
-					barrier.release(MemberWait{Member: k, Step: stepKey(s)}, stepErr)
+					barrier.release(MemberWait{Member: k, StepKey: stepKey(s)}, stepErr)
 				}
 				barrier.markDone(stepKey(s), stepErr)
 			}()
