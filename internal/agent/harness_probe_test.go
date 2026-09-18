@@ -172,15 +172,28 @@ func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 // managed command is a lifecycle hook (checkpoint/rehydrate/observe), which
 // never renders a verdict, is still reported verified from presence alone: there
 // is nothing for the probe to run, and that is not a gap.
+// Both forms of both wrappers, because the skip used to match the .sh suffix alone:
+// porting checkpoint and rehydrate to Buzz made every apply --id claude-code write a
+// config its own verify then called uncovered, on the grounds that a recorder had
+// rendered no verdict.
 func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
-	root := t.TempDir()
-	writeFakeMagusBinary(t, root)
-	writeProbeableHarness(t, root, "lifecycle", "sh magus-checkpoint.sh")
-	// No stub script written at all: if this were probed, it would fail.
+	for _, command := range []string{
+		"sh magus-checkpoint.sh",
+		"sh magus-rehydrate.sh",
+		"magus buzz -s magus-checkpoint.buzz",
+		"magus buzz -s magus-rehydrate.buzz",
+	} {
+		t.Run(command, func(t *testing.T) {
+			root := t.TempDir()
+			writeFakeMagusBinary(t, root)
+			writeProbeableHarness(t, root, "lifecycle", command)
+			// No stub script written at all: if this were probed, it would fail.
 
-	result, err := VerifyHarness(context.Background(), root, "lifecycle")
-	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, result.Status)
+			result, err := VerifyHarness(context.Background(), root, "lifecycle")
+			require.NoError(t, err)
+			assert.Equal(t, HarnessVerified, result.Status)
+		})
+	}
 }
 
 // buildMinimalPATH resolves each name against the CURRENT (real) PATH, so call it

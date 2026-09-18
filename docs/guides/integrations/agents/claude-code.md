@@ -307,8 +307,8 @@ magusfile walk as the lease hook above, for the same reason.
 
 ## Recording where the work stands
 
-Wire `Stop` to [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh) and
-each time a turn ends magus records the revision, branch and dirtiness of the
+Wire `Stop` to [`magus-checkpoint.buzz`](guard-templates.md#magus-checkpointbuzz)
+and each time a turn ends magus records the revision, branch and dirtiness of the
 tree, plus this session's id and transcript path. `magus session` lists it.
 
 ```json
@@ -319,7 +319,7 @@ tree, plus this session's id and transcript path. `magus session` lists it.
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz",
             "timeout": 10
           }
         ]
@@ -339,7 +339,7 @@ record by hand, which is the form to reach for when you are the one stopping.
 Claude Code fires `SessionStart` when a session begins, when one is resumed, and
 after it compacts a long conversation into a summary; whatever a `SessionStart`
 hook prints is added to the model's context. Wire it to
-[`magus-rehydrate.sh`](guard-templates.md#magus-rehydratesh) and a session that
+[`magus-rehydrate.buzz`](guard-templates.md#magus-rehydratebuzz) and a session that
 just lost its history is handed this checkout instead: branch and revision,
 commits not yet on the base ref, the dirty tree split into sources, generated
 outputs and unclaimed paths, the live leases with the command that binds each
@@ -358,7 +358,7 @@ automatic instruction or memory edit.
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz",
             "timeout": 10
           }
         ]

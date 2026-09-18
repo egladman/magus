@@ -395,6 +395,8 @@ var templatePage = map[string]string{
 	"magus-hook-command.buzz": "docs/guides/integrations/agents/guard-templates.md",
 	"magus-hook-path.buzz":    "docs/guides/integrations/agents/guard-templates.md",
 	"magus-hook-observe.buzz": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.buzz":   "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.buzz":    "docs/guides/integrations/agents/guard-templates.md",
 	"codex-hooks.json":        "docs/guides/integrations/agents/codex.md",
 	"cursor-hook.sh":          "docs/guides/integrations/agents/cursor.md",
 	"opencode-plugin.ts":      "docs/guides/integrations/agents/opencode.md",
@@ -432,6 +434,10 @@ var hookTemplates = []string{
 	"magus-hook-command.buzz",
 	"magus-hook-path.buzz",
 	"magus-hook-observe.buzz",
+	// And the Buzz ports of the two verdict-free wrappers, which is what leaves this
+	// repository's Claude Code wiring needing neither a POSIX shell nor jq.
+	"magus-checkpoint.buzz",
+	"magus-rehydrate.buzz",
 	"codex-hooks.json",
 	"cursor-hook.sh",
 	"opencode-plugin.ts",
@@ -1747,22 +1753,27 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 // It asserts the wiring is documented, not that this repository has applied it:
 // what a checkout wires is the reader's, and .claude/settings.json is checked by
 // TestDogfoodedHookInvokesTheTemplate for the hooks it does carry.
+// Both forms are held to the brief, because either one may be what a reader wires; the
+// PAGE is asked only for the stem, so it stays free to show one form in its example
+// without this test deciding which.
 func TestRehydrateTemplateIsWiredAfterCompaction(t *testing.T) {
-	const template = "magus-rehydrate.sh"
+	const stem = "magus-rehydrate"
 
-	body, err := os.ReadFile(filepath.Join(hookTemplateDir, template))
-	require.NoError(t, err, "read %s", template)
-	assert.Contains(t, string(body), "session --brief",
-		"%s must invoke the brief; it has no other reason to exist", template)
+	for _, ext := range []string{".sh", ".buzz"} {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, stem+ext))
+		require.NoError(t, err, "read %s", stem+ext)
+		assert.Contains(t, string(body), "session --brief",
+			"%s must invoke the brief; it has no other reason to exist", stem+ext)
+	}
 
 	page, err := os.ReadFile("docs/guides/integrations/agents/claude-code.md")
 	require.NoError(t, err, "read the host page")
 	doc := string(page)
-	for _, want := range []string{template, "SessionStart", "compact"} {
+	for _, want := range []string{stem, "SessionStart", "compact"} {
 		assert.Contains(t, doc, want,
 			"the host page must wire %s to the post-compaction event by name; a reader who\n"+
 				"cannot see WHEN it runs wires it to session start, which is the one moment it\n"+
-				"has nothing to say.", template)
+				"has nothing to say.", stem)
 	}
 }
 

@@ -66,7 +66,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -78,7 +78,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz",
             "timeout": 10,
             "type": "command"
           }

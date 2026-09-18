@@ -774,10 +774,11 @@ since a deny exits 2 with the verdict on stdout.
 
 ## The Buzz ports
 
-Beside each guard template above sits a `.buzz` file of the same name. It reads
-the same host event, renders the same reply, and carries the same version marker;
-`cmd/magus/testdata/script/guard_templates.txtar` runs both forms against every
-recorded event and fails on one byte of difference.
+Beside every template on this page sits a `.buzz` file of the same name: the three
+guard templates above, and the two verdict-free wrappers documented below. Each
+reads the same host event, renders the same reply, and carries the same version
+marker; `cmd/magus/testdata/script/guard_templates.txtar` runs both forms against
+every recorded event and fails on one byte of difference.
 
 Which one to wire is a question about your machine, not about the guard. The sh
 copy needs a POSIX shell and `jq`; the Buzz port needs neither, so it runs
@@ -1788,6 +1789,338 @@ fun main(args: [str]) > void {
         "--transcript", field(event, dotPath: transcriptPath),
         "--event", "PreToolUse",
     ], opts: {"quiet": true, "allow_failure": true, "stdin": reached}) catch void;
+}
+```
+
+### `magus-checkpoint.buzz`
+
+The stop recorder, in Buzz. It forwards the event whole, exactly as its sh twin
+does, so it selects nothing and imports no JSON reader at all.
+
+```buzz
+// magus checkpoint hook: records where the work stands when a session stops.
+//
+// This file is the source of truth for hosts wired to `magus buzz`. It is the
+// Buzz port of magus-checkpoint.sh and behaves identically without a POSIX
+// shell, so the wiring works unchanged on Windows. The shell copy stays for the
+// hosts still wired to `sh`.
+//
+// Run it as `magus buzz magus-checkpoint.buzz`. It imports no magus Buzz module
+// and no spell, which is what keeps the workspace CLOSED: a Stop hook fires once
+// per session rather than once per tool call, so the 700ms an open costs would
+// be affordable here - and it is still refused, because the rule that keeps the
+// glue closed is worth more than the one exception that would erode it.
+//
+// Wire it to your host's stop or session-end event. It records the revision,
+// branch and dirtiness of the tree, plus your host's session id and transcript
+// path as opaque pointers, so that whoever comes back to this repository - you
+// tomorrow, or another session - reads `magus session` instead of reconstructing
+// where the work stopped. That reconstruction is the cost this exists to remove:
+// it was measured at a session id passed by hand, a guessed transcript location,
+// and three failed commands before it emerged the work had never been pushed.
+//
+// Contract: pipes your host's event, unread, into `magus session checkpoint`.
+// magus takes the two pointers only a host knows out of the envelope and ignores
+// the rest; nothing in the payload becomes the note, because a note is a sentence
+// a person writes. It prints NOTHING and always exits 0. Override:
+//
+//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the checkpoint
+//   __MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// A host whose envelope spells those fields differently passes them as flags
+// instead - `--session` and `--transcript` outrank the envelope - and a host that
+// cannot supply either still records a usable checkpoint, because the part that
+// matters is read from the tree rather than from the event.
+//
+// There is no JSON import here, unlike its judging siblings. This wrapper selects
+// nothing: magus parses the envelope itself, so the event is forwarded whole.
+//
+// NO magus-guard-coverage line, for the same reason magus-hook-observe.buzz has
+// none: a coverage declaration states how much of a VERDICT a host can carry, and
+// this file carries no verdict on no surface. It never denies, never advises, and
+// cannot change what your host does next.
+//
+// magus-guard-template: 15
+
+// EVERY call that can fail is caught, matching the templates beside it and the
+// missing `set -e` in the sh copy. A hook that can fail is a hook that can break
+// the session it was meant to observe, and a record of where the work stopped is
+// worth strictly less than the work.
+
+import "io";
+import "env";
+import "fs";
+import "path";
+import "proc";
+
+fun envOr(name: str, fallback: str) > str {
+    final value = env\get(name) catch "";
+    if (value == "") { return fallback; }
+    return value;
+}
+
+fun isExecutable(candidate: str) > bool {
+    final info = fs\stat(candidate) catch null;
+    if (info == null) { return false; }
+    final mode = info!.mode as? int;
+    if (mode == null) { return false; }
+    return mode! & 73 != 0;
+}
+
+// parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
+// what ends the walk. fs\dirname answers "/" there and would never terminate.
+fun parentDir(dir: str) > str {
+    final parts = dir.split("/");
+    if (parts.len() <= 1) { return ""; }
+    var head = mut [<str>];
+    foreach (i in 0..parts.len() - 1) { head.append(parts[i]); }
+    return head.join("/");
+}
+
+// resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the
+// magusfile: a hook runs in the host's session directory, which is not always the
+// workspace root. magus-hook-command.buzz carries the full reasoning.
+fun resolveBin() > str {
+    final declared = env\get("__MAGUS_BIN") catch "";
+    if (declared != "") { return declared; }
+    var dir = path\abs(".") catch "";
+    while (dir != "") {
+        final marker = "{dir}/magusfile.buzz";
+        final found = fs\isFile(marker) catch false;
+        if (found) {
+            final candidate = "{dir}/magus";
+            if (isExecutable(candidate)) { return candidate; }
+            break;
+        }
+        dir = parentDir(dir);
+    }
+    return proc\which("magus") catch "";
+}
+
+fun main(args: [str]) > void {
+    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
+
+    // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
+    // unenforced - there is no rule - so announcing it would interrupt the end of
+    // every session to report that an optional record was not written.
+    //
+    // Checked before stdin is touched, exactly as the sh copy leaves the event unread
+    // on this arm: there is nobody to forward it to.
+    final bin = resolveBin();
+    if (bin == "" or !isExecutable(bin)) { return; }
+
+    final event = io\stdin.readAll() catch "";
+
+    // Both streams are discarded by `quiet`: a magus too old for `session checkpoint`
+    // prints its usage, and that would otherwise reach the host as this hook's response
+    // every time a session ends. The absence shows up where it is actionable instead -
+    // as an empty checkpoint list in `magus session`.
+    proc\exec(bin, args: [
+        "session", "checkpoint",
+        "--agent-name", agentName,
+    ], opts: {"quiet": true, "allow_failure": true, "stdin": event}) catch void;
+}
+```
+
+### `magus-rehydrate.buzz`
+
+The post-compaction brief, in Buzz. It needs neither `tr` nor `sed`: the JSON
+escape its sh twin builds out of a pipeline is one byte-indexed loop here.
+
+```buzz
+// magus rehydrate hook: prints where this checkout stands, for a session that has
+// lost its history.
+//
+// This file is the source of truth for hosts wired to `magus buzz`. It is the Buzz
+// port of magus-rehydrate.sh and prints byte-identical text without a POSIX shell,
+// so it needs neither `tr` nor `sed` and runs unchanged on Windows. The shell copy
+// stays for the hosts still wired to `sh`.
+//
+// Run it as `magus buzz magus-rehydrate.buzz`. It imports no magus Buzz module and
+// no spell: the workspace stays CLOSED, which is what lets a session-start hook add
+// its block in about 10ms rather than paying roughly 700ms to open one.
+//
+// Wire it to your host's session-start event, for the compaction and resume cases
+// at least. When a host replaces a long session's history with a summary, the model
+// keeps working from prose: the branch it is on, what it has already changed, and
+// which rules it agreed to all survive only as somebody's retelling, and each
+// retelling is a copy of a copy. Whatever this prints lands in that context window
+// instead, read off the disk at the moment it prints.
+//
+// Contract: runs `magus session --brief`, prints what it says, and adds one line
+// naming your host's own instruction file. It judges nothing, reads no event, and
+// exits 0 whatever happens. Override:
+//
+//   __MAGUS_BIN   path to the binary, when it is not on PATH
+//   REHYDRATE_RULES   your host's instruction file, relative to the workspace root
+//   REHYDRATE_FORMAT  set it to `json` for a host that reads stdout as a reply
+//
+// Two channels, because hosts disagree about what a session-start hook's stdout
+// IS. Some add plain stdout to the model's context, which is the default here.
+// Others parse stdout as a JSON reply and drop anything that is not one, so the
+// same text has to arrive as a string field:
+//
+//   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}
+//
+// The escape below is written out rather than handed to json\stringify, and that is
+// deliberate: the sh copy escapes with `tr` and `sed`, the two forms are graded byte
+// for byte against the same brief, and a stringify that ever disagreed about a tab
+// or a control character would move this file's output rather than reveal the
+// difference. The loop is the sh pipeline, transcribed.
+//
+// The rules line is the one host-shaped part, which is why it is a variable rather
+// than something magus prints: magus names the files it ships and can see
+// (AGENTS.md, the installed skill directories), and the file YOUR host reads is
+// yours to name. It prints only when that file is really there.
+//
+// NO magus-guard-coverage line, for the same reason magus-checkpoint.buzz has none: a
+// coverage declaration states how much of a VERDICT a host can carry, and this file
+// carries no verdict on no surface. It never denies, never advises, and cannot
+// change what your host does next.
+//
+// magus-guard-template: 15
+
+// EVERY call that can fail is caught, matching the templates beside it and the
+// missing `set -e` in the sh copy. A hook that can fail is a hook that can break the
+// session it was meant to help.
+
+import "io";
+import "env";
+import "fs";
+import "path";
+import "proc";
+
+// JSON_REPLY is the sh copy's printf format, %s and all, and it is written as ONE
+// balanced template rather than concatenated around the body for a lexer reason worth
+// knowing: a raw string counts braces even though it never interpolates, so a fragment
+// carrying `{{` and no `}}` swallows its own closing backtick and everything after it,
+// silently, as far as the next backtick.
+final JSON_REPLY = `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}`;
+
+fun envOr(name: str, fallback: str) > str {
+    final value = env\get(name) catch "";
+    if (value == "") { return fallback; }
+    return value;
+}
+
+fun isExecutable(candidate: str) > bool {
+    final info = fs\stat(candidate) catch null;
+    if (info == null) { return false; }
+    final mode = info!.mode as? int;
+    if (mode == null) { return false; }
+    return mode! & 73 != 0;
+}
+
+// parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
+// what ends the walk. fs\dirname answers "/" there and would never terminate.
+fun parentDir(dir: str) > str {
+    final parts = dir.split("/");
+    if (parts.len() <= 1) { return ""; }
+    var head = mut [<str>];
+    foreach (i in 0..parts.len() - 1) { head.append(parts[i]); }
+    return head.join("/");
+}
+
+// workspaceRoot walks UP to the magusfile: a hook runs in the host's session
+// directory, which is not always the workspace root. The walk is UNCONDITIONAL, unlike
+// the one in its judging siblings, because the root is also what the rules line is
+// resolved against; an explicit __MAGUS_BIN settles the binary, not the tree.
+fun workspaceRoot() > str {
+    var dir = path\abs(".") catch "";
+    while (dir != "") {
+        final found = fs\isFile("{dir}/magusfile.buzz") catch false;
+        if (found) { return dir; }
+        dir = parentDir(dir);
+    }
+    return "";
+}
+
+// resolveBin prefers the workspace's own ./magus over PATH. magus-hook-command.buzz
+// carries the full reasoning for that preference.
+fun resolveBin(root: str) > str {
+    final declared = env\get("__MAGUS_BIN") catch "";
+    if (declared != "") { return declared; }
+    if (root != "") {
+        final candidate = "{root}/magus";
+        if (isExecutable(candidate)) { return candidate; }
+    }
+    return proc\which("magus") catch "";
+}
+
+// trimTrailingNewlines matches shell command substitution, which drops every trailing
+// newline from a captured brief.
+fun trimTrailingNewlines(s: str) > str {
+    var end = s.len();
+    while (end > 0 and s.sub(end - 1, len: 1) == "\n") { end = end - 1; }
+    return s.sub(0, len: end);
+}
+
+// escapeJSON is `tr '\001-\011\013-\037' '[ *]' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'`
+// followed by the read loop that joins the lines, transcribed byte for byte.
+//
+// Every control character but the line break becomes a space (a raw one is not legal
+// inside a JSON string), backslash and quote are escaped, and each line break becomes
+// the two characters a JSON string spells it with. Byte-indexed on purpose: a
+// multi-byte rune's continuation bytes are all above 0x7f, so they fall through
+// untouched and reassemble exactly as they arrived.
+fun escapeJSON(body: str) > str {
+    var buf = mut [<str>];
+    foreach (i in 0..body.len()) {
+        final b = body.byte(i) catch 0;
+        if (b == 10) {
+            buf.append("\\n");
+        } else if (b > 0 and b < 32) {
+            buf.append(" ");
+        } else if (b == 92) {
+            buf.append("\\\\");
+        } else if (b == 34) {
+            buf.append("\\\"");
+        } else {
+            buf.append(body.sub(i, len: 1));
+        }
+    }
+    return buf.join("");
+}
+
+fun main(args: [str]) > void {
+    final rules = envOr("REHYDRATE_RULES", fallback: "CLAUDE.md");
+    final root = workspaceRoot();
+
+    // An absent magus is SILENT, where an absent guard is loud. Nothing here is
+    // unenforced (there is no rule), so announcing it would open every compacted
+    // session with a report that an optional context block was not written.
+    final bin = resolveBin(root);
+    if (bin == "" or !isExecutable(bin)) { return; }
+
+    // Captured rather than streamed, because the json arm has to wrap it. stderr is
+    // discarded by `quiet`: a magus too old for `session --brief` prints its usage
+    // there, and that would otherwise be injected as this hook's answer.
+    final result = proc\exec(bin, args: ["session", "--brief"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null) { return; }
+
+    var brief = trimTrailingNewlines(result!.stdout);
+
+    // Nothing from magus is nothing to say, in either channel. The rules line trails
+    // the brief and points back at it, so on its own it is a sentence about a block
+    // that was never written, and an envelope carrying only that is worse than none.
+    if (brief == "") { return; }
+
+    if (root != "") {
+        final hasRules = fs\isFile("{root}/{rules}") catch false;
+        if (hasRules) {
+            brief = brief + "\nstanding rules: " + rules + "; re-read it, the summary above is not it";
+        }
+    }
+
+    if (envOr("REHYDRATE_FORMAT", fallback: "") == "json") {
+        io\stdout.write(JSON_REPLY.replace("%s", with: escapeJSON(brief + "\n"))) catch void;
+        return;
+    }
+
+    io\stdout.write(brief + "\n") catch void;
 }
 ```
 

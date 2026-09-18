@@ -55,8 +55,12 @@ fun claude_interpreter() > str {
 // BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an
 // error notice, so an advisory about the glue would read as a guard failure. Real
 // errors still print, which is what makes a broken hook visible rather than silent.
+fun claude_buzz_command(script: str) > str {
+    return "{claude_interpreter()} buzz -s docs/guides/integrations/agents/{script}.buzz";
+}
+
 fun claude_glue_command(surface: str) > str {
-    return "{claude_interpreter()} buzz -s docs/guides/integrations/agents/magus-hook-{surface}.buzz";
+    return claude_buzz_command("magus-hook-{surface}");
 }
 
 fun claude_guard_command() > str {
@@ -98,12 +102,16 @@ fun claude_agent_command() > str {
         + claude_glue_command("command");
 }
 
+// The two lifecycle wrappers go through the same interpreter helper as the guard
+// glue, so this host's whole wiring names one runtime. They judge nothing, which is
+// why they are built from claude_buzz_command directly: their names are their own
+// rather than a surface of the hook template.
 fun claude_rehydrate_command() > str {
-    return "sh docs/guides/integrations/agents/magus-rehydrate.sh";
+    return claude_buzz_command("magus-rehydrate");
 }
 
 fun claude_checkpoint_command() > str {
-    return "sh docs/guides/integrations/agents/magus-checkpoint.sh";
+    return claude_buzz_command("magus-checkpoint");
 }
 
 fun claude_command_hook(cmd: str) > {str: any} {
@@ -230,6 +238,23 @@ test "guard commands name the Buzz glue, never the sh copies" {
     assert\isTrue(claude_guard_command().indexOf("buzz -s ") != null, "quiet interpreter");
 }
 
+test "the lifecycle wrappers name the Buzz ports too" {
+    // The whole point of porting these two: with them on sh, this host's wiring still
+    // demanded a POSIX shell for two of its eight entries, so a reader on Windows had
+    // six working hooks and no way to know which two were doing nothing.
+    assert\isTrue(claude_rehydrate_command().indexOf("magus-rehydrate.buzz") != null, "SessionStart rehydrate");
+    assert\isTrue(claude_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
+    foreach (block in claude_entries()) {
+        foreach (entry in block["entries"] as [any]) {
+            foreach (hook in entry["hooks"] as [any]) {
+                final cmd = "{hook["command"]}";
+                assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script");
+                assert\isTrue(cmd.indexOf("sh ") == null, "and none is run through sh");
+            }
+        }
+    }
+}
+
 test "the interpreter is the workspace binary where there is one" {
     // Both shapes, because a clone that has not built magus yet wires PATH and a
     // checkout that carries its own binary must never be sent to PATH's vintage.
@@ -246,8 +271,8 @@ test "the interpreter is the workspace binary where there is one" {
     assert\isTrue(claude_observe_command().startsWith("{chosen} buzz"), "read surface");
     assert\isTrue(claude_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
     assert\isTrue(claude_agent_command().indexOf("HOST_EVENT_RAW=1") != null, "spawn forwards the whole event");
-    assert\isTrue(claude_rehydrate_command().indexOf("magus-rehydrate.sh") != null, "SessionStart rehydrate");
-    assert\isTrue(claude_checkpoint_command().indexOf("magus-checkpoint.sh") != null, "Stop checkpoint");
+    assert\isTrue(claude_rehydrate_command().startsWith("{chosen} buzz"), "SessionStart rehydrate");
+    assert\isTrue(claude_checkpoint_command().startsWith("{chosen} buzz"), "Stop checkpoint");
 }
 
 test "harness_entries covers PreToolUse SessionStart and Stop" {

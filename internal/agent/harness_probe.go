@@ -56,8 +56,8 @@ const (
 func probeable(command string) bool {
 	switch {
 	case namesTemplate(command, "magus-hook-observe"),
-		strings.Contains(command, "magus-checkpoint.sh"),
-		strings.Contains(command, "magus-rehydrate.sh"):
+		namesTemplate(command, "magus-checkpoint"),
+		namesTemplate(command, "magus-rehydrate"):
 		return false
 	default:
 		return invokesMagus(command) && runnableAsProbe(command)
