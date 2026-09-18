@@ -514,6 +514,17 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    env:
+      # The symbol index needs a WRITABLE cache, which the workflow-wide value denies a pull
+      # request. A scip run records its manifest in the cache, and the freshness probe reads
+      # that manifest back; with nothing recorded, every index reads as "predates the sources
+      # it covers" and ingestion drops it. Measured: the same tree indexes 9 projects and
+      # then answers `magus refs` with "unknown, not absent" under the false, and resolves
+      # under the true. That silently cost this job reach, public surface and the API delta.
+      #
+      # It publishes nothing either way: the shared cache needs MAGUS_CACHE_SIGNING_KEY,
+      # which only a main push holds.
+      MAGUS_CACHE_WRITE_ENABLED: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
