@@ -24,16 +24,6 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 ./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "^mcp__magus__"
-      },
-      {
-        "hooks": [
-          {
             "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-observe.buzz",
             "timeout": 10,
             "type": "command"
@@ -44,22 +34,32 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads ./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
             "timeout": 10,
             "type": "command"
           }
         ],
-        "matcher": "Agent|Task"
+        "matcher": "^mcp__magus__"
       },
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 ./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
             "timeout": 10,
             "type": "command"
           }
         ],
         "matcher": "Skill"
+      },
+      {
+        "hooks": [
+          {
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz -- --observes-skill-loads",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task"
       }
     ],
     "SessionStart": [

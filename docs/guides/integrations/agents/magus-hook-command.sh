@@ -66,7 +66,7 @@
 # denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 # permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 # names the person's own terminal.
-# magus-guard-template: 15
+# magus-guard-template: 16
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human

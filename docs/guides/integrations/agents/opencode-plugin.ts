@@ -36,7 +36,7 @@
 // for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
-// magus-guard-template: 15
+// magus-guard-template: 16
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none ask=none

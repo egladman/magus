@@ -39,7 +39,7 @@
 # before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 # Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 # renders as a deny.
-# magus-guard-template: 15
+# magus-guard-template: 16
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 

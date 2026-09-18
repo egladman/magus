@@ -19,6 +19,13 @@
 # second block of cases that could fall behind them. The sh reply is what reaches the
 # assertions, so the cases read exactly as they did when one form existed.
 #
+# The two forms take their PER-ENTRY knobs by different routes, on purpose: a case sets
+# HOST_EVENT_RAW and __MAGUS_SHELL_FLAGS in the environment, where the sh copy reads them
+# because sh is what runs it, and parity.sh clears the first and re-spells the second as
+# argv for the Buzz port, which is wired as a plain `magus buzz -s <file> [-- flags]` and
+# works the raw-event question out of the event itself. Comparing the replies is what
+# proves the routes agree; a case that set only one would grade only one.
+#
 # Every case is labeled `# case: <surface>/<decision>`; TestTransportCasesCoverTheContract
 # in conventions_test.go fails when the guard contract grows a cell no case covers.
 
@@ -99,20 +106,27 @@ cd notes-ws
 exec magus job fork harness/mcp-worker --criteria 'the transport test set, held so the rebind rule has a job to read'
 exec magus job exec harness/mcp-worker
 
+# Both MCP cases forward the WHOLE event, and the two forms reach that by different
+# routes: the sh copy is told, through HOST_EVENT_RAW, and the Buzz port works it out,
+# because an MCP call carries no tool_input.command for HOST_EVENT_PATH to select. Parity
+# is what grades the second against the first. parity.sh clears the variable before running
+# the Buzz form, so a derivation that regressed to selecting `null` would judge text
+# instead of a tool call and the deny below would vanish on one side only.
+env HOST_EVENT_RAW=1
+
 # case: mcp/pass
-# The same event WITHOUT the raw wiring. An MCP call carries no tool_input.command for
-# HOST_EVENT_PATH to select, so jq hands magus the literal `null` and the rules judge text
-# rather than a tool call: it passes. Paired with the deny below, this is what pins the raw
-# arm, since a case that passes either way pins none of the transport it was added for.
-stdin $WORK/mcp-call.json
+# A judged MCP call that no rule refuses. `magus describe` reads, and a bound worker
+# reading its own workspace is the ordinary case, so this must render NOTHING. Paired with
+# the deny below it pins both directions of the raw arm: that the envelope reaches the
+# rules at all, and that arriving there is not itself a refusal.
+stdin $WORK/mcp-read.json
 exec sh $WORK/parity.sh command
 ! stdout .
 
 # case: mcp/deny
-# The same event THROUGH HOST_EVENT_RAW. `op=clear` would drop every job, which is
-# the one thing a bound worker may never do, so leaseRebind refuses it and the same
-# hookSpecificOutput reply this file renders for the command surface carries the deny here.
-env HOST_EVENT_RAW=1
+# `op=clear` would drop every job, which is the one thing a bound worker may never do, so
+# leaseRebind refuses it and the same hookSpecificOutput reply this file renders for the
+# command surface carries the deny here.
 stdin $WORK/mcp-call.json
 exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
@@ -125,6 +139,105 @@ env XDG_STATE_HOME=
 # fixture workspace would otherwise be graded against a lane nobody declared for it, and
 # the lease rules answer before the rule each of those cases is about.
 rm notes-ws/.magus/lease
+
+# --- the edges of the whole-event derivation --------------------------------
+#
+# The Buzz port works out which payload to send from the event, so these are the shapes
+# where working it out could go wrong. Each says which branch it must take and proves the
+# sh copy answers the same, and the last one is the one that would be SILENT: a params
+# object carrying a `command` key, where selecting the field judges a string that was never
+# a command line.
+
+# case: command/pass
+# An empty command is still a STRING, so it takes the field branch and magus judges an
+# empty command line. It must not be read as an absent field and turned into an envelope.
+stdin $WORK/empty-command.json
+exec sh $WORK/parity.sh command
+! stdout .
+
+# case: command/pass
+# Present but NULL. jq prints the literal `null` for the sh copy; the Buzz port cannot tell
+# a JSON null from an absent key and sends the envelope, where the decoder finds no command,
+# no path and no prompt and says there is nothing to judge. Both render nothing, which is
+# what the comparison below asserts: the two roads meet.
+stdin $WORK/null-command.json
+exec sh $WORK/parity.sh command
+! stdout .
+
+# case: command/pass
+# No command field at all, and no other shape magus reads either. The envelope goes whole
+# and the decoder answers that it holds nothing to judge.
+stdin $WORK/no-command.json
+exec sh $WORK/parity.sh command
+! stdout .
+
+# case: command/pass
+# The silent one. `magus shell` reads an MCP call off the TOOL NAME, ahead of any `command`
+# in its params, so this whole event has to reach it: reduced to its `command` key it would
+# be judged as a shell line and DENIED on a rule about `git stash`, which is a refusal of a
+# read-only describe call for words in a parameter. The sh copy is told with HOST_EVENT_RAW;
+# the Buzz port recognizes the MCP namespace. Both must pass.
+env HOST_EVENT_RAW=1
+stdin $WORK/mcp-command-param.json
+exec sh $WORK/parity.sh command
+! stdout .
+env HOST_EVENT_RAW=
+
+# --- the per-entry flag route: sh reads a variable, Buzz reads its argv ------
+#
+# A spawn carries a prompt and a subagent type rather than one string, so it takes the same
+# whole-event route the MCP cases above do. What it adds is the OTHER knob: the capability
+# an entry declares about itself. Only a wiring that also matches its host's skill tool may
+# pass --observes-skill-loads, so the rule that requires a skill before a spawn fires
+# exactly where loads are reported, and this pair is what proves the two forms agree on
+# where the flag comes from: the sh copy word-splits __MAGUS_SHELL_FLAGS, the Buzz port
+# reads the argv after `--`, and parity refuses any difference in what magus was told.
+
+# Inside a fixture workspace, because the rule stands down without a cache dir to key its
+# per-session marker on: that is the same fail-open the flag itself exists for, and a case
+# run at $WORK would pass both ways and pin nothing.
+cd push-ws
+
+# A spawn's payload is a prompt and a subagent type, so it takes the whole-event route too:
+# the sh copy is told with HOST_EVENT_RAW, the Buzz port derives it. What varies between the
+# two cases below is only the flag.
+env HOST_EVENT_RAW=1
+
+# case: command/pass
+# Unflagged: the wiring reports no skill loads, so the rule stands down rather than denying
+# every spawn on a host that cannot satisfy it.
+stdin $WORK/spawn-call.json
+exec sh $WORK/parity.sh command
+! stdout .
+
+# case: command/deny
+# A SUPPORTED flag, both forms: the sh copy word-splits it out of the variable, the Buzz
+# port matches it against the set it publishes, and the verdict is the same.
+env __MAGUS_SHELL_FLAGS=--observes-skill-loads
+stdin $WORK/spawn-call.json
+exec sh $WORK/parity.sh command
+stdout '"permissionDecision":"deny"'
+stdout 'magus-multi-agent'
+env __MAGUS_SHELL_FLAGS=
+env HOST_EVENT_RAW=
+
+# case: command/deny
+# An argument the Buzz port does not know. It is the ONE case here that cannot go through
+# parity.sh, and the reason is the point of the whole arrangement: the sh copy has no argv
+# to parse, so there is no second answer to compare this one against. What it forwards is
+# whatever the variable held, which `magus shell` rejects with a usage error, losing the
+# verdict. The Buzz port refuses the argument, says which one on stderr, and judges the call
+# anyway. A misconfigured entry must not block work, and must not be silent: both halves are
+# asserted below, because either one alone is a shape somebody would settle for.
+stdin $WORK/deny-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-hook-command.buzz -- --not-a-flag
+stderr 'magus-hook-command.buzz: unsupported argument --not-a-flag'
+stderr 'judged WITHOUT it'
+stderr 'Supported: --observes-skill-loads'
+stdout '"permissionDecision":"deny"'
+stdout 'whole-tree git stash'
+
+cd $WORK
 
 # case: mcp/advise unreachable - no rule ADVISES on an MCP call. Every rule that reads one
 # denies (the lease-scoped gate, VCS and rebind rules, and the cache-dir rule), and the
@@ -749,7 +862,17 @@ mkdir -p "$sh_tmp" "$bz_tmp"
 printf '%s' "$event" | TMPDIR=$sh_tmp sh "$__MAGUS_TEMPLATES/$stem.sh" \
   >"$sh_tmp/out" 2>"$sh_tmp/err"
 sh_status=$?
-printf '%s' "$event" | TMPDIR=$bz_tmp magus buzz -s "$__MAGUS_TEMPLATES/$stem.buzz" \
+
+# The two forms take their PER-ENTRY knobs by different routes, and the comparison is
+# what proves the routes agree. sh is run by sh, so a case sets HOST_EVENT_RAW and
+# __MAGUS_SHELL_FLAGS in the environment and the copy reads them there. The Buzz port is
+# wired as a plain argv: it reads the raw-event question off the event itself, so the
+# variable is cleared rather than passed, and takes its shell flags after `--`, which is
+# where a hook command carries them. A case that sets neither runs the same comparison
+# with an empty tail.
+printf '%s' "$event" |
+  TMPDIR=$bz_tmp HOST_EVENT_RAW= __MAGUS_SHELL_FLAGS= \
+  magus buzz -s "$__MAGUS_TEMPLATES/$stem.buzz" -- $__MAGUS_SHELL_FLAGS \
   >"$bz_tmp/out" 2>"$bz_tmp/err"
 bz_status=$?
 
@@ -844,6 +967,18 @@ exit 2
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
 -- mcp-call.json --
 {"session_id": "s1", "tool_name": "mcp__magus__magus_job", "tool_input": {"op": "clear"}}
+-- mcp-read.json --
+{"session_id": "s1", "tool_name": "mcp__magus__magus_describe", "tool_input": {"kind": "targets"}}
+-- spawn-call.json --
+{"session_id": "s1", "tool_name": "Agent", "tool_input": {"prompt": "find every caller", "subagent_type": "explore"}}
+-- empty-command.json --
+{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": ""}}
+-- null-command.json --
+{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": null}}
+-- no-command.json --
+{"session_id": "s1", "tool_name": "TodoWrite", "tool_input": {"todos": [{"content": "git stash the tree", "status": "pending"}]}}
+-- mcp-command-param.json --
+{"session_id": "s1", "tool_name": "mcp__magus__magus_describe", "tool_input": {"command": "git stash"}}
 -- advise-path.json --
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
 -- pass-path.json --

@@ -51,7 +51,7 @@
 // coverage declaration states what a HOST gets. The Codex ask arm is implemented and
 // graded here anyway, so a Codex config can move to Buzz with no window in which a
 // decision renders as nothing.
-// magus-guard-template: 15
+// magus-guard-template: 16
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 
 import "io";

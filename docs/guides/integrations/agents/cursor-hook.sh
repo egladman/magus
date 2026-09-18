@@ -50,7 +50,7 @@
 # note in magus-hook-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
-# magus-guard-template: 15
+# magus-guard-template: 16
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none ask=none

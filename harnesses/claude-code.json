@@ -37,7 +37,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "HOST_EVENT_RAW=1 magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
               "timeout": 10
             }
           ]
@@ -57,7 +57,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "HOST_EVENT_RAW=1 magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
               "timeout": 10
             }
           ]

@@ -55,51 +55,57 @@ fun claude_interpreter() > str {
 // BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an
 // error notice, so an advisory about the glue would read as a guard failure. Real
 // errors still print, which is what makes a broken hook visible rather than silent.
-fun claude_buzz_command(script: str) > str {
-    return "{claude_interpreter()} buzz -s docs/guides/integrations/agents/{script}.buzz";
+//
+// Every command this spell builds is a plain argv. Claude Code splits a hook command
+// itself rather than handing it to a shell, so a leading `VAR=value` is a word the host
+// would look for a program named after; the sh copies beside the Buzz glue are run BY sh
+// and keep their variables for that reason. Flags a single entry declares ride after
+// `--`, which `magus buzz` forwards to the script as its own argv.
+fun claude_buzz_command(script: str, flags: [str]) > str {
+    final base = "{claude_interpreter()} buzz -s docs/guides/integrations/agents/{script}.buzz";
+    if (flags.len() == 0) { return base; }
+    return base + " -- " + flags.join(" ");
 }
 
-fun claude_glue_command(surface: str) > str {
-    return claude_buzz_command("magus-hook-{surface}");
+fun claude_glue_command(surface: str, flags: [str]) > str {
+    return claude_buzz_command("magus-hook-{surface}", flags: flags);
 }
 
 fun claude_guard_command() > str {
-    return claude_glue_command("command");
+    return claude_glue_command("command", flags: [<str>]);
 }
 
 fun claude_path_command() > str {
-    return claude_glue_command("path");
+    return claude_glue_command("path", flags: [<str>]);
 }
 
 fun claude_observe_command() > str {
-    return claude_glue_command("observe");
+    return claude_glue_command("observe", flags: [<str>]);
 }
 
+// The MCP and Skill surfaces run the guard glue with no flags at all, the same string the
+// Bash matcher gets. Their payload is a params object or a skill name rather than one
+// shell line, so the whole event has to reach `magus shell`, and the glue reads that off
+// the event: the field HOST_EVENT_PATH names is absent on exactly these surfaces. Nothing
+// distinguishes the ENTRY, so nothing is written on it.
 fun claude_mcp_command() > str {
-    return "HOST_EVENT_RAW=1 " + claude_glue_command("command");
+    return claude_glue_command("command", flags: [<str>]);
 }
 
 fun claude_skill_command() > str {
-    // The guard records which skill loaded so a later spawn can ask whether this session
-    // read its brief; it judges nothing here. HOST_EVENT_RAW for the same reason the two
-    // below use it: the payload is a named field, not a shell line.
-    return "HOST_EVENT_RAW=1 " + claude_glue_command("command");
+    return claude_glue_command("command", flags: [<str>]);
 }
 
 fun claude_agent_command() > str {
-    // Same script and HOST_EVENT_RAW as the MCP surface: a spawn's payload is a
-    // prompt and a subagent_type, not one string, so the whole event has to
-    // reach `magus shell` for it to be recognized as a spawn at all.
-    //
     // --observes-skill-loads because THIS config wires the Skill matcher above. A rule
     // that requires a skill before a spawn can only be satisfied where loads are
     // reported, so the wiring that reports them is what declares it; a harness without
     // that matcher passes nothing here and those rules stand down rather than denying
     // every spawn forever. Keep the two in step: drop the matcher and drop this.
-    // __MAGUS_ and not MAGUS_: the template reserves the whole MAGUS_* space for magus's
-    // own configuration, so a variable the template invents stays out of it.
-    return "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads "
-        + claude_glue_command("command");
+    //
+    // It is the one thing this entry knows that the event cannot say, which is why it is
+    // the one thing written on the entry.
+    return claude_glue_command("command", flags: ["--observes-skill-loads"]);
 }
 
 // The two lifecycle wrappers go through the same interpreter helper as the guard
@@ -107,11 +113,11 @@ fun claude_agent_command() > str {
 // why they are built from claude_buzz_command directly: their names are their own
 // rather than a surface of the hook template.
 fun claude_rehydrate_command() > str {
-    return claude_buzz_command("magus-rehydrate");
+    return claude_buzz_command("magus-rehydrate", flags: [<str>]);
 }
 
 fun claude_checkpoint_command() > str {
-    return claude_buzz_command("magus-checkpoint");
+    return claude_buzz_command("magus-checkpoint", flags: [<str>]);
 }
 
 fun claude_command_hook(cmd: str) > {str: any} {
@@ -238,6 +244,32 @@ test "guard commands name the Buzz glue, never the sh copies" {
     assert\isTrue(claude_guard_command().indexOf("buzz -s ") != null, "quiet interpreter");
 }
 
+test "no entry carries an environment assignment" {
+    // The whole reason the glue reads the raw-event question off the event and its flags
+    // off argv. Claude Code splits a hook command itself, so a leading VAR=value is a
+    // word it would look for a program named after, not an assignment anything performs.
+    foreach (block in claude_entries()) {
+        foreach (entry in block["entries"] as [any]) {
+            foreach (hook in entry["hooks"] as [any]) {
+                final cmd = "{hook["command"]}";
+                final head = cmd.split(" ")[0];
+                assert\isTrue(head.indexOf("=") == null, "the command starts with a program, not an assignment: {cmd}");
+                assert\isTrue(cmd.indexOf("HOST_EVENT_RAW") == null, "the event decides that, not the entry: {cmd}");
+                assert\isTrue(cmd.indexOf("__MAGUS_SHELL_FLAGS") == null, "shell flags ride after --: {cmd}");
+            }
+        }
+    }
+}
+
+test "the one per-entry flag rides after the argv separator" {
+    // Only the spawn surface declares a capability, and it is the only entry that differs
+    // from the bare guard command at all.
+    assert\equal(claude_agent_command(), claude_guard_command() + " -- --observes-skill-loads",
+        "the spawn entry is the guard command plus one forwarded flag");
+    assert\equal(claude_mcp_command(), claude_guard_command(), "the MCP surface needs nothing written on it");
+    assert\equal(claude_skill_command(), claude_guard_command(), "nor does the skill surface");
+}
+
 test "the lifecycle wrappers name the Buzz ports too" {
     // The whole point of porting these two: with them on sh, this host's wiring still
     // demanded a POSIX shell for two of its eight entries, so a reader on Windows had
@@ -261,16 +293,15 @@ test "the interpreter is the workspace binary where there is one" {
     final chosen = claude_interpreter();
     assert\isTrue(chosen == "./magus" or chosen == "magus", "one of the two shapes");
     assert\equal(chosen == "./magus", fs\isFile("magus"), "the workspace binary wins when it exists");
-    assert\isTrue(claude_glue_command("command").startsWith("{chosen} buzz -s "), "the command carries it");
-    assert\isTrue(claude_mcp_command().indexOf("HOST_EVENT_RAW=1 {chosen} buzz") != null, "so does the raw form");
+    assert\isTrue(claude_glue_command("command", flags: [<str>]).startsWith("{chosen} buzz -s "), "the command carries it");
     // Every surface, because one command built by hand rather than through the helper
-    // is one entry apply keeps rewriting against a config that already holds it.
-    assert\isTrue(claude_skill_command().indexOf("{chosen} buzz") != null, "skill surface");
-    assert\isTrue(claude_agent_command().indexOf("{chosen} buzz") != null, "spawn surface");
+    // is one entry apply keeps rewriting against a config that already holds it. Each
+    // STARTS with the interpreter now: nothing precedes the program any more.
+    assert\isTrue(claude_mcp_command().startsWith("{chosen} buzz"), "MCP surface");
+    assert\isTrue(claude_skill_command().startsWith("{chosen} buzz"), "skill surface");
+    assert\isTrue(claude_agent_command().startsWith("{chosen} buzz"), "spawn surface");
     assert\isTrue(claude_path_command().startsWith("{chosen} buzz"), "path surface");
     assert\isTrue(claude_observe_command().startsWith("{chosen} buzz"), "read surface");
-    assert\isTrue(claude_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
-    assert\isTrue(claude_agent_command().indexOf("HOST_EVENT_RAW=1") != null, "spawn forwards the whole event");
     assert\isTrue(claude_rehydrate_command().startsWith("{chosen} buzz"), "SessionStart rehydrate");
     assert\isTrue(claude_checkpoint_command().startsWith("{chosen} buzz"), "Stop checkpoint");
 }

@@ -114,6 +114,16 @@ with; re-run apply after your first build to move a checkout from one to the
 other. It is never an absolute path: this config is committed, and an absolute
 path would ship one machine's layout to every clone.
 
+Every entry is a plain argv: `<interpreter> buzz -s <file>`, with at most a
+`-- <flags>` tail and never a `VAR=value` prefix. Claude Code splits a hook command
+itself rather than handing it to a shell, so a leading assignment is a word it would
+look for a program named after. The two knobs that used to ride there are gone from
+this config for that reason: the glue reads whether to forward the whole event off
+the event itself, and takes the `magus shell` flags an entry declares from the argv
+after `--`, which `magus buzz` forwards to the script. The sh twins keep their
+environment variables, because `sh` is what runs them and `sh` is what reads a
+variable; that is the one place the two forms differ by design.
+
 ### When the hook itself cannot run
 
 Wiring the guard to `magus buzz` makes the INTERPRETER a magus, where the sh
@@ -178,7 +188,7 @@ the command and file surfaces:
       {
         "matcher": "mcp__magus__.*",
         "hooks": [
-          { "type": "command", "command": "HOST_EVENT_RAW=1 ./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz", "timeout": 10 }
         ]
       }
     ]
@@ -186,9 +196,11 @@ the command and file surfaces:
 }
 ```
 
-Same script, same reply shape. An MCP call carries no `tool_input.command`,
-only a tool name and a params object, so `HOST_EVENT_RAW=1` forwards the event whole
-instead of extracting one field. `magus session hook` already parses that whole envelope;
+Same script, same command string, same reply shape. An MCP call carries no
+`tool_input.command`, only a tool name and a params object, and that absence is what
+the glue reads: with nothing at `HOST_EVENT_PATH` to select, it forwards the event
+whole instead of extracting one field, so the entry says nothing the event does not
+already say. `magus session hook` already parses that whole envelope;
 today it recognizes the tool name and params only well enough to say there is
 nothing here it can judge, so this wiring passes every MCP call rather than
 denying or advising on one - which is the honest state to ship rather than
@@ -241,7 +253,7 @@ claude-code` installs this entry alongside the surfaces above:
       {
         "matcher": "Agent|Task",
         "hooks": [
-          { "type": "command", "command": "HOST_EVENT_RAW=1 ./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz -- --observes-skill-loads", "timeout": 10 }
         ]
       }
     ]
@@ -250,8 +262,16 @@ claude-code` installs this entry alongside the surfaces above:
 ```
 
 Same script as the MCP surface and for the same reason: a spawn's payload is a
-prompt, a `subagent_type`, and an optional `model`, not one string, so
-`HOST_EVENT_RAW=1` forwards the event whole. `magus session hook` reads
+prompt, a `subagent_type`, and an optional `model`, not one string, so there is no
+`tool_input.command` to select and the event goes whole. The one thing written on
+this entry is the flag after `--`, which `magus buzz` forwards to the script as its
+own argv: `--observes-skill-loads` says that THIS config also matches the host's
+`Skill` tool, so a rule that requires a skill before a spawn has loads to read. A
+config without that matcher omits the flag and those rules stand down rather than
+denying every spawn forever. The script parses that tail against the flags it
+supports; an argument it does not know is named on stderr, which Claude Code shows
+as a hook error, and the call is judged without it rather than blocked.
+`magus session hook` reads
 `tool_input.prompt` for the context, `tool_input.subagent_type` (then
 `description`, then `tool_name`) for the callee's label, `tool_input.model` for
 the model the caller claimed, and `session_id` for the parent's session. The

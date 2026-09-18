@@ -622,6 +622,63 @@ func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
 	}
 }
 
+// TestBuzzGlueIsWiredAsPlainArgv refuses a `NAME=value` prefix on any hook command
+// that runs the Buzz glue.
+//
+// A leading assignment is shell syntax, and a hook command is not a shell line: the
+// host splits it into argv itself, so the prefix only works where something later
+// re-joins and re-parses it. The sh copies genuinely need their environment knobs,
+// because `sh` is what runs them and `sh` is what reads the variable; the Buzz ports
+// take the same two knobs from the event they already read and from their own argv,
+// which `magus buzz` forwards after `--`. Keyed on which glue the command names, so
+// the two forms can differ exactly where they have to and nowhere else.
+func TestBuzzGlueIsWiredAsPlainArgv(t *testing.T) {
+	for host, path := range shippedHookConfigs {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err, "read %s", path)
+		var cfg hookSettings
+		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+
+		for event, entries := range cfg.Hooks {
+			for _, entry := range entries {
+				for _, h := range entry.Hooks {
+					if !strings.Contains(h.Command, ".buzz") {
+						continue
+					}
+					first := strings.Fields(h.Command)
+					require.NotEmpty(t, first, "%s: %s %q hook has an empty command", path, event, entry.Matcher)
+					name, _, isAssignment := strings.Cut(first[0], "=")
+					assert.False(t, isAssignment && isEnvNameForTest(name),
+						"%s wires the Buzz glue on %s %q as %q.\n"+
+							"A Buzz hook command is a plain argv: %s buzz -s <file> [-- flags].\n"+
+							"The glue reads the raw-event question off the event itself and takes its\n"+
+							"flags from the argv after --, so there is nothing left for a variable to say.",
+						path, event, entry.Matcher, h.Command, host)
+				}
+			}
+		}
+	}
+}
+
+// isEnvNameForTest mirrors internal/agent's isEnvName: shaped like an environment
+// variable name. Copied rather than exported, because exporting it would publish a
+// shell-syntax predicate from a package whose whole point here is that the Buzz
+// wiring has no shell.
+func isEnvNameForTest(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r == '_':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // TestHostPagesDocumentTheWiringTheyShip closes the direction the embed gate
 // leaves open. TestHookTemplatesAreEmbeddedInTheGuide proves a template's SOURCE
 // is on a page; this proves the host's page names the event that runs it.
