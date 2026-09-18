@@ -46,17 +46,18 @@ func DisplayNodeKey(key string) string { return strings.Replace(key, nodeKeySep,
 // Requires an acyclic graph: checkAcyclic must be called before launching goroutines.
 type depBarrier struct {
 	done map[string]*barrierEntry
-	// members holds one entry per (member, step running it) pair a step Releases, so a
+	// members holds one entry per (member, step running it) pair a step declares in
+	// ReleasedMembers, so a
 	// reader waits out each copy of a member separately. A member two steps run is two
 	// entries: waiting on one says nothing about the other, and a reader that runs the
 	// member itself waits on the other steps' copies without waiting on its own.
-	members map[MemberWait]*barrierEntry
+	members map[MemberRun]*barrierEntry
 }
 
-// MemberWait is one step's run of a chain member: what a reader waits on when the
+// MemberRun is one step's run of a chain member: what a reader waits on when the
 // writer it overlaps is a member of another step's chain rather than that step's own
 // target. See Step.RunAfterMembers.
-type MemberWait struct {
+type MemberRun struct {
 	// Member is the member's node key (DepKey); StepKey is the key of the step running
 	// it, spelled out because a bare Step beside cache.Step reads as that type.
 	Member, StepKey string
@@ -81,10 +82,10 @@ func newDepBarrier(steps []Step) *depBarrier {
 			done[k] = &barrierEntry{ch: make(chan struct{})}
 		}
 	}
-	members := map[MemberWait]*barrierEntry{}
+	members := map[MemberRun]*barrierEntry{}
 	for _, s := range steps {
-		for _, k := range s.Releases {
-			members[MemberWait{Member: k, StepKey: stepKey(s)}] = &barrierEntry{ch: make(chan struct{})}
+		for _, k := range s.ReleasedMembers {
+			members[MemberRun{Member: k, StepKey: stepKey(s)}] = &barrierEntry{ch: make(chan struct{})}
 		}
 	}
 	return &depBarrier{done: done, members: members}
@@ -99,7 +100,7 @@ func newDepBarrier(steps []Step) *depBarrier {
 // contract a step-level upstream has. Releasing a failed member as a success would let
 // that reader run against half-written bytes and CACHE the result, and nothing would
 // cancel it: a batch tolerates failures by default (WithMaxFailures).
-func (b *depBarrier) release(w MemberWait, err error) {
+func (b *depBarrier) release(w MemberRun, err error) {
 	e, ok := b.members[w]
 	if !ok {
 		return
@@ -130,10 +131,10 @@ func withReleaser(ctx context.Context, b *depBarrier, step string) context.Conte
 // when the caller has decided that failure does not speak for the bytes (see release).
 //
 // Safe to call for any member, from any goroutine, any number of times: a member no step
-// Releases is ignored, as is a ctx outside RunAll, and the first call wins.
+// ReleasedMembers is ignored, as is a ctx outside RunAll, and the first call wins.
 func ReleaseMember(ctx context.Context, key string, err error) {
 	if r, ok := ctx.Value(barrierCtxKey{}).(releaser); ok {
-		r.barrier.release(MemberWait{Member: key, StepKey: r.step}, err)
+		r.barrier.release(MemberRun{Member: key, StepKey: r.step}, err)
 	}
 }
 
@@ -163,10 +164,7 @@ func (b *depBarrier) markDone(key string, err error) {
 // depends on had already failed.
 func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 	self := stepKey(s)
-	wait := func(key string, e *barrierEntry, ok bool) error {
-		if !ok {
-			return nil
-		}
+	wait := func(key string, e *barrierEntry) error {
 		// Probe the upstream before blocking, so a settled one always wins over a
 		// cancelled ctx. Both can be ready at once (the upstream failed AND a sibling
 		// already cancelled the group), and select picks uniformly at random among
@@ -175,7 +173,7 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 		select {
 		case <-e.ch:
 		default:
-			if err := waitForUpstream(ctx, e.ch, stepKey(s), key); err != nil {
+			if err := waitForUpstream(ctx, e.ch, self, key); err != nil {
 				return err
 			}
 		}
@@ -188,8 +186,10 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 		if key == self {
 			return nil
 		}
-		e, ok := b.done[key]
-		return wait(key, e, ok)
+		if e, ok := b.done[key]; ok {
+			return wait(key, e)
+		}
+		return nil
 	}
 	for _, d := range s.DependsOn {
 		if err := step(DepKey(d, s.Target)); err != nil {
@@ -204,6 +204,7 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 	for _, w := range s.RunAfterMembers {
 		// This step's own run of the member is its own body's business: waiting on it
 		// would be waiting on itself, and that overlap is the same-step question.
+		// Derivation leaves such a pair out; this is the belt to that braces.
 		if w.StepKey == self {
 			continue
 		}
@@ -218,7 +219,7 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 			}
 			continue
 		}
-		if err := wait(w.Member, e, ok); err != nil {
+		if err := wait(w.Member, e); err != nil {
 			return err
 		}
 	}

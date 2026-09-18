@@ -131,10 +131,10 @@ type DerivedOrder struct {
 	// coarse DependsOn. RunAll's barrier waits these exactly.
 	RunAfter map[string][]string
 	// RunAfterMembers maps a step's node key to the individual runs of chain members it
-	// must wait for; Releases maps a step's node key to the members it opens. See
+	// must wait for; ReleasedMembers maps a step's node key to the members it opens. See
 	// Step.RunAfterMembers.
-	RunAfterMembers map[string][]MemberWait
-	Releases        map[string][]string
+	RunAfterMembers map[string][]MemberRun
+	ReleasedMembers map[string][]string
 	// SameStep holds the overlaps inside one step that nothing sequences. They are not
 	// edges: no schedule can express them, and settling cannot repair them either, since
 	// both targets run in one window. The caller refuses the run over them.
@@ -161,7 +161,7 @@ type DerivedOrder struct {
 func DeriveTargetOrder(steps []Step, nodes []TargetNode, witness OverlapWitness) *DerivedOrder {
 	d := &DerivedOrder{
 		Nodes: nodes, RunAfter: map[string][]string{},
-		RunAfterMembers: map[string][]MemberWait{}, Releases: map[string][]string{},
+		RunAfterMembers: map[string][]MemberRun{}, ReleasedMembers: map[string][]string{},
 		SameStep: FindSameStepConflicts(nodes, witness),
 	}
 
@@ -531,9 +531,7 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 	// what makes waiting on that step's copy of a member safe to add. reachable follows
 	// kept edges out of step, so a direct kept edge is a one-hop hit and needs no arm of
 	// its own.
-	ordersBefore := func(step, reader string) bool {
-		return step == reader || reachable(step, reader)
-	}
+	ordersBefore := func(step, reader string) bool { return reachable(step, reader) }
 	for e := range kept {
 		members := d.memberWaits(e, induced[e], inScope, ordersBefore)
 		if len(members) == 0 {
@@ -546,8 +544,8 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 			if !slices.Contains(d.RunAfterMembers[e.to], w) {
 				d.RunAfterMembers[e.to] = append(d.RunAfterMembers[e.to], w)
 			}
-			if !slices.Contains(d.Releases[w.StepKey], w.Member) {
-				d.Releases[w.StepKey] = append(d.Releases[w.StepKey], w.Member)
+			if !slices.Contains(d.ReleasedMembers[w.StepKey], w.Member) {
+				d.ReleasedMembers[w.StepKey] = append(d.ReleasedMembers[w.StepKey], w.Member)
 			}
 		}
 	}
@@ -555,15 +553,15 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 		slices.Sort(d.RunAfter[k])
 	}
 	for k := range d.RunAfterMembers {
-		slices.SortFunc(d.RunAfterMembers[k], func(a, b MemberWait) int {
+		slices.SortFunc(d.RunAfterMembers[k], func(a, b MemberRun) int {
 			if a.Member != b.Member {
 				return strings.Compare(a.Member, b.Member)
 			}
 			return strings.Compare(a.StepKey, b.StepKey)
 		})
 	}
-	for k := range d.Releases {
-		slices.Sort(d.Releases[k])
+	for k := range d.ReleasedMembers {
+		slices.Sort(d.ReleasedMembers[k])
 	}
 }
 
@@ -574,31 +572,35 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 // for it.
 //
 // A writer the reader step runs TOO is not such a case: the reader waits out the other
-// steps' copies and not its own, which is its body's own sequencing (the same-step
-// question, reported in SameStep rather than scheduled here).
+// steps' copies, and its own copy is left out entirely rather than emitted for the
+// barrier to skip, because that overlap is its body's own sequencing (the same-step
+// question, which FindSameStepConflicts reports).
 //
 // Only copies in steps ordersBefore admits are waited on. A copy in a step the schedule
 // cannot put ahead of the reader is left out, which is also what marks this edge
 // unordered in the loop above, for settling; waiting on it would ask the barrier for a
 // cycle it was built to refuse.
 //
-// What the reader gives up against a whole-step wait is the writer step's UNDECLARED
-// writes. Every declared overlap between the two chains is its own fine edge, induced on
-// this same step pair and waited on here, so what is no longer incidentally serialized is
-// what no footprint names, which magus does not order anywhere else either (MGS4007 is
-// where an undeclared write is reported).
+// What the reader gives up against a whole-step wait is everything about the writer step
+// the footprints do not model. Every declared overlap between the two chains is its own
+// fine edge, induced on this same step pair and waited on here, so what stops being
+// incidentally serialized is an undeclared write (MGS4007's subject, ordered nowhere
+// else either) and an overlap whose own edge was dropped as unschedulable, which used to
+// ride along behind whichever kept edge happened to serialize the two steps. Settling
+// still repairs a stale read of the second kind; neither is ordered by pretending a
+// whole-step wait was the declaration.
 func (d *DerivedOrder) memberWaits(e stepEdge, fine []int, inScope map[string]bool,
 	ordersBefore func(step, reader string) bool,
-) []MemberWait {
-	var waits []MemberWait
+) []MemberRun {
+	var waits []MemberRun
 	for _, ei := range fine {
 		w := d.Nodes[d.Edges[ei].Writer]
 		if inScope[w.Key()] {
 			return nil
 		}
 		for _, owner := range w.Steps {
-			m := MemberWait{Member: w.Key(), StepKey: owner}
-			if !ordersBefore(owner, e.to) || slices.Contains(waits, m) {
+			m := MemberRun{Member: w.Key(), StepKey: owner}
+			if owner == e.to || !ordersBefore(owner, e.to) || slices.Contains(waits, m) {
 				continue
 			}
 			waits = append(waits, m)

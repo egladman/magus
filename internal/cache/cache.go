@@ -166,21 +166,30 @@ type Step struct {
 	// derived from declared writer-before-reader footprints (DeriveTargetOrder).
 	// Unlike DependsOn it crosses target names and is exact. Scheduling only:
 	// never hashed, never folded into Deps, never part of the affected set.
+	//
+	// This is the STEP-granular half of the pair: it waits out a whole step, and
+	// RunAfterMembers below waits out one target inside one. Derivation reaches for this
+	// one when the writer cannot be named more finely.
 	RunAfter []string
 	// RunAfterMembers holds the chain members this step must wait for, each named with
 	// the step that runs it: a writer inside another step's chain, waited out on its own
 	// rather than by that step's whole run. This step's own runs of a member are skipped
 	// (that overlap is the same-step question). Scheduling only, like RunAfter: never
 	// hashed, never folded into Deps, never part of the affected set.
-	RunAfterMembers []MemberWait
-	// Releases are node keys of this step's chain members that some other step's
+	RunAfterMembers []MemberRun
+	// ReleasedMembers are node keys of this step's chain members that some other step's
 	// RunAfterMembers names. Each opens when ReleaseMember reports the member finished,
 	// and at the latest when this step ends. A step that names one without the other
 	// leaves its readers waiting out the whole step (see waitForDeps).
-	Releases      []string
-	WorkspaceRoot string
-	Target        string   // mixed into key to distinguish targets on the same sources
-	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
+	//
+	// A member SEVERAL steps reach is one entry per step, and a runner that dedupes such
+	// a member across steps (cross-project dispatch) runs it under whichever step got
+	// there first: the others never report it, so their entries open at step end. Safe,
+	// and the reason a shared member buys less than a step-local one.
+	ReleasedMembers []string
+	WorkspaceRoot   string
+	Target          string   // mixed into key to distinguish targets on the same sources
+	Charms          []string // active charm names (sorted), mixed into key so charm-variant runs differ
 	// ExtraArgs are the args after `--`, forwarded to the target. They change what
 	// the target does, so like Charms they MUST key the cache: without them a run
 	// with different args replays the previous run's result. Order is significant
@@ -1182,8 +1191,14 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// from failure rather than just "done" (see waitForDeps).
 			defer func() {
 				// A member the step never reached, or replayed from cache, opens here.
-				for _, k := range s.Releases {
-					barrier.release(MemberWait{Member: k, StepKey: stepKey(s)}, stepErr)
+				// Its verdict is the step's, named as the step's: a waiter told
+				// "<member> failed" would blame a target that may never have run.
+				for _, k := range s.ReleasedMembers {
+					err := stepErr
+					if err != nil {
+						err = fmt.Errorf("%s ended first: %w", DisplayNodeKey(stepKey(s)), err)
+					}
+					barrier.release(MemberRun{Member: k, StepKey: stepKey(s)}, err)
 				}
 				barrier.markDone(stepKey(s), stepErr)
 			}()

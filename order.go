@@ -59,9 +59,9 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 				steps[i].RunAfterMembers = append(steps[i].RunAfterMembers, w)
 			}
 		}
-		for _, member := range order.Releases[key] {
-			if !slices.Contains(steps[i].Releases, member) {
-				steps[i].Releases = append(steps[i].Releases, member)
+		for _, member := range order.ReleasedMembers[key] {
+			if !slices.Contains(steps[i].ReleasedMembers, member) {
+				steps[i].ReleasedMembers = append(steps[i].ReleasedMembers, member)
 			}
 		}
 	}

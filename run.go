@@ -1551,6 +1551,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = cache.WithRunScope(ctx)
 	projectByDir := make(map[string]string)
 	for _, p := range m.ws.All() {
+		// Dir is empty when the workspace could not resolve one, and Clean would turn
+		// that into ".", claiming the root project's key for a project nobody located.
+		if p.Dir == "" {
+			continue
+		}
 		projectByDir[filepath.Clean(p.Dir)] = p.Path
 	}
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
@@ -1703,7 +1708,7 @@ func (o stageObserver) TargetEnd(ctx context.Context, name string, elapsed time.
 
 // releaseObserver tells the batch barrier each ctx.needs member finished, so a step
 // waiting on that member's writes starts without waiting out the rest of this step
-// (cache.Step.Releases). The project comes from the pool's magusfile source, not the
+// (cache.Step.ReleasedMembers). The project comes from the pool's source, not the
 // step: a cross-project dispatch runs the other project's members under this observer.
 type releaseObserver struct {
 	projectByDir map[string]string

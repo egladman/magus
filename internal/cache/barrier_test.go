@@ -232,9 +232,9 @@ func TestRunAllReleasedMemberStartsTheReaderBeforeItsStepEnds(t *testing.T) {
 	root, c := openCache(t)
 	member := DepKey("libs/a", "format")
 	steps := []Step{
-		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}},
+		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, ReleasedMembers: []string{member}},
 		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root,
-			RunAfterMembers: []MemberWait{{Member: member, StepKey: DepKey("libs/a", "ci")}}},
+			RunAfterMembers: []MemberRun{{Member: member, StepKey: DepKey("libs/a", "ci")}}},
 	}
 	readerStarted := make(chan struct{})
 	done := make(chan error, 1)
@@ -270,8 +270,8 @@ func TestRunAllUnreleasedMemberOpensWhenItsStepEnds(t *testing.T) {
 	rec := newOrderRecorder()
 	steps := []Step{
 		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root,
-			RunAfterMembers: []MemberWait{{Member: member, StepKey: DepKey("libs/a", "ci")}}},
-		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}},
+			RunAfterMembers: []MemberRun{{Member: member, StepKey: DepKey("libs/a", "ci")}}},
+		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, ReleasedMembers: []string{member}},
 	}
 	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
 		if s.ProjectPath == "." {
@@ -287,8 +287,8 @@ func TestRunAllUnreleasedMemberOpensWhenItsStepEnds(t *testing.T) {
 	failing := DepKey("libs/b", "format")
 	_, err = c.RunAll(t.Context(), []Step{
 		{ProjectPath: "x", Target: "ci", WorkspaceRoot: root,
-			RunAfterMembers: []MemberWait{{Member: failing, StepKey: DepKey("libs/b", "ci")}}},
-		{ProjectPath: "libs/b", Target: "ci", WorkspaceRoot: root, Releases: []string{failing}},
+			RunAfterMembers: []MemberRun{{Member: failing, StepKey: DepKey("libs/b", "ci")}}},
+		{ProjectPath: "libs/b", Target: "ci", WorkspaceRoot: root, ReleasedMembers: []string{failing}},
 	}, func(_ context.Context, s Step) error {
 		if s.ProjectPath == "libs/b" {
 			return errors.New("boom")
@@ -308,9 +308,9 @@ func TestRunAllFailedMemberFailsItsReader(t *testing.T) {
 	member := DepKey("libs/a", "format")
 	var readerRan atomic.Bool
 	_, err := c.RunAll(t.Context(), []Step{
-		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}},
+		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, ReleasedMembers: []string{member}},
 		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root,
-			RunAfterMembers: []MemberWait{{Member: member, StepKey: DepKey("libs/a", "ci")}}},
+			RunAfterMembers: []MemberRun{{Member: member, StepKey: DepKey("libs/a", "ci")}}},
 	}, func(ctx context.Context, s Step) error {
 		if s.ProjectPath == "." {
 			readerRan.Store(true)
@@ -332,7 +332,7 @@ func TestRunAllMemberWithNoReleaserWaitsOutTheWholeStep(t *testing.T) {
 	rec := newOrderRecorder()
 	_, err := c.RunAll(t.Context(), []Step{
 		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root,
-			RunAfterMembers: []MemberWait{{Member: DepKey("libs/a", "format"), StepKey: DepKey("libs/a", "ci")}}},
+			RunAfterMembers: []MemberRun{{Member: DepKey("libs/a", "format"), StepKey: DepKey("libs/a", "ci")}}},
 		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root},
 	}, func(_ context.Context, s Step) error {
 		if s.ProjectPath == "." {
@@ -352,9 +352,9 @@ func TestRunAllMemberCycleRejected(t *testing.T) {
 	root, c := openCache(t)
 	member := DepKey("a", "format")
 	_, err := c.RunAll(t.Context(), []Step{
-		{ProjectPath: "a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}, RunAfter: []string{DepKey("b", "ci")}},
+		{ProjectPath: "a", Target: "ci", WorkspaceRoot: root, ReleasedMembers: []string{member}, RunAfter: []string{DepKey("b", "ci")}},
 		{ProjectPath: "b", Target: "ci", WorkspaceRoot: root,
-			RunAfterMembers: []MemberWait{{Member: member, StepKey: DepKey("a", "ci")}}},
+			RunAfterMembers: []MemberRun{{Member: member, StepKey: DepKey("a", "ci")}}},
 	}, func(_ context.Context, _ Step) error { return nil })
 	require.ErrorContains(t, err, "dependency cycle")
 }
@@ -368,9 +368,9 @@ func TestRunAllStepRunningTheMemberItselfDoesNotWaitOnItsOwnCopy(t *testing.T) {
 	writer, reader := DepKey("libs/a", "ci"), DepKey(".", "ci")
 	rec := newOrderRecorder()
 	steps := []Step{
-		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root, Releases: []string{member},
-			RunAfterMembers: []MemberWait{{Member: member, StepKey: writer}, {Member: member, StepKey: reader}}},
-		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}},
+		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root, ReleasedMembers: []string{member},
+			RunAfterMembers: []MemberRun{{Member: member, StepKey: writer}, {Member: member, StepKey: reader}}},
+		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, ReleasedMembers: []string{member}},
 	}
 	done := make(chan error, 1)
 	go func() {
