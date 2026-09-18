@@ -131,6 +131,9 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 **--static**
 : Deprecated alias for --reproducible
 
+**--symbols** *magus diff --baseline*
+: Include every indexed code symbol, which the whole-graph export leaves out; a \`magus diff --baseline\` needs them
+
 **--targets**
 : With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it
 

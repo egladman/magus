@@ -290,9 +290,9 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export; the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
 	}
 
-	// The whole-graph export stays domain-only; a --select neighborhood pulls in the
-	// symbol shards only when the selection actually targets symbols.
-	g, err := loadKnowledgeGraph(ctx, root, ef.Refresh, ef.Global, ef.Select != "" && knowledge.SeedsLazyLayer(ef.Select))
+	// The whole-graph export stays domain-only unless --symbols asks; a --select neighborhood
+	// pulls in the symbol shards only when the selection actually targets symbols.
+	g, err := loadKnowledgeGraph(ctx, root, ef.Refresh, ef.Global, ef.Symbols || (ef.Select != "" && knowledge.SeedsLazyLayer(ef.Select)))
 	if err != nil {
 		return err
 	}

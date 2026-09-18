@@ -508,10 +508,23 @@ jobs:
     if: github.event_name == 'pull_request' && vars.MAGUS_PR_COMMENTS != 'false' && needs.plan.outputs.inherit != 'true'
     needs: [plan]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Two symbol indexes, this tree's and the merge base's. Measured locally at 30s each on
+    # a warm build cache; a cold runner pays the Go compile for both.
+    timeout-minutes: 30
     permissions:
       contents: read
       pull-requests: write
+    env:
+      # The symbol index needs a WRITABLE cache, which the workflow-wide value denies a pull
+      # request. A scip run records its manifest in the cache, and the freshness probe reads
+      # that manifest back; with nothing recorded, every index reads as "predates the sources
+      # it covers" and ingestion drops it. Measured: the same tree indexes 9 projects and
+      # then answers `magus refs` with "unknown, not absent" under the false, and resolves
+      # under the true. That silently cost this job reach, public surface and the API delta.
+      #
+      # It publishes nothing either way: the shared cache needs MAGUS_CACHE_SIGNING_KEY,
+      # which only a main push holds.
+      MAGUS_CACHE_WRITE_ENABLED: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -538,6 +551,35 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
+      # Symbols, for BOTH sides. Without an index of this tree every file reads as surface
+      # unknown and the api-surface advisor says nothing at all, which is what it has been
+      # doing here; without one of the merge base there is nothing to compare a signature
+      # against, so no bump can be computed.
+      #
+      # Built here rather than pulled from the published graph: that artifact is per main
+      # commit, and a pull request's merge base need not have one yet.
+      #
+      # The base is indexed in a worktree of the SAME checkout, so both sides see the same
+      # paths, the same toolchain and the same missing node_modules. Symmetry is the point:
+      # a signature compared across two different environments moves for reasons the author
+      # did not write.
+      #
+      # continue-on-error: an index that fails leaves the advisors reporting less, which is
+      # what they do on any workspace with no index, and never fails a pull request.
+      - name: Index this tree and the merge base
+        id: baseline
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          magus graph build --no-sessions
+          git worktree add "$RUNNER_TEMP/base" "$(git merge-base HEAD "origin/$BASE_REF")"
+          magus --root "$RUNNER_TEMP/base" graph build --no-sessions
+          magus --root "$RUNNER_TEMP/base" graph export --symbols -o json \
+            --tee "$RUNNER_TEMP/base-graph.json" -q > /dev/null
+          echo "path=$RUNNER_TEMP/base-graph.json" >> "$GITHUB_OUTPUT"
+
       # Every advisor, each silent unless it has something to say. They live in the
       # action so other workspaces get them with one `uses:` line; turn one off by name
       # (merge-conflicts: 'false') rather than by editing this step.
@@ -547,6 +589,7 @@ jobs:
       - uses: ./.github/actions/advice
         with:
           offer-fix-label: 'true'
+          baseline: ${{ steps.baseline.outputs.path }}
 
   # One stable check name a branch rule can require, standing for the whole run.
   #

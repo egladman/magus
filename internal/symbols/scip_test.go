@@ -65,6 +65,40 @@ func TestParseIndexDefsRefsAndDedup(t *testing.T) {
 	assert.Equal(t, []int{5, 8}, s.Refs[0].Lines)
 }
 
+func TestParseIndexSignature(t *testing.T) {
+	const (
+		goSym = "scip-go gomod example.com/foo v1 Open()."
+		tsSym = "scip-typescript npm web 1.0.0 src/`a.ts`/open()."
+		prose = "scip-go gomod example.com/foo v1 Bare#"
+		open  = "scip-go gomod example.com/foo v1 Unclosed#"
+	)
+	def := func(sym string, line int32) *scip.Occurrence {
+		return &scip.Occurrence{Symbol: sym, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{line, 0, 1}}
+	}
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "a.go",
+		Symbols: []*scip.SymbolInformation{
+			{Symbol: goSym, DisplayName: "Open", SignatureDocumentation: &scip.Signature{Text: "func Open(root string) error\n"}},
+			{Symbol: tsSym, DisplayName: "open", Documentation: []string{"```ts\nfunction open(root: string): void\n```", "Opens it."}},
+			{Symbol: prose, DisplayName: "Bare", Documentation: []string{"Bare has prose and no rendered declaration."}},
+			{Symbol: open, DisplayName: "Unclosed", Documentation: []string{"```ts\nclass Unclosed"}},
+		},
+		Occurrences: []*scip.Occurrence{def(goSym, 1), def(tsSym, 2), def(prose, 3), def(open, 4)},
+	}}}
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
+	require.NoError(t, err)
+	got := map[string]string{}
+	for _, s := range syms {
+		got[s.Label] = s.Signature
+	}
+	assert.Equal(t, map[string]string{
+		"Open":     "func Open(root string) error",
+		"open":     "function open(root: string): void",
+		"Bare":     "",
+		"Unclosed": "",
+	}, got)
+}
+
 // TestParseIndexTypedRange guards the fix for modern indexers: they set the typed
 // range oneof and NOT the deprecated packed `range` field, so reading `range` alone
 // would report line 0 everywhere. SourceRange must resolve the typed form.

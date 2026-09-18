@@ -19,6 +19,13 @@ import { authHeaders } from "../../lib/daemon";
 export type ReviewRole = "source" | "output" | "maintained" | "unclaimed";
 export type ReviewSurface = "internal" | "public" | "unknown";
 
+// ReviewChange mirrors the DiffChange constants: what a changeset did to one symbol, read
+// against a base graph. Absent when the review had no base, which is not "unchanged".
+export type ReviewChange = "added" | "removed" | "signature" | "body";
+
+// ReviewBump mirrors the DiffBump constants, ordered none < patch < minor < major.
+export type ReviewBump = "none" | "patch" | "minor" | "major";
+
 export interface DiffSymbol {
   readonly id: string;
   readonly label?: string;
@@ -27,6 +34,28 @@ export interface DiffSymbol {
   readonly external_projects?: readonly string[];
   readonly external_file_count: number;
   readonly module_api?: boolean;
+  readonly change?: ReviewChange;
+  // qualified names the symbol through its enclosing declarations (`DiffAPI.Signature`), so
+  // two members sharing a label stay distinguishable.
+  readonly qualified?: string;
+  readonly signature?: string;
+  readonly base_signature?: string;
+}
+
+// DiffAPI is what the changeset did to the public API, present only when the review was
+// given a base graph.
+//
+// floor is the smallest bump the evidence PROVES and likely is floor raised to major by a
+// changed signature. Both are lower bounds: behavior moves under an unchanged signature, so
+// a reader may raise either and should never lower one.
+export interface DiffAPI {
+  readonly base: string;
+  readonly floor: ReviewBump;
+  readonly likely: ReviewBump;
+  readonly added: number;
+  readonly removed: number;
+  readonly signature: number;
+  readonly body: number;
 }
 
 export interface DiffCoverage {
@@ -83,6 +112,7 @@ export interface Diff {
   readonly seed_projects?: readonly string[];
   readonly affected_projects?: readonly { path: string; seed: boolean }[];
   readonly notes?: readonly string[];
+  readonly api?: DiffAPI;
 }
 
 export interface DiffComment {

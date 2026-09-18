@@ -229,6 +229,7 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 						a.sym.Label = si.DisplayName
 					}
 					a.sym.SymbolKind = si.Kind.String()
+					a.sym.Signature = signatureOf(si)
 				}
 				byKey[key] = a
 			}
@@ -292,6 +293,31 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 			slog.Int("kept", len(idx.Documents)-skipped))
 	}
 	return out, nil
+}
+
+// signatureOf returns the declaration an indexer rendered for a symbol, or "" when it
+// rendered none.
+func signatureOf(si *scip.SymbolInformation) string {
+	if sig := strings.TrimSpace(si.GetSignatureDocumentation().GetText()); sig != "" {
+		return sig
+	}
+	// compat(until: every SCIP indexer pinned in mise.toml sets signature_documentation):
+	// scip-typescript 0.4.0 renders the declaration as a fenced block opening
+	// Documentation[0] instead (FileIndexer.addSymbolInformation). Observe it by deleting
+	// this fallback and querying a TypeScript symbol after `magus graph build`: a signature
+	// attr still present means the indexer caught up.
+	if len(si.Documentation) == 0 || !strings.HasPrefix(si.Documentation[0], "```") {
+		return ""
+	}
+	_, body, ok := strings.Cut(si.Documentation[0], "\n")
+	if !ok {
+		return ""
+	}
+	body, _, ok = strings.Cut(body, "\n```")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(body)
 }
 
 // workspacePath rebases an indexer-relative document path onto the workspace by joining

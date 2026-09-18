@@ -83,7 +83,11 @@ import (
 // so a v12 consumer parses a v13 graph unchanged; the bump is for a v12 store on disk,
 // whose symbol shards were extracted before the attr existed and whose indexes have not
 // changed.
-const KnowledgeSchemaVersion = 13
+// v14 adds `signature` and `body_digest` attrs to symbol nodes: the declaration text the
+// indexer rendered and a fingerprint of the definition's lines, which is what lets a review
+// compare a symbol against its base and tell an added, removed, or re-signed API from a body
+// edit. Additive; the bump is for a v13 store whose symbol shards predate them.
+const KnowledgeSchemaVersion = 14
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -494,8 +498,17 @@ type KnowledgeSymbol struct {
 	// (its own key for a namespace symbol), or empty when the moniker names none. It is what
 	// joins a symbol to its package without reading paths, which differ per language.
 	Namespace string
-	Defs      []string
-	Refs      []KnowledgeSymbolRef
+	// Signature is the declaration as the indexer rendered it, or empty when it rendered
+	// none. It is compared byte for byte and never parsed: magus models no language, so two
+	// renderings are one signature only when the same indexer produced both.
+	Signature string
+	// BodyDigest fingerprints the definition's source lines, Source through DefEndLine (the
+	// definition line alone when the indexer emits no extent), read from the tree the index
+	// was built over. Two sides with equal digests defined the symbol identically. Empty when
+	// the lines could not be read.
+	BodyDigest string
+	Defs       []string
+	Refs       []KnowledgeSymbolRef
 	// Calls are the workspace-defined symbols referenced from inside this symbol's own
 	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
 	// (caller, callee), the same scale decision Refs makes per (file, symbol), so a hot

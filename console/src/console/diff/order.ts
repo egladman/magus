@@ -33,7 +33,7 @@ export function modeChange(file: DiffFile): string | null {
   if (oldMode === undefined || newMode === undefined || oldMode === newMode) return null;
   return `mode ${oldMode} -> ${newMode}`;
 }
-import type { DiffAnnotation, DiffSession } from "./session";
+import type { DiffAnnotation, DiffSession, ReviewChange } from "./session";
 
 export interface OrderedFile {
   readonly file: DiffFile;
@@ -217,6 +217,37 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
         (across.length > 0 ? `Also used by: ${across.join(", ")}. ` : "") +
         "A change here is API surface. Consider whether it needs a version bump.",
     });
+
+    // What the change DID to those symbols, when the review had a base graph to compare
+    // against. Removals lead: they are the one class a consumer cannot work around, and the
+    // only one magus can prove. A body change earns no chip - every changed file has those.
+    const named = (kind: ReviewChange) =>
+      (a.symbols ?? [])
+        .filter(
+          (s) => s.change === kind && (s.module_api || (s.external_projects ?? []).length > 0),
+        )
+        .map((s) => s.qualified ?? s.label ?? s.id);
+    const removed = named("removed");
+    const resigned = named("signature");
+    if (removed.length > 0) {
+      chips.push({
+        text: `${removed.length} removed`,
+        tone: "danger",
+        title:
+          `Gone from the public surface: ${removed.slice(0, 8).join(", ")}. ` +
+          "A consumer calling one of these breaks, which is a major bump.",
+      });
+    }
+    if (resigned.length > 0) {
+      chips.push({
+        text: `${resigned.length} re-signed`,
+        tone: "warn",
+        title:
+          `Declaration changed: ${resigned.slice(0, 8).join(", ")}. ` +
+          "Signatures are compared as the indexer rendered them, so a renamed parameter or a " +
+          "widened type reads the same as a break. Read them before deciding the bump.",
+      });
+    }
   }
 
   // An unmeasured reach shows no chip at all. A "0 referents" chip on an unindexed workspace
