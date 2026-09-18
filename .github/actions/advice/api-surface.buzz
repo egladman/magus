@@ -136,6 +136,13 @@ fun main() > void !> any {
 
     final review = magus\diff(reviewOpts(
         baseline: advice\env("BASELINE"), base: base, head: head, local: advice\collecting()));
+    // What it actually read, before what it concluded. "nothing to say" and "nothing to read"
+    // are different failures, and this advisor spent two pull requests looking like the first
+    // while being the second: the changeset came back empty and the line below said only that
+    // no public surface changed.
+    std\print("api-surface: read " + review.base + ": " + "{review.files.len()}" + " file(s), "
+        + "{review.notes.len()}" + " note(s)");
+    foreach (n in review.notes) { std\print("api-surface: note: " + n); }
     var lines = mut [];
     var files = 0;
     foreach (f in review.files) {
