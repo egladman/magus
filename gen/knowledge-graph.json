@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6397,
-  "edge_count": 11447,
+  "node_count": 6399,
+  "edge_count": 11452,
   "relations": [
     {
       "id": "annotates",
@@ -46463,7 +46463,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked at the repo root: conventions_test.go verifies that this repository's own hook config invokes them, that the guide embeds them verbatim, and that each declares a stance for every decision and surface in the guard contract (the magus-guard-coverage lines).  This comment used to claim the templates' behavior was asserted",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:180",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:214",
       "attrs": {
         "exported": "true"
       }
@@ -46473,7 +46473,7 @@
       "kind": "function",
       "label": "cursor_schemas_generate",
       "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.  A GENERATOR where every other Cursor schema in that tree is a hand transcription, which is the point: a transcription is partial by construction and goes stale in silence, and this one cannot, because its source is a pinned package and the drift gate compares the output byte for byte.  The output lands in the ROOT project's testdata, because that is where the host schemas live and where host_schema_test.go reads them. Declared with",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:95",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:129",
       "attrs": {
         "exported": "true"
       }
@@ -46483,7 +46483,7 @@
       "kind": "function",
       "label": "format",
       "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates. The docs project cannot do it: dprint discovers this project's dprint.json and would format the subtree under it, which is a parent target writing into a descendant project (MGS3001). So the pages are formatted by the project that owns them, which is the same rule every other project with Markdown follows.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:191",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:225",
       "attrs": {
         "exported": "true"
       }
@@ -46493,17 +46493,24 @@
       "kind": "function",
       "label": "generate",
       "doc": "Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.  The page is a verbatim copy of ten templates a reader downloads, and kept by hand it went stale where no gate could see. conventions_test.go compares the EXECUTABLE lines, so a comment rewritten in a template and not in the page passed every check and shipped the old text; three of the ten had drifted that way at once. Generated, the page cannot: the drift gate regenerates it and compares byte",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:74",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:84",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magusfile.buzz:generatedOutputs",
+      "kind": "function",
+      "label": "generatedOutputs",
+      "doc": "Everything generate writes, project-relative because that is where this target runs. The schema DIRECTORY rather than its files: drift\\expand walks it, so a schema the SDK starts emitting is covered without this list being edited to notice.",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:68"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:host_integration",
       "kind": "function",
       "label": "host_integration",
       "doc": "host-integration is deliberately NOT a dependency of ci. It starts real, locally installed agent hosts, so it can consume the caller's authentication and quota. A person opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness descriptors explicitly:  MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \\ host-e2e/example.json  The runner creates a disposable workspace and applies each descriptor's config. A missing local host is a structured skip; a present host t",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:163",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:197",
       "attrs": {
         "exported": "true"
       }
@@ -46513,14 +46520,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:107"
+      "source": "docs/guides/integrations/agents/magusfile.buzz:141"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). proc.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:115",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:149",
       "attrs": {
         "exported": "true"
       }
@@ -46529,7 +46536,7 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:60",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:63",
       "attrs": {
         "exported": "true"
       }
@@ -46539,7 +46546,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.  It runs under node, not bun, even though the plugin's runtime is bun. The test supplies Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified, which is a better trade than putting a second JS runtime in every contributor's toolchain for one file. The residual gap is bun-versus-node spawn semant",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:145",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:179",
       "attrs": {
         "exported": "true"
       }
@@ -54184,6 +54191,14 @@
       "source": "tools/toolchain.buzz:64"
     },
     {
+      "id": "import:../../../../tools/drift",
+      "kind": "import",
+      "label": "../../../../tools/drift",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
       "id": "import:../../spells/golang/gomod",
       "kind": "import",
       "label": "../../spells/golang/gomod",
@@ -61625,6 +61640,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "console"
+    },
+    {
+      "source": "charm:rw",
+      "target": "target:docs/guides/integrations/agents:generate",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
     },
     {
       "source": "charm:rw",
@@ -125252,6 +125275,14 @@
     },
     {
       "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:generatedOutputs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
       "target": "function:docs/guides/integrations/agents/magusfile.buzz:host_integration",
       "relation": "contains",
       "confidence": "extracted",
@@ -125288,6 +125319,14 @@
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "import:../../../../tools/drift",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
       "provenance": "docs/guides/integrations/agents/magusfile.buzz"
     },
     {
@@ -138755,6 +138794,14 @@
       "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
     },
     {
+      "source": "function:docs/guides/integrations/agents/magusfile.buzz:generate",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:generatedOutputs",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
       "source": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
       "target": "function:docs/guides/integrations/agents/magusfile.buzz:install",
       "relation": "calls",
@@ -149743,6 +149790,14 @@
       "source": "target:docs/guides/integrations/agents:generate",
       "target": "file:docs/guides/integrations/agents/magusfile.buzz",
       "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "target:docs/guides/integrations/agents:cursor-schemas-generate",
+      "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents"

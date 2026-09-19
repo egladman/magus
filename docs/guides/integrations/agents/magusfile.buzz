@@ -23,6 +23,9 @@
 import "magus";
 // The page renderer, kept out of this file because it wants tests of its own.
 import "./lib/embed" as embed;
+// The workspace's shared drift helper, so this project's generated files are gated the
+// same way the root's are rather than by a second implementation of the same idea.
+import "../../../../tools/drift" as drift;
 // os shells out to pnpm for the install and the two gates.
 import "os";
 
@@ -59,6 +62,13 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
+// Everything generate writes, project-relative because that is where this target runs.
+// The schema DIRECTORY rather than its files: drift\expand walks it, so a schema the SDK
+// starts emitting is covered without this list being edited to notice.
+fun generatedOutputs() > [str] {
+    return ["guard-templates.md", "../../../../testdata/hosts/cursor/gen"];
+}
+
 // Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker
 // replaced by the file it names.
 //
@@ -72,6 +82,20 @@ export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install();
 // Reading the templates is declared, because affected tracking is glob-based here: without
 // it, editing a template would not rebuild the page that quotes it.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    // Hashed BEFORE the generators run, so an already-dirty tree does not disarm the
+    // check: what matters is whether these bytes moved during this run, not whether the
+    // tree was clean when it started.
+    //
+    // The OUTPUTS by name, where the root's copy of this hashes whatever vcs reports
+    // dirty. The root can do that because it runs there; here vcs\status names paths from
+    // the repository root while this target resolves them from its own directory, so every
+    // one of them missed and the check passed on a tree it had never looked at.
+    final before = drift\hashes(generatedOutputs());
+
+    // The other generated thing this project owns. Its own comment claimed the drift gate
+    // compared its output byte for byte, and nothing ran it: measured by planting a probe
+    // in a committed schema and watching a full green gate keep it.
+    ctx.needs(cursor_schemas_generate);
     ctx.readsFiles("guard-templates.md.tmpl", "*.sh", "*.buzz", "lib/*.buzz");
     ctx.writesFiles("guard-templates.md");
     final tmpl = fs\readFile("guard-templates.md.tmpl");
@@ -80,6 +104,16 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         files[name] = fs\readFile(name);
     }
     fs\writeFile("guard-templates.md", content: embed\render(tmpl, files: files));
+
+    // Under `rw` this target is the thing that WRITES the outputs, so there is nothing to
+    // report; the gate strips that charm and this is the half that answers.
+    if (ctx.hasCharm("rw")) { return; }
+    final changed = drift\changedSince(before, generatedOutputs());
+    if (changed.len() > 0) {
+        throw "[MGS4006] generate: regeneration changed generated files; re-run "
+            + "`magus run generate:rw docs/guides/integrations/agents` and commit: "
+            + changed.join(", ");
+    }
 }
 
 // Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.

@@ -171,6 +171,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target                    | What it does                                                                                                                                                                                                                                                         |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`                | Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.                                                                                                                                                    |
 | `cursor-schemas-generate` | Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.                                                                                                                                                                                          |
 | `lint`                    | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
 | `test`                    | test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.                                                                                     |
@@ -178,7 +179,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci`                      | 'ci' is the anchor `magus affected ci` keys off.                                                                                                                                                                                                                     |
 | `format`                  | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
 | `preflight`               |                                                                                                                                                                                                                                                                      |
-| `generate`                | Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.                                                                                                                                                    |
 
 ## Project: libs/commentdash
 
