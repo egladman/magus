@@ -1743,6 +1743,24 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 
 	bin := filepath.Join(r.ws.Root(), "magus")
 	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+		// A config that NAMES ./magus is not covered by a magus on PATH: the host runs the
+		// command string as written, so the hook fails to launch and no glue survives to
+		// say so. Reported before the PATH fallback, which used to answer "hook would run
+		// <PATH magus>" here, which was simply untrue.
+		//
+		// ADVICE rather than fail, because whether it matters depends on something doctor
+		// cannot see: whether a host session is live. A build machine has no agent running
+		// hooks and legitimately has no ./magus yet, so failing there invented a broken
+		// state out of a normal one. What was actually wrong was the answer, not the
+		// severity.
+		if wired := configsNamingOwnBinary(r.runCtx(), r.ws.Root(), workspaceHarnesses(r.ws)...); len(wired) > 0 {
+			return types.DoctorCheck{
+				Name:    name,
+				Status:  types.DoctorAdvice,
+				Message: "no ./magus, and a wired hook command runs ./magus, so its hooks cannot launch in a live session",
+				Details: append(append([]string{}, wired...), "build one: "+hint.Run.With("build", ".")),
+			}
+		}
 		if found, lookErr := exec.LookPath("magus"); lookErr == nil {
 			return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "hook would run " + found + " (from PATH; no ./magus built)"}
 		}
@@ -1957,8 +1975,14 @@ func newestGoSource(root string) (time.Time, string) {
 // pointed at by another config's text, is checked directly in the directory
 // branch of checkGuardWiring instead of appearing here.
 var guardTemplateBasenames = []string{
-	"magus-hook-command.sh",
-	"magus-hook-path.sh",
+	"magus-command.sh",
+	"magus-path.sh",
+	// The Buzz ports of the two above, which a `magus buzz` wiring names instead.
+	// They carry the same verdicts, so a stale copy of one fails the same way a
+	// stale copy of its sh twin does, and both names have to be gradeable.
+	"magus-command.buzz",
+	"magus-path.buzz",
+	"magus-observe.buzz",
 	"cursor-hook.sh",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository
@@ -1973,6 +1997,11 @@ var guardTemplateBasenames = []string{
 	// compacted session a brief the current binary would not have written, and the only
 	// sign is a model working from a summary that looked complete.
 	"magus-rehydrate.sh",
+	// The Buzz ports of those two, for the reason the hook templates' ports are here:
+	// a config names one form or the other, and a name this list cannot match is a
+	// staleness check that silently grades nothing.
+	"magus-checkpoint.buzz",
+	"magus-rehydrate.buzz",
 }
 
 // workspaceHarnesses returns magusfile-wired harness spell names when ws

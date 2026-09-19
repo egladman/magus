@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-command.sh",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-path.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-path.sh",
             "statusMessage": "magus guard: checking file"
           }
         ]
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-command.sh",
             "statusMessage": "magus guard: checking MCP tool call"
           }
         ]
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-observe.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-observe.sh",
             "statusMessage": "magus: recording read"
           }
         ]
@@ -48,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-command.sh",
             "statusMessage": "magus guard: checking approval"
           }
         ]

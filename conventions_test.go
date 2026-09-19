@@ -385,11 +385,18 @@ func TestSkillsGenerateDeclaresEveryShippedSkill(t *testing.T) {
 // The two generic sh templates share a page because two hosts share the files;
 // Cursor's and OpenCode's are self-contained and sit with their host.
 var templatePage = map[string]string{
-	"magus-hook-command.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-hook-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
-	"magus-hook-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-checkpoint.sh":   "docs/guides/integrations/agents/guard-templates.md",
-	"magus-rehydrate.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-command.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-path.sh":       "docs/guides/integrations/agents/guard-templates.md",
+	"magus-observe.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.sh": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.sh":  "docs/guides/integrations/agents/guard-templates.md",
+	// The Buzz ports sit on the same page as the files they mirror, so a reader
+	// choosing between the two forms is looking at both when they choose.
+	"magus-command.buzz":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-path.buzz":       "docs/guides/integrations/agents/guard-templates.md",
+	"magus-observe.buzz":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.buzz": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.buzz":  "docs/guides/integrations/agents/guard-templates.md",
 	"codex-hooks.json":      "docs/guides/integrations/agents/codex.md",
 	"cursor-hook.sh":        "docs/guides/integrations/agents/cursor.md",
 	"opencode-plugin.ts":    "docs/guides/integrations/agents/opencode.md",
@@ -407,17 +414,30 @@ var templatePage = map[string]string{
 // something anyone copies into a host, so the list is explicit rather than a
 // directory walk that would drag all of it into the guide.
 var hookTemplates = []string{
-	"magus-hook-command.sh",
-	"magus-hook-path.sh",
+	"magus-command.sh",
+	"magus-path.sh",
 	// The two templates that carry no verdict: one records a path an agent reached,
 	// the other where the work stood when a session stopped, and neither judges
 	// anything. So they declare no guard coverage and owe no parity row. See the note
 	// at the top of each for why that absence is deliberate rather than a hole.
-	"magus-hook-observe.sh",
+	"magus-observe.sh",
 	"magus-checkpoint.sh",
 	// The third of them: it reports where a checkout stands to a session that lost
 	// its history, and judges nothing either.
 	"magus-rehydrate.sh",
+	// The Buzz ports of the three above, which a `magus buzz` wiring names instead of
+	// the sh copy. They are shipped artifacts in their own right: a reader downloads
+	// one, magus's own config runs them, and they carry their own version marker and
+	// coverage declarations. guard_templates.txtar runs both forms of every recorded
+	// event and refuses a byte of difference, so what they owe the gates below is the
+	// same as what their sh twins owe.
+	"magus-command.buzz",
+	"magus-path.buzz",
+	"magus-observe.buzz",
+	// And the Buzz ports of the two verdict-free wrappers, which is what leaves this
+	// repository's Claude Code wiring needing neither a POSIX shell nor jq.
+	"magus-checkpoint.buzz",
+	"magus-rehydrate.buzz",
 	"codex-hooks.json",
 	"cursor-hook.sh",
 	"opencode-plugin.ts",
@@ -492,6 +512,19 @@ var hookConfigExemptions = map[string]map[string]string{}
 // below carries it and the parity gate can see the two apart.
 const mcpToolMatcherPrefix = "mcp__magus__"
 
+// shippedGlue reports whether a registered template is one of the executable glue
+// files a host config names, in either form: the POSIX sh copies and the Buzz ports.
+// It excludes codex-hooks.json, which is a config that NAMES glue rather than glue,
+// and opencode-plugin.ts, which a host loads rather than a config naming it.
+func shippedGlue(name string) bool {
+	switch filepath.Ext(name) {
+	case ".sh", ".buzz":
+		return true
+	default:
+		return false
+	}
+}
+
 // configTemplates returns the shipped template FILES a hook config's commands
 // invoke, for the gates that ask whether a file is named somewhere.
 func configTemplates(t *testing.T, path string) map[string]bool {
@@ -507,7 +540,7 @@ func configTemplates(t *testing.T, path string) map[string]bool {
 // and, where the matcher selects magus's MCP tools, by that surface too.
 //
 // Keyed by job rather than by file because a template wired twice under different
-// matchers is two jobs: claude-code runs magus-hook-command.sh on Bash AND on the
+// matchers is two jobs: claude-code runs magus-command.sh on Bash AND on the
 // MCP tool call, and a gate collecting basenames alone reads the second as nothing
 // new, which is the whole absence it exists to report.
 func configJobs(t *testing.T, path string) map[string]bool {
@@ -523,10 +556,14 @@ func configJobs(t *testing.T, path string) map[string]bool {
 		for _, entry := range entries {
 			for _, h := range entry.Hooks {
 				for _, template := range hookTemplates {
-					if filepath.Ext(template) != ".sh" || !strings.Contains(h.Command, template) {
+					if !shippedGlue(template) || !strings.Contains(h.Command, template) {
 						continue
 					}
-					name := template
+					// Keyed by the stem, so a host wiring the Buzz port counts as running
+					// the same JOB as a host wiring the sh copy. The two render identical
+					// replies, and the gate below asks whether a host does the work, not
+					// which of the two files it reached for.
+					name := strings.TrimSuffix(strings.TrimSuffix(template, ".sh"), ".buzz")
 					if strings.Contains(entry.Matcher, "mcp__") {
 						name += " on " + mcpToolMatcherPrefix
 					}
@@ -583,6 +620,63 @@ func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
 				host, name, shippedHookConfigs[host])
 		}
 	}
+}
+
+// TestBuzzGlueIsWiredAsPlainArgv refuses a `NAME=value` prefix on any hook command
+// that runs the Buzz glue.
+//
+// A leading assignment is shell syntax, and a hook command is not a shell line: the
+// host splits it into argv itself, so the prefix only works where something later
+// re-joins and re-parses it. The sh copies genuinely need their environment knobs,
+// because `sh` is what runs them and `sh` is what reads the variable; the Buzz ports
+// take the same two knobs from the event they already read and from their own argv,
+// which `magus buzz` forwards after `--`. Keyed on which glue the command names, so
+// the two forms can differ exactly where they have to and nowhere else.
+func TestBuzzGlueIsWiredAsPlainArgv(t *testing.T) {
+	for host, path := range shippedHookConfigs {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err, "read %s", path)
+		var cfg hookSettings
+		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+
+		for event, entries := range cfg.Hooks {
+			for _, entry := range entries {
+				for _, h := range entry.Hooks {
+					if !strings.Contains(h.Command, ".buzz") {
+						continue
+					}
+					first := strings.Fields(h.Command)
+					require.NotEmpty(t, first, "%s: %s %q hook has an empty command", path, event, entry.Matcher)
+					name, _, isAssignment := strings.Cut(first[0], "=")
+					assert.False(t, isAssignment && isEnvNameForTest(name),
+						"%s wires the Buzz glue on %s %q as %q.\n"+
+							"A Buzz hook command is a plain argv: %s buzz -s <file> [-- flags].\n"+
+							"The glue reads the raw-event question off the event itself and takes its\n"+
+							"flags from the argv after --, so there is nothing left for a variable to say.",
+						path, event, entry.Matcher, h.Command, host)
+				}
+			}
+		}
+	}
+}
+
+// isEnvNameForTest mirrors internal/agent's isEnvName: shaped like an environment
+// variable name. Copied rather than exported, because exporting it would publish a
+// shell-syntax predicate from a package whose whole point here is that the Buzz
+// wiring has no shell.
+func isEnvNameForTest(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r == '_':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // TestHostPagesDocumentTheWiringTheyShip closes the direction the embed gate
@@ -714,7 +808,7 @@ func TestEveryShippedTemplateIsRegistered(t *testing.T) {
 			continue
 		}
 		switch filepath.Ext(name) {
-		case ".sh", ".ts", ".json":
+		case ".sh", ".ts", ".json", ".buzz":
 		default:
 			continue
 		}
@@ -809,8 +903,6 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 				if cov[host] == nil {
 					cov[host] = map[string]map[string]string{}
 				}
-				require.Nil(t, cov[host][surface],
-					"host %q has two declarations for the %s surface; one artifact per host per surface, or the gate cannot tell which is true", host, surface)
 				stances := map[string]string{}
 				for _, decision := range agent.GuardDecisions() {
 					stance, ok := fields[decision]
@@ -820,6 +912,18 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 							"an undeclared decision is one this host was never asked about.", name, surface, host, decision)
 					require.True(t, guardStances[stance], "%s: unknown stance %q for %q (want model, human, or none)", name, stance, decision)
 					stances[decision] = stance
+				}
+				// A host may be served on one surface by two artifacts, because a
+				// template ships in sh and in Buzz and a host wires whichever suits
+				// its machine. What must not differ is what they CLAIM: two artifacts
+				// disagreeing about the same cell leaves the gate unable to say which
+				// is true, which is the state the check below refuses. Agreement is
+				// cheap to state and is what the executed cases already prove.
+				if prior := cov[host][surface]; prior != nil {
+					require.Equal(t, prior, stances,
+						"%s declares the %s surface for host %q differently from the artifact beside it.\n"+
+							"Two forms of one template must claim the same stances, or nothing can say which the host gets.",
+						name, surface, host)
 				}
 				cov[host][surface] = stances
 			}
@@ -901,18 +1005,24 @@ func claimsGuardHost(body, host string) bool {
 
 // failOpenArmRe matches the tests a shipped template makes before answering
 // WITHOUT a verdict from magus: the binary is missing or not executable, or it
-// ran and left nothing to report. Both spellings the templates use, sh and TS.
-var failOpenArmRe = regexp.MustCompile(`! -x "\$__MAGUS_BIN"|-z "\$verdict"|stdout === null`)
+// ran and left nothing to report. All three spellings the templates use: sh, TS
+// and Buzz.
+var failOpenArmRe = regexp.MustCompile(`! -x "\$__MAGUS_BIN"|-z "\$verdict"|stdout === null` +
+	`|!isExecutable\(bin\)|trimTrailingNewlines\(result!\.stdout\) == ""`)
 
-// failOpenRetryRe marks a block that re-invokes magus rather than answering. Two
-// of the templates test the same `-z "$verdict"` condition twice (once to retry
-// without the attribution flags, once to give up), and only the second is a
-// fail-open arm.
-var failOpenRetryRe = regexp.MustCompile(`\$\(guard\b|runOnce\(`)
+// failOpenRetryRe marks a block that re-invokes magus rather than answering. Every
+// template tests the same empty-verdict condition twice (once to retry without the
+// attribution flags, once to give up), and only the second is a fail-open arm.
+var failOpenRetryRe = regexp.MustCompile(`\$\(guard\b|runOnce\(|judge\(guard, extra: \[<str>\]\)`)
 
 // failOpenNoticeRe matches an arm SAYING it did not judge the call: prose on
-// stderr, a console warning, or one of the __MAGUS_*_RESPONSE envelopes.
-var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$__MAGUS_[A-Z_]+_RESPONSE`)
+// stderr, a console warning, or one of the __MAGUS_*_RESPONSE envelopes. The Buzz
+// ports read that envelope through envOr, so the fallback they hand it is the
+// notice, and it is named here rather than reached through a variable. That
+// fallback is now a CALL, because the PermissionRequest surface has no context
+// field to carry prose and takes the same notice by another route.
+var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$__MAGUS_[A-Z_]+_RESPONSE` +
+	`|text: UNAVAILABLE_TEXT`)
 
 // failOpenOptInRe matches the shape that makes a notice OPT-IN: the arm prints
 // only when the reader has set the variable, so by default it prints nothing.
@@ -925,7 +1035,7 @@ var failOpenDefaultRe = regexp.MustCompile(`\$(__MAGUS_[A-Z_]+_RESPONSE)`)
 // failOpenComputedNoticeRe matches an arm that BUILDS its notice from what it observed
 // rather than printing a canned string. There is no variable to give a default to, and
 // the evidence is the point: which binary went silent, its version, what it printed.
-var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\b`)
+var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\b|failureNotice\(guard\b`)
 
 // failOpenSilentByDesign records the verdict-carrying templates whose fail-open
 // arms deliberately announce NOTHING, and where that decision is written down.
@@ -938,7 +1048,8 @@ var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\
 // worse noise. Overturning that is a decision for whoever made it; leaving it
 // undeclared here is what this table refuses.
 var failOpenSilentByDesign = map[string]string{
-	"magus-hook-path.sh": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
+	"magus-path.sh":   "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
+	"magus-path.buzz": "the same decision as its sh twin, and the same executed case: the archive runs both forms against the same event and refuses a difference",
 }
 
 // TestFailOpenArmsAnnounceThemselves is the doctrine's enforcement point: a
@@ -952,7 +1063,7 @@ var failOpenSilentByDesign = map[string]string{
 // Structural on purpose: it finds the arms by the conditions the templates test
 // and asks each one for an unconditional notice, so rewording a message costs
 // nothing and DELETING one fails. A template with no coverage declaration is not
-// asked, which is how magus-hook-observe.sh is exempt: it carries no verdict,
+// asked, which is how magus-observe.sh is exempt: it carries no verdict,
 // so it has no fail-open to announce.
 func TestFailOpenArmsAnnounceThemselves(t *testing.T) {
 	for _, name := range hookTemplates {
@@ -1029,7 +1140,7 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 	assert.Fail(t, "fail-open arm says nothing",
 		"%s answers without a magus verdict at line %d and emits no default notice.\n"+
 			"A guard that stopped enforcing looks exactly like a clean session, so every fail-open arm\n"+
-			"announces itself (see magus-hook-command.sh's __MAGUS_UNAVAILABLE_RESPONSE). Add a notice,\n"+
+			"announces itself (see magus-command.sh's __MAGUS_UNAVAILABLE_RESPONSE). Add a notice,\n"+
 			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
 		name, line)
 }
@@ -1669,23 +1780,18 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err, "every template in hookTemplates must exist")
 
-		// Compare on the executable lines only. Comments carry the reasoning and
-		// are worth reading in the file itself; requiring the guide to mirror
-		// every one of them would make the page unreadable and the test brittle.
-		var missing []string
-		for _, line := range strings.Split(string(body), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
-				continue
-			}
-			if !strings.Contains(doc, line) {
-				missing = append(missing, line)
-			}
-		}
-		assert.Empty(t, missing,
-			"%s embeds %s incompletely: the lines below are in the template but not on that page.\n"+
-				"Re-copy the template into its code block - a reader exploring the docs site must see\n"+
-				"what they would download.", page, name)
+		// VERBATIM, comments included. This compared executable lines only while the page
+		// was maintained by hand, because demanding every comment of a human editor would
+		// have been brittle. It also meant a comment rewritten in a template and not in
+		// the page passed here and shipped the old text; three of the ten had drifted that
+		// way at once. The page is rendered from the templates now (see that project's
+		// generate target), so the whole file is what the page carries and this asks for it.
+		assert.Contains(t, doc, strings.TrimRight(string(body), "\n"),
+			"%s does not carry %s verbatim.\n"+
+				"That page is GENERATED from guard-templates.md.tmpl and the templates it names:\n"+
+				"run `magus run generate docs/guides/integrations/agents` rather than editing it,\n"+
+				"because a reader exploring the docs site must see exactly what they would download.",
+			page, name)
 	}
 }
 
@@ -1701,22 +1807,27 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 // It asserts the wiring is documented, not that this repository has applied it:
 // what a checkout wires is the reader's, and .claude/settings.json is checked by
 // TestDogfoodedHookInvokesTheTemplate for the hooks it does carry.
+// Both forms are held to the brief, because either one may be what a reader wires; the
+// PAGE is asked only for the stem, so it stays free to show one form in its example
+// without this test deciding which.
 func TestRehydrateTemplateIsWiredAfterCompaction(t *testing.T) {
-	const template = "magus-rehydrate.sh"
+	const stem = "magus-rehydrate"
 
-	body, err := os.ReadFile(filepath.Join(hookTemplateDir, template))
-	require.NoError(t, err, "read %s", template)
-	assert.Contains(t, string(body), "session --brief",
-		"%s must invoke the brief; it has no other reason to exist", template)
+	for _, ext := range []string{".sh", ".buzz"} {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, stem+ext))
+		require.NoError(t, err, "read %s", stem+ext)
+		assert.Contains(t, string(body), "session --brief",
+			"%s must invoke the brief; it has no other reason to exist", stem+ext)
+	}
 
 	page, err := os.ReadFile("docs/guides/integrations/agents/claude-code.md")
 	require.NoError(t, err, "read the host page")
 	doc := string(page)
-	for _, want := range []string{template, "SessionStart", "compact"} {
+	for _, want := range []string{stem, "SessionStart", "compact"} {
 		assert.Contains(t, doc, want,
 			"the host page must wire %s to the post-compaction event by name; a reader who\n"+
 				"cannot see WHEN it runs wires it to session start, which is the one moment it\n"+
-				"has nothing to say.", template)
+				"has nothing to say.", stem)
 	}
 }
 

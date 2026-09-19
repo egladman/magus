@@ -1,0 +1,176 @@
+// magus observe hook: records ONE path an agent reached, and judges nothing.
+//
+// This file is the source of truth for hosts wired to `magus buzz`. It is the
+// Buzz port of magus-observe.sh and behaves identically without jq or a
+// POSIX shell.
+//
+// Run it as `magus buzz -s magus-observe.buzz`; see magus-command.buzz for why `-s` is
+// load-bearing. It imports no magus Buzz
+// module and no spell: a read hook fires on every file an agent opens, so the
+// 10ms start a closed workspace buys is worth more here than anywhere else.
+//
+// Wire it to the tools that only LOOK, your host's read equivalent. The guard
+// templates beside this one handle the tools that ACT. Do not point a read tool
+// at those: a read event carries a file path, so the write rules would advise
+// "you are editing a declared output" at a file the agent merely opened.
+// --observe is what separates the two, and only this wrapper can set it,
+// because only it knows which of your host's tools look.
+//
+// Contract: reads the host's event as JSON on stdin, selects the path, and feeds
+// it to `magus shell --observe`. It prints NOTHING and always exits 0; see the
+// note on that below, which is load-bearing rather than tidy. Override any of
+// the variables below:
+//
+//   HOST_EVENT_PATH  dot-path to the read path inside your host's event
+//   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+//   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
+//   __MAGUS_BIN  path to the binary, when it is not on PATH
+//
+// The defaults are Claude Code's event shape, matching its two siblings. A
+// different host overrides the dot-paths and passes its own __MAGUS_AGENT_NAME.
+//
+// NO magus-guard-coverage line, and that absence is deliberate rather than an
+// oversight: a coverage declaration states how much of a VERDICT a host can
+// carry on a guard surface, and this file carries no verdict on no surface. It
+// never denies, never advises, and cannot change what your host does next. The
+// parity gates ask that question only of artifacts that answer it.
+//
+// magus-guard-template: 16
+
+// EVERY call that can fail is caught, deliberately.
+//
+// An unparsable event, a missing binary, a flag the binary does not know: each one
+// must end as silence and exit 0. A PreToolUse hook's exit status is not advisory on
+// every host. Claude Code reads exit 2 as "block this tool call" and takes the message
+// from stderr, so an uncaught error here could stop the agent from reading anything at
+// all. An optional record must never be able to do that.
+
+import "io";
+import "encoding/json" as json;
+import "env";
+import "fs";
+import "path";
+import "proc";
+
+fun envOr(name: str, fallback: str) > str {
+    final value = env\get(name) catch "";
+    if (value == "") { return fallback; }
+    return value;
+}
+
+fun digKey(node: any?, key: str) > any? {
+    final m = node as? {str: any};
+    if (m == null) { return null; }
+    return m![key];
+}
+
+fun dig(event: any?, dotPath: str) > any? {
+    var cur = event;
+    foreach (key in dotPath.split(".")) {
+        cur = digKey(cur, key: key);
+        if (cur == null) { return null; }
+    }
+    return cur;
+}
+
+// field is `jq -r ".<dotPath> // empty"`: absent reads as the empty string rather
+// than the literal "null".
+// Only a STRING is a path. Rendering an object or a list as JSON instead recorded the
+// serialized blob as the file the agent reached, which the judging surfaces treat as a
+// shape they cannot read; nothing to record beats recording something untrue.
+fun field(event: any?, dotPath: str) > str {
+    final value = dig(event, dotPath: dotPath);
+    if (value == null) { return ""; }
+    return (value as? str) ?? "";
+}
+
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
+fun isExecutable(candidate: str) > bool {
+    final info = fs\stat(candidate) catch null;
+    if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
+    final mode = info!.mode as? int;
+    if (mode == null) { return false; }
+    return (mode! & 73) != 0;
+}
+
+// parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
+// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
+// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
+fun parentDir(dir: str) > str {
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
+}
+
+// resolveBin prefers the workspace's own ./magus over PATH, for the same reason its two
+// siblings do, and this file needs it MORE than they do, because it is silent by design.
+// An older PATH copy does not know --observe at all: it rejects the flag, prints its usage
+// to a stream this script discards, and exits non-zero, so the observation is simply never
+// recorded, forever, with nothing anywhere saying so. Measured 2026-08-14 in magus's own
+// repository, where the wiring was correct, the binary was wrong, and the trail held 3252
+// events and not one read.
+fun resolveBin() > str {
+    final declared = env\get("__MAGUS_BIN") catch "";
+    if (declared != "") { return declared; }
+    var dir = path\abs(".") catch "";
+    while (dir != "") {
+        final marker = "{dir}/magusfile.buzz";
+        final found = fs\isFile(marker) catch false;
+        if (found) {
+            final candidate = "{dir}/magus";
+            if (isExecutable(candidate)) { return candidate; }
+            break;
+        }
+        dir = parentDir(dir);
+    }
+    return proc\which("magus") catch "";
+}
+
+fun main(args: [str]) > void {
+    final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
+    final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
+    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
+
+    // An absent observer is SILENT, where an absent guard is loud.
+    //
+    // The guard templates announce themselves when magus cannot be found, because an
+    // unenforced deny rule is a safety fact the reader needs. Nothing is unenforced
+    // here, there is no rule, so the same announcement would be a per-read interruption
+    // reporting that an optional record was not written.
+    final bin = resolveBin();
+    if (bin == "" or !isExecutable(bin)) { return; }
+
+    final raw = io\stdin.readAll() catch "";
+    final event = json\parse(raw) catch null;
+
+    // The path is extracted rather than forwarding the whole event, because a payload
+    // magus does not recognize as an envelope is judged as the literal text it is, and
+    // for a search that carries a pattern but no path that would record the entire
+    // event, query text included, as the thing the agent reached.
+    //
+    // Nothing to record is not a failure: a host event that names no path has no reach
+    // to report, and inventing one would claim a file the host never named.
+    final reached = field(event, dotPath: eventPath);
+    if (reached == "") { return; }
+
+    // A magus too old for --observe rejects the flag and exits non-zero. That is a real
+    // state worth knowing about once, but not once per read, so it is reported through
+    // the trail's own absence rather than through the session: if reads are missing from
+    // `magus session`, the binary is too old.
+    proc\exec(bin, args: [
+        "shell", "--observe",
+        "--agent-name", agentName,
+        "--session", field(event, dotPath: sessionPath),
+        "--transcript", field(event, dotPath: transcriptPath),
+        "--event", "PreToolUse",
+    ], opts: {"quiet": true, "allow_failure": true, "stdin": reached}) catch void;
+}

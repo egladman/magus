@@ -1,0 +1,130 @@
+// magus checkpoint hook: records where the work stands when a session stops.
+//
+// This file is the source of truth for hosts wired to `magus buzz`. It is the
+// Buzz port of magus-checkpoint.sh and behaves identically without a POSIX
+// shell, so the wiring works unchanged on Windows. The shell copy stays for the
+// hosts still wired to `sh`.
+//
+// Run it as `magus buzz -s magus-checkpoint.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports no magus Buzz module
+// and no spell, which is what keeps the workspace CLOSED: a Stop hook fires once
+// per session rather than once per tool call, so the 700ms an open costs would
+// be affordable here; it is still refused, because the rule that keeps the glue
+// closed is worth more than the one exception that would erode it.
+//
+// Wire it to your host's stop or session-end event. It records the revision,
+// branch and dirtiness of the tree, plus your host's session id and transcript
+// path as opaque pointers, so that whoever comes back to this repository (you
+// tomorrow, or another session) reads `magus session` instead of reconstructing
+// where the work stopped. That reconstruction is the cost this exists to remove:
+// it was measured at a session id passed by hand, a guessed transcript location,
+// and three failed commands before it emerged the work had never been pushed.
+//
+// Contract: pipes your host's event, unread, into `magus session checkpoint`.
+// magus takes the two pointers only a host knows out of the envelope and ignores
+// the rest; nothing in the payload becomes the note, because a note is a sentence
+// a person writes. It prints NOTHING and always exits 0. Override:
+//
+//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the checkpoint
+//   __MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// A host whose envelope spells those fields differently passes them as flags
+// instead, since `--session` and `--transcript` outrank the envelope, and a host that
+// cannot supply either still records a usable checkpoint, because the part that
+// matters is read from the tree rather than from the event.
+//
+// There is no JSON import here, unlike its judging siblings. This wrapper selects
+// nothing: magus parses the envelope itself, so the event is forwarded whole.
+//
+// NO magus-guard-coverage line, for the same reason magus-observe.buzz has
+// none: a coverage declaration states how much of a VERDICT a host can carry, and
+// this file carries no verdict on no surface. It never denies, never advises, and
+// cannot change what your host does next.
+//
+// magus-guard-template: 16
+
+// EVERY call that can fail is caught, matching the templates beside it and the
+// missing `set -e` in the sh copy. A hook that can fail is a hook that can break
+// the session it was meant to observe, and a record of where the work stopped is
+// worth strictly less than the work.
+
+import "io";
+import "env";
+import "fs";
+import "path";
+import "proc";
+
+fun envOr(name: str, fallback: str) > str {
+    final value = env\get(name) catch "";
+    if (value == "") { return fallback; }
+    return value;
+}
+
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
+fun isExecutable(candidate: str) > bool {
+    final info = fs\stat(candidate) catch null;
+    if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
+    final mode = info!.mode as? int;
+    if (mode == null) { return false; }
+    return (mode! & 73) != 0;
+}
+
+// parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
+// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
+// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
+fun parentDir(dir: str) > str {
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
+}
+
+// resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the
+// magusfile: a hook runs in the host's session directory, which is not always the
+// workspace root. magus-command.buzz carries the full reasoning.
+fun resolveBin() > str {
+    final declared = env\get("__MAGUS_BIN") catch "";
+    if (declared != "") { return declared; }
+    var dir = path\abs(".") catch "";
+    while (dir != "") {
+        final marker = "{dir}/magusfile.buzz";
+        final found = fs\isFile(marker) catch false;
+        if (found) {
+            final candidate = "{dir}/magus";
+            if (isExecutable(candidate)) { return candidate; }
+            break;
+        }
+        dir = parentDir(dir);
+    }
+    return proc\which("magus") catch "";
+}
+
+fun main(args: [str]) > void {
+    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
+
+    // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
+    // unenforced, because there is no rule, so announcing it would interrupt the end of
+    // every session to report that an optional record was not written.
+    //
+    // Checked before stdin is touched, exactly as the sh copy leaves the event unread
+    // on this arm: there is nobody to forward it to.
+    final bin = resolveBin();
+    if (bin == "" or !isExecutable(bin)) { return; }
+
+    final event = io\stdin.readAll() catch "";
+
+    // Both streams are discarded by `quiet`: a magus too old for `session checkpoint`
+    // prints its usage, and that would otherwise reach the host as this hook's response
+    // every time a session ends. The absence shows up where it is actionable instead -
+    // as an empty checkpoint list in `magus session`.
+    proc\exec(bin, args: [
+        "session", "checkpoint",
+        "--agent-name", agentName,
+    ], opts: {"quiet": true, "allow_failure": true, "stdin": event}) catch void;
+}
