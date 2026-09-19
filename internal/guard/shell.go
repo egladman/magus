@@ -593,7 +593,8 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 					continue
 				}
 				prefix := commandPrefix(args)
-				if len(prefix) > 0 && (len(c.Args) < len(prefix) || !slices.Equal(c.Args[:len(prefix)], prefix)) {
+				have := afterGlobalFlags(c.Args)
+				if len(prefix) > 0 && (len(have) < len(prefix) || !slices.Equal(have[:len(prefix)], prefix)) {
 					continue
 				}
 				return toolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0}, true
@@ -619,6 +620,28 @@ func commandPrefix(args []string) []string {
 		prefix = append(prefix, args[first+1])
 	}
 	return prefix
+}
+
+// afterGlobalFlags drops the options a tool takes BEFORE its subcommand, so the rule
+// matches the command rather than one spelling of it. commandPrefix already does this on
+// the rendered side; an invocation that carries such a flag has to be read the same way,
+// or the deny is a test of where the caller put the flag.
+//
+// `go -C <dir> test ./...` is the case that named this: same module, same effect as
+// `go test ./...`, and it ran while that one was denied. -C is spelled out because it
+// takes a separate operand; a lone flag consumes nothing after it, and a flag this does
+// not know is skipped rather than followed, which can only leave the invocation looking
+// like some OTHER subcommand and so cannot invent a deny.
+func afterGlobalFlags(args []string) []string {
+	for i := 0; i < len(args); i++ {
+		if !strings.HasPrefix(args[i], "-") {
+			return args[i:]
+		}
+		if args[i] == "-C" {
+			i++
+		}
+	}
+	return nil
 }
 
 // subcommandWord reports an argv word that names a subcommand rather than a path or a
