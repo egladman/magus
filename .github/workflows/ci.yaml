@@ -91,6 +91,8 @@ jobs:
       # because every path changed since it classifies low-risk. magus decides that
       # and publishes the report; the two `if:` guards below only consume the answer.
       inherit:       ${{ steps.plan.outputs.inherit }}
+      # Doctor's verdict, carried to the gate rather than failing this job. See the step.
+      doctor:        ${{ steps.doctor.outcome }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -122,7 +124,22 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
+      # Reported to the gate instead of failing this job, which is not leniency: the run
+      # still goes red, and it goes red with the shard results in hand.
+      #
+      # Doctor asks about workspace CONFIGURATION, and by this point the shard matrix is
+      # already proof the workspace loads and the graph resolves. Those shards are what
+      # says whether the code works, and a failed plan job skips every one of them. Four
+      # runs in a row reported a guard-wiring problem and said nothing whatever about the
+      # tests, and the work was merged with them still unrun. A check that costs you the
+      # answer you came for is charging too much for the answer it gives.
+      #
+      # The hard failures below keep failing hard: uncommitted generated output and a
+      # non-deterministic generator both mean the tree under test is not the tree in the
+      # commit, and a shard result from it describes nothing.
       - name: Doctor
+        id: doctor
+        continue-on-error: true
         run: magus doctor
 
       # Fails the run before a single shard starts. Six projects declare index-generate
@@ -609,21 +626,33 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Require the plan and every shard to have passed
+      - name: Require the plan, doctor and every shard to have passed
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
+          DOCTOR_RESULT: ${{ needs.plan.outputs.doctor }}
           CI_RESULT: ${{ needs.ci.result }}
         run: |
           set -euo pipefail
+          # Every verdict is reported before exiting, so one red run names everything that
+          # is wrong. Exiting at the first one is what turned a fix into four rounds: each
+          # run revealed exactly one more problem, and the next was invisible until the
+          # previous one was pushed.
+          failed=0
           if [ "$PLAN_RESULT" != "success" ]; then
             echo "::error::plan did not pass (${PLAN_RESULT}); nothing downstream is trustworthy"
-            exit 1
+            failed=1
+          fi
+          # Empty when the plan job never reached Doctor, which the plan check above owns.
+          if [ -n "$DOCTOR_RESULT" ] && [ "$DOCTOR_RESULT" != "success" ]; then
+            echo "::error::doctor did not pass (${DOCTOR_RESULT}); the workspace is misconfigured even where the shards are green"
+            failed=1
           fi
           # skipped is a pass: an inherited verdict plans an empty shard matrix on purpose.
           case "$CI_RESULT" in
             success|skipped) echo "shards: ${CI_RESULT}" ;;
-            *) echo "::error::shards did not pass (${CI_RESULT})"; exit 1 ;;
+            *) echo "::error::shards did not pass (${CI_RESULT})"; failed=1 ;;
           esac
+          exit "$failed"
 
   report:
     # One job for everything that runs AFTER the shards: the run summary always, and the
