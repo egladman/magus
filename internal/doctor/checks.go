@@ -1745,12 +1745,19 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
 		// A config that NAMES ./magus is not covered by a magus on PATH: the host runs the
 		// command string as written, so the hook fails to launch and no glue survives to
-		// say so. Reported before the PATH fallback, which would otherwise call it healthy.
+		// say so. Reported before the PATH fallback, which used to answer "hook would run
+		// <PATH magus>" here, which was simply untrue.
+		//
+		// ADVICE rather than fail, because whether it matters depends on something doctor
+		// cannot see: whether a host session is live. A build machine has no agent running
+		// hooks and legitimately has no ./magus yet, so failing there invented a broken
+		// state out of a normal one. What was actually wrong was the answer, not the
+		// severity.
 		if wired := configsNamingOwnBinary(r.runCtx(), r.ws.Root(), workspaceHarnesses(r.ws)...); len(wired) > 0 {
 			return types.DoctorCheck{
 				Name:    name,
-				Status:  types.DoctorFail,
-				Message: "no ./magus, and a wired hook command runs ./magus, so every one of its hooks fails to launch",
+				Status:  types.DoctorAdvice,
+				Message: "no ./magus, and a wired hook command runs ./magus, so its hooks cannot launch in a live session",
 				Details: append(append([]string{}, wired...), "build one: "+hint.Run.With("build", ".")),
 			}
 		}

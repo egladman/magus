@@ -12,9 +12,12 @@ import (
 )
 
 // A magus on PATH does not cover a hook command that spells ./magus: the host runs the
-// string as written. Graded OK until the check read the config instead of re-deriving the
-// resolution order the SCRIPTS use, which is the one failure no glue survives to report.
-func TestCheckGuardBinaryFailsWhenAWiredCommandNamesAMissingOwnBinary(t *testing.T) {
+// string as written. This answered "hook would run <PATH magus>", which was untrue, until
+// the check read the config instead of re-deriving the order the SCRIPTS resolve in.
+//
+// Advice rather than fail: a build machine runs no hooks and has no ./magus yet, so the
+// state is normal there and only the old ANSWER was wrong.
+func TestCheckGuardBinaryAdvisesWhenAWiredCommandNamesAMissingOwnBinary(t *testing.T) {
 	root := t.TempDir()
 	writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)
 	require.NoError(t, os.Remove(filepath.Join(root, "magus")))
@@ -22,8 +25,8 @@ func TestCheckGuardBinaryFailsWhenAWiredCommandNamesAMissingOwnBinary(t *testing
 
 	got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
 
-	assert.Equal(t, types.DoctorFail, got.Status)
-	assert.Contains(t, got.Message, "fails to launch")
+	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Contains(t, got.Message, "cannot launch in a live session")
 	assert.Contains(t, got.Details[0], filepath.FromSlash("host/hooks.json"))
 }
 

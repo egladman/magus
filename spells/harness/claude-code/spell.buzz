@@ -14,7 +14,6 @@
 
 import "magus/spell";
 import "assert";
-import "fs";
 
 export fun mgs_getName() > str { return "claude-code"; }
 
@@ -35,15 +34,21 @@ fun claude_skills_paths() > [str] {
 // argument applies to the interpreter, and more sharply, because a magus too old
 // to run the script renders no verdict at all.
 //
-// So a workspace that carries its own binary wires that one. It is chosen when the
-// harness is applied, because a hook command is one string with no shell to test a
-// file in, and re-applying is what moves a checkout between the two answers.
-// Workspace-relative, never absolute: this config is committed, and an absolute
-// path would ship one machine's layout to every clone.
+// So a workspace that carries its own binary wires that one, and this answer is a
+// CONSTANT rather than a probe of the machine it runs on.
+//
+// It used to test for ./magus and fall back to `magus`, which made the committed config
+// valid only on the machine that last applied it: a checkout carrying the binary wrote
+// `./magus`, and every other one then computed `magus`, compared it against what was
+// committed, and reported the harness uncovered. CI said so on every run.
+//
+// A config is one string with no shell to test a file in, so it cannot hold both. It
+// names the workspace binary because that is the one whose rules match the tree; a
+// checkout that has not built one yet has hooks that cannot launch, which is a real
+// state and the one `magus doctor`'s guard-binary check reports. Workspace-relative,
+// never absolute: an absolute path would ship one machine's layout to every clone.
 fun claude_interpreter() > str {
-    final own = fs\isFile("magus") catch false;
-    if (own) { return "./magus"; }
-    return "magus";
+    return "./magus";
 }
 
 // The Buzz ports, not the sh copies beside them. Buzz needs neither jq nor a POSIX
@@ -300,15 +305,16 @@ test "the lifecycle wrappers name the Buzz ports too" {
     }
 }
 
-test "the interpreter is the workspace binary where there is one" {
-    // Both shapes, because a clone that has not built magus yet wires PATH and a
-    // checkout that carries its own binary must never be sent to PATH's vintage.
+test "the interpreter is the same string on every machine" {
+    // A CONSTANT, not a probe. Resolving it per machine wrote whichever answer the
+    // applying checkout happened to have into a COMMITTED config, so every other
+    // checkout computed the other one and reported the harness uncovered.
     //
-    // The choice is made HERE, at apply time, and written into a committed config that
-    // nothing re-checks, so a checkout that later loses ./magus has every hook fail to
-    // launch. No test can see that; doctor's guard-binary check is what names it.
+    // A checkout with no ./magus has hooks that cannot launch. That is a real state and
+    // doctor's guard-binary check reports it; it is not something to paper over by
+    // writing a different config on that machine.
     final chosen = claude_interpreter();
-    assert\isTrue(chosen == "./magus" or chosen == "magus", "one of the two shapes");
+    assert\equal(chosen, "./magus", "the workspace binary, whether or not this machine has one");
     assert\isTrue(claude_glue_command("command", flags: [<str>]).startsWith("{chosen} buzz -s "), "the command carries it");
     // Every surface, because one command built by hand rather than through the helper
     // is one entry apply keeps rewriting against a config that already holds it. Each
