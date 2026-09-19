@@ -135,3 +135,22 @@ type URL struct {
 	Query    string
 	Fragment string
 }
+
+// FlagParse mirrors flags.parse's {values, positionals, unknown} object.
+//
+// Three fields rather than two because the caller, not the module, decides what an
+// argument it did not declare means. A parser that folds unknown arguments into the
+// positionals leaves the caller unable to tell "you passed me a file" from "you passed me
+// a flag I have never heard of", and one that drops them silently judges the call with
+// settings nobody chose. Both answers belong to the script.
+type FlagParse struct {
+	// Values holds every declared flag that appeared. A switch records "true"; a valued
+	// flag records its value. A flag given twice records the LAST one, because an argv
+	// assembled by concatenation reads left to right and the nearer word is the override.
+	Values map[string]string
+	// Positionals are the words after the `--` separator, verbatim and in order.
+	Positionals []string
+	// Unknown holds every argument that was not declared, in order, whatever it looks
+	// like. A leading dash does not make a word a flag here: only declaring it does.
+	Unknown []string
+}

@@ -130,6 +130,7 @@ const (
 // so it cannot lack a feature that workspace uses. That holds only until the checkout
 // moves: a binary built before a pull is a dev build that is genuinely too old, and it
 // is the single most likely way to reach this in day-to-day work.
+
 // StaleBinaryAdvice is the sentence every out-of-date-binary report shares.
 //
 // Two surfaces reach this conclusion from different evidence and at different moments: a

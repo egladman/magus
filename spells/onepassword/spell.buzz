@@ -22,8 +22,6 @@
 
 import "magus/spell";
 
-import "os";
-
 import "proc";
 // "onepassword", not "op": a spell's registered name has to stand alone - it is what
 // `magus describe spells` and every diagnostic show, with no directory around it to

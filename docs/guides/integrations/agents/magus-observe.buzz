@@ -47,6 +47,7 @@
 // all. An optional record must never be able to do that.
 
 import "io";
+import "flags";
 import "encoding/json" as json;
 import "env";
 import "fs";
@@ -134,7 +135,25 @@ fun resolveBin() > str {
     return proc\which("magus") catch "";
 }
 
+// warn names the file; see magus-command.buzz. STDERR, which is why it does not break
+// this file's contract to print nothing: stdout is what the host reads as a verdict.
+fun warn(message: str) > void {
+    io\stderr.write("magus-observe.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
