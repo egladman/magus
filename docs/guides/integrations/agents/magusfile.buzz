@@ -103,11 +103,23 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     foreach (name in embed\embedNames(tmpl)) {
         files[name] = fs\readFile(name);
     }
-    fs\writeFile("guard-templates.md", content: embed\render(tmpl, files: files));
+    final rendered = embed\render(tmpl, files: files);
 
-    // Under `rw` this target is the thing that WRITES the outputs, so there is nothing to
-    // report; the gate strips that charm and this is the half that answers.
-    if (ctx.hasCharm("rw")) { return; }
+    // Under `rw` this target is the thing that WRITES the page. The gate strips that charm,
+    // and the rest of this function is the half that answers instead.
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("guard-templates.md", content: rendered);
+        return;
+    }
+
+    // COMPARED, never written. Writing here would edit the tree this run was asked to judge
+    // and then report its own edit (MGS1035): the page would be correct by the time anything
+    // looked, so the check could only ever pass. Named separately from the hash comparison
+    // below because that one cannot see this file at all for the same reason.
+    if ((fs\readFile("guard-templates.md") catch "") != rendered) {
+        throw "[MGS4006] generate: guard-templates.md does not match its template; re-run "
+            + "`magus run generate:rw docs/guides/integrations/agents` and commit it";
+    }
     final changed = drift\changedSince(before, generatedOutputs());
     if (changed.len() > 0) {
         throw "[MGS4006] generate: regeneration changed generated files; re-run "

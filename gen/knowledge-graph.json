@@ -46463,7 +46463,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked at the repo root: conventions_test.go verifies that this repository's own hook config invokes them, that the guide embeds them verbatim, and that each declares a stance for every decision and surface in the guard contract (the magus-guard-coverage lines).  This comment used to claim the templates' behavior was asserted",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:214",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:226",
       "attrs": {
         "exported": "true"
       }
@@ -46473,7 +46473,7 @@
       "kind": "function",
       "label": "cursor_schemas_generate",
       "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.  A GENERATOR where every other Cursor schema in that tree is a hand transcription, which is the point: a transcription is partial by construction and goes stale in silence, and this one cannot, because its source is a pinned package and the drift gate compares the output byte for byte.  The output lands in the ROOT project's testdata, because that is where the host schemas live and where host_schema_test.go reads them. Declared with",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:129",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:141",
       "attrs": {
         "exported": "true"
       }
@@ -46483,7 +46483,7 @@
       "kind": "function",
       "label": "format",
       "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates. The docs project cannot do it: dprint discovers this project's dprint.json and would format the subtree under it, which is a parent target writing into a descendant project (MGS3001). So the pages are formatted by the project that owns them, which is the same rule every other project with Markdown follows.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:225",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:237",
       "attrs": {
         "exported": "true"
       }
@@ -46510,7 +46510,7 @@
       "kind": "function",
       "label": "host_integration",
       "doc": "host-integration is deliberately NOT a dependency of ci. It starts real, locally installed agent hosts, so it can consume the caller's authentication and quota. A person opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness descriptors explicitly:  MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \\ host-e2e/example.json  The runner creates a disposable workspace and applies each descriptor's config. A missing local host is a structured skip; a present host t",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:197",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:209",
       "attrs": {
         "exported": "true"
       }
@@ -46520,14 +46520,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:141"
+      "source": "docs/guides/integrations/agents/magusfile.buzz:153"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). proc.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:149",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:161",
       "attrs": {
         "exported": "true"
       }
@@ -46546,7 +46546,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.  It runs under node, not bun, even though the plugin's runtime is bun. The test supplies Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified, which is a better trade than putting a second JS runtime in every contributor's toolchain for one file. The residual gap is bun-versus-node spawn semant",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:179",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:191",
       "attrs": {
         "exported": "true"
       }
