@@ -192,6 +192,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// both which rule fired and what it judged, the property every wrapper row
 		// below exists to prove.
 		{command: "go test ./...", rule: rawTool(`go test ./...`)},
+		// The tool moved, not the subcommand: same module, same effect, and it ran
+		// while the line above was denied.
+		{command: "go -C libs/gopherbuzz test ./...", rule: rawTool(`go -C libs/gopherbuzz test ./...`)},
+		{command: "go -C . test ./types", rule: rawTool(`go -C . test ./types`)},
+		// A global flag does not invent a deny for a subcommand nothing renders.
+		{command: "go -C libs/gopherbuzz env GOMODCACHE"},
 		{command: "npm test"},
 		{command: "npx prettier --check ."},
 		{command: "pytest tests/"},
