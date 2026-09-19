@@ -29,6 +29,7 @@ func TestExcludedModules(t *testing.T) {
 		"platform", "crypto", "env", "json", "time", "fmt", "markdown", "charm",
 		"path", "strings", "semver", "yaml", "template", "toml", "uuid", "xml",
 		"base64", "csv", "diff", "hex", "ini", "log", "math", "sort", "url",
+		"flags",
 		"magus",
 	}
 	got := names(ExcludedModules(available))

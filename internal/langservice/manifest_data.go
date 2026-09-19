@@ -108,6 +108,13 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "flags",
+		Doc:  "Parse a script's argv against the flags it declares.",
+		Methods: []Method{
+			{Name: "parse", Doc: "Parse argv against the declared flags, returning {values, positionals, unknown}: switches take no value and record \"true\", valued flags take the next word or an =value suffix, everything after `--` is a positional, and every argument that was not declared is returned in unknown rather than guessed at. Errors when a valued flag is given no value.", Sig: "flags\\parse(argv, switches, valued) -> FlagParse"},
+		},
+	},
+	{
 		Name: "fmt",
 		Doc:  "String formatting (printf-style).",
 		Methods: []Method{

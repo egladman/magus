@@ -49,6 +49,7 @@
 // worth strictly less than the work.
 
 import "io";
+import "flags";
 import "env";
 import "fs";
 import "path";
@@ -105,7 +106,25 @@ fun resolveBin() > str {
     return proc\which("magus") catch "";
 }
 
+// warn names the file; see magus-command.buzz. STDERR, which is why it does not break
+// this file's contract to print nothing: stdout is what the host reads as a verdict.
+fun warn(message: str) > void {
+    io\stderr.write("magus-checkpoint.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is

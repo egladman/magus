@@ -2158,7 +2158,20 @@ magus does not. The most common one is "argument N must be labeled".
 code in this ecosystem is tested. --coverprofile writes an LCOV report for
 the file under -t (entry file only; imports are measured when they are the
 -t subject). The lsp subcommand speaks the Language Server Protocol over
-stdio for an editor integration.`,
+stdio for an editor integration.
+
+--check parses and type-checks the named files and does not run them, which
+is the only way to judge a script whose whole job is a side effect: a hook
+that reads stdin and shells out cannot be validated by running it. It takes
+several paths, reports every diagnostic rather than stopping at the first,
+and fails only on errors; warnings print and pass. Resolving a file import
+still executes that module's top level, since there is no check-only import
+pass.
+
+It cannot resolve magus/spell/*, which the workspace loader binds, so a
+magusfile or a target definition reports an unresolved import. Those are
+the files magus already checks by loading them; --check is for the ones
+nothing loads.`,
 	Flags: []Flag{
 		// Backticks are load-bearing: flag.UnquoteUsage reads the quoted word as the
 		// value's name, so this renders `-e code` rather than `-e string`. The
@@ -2167,12 +2180,13 @@ stdio for an editor integration.`,
 		{Name: "e", Kind: FlagString, Doc: "Execute `code` given on the command line instead of a file"},
 		{Name: "t", Kind: FlagBool, Doc: `Run the file's test "..." {} blocks and report pass/fail`},
 		{Name: "test", Kind: FlagBool, AliasOf: "t", Doc: "Alias for -t"},
+		{Name: "check", Kind: FlagBool, Doc: "Parse and type-check the named files without running them; report every diagnostic"},
 		{Name: "coverprofile", Kind: FlagString, Doc: "Write an LCOV coverprofile for the file under `-t` (requires `-t`)"},
 		{Name: "embedded", Kind: FlagBool, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
 		{Name: "no-autoload", Kind: FlagBool, Doc: "Start the REPL without executing the magusfile"},
 		{Name: "C", Kind: FlagString, Doc: "Working directory for the REPL's import resolution (default: cwd)"},
 	},
-	Usage: "magus buzz [file|-|lsp] [flags]",
+	Usage: "magus buzz [file...|-|lsp] [flags]",
 	Children: []Command{
 		{Name: "lsp", Short: "Language server over stdio (LSP)"},
 	},
@@ -2181,6 +2195,7 @@ stdio for an editor integration.`,
 		{"Run a script", "magus buzz scripts/report.buzz"},
 		{"Run an inline snippet", `magus buzz -e 'import "std"; fun main() > void { std\print("hi"); } main();'`},
 		{"Run a file's test blocks", "magus buzz -t scripts/report.buzz"},
+		{"Check files without running them", "magus buzz --check scripts/report.buzz scripts/build.buzz"},
 		{"Run a magusfile-style file", "magus buzz --embedded scripts/target.buzz"},
 		{"Write an LCOV coverprofile while testing", "magus buzz -t --coverprofile=out.lcov scripts/report.buzz"},
 	},

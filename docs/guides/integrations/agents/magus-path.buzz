@@ -69,6 +69,7 @@
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 
 import "io";
+import "flags";
 import "encoding/json" as json;
 import "env";
 import "fs";
@@ -231,7 +232,29 @@ fun adviseBranch() > str {
     return envOr("HOST_ADVISE_BRANCH", fallback: ADVISE_DEFAULT);
 }
 
+// warn names the file: a host reports a hook's stderr with the entry's matcher at best
+// and nothing at all at worst, and a reader with several entries needs to know which.
+fun warn(message: str) > void {
+    io\stderr.write("magus-path.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv ANYWAY.
+//
+// An argument that arrives here means the wiring meant something by it, and reading none
+// at all accepted that in silence. Reported and then ignored, which is the same policy
+// every other arm of this file takes: a misconfigured entry must not block work, and must
+// not be invisible either.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
