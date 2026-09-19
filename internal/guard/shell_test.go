@@ -198,6 +198,15 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "go -C . test ./types", rule: rawTool(`go -C . test ./types`)},
 		// A global flag does not invent a deny for a subcommand nothing renders.
 		{command: "go -C libs/gopherbuzz env GOMODCACHE"},
+		// Another tree is not this workspace's to funnel. The target the deny would
+		// name runs THIS module's tests, so pointing the caller at it answers a
+		// question they did not ask.
+		{command: "go -C /elsewhere/repo test ./..."},
+		{command: "go -C ../sibling test ./..."},
+		// An unknown flag before the subcommand ends the read rather than guessing
+		// whether the word after it is an operand or the verb. Denying `nx build`
+		// here would name an operation the caller never invoked.
+		{command: "npx --package nx some-other-bin"},
 		{command: "npm test"},
 		{command: "npx prettier --check ."},
 		{command: "pytest tests/"},

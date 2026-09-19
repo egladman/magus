@@ -585,6 +585,10 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 			return toolMatch{}, false
 		}
 	}
+	// Read once: every rendering that reaches the comparison below has already been
+	// checked to name this same program, so the invocation reads the same way for all of
+	// them. Computed inside the loops it cost a scan per spell, per operation, per charm.
+	have := afterGlobalFlags(c.Name, c.Args)
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
 			for _, charms := range [][]string{nil, {"rw"}} {
@@ -592,8 +596,7 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 				if err != nil || !ok || program == "" || filepath.Base(program) != c.Name {
 					continue
 				}
-				prefix := commandPrefix(args)
-				have := afterGlobalFlags(c.Args)
+				prefix := commandPrefix(program, args)
 				if len(prefix) > 0 && (len(have) < len(prefix) || !slices.Equal(have[:len(prefix)], prefix)) {
 					continue
 				}
@@ -607,9 +610,25 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 // commandPrefix extracts the semantic subcommand from an operation's rendered argv,
 // preserving compound verbs (`go mod tidy`, `go tool govulncheck`). It is empty when the
 // rendering names no subcommand, which rawToolMatch reads as a single-purpose program.
-func commandPrefix(args []string) []string {
+//
+// It consumes a valued global flag's OPERAND as well as its name, which the invocation
+// side also does. Skipping the name alone left a rendering of `go -C <dir> test` with the
+// prefix ["<dir>"], and for any real path subcommandWord then rejected it, returned nil,
+// and rawToolMatch read `go` as a single-purpose program whose every spelling is covered:
+// one spell rendering that argv would have denied `go version` workspace-wide.
+//
+// An unknown flag is SKIPPED here, unlike on the invocation side, and the asymmetry is the
+// point. This argv is magus's own rendering, so a misread costs a rule that matches
+// nothing; the other side is a caller's argv, where the same misread invents a deny. A
+// nil answer here is not the cautious option, it is the claim that the program has no
+// subcommands at all.
+func commandPrefix(program string, args []string) []string {
+	valued := valuedGlobalFlags[filepath.Base(program)]
 	first := 0
 	for first < len(args) && strings.HasPrefix(args[first], "-") {
+		if valued[args[first]] {
+			first++
+		}
 		first++
 	}
 	if first == len(args) || !subcommandWord(args[first]) {
@@ -622,26 +641,61 @@ func commandPrefix(args []string) []string {
 	return prefix
 }
 
-// afterGlobalFlags drops the options a tool takes BEFORE its subcommand, so the rule
-// matches the command rather than one spelling of it. commandPrefix already does this on
-// the rendered side; an invocation that carries such a flag has to be read the same way,
-// or the deny is a test of where the caller put the flag.
+// valuedGlobalFlags names, per program, the flags that appear BEFORE a subcommand and take
+// a SEPARATE operand. Per program because the word that follows one is otherwise
+// indistinguishable from the subcommand itself, and reading it wrong is what invents a
+// deny rather than what misses one.
+//
+// `go` takes exactly one. Nothing else is listed yet, so `npm -w <pkg> test` and its
+// siblings still walk past their denies: that is the same hole this closes for go, left
+// open deliberately rather than guessed at, because a wrong entry here is worse than a
+// missing one.
+var valuedGlobalFlags = map[string]map[string]bool{
+	"go": {"-C": true},
+}
+
+// afterGlobalFlags drops the options a tool takes BEFORE its subcommand, so a rule matches
+// the command rather than one spelling of it, and answers nil when it cannot tell.
 //
 // `go -C <dir> test ./...` is the case that named this: same module, same effect as
-// `go test ./...`, and it ran while that one was denied. -C is spelled out because it
-// takes a separate operand; a lone flag consumes nothing after it, and a flag this does
-// not know is skipped rather than followed, which can only leave the invocation looking
-// like some OTHER subcommand and so cannot invent a deny.
-func afterGlobalFlags(args []string) []string {
+// `go test ./...`, and it ran while that one was denied.
+//
+// An UNKNOWN flag ends the read. The alternative, skipping it and carrying on, cannot tell
+// a lone flag from one whose operand follows, so `npx --package nx some-bin` would present
+// `nx` as the subcommand and be denied as an nx operation nobody invoked. A guard that
+// refuses only what it can prove would rather miss that deny than invent this one, and
+// missing it is what happened before this function existed at all.
+//
+// A `--flag=value` needs no such care: it carries its operand, so nothing can follow it.
+func afterGlobalFlags(program string, args []string) []string {
+	valued := valuedGlobalFlags[filepath.Base(program)]
 	for i := 0; i < len(args); i++ {
-		if !strings.HasPrefix(args[i], "-") {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
 			return args[i:]
 		}
-		if args[i] == "-C" {
-			i++
+		if strings.Contains(arg, "=") {
+			continue
 		}
+		if !valued[arg] {
+			return nil
+		}
+		// The operand of a valued flag, and the one case where reading it decides more
+		// than where to resume: a directory outside this workspace means the invocation
+		// is pointed at another tree, which no target here can run for the caller.
+		if i+1 >= len(args) || escapesWorkspace(args[i+1]) {
+			return nil
+		}
+		i++
 	}
 	return nil
+}
+
+// escapesWorkspace reports a path that names something outside the workspace. Absolute or
+// dot-dot only: this is a textual read of one argv word, and anything subtler would be a
+// claim about a filesystem the guard has not looked at.
+func escapesWorkspace(path string) bool {
+	return filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../")
 }
 
 // subcommandWord reports an argv word that names a subcommand rather than a path or a
