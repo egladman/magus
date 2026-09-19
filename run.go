@@ -1544,10 +1544,15 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		svcSession.ReleaseAll(shutdownCtx)
 	}()
 	ctx = service.WithSession(ctx, svcSession)
-	// The pre-run composed gates and RunAll's batch steps share one isolation
-	// scope. A dynamically admitted needs child temporarily yields its parent's
-	// lease, so its own exclusive policy is enforced without holding the parent
-	// slot or lock across the child scheduler.
+	// The pre-run composed gates and RunAll's batch steps share one isolation scope. A
+	// dynamically admitted needs child INHERITS its parent's lease and takes nothing of
+	// its own, so it can never queue for a gate its own ancestor holds.
+	//
+	// This said the opposite until 2026-09-19, describing a yield-and-retake that was
+	// removed on 2026-09-08 as the cause of a 19-minute hang (internal/cache/admission.go
+	// records it). Inheritance is what the isolation gate's wedge verdict now relies on to
+	// read a holder in a fan-out as working, so a reader who resolves the two the wrong
+	// way reintroduces that hang.
 	ctx = cache.WithRunScope(ctx)
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err
