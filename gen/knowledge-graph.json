@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6410,
-  "edge_count": 11473,
+  "node_count": 6416,
+  "edge_count": 11483,
   "relations": [
     {
       "id": "annotates",
@@ -1727,7 +1727,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1921",
+        "dir_files": "1925",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1987,7 +1987,7 @@
       "label": "docs/reference/buzz",
       "source": "docs/reference/buzz",
       "attrs": {
-        "dir_files": "362",
+        "dir_files": "366",
         "dir_languages": "markdown,md#abs,md#add,md#affected,md#affectedimpact,md#after,md#afterfunc,md#append,md#appendfile,md#arch,md#archive,md#at,md#attention,md#base,md#base64,md#base64decodebytes,md#base64encodebytes,md#basename,md#before,md#beforefunc,md#build,md#bustcache,m"
       }
     },
@@ -4865,6 +4865,18 @@
         "section": "reference",
         "tags": "env,module,stdlib,magusfile",
         "title": "env module"
+      }
+    },
+    {
+      "id": "doc:docs/reference/buzz/flags.md",
+      "kind": "doc",
+      "label": "docs/reference/buzz/flags.md",
+      "source": "docs/reference/buzz/flags.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "flags,module,stdlib,magusfile",
+        "title": "flags module"
       }
     },
     {
@@ -25594,6 +25606,36 @@
       }
     },
     {
+      "id": "docsection:docs/reference/buzz/flags.md#flags",
+      "kind": "docsection",
+      "label": "flags",
+      "source": "docs/reference/buzz/flags.md#flags",
+      "attrs": {
+        "anchor": "flags",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/buzz/flags.md#methods",
+      "kind": "docsection",
+      "label": "Methods",
+      "source": "docs/reference/buzz/flags.md#methods",
+      "attrs": {
+        "anchor": "methods",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/buzz/flags.md#parse",
+      "kind": "docsection",
+      "label": "parse",
+      "source": "docs/reference/buzz/flags.md#parse",
+      "attrs": {
+        "anchor": "parse",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/buzz/fmt.md#fmt",
       "kind": "docsection",
       "label": "fmt",
@@ -44462,6 +44504,15 @@
       }
     },
     {
+      "id": "file:std/flags.go",
+      "kind": "file",
+      "label": "std/flags.go",
+      "source": "std/flags.go",
+      "attrs": {
+        "language": "go"
+      }
+    },
+    {
       "id": "file:std/fmt.go",
       "kind": "file",
       "label": "std/fmt.go",
@@ -46515,11 +46566,18 @@
       "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:107"
     },
     {
+      "id": "function:docs/guides/integrations/agents/magusfile.buzz:checkBuzz",
+      "kind": "function",
+      "label": "checkBuzz",
+      "doc": "checkBuzz type-checks this directory's Buzz without running it.  Running is what stood in for this before, and it is not the same question: these templates read an event on stdin and shell out, so executing one exercises the path its fixture happens to take and says nothing about the rest of the file. A check reads all of it.  TWO invocations because the two sets parse under different rules, and the split is not cosmetic: the templates are upstream-strict, which is what lets a reader run one with a stock Bu",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:201"
+    },
+    {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked at the repo root: conventions_test.go verifies that this repository's own hook config invokes them, that the guide embeds them verbatim, and that each declares a stance for every decision and surface in the guard contract (the magus-guard-coverage lines).  This comment used to claim the templates' behavior was asserted",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:226",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:261",
       "attrs": {
         "exported": "true"
       }
@@ -46529,7 +46587,7 @@
       "kind": "function",
       "label": "cursor_schemas_generate",
       "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.  A GENERATOR where every other Cursor schema in that tree is a hand transcription, which is the point: a transcription is partial by construction and goes stale in silence, and this one cannot, because its source is a pinned package and the drift gate compares the output byte for byte.  The output lands in the ROOT project's testdata, because that is where the host schemas live and where host_schema_test.go reads them. Declared with",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:141",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:142",
       "attrs": {
         "exported": "true"
       }
@@ -46539,7 +46597,7 @@
       "kind": "function",
       "label": "format",
       "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates. The docs project cannot do it: dprint discovers this project's dprint.json and would format the subtree under it, which is a parent target writing into a descendant project (MGS3001). So the pages are formatted by the project that owns them, which is the same rule every other project with Markdown follows.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:237",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:272",
       "attrs": {
         "exported": "true"
       }
@@ -46549,7 +46607,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.  The page is a verbatim copy of ten templates a reader downloads, and kept by hand it went stale where no gate could see. conventions_test.go compares the EXECUTABLE lines, so a comment rewritten in a template and not in the page passed every check and shipped the old text; three of the ten had drifted that way at once. Generated, the page cannot: the drift gate regenerates it and compares byte",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:84",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:85",
       "attrs": {
         "exported": "true"
       }
@@ -46559,14 +46617,14 @@
       "kind": "function",
       "label": "generatedOutputs",
       "doc": "Everything generate writes, project-relative because that is where this target runs. The schema DIRECTORY rather than its files: drift\\expand walks it, so a schema the SDK starts emitting is covered without this list being edited to notice.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:68"
+      "source": "docs/guides/integrations/agents/magusfile.buzz:69"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:host_integration",
       "kind": "function",
       "label": "host_integration",
       "doc": "host-integration is deliberately NOT a dependency of ci. It starts real, locally installed agent hosts, so it can consume the caller's authentication and quota. A person opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness descriptors explicitly:  MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \\ host-e2e/example.json  The runner creates a disposable workspace and applies each descriptor's config. A missing local host is a structured skip; a present host t",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:209",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:244",
       "attrs": {
         "exported": "true"
       }
@@ -46576,14 +46634,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:153"
+      "source": "docs/guides/integrations/agents/magusfile.buzz:154"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). proc.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:161",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:162",
       "attrs": {
         "exported": "true"
       }
@@ -46592,7 +46650,7 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:63",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:64",
       "attrs": {
         "exported": "true"
       }
@@ -46602,7 +46660,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.  It runs under node, not bun, even though the plugin's runtime is bun. The test supplies Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified, which is a better trade than putting a second JS runtime in every contributor's toolchain for one file. The residual gap is bun-versus-node spawn semant",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:191",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:226",
       "attrs": {
         "exported": "true"
       }
@@ -53503,14 +53561,14 @@
       "kind": "function",
       "label": "has",
       "doc": "has reports whether haystack contains needle.  Buzz's str.indexOf returns NULL when the substring is absent, not -1, so comparing the result to a number raises \"cannot compare null and int\" rather than answering false. That is why this is a named helper instead of an inline comparison at four call sites.",
-      "source": "spells/onepassword/spell.buzz:39"
+      "source": "spells/onepassword/spell.buzz:37"
     },
     {
       "id": "function:spells/onepassword/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
       "doc": "\"onepassword\", not \"op\": a spell's registered name has to stand alone - it is what `magus describe spells` and every diagnostic show, with no directory around it to supply the context. `op` is the binary, not the product.",
-      "source": "spells/onepassword/spell.buzz:31",
+      "source": "spells/onepassword/spell.buzz:29",
       "attrs": {
         "exported": "true"
       }
@@ -53519,7 +53577,7 @@
       "id": "function:spells/onepassword/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "source": "spells/onepassword/spell.buzz:120",
+      "source": "spells/onepassword/spell.buzz:118",
       "attrs": {
         "exported": "true"
       }
@@ -53529,7 +53587,7 @@
       "kind": "function",
       "label": "resolve_secret",
       "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so this one is enforced at compile time - a provider returning the wrong shape fails to load rather than failing at the first read. Secret comes from magus/spell, like Target and Command.  The reference may be written either way, because both read naturally at a call site:  magus\\secret.r",
-      "source": "spells/onepassword/spell.buzz:65",
+      "source": "spells/onepassword/spell.buzz:63",
       "attrs": {
         "exported": "true"
       }
@@ -63650,6 +63708,14 @@
     },
     {
       "source": "dir:docs/reference/buzz",
+      "target": "doc:docs/reference/buzz/flags.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
+      "source": "dir:docs/reference/buzz",
       "target": "doc:docs/reference/buzz/fmt.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -68039,6 +68105,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "std/env.go"
+    },
+    {
+      "source": "dir:std",
+      "target": "file:std/flags.go",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "std/flags.go"
     },
     {
       "source": "dir:std",
@@ -79185,6 +79259,30 @@
       "provenance": "docs/reference/buzz/env.md"
     },
     {
+      "source": "doc:docs/reference/buzz/flags.md",
+      "target": "docsection:docs/reference/buzz/flags.md#flags",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/flags.md",
+      "target": "file:std/flags.go",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/flags.md",
+      "target": "module:flags",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
       "source": "doc:docs/reference/buzz/fmt.md",
       "target": "docsection:docs/reference/buzz/fmt.md#fmt",
       "relation": "contains",
@@ -79395,6 +79493,14 @@
     {
       "source": "doc:docs/reference/buzz/index.md",
       "target": "doc:docs/reference/buzz/env.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/index.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/index.md",
+      "target": "doc:docs/reference/buzz/flags.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -111537,6 +111643,22 @@
       "provenance": "docs/reference/buzz/env.md"
     },
     {
+      "source": "docsection:docs/reference/buzz/flags.md#flags",
+      "target": "docsection:docs/reference/buzz/flags.md#methods",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
+      "source": "docsection:docs/reference/buzz/flags.md#methods",
+      "target": "docsection:docs/reference/buzz/flags.md#parse",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
       "source": "docsection:docs/reference/buzz/fmt.md#fmt",
       "target": "docsection:docs/reference/buzz/fmt.md#methods",
       "relation": "contains",
@@ -125426,6 +125548,14 @@
     },
     {
       "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:checkBuzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
       "target": "function:docs/guides/integrations/agents/magusfile.buzz:ci",
       "relation": "contains",
       "confidence": "extracted",
@@ -136066,14 +136196,6 @@
     },
     {
       "source": "file:spells/onepassword/spell.buzz",
-      "target": "import:os",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "spells/onepassword/spell.buzz"
-    },
-    {
-      "source": "file:spells/onepassword/spell.buzz",
       "target": "import:proc",
       "relation": "imports",
       "confidence": "inferred",
@@ -139035,6 +139157,14 @@
     {
       "source": "function:docs/guides/integrations/agents/magusfile.buzz:generate",
       "target": "function:docs/guides/integrations/agents/magusfile.buzz:generatedOutputs",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:checkBuzz",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -150459,6 +150589,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/buzz/env.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/buzz/flags.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

@@ -11,7 +11,7 @@ Run a Buzz script
 
 ## Synopsis
 
-**magus** buzz [file|-|lsp] [flags]
+**magus** buzz [file...|-|lsp] [flags]
 
 ## Description
 
@@ -37,10 +37,26 @@ the file under -t (entry file only; imports are measured when they are the
 -t subject). The lsp subcommand speaks the Language Server Protocol over
 stdio for an editor integration.
 
+--check parses and type-checks the named files and does not run them, which
+is the only way to judge a script whose whole job is a side effect: a hook
+that reads stdin and shells out cannot be validated by running it. It takes
+several paths, reports every diagnostic rather than stopping at the first,
+and fails only on errors; warnings print and pass. Resolving a file import
+still executes that module's top level, since there is no check-only import
+pass.
+
+It cannot resolve magus/spell/\*, which the workspace loader binds, so a
+magusfile or a target definition reports an unresolved import. Those are
+the files magus already checks by loading them; --check is for the ones
+nothing loads.
+
 ## Options
 
 **-C** *string*
 : Working directory for the REPL's import resolution (default: cwd)
+
+**--check**
+: Parse and type-check the named files without running them; report every diagnostic
 
 **--coverprofile** *-t*
 : Write an LCOV coverprofile for the file under \`-t\` (requires \`-t\`)
@@ -89,6 +105,12 @@ magus buzz -e 'import "std"; fun main() > void { std\print("hi"); } main();'
 
 ```sh
 magus buzz -t scripts/report.buzz
+```
+
+*Check files without running them*
+
+```sh
+magus buzz --check scripts/report.buzz scripts/build.buzz
 ```
 
 *Run a magusfile-style file*
