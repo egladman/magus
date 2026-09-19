@@ -85,6 +85,12 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if sym.Namespace != "" {
 			attrs[attrNamespace] = symbolID(sym.Namespace)
 		}
+		if sym.Signature != "" {
+			attrs[AttrSignature] = sym.Signature
+		}
+		if sym.BodyDigest != "" {
+			attrs[AttrBodyDigest] = sym.BodyDigest
+		}
 		s.Nodes = append(s.Nodes, types.KnowledgeNode{
 			ID:     sID,
 			Kind:   types.KindSymbol,

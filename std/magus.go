@@ -72,7 +72,7 @@ var Magus = Module{
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.",
 			Args: []Arg{
 				{Name: "sub", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice},
@@ -148,7 +148,7 @@ var Magus = Module{
 		},
 		{
 			Name: "run",
-			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console.",
+			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -202,7 +202,7 @@ var Magus = Module{
 		},
 		{
 			Name: "diff",
-			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
+			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. opts.rev reviews a committed range written base...head instead of the working tree, which is what a caller running where the tree is clean (a CI checkout) has to pass to see anything at all. opts.baseline is a `magus graph export --symbols -o json` of the base: with it every changed symbol carries what the change did to it (`change` is added, removed, signature, or body) and `api` carries the semver bump that proves, a floor and never a ceiling. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
 			Args: []Arg{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
@@ -516,7 +516,12 @@ var Magus = Module{
 						"declared; a key present with an empty value is an explicit clear. id is the " +
 						"row's identity to upsert on - the value an orchestrator should also put in " +
 						"the worker's prompt, so the console can join activity to the row. " +
-						"created/updated/releases are stamped by the store and cannot be set here. " +
+						"created/updated/releases/lane_proof are stamped by the store and cannot be set " +
+						"here. A put that CREATES a row raises when its write_paths cover a file the " +
+						"workspace has to load (a magusfile, a magus.yaml, an imported spell source) " +
+						"while another live job with write paths is bound to this checkout: that job " +
+						"needs a worktree of its own, since a half-saved one of those stops the " +
+						"workspace loading for every job here at once. " +
 						"Returns the stored row. Read straight off the workspace already open on the " +
 						"context - no subprocess. Works from a magusfile target and from a `magus " +
 						"buzz` script run inside a workspace; raises MGS1022 only when there is no " +
@@ -1430,7 +1435,16 @@ func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any)
 // comment and a terminal reader want different things from the generated set, and a host
 // module that pre-filtered would make the wider answer unreachable.
 func MagusDiff(ctx context.Context, opts map[string]any) (types.Diff, error) {
-	return runMagusJSON[types.Diff](ctx, "diff", []string{"--generated"}, opts)
+	args := []string{"--generated"}
+	// Flags rather than opts to forward, because the nested magus is the one that knows how
+	// to read a baseline and a range; these just name them for it.
+	if baseline, ok := opts["baseline"].(string); ok && baseline != "" {
+		args = append(args, "--baseline", baseline)
+	}
+	if rev, ok := opts["rev"].(string); ok && rev != "" {
+		args = append(args, "--rev", rev)
+	}
+	return runMagusJSON[types.Diff](ctx, "diff", args, opts)
 }
 
 // runMagusJSON runs a nested magus subcommand and decodes its report into T.
@@ -1498,6 +1512,30 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 // The child runs in the working directory carried by ctx (WithCwd), so a nested project
 // describes its own project rather than the root workspace. opts may carry "root",
 // emitted as the global --root flag, which precedes the subcommand.
+// nestedExecOptions is how a nested magus is launched: where it runs, what it inherits, and
+// what it is fed.
+//
+// Extracted from runMagus so the option plumbing can be asserted without spawning anything.
+// Each field answers one opt, spelled as proc.exec spells it:
+//
+//   - dir runs the child somewhere else, resolved RELATIVE to the contextual project dir, so
+//     a nested magus reaching a sibling project needs no proc.exec("magus", ...).
+//   - quiet captures the output without echoing it, for a command whose stdout is consumed.
+//   - stdin feeds the child. A subcommand that reads a credential there (graph push) is the
+//     case it exists for: an argument would put the token in a process listing and in every
+//     run log. It was missing, so the magusfile that pipes a token to `graph push` had it
+//     dropped on the floor and the publish failed on every push to main.
+func nestedExecOptions(ctx context.Context, opts map[string]any, env []string) run.ExecOptions {
+	quiet, _ := opts["quiet"].(bool)
+	return run.ExecOptions{
+		Dir:     resolveRunDir(ctx, opts),
+		Env:     env,
+		Capture: true,
+		Quiet:   quiet,
+		Stdin:   optStringDefault(opts, "stdin", ""),
+	}
+}
+
 func runMagus(ctx context.Context, label string, args []string, opts map[string]any) (types.ExecResult, error) {
 	self, err := os.Executable()
 	if err != nil {
@@ -1515,23 +1553,11 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	// call must retain both that trusted transport and its captured lease.
 	env := recursiveMagusEnv(ctx)
 
-	// Run in the contextual project dir; "" inherits the process cwd (the
-	// behavior for magusfile targets that run under a process chdir). opts.dir
-	// redirects it, resolved RELATIVE to that contextual dir exactly as proc.exec's
-	// dir is: a nested magus that must run somewhere else (a sibling project, a
-	// directory of scripts) has no other way to say so, and reaching for
-	// proc.exec("magus", ...) to get it is the thing magus warns about.
-	dir := resolveRunDir(ctx, opts)
-
-	// opts.quiet captures the output without echoing it to the console, for a
-	// command whose stdout is consumed (e.g. written to a file), not displayed.
-	quiet, _ := opts["quiet"].(bool)
-
 	lim := cache.LimiterFromContext(ctx)
 	var rec types.ExecResult
 	var cmdErr error
 	runFn := func() error {
-		res, err := run.Exec(ctx, self, full, run.ExecOptions{Dir: dir, Env: env, Capture: true, Quiet: quiet})
+		res, err := run.Exec(ctx, self, full, nestedExecOptions(ctx, opts, env))
 		switch {
 		case err != nil && errors.Is(err, types.ExecDenied):
 			cmdErr = err

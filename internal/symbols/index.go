@@ -1,9 +1,15 @@
 package symbols
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/egladman/magus/types"
 )
 
 // The symbol index is a build artifact, never a source file: it lives under the magus
@@ -40,4 +46,39 @@ func IndexPath(cacheDir, projectAbsDir string) string {
 	}
 	sum := sha256.Sum256([]byte(dir))
 	return filepath.Join(cacheDir, "symbols", hex.EncodeToString(sum[:8]), indexFileName)
+}
+
+// FingerprintBodies sets each symbol's BodyDigest from the definition lines under root,
+// reading every defining file once. A symbol whose file or lines cannot be read keeps an
+// empty digest, which a comparison must read as unknown rather than as unchanged.
+//
+// It reads the working tree, not the index, so an index built before the file was edited
+// fingerprints lines that may no longer hold the symbol. That is the staleness the index
+// already carries for Source, and `magus graph build` clears both at once.
+func FingerprintBodies(root string, syms []types.KnowledgeSymbol) {
+	lines := map[string][][]byte{}
+	for i := range syms {
+		path, lineStr, ok := strings.Cut(syms[i].Source, ":")
+		if !ok {
+			continue
+		}
+		start, err := strconv.Atoi(lineStr)
+		if err != nil || start < 1 {
+			continue
+		}
+		file, seen := lines[path]
+		if !seen {
+			data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+			if err == nil {
+				file = bytes.Split(data, []byte("\n"))
+			}
+			lines[path] = file
+		}
+		end := max(start, syms[i].DefEndLine)
+		if end > len(file) {
+			continue
+		}
+		sum := sha256.Sum256(bytes.Join(file[start-1:end], []byte("\n")))
+		syms[i].BodyDigest = hex.EncodeToString(sum[:8])
+	}
 }

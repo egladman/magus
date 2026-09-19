@@ -22,9 +22,7 @@
 
 import "fs";
 import "proc";
-import "crypto";
 import "sort";
-import "encoding/json";
 import "std";
 import "assert";
 
@@ -353,99 +351,23 @@ export fun coveredBlocks(profile: str) > {str: bool} !> any {
     return blocks;
 }
 
-// platformTotals is one platform's own figure: the statements its run compiled, and how
-// many it entered. This is what a reader of a committed record wants when the merged
-// badge disagrees with what their laptop measured.
-export fun platformTotals(tables: {str: [str]}, blocks: {str: bool}) > any !> any {
+// treeTotals is the whole-tree figure {covered, statements}: every block the static
+// denominator lists counts toward statements, including files this platform never
+// compiled, and a block counts as covered only when blocks says it ran. A block the
+// profiles name that the denominator does not list (a generated file) is ignored.
+export fun treeTotals(tables: {str: [str]}, blocks: {str: bool}) > any !> any {
     var statements = 0;
     var covered = 0;
     foreach (file, rows in tables) {
         foreach (row in rows) {
             final fields = row.split(" ");
-            final ran = blocks[file + ":" + fields[0]];
-            if (ran == null) { continue; }
             final n = std\parseInt(fields[1]);
             if (n == null) { throw "coverage: block row \"" + row + "\" has no statement count"; }
             statements = statements + n!;
-            if (ran! == true) { covered = covered + n!; }
+            if (blocks[file + ":" + fields[0]] == true) { covered = covered + n!; }
         }
     }
     return {"covered": covered, "statements": statements};
-}
-
-// blockDigest fingerprints a file's block table. A summary carries it per file so a
-// record measured against different source is DETECTED rather than misread: a bitset
-// only means anything against the block list it was written for.
-export fun blockDigest(rows: [str]) > str !> any {
-    return crypto\sha256Hex(rows.join("\n")).sub(0, len: 12);
-}
-
-// summaryFiles renders one platform's per-file coverage: "<digest> <bits>", one bit per
-// block in cover's order, "1" where the run executed it.
-//
-// A file with nothing covered is OMITTED rather than written as a run of zeros. It is
-// the same input to the merge and it halves the committed record; the file the platform
-// never compiled and the file it compiled but never entered are not distinguishable
-// here, and the badge does not distinguish them either.
-export fun summaryFiles(tables: {str: [str]}, covered: {str: bool}) > {str: str} !> any {
-    final files = mut {<str: str>};
-    foreach (file, rows in tables) {
-        var bits = mut [<str>];
-        var entered = false;
-        foreach (row in rows) {
-            final hit = covered[file + ":" + row.split(" ")[0]] == true;
-            if (hit) { entered = true; }
-            bits.append(if (hit) "1" else "0");
-        }
-        if (entered) { files[file] = blockDigest(rows) + " " + bits.join(""); }
-    }
-    return files;
-}
-
-// mergeSummaries unions every platform's run over the static denominator, returning
-// {covered, statements, stale}. A block counts once however many platforms ran it, and
-// a block no platform compiled counts in the denominator alone.
-//
-// A file whose digest no longer matches the tree is reported in `stale` and contributes
-// NOTHING, so an unrefreshed record can only lower the figure. That is what makes a
-// platform nobody has refreshed lately a smaller number rather than a wrong one.
-export fun mergeSummaries(tables: {str: [str]}, summaries: [any]) > any !> any {
-    var total = 0;
-    var covered = 0;
-    final stale = mut [<str>];
-    foreach (file in sort\strings(tables.keys())) {
-        final rows = tables[file]!;
-        final digest = blockDigest(rows);
-        final marks = mut {<int: bool>};
-        foreach (s in summaries) {
-            final rec = s["files"][file];
-            if (rec == null) { continue; }
-            final parts = "{rec}".split(" ");
-            if (parts[0] != digest) {
-                stale.append("{s["goos"]}/{s["goarch"]} " + file);
-                continue;
-            }
-            final bits = parts[1];
-            if (bits.len() != rows.len()) {
-                throw "coverage: {s["goos"]}/{s["goarch"]} records {bits.len()} blocks for "
-                    + file + ", which has {rows.len()}";
-            }
-            var b = 0;
-            while (b < rows.len()) {
-                if (bits.sub(b, len: 1) == "1") { marks[b] = true; }
-                b = b + 1;
-            }
-        }
-        var i = 0;
-        while (i < rows.len()) {
-            final n = std\parseInt(rows[i].split(" ")[1]);
-            if (n == null) { throw "coverage: block row \"" + rows[i] + "\" has no statement count"; }
-            total = total + n!;
-            if (marks[i] == true) { covered = covered + n!; }
-            i = i + 1;
-        }
-    }
-    return {"covered": covered, "statements": total, "stale": stale};
 }
 
 // percentOf renders the badge figure, truncated to a whole percent so it matches what
@@ -453,57 +375,6 @@ export fun mergeSummaries(tables: {str: [str]}, summaries: [any]) > any !> any {
 export fun percentOf(covered: int, statements: int) > str !> str {
     if (statements <= 0) { throw "coverage: nothing to measure; the denominator is empty"; }
     return "{covered * 100 / statements}";
-}
-
-// ---------------------------------------------------------------------------
-// The committed record.
-// ---------------------------------------------------------------------------
-
-// jsonString quotes a value that must not need escaping. Summaries carry import paths,
-// hex and bits, so a character needing an escape means something upstream is wrong.
-fun jsonString(s: str) > str !> str {
-    if (s.indexOf(`"`) != null or s.indexOf(`\`) != null) {
-        throw "coverage: \"" + s + "\" needs JSON escaping; a summary carries only ASCII paths, hex and bits";
-    }
-    return `"` + s + `"`;
-}
-
-// encodeSummary renders a platform's record: keys in a fixed order, files sorted, one
-// file per line.
-//
-// Hand-rendered rather than json\stringify because the record is COMMITTED. Go's map
-// marshalling is not a guaranteed order across encoder versions, and a byte that moves
-// on its own turns every refresh into a diff.
-export fun encodeSummary(rec: any) > str !> any {
-    var lines = mut [<str>];
-    lines.append("\{");
-    foreach (field in ["goos", "goarch", "mode", "commit", "measured_at"]) {
-        lines.append("  " + jsonString(field) + ": " + jsonString("{rec[field]}") + ",");
-    }
-    lines.append("  " + jsonString("statements") + ": {rec["statements"]},");
-    lines.append("  " + jsonString("covered") + ": {rec["covered"]},");
-    lines.append("  " + jsonString("files") + ": \{");
-    final names = sort\strings(rec["files"].keys());
-    var i = 0;
-    while (i < names.len()) {
-        final comma = if (i == names.len() - 1) "" else ",";
-        lines.append("    " + jsonString(names[i]) + ": " + jsonString("{rec["files"][names[i]]}") + comma);
-        i = i + 1;
-    }
-    lines.append("  }");
-    lines.append("}");
-    return lines.join("\n") + "\n";
-}
-
-// decodeSummary parses a committed record and rejects one missing a field the merge
-// reads, so a hand-edited file fails where it is read rather than silently measuring
-// less.
-export fun decodeSummary(path: str, text: str) > any !> any {
-    final rec = json\parse(text);
-    foreach (field in ["goos", "goarch", "mode", "commit", "measured_at", "files"]) {
-        if (rec[field] == null) { throw "coverage: " + path + " has no \"" + field + "\" field"; }
-    }
-    return rec;
 }
 
 test "modulePath reads the module line" {
@@ -633,74 +504,15 @@ test "coveredBlocks ORs a block reported by several test binaries" {
     assert\equal(covered["m/win.go:1.1,2.2"] == null, want: true, message: "never compiled here");
 }
 
-test "platformTotals separates what this platform compiled from what the tree holds" {
+test "treeTotals counts a file this platform never compiled at zero" {
     final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"], "m/win.go": ["5.5,6.6 4"]};
-    final totals = platformTotals(tables, blocks: {"m/a.go:1.1,2.2": true, "m/a.go:3.3,4.4": false});
-    assert\equal(totals["statements"], want: 5, message: "win.go is not this platform's denominator");
-    assert\equal(totals["covered"], want: 3, message: "one block entered");
+    final totals = treeTotals(tables, blocks: {"m/a.go:1.1,2.2": true, "m/a.go:3.3,4.4": false,
+        "m/gen.go:1.1,2.2": true});
+    assert\equal(totals, want: {"covered": 3, "statements": 9}, message: "win.go counts against; gen.go is not in the denominator");
 }
 
-// summaryText renders the committed JSON a platform would write for one file's bits, so
-// the merge tests below read exactly what encodeSummary produces.
-fun summaryText(goos: str, goarch: str, files: {str: str}) > str !> any {
-    return encodeSummary({"goos": goos, "goarch": goarch, "mode": "atomic",
-        "commit": "587c27db1", "measured_at": "2026-09-10T00:00:00Z",
-        "statements": 0, "covered": 0, "files": files});
-}
-
-test "mergeSummaries unions two platforms and keeps an uncompiled file in the denominator" {
-    final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"], "m/win.go": ["5.5,6.6 4"]};
-    final digest = blockDigest(tables["m/a.go"]!);
-    final darwin = decodeSummary("darwin", text: summaryText("darwin", goarch: "arm64",
-        files: {"m/a.go": digest + " 10"}));
-    // win.go is absent from both records: nothing local compiles it, and its statements
-    // still have to be counted against.
-    final linux = decodeSummary("linux", text: summaryText("linux", goarch: "amd64",
-        files: {"m/a.go": digest + " 01"}));
-
-    final merged = mergeSummaries(tables, summaries: [darwin, linux]);
-
-    assert\equal(merged["statements"], want: 9, message: "every block, compiled here or not");
-    assert\equal(merged["covered"], want: 5, message: "a block covered on either platform counts once");
-    assert\equal(merged["stale"].len(), want: 0, message: "nothing stale");
-    assert\equal(percentOf(merged["covered"], statements: merged["statements"]), want: "55", message: "truncated");
-}
-
-test "mergeSummaries reports a record measured against different source and credits it nothing" {
-    final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"]};
-    final stale = decodeSummary("linux", text: summaryText("linux", goarch: "amd64",
-        files: {"m/a.go": "000000000000 11"}));
-
-    final merged = mergeSummaries(tables, summaries: [stale]);
-
-    assert\equal(merged["covered"], want: 0, message: "a mismatched digest can only lower the figure");
-    assert\equal(merged["statements"], want: 5, message: "denominator unaffected");
-    assert\equal(merged["stale"][0], want: "linux/amd64 m/a.go", message: "named platform and file");
-}
-
-test "summaryFiles omits a file nothing covered and round-trips through the record" {
-    final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"], "m/cold.go": ["9.9,10.10 1"]};
-    final files = summaryFiles(tables, covered: {"m/a.go:3.3,4.4": true});
-
-    assert\equal(files["m/cold.go"] == null, want: true, message: "an all-zero file is not written");
-    assert\equal(files["m/a.go"]!.split(" ")[1], want: "01", message: "one bit per block, in cover's order");
-
-    final rec = decodeSummary("darwin", text: summaryText("darwin", goarch: "arm64", files: files));
-    final merged = mergeSummaries(tables, summaries: [rec]);
-    assert\equal(merged["covered"], want: 2, message: "the covered block survives the round trip");
-    assert\equal(merged["statements"], want: 6, message: "the omitted file still counts against");
-}
-
-test "encodeSummary sorts files so a refresh that measures the same thing is a no-op" {
-    final text = summaryText("darwin", goarch: "arm64", files: {"m/z.go": "aa 1", "m/a.go": "bb 0"});
-    assert\equal(text.indexOf("m/a.go") < text.indexOf("m/z.go"), want: true, message: "sorted");
-    assert\equal(text.endsWith("}\n"), want: true, message: "newline terminated");
-}
-
-test "decodeSummary rejects a record missing a field the merge reads" {
-    assert\throws(fun () > void !> any {
-        final _ = decodeSummary("coverage/linux-amd64.json", text: "\{\"goos\": \"linux\"\}");
-    }, message: "hand-edited record fails where it is read");
+test "percentOf truncates to a whole percent" {
+    assert\equal(percentOf(5, statements: 9), want: "55", message: "truncated");
 }
 
 test "percentOf refuses an empty denominator" {

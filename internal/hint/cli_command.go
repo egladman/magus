@@ -122,6 +122,7 @@ var (
 	JobExec             = cmd("job", "exec")
 	JobExit             = cmd("job", "exit")
 	JobWait             = cmd("job", "wait")
+	JobWatch            = cmd("job", "watch")
 	JobRun              = cmd("job", "run")
 	JobRm               = cmd("job", "rm")
 	NotesLs             = cmd("notes", "ls")
@@ -188,7 +189,7 @@ var AllCommands = []Command{
 	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
 	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs, Shell,
-	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobRun, JobRm, NotesLs, NotesGet, NotesEdit,
+	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobWatch, JobRun, JobRm, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,
 	AgentHarnessApply, AgentHarnessInstall, AgentHarnessVerify,

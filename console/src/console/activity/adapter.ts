@@ -33,6 +33,10 @@ export function kindLabel(kind: Kind): string {
       return "spawn";
     case Kind.NOTES:
       return "notes";
+    case Kind.FILE_CHANGE:
+      return "file";
+    case Kind.RUN:
+      return "run";
     default:
       return "event";
   }
@@ -181,6 +185,11 @@ const KIND_GROUP_ORDER: ReadonlyArray<{ kind: Kind; label: string }> = [
   { kind: Kind.CREDENTIAL_GRANT, label: "Credential grants" },
   { kind: Kind.AGENT_SPAWN, label: "Agent spawns" },
   { kind: Kind.NOTES, label: "Notes" },
+  // The two kinds the job feed synthesizes: a path under a job's write lane changed, and a run
+  // magus recorded against a job. They are last because they are the newest sources, not
+  // because they matter least.
+  { kind: Kind.FILE_CHANGE, label: "File changes" },
+  { kind: Kind.RUN, label: "Runs" },
 ];
 
 // groupEventsByKind buckets a page of events into the fixed kind order, dropping empty groups so the

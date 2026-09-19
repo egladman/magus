@@ -20,9 +20,11 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
+	"github.com/egladman/magus/types"
 )
 
 const (
@@ -55,11 +57,24 @@ type Service struct {
 	// live: an adopted run loads a workspace and the idle janitor evicts one while the daemon
 	// runs, so a slice taken at mount time would go stale within one session.
 	workspaces func() []Workspace
+	// The two sources WatchActivityEvents merges with the trail, both optional: see
+	// [WithJobs] and [WithFileChanges].
+	jobs  func() []types.Job
+	files func(context.Context) <-chan jobstore.FeedEvent
+	// poll is the follow loop's cadence, zero for [defaultPoll]. Injectable so a test does
+	// not wait on the production one.
+	poll time.Duration
 }
 
 // NewService builds a Service merging the trails of the workspaces the source reports at call
 // time. A nil source (or one that reports none) yields an empty view rather than an error.
-func NewService(workspaces func() []Workspace) *Service { return &Service{workspaces: workspaces} }
+func NewService(workspaces func() []Workspace, opts ...Option) *Service {
+	s := &Service{workspaces: workspaces}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
 
 // loaded returns the workspaces to read this call, skipping any without a cache dir to read.
 func (s *Service) loaded() []Workspace {
@@ -111,29 +126,36 @@ func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[act
 	from, to, next := pageBounds(len(matched), offset, limit)
 	out := make([]*activityv1.ActivityEvent, 0, to-from)
 	for _, e := range matched[from:to] {
-		pe := &activityv1.ActivityEvent{
-			Time:          timestamppb.New(time.UnixMilli(e.Ts)),
-			Kind:          encodeKind(e.Kind),
-			Actor:         e.Actor,
-			Host:          encodeHost(e),
-			Session:       e.Session,
-			Workspace:     e.Workspace,
-			Action:        e.Action,
-			Unit:          e.Lease, // magus calls this a lease; the proto keeps the "unit" spelling, which is the console's wire
-			Outcome:       encodeOutcome(e.Outcome),
-			Error:         e.Error,
-			RequestRef:    e.RequestRef,
-			ResponseRef:   e.ResponseRef,
-			Preview:       e.Preview,
-			RequestBytes:  e.RequestBytes,
-			ResponseBytes: e.ResponseBytes,
-		}
-		if e.DurationMs > 0 {
-			pe.Duration = durationpb.New(time.Duration(e.DurationMs) * time.Millisecond)
-		}
-		out = append(out, pe)
+		out = append(out, wireEvent(e))
 	}
 	return connect.NewResponse(&activityv1.ListActivityEventsResponse{Events: out, NextPageToken: next}), nil
+}
+
+// wireEvent maps one stored event onto the wire type. Its own function because the stream
+// sends the same events one at a time: a second copy of this mapping is how a field comes
+// to be served by the list and missing from the feed.
+func wireEvent(e trail.Event) *activityv1.ActivityEvent {
+	pe := &activityv1.ActivityEvent{
+		Time:          timestamppb.New(time.UnixMilli(e.Ts)),
+		Kind:          encodeKind(e.Kind),
+		Actor:         e.Actor,
+		Host:          encodeHost(e),
+		Session:       e.Session,
+		Workspace:     e.Workspace,
+		Action:        e.Action,
+		Unit:          e.Lease, // magus calls this a lease; the proto keeps the "unit" spelling, which is the console's wire
+		Outcome:       encodeOutcome(e.Outcome),
+		Error:         e.Error,
+		RequestRef:    e.RequestRef,
+		ResponseRef:   e.ResponseRef,
+		Preview:       e.Preview,
+		RequestBytes:  e.RequestBytes,
+		ResponseBytes: e.ResponseBytes,
+	}
+	if e.DurationMs > 0 {
+		pe.Duration = durationpb.New(time.Duration(e.DurationMs) * time.Millisecond)
+	}
+	return pe
 }
 
 // pageOffset reads a page token as an offset into the filtered stream. An unparseable token errors
@@ -237,6 +259,26 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 	}
 	if actions := q.GetActions(); len(actions) > 0 && !slices.Contains(actions, e.Action) {
 		return false
+	}
+	// The three narrowings a person watching one worker asks for. They are applied here
+	// rather than only on the stream so the same question can be asked of history: the
+	// drawer backfills through this predicate and then follows through it.
+	if units := q.GetUnits(); len(units) > 0 && !slices.Contains(units, e.Lease) {
+		return false
+	}
+	if sessions := q.GetSessions(); len(sessions) > 0 && !slices.Contains(sessions, e.Session) {
+		return false
+	}
+	if paths := q.GetPaths(); len(paths) > 0 {
+		// A path names a FILE change and nothing else. A tool call and a run are attributed
+		// by lease, so serving them under a path filter would report reach nobody asked
+		// about; see ActivityQuery.paths.
+		if e.Kind != trail.Kind(kindFileChange) {
+			return false
+		}
+		if !slices.ContainsFunc(paths, func(p string) bool { return jobstore.Covers(p, e.Action) }) {
+			return false
+		}
 	}
 	if window := q.GetTime(); window != nil {
 		if since := window.GetSince(); since != nil && e.Ts < since.AsTime().UnixMilli() {

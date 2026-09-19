@@ -3,6 +3,8 @@ package activity
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,9 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
+	"github.com/egladman/magus/types"
 )
 
 func actions(events []*activityv1.ActivityEvent) []string {
@@ -514,4 +519,110 @@ func TestListActivityEvents_RejectsBadPageToken(t *testing.T) {
 		require.Error(t, err, "token %q", token)
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	}
+}
+
+// watchClient mounts the real ActivityService Connect handler over an httptest server and
+// returns a client for it. connect.ServerStream has no injectable test sink, so a streaming
+// RPC is exercised end to end, the shape the viewer and status stream tests already use.
+// The poll is tightened so a test does not wait on the production cadence.
+func watchClient(t *testing.T, dir string, rows []types.Job, files chan job.FeedEvent) activityv1alpha1connect.ActivityServiceClient {
+	t.Helper()
+	s := NewService(func() []Workspace { return []Workspace{{Root: "/ws" + dir, CacheDir: dir}} },
+		WithJobs(func() []types.Job { return rows }),
+		WithFileChanges(func(context.Context) <-chan job.FeedEvent { return files }))
+	s.poll = 5 * time.Millisecond
+	path, handler := activityv1alpha1connect.NewActivityServiceHandler(s)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return activityv1alpha1connect.NewActivityServiceClient(srv.Client(), srv.URL)
+}
+
+// The whole point of the feed in one run: a person asks what one worker is doing and gets
+// the three producers merged into one stream, narrowed to that job, without the worker
+// being asked anything. The past arrives first (a drawer opening onto a blank panel reads
+// as "nothing happened"), then what lands next as it lands.
+func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
+	dir := t.TempDir()
+	trail.Append(t.Context(), dir, trail.Event{
+		Ts: 10, Kind: trail.KindAgentCommand, Actor: "agent", Action: "edit",
+		Lease: "pwa/job-watch", Session: "s1", Host: "claude-code",
+		Outcome: trail.OutcomeOK, Preview: "guard: deny",
+	})
+	trail.Append(t.Context(), dir, trail.Event{
+		Ts: 11, Kind: trail.KindAgentCommand, Actor: "agent", Action: "edit",
+		Lease: "pwa/elsewhere", Session: "s2", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+	})
+	rows := []types.Job{{
+		ID: "pwa/job-watch", State: types.StateRunning, WritePaths: []string{"internal/trail"},
+		Attempt: &types.JobAttempt{Found: true, Ref: "out1a2b3c", TimestampMs: 12, Target: "go-test", Project: "."},
+	}}
+	files := make(chan job.FeedEvent, 1)
+	client := watchClient(t, dir, rows, files)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	stream, err := client.WatchActivityEvents(ctx, connect.NewRequest(&activityv1.WatchActivityEventsRequest{
+		Backfill: 10,
+		Filter:   &activityv1.ActivityQuery{Units: []string{"pwa/job-watch"}},
+	}))
+	require.NoError(t, err)
+
+	require.True(t, stream.Receive())
+	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, stream.Msg().GetKind())
+	assert.Equal(t, "pwa/job-watch", stream.Msg().GetUnit(), "the other job's command is somebody else's business")
+	assert.Equal(t, "guard: deny", stream.Msg().GetPreview(), "a deny is the line a watcher is reading for")
+
+	require.True(t, stream.Receive())
+	assert.Equal(t, activityv1.Kind_KIND_RUN, stream.Msg().GetKind())
+	assert.Equal(t, "magus run go-test .", stream.Msg().GetAction())
+	assert.Equal(t, "out1a2b3c", stream.Msg().GetResponseRef(), "the feed names the log, so a reader opens it instead of hunting for it")
+
+	// The file watcher's half: nothing here asked the worker anything, and the path alone
+	// named it.
+	files <- job.FeedEvent{Ts: 20, Kind: job.FeedFile, Job: "pwa/job-watch", Lane: "internal/trail", Action: "internal/trail/trail.go", Outcome: trail.OutcomeOK}
+	require.True(t, stream.Receive())
+	assert.Equal(t, activityv1.Kind_KIND_FILE_CHANGE, stream.Msg().GetKind())
+	assert.Equal(t, "internal/trail/trail.go", stream.Msg().GetAction())
+	assert.Equal(t, "pwa/job-watch", stream.Msg().GetUnit())
+
+	require.NoError(t, stream.Close())
+}
+
+// A new trail line lands while somebody is watching, and the follow half delivers it: a
+// feed that only ever replayed the past would answer "how is it going" with history.
+//
+// One event is seeded and backfilled first, which is what gets the response headers out so
+// the client call returns. That is not scaffolding around a flaw: a stream that has sent
+// nothing has sent no headers either, and every real reader of this RPC is a drawer or a
+// terminal that asked for its backfill.
+func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
+	dir := t.TempDir()
+	trail.Append(t.Context(), dir, trail.Event{
+		Ts: 1, Kind: trail.KindAgentCommand, Actor: "agent",
+		Action: "already-here", Session: "s1", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+	})
+	files := make(chan job.FeedEvent)
+	client := watchClient(t, dir, nil, files)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	stream, err := client.WatchActivityEvents(ctx, connect.NewRequest(&activityv1.WatchActivityEventsRequest{
+		Backfill: 10,
+		Filter:   &activityv1.ActivityQuery{Sessions: []string{"s1"}},
+	}))
+	require.NoError(t, err)
+	require.True(t, stream.Receive())
+	assert.Equal(t, "already-here", stream.Msg().GetAction())
+
+	trail.Append(t.Context(), dir, trail.Event{
+		Ts: 2, Kind: trail.KindAgentCommand, Actor: "agent",
+		Action: "landed-while-watching", Session: "s1", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+	})
+	require.True(t, stream.Receive())
+	assert.Equal(t, "landed-while-watching", stream.Msg().GetAction())
+	assert.Equal(t, "s1", stream.Msg().GetSession(), "session is a filter, not an attribution")
+
+	require.NoError(t, stream.Close())
 }

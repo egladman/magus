@@ -1,6 +1,7 @@
 package job
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -10,14 +11,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// declaration renders one input record at the version this magus accepts, with members
+// spliced in after it.
+//
+// The version is READ from the constant rather than typed as a digit. Every fixture below
+// asserts something about a record the decoder got far enough to look INSIDE, so a stale
+// digit does not fail them honestly: it fails them at the version check, which is a
+// different refusal than the one each one names. TestDecodeDeclarationRefusesTheStoresOwnFields
+// says so in its own body and then asserts it, and it is the reason this helper exists.
+func declaration(members ...string) *strings.Reader {
+	body := fmt.Sprintf(`{"schema_version":%d`, types.JobSchemaVersion)
+	for _, m := range members {
+		body += "," + m
+	}
+	return strings.NewReader(body + "}")
+}
+
 // compat: see the legacy fields on types.Declaration. A client one release behind still registers, and
 // one that names a lane twice is refused rather than silently taking either spelling.
 func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 	t.Parallel()
 
-	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":7,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
-			`"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],"tier":"principal"}`))
+	row, err := DecodeDeclaration(declaration(
+		`"id":"adj/ledger"`, `"owned_paths":["internal/ledger"]`,
+		`"forbidden_paths":["MAGUS.md"]`, `"focus":["internal/hint"]`, `"tier":"principal"`))
 	require.NoError(t, err)
 	require.Equal(t, types.Declaration{
 		SchemaVersion: types.JobSchemaVersion,
@@ -32,8 +49,7 @@ func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 func TestDecodeDeclarationRefusesALaneSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":7,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
+	_, err := DecodeDeclaration(declaration(`"id":"adj/ledger"`, `"owned_paths":["a"]`, `"write_paths":["b"]`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "owned_paths")
 }
@@ -94,7 +110,7 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 		{"registered_by", `"registered_by":{"session":"someone"}`},
 		{"releases", `"releases":[]`},
 	} {
-		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":7,"id":"adj/store",` + field.member + `}`))
+		_, err := DecodeDeclaration(declaration(`"id":"adj/store"`, field.member))
 		require.Error(t, err, field.name)
 		// The refusal has to NAME the field. An error alone is satisfied by the version
 		// check too, so a fixture whose schema_version fell behind would leave this
@@ -107,16 +123,16 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":7,"id":"adj store"}`))
+	_, err := DecodeDeclaration(declaration(`"id":"adj store"`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a lease id")
 
-	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":7,"id":"adj/store","state":"done"}`))
+	_, err = DecodeDeclaration(declaration(`"id":"adj/store"`, `"state":"done"`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 
-	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":7,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
+	row, err := DecodeDeclaration(declaration(
+		`"id":"adj/store"`, `"write_paths":["internal/ledger"]`, `"state":"declared"`))
 	require.NoError(t, err)
 	assert.Equal(t, types.StateDeclared, row.State)
 }

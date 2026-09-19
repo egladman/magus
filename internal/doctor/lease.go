@@ -18,7 +18,8 @@ func (r *runner) checkJobTree() types.DoctorCheck {
 	return checkJobTree(r.ws.Root(), r.opts.cfg.Jobs, time.Now().Unix())
 }
 
-// checkJobTree reports live jobs nobody is left to wait on. It only reports: magus never
+// checkJobTree reports live jobs nobody is left to wait on, including a job blocked on a
+// dependency that ended without passing. It only reports: magus never
 // transitions a row, so the finding names the exit command a person runs instead.
 func checkJobTree(root string, limits config.Jobs, now int64) types.DoctorCheck {
 	const name = "job-tree"
@@ -37,11 +38,20 @@ func checkJobTree(root string, limits config.Jobs, now int64) types.DoctorCheck 
 		parts = append(parts, fmt.Sprintf("%d live job(s) not updated within jobs.stale_after (%s): %s",
 			len(flagged.Stale), limits.StaleAfter, strings.Join(flagged.Stale, ", ")))
 	}
+	// A job blocked on a dependency that ended without passing owns nothing and never will
+	// until somebody re-plans it; one waiting on live work is the plan working.
+	var stuck []string
+	for _, b := range flagged.Blocked {
+		if b.State == "" || b.State.Terminal() {
+			stuck = append(stuck, b.Job)
+			parts = append(parts, b.Job+" is "+b.String())
+		}
+	}
 	if len(parts) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every live job has a live root and a recent update"}
 	}
 	seen := map[string]bool{}
-	for _, id := range append(slices.Clone(flagged.Orphans), flagged.Stale...) {
+	for _, id := range append(append(slices.Clone(flagged.Orphans), flagged.Stale...), stuck...) {
 		if !seen[id] {
 			seen[id] = true
 			details = append(details, "if nobody holds it: "+hint.JobExit.With(id))

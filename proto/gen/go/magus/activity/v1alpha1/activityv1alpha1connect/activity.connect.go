@@ -50,6 +50,9 @@ const (
 	// ActivityServiceGetPayloadProcedure is the fully-qualified name of the ActivityService's
 	// GetPayload RPC.
 	ActivityServiceGetPayloadProcedure = "/magus.activity.v1alpha1.ActivityService/GetPayload"
+	// ActivityServiceWatchActivityEventsProcedure is the fully-qualified name of the ActivityService's
+	// WatchActivityEvents RPC.
+	ActivityServiceWatchActivityEventsProcedure = "/magus.activity.v1alpha1.ActivityService/WatchActivityEvents"
 )
 
 // ActivityServiceClient is a client for the magus.activity.v1alpha1.ActivityService service.
@@ -58,6 +61,18 @@ type ActivityServiceClient interface {
 	ListActivityEvents(context.Context, *connect.Request[v1alpha1.ListActivityEventsRequest]) (*connect.Response[v1alpha1.ListActivityEventsResponse], error)
 	// GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 	GetPayload(context.Context, *connect.Request[v1alpha1.GetPayloadRequest]) (*connect.Response[v1alpha1.Payload], error)
+	// WatchActivityEvents follows the same trail forward, OLDEST first, until the caller
+	// hangs up. It is the polling half of ListActivityEvents turned inside out: the console
+	// and `magus job watch` both want "tell me when something happens", and asking a list
+	// endpoint that question costs a full retained-window scan per second per reader.
+	//
+	// It merges three producers into the one envelope, which is why the filter is where it
+	// is rather than on the client: file changes the daemon's watcher saw, attributed to the
+	// job whose declared write lane covers the path; the guard's tool-call observations,
+	// attributed by the lease the hook resolved; and the runs recorded against a job. A
+	// reader narrows by job, session or path and gets one time-ordered stream of all three,
+	// so "what is that worker doing" is one subscription rather than three.
+	WatchActivityEvents(context.Context, *connect.Request[v1alpha1.WatchActivityEventsRequest]) (*connect.ServerStreamForClient[v1alpha1.ActivityEvent], error)
 }
 
 // NewActivityServiceClient constructs a client for the magus.activity.v1alpha1.ActivityService
@@ -83,13 +98,20 @@ func NewActivityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(activityServiceMethods.ByName("GetPayload")),
 			connect.WithClientOptions(opts...),
 		),
+		watchActivityEvents: connect.NewClient[v1alpha1.WatchActivityEventsRequest, v1alpha1.ActivityEvent](
+			httpClient,
+			baseURL+ActivityServiceWatchActivityEventsProcedure,
+			connect.WithSchema(activityServiceMethods.ByName("WatchActivityEvents")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // activityServiceClient implements ActivityServiceClient.
 type activityServiceClient struct {
-	listActivityEvents *connect.Client[v1alpha1.ListActivityEventsRequest, v1alpha1.ListActivityEventsResponse]
-	getPayload         *connect.Client[v1alpha1.GetPayloadRequest, v1alpha1.Payload]
+	listActivityEvents  *connect.Client[v1alpha1.ListActivityEventsRequest, v1alpha1.ListActivityEventsResponse]
+	getPayload          *connect.Client[v1alpha1.GetPayloadRequest, v1alpha1.Payload]
+	watchActivityEvents *connect.Client[v1alpha1.WatchActivityEventsRequest, v1alpha1.ActivityEvent]
 }
 
 // ListActivityEvents calls magus.activity.v1alpha1.ActivityService.ListActivityEvents.
@@ -102,6 +124,11 @@ func (c *activityServiceClient) GetPayload(ctx context.Context, req *connect.Req
 	return c.getPayload.CallUnary(ctx, req)
 }
 
+// WatchActivityEvents calls magus.activity.v1alpha1.ActivityService.WatchActivityEvents.
+func (c *activityServiceClient) WatchActivityEvents(ctx context.Context, req *connect.Request[v1alpha1.WatchActivityEventsRequest]) (*connect.ServerStreamForClient[v1alpha1.ActivityEvent], error) {
+	return c.watchActivityEvents.CallServerStream(ctx, req)
+}
+
 // ActivityServiceHandler is an implementation of the magus.activity.v1alpha1.ActivityService
 // service.
 type ActivityServiceHandler interface {
@@ -109,6 +136,18 @@ type ActivityServiceHandler interface {
 	ListActivityEvents(context.Context, *connect.Request[v1alpha1.ListActivityEventsRequest]) (*connect.Response[v1alpha1.ListActivityEventsResponse], error)
 	// GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 	GetPayload(context.Context, *connect.Request[v1alpha1.GetPayloadRequest]) (*connect.Response[v1alpha1.Payload], error)
+	// WatchActivityEvents follows the same trail forward, OLDEST first, until the caller
+	// hangs up. It is the polling half of ListActivityEvents turned inside out: the console
+	// and `magus job watch` both want "tell me when something happens", and asking a list
+	// endpoint that question costs a full retained-window scan per second per reader.
+	//
+	// It merges three producers into the one envelope, which is why the filter is where it
+	// is rather than on the client: file changes the daemon's watcher saw, attributed to the
+	// job whose declared write lane covers the path; the guard's tool-call observations,
+	// attributed by the lease the hook resolved; and the runs recorded against a job. A
+	// reader narrows by job, session or path and gets one time-ordered stream of all three,
+	// so "what is that worker doing" is one subscription rather than three.
+	WatchActivityEvents(context.Context, *connect.Request[v1alpha1.WatchActivityEventsRequest], *connect.ServerStream[v1alpha1.ActivityEvent]) error
 }
 
 // NewActivityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -130,12 +169,20 @@ func NewActivityServiceHandler(svc ActivityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(activityServiceMethods.ByName("GetPayload")),
 		connect.WithHandlerOptions(opts...),
 	)
+	activityServiceWatchActivityEventsHandler := connect.NewServerStreamHandler(
+		ActivityServiceWatchActivityEventsProcedure,
+		svc.WatchActivityEvents,
+		connect.WithSchema(activityServiceMethods.ByName("WatchActivityEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/magus.activity.v1alpha1.ActivityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ActivityServiceListActivityEventsProcedure:
 			activityServiceListActivityEventsHandler.ServeHTTP(w, r)
 		case ActivityServiceGetPayloadProcedure:
 			activityServiceGetPayloadHandler.ServeHTTP(w, r)
+		case ActivityServiceWatchActivityEventsProcedure:
+			activityServiceWatchActivityEventsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -151,4 +198,8 @@ func (UnimplementedActivityServiceHandler) ListActivityEvents(context.Context, *
 
 func (UnimplementedActivityServiceHandler) GetPayload(context.Context, *connect.Request[v1alpha1.GetPayloadRequest]) (*connect.Response[v1alpha1.Payload], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.activity.v1alpha1.ActivityService.GetPayload is not implemented"))
+}
+
+func (UnimplementedActivityServiceHandler) WatchActivityEvents(context.Context, *connect.Request[v1alpha1.WatchActivityEventsRequest], *connect.ServerStream[v1alpha1.ActivityEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("magus.activity.v1alpha1.ActivityService.WatchActivityEvents is not implemented"))
 }

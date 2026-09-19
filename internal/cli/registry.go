@@ -643,6 +643,7 @@ Subcommands (the first argument):
 			{Name: "static", Kind: FlagBool, Doc: "Deprecated alias for --reproducible"},
 			{Name: "select", Kind: FlagString, Doc: "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid"},
 			{Name: "budget", Kind: FlagInt, Default: 50, DefaultAtBind: true, Doc: "Node budget for --select (how many nodes the neighborhood may collect)"},
+			{Name: "symbols", Kind: FlagBool, Doc: "Include every indexed code symbol, which the whole-graph export leaves out; a `magus diff --baseline` needs them"},
 		}},
 		{Name: "stats", Short: "Report the knowledge graph's shape: god nodes, orphans, doc coverage", Flags: []Flag{
 			{Name: "kind", Kind: FlagString, Doc: "Scope every section to one node kind (spell, target, doc, ...)"},
@@ -1833,11 +1834,17 @@ call it unconditionally.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|exec|exit|wait|run> [flags]",
+	Usage: "magus job <fork|exec|exit|wait|watch|run> [flags]",
 	Children: []Command{
 		{
 			Name:  "fork",
 			Short: "Declare one job, from flags or a JSON record on stdin",
+			Description: "Declare one job: what its holder is handed, where it may write, and the one check it runs. " +
+				"It refuses a job whose write paths cover a file the workspace has to LOAD (any project's magusfile.buzz, " +
+				"its magus.yaml, or a spell source a magusfile imports) while another live job with write paths is bound " +
+				"to this checkout, because a half-saved one of those stops the workspace loading for every job here at " +
+				"once: give that job its own worktree. Every other fork records what it could prove about its lane against " +
+				"the jobs already here, in lane_proof, which `magus ls jobs` prints.",
 			Flags: []Flag{
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
@@ -1865,9 +1872,10 @@ them and magus describe job prints one job's terms.`,
 		{
 			Name:        "exec",
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
-			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. With no job, print the one this checkout holds. --vacate gives up the binding instead.",
+			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. The binding is the SESSION's when --session names one, so several sessions in one checkout each hold their own. With no job, print the one this checkout holds. --vacate gives up the binding instead.",
 			Flags: []Flag{
 				{Name: "base", Kind: FlagString, Doc: "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)"},
+				{Name: "session", Kind: FlagString, Doc: "The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's"},
 				{Name: "vacate", Kind: FlagBool, Doc: "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running"},
 			},
 		},
@@ -1886,6 +1894,28 @@ them and magus describe job prints one job's terms.`,
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a result must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read the result from stdin instead of from the job, for one that was never filed"},
 			},
+		},
+		{
+			Name:        "watch",
+			Short:       "Follow what a job's holder is doing, until interrupted",
+			Description: "Print one line per event as it happens: files changed under the job's declared write lane, tool calls the guard observed under its lease, and the runs magus recorded against it, merged in time order.",
+			Long: `Follow one job's holder without asking it anything.
+
+The three sources are the filesystem, the guard's activity trail, and the job's
+own recorded runs. None of them needs the holder to cooperate or even to notice,
+which is the point: messaging a worker to ask how it is going costs it the turn
+it was in the middle of, and the answer you get is the worker's account of
+itself rather than what happened.
+
+A changed file is attributed to the job whose declared write lane covers it. The
+lanes are disjoint, so the attribution is exact and needs nothing from the
+worker; where two live lanes somehow cover one path the line says so and
+attributes it to neither, because there is nothing in a path to break the tie.
+
+It reads this checkout and needs no daemon. The same feed is served over the
+console's Jobs view, which every verb that names a job prints a link to.` + "\n\n`magus describe job <job> --gates`" + ` grades what a job has finished; this
+shows what it is doing.`,
+			Usage: "magus job watch <job>",
 		},
 		{Name: "run", Short: "Submit one of the daemon's own jobs and return"},
 		{
@@ -2021,6 +2051,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "prompt", Kind: FlagBool, Doc: "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction"},
 		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
 		{Name: "patch", Kind: FlagString, Doc: "Review a patch somebody handed you instead of the working tree; `-` reads stdin"},
+		{Name: "baseline", Kind: FlagString, Doc: "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves"},
 	},
 	Examples: []Example{
 		{"Read what you are about to commit", "magus diff"},

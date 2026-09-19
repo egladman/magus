@@ -159,6 +159,8 @@ const (
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
 	// diff: --ack
 	FlagDiffAck = "ack"
+	// diff: --baseline
+	FlagDiffBaseline = "baseline"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
 	// diff: --impact
@@ -233,6 +235,8 @@ const (
 	FlagGraphExportServe = "serve"
 	// graph export: --static
 	FlagGraphExportStatic = "static"
+	// graph export: --symbols
+	FlagGraphExportSymbols = "symbols"
 	// graph export: --targets
 	FlagGraphExportTargets = "targets"
 	// graph export: --url
@@ -267,6 +271,8 @@ const (
 	FlagInitVCS = "vcs"
 	// job exec: --base
 	FlagJobExecBase = "base"
+	// job exec: --session
+	FlagJobExecSession = "session"
 	// job exec: --vacate
 	FlagJobExecVacate = "vacate"
 	// job exit: --schema
@@ -840,6 +846,7 @@ type GraphExportFlags struct {
 	Static       bool   // --static
 	Select       string // --select
 	Budget       int    // --budget
+	Symbols      bool   // --symbols
 }
 
 // GraphExportDefaults carries the defaults `magus graph export` resolves at runtime (config, a
@@ -864,6 +871,7 @@ func BindGraphExport(fs *flag.FlagSet, d GraphExportDefaults) *GraphExportFlags 
 	fs.BoolVar(&f.Static, FlagGraphExportStatic, false, "Deprecated alias for --reproducible")
 	fs.StringVar(&f.Select, FlagGraphExportSelect, "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid")
 	fs.IntVar(&f.Budget, FlagGraphExportBudget, d.Budget, "Node budget for --select (how many nodes the neighborhood may collect)")
+	fs.BoolVar(&f.Symbols, FlagGraphExportSymbols, false, "Include every indexed code symbol, which the whole-graph export leaves out; a `magus diff --baseline` needs them")
 	return &f
 }
 
@@ -1403,14 +1411,16 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 
 // JobExecFlags are the flags declared for `magus job exec`.
 type JobExecFlags struct {
-	Base   string // --base
-	Vacate bool   // --vacate
+	Base    string // --base
+	Session string // --session
+	Vacate  bool   // --vacate
 }
 
 // BindJobExec registers `magus job exec`'s flags on fs and returns the destination.
 func BindJobExec(fs *flag.FlagSet) *JobExecFlags {
 	var f JobExecFlags
 	fs.StringVar(&f.Base, FlagJobExecBase, "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+	fs.StringVar(&f.Session, FlagJobExecSession, "", "The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's")
 	fs.BoolVar(&f.Vacate, FlagJobExecVacate, false, "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running")
 	return &f
 }
@@ -1499,6 +1509,7 @@ type DiffFlags struct {
 	Prompt    bool   // --prompt
 	Rev       string // --rev
 	Patch     string // --patch
+	Baseline  string // --baseline
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
@@ -1513,6 +1524,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.BoolVar(&f.Prompt, FlagDiffPrompt, false, "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction")
 	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
 	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
+	fs.StringVar(&f.Baseline, FlagDiffBaseline, "", "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves")
 	return &f
 }
 

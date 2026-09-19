@@ -55,6 +55,7 @@ import {
   wantsDemo,
 } from "../../lib/daemon";
 import { demoJobs, demoOverlaps } from "./demo";
+import { JobFeed } from "./feed";
 import { persisted } from "../../lib/persist";
 import { mountZoomControl, type ZoomControl } from "../zoomControl";
 import { registerCommand, unregisterCommand } from "../commands";
@@ -786,7 +787,11 @@ export function activate(host: HTMLElement): JobsInstance {
   let sourceDecided = false;
   // The shared #demo fragment, read once at mount. Polling is never started in the demo: there is
   // no daemon to poll and the fixture does not move.
-  const demo = wantsDemo(parseHash());
+  const hash = parseHash();
+  const demo = wantsDemo(hash);
+  // The job a link asked for, read once at mount and cleared by the first read that could act
+  // on it. See where it is consumed for why it is retired either way.
+  let wantedJob = hash["job"] ?? "";
   let model: JobTree = buildJobTree([]);
   let join: RunJoin = joinRuns(model, []);
   let runModel: RunPlanModel = emptyRunPlan();
@@ -797,6 +802,10 @@ export function activate(host: HTMLElement): JobsInstance {
   // The host the last read resolved, kept so the detail can build a log-viewer deep link without
   // re-resolving it mid-render, and so a submit knows where to send.
   let lastHost: string | null = null;
+  // The live feed, built ONCE for the mount and re-pointed as the selection moves. One
+  // subscription at a time, because a drawer shows one job: opening a stream per job the
+  // reader has ever clicked would leave the daemon writing to tabs nobody is looking at.
+  const feed = new JobFeed();
   // One connection per host, reused by every read and every submit. Rebuilt when the daemon changes,
   // because a client carries the origin it was built for.
   let client: JobClient | null = null;
@@ -1312,7 +1321,11 @@ export function activate(host: HTMLElement): JobsInstance {
       }
       runsBox.append(ul);
     }
-    refs.detail.replaceChildren(head, dl, runsBox);
+    // The live feed's element is REUSED rather than rebuilt, which is the whole reason it is
+    // an object and not a render function: this sheet is repainted whenever the poll changes
+    // a field, and a feed rebuilt with it would restart its subscription and lose everything
+    // the reader had scrolled back to.
+    refs.detail.replaceChildren(head, dl, runsBox, feed.el);
   };
 
   // renderTargetDetail is the second tenant's half: what this node IS (project, target, state) and
@@ -1390,6 +1403,11 @@ export function activate(host: HTMLElement): JobsInstance {
       if (g.dataset.id === selected) g.dataset.selected = "";
       else delete g.dataset.selected;
     }
+    // OUTSIDE the signature check below, because the feed follows the SELECTION and the
+    // signature is about the sheet's content: a job selected while its fields happened to be
+    // unchanged would otherwise be watched by a feed still pointed at the last one.
+    // Re-pointing at the job it already follows is a no-op, which is what makes it safe here.
+    feed.follow(lastHost ?? "", source === "jobs" ? selected : null);
     const sig = detailSignature();
     if (sig === paintedDetail) return;
     paintedDetail = sig;
@@ -1581,6 +1599,16 @@ export function activate(host: HTMLElement): JobsInstance {
     }
     drawn = jobsDrawn(model, Date.now());
     if (selected && !model.byId.has(selected)) selected = null;
+    // The #job= directive, honoured on the first read that can resolve it and then retired.
+    // It is what the link every CLI verb prints leads to (internal/service/console.JobLink),
+    // so a person handed a URL lands on that job's sheet with its feed already running
+    // instead of on a list they have to find it in. Retired whether or not the job was
+    // there: a link to a job this daemon does not carry must not keep reselecting on every
+    // poll and fighting whatever the reader picks instead.
+    if (wantedJob) {
+      if (model.byId.has(wantedJob)) selected = wantedJob;
+      wantedJob = "";
+    }
     render(overviewLine(model), staleNote());
   };
 
@@ -1961,11 +1989,17 @@ export function activate(host: HTMLElement): JobsInstance {
       } else {
         unmountZoom();
         stopPolling();
+        // A backgrounded pane stops the feed for the reason it stops polling: work nobody is
+        // looking at is not a reason to hold a stream open. syncSelection reopens it when the
+        // pane comes back, so what returns to the screen is current rather than the picture
+        // from before it was hidden.
+        feed.stop();
       }
     },
     deactivate(): void {
       disposed = true;
       stopPolling();
+      feed.stop();
       detachCommands();
       controller.abort();
       // The status bar outlives this view, so the stepper has to be taken down by hand -

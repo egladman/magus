@@ -485,6 +485,49 @@
   color: var(--console-status-ok);
 }
 
+/* The live feed: what the selected job's holder is doing right now, as opposed to everything
+   above it, which is what the job was declared to be and how it has been graded.
+
+   It reads like a terminal on purpose. A person watching four workers is scanning a column for
+   the word "deny" going past, not reading sentences, so the row is fixed columns and the list
+   scrolls with the newest at the bottom, which is the shape they already know how to read. */
+.console-plan-feed__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* Bounded, and it is the bound that makes the section usable: a feed free to grow pushes the
+     declared fields above it off the screen, so opening a drawer on a busy worker would cost the
+     reader everything else the sheet says. */
+  max-block-size: 18rem;
+  overflow-y: auto;
+}
+.console-plan-feed__row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: baseline;
+  padding: 0.12rem 0;
+  font-size: 0.7rem;
+}
+.console-plan-feed__time {
+  color: var(--pf-t--global--text--color--subtle);
+  font-variant-numeric: tabular-nums;
+}
+/* Fixed width so the labels line up into a column the eye can run down, rather than moving with
+   the length of each word. */
+.console-plan-feed__kind {
+  inline-size: 2.6rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-plan-feed__mark { inline-size: 4.5rem; }
+.console-plan-feed__label { overflow-wrap: anywhere; }
+.console-plan-feed__note {
+  color: var(--pf-t--global--text--color--subtle);
+  overflow-wrap: anywhere;
+}
+/* A deny, an ask, a failed run, a contested path. The only rows worth interrupting a worker over
+   are the ones this marks, which is the point of marking them. */
+.console-plan-feed__row[data-bad] .console-plan-feed__mark { color: var(--console-status-danger); }
+
 /* One column on a phone: the drawing is the first thing to go, since the list carries the same
    nodes with the same states in words. */
 @media (max-width: 900px) {

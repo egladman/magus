@@ -58,15 +58,14 @@ console/gen/
 # root's own gen/*.json (the graph exports) stays tracked beside it.
 /gen/site/
 
-# Go coverage profile — throwaway intermediate from `magus run coverage`. The
-# rendered coverage.svg badge is committed, and so is coverage/, the per-platform
-# record it is rendered from; the profiles they are measured from are not.
+# Coverage intermediates: Go profiles from `magus run test`, Buzz LCOV fragments and the
+# merged figure from `magus run buzz-test`. The badges are rendered by coverage-render in
+# CD and published with the site, never committed.
 coverage.out
 coverage.hand.out
 # The half of that profile `test` measures without -race (cmd/magus), merged into
 # coverage.out as the suite finishes.
 coverage.cmd.out
-# Buzz LCOV fragments from `magus run buzz-test`; the badge is assets/buzz-coverage.svg.
 /coverage/buzz/
 
 # Local build artifacts: `go build ./cmd/<name>` at the repo root drops the bare

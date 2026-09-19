@@ -132,6 +132,10 @@ export object DiffSymbol {
     externalProjects: [str] = [],
     externalFileCount: int = 0,
     moduleAPI: bool = false,
+    change: str = "",
+    qualified: str = "",
+    signature: str = "",
+    baseSignature: str = "",
 }
 
 export object DiffTouch {
@@ -165,6 +169,16 @@ export object DiffFile {
     reach: int? = null,
 }
 
+export object DiffAPI {
+    base: str = "",
+    floor: str = "",
+    likely: str = "",
+    added: int = 0,
+    removed: int = 0,
+    signature: int = 0,
+    body: int = 0,
+}
+
 export object VCSCheckpoint {
     revision: str = "",
     branch: str = "",
@@ -186,6 +200,7 @@ export object Diff {
     seedProjects: [str] = [],
     affectedProjects: [ImpactProject] = [],
     notes: [str] = [],
+    api: DiffAPI? = null,
     reviewed: DiffReviewed = DiffReviewed{},
 }
 
@@ -583,6 +598,7 @@ export object Job {
     readOnly: bool = false,
     releases: [JobRelease] = [],
     unattributed: [JobUnattributedWrite] = [],
+    laneProof: str = "",
     reportedBase: str = "",
     baseVerdict: str = "",
     registeredBy: JobActor = JobActor{},
@@ -603,12 +619,19 @@ export object JobOverlap {
     pathsB: [str] = [],
 }
 
+export object JobBlock {
+    job: str = "",
+    on: str = "",
+    state: str = "",
+}
+
 export object JobList {
     jobs: [Job] = [],
     overlaps: [JobOverlap] = [],
     overdue: [str] = [],
     orphans: [str] = [],
     stale: [str] = [],
+    blocked: [JobBlock] = [],
 }
 
 export object GateStatus {

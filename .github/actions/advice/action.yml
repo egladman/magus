@@ -147,11 +147,10 @@ inputs:
       magus instead of doing it locally.
 
       Its own input rather than a consequence of `fix-merge-conflict`, because the two
-      run in different jobs: the comment is written by a read-only advisor on the pull
-      request's checks, and the fixer needs `contents: write` and a label event, so a
-      repository that honours the label does so from a SEPARATE workflow this one cannot
-      see. Set it where such a workflow exists - an offer nobody can accept is worse than
-      no offer.
+      run in different jobs: the comment is written by a read-only advisor, and the fixer
+      needs `contents: write` and the head branch checked out, so a repository that
+      honours the label does so from a job this one cannot see. Set it where such a job
+      exists - an offer nobody can accept is worse than no offer.
     required: false
     default: 'false'
   fix-merge-conflict:
@@ -174,6 +173,20 @@ inputs:
       settled again the next time main breaks it. Remove it to stop.
     required: false
     default: 'magus:regenerate:requested'
+  baseline:
+    description: >
+      A `magus graph export --symbols -o json` of the revision this pull request started
+      from, which api-surface reads to say what each changed symbol did to the API and the
+      smallest semver bump that proves.
+
+      Signatures are compared as the indexer rendered them, so the base must be indexed with
+      the same indexers as the head, and ideally in the same checkout: two environments
+      render one declaration differently and every difference reads as a changed signature.
+
+      Without it api-surface reports who can see the change and claims no bump, which is
+      what it did before a baseline was possible.
+    required: false
+    default: ''
   pr-number:
     description: The pull request to comment on.
     required: false
@@ -362,6 +375,7 @@ runs:
         PR_NUMBER: ${{ inputs.pr-number }}
         PR_BASE: ${{ inputs.base-ref }}
         PR_HEAD_SHA: ${{ inputs.head-sha }}
+        BASELINE: ${{ inputs.baseline }}
       run: magus buzz "$GITHUB_ACTION_PATH/api-surface.buzz"
 
     - name: Welcome a first-time contributor

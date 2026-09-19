@@ -1118,15 +1118,13 @@
           ]
         },
         {
-          "name": "coverage-badge",
-          "declared": "coverage_badge",
-          "doc": "Writes assets/coverage.svg, and is the only target that may.",
+          "name": "coverage-render",
+          "declared": "coverage_render",
+          "doc": "Renders the three language coverage badges into the assembled site, gen/site/assets/.",
           "dependencies": [
             "generate",
-            "test"
-          ],
-          "charms": [
-            "rw"
+            "test",
+            "buzz-test"
           ],
           "cross_dependencies": [
             {
@@ -1151,71 +1149,45 @@
               "target": "generate"
             },
             {
-              "target": "test",
-              "callIndex": 1
+              "target": "test"
             },
             {
               "project": "libs/gopherbuzz",
-              "target": "test",
-              "callIndex": 1
+              "target": "test"
             },
             {
               "project": "libs/diagnostics",
-              "target": "test",
-              "callIndex": 1
+              "target": "test"
             },
             {
               "project": "libs/commentdash",
-              "target": "test",
-              "callIndex": 1
+              "target": "test"
             },
             {
               "project": "libs/testlayout",
-              "target": "test",
-              "callIndex": 1
-            }
-          ],
-          "reads_files": [
-            {
-              "project": ".",
-              "glob": "**/*.go"
+              "target": "test"
             },
             {
-              "project": ".",
-              "glob": "**/go.mod"
-            },
-            {
-              "project": ".",
-              "glob": "coverage/*.json"
-            },
-            {
-              "project": ".",
-              "glob": "badge.buzz"
-            },
-            {
-              "project": ".",
-              "glob": "coverage.buzz"
+              "target": "buzz-test"
             }
           ],
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "assets/coverage.svg"
-            }
-          ],
-          "modifies_existing_files": [
+              "glob": "gen/site/assets/go-coverage.svg"
+            },
             {
-              "glob": "coverage/*.json"
+              "glob": "gen/site/assets/buzz-coverage.svg"
+            },
+            {
+              "glob": "gen/site/assets/typescript-coverage.svg"
             }
           ]
         },
         {
           "name": "buzz-test",
           "declared": "buzz_test",
-          "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.",
-          "charms": [
-            "rw"
-          ],
+          "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine, and holds their merged line coverage above a floor.",
           "reads_files": [
             {
               "project": ".",
@@ -1249,10 +1221,10 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "assets/buzz-coverage.svg"
+              "glob": "coverage/buzz/*.lcov"
             },
             {
-              "glob": "coverage/buzz/*.lcov"
+              "glob": "coverage/buzz/coverage.txt"
             }
           ]
         },
@@ -1527,7 +1499,6 @@
             "lint",
             "build",
             "test",
-            "coverage-badge",
             "compress-cgo-test",
             "completion-test",
             "security"
@@ -1541,9 +1512,6 @@
             },
             {
               "target": "test"
-            },
-            {
-              "target": "coverage-badge"
             },
             {
               "target": "compress-cgo-test"
@@ -1744,12 +1712,9 @@
         },
         {
           "name": "test",
-          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.",
+          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and holds the merged line coverage above a floor.",
           "dependencies": [
             "preflight"
-          ],
-          "charms": [
-            "rw"
           ],
           "cross_dependencies": [
             {
@@ -1769,7 +1734,13 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "coverage.svg"
+              "glob": "coverage.plain.lcov"
+            },
+            {
+              "glob": "coverage.dom.lcov"
+            },
+            {
+              "glob": "coverage.txt"
             }
           ]
         },
@@ -3566,7 +3537,7 @@
         },
         {
           "name": "test",
-          "doc": "test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run.",
+          "doc": "test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.",
           "dependencies": [
             "preflight"
           ],

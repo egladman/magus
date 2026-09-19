@@ -843,6 +843,10 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out.MapSet("externalProjects", vm.ListValue(itemsExternalProjects))
 	out.MapSet("externalFileCount", vm.IntValue(int64(v.ExternalFileCount)))
 	out.MapSet("moduleAPI", vm.BoolValue(v.ModuleAPI))
+	out.MapSet("change", vm.StrValue(v.Change))
+	out.MapSet("qualified", vm.StrValue(v.Qualified))
+	out.MapSet("signature", vm.StrValue(v.Signature))
+	out.MapSet("baseSignature", vm.StrValue(v.BaseSignature))
 	return out
 }
 
@@ -911,6 +915,18 @@ func ObjectDiffFile(v types.DiffFile) vm.Value {
 	return out
 }
 
+func ObjectDiffAPI(v types.DiffAPI) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("base", vm.StrValue(v.Base))
+	out.MapSet("floor", vm.StrValue(v.Floor))
+	out.MapSet("likely", vm.StrValue(v.Likely))
+	out.MapSet("added", vm.IntValue(int64(v.Added)))
+	out.MapSet("removed", vm.IntValue(int64(v.Removed)))
+	out.MapSet("signature", vm.IntValue(int64(v.Signature)))
+	out.MapSet("body", vm.IntValue(int64(v.Body)))
+	return out
+}
+
 func ObjectVCSCheckpoint(v types.VCSCheckpoint) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("revision", vm.StrValue(v.Revision))
@@ -953,6 +969,11 @@ func ObjectDiff(v types.Diff) vm.Value {
 		itemsNotes[indexNotes] = vm.StrValue(v.Notes[indexNotes])
 	}
 	out.MapSet("notes", vm.ListValue(itemsNotes))
+	optAPI := vm.Null
+	if v.API != nil {
+		optAPI = ObjectDiffAPI((*v.API))
+	}
+	out.MapSet("api", optAPI)
 	out.MapSet("reviewed", ObjectDiffReviewed(v.Reviewed))
 	return out
 }
@@ -1472,6 +1493,7 @@ func ObjectJob(v types.Job) vm.Value {
 		itemsUnattributed[indexUnattributed] = ObjectJobUnattributedWrite(v.Unattributed[indexUnattributed])
 	}
 	out.MapSet("unattributed", vm.ListValue(itemsUnattributed))
+	out.MapSet("laneProof", vm.StrValue(string(v.LaneProof)))
 	out.MapSet("reportedBase", vm.StrValue(v.ReportedBase))
 	out.MapSet("baseVerdict", vm.StrValue(string(v.BaseVerdict)))
 	out.MapSet("registeredBy", ObjectJobActor(v.RegisteredBy))
@@ -1519,6 +1541,14 @@ func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 	return out
 }
 
+func ObjectJobBlock(v types.JobBlock) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("job", vm.StrValue(v.Job))
+	out.MapSet("on", vm.StrValue(v.On))
+	out.MapSet("state", vm.StrValue(string(v.State)))
+	return out
+}
+
 func ObjectJobList(v types.JobList) vm.Value {
 	out := vm.NewMap()
 	itemsJobs := make([]vm.Value, len(v.Jobs))
@@ -1546,6 +1576,11 @@ func ObjectJobList(v types.JobList) vm.Value {
 		itemsStale[indexStale] = vm.StrValue(v.Stale[indexStale])
 	}
 	out.MapSet("stale", vm.ListValue(itemsStale))
+	itemsBlocked := make([]vm.Value, len(v.Blocked))
+	for indexBlocked := range v.Blocked {
+		itemsBlocked[indexBlocked] = ObjectJobBlock(v.Blocked[indexBlocked])
+	}
+	out.MapSet("blocked", vm.ListValue(itemsBlocked))
 	return out
 }
 

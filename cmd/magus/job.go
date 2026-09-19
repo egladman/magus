@@ -18,10 +18,14 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -57,12 +61,14 @@ func jobCmd(ctx context.Context, root string, args []string) error {
 		return jobExit(ctx, root, args[1:])
 	case hint.JobWait.Leaf():
 		return jobWait(ctx, root, args[1:])
+	case hint.JobWatch.Leaf():
+		return jobWatch(ctx, root, args[1:])
 	case hint.JobRun.Leaf():
 		return jobRunCatalog(ctx, args[1:])
 	case hint.JobRm.Leaf():
 		return jobDelete(ctx, root, args[1:])
 	default:
-		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, run or rm; `%s` lists what is in flight)", args[0], hint.LsJobs)
+		return usagef("magus job: unknown subcommand %q (want fork, exec, exit, wait, watch, run or rm; `%s` lists what is in flight)", args[0], hint.LsJobs)
 	}
 }
 
@@ -81,6 +87,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "        --vacate gives it up instead")
 	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
 	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
+	fmt.Fprintln(os.Stderr, "  watch follow what its holder is doing, until interrupted")
 	fmt.Fprintln(os.Stderr, "  run   submit one of the daemon's own jobs and return")
 	fmt.Fprintln(os.Stderr, "  rm    remove one job from the plan; a row that already ended needs --force")
 	fmt.Fprintln(os.Stderr, "")
@@ -90,6 +97,61 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "paths and end its own job, and nothing else. "+hint.ToolJob.String()+" is the")
 	fmt.Fprintln(os.Stderr, "same store through an agent's channel.")
 }
+
+// consoleJobLine is where to WATCH a job while it runs, printed under every verb that names
+// one. Somebody who wants to know how a worker is doing has two ways to find out, and only
+// one of them leaves the worker alone.
+//
+// An empty id asks for the Jobs view itself, which is what a listing wants.
+//
+// With no daemon serving there is no origin to build a link against, so the line says how to
+// start one instead. Printing the URL anyway would hand a person a page that never loads,
+// and a browser error page cannot tell them that nothing is listening rather than that the
+// console is broken.
+func consoleJobLine(id string) string {
+	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
+		return ""
+	}
+	if !daemonServing() {
+		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
+	}
+	host := mcpAddrString()
+	if id == "" {
+		return "console: " + console.Link(console.LinkOpts{Host: host, Surface: console.JobSurface})
+	}
+	return "console: " + console.JobLink(host, id)
+}
+
+// printConsoleJobLine writes that line, and nothing at all when the console is off: a
+// suppressed surface has no address, and a bare "console:" is worse than silence.
+func printConsoleJobLine(out io.Writer, id string) {
+	if line := consoleJobLine(id); line != "" {
+		fmt.Fprintln(out, line)
+	}
+}
+
+// daemonServing reports whether a PERSISTENT daemon is up. It is the two-step check
+// jobRunCatalog makes and for the same reason: a per-process proc server answers the socket
+// and serves no console, so its address would build a link to a page that never loads.
+//
+// It makes its OWN bounded context rather than taking the command's. The probe is a local
+// socket round trip on the way to printing one line, `magus ls jobs` reaches it through a
+// caller that has no context to pass, and a link nobody can build is not worth widening four
+// signatures for.
+func daemonServing() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), consoleProbeTimeout)
+	defer cancel()
+	addr, err := resolveDaemonAddr(ctx, "")
+	if err != nil || addr == "" {
+		return false
+	}
+	st, err := proc.QueryStatus(ctx, addr)
+	return err == nil && st != nil && st.Mode == "daemon"
+}
+
+// consoleProbeTimeout bounds that probe. A daemon on the same machine answers in
+// milliseconds; anything slower is one that cannot serve a console page either.
+const consoleProbeTimeout = 2 * time.Second
 
 func openJobs(root string) (*job.Store, error) {
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
@@ -105,8 +167,12 @@ func lsJobs(root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count and")
-			fmt.Fprintln(os.Stderr, "check, followed by every pair that claims the same path.")
+			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count, what")
+			fmt.Fprintln(os.Stderr, "its fork could prove about its lane (LANES) and its check, followed by every")
+			fmt.Fprintln(os.Stderr, "pair that claims the same path.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "LANES is what the checkout looked like when the job was forked: alone (nothing")
+			fmt.Fprintln(os.Stderr, "else live was bound there), disjoint, or overlapping.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -144,6 +210,7 @@ func lsJobs(root string, args []string) error {
 		return emitNames(ids)
 	case outputText:
 		printJobTree(os.Stdout, list)
+		printConsoleJobLine(os.Stdout, "")
 		return nil
 	default:
 		return emitFormatted(opts, list)
@@ -157,7 +224,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "JOB\tHOLDER\tSTATE\tMODEL\tPATHS\tCHECK")
+	fmt.Fprintln(w, "JOB\tHOLDER\tSTATE\tMODEL\tPATHS\tLANES\tCHECK")
 	marks := map[string][]string{}
 	for word, ids := range map[string][]string{"overdue": report.Overdue, "orphan": report.Orphans, "stale": report.Stale} {
 		for _, id := range ids {
@@ -170,10 +237,10 @@ func printJobTree(out io.Writer, report types.JobList) {
 			slices.Sort(m)
 			state += " (" + strings.Join(m, ", ") + ")"
 		}
-		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\n",
+		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
 			string(row.lease.Holder.OrSession()), state, orDash(row.lease.Model),
-			len(row.lease.WritePaths), orDash(row.lease.Validation))
+			len(row.lease.WritePaths), orDash(string(row.lease.LaneProof)), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()
 
@@ -191,6 +258,12 @@ func printJobTree(out io.Writer, report types.JobList) {
 		fmt.Fprintf(out, "\n%s\n", section.title)
 		for _, id := range section.ids {
 			fmt.Fprintf(out, "  %s: if nobody holds it, `%s`\n", id, hint.JobExit.With(id))
+		}
+	}
+	if len(report.Blocked) > 0 {
+		fmt.Fprintln(out, "\nblocked: own no paths until every dependency passes")
+		for _, b := range report.Blocked {
+			fmt.Fprintf(out, "  %s: %s\n", b.Job, b.String())
 		}
 	}
 
@@ -316,6 +389,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
+		printConsoleJobLine(os.Stdout, row.ID)
 		return nil
 	default:
 		return emitFormatted(opts, brief)
@@ -514,6 +588,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseAmbiguousSymbols(ctx, row.CompletionGates, jobSymbolReader(root)); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
+	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths}
+	if err := job.RefuseSharedCheckout(store, plan, row.ID, candidate); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	proof := job.LaneProofFor(store, plan, row.ID, candidate)
 	// A writing job is verified against the diff since its checkpoint, so one forked without
 	// a checkpoint could never pass. The fork records this checkout's state instead; where it
 	// cannot be read (no VCS here) the row stays without one and wait says why it cannot verify.
@@ -522,7 +601,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			row.Checkpoint = token
 		}
 	}
-	stored, err := store.Update(ctx, row.ID, job.Declare(row, globalCfg.Jobs.DefaultTimeout))
+	declare := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
+	stored, err := store.Update(ctx, row.ID, func(u *types.Job) {
+		declare(u)
+		u.LaneProof = proof
+	})
 	if err != nil {
 		return err
 	}
@@ -538,6 +621,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
+		printConsoleJobLine(os.Stdout, stored.ID)
 		return nil
 	default:
 		return emitFormatted(opts, stored)
@@ -557,10 +641,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 // believes it is on is a holder reporting a belief; the divergence this records is only
 // worth anything if the value comes from the tree.
 func jobExec(ctx context.Context, root string, args []string) error {
-	var base string
+	var base, session string
 	var vacate bool
 	pos, err := cmdParse("job exec", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&base, "base", "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+		fs.StringVar(&session, "session", "", "The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's, as it was before")
 		fs.BoolVar(&vacate, "vacate", false, "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none.")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exec <job> [flags]")
@@ -572,6 +657,10 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "them as a fact rather than a refusal.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no job, it prints the one this checkout holds.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--session names the session taking it, so several sessions sharing one checkout")
+			fmt.Fprintln(os.Stderr, "each hold their own lease and each gets its own lane graded. Pass the id this")
+			fmt.Fprintln(os.Stderr, "agent host reports to its hooks, or the binding is the whole checkout's.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--vacate gives that binding up instead of taking one, so the checkout can exec a")
 			fmt.Fprintln(os.Stderr, "different job (or the daemon's next assignment). Refused while the job is still")
@@ -601,7 +690,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		if cerr != nil {
 			return fmt.Errorf("magus job exec --vacate: %w", cerr)
 		}
-		return jobExecVacate(root, cacheDir)
+		return jobExecVacate(root, job.Checkout{CacheDir: cacheDir, Session: strings.TrimSpace(session)})
 	}
 	if len(pos) > 1 {
 		return usagef("magus job exec: takes at most one job")
@@ -615,15 +704,16 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
+	here := job.Checkout{CacheDir: cacheDir, Session: strings.TrimSpace(session)}
 	if len(pos) == 0 {
-		if id := job.LeaseFromMarker(cacheDir); id != "" {
+		if id := here.Marker(); id != "" {
 			fmt.Printf("this checkout holds the lease on %s\n", id)
 			return nil
 		}
 		fmt.Println("this checkout holds no job")
 		return nil
 	}
-	if err := job.BindLease(cacheDir, pos[0]); err != nil {
+	if err := here.Bind(pos[0]); err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
 	if strings.TrimSpace(base) == "" {
@@ -661,8 +751,9 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	}
 }
 
-// jobExecVacate gives up the lease this checkout holds, so a later exec can take a
-// different one (or the same one again, which BindLease already permitted).
+// jobExecVacate gives up the lease this session holds here, so a later exec can take a
+// different one (or the same one again, which Bind already permitted). It releases only
+// this session's binding: a sibling session working in the same checkout keeps its own.
 //
 // Refused only while the row says work is still IN FLIGHT (declared or running): a
 // holder that walks away from those two leaves its next write ungraded from here on,
@@ -674,8 +765,8 @@ func jobExec(ctx context.Context, root string, args []string) error {
 // store cannot find or read is treated the same permissive way: nothing here declares a
 // boundary left to protect, the same fail-open reading the guard gives an unreadable
 // ledger.
-func jobExecVacate(root, cacheDir string) error {
-	id := job.LeaseFromMarker(cacheDir)
+func jobExecVacate(root string, here job.Checkout) error {
+	id := here.Marker()
 	if id == "" {
 		fmt.Println("this checkout holds no job; nothing to vacate")
 		return nil
@@ -691,7 +782,7 @@ func jobExecVacate(root, cacheDir string) error {
 			}
 		}
 	}
-	cleared, err := job.VacateLease(cacheDir)
+	cleared, err := here.Vacate()
 	if err != nil {
 		return fmt.Errorf("magus job exec --vacate: %w", err)
 	}
@@ -884,6 +975,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		err = emitNames([]string{status.Job})
 	case outputText:
 		printJobStatus(os.Stdout, status)
+		printConsoleJobLine(os.Stdout, status.Job)
 	default:
 		err = emitFormatted(opts, status)
 	}
@@ -891,6 +983,167 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	return errSilent{exitCode: 1}
+}
+
+// jobWatch follows one job's feed in this terminal, one line per event, until interrupted.
+//
+// THE POINT IS THAT IT ASKS THE HOLDER NOTHING. The three sources are the guard's trail,
+// the job's recorded runs, and the filesystem under the job's declared write lane, and none
+// of them needs the worker to cooperate or even to notice. Messaging a worker to ask how it
+// is going costs it the turn it was in the middle of.
+//
+// It reads LOCALLY rather than through the daemon's WatchActivityEvents, over the same
+// internal/job cursors that RPC follows with, so the two cannot disagree about what has
+// happened since you last looked. Local because this verb has to work in a checkout with no
+// daemon running, which is the same tree the holder is working in: requiring a server to
+// answer "what is that worker doing" would put the question out of reach exactly when
+// somebody is at a terminal wondering.
+func jobWatch(ctx context.Context, root string, args []string) error {
+	pos, err := cmdParse("job watch", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus job watch <job>")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Follow what a job's holder is doing, one line per event, until interrupted.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Three sources, merged in time order: files changed under the job's declared write")
+			fmt.Fprintln(os.Stderr, "lane, tool calls the guard observed under its lease, and the runs magus recorded")
+			fmt.Fprintln(os.Stderr, "against it. None of them asks the holder anything, so watching costs it nothing.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "`"+hint.DescribeJob.With("<job>", "--gates")+"` grades what it has finished; this shows what it is doing.")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return usagef("magus job watch: requires exactly one job")
+	}
+	id := pos[0]
+	root = resolveRootOrEmpty(root)
+	store, err := openJobs(root)
+	if err != nil {
+		return err
+	}
+	rows, err := store.List()
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
+		return fmt.Errorf("magus job watch: there is no job %q (run `%s` to see them)", id, hint.LsJobs)
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return err
+	}
+
+	out := os.Stdout
+	printConsoleJobLine(out, id)
+	fmt.Fprintf(out, "watching %s in %s; interrupt to stop\n", id, root)
+
+	// The job plan is re-read per batch rather than captured: a holder releases paths as it
+	// goes, and a lane frozen here would keep attributing a file it gave up.
+	plan := func() []types.Job {
+		live, lerr := store.List()
+		if lerr != nil {
+			return nil
+		}
+		return live
+	}
+	changes := jobWatchFiles(ctx, out, root, plan)
+	cursor := job.CursorAt(job.Ascending(recentTrail(cacheDir)))
+	runs := job.NewRunCursor()
+	runs.Prime(rows)
+
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case e, ok := <-changes:
+			if !ok {
+				changes = nil // the watcher ended; the trail half keeps reporting
+				continue
+			}
+			// A contested path is attributed to nobody and is still this reader's business:
+			// their job declared it, somebody wrote it, and which of them did is precisely
+			// what nothing can say. Filtering on Job alone hid it.
+			if e.Job == id || slices.Contains(e.Contested, id) {
+				printFeedLine(out, e)
+			}
+		case <-tick.C:
+			for _, e := range job.ToolEvents(cursor.Next(job.Ascending(recentTrail(cacheDir)))) {
+				if e.Job == id {
+					printFeedLine(out, e)
+				}
+			}
+			for _, e := range runs.Next(plan()) {
+				if e.Job == id {
+					printFeedLine(out, e)
+				}
+			}
+		}
+	}
+}
+
+// jobWatchFiles starts this checkout's own file watcher and returns the attributed changes.
+// A watcher that will not start is REPORTED and then done without: the other two sources
+// still answer, and a silently missing third is how a feed comes to show a quiet tree.
+func jobWatchFiles(ctx context.Context, out io.Writer, root string, plan func() []types.Job) <-chan job.FeedEvent {
+	// RelativeIgnore, not BuiltinIgnore: an agent worktree lives under a dot-directory, and
+	// the absolute form would skip every file in the very tree this verb exists to watch.
+	w, err := watch.New(ctx, watch.WithRoot(root), watch.WithIgnore(watch.RelativeIgnore(root, watch.BuiltinIgnore)))
+	if err != nil {
+		fmt.Fprintf(out, "note: no file watcher here (%s), so this shows tool calls and runs only\n", err)
+		return nil
+	}
+	go func() {
+		<-ctx.Done()
+		_ = w.Close()
+	}()
+	return console.NewJobFeed(ctx, w, root, plan).Subscribe(ctx)
+}
+
+// recentTrail is what this checkout's activity trail still holds, newest first. An
+// unreadable trail reads as empty: a watcher that refused to start because nothing had been
+// recorded yet would refuse exactly when a job has only just begun.
+func recentTrail(cacheDir string) []trail.Event {
+	events, err := trail.ReadRecent(cacheDir, jobWatchWindow)
+	if err != nil {
+		return nil
+	}
+	return events
+}
+
+// jobWatchWindow bounds one read of the trail. It is a follower's window, not a history:
+// every tick re-reads it and the cursor drops what it has already printed, so this only has
+// to be wider than one second of a very busy machine.
+const jobWatchWindow = 2000
+
+// printFeedLine writes one event as one line. Fixed columns rather than prose, because the
+// value of this surface is skimming a column: a person watching four workers is looking for
+// the word "deny" going past, not reading sentences.
+func printFeedLine(out io.Writer, e job.FeedEvent) {
+	stamp := time.UnixMilli(e.Ts).Format("15:04:05")
+	switch e.Kind {
+	case job.FeedFile:
+		fmt.Fprintf(out, "%s  file  %s\n", stamp, e.Action)
+	case job.FeedTool:
+		verdict := e.Decision
+		if verdict == "" {
+			verdict = "observed" // the guard judged nothing; see trail.AppendAgentCommand
+		}
+		fmt.Fprintf(out, "%s  tool  %-8s %s\n", stamp, verdict, e.Action)
+	default:
+		status := "ok"
+		if e.Outcome == trail.OutcomeError {
+			status = "failed"
+		}
+		fmt.Fprintf(out, "%s  run   %-8s %s  %s\n", stamp, status, e.Action, e.Ref)
+	}
+	if e.Note != "" && e.Kind == job.FeedFile {
+		fmt.Fprintf(out, "          %s\n", e.Note)
+	}
 }
 
 // storedAttempt is what the output store recorded about the run behind ref: which command
@@ -1042,7 +1295,8 @@ func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
 	ancestors := types.JobAncestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
-		if other.ID == row.ID || !other.State.Live() || slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
+		if _, blocked := types.JobBlockedOn(leases, other); other.ID == row.ID || !other.State.Live() || blocked ||
+			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
 		for _, p := range other.WritePaths {

@@ -124,3 +124,15 @@ func TestLogViewerURLKeyDirective(t *testing.T) {
 func TestKeyDigestsParamEmpty(t *testing.T) {
 	assert.Empty(t, KeyDigestsParam(nil))
 }
+
+// A job's console link is the Jobs view with that job selected, and it is ABSOLUTE: a CLI
+// hands it to somebody who is not in the console already, so a path alone resolves against
+// nothing. With no daemon serving there is no origin, and the empty string is what lets the
+// caller say how to start one rather than print a dead link.
+func TestJobLink(t *testing.T) {
+	assert.Equal(t, "/console/plan/#job=pwa%2Fjob-watch", JobSurfaceLink("pwa/job-watch"))
+	assert.Equal(t, "http://127.0.0.1:7777/console/plan/#job=pwa%2Fjob-watch", JobLink("127.0.0.1:7777", "pwa/job-watch"))
+	assert.Empty(t, JobLink("", "pwa/job-watch"), "no serving daemon has no origin, so there is no link to print")
+	assert.Empty(t, JobLink("127.0.0.1:7777", ""), "a link to no job in particular is the surface link, not this")
+	assert.Contains(t, KnownSurfaces, JobSurface, "the Jobs view has to be a surface the daemon serves the shell for")
+}

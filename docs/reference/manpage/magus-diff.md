@@ -113,6 +113,9 @@ performance metric, and a performance metric gets gamed rather than met.
 **--ack**
 : Record that you have read the changed files at their current content; --impact reports what carries no such record
 
+**--baseline** *graph export --symbols -o json*
+: The base's \`graph export --symbols -o json\`: adds what each changed symbol did to the API and the smallest semver bump that proves
+
 **--generated**
 : Include declared target outputs, which are folded away by default
 

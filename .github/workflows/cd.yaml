@@ -35,7 +35,9 @@ jobs:
   site:
     name: docs site
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 60 rather than 30: coverage-render runs the race-enabled Go suite, every lib suite
+    # and buzz-test on top of the docs and console builds.
+    timeout-minutes: 60
     # Least privilege: read the repo, mint the Pages OIDC token, write the deployment.
     permissions:
       contents: read
@@ -90,7 +92,7 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # Three target names, no logic. Each project builds its OWN tree - a root target
+      # Target names, no logic. Each project builds its OWN tree - a root target
       # that wrote into docs/ trips MGS3001, because a parent writing into a descendant
       # project breaks the boundary the cache and affected set are computed over.
       #
@@ -105,10 +107,21 @@ jobs:
       - name: Build the console app
         run: magus run build console
 
+      # Leaves console/coverage.txt, the TypeScript figure coverage-render publishes. The
+      # root cannot need this target itself, because the console imports the root.
+      - name: Test the console
+        run: magus run test console
+
       # Assembles gen/site: docs at the root of it, console under /console/. Reproduce the
-      # exact published tree locally with the same three commands.
+      # exact published tree locally with the same commands.
       - name: Assemble the deploy tree
         run: magus run deploy-generate .
+
+      # The ONLY producer of the README's coverage badges. Runs every Go module's suite and
+      # buzz-test, then writes go-, buzz- and typescript-coverage.svg into gen/site/assets/.
+      # Nothing is committed back, which is why this job keeps read-only contents.
+      - name: Measure coverage and render the badges
+        run: magus run coverage-render .
 
       # enablement: true turns Pages on (with the Actions source) the first time this
       # runs, so no manual Settings -> Pages step is needed. If your org blocks

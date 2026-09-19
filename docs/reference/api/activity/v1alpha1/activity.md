@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, activityservice]
 
 ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a page of events (newest first), Get a payload blob by ref. Mounted on the console's human-facing API surface, never under /mcp (the agent protocol surface).
 
-Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:121](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L121). Part of the [daemon API](../../index.md).
+Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:143](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L143). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -17,7 +17,7 @@ Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/act
 
 ListActivity returns a page of recent events, newest first, narrowed by filter.
 
-`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary. Source: [activity.proto:123](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L123).
+`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary. Source: [activity.proto:145](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L145).
 
 Takes [ListActivityEventsRequest](#listactivityeventsrequest), returns [ListActivityEventsResponse](#listactivityeventsresponse).
 
@@ -25,9 +25,19 @@ Takes [ListActivityEventsRequest](#listactivityeventsrequest), returns [ListActi
 
 GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 
-`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary. Source: [activity.proto:125](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L125).
+`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary. Source: [activity.proto:147](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L147).
 
 Takes [GetPayloadRequest](#getpayloadrequest), returns [Payload](#payload).
+
+### WatchActivityEvents
+
+WatchActivityEvents follows the same trail forward, OLDEST first, until the caller hangs up. It is the polling half of ListActivityEvents turned inside out: the console and `magus job watch` both want "tell me when something happens", and asking a list endpoint that question costs a full retained-window scan per second per reader.
+
+It merges three producers into the one envelope, which is why the filter is where it is rather than on the client: file changes the daemon's watcher saw, attributed to the job whose declared write lane covers the path; the guard's tool-call observations, attributed by the lease the hook resolved; and the runs recorded against a job. A reader narrows by job, session or path and gets one time-ordered stream of all three, so "what is that worker doing" is one subscription rather than three.
+
+`POST /magus.activity.v1alpha1.ActivityService/WatchActivityEvents`: server streaming. Source: [activity.proto:159](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L159).
+
+Takes [WatchActivityEventsRequest](#watchactivityeventsrequest), returns [ActivityEvent](#activityevent).
 
 ## Messages
 
@@ -35,7 +45,7 @@ Takes [GetPayloadRequest](#getpayloadrequest), returns [Payload](#payload).
 
 ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor, kind, action, outcome) is common to every kind; the payload refs point into the activity blob store (fetched via GetPayload) so a large request/response body never bloats the line. For an MCP tool call: actor is the agent id, action is the tool name, request is the arguments, response is the result. For an agent command observation: actor is the host-supplied agent/session identity when available, action is the host tool name, request is the normalized invocation, and response is the guard decision. For a token lifecycle event: actor is "cli", action is "connector.create"/"connector.revoke", and the refs are empty.
 
-Source: [activity.proto:73](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L73).
+Source: [activity.proto:84](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L84).
 
 | Field            | Type                | #  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ---------------- | ------------------- | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -55,27 +65,31 @@ Source: [activity.proto:73](https://github.com/egladman/magus/blob/main/proto/ma
 | `host`           | string              | 14 | The agent host behind the action and that host's own session id, empty when the producer could not know them. The name is an opaque label the caller supplies, not a set magus enumerates: a hook is told its host by the wrapper that ran it, because no local process can discover which agent host started it. An MCP call has no such wrapper and is attributed from its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by host rather than switching on kind first.  They ride the EVENT rather than the request blob, which also carries them: a 200-row feed grouped by host must not cost 200 GetPayload calls.                                                                 |
 | `session`        | string              | 15 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `unit`           | string              | 16 | The work-ledger lease this action belongs to, empty when the producer could not correlate one. The field keeps the "unit" spelling; magus calls the concept a lease. Set today only by KIND\_AGENT\_SPAWN, and only when the handed context declared it: no host event names a magus lease, so the producer scans the lease prompt for a documented marker line ("lease: <id>") instead. Correlation is COOPERATIVE - an orchestrator that wants the join writes the marker, and one that does not leaves this empty, which is a missing join rather than a wrong one. It rides the event rather than the blob for the same reason host and session do: joining a page of rows to a ledger must not cost a GetPayload per row. |
+| `contested`      | repeated string     | 17 | On a KIND\_FILE\_CHANGE, the leases that BOTH declared this path, set only when more than one did. unit is then empty, because there is no answer to "whose write is this": the lanes are meant to be disjoint and this path is the evidence they are not.  A repeated field rather than a sentence in preview, because a reader watching one lease has to ask "am I one of these" on every row, and parsing prose to answer it is how the one event a damaged plan most needs to surface gets dropped. A filter on units matches a contested event that names one of them, which is deliberate: the event is attributed to nobody and is still that reader's business.                                                        |
 
-Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
+Used by: [ListActivityEvents (response)](activity.md#listactivityevents), [WatchActivityEvents (response)](activity.md#watchactivityevents).
 
 ### ActivityQuery
 
 ActivityQuery narrows the listing server-side. Fields AND together; repeated values within a field OR; the time window bounds it.
 
-Source: [activity.proto:130](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L130).
+Source: [activity.proto:164](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L164).
 
-| Field     | Type                                                 | # | Description                                 |
-| --------- | ---------------------------------------------------- | - | ------------------------------------------- |
-| `kinds`   | [repeated Kind](#kind)                               | 1 | restrict to these action kinds              |
-| `actors`  | repeated string                                      | 2 | restrict to these actors                    |
-| `actions` | repeated string                                      | 3 | restrict to these actions (e.g. tool names) |
-| `time`    | [TimeRange](../../query/v1alpha1/query.md#timerange) | 4 | action-time window                          |
+| Field      | Type                                                 | # | Description                                                                                                                                                                                                                                                                                                                     |
+| ---------- | ---------------------------------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kinds`    | [repeated Kind](#kind)                               | 1 | restrict to these action kinds                                                                                                                                                                                                                                                                                                  |
+| `actors`   | repeated string                                      | 2 | restrict to these actors                                                                                                                                                                                                                                                                                                        |
+| `actions`  | repeated string                                      | 3 | restrict to these actions (e.g. tool names)                                                                                                                                                                                                                                                                                     |
+| `time`     | [TimeRange](../../query/v1alpha1/query.md#timerange) | 4 | action-time window                                                                                                                                                                                                                                                                                                              |
+| `units`    | repeated string                                      | 5 | The three narrowings a person watching a worker asks for. They are here rather than on the watch request alone because the same question is worth asking of history: "what has this job been doing" and "what is it doing now" differ only in which verb you call. restrict to these leases (magus calls one a job)             |
+| `sessions` | repeated string                                      | 6 | restrict to these host session ids                                                                                                                                                                                                                                                                                              |
+| `paths`    | repeated string                                      | 7 | Restrict to file changes under these paths. A path matches the way a declared write lane does, so naming a directory answers for what is under it. It selects FILE events only: a tool call and a run are attributed by lease, not by path, and quietly returning them for a path filter would report reach nobody asked about. |
 
-Used by: [ListActivityEvents (request)](activity.md#listactivityevents).
+Used by: [ListActivityEvents (request)](activity.md#listactivityevents), [WatchActivityEvents (request)](activity.md#watchactivityevents).
 
 ### GetPayloadRequest
 
-Source: [activity.proto:147](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L147).
+Source: [activity.proto:201](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L201).
 
 | Field | Type   | # | Description                                                                                                                |
 | ----- | ------ | - | -------------------------------------------------------------------------------------------------------------------------- |
@@ -85,7 +99,7 @@ Used by: [GetPayload (request)](activity.md#getpayload).
 
 ### ListActivityEventsRequest
 
-Source: [activity.proto:137](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L137).
+Source: [activity.proto:181](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L181).
 
 | Field        | Type                            | # | Description                     |
 | ------------ | ------------------------------- | - | ------------------------------- |
@@ -97,7 +111,7 @@ Used by: [ListActivityEvents (request)](activity.md#listactivityevents).
 
 ### ListActivityEventsResponse
 
-Source: [activity.proto:142](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L142).
+Source: [activity.proto:186](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L186).
 
 | Field             | Type                                     | # | Description                 |
 | ----------------- | ---------------------------------------- | - | --------------------------- |
@@ -110,7 +124,7 @@ Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
 
 Payload is one stored request or response body, resolved from an ActivityEvent's ref.
 
-Source: [activity.proto:152](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L152).
+Source: [activity.proto:206](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L206).
 
 | Field        | Type  | # | Description |
 | ------------ | ----- | - | ----------- |
@@ -118,6 +132,19 @@ Source: [activity.proto:152](https://github.com/egladman/magus/blob/main/proto/m
 | `size_bytes` | int64 | 2 |             |
 
 Used by: [GetPayload (response)](activity.md#getpayload).
+
+### WatchActivityEventsRequest
+
+WatchActivityEventsRequest subscribes to the merged feed.
+
+Source: [activity.proto:192](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L192).
+
+| Field      | Type                            | # | Description                                                                                                                                                                                                                                                                                                                                                       |
+| ---------- | ------------------------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filter`   | [ActivityQuery](#activityquery) | 1 |                                                                                                                                                                                                                                                                                                                                                                   |
+| `backfill` | int32                           | 2 | _int32.lte: 1000; int32.gte: 0_ backfill is how many already-recorded matching events to send before following. It is what stops a reader opening a drawer onto a blank panel and reading it as "nothing has happened": a job that has been running for an hour has a past, and a stream that starts at now hides all of it. Zero means none; the server caps it. |
+
+Used by: [WatchActivityEvents (request)](activity.md#watchactivityevents).
 
 ## Enums
 
@@ -140,14 +167,16 @@ Source: [activity.proto:23](https://github.com/egladman/magus/blob/main/proto/ma
 | `KIND_CREDENTIAL_GRANT` | 8  | A run made a credential reachable: a magusfile granted one to a destination host, or opened a loopback endpoint carrying one. The event names the REFERENCE, the host and the header, never the value - a grant resolves nothing at declaration time, and resolving one in order to log it would defeat that. It is the governance half of a fact the execution journal already records per invocation; this is what connects an agent's tool call to the credential it made spendable. |
 | `KIND_AGENT_SPAWN`      | 9  | An orchestrating agent handed work to a sub-agent. The request blob carries the CONTEXT that was handed over - the lease's whole point, and routinely kilobytes, so only its ref rides the event. There is no response blob and no guard decision: a spawn is an observation, not a judged surface. OUTCOME\_OK means the handoff was observed, NOT that the sub-agent later succeeded.                                                                                                 |
 | `KIND_NOTES`            | 10 | The console NotesService door onto the workspace's human-authored notes. The service has no write path - a note's whole value is the guarantee that a person wrote it - so every event under this kind is a READ, audited because this is the only door that can serve the PRIVATE note store, which lives outside any repository and which nothing else attributes.                                                                                                                    |
+| `KIND_FILE_CHANGE`      | 11 | A path under a job's declared write lane changed, as the daemon's file watcher saw it. action is the repo-relative path and unit is the job whose lane covers it. The producer is the FILESYSTEM, not an agent: this is the one kind that needs no cooperation from the worker being watched, which is the whole reason a person can see what a worker is doing without asking it. An empty unit means no live lane covered the path.                                                   |
+| `KIND_RUN`              | 12 | A run magus recorded against a job: its check, one of its completion gates, or the daemon's own last run of a catalog job. action is the rendered command and preview names which of the three it was. OUTCOME\_ERROR means the run failed, which is the one kind here where the outcome is a fact about the work rather than about the recording.                                                                                                                                      |
 
-Used by: [ListActivityEvents (request)](activity.md#listactivityevents), [ListActivityEvents (response)](activity.md#listactivityevents).
+Used by: [ListActivityEvents (request)](activity.md#listactivityevents), [ListActivityEvents (response)](activity.md#listactivityevents), [WatchActivityEvents (request)](activity.md#watchactivityevents), [WatchActivityEvents (response)](activity.md#watchactivityevents).
 
 ### Outcome
 
 Outcome is how the action ended.
 
-Source: [activity.proto:59](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L59).
+Source: [activity.proto:70](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L70).
 
 | Value                 | # | Description |
 | --------------------- | - | ----------- |
@@ -155,5 +184,5 @@ Source: [activity.proto:59](https://github.com/egladman/magus/blob/main/proto/ma
 | `OUTCOME_OK`          | 1 |             |
 | `OUTCOME_ERROR`       | 2 |             |
 
-Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
+Used by: [ListActivityEvents (response)](activity.md#listactivityevents), [WatchActivityEvents (response)](activity.md#watchactivityevents).
 

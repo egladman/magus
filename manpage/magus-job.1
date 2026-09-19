@@ -3,7 +3,7 @@
 magus\-job \- Fork a job, take it, return it with its result, and verify that result
 .SH SYNOPSIS
 .B magus
-.RI "job <fork|exec|exit|wait|run> [flags]"
+.RI "job <fork|exec|exit|wait|watch|run> [flags]"
 .SH DESCRIPTION
 Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read lanes, plus the one check
@@ -138,6 +138,9 @@ A path this job may write; repeatable or comma\-separated
 \fB\-\-base\fR \fImagus vcs checkpoint -o name\fR
 The base this checkout landed on, as `magus vcs checkpoint \-o name` prints it (default: read from this checkout)
 .TP
+\fB\-\-session\fR \fIstring\fR
+The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's
+.TP
 \fB\-\-vacate\fR
 Give up the lease this checkout holds, so a later exec can take a different one. A no\-op if it holds none; refused while the job is declared or running
 .RE
@@ -179,6 +182,9 @@ Return a job with its result, or abandon it
 .TP
 \fBwait\fR
 Verify the result a job was exited with
+.TP
+\fBwatch\fR
+Follow what a job's holder is doing, until interrupted
 .TP
 \fBrun\fR
 Submit one of the daemon's own jobs and return

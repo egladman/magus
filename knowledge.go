@@ -542,6 +542,7 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 			log.WarnContext(ctx, "knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			continue
 		}
+		symbols.FingerprintBodies(in.root, syms)
 		out[decl.project] = syms
 	}
 	return out

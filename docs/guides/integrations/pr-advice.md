@@ -106,26 +106,53 @@ which is not a question a working tree can answer.
 
 ## What each advisor says
 
-| input                   | it comments when                                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `merge-conflicts`       | the pull request conflicts with its base in files magus generates, which a merge driver cannot settle on the server |
-| `hand-edited-generated` | a generated file changed and nothing that produces it did, so the next regeneration overwrites the edit             |
-| `unclaimed`             | changed files belong to no project, so no target reads them and the checks say nothing about them                   |
-| `target-outputs`        | a new target declares no outputs, which means it never replays from cache                                           |
-| `skip-cache`            | a target opts out of the cache, quoting the reason magus requires for it                                            |
-| `blast-radius`          | the change reaches a large share of the workspace, with the chain that pulled each project in                       |
-| `doctor`                | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                           |
-| `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                     |
-| `conformance`           | a new target's name diverges from what the rest of the workspace already calls the same work                        |
-| `missing-target`        | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                   |
-| `api-surface`           | the change touches symbols reachable outside the project that defines them, which is what a version bump is about   |
-| `first-contribution`    | the author has no merged pull request here yet                                                                      |
-| `fix-generated-drift`   | off by default; regenerates drifted files and pushes them, and only with a label                                    |
-| `fix-merge-conflict`    | off by default; merges the base in, settles conflicts in generated files by regenerating, and pushes                |
+| input                   | it comments when                                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `merge-conflicts`       | the pull request conflicts with its base in files magus generates, which a merge driver cannot settle on the server                                      |
+| `hand-edited-generated` | a generated file changed and nothing that produces it did, so the next regeneration overwrites the edit                                                  |
+| `unclaimed`             | changed files belong to no project, so no target reads them and the checks say nothing about them                                                        |
+| `target-outputs`        | a new target declares no outputs, which means it never replays from cache                                                                                |
+| `skip-cache`            | a target opts out of the cache, quoting the reason magus requires for it                                                                                 |
+| `blast-radius`          | the change reaches a large share of the workspace, with the chain that pulled each project in                                                            |
+| `doctor`                | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                                                                |
+| `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                                                          |
+| `conformance`           | a new target's name diverges from what the rest of the workspace already calls the same work                                                             |
+| `missing-target`        | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                                                        |
+| `api-surface`           | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
+| `first-contribution`    | the author has no merged pull request here yet                                                                                                           |
+| `fix-generated-drift`   | off by default; regenerates drifted files and pushes them, and only with a label                                                                         |
+| `fix-merge-conflict`    | off by default; merges the base in, settles conflicts in generated files by regenerating, and pushes                                                     |
 
 `blast-radius` takes a `fanout-share` (default `0.5`): the share of the workspace a
 change must reach before it says anything. It is a share rather than a count because
 five projects is most of a small workspace and a rounding error in a large one.
+
+## The bump is a floor
+
+`api-surface` takes a `baseline`: a `magus graph export --symbols -o json` of the revision
+the pull request started from. With one, it compares every changed symbol against its base
+and reports what the change did to it - added, removed, re-signed, or changed in the body -
+and the semver bump that evidence proves.
+
+The bump is a LOWER bound and never a ceiling. A removed public symbol proves a major, an
+added one proves a minor, and nothing a graph holds can prove a change is small: behavior
+moves under an unchanged signature. So raise it freely and never lower it.
+
+A changed signature is reported apart from the floor, as the likely bump. Signatures are
+compared as the indexer rendered them, which is what keeps this language-agnostic and is
+also the one place it can be wrong: renaming a parameter, widening a type, or changing a
+constant's value all move the rendered text without breaking a consumer.
+
+Index both sides in one checkout. Two environments render one declaration differently -
+a missing `node_modules` turns a TypeScript parameter into `any` - and every difference
+would read as a changed signature.
+
+```sh
+git worktree add /tmp/base "$(git merge-base HEAD origin/main)"
+magus --root /tmp/base graph build
+magus --root /tmp/base graph export --symbols -o json --tee /tmp/base.json -q > /dev/null
+magus diff --baseline /tmp/base.json
+```
 
 ## Why a single comment
 

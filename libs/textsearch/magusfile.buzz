@@ -113,8 +113,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("pnpm", ["run", "biome"], ".", {});
 }
 
-// test runs the node:test suite over the bundled *.test.ts and renders a line-
-// coverage badge from the run.
+// test runs the node:test suite over the bundled *.test.ts and leaves an lcov report.
 //
 // The bundle is deliberate, not a workaround: this project is authored
 // bundler-first (tsconfig moduleResolution: "bundler", extensionless relative
@@ -124,12 +123,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 // name a .testcache bundle instead of the src/*.ts someone wrote.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    // The lcov report is a declared output, not a badge: the TypeScript badge is one
-    // figure across every TypeScript project, rendered by the console (the top of the
-    // TypeScript dependency graph) from this report and its own. Declaring it keeps a
-    // cache hit restoring the report the console reads.
+    // The TypeScript coverage figure is one across every TypeScript project, merged by
+    // the console (the top of the TypeScript dependency graph) from this report and its
+    // own. Declaring it keeps a cache hit restoring the report the console reads.
     ctx.writesFiles("coverage.lcov");
-    install();
 
     final tests = fs\glob("src/**/*.test.ts");
     var bundle = mut ["exec", "esbuild"];
