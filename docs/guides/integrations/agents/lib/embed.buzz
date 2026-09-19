@@ -1,0 +1,107 @@
+// Renders guard-templates.md from its prose template and the files it documents.
+//
+// The page is a VERBATIM copy of ten shipped templates, and keeping it by hand meant it
+// drifted in silence: the conventions test compares executable lines only, so a comment
+// rewritten in a template and not in the page passed every gate and reached readers as the
+// old text. Measured on three of the ten in one sitting. The same argument the cursor
+// schema generator beside this makes: a transcription is partial by construction, and one
+// the drift gate compares byte for byte cannot be.
+//
+// Pure on purpose. The caller owns the filesystem, so every case below runs without one.
+
+import "assert";
+
+// A marker line names one file and is replaced by its contents in a fenced block.
+final EMBED_PREFIX = "<!-- embed: ";
+final EMBED_SUFFIX = " -->";
+
+// fenceFor picks the info string from the extension, so the marker names one thing and
+// nothing has to be kept in step with it.
+export fun fenceFor(name: str) > str {
+    if (name.endsWith(".buzz")) { return "buzz"; }
+    return "sh";
+}
+
+// markerName returns the file a marker line names, or "" for any other line.
+export fun markerName(line: str) > str {
+    if (!line.startsWith(EMBED_PREFIX) or !line.endsWith(EMBED_SUFFIX)) { return ""; }
+    final start = EMBED_PREFIX.len();
+    final width = line.len() - EMBED_PREFIX.len() - EMBED_SUFFIX.len();
+    if (width <= 0) { return ""; }
+    return line.sub(start, len: width);
+}
+
+// embedNames lists the files a template asks for, in page order. The template declares
+// what it needs, so adding a block is one marker rather than a marker and a list.
+export fun embedNames(tmpl: str) > [str] {
+    final names = mut [<str>];
+    foreach (line in tmpl.split("\n")) {
+        final name = markerName(line);
+        if (name != "" and names.indexOf(name) == null) { names.append(name); }
+    }
+    return names;
+}
+
+// trimTrailingNewlines keeps a file's final newline from becoming a blank line above the
+// closing fence.
+fun trimTrailingNewlines(s: str) > str {
+    var end = s.len();
+    while (end > 0 and s.sub(end - 1, len: 1) == "\n") { end = end - 1; }
+    return s.sub(0, len: end);
+}
+
+// render replaces every marker with its file's contents. A marker naming a file the caller
+// did not hand in RAISES rather than rendering an empty block: a page that silently lost a
+// template is the failure this generator exists to remove.
+export fun render(tmpl: str, files: {str: str}) > str !> str {
+    final rendered = mut [<str>];
+    foreach (line in tmpl.split("\n")) {
+        final name = markerName(line);
+        if (name == "") {
+            rendered.append(line);
+            continue;
+        }
+        final body = files[name];
+        if (body == null) {
+            throw "guard-templates.md.tmpl embeds {name}, which was not read";
+        }
+        rendered.append("```{fenceFor(name)}");
+        rendered.append(trimTrailingNewlines(body!));
+        rendered.append("```");
+    }
+    return rendered.join("\n");
+}
+
+test "a marker becomes a fenced block carrying the whole file" {
+    final page = render("intro\n<!-- embed: magus-command.sh -->\noutro",
+        files: {"magus-command.sh": "#!/usr/bin/env sh\necho hi\n"}) catch "raised";
+    assert\equal(page, "intro\n```sh\n#!/usr/bin/env sh\necho hi\n```\noutro", "block replaces the marker");
+}
+
+test "the fence follows the extension" {
+    assert\equal(fenceFor("magus-command.buzz"), "buzz", "a Buzz port");
+    assert\equal(fenceFor("magus-command.sh"), "sh", "its sh twin");
+}
+
+test "a file's trailing newline does not open a blank line" {
+    final page = render("<!-- embed: x.sh -->", files: {"x.sh": "one\n\n\n"}) catch "raised";
+    assert\equal(page, "```sh\none\n```", "trailing newlines are trimmed");
+}
+
+test "prose that merely mentions a marker is left alone" {
+    assert\equal(markerName("text <!-- embed: x.sh --> more"), "", "a marker owns its whole line");
+    assert\equal(markerName("<!-- embed:  -->"), "", "a marker names a file");
+    assert\equal(markerName("<!-- embed: x.sh -->"), "x.sh", "and this one does");
+}
+
+test "a marker naming a file nobody read raises instead of emptying the page" {
+    final page = render("<!-- embed: missing.sh -->", files: {"other.sh": "x"}) catch "raised";
+    assert\equal(page, "raised", "the generator refuses rather than shipping a hole");
+}
+
+test "embedNames lists what the template asks for, in page order, once each" {
+    final names = embedNames("<!-- embed: b.sh -->\nprose\n<!-- embed: a.buzz -->\n<!-- embed: b.sh -->");
+    assert\equal(names.len(), 2, "a repeated marker is one file to read");
+    assert\equal(names[0], "b.sh", "page order, not sorted");
+    assert\equal(names[1], "a.buzz", "and the second");
+}

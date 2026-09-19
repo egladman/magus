@@ -21,6 +21,8 @@
 // render: they belong to the docs project's **/*.md set, not to this project's sources.
 
 import "magus";
+// The page renderer, kept out of this file because it wants tests of its own.
+import "./lib/embed" as embed;
 // os shells out to pnpm for the install and the two gates.
 import "os";
 
@@ -56,6 +58,29 @@ magus\project({
 });
 
 export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
+
+// Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker
+// replaced by the file it names.
+//
+// The page is a verbatim copy of ten templates a reader downloads, and kept by hand it went
+// stale where no gate could see. conventions_test.go compares the EXECUTABLE lines, so a
+// comment rewritten in a template and not in the page passed every check and shipped the old
+// text; three of the ten had drifted that way at once. Generated, the page cannot: the drift
+// gate regenerates it and compares byte for byte, which is the same argument
+// cursor_schemas_generate above makes about hand transcription.
+//
+// Reading the templates is declared, because affected tracking is glob-based here: without
+// it, editing a template would not rebuild the page that quotes it.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("guard-templates.md.tmpl", "*.sh", "*.buzz", "lib/*.buzz");
+    ctx.writesFiles("guard-templates.md");
+    final tmpl = fs\readFile("guard-templates.md.tmpl");
+    final files = mut {<str: str>};
+    foreach (name in embed\embedNames(tmpl)) {
+        files[name] = fs\readFile(name);
+    }
+    fs\writeFile("guard-templates.md", content: embed\render(tmpl, files: files));
+}
 
 // Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.
 //
@@ -165,9 +190,15 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // which is the same rule every other project with Markdown follows.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    // dprint amends the authored guide pages in place. They are inputs, not
-    // generated outputs: declaring them as outputs would make magus clean delete
-    // a reader's documentation.
+    // Before dprint, so the page it formats is the one the template just produced. This is
+    // also what puts the render inside `ci`, and so under the drift gate.
+    ctx.needs(generate);
+    // dprint amends the AUTHORED guide pages in place. They are inputs, not generated
+    // outputs: declaring them as outputs would make magus clean delete a reader's
+    // documentation. guard-templates.md is the one exception and is declared an output by
+    // generate above, because it is rendered rather than written, so clean deleting it
+    // costs a regeneration instead of prose nobody can get back. dprint leaves the
+    // rendered page byte-identical, which is what keeps the drift gate quiet.
     ctx.modifiesExistingFiles("*.md", "*.ts");
     markdown["dprint"](ctx);
     typescript["biome-format"](ctx);

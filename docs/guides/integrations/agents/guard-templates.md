@@ -933,6 +933,8 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 // Override any of the variables below:
 //
 //   HOST_EVENT_PATH  dot-path to the command inside your host's event
+//   HOST_TOOL_PATH   dot-path to the tool name, which decides whether the whole envelope
+//                    is forwarded rather than one field selected out of it
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 //   HOST_RESPONSE    Go template rendering your host's reply
@@ -1679,7 +1681,9 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
-//   HOST_EVENT_PATH, HOST_SESSION_PATH, HOST_TRANSCRIPT_PATH  dot-paths into the event
+//   HOST_EVENT_PATH, HOST_TOOL_PATH, HOST_SESSION_PATH, HOST_TRANSCRIPT_PATH  dot-paths
+//                    into the event; the tool name is what decides whether the whole
+//                    envelope goes rather than one field selected out of it
 //   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
 //   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
 //   __MAGUS_AGENT_NAME, __MAGUS_BIN  attribution, and the binary when it is not on PATH
@@ -2155,13 +2159,13 @@ does, so it selects nothing and imports no JSON reader at all.
 // is load-bearing. It imports no magus Buzz module
 // and no spell, which is what keeps the workspace CLOSED: a Stop hook fires once
 // per session rather than once per tool call, so the 700ms an open costs would
-// be affordable here - and it is still refused, because the rule that keeps the
-// glue closed is worth more than the one exception that would erode it.
+// be affordable here; it is still refused, because the rule that keeps the glue
+// closed is worth more than the one exception that would erode it.
 //
 // Wire it to your host's stop or session-end event. It records the revision,
 // branch and dirtiness of the tree, plus your host's session id and transcript
-// path as opaque pointers, so that whoever comes back to this repository - you
-// tomorrow, or another session - reads `magus session` instead of reconstructing
+// path as opaque pointers, so that whoever comes back to this repository (you
+// tomorrow, or another session) reads `magus session` instead of reconstructing
 // where the work stopped. That reconstruction is the cost this exists to remove:
 // it was measured at a session id passed by hand, a guessed transcript location,
 // and three failed commands before it emerged the work had never been pushed.
@@ -2175,7 +2179,7 @@ does, so it selects nothing and imports no JSON reader at all.
 //   __MAGUS_BIN   path to the binary, when it is not on PATH
 //
 // A host whose envelope spells those fields differently passes them as flags
-// instead - `--session` and `--transcript` outrank the envelope - and a host that
+// instead, since `--session` and `--transcript` outrank the envelope, and a host that
 // cannot supply either still records a usable checkpoint, because the part that
 // matters is read from the tree rather than from the event.
 //
@@ -2255,7 +2259,7 @@ fun main(args: [str]) > void {
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
-    // unenforced - there is no rule - so announcing it would interrupt the end of
+    // unenforced, because there is no rule, so announcing it would interrupt the end of
     // every session to report that an optional record was not written.
     //
     // Checked before stdin is touched, exactly as the sh copy leaves the event unread

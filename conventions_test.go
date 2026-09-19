@@ -1780,23 +1780,18 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err, "every template in hookTemplates must exist")
 
-		// Compare on the executable lines only. Comments carry the reasoning and
-		// are worth reading in the file itself; requiring the guide to mirror
-		// every one of them would make the page unreadable and the test brittle.
-		var missing []string
-		for _, line := range strings.Split(string(body), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
-				continue
-			}
-			if !strings.Contains(doc, line) {
-				missing = append(missing, line)
-			}
-		}
-		assert.Empty(t, missing,
-			"%s embeds %s incompletely: the lines below are in the template but not on that page.\n"+
-				"Re-copy the template into its code block - a reader exploring the docs site must see\n"+
-				"what they would download.", page, name)
+		// VERBATIM, comments included. This compared executable lines only while the page
+		// was maintained by hand, because demanding every comment of a human editor would
+		// have been brittle. It also meant a comment rewritten in a template and not in
+		// the page passed here and shipped the old text; three of the ten had drifted that
+		// way at once. The page is rendered from the templates now (see that project's
+		// generate target), so the whole file is what the page carries and this asks for it.
+		assert.Contains(t, doc, strings.TrimRight(string(body), "\n"),
+			"%s does not carry %s verbatim.\n"+
+				"That page is GENERATED from guard-templates.md.tmpl and the templates it names:\n"+
+				"run `magus run generate docs/guides/integrations/agents` rather than editing it,\n"+
+				"because a reader exploring the docs site must see exactly what they would download.",
+			page, name)
 	}
 }
 

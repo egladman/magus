@@ -68,7 +68,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | .                               |      49 | `magus query project=.`                               | `test`, `generate`, `buzz-test`                          |
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       7 | `magus query project=docs/guides/integrations/agents` | `format`, `preflight`, `ci`                              |
+| docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `preflight`                        |
 | libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `test`, `build`                                |
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
@@ -178,6 +178,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci`                      | 'ci' is the anchor `magus affected ci` keys off.                                                                                                                                                                                                                     |
 | `format`                  | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
 | `preflight`               |                                                                                                                                                                                                                                                                      |
+| `generate`                | Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.                                                                                                                                                    |
 
 ## Project: libs/commentdash
 
