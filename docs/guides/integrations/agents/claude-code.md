@@ -78,7 +78,7 @@ magus agent harness verify --id claude-code
 
 The spell installs entries for commands, file edits, Magus MCP tool calls, read
 observation, and sub-agent spawns. Each runs a shipped script that talks to
-`magus session hook`:
+`magus shell`:
 
 ```json
 {
@@ -86,11 +86,11 @@ observation, and sub-agent spawns. Each runs a shipped script that talks to
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "sh docs/guides/integrations/agents/magus-hook-command.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "sh docs/guides/integrations/agents/magus-hook-path.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-path.buzz", "timeout": 10 }]
       }
     ]
   }
@@ -101,6 +101,50 @@ This repository's own `.claude/settings.json` invokes those same files. The
 scripts are the glue; harness apply only merges the fragments that name them.
 See [guard templates](guard-templates.md) for the files and the variables that
 adapt them.
+
+The Claude Code harness wires the Buzz form, which needs neither a POSIX shell
+nor `jq`. Its sh twin, `magus-command.sh`, is the same guard and renders the
+same replies; an executed case runs both against every recorded event and fails
+on one byte of difference. Wire the sh copy instead if you would rather not pin
+the guard to a `magus buzz`, and see below for what that pin costs.
+
+`./magus` when the workspace carries its own binary, `magus` otherwise. Apply
+decides, because a hook command is one string with no shell in it to test a file
+with; re-run apply after your first build to move a checkout from one to the
+other. It is never an absolute path: this config is committed, and an absolute
+path would ship one machine's layout to every clone.
+
+Every entry is a plain argv: `<interpreter> buzz -s <file>`, with at most a
+`-- <flags>` tail and never a `VAR=value` prefix. Claude Code splits a hook command
+itself rather than handing it to a shell, so a leading assignment is a word it would
+look for a program named after. The two knobs that used to ride there are gone from
+this config for that reason: the glue reads whether to forward the whole event off
+the event itself, and takes the `magus shell` flags an entry declares from the argv
+after `--`, which `magus buzz` forwards to the script. The sh twins keep their
+environment variables, because `sh` is what runs them and `sh` is what reads a
+variable; that is the one place the two forms differ by design.
+
+### When the hook itself cannot run
+
+Wiring the guard to `magus buzz` makes the INTERPRETER a magus, where the sh
+copy's interpreter was `/bin/sh`: always present, and with no version to be wrong.
+So a magus that is missing, too old to run the script, or unable to load this
+workspace does not merely answer badly; it never runs the script at all.
+
+That failure is loud rather than silent, which is the trade this wiring makes.
+Claude Code treats a hook that exits non-zero with any code other than 2 as a
+[non-blocking error](https://code.claude.com/docs/en/hooks): the first line of its
+stderr appears in the transcript as a `<hook name> hook error` notice, and the
+tool call goes ahead. So you see something like
+`magus: magus.yaml:99: unknown key "sessions"` in the transcript, the command you
+asked for runs, and it runs UNJUDGED: no deny rule fires and no advisory reaches
+the model for as long as the interpreter stays broken. `magus agent harness verify
+--id claude-code` reports the same thing before a session ever starts, by running
+each wired command against a synthetic event and checking the verdict comes back.
+
+The guard never blocks on its own failure. Exit 2 is the only code that blocks,
+and the glue reaches it on no path: a verdict it cannot obtain is reported and the
+call proceeds.
 
 A push at a commit no passing gate covers gets the verdict `ask`, and the command
 template renders it as `permissionDecision: "ask"`: Claude Code shows you the
@@ -144,7 +188,7 @@ the command and file surfaces:
       {
         "matcher": "mcp__magus__.*",
         "hooks": [
-          { "type": "command", "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
         ]
       }
     ]
@@ -152,9 +196,11 @@ the command and file surfaces:
 }
 ```
 
-Same script, same reply shape. An MCP call carries no `tool_input.command`,
-only a tool name and a params object, so `HOST_EVENT_RAW=1` forwards the event whole
-instead of extracting one field. `magus session hook` already parses that whole envelope;
+Same script, same command string, same reply shape. An MCP call carries no
+`tool_input.command`, only a tool name and a params object, and that absence is what
+the glue reads: with nothing at `HOST_EVENT_PATH` to select, it forwards the event
+whole instead of extracting one field, so the entry says nothing the event does not
+already say. `magus session hook` already parses that whole envelope;
 today it recognizes the tool name and params only well enough to say there is
 nothing here it can judge, so this wiring passes every MCP call rather than
 denying or advising on one - which is the honest state to ship rather than
@@ -164,7 +210,7 @@ ships, with no new host wiring, because the transport is already here.
 ## Recording what was read
 
 A third `PreToolUse` entry, matching `Read`, runs
-[`magus-hook-observe.sh`](guard-templates.md#magus-hook-observesh). It judges
+[`magus-observe.buzz`](guard-templates.md#magus-observebuzz). It judges
 nothing and prints nothing: it records the path on the activity trail so a later
 `magus session show` can say what a session looked at, not only what it changed.
 
@@ -177,7 +223,7 @@ nothing and prints nothing: it records the path on the activity trail so a later
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-hook-observe.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-observe.buzz",
             "timeout": 10
           }
         ]
@@ -207,7 +253,7 @@ claude-code` installs this entry alongside the surfaces above:
       {
         "matcher": "Agent|Task",
         "hooks": [
-          { "type": "command", "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --observes-skill-loads", "timeout": 10 }
         ]
       }
     ]
@@ -216,8 +262,16 @@ claude-code` installs this entry alongside the surfaces above:
 ```
 
 Same script as the MCP surface and for the same reason: a spawn's payload is a
-prompt, a `subagent_type`, and an optional `model`, not one string, so
-`HOST_EVENT_RAW=1` forwards the event whole. `magus session hook` reads
+prompt, a `subagent_type`, and an optional `model`, not one string, so there is no
+`tool_input.command` to select and the event goes whole. The one thing written on
+this entry is the flag after `--`, which `magus buzz` forwards to the script as its
+own argv: `--observes-skill-loads` says that THIS config also matches the host's
+`Skill` tool, so a rule that requires a skill before a spawn has loads to read. A
+config without that matcher omits the flag and those rules stand down rather than
+denying every spawn forever. The script parses that tail against the flags it
+supports; an argument it does not know is named on stderr, which Claude Code shows
+as a hook error, and the call is judged without it rather than blocked.
+`magus session hook` reads
 `tool_input.prompt` for the context, `tool_input.subagent_type` (then
 `description`, then `tool_name`) for the callee's label, `tool_input.model` for
 the model the caller claimed, and `session_id` for the parent's session. The
@@ -273,8 +327,8 @@ magusfile walk as the lease hook above, for the same reason.
 
 ## Recording where the work stands
 
-Wire `Stop` to [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh) and
-each time a turn ends magus records the revision, branch and dirtiness of the
+Wire `Stop` to [`magus-checkpoint.buzz`](guard-templates.md#magus-checkpointbuzz)
+and each time a turn ends magus records the revision, branch and dirtiness of the
 tree, plus this session's id and transcript path. `magus session` lists it.
 
 ```json
@@ -285,7 +339,7 @@ tree, plus this session's id and transcript path. `magus session` lists it.
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz",
             "timeout": 10
           }
         ]
@@ -305,7 +359,7 @@ record by hand, which is the form to reach for when you are the one stopping.
 Claude Code fires `SessionStart` when a session begins, when one is resumed, and
 after it compacts a long conversation into a summary; whatever a `SessionStart`
 hook prints is added to the model's context. Wire it to
-[`magus-rehydrate.sh`](guard-templates.md#magus-rehydratesh) and a session that
+[`magus-rehydrate.buzz`](guard-templates.md#magus-rehydratebuzz) and a session that
 just lost its history is handed this checkout instead: branch and revision,
 commits not yet on the base ref, the dirty tree split into sources, generated
 outputs and unclaimed paths, the live leases with the command that binds each
@@ -324,7 +378,7 @@ automatic instruction or memory edit.
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz",
             "timeout": 10
           }
         ]

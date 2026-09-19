@@ -15,6 +15,8 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"gopkg.in/yaml.v3"
+
+	"github.com/egladman/magus/internal/ward"
 )
 
 // Filename is the canonical config file name magus searches for.
@@ -248,7 +250,7 @@ func decodeFile(path string) ([]byte, Config, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&overlay); err != nil && !errors.Is(err, io.EOF) {
-		if ue := unknownKeyError(path, err); ue != nil {
+		if ue := unknownKeyError(path, data, err); ue != nil {
 			return nil, Config{}, ue
 		}
 		return nil, Config{}, fmt.Errorf("config: %s: %w", path, err)
@@ -274,7 +276,33 @@ var unknownFieldIssue = regexp.MustCompile(`^line (\d+): field (.+) not found in
 // anything else (a type mismatch, say) is left alone whole rather than rewritten
 // in part: that detail has no place in this shape, and half a message is worse
 // than yaml's.
-func unknownKeyError(path string, err error) error {
+// staleBinaryNote says out loud what an unknown key only implies: this build may predate
+// the key rather than the key being wrong.
+//
+// The two readings have opposite fixes, and the message used to leave the reader to guess
+// which one they were looking at. `unknown key "sessions"` is exactly what a magus older
+// than the workspace prints, and nothing in those words says so; a reader who has not met
+// this before reasonably concludes their magus.yaml is at fault and starts editing it.
+//
+// Only where no near key was suggested. A near miss is a typo, and telling someone their
+// binary might be old when they wrote "vcs" for "vsc" is noise.
+//
+// The sentence itself is ward's, shared with the magusfile path that reaches the same
+// conclusion from different evidence. The floor is re-read leniently from the same bytes,
+// because the strict decode that produced this error never completed and there is no
+// Config to ask; the running version is not known this early, which ward allows for.
+func staleBinaryNote(data []byte) string {
+	var head struct {
+		RequiredVersion string `yaml:"required_version"`
+	}
+	// Unknown keys are ignored here ON PURPOSE: this decode exists to read one field out
+	// of a document the strict decode already rejected.
+	_ = yaml.Unmarshal(data, &head)
+	return "; this magus does not know that key. " + ward.StaleBinaryAdvice("", head.RequiredVersion) +
+		". If the key is genuinely misspelled, this note does not apply"
+}
+
+func unknownKeyError(path string, data []byte, err error) error {
 	var terr *yaml.TypeError
 	if !errors.As(err, &terr) || len(terr.Errors) == 0 {
 		return nil
@@ -289,6 +317,8 @@ func unknownKeyError(path string, err error) error {
 		msg := fmt.Sprintf("%s:%s: unknown key %q", workspaceRelPath(path), line, key)
 		if sug := hint.Nearest(key, knownKeysIn(goType)); sug != "" {
 			msg += fmt.Sprintf("; did you mean %q?", sug)
+		} else {
+			msg += staleBinaryNote(data)
 		}
 		lines = append(lines, msg)
 	}

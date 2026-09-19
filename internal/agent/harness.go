@@ -845,6 +845,10 @@ func ensureManagedEntries(config map[string]any, groups []HarnessEntries) (bool,
 				groupChanged = true
 			}
 		}
+		if pruned, dropped := dropSupersededEntries(entries, group.Entries); dropped {
+			entries = pruned
+			groupChanged = true
+		}
 		if groupChanged {
 			setDescriptorEntries(config, group.Path, entries)
 			changed = true
@@ -888,6 +892,57 @@ func containsExactEntry(entries []any, wanted map[string]any) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// dropSupersededEntries removes, from one managed group, every entry that runs a
+// template magus ships and that this descriptor no longer wants.
+//
+// Without it apply APPENDS on any command rewrite, because managedIdentityKey is
+// built from the command: change the descriptor and the new entry matches nothing,
+// so both the old and the new wiring end up in the config and every tool call is
+// judged twice, recorded twice, and (where the old one is stale) answered by a
+// binary the tree replaced. A reader upgrading gets that silently.
+//
+// Narrower than invokesMagus on purpose. That one also answers true for a bare
+// `magus ...` line, and a reader's own `magus session notify` hook is theirs to
+// keep. An entry naming a SHIPPED template is one apply wrote, so it is one apply
+// owns and may retire.
+func dropSupersededEntries(entries []any, wanted []map[string]any) ([]any, bool) {
+	keep := make(map[string]bool, len(wanted))
+	for _, entry := range wanted {
+		keep[managedIdentityKey(entry)] = true
+	}
+	kept := make([]any, 0, len(entries))
+	dropped := false
+	for _, raw := range entries {
+		entry, ok := raw.(map[string]any)
+		if ok && runsAShippedTemplate(entry) && !keep[managedIdentityKey(entry)] {
+			dropped = true
+			continue
+		}
+		kept = append(kept, raw)
+	}
+	return kept, dropped
+}
+
+// runsAShippedTemplate reports whether any command inside entry names a template
+// this repository ships, in either form: the POSIX sh copies and the Buzz ports
+// beside them.
+func runsAShippedTemplate(entry map[string]any) bool {
+	var commands []string
+	collectCommands(entry, &commands)
+	for _, command := range commands {
+		switch {
+		case strings.Contains(command, "magus-command"),
+			strings.Contains(command, "magus-path"),
+			strings.Contains(command, "magus-observe"),
+			strings.Contains(command, "cursor-hook."),
+			strings.Contains(command, "magus-checkpoint"),
+			strings.Contains(command, "magus-rehydrate"):
+			return true
+		}
+	}
+	return false
 }
 
 // sameManagedIdentity treats matcher/match (when present) plus collected command
@@ -950,11 +1005,13 @@ func configInvokesMagus(config map[string]any) bool {
 
 // invokesMagus reports whether a host hook command actually calls Magus.
 // Coverage is transport-shaped: shipped script basenames (aligned with
-// doctor's guardTemplateBasenames plus magus-hook-observe), or a magus
+// doctor's guardTemplateBasenames plus magus-observe), or a magus
 // session/session-hook invocation. A generic *-guard.sh does not count.
 func invokesMagus(command string) bool {
 	switch {
-	case strings.Contains(command, "magus-hook-"):
+	case strings.Contains(command, "magus-command"),
+		strings.Contains(command, "magus-path"),
+		strings.Contains(command, "magus-observe"):
 		return true
 	case strings.Contains(command, "cursor-hook.sh"):
 		return true
@@ -1067,6 +1124,37 @@ func writeHarnessAtomically(path string, body []byte) error {
 // union, which is fine. A blank entry inside wired is not: empty and whitespace-
 // only names are rejected rather than skipped, so a bad AddHarness cannot
 // disappear into the union.
+
+// HarnessConfigPaths resolves the config file of every known harness that has one in this
+// checkout, skipping any that cannot be resolved or is not there.
+//
+// It deliberately does not verify: VerifyHarness RUNS the wired command, so it reports
+// nothing for a checkout whose wired interpreter is missing, which is exactly the state a
+// caller asking which configs exist needs to inspect.
+func HarnessConfigPaths(ctx context.Context, root string, wired ...string) []string {
+	ids, err := KnownHarnesses(ctx, root, wired...)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		d, _, err := LoadHarness(ctx, root, id)
+		if err != nil || d.Config.Path == "" {
+			continue
+		}
+		path, err := harnessConfigPath(root, d.Config.Path)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		out = append(out, path)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 func KnownHarnesses(ctx context.Context, root string, wired ...string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

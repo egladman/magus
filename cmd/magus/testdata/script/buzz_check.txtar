@@ -1,0 +1,82 @@
+# `magus buzz --check` parses and type-checks files WITHOUT running them. That is the
+# only way to judge a script whose whole job is a side effect: a hook that reads stdin
+# and shells out cannot be validated by running it, and until this existed the shipped
+# glue could only be checked by a Go test that executed it.
+#
+# Two properties are load-bearing and are each pinned below: the file does NOT run, and
+# every diagnostic is reported rather than only the first.
+
+# a clean file passes silently
+exec magus buzz --check ok.buzz
+! stdout .
+! stderr .
+
+# the file is NOT executed: a run of the same file prints, a check of it does not
+exec magus buzz ok.buzz
+stdout 'side effect'
+exec magus buzz --check ok.buzz
+! stdout 'side effect'
+! stderr 'side effect'
+
+# every error is reported, not just the first. Running stops at one; this is the
+# reason to prefer it over `magus buzz <file>` as a check.
+! exec magus buzz --check two_errors.buzz
+stderr '\[BZZ1005\].*cannot assign str to int'
+stderr '\[BZZ1001\].*undefined: nope'
+
+# the position names the FILE, so an editor can jump to it
+stderr 'two_errors\.buzz:4:'
+
+# several paths in one invocation: the question is asked about a set
+! exec magus buzz --check ok.buzz two_errors.buzz
+stderr 'two_errors\.buzz'
+
+# strict is the default, matching `magus buzz`; --embedded opts into the magusfile
+# engine's relaxations, so a file written for that engine needs it
+! exec magus buzz --check embedded_only.buzz
+stderr 'must be labeled'
+exec magus buzz --check --embedded embedded_only.buzz
+
+# an unresolved magus/spell/* import is the one diagnostic that does not mean what it
+# says: those paths are bound by the workspace loader, so a note says which check
+# settles it rather than leaving a fine magusfile reading as broken
+! exec magus buzz --check --embedded spell_import.buzz
+stderr 'BZZ2001'
+stderr 'note: magus/spell/\* is bound by the workspace loader'
+stderr 'a magusfile, a target definition'
+
+# --check and -t are different modes and are refused together rather than ordered
+! exec magus buzz --check -t ok.buzz
+stderr 'different modes'
+
+# --check needs a path: -e and stdin report positions in a source no reader can open
+! exec magus buzz --check -e 'final n = 1;'
+stderr 'takes one or more file paths'
+! exec magus buzz --check
+stderr 'takes one or more file paths'
+
+-- ok.buzz --
+import "std";
+
+fun main(args: [str]) > void {
+    std\print("side effect");
+}
+-- two_errors.buzz --
+import "std";
+
+fun main(args: [str]) > void {
+    final n: int = "not an int";
+    std\print(nope);
+}
+-- embedded_only.buzz --
+import "std";
+
+fun pair(a: str, b: str) > str { return a + b; }
+
+fun main(args: [str]) > void {
+    std\print(pair("x", "y"));
+}
+-- spell_import.buzz --
+import "magus/spell/go";
+
+fun main(args: [str]) > void {}

@@ -21,6 +21,11 @@
 // render: they belong to the docs project's **/*.md set, not to this project's sources.
 
 import "magus";
+// The page renderer, kept out of this file because it wants tests of its own.
+import "./lib/embed" as embed;
+// The workspace's shared drift helper, so this project's generated files are gated the
+// same way the root's are rather than by a second implementation of the same idea.
+import "../../../../tools/drift" as drift;
 // os shells out to pnpm for the install and the two gates.
 import "os";
 
@@ -43,7 +48,12 @@ magus\project({
     "spells": [bash, typescript],
     // Affected tracking is glob-based, not import-graph-based, so every input must be named to
     // be watched: the templates themselves, and the config files that drive the gates.
-    "sources": ["*.ts", "*.sh", "codex-hooks.json", "*.md", "*.tmpl", "host-e2e/*.json",
+    // *.buzz covers the Buzz ports of the guard templates beside their sh twins, and
+    // lib/*.buzz the renderer behind guard-templates.md. Both are type-checked by lint
+    // now; until `magus buzz --check` existed nothing could, and the only thing standing
+    // in for it was cmd/magus/buzz_test.go EXECUTING each template, which is a poor
+    // substitute for a file whose whole job is a side effect.
+    "sources": ["*.ts", "*.sh", "*.buzz", "lib/*.buzz", "codex-hooks.json", "*.md", "*.tmpl", "host-e2e/*.json",
                 "host-e2e/*.tmpl",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 "dprint.json"],
@@ -52,6 +62,72 @@ magus\project({
 });
 
 export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
+
+// Everything generate writes, project-relative because that is where this target runs.
+// The schema DIRECTORY rather than its files: drift\expand walks it, so a schema the SDK
+// starts emitting is covered without this list being edited to notice.
+fun generatedOutputs() > [str] {
+    return ["guard-templates.md", "../../../../testdata/hosts/cursor/gen"];
+}
+
+// Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker
+// replaced by the file it names.
+//
+// The page is a verbatim copy of ten templates a reader downloads, and kept by hand it went
+// stale where no gate could see. conventions_test.go compares the EXECUTABLE lines, so a
+// comment rewritten in a template and not in the page passed every check and shipped the old
+// text; three of the ten had drifted that way at once. Generated, the page cannot: the drift
+// gate regenerates it and compares byte for byte, which is the same argument
+// cursor_schemas_generate above makes about hand transcription.
+//
+// Reading the templates is declared, because affected tracking is glob-based here: without
+// it, editing a template would not rebuild the page that quotes it.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    // Hashed BEFORE the generators run, so an already-dirty tree does not disarm the
+    // check: what matters is whether these bytes moved during this run, not whether the
+    // tree was clean when it started.
+    //
+    // The OUTPUTS by name, where the root's copy of this hashes whatever vcs reports
+    // dirty. The root can do that because it runs there; here vcs\status names paths from
+    // the repository root while this target resolves them from its own directory, so every
+    // one of them missed and the check passed on a tree it had never looked at.
+    final before = drift\hashes(generatedOutputs());
+
+    // The other generated thing this project owns. Its own comment claimed the drift gate
+    // compared its output byte for byte, and nothing ran it: measured by planting a probe
+    // in a committed schema and watching a full green gate keep it.
+    ctx.needs(cursor_schemas_generate);
+    ctx.readsFiles("guard-templates.md.tmpl", "*.sh", "*.buzz", "lib/*.buzz");
+    ctx.writesFiles("guard-templates.md");
+    final tmpl = fs\readFile("guard-templates.md.tmpl");
+    final files = mut {<str: str>};
+    foreach (name in embed\embedNames(tmpl)) {
+        files[name] = fs\readFile(name);
+    }
+    final rendered = embed\render(tmpl, files: files);
+
+    // Under `rw` this target is the thing that WRITES the page. The gate strips that charm,
+    // and the rest of this function is the half that answers instead.
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("guard-templates.md", content: rendered);
+        return;
+    }
+
+    // COMPARED, never written. Writing here would edit the tree this run was asked to judge
+    // and then report its own edit (MGS1035): the page would be correct by the time anything
+    // looked, so the check could only ever pass. Named separately from the hash comparison
+    // below because that one cannot see this file at all for the same reason.
+    if ((fs\readFile("guard-templates.md") catch "") != rendered) {
+        throw "[MGS4006] generate: guard-templates.md does not match its template; re-run "
+            + "`magus run generate:rw docs/guides/integrations/agents` and commit it";
+    }
+    final changed = drift\changedSince(before, generatedOutputs());
+    if (changed.len() > 0) {
+        throw "[MGS4006] generate: regeneration changed generated files; re-run "
+            + "`magus run generate:rw docs/guides/integrations/agents` and commit: "
+            + changed.join(", ");
+    }
+}
 
 // Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.
 //
@@ -91,7 +167,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // they get the same scrutiny as the TypeScript: shellcheck in sh mode catches the
     // bashisms that would break on a host whose /bin/sh is dash.
     // GLOBBED, not enumerated. The hand-written list this replaced named six of the nine
-    // scripts here: magus-hook-observe.sh, magus-rehydrate.sh and magus-checkpoint.sh
+    // scripts here: magus-observe.sh, magus-rehydrate.sh and magus-checkpoint.sh
     // were added later and never joined it, so the three that run on every Read, every
     // compaction and every Stop were the unchecked ones. A list that must be edited when a
     // file is added is a list that stops matching the directory.
@@ -100,6 +176,40 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         shell_args.append(script.value);
     }
     proc\exec("shellcheck", shell_args, ".", {});
+    checkBuzz();
+}
+
+// checkBuzz type-checks this directory's Buzz without running it.
+//
+// Running is what stood in for this before, and it is not the same question: these
+// templates read an event on stdin and shell out, so executing one exercises the path
+// its fixture happens to take and says nothing about the rest of the file. A check reads
+// all of it.
+//
+// TWO invocations because the two sets parse under different rules, and the split is not
+// cosmetic: the templates are upstream-strict, which is what lets a reader run one with a
+// stock Buzz toolchain, while lib/ is written for the magusfile engine. Checking either
+// under the other's mode reports rules it never targeted.
+//
+// GLOBBED, for the reason the shellcheck list above gives: a list that must be edited
+// when a file is added is a list that stops matching the directory.
+//
+// NOT quiet, unlike every other magus\cmd in this workspace. A passing check prints
+// nothing, so quiet buys no silence on the common path and costs the whole answer on the
+// failing one: it captures the diagnostics, leaving a reader "exited with code 1" and a
+// command to re-run by hand to find out which file and which line.
+fun checkBuzz() > void !> any {
+    var strict = mut ["--check"];
+    foreach (script in fs\glob("magus-*.buzz")) {
+        strict.append(script.value);
+    }
+    magus\cmd("buzz", args: strict);
+
+    var embedded = mut ["--check", "--embedded"];
+    foreach (script in fs\glob("lib/*.buzz")) {
+        embedded.append(script.value);
+    }
+    magus\cmd("buzz", args: embedded);
 }
 
 // test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level
@@ -161,9 +271,15 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // which is the same rule every other project with Markdown follows.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    // dprint amends the authored guide pages in place. They are inputs, not
-    // generated outputs: declaring them as outputs would make magus clean delete
-    // a reader's documentation.
+    // Before dprint, so the page it formats is the one the template just produced. This is
+    // also what puts the render inside `ci`, and so under the drift gate.
+    ctx.needs(generate);
+    // dprint amends the AUTHORED guide pages in place. They are inputs, not generated
+    // outputs: declaring them as outputs would make magus clean delete a reader's
+    // documentation. guard-templates.md is the one exception and is declared an output by
+    // generate above, because it is rendered rather than written, so clean deleting it
+    // costs a regeneration instead of prose nobody can get back. dprint leaves the
+    // rendered page byte-identical, which is what keeps the drift gate quiet.
     ctx.modifiesExistingFiles("*.md", "*.ts");
     markdown["dprint"](ctx);
     typescript["biome-format"](ctx);

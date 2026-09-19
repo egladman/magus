@@ -1,5 +1,17 @@
 [env]
 GOEXPERIMENT = "jsonv2"
+# The workspace's own magus, in front of whatever is installed globally.
+#
+# This repository is the one that dogfoods magus, so `magus` here has to mean the binary
+# built from this tree and not the released one on PATH, which sits below this workspace's
+# required_version floor and cannot load it at all. Every OTHER repository wants a plain
+# `magus`, and the committed hook config is copied by readers, so the config says `magus`
+# and resolution is left to the environment, which is what PATH is for.
+#
+# The workspace ROOT rather than a bin/ directory, because `magus run build .` has always
+# written ./magus there. The cost is that anything else executable at the root joins PATH
+# for a shell in this tree; there are two such files today and both are deliberate.
+_.path = ["{{config_root}}"]
 
 [tools]
 go = "1.26.6"

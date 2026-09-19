@@ -187,18 +187,18 @@ func TestGuardReferencedTemplates(t *testing.T) {
 	configDir := filepath.Join(root, ".claude")
 	require.NoError(t, os.MkdirAll(configDir, 0o755))
 
-	fromRoot := plant(t, root, "docs/guides/magus-hook-command.sh", "#!/bin/sh\n")
-	besideConfig := plant(t, configDir, "magus-hook-path.sh", "#!/bin/sh\n")
+	fromRoot := plant(t, root, "docs/guides/magus-command.sh", "#!/bin/sh\n")
+	besideConfig := plant(t, configDir, "magus-path.sh", "#!/bin/sh\n")
 
 	t.Run("resolves against the root and against the config dir", func(t *testing.T) {
-		body := []byte(`{"command": "sh docs/guides/magus-hook-command.sh", "other": "magus-hook-path.sh"}`)
+		body := []byte(`{"command": "sh docs/guides/magus-command.sh", "other": "magus-path.sh"}`)
 		found, missing := guardReferencedTemplates(root, configDir, body)
 		assert.Equal(t, []string{fromRoot, besideConfig}, found)
 		assert.Empty(t, missing)
 	})
 
 	t.Run("resolves Codex's VCS-neutral workspace-root shell expansion", func(t *testing.T) {
-		body := []byte(`{"command": "sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/magus-hook-command.sh\""}`)
+		body := []byte(`{"command": "sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/magus-command.sh\""}`)
 		found, missing := guardReferencedTemplates(root, configDir, body)
 		assert.Equal(t, []string{fromRoot}, found)
 		assert.Empty(t, missing)
@@ -208,7 +208,7 @@ func TestGuardReferencedTemplates(t *testing.T) {
 	// documented expansion, not a way for a config to smuggle an arbitrary shell
 	// command into doctor.
 	t.Run("does not resolve an arbitrary magus shell expansion from the root", func(t *testing.T) {
-		body := []byte(`{"command": "sh \"$(magus version)/docs/guides/magus-hook-command.sh\""}`)
+		body := []byte(`{"command": "sh \"$(magus version)/docs/guides/magus-command.sh\""}`)
 		found, missing := guardReferencedTemplates(root, configDir, body)
 		assert.Empty(t, found)
 		assert.NotEmpty(t, missing)
@@ -511,7 +511,7 @@ func TestPrunedPrefixIgnoresARelativePrefix(t *testing.T) {
 //
 // Membership is deliberately NOT asserted in the other direction: a template a host
 // discovers by placing it in a directory is graded in checkGuardWiring's directory
-// branch and correctly absent here (magus-hook-observe.sh is the standing example).
+// branch and correctly absent here (magus-observe.sh is the standing example).
 func TestGuardTemplateBasenamesAreShipped(t *testing.T) {
 	dir := filepath.Join("..", "..", "docs", "guides", "integrations", "agents")
 	for _, base := range guardTemplateBasenames {

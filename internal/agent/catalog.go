@@ -206,7 +206,11 @@ import (
 // `magus describe job --gates` answer from the filesystem, the guard's trail and recorded
 // evidence, none of which the worker can make quiet. It also states what a contested path
 // means, since a file two live lanes cover is attributed to neither.
-const SkillVersion = 85
+// 86: magus-buzz-write and magus-buzz-review teach `magus buzz --check`, which
+// type-checks without running. Review had no way to PROVE a strict-mode finding and
+// said to read for it; running a file whose job is a side effect was never a check of
+// it, and was the only thing standing in for one.
+const SkillVersion = 86
 
 const skillLicense = "GPL-3.0-or-later"
 

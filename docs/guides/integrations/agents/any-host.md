@@ -68,7 +68,7 @@ inherits it from the worker's environment, which the orchestrator that spawned
 the worker has to export - see
 [wiring a lease into a worker](leases.md#wiring-the-lease-into-a-worker).
 
-The fastest start is to copy [`magus-hook-command.sh`](guard-templates.md) and
+The fastest start is to copy [`magus-command.sh`](guard-templates.md) and
 set its override variables: `HOST_EVENT_PATH`, `HOST_RESPONSE`,
 `__MAGUS_AGENT_NAME`, and the two unavailable-response variables. That gets you
 the missing-binary and broken-binary handling without writing it again.

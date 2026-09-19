@@ -130,6 +130,36 @@ const (
 // so it cannot lack a feature that workspace uses. That holds only until the checkout
 // moves: a binary built before a pull is a dev build that is genuinely too old, and it
 // is the single most likely way to reach this in day-to-day work.
+
+// StaleBinaryAdvice is the sentence every out-of-date-binary report shares.
+//
+// Two surfaces reach this conclusion from different evidence and at different moments: a
+// magusfile naming something this build never heard of (ExplainStaleBinary, below) and
+// magus.yaml carrying a key it cannot decode, which fails earlier, before there is a
+// Config to read a version out of. They were separate paragraphs saying one thing, which
+// is how two explanations of one condition start disagreeing about the remedy.
+//
+// running may be empty: the config loader fails before the running version is threaded
+// through, and the floor alone still tells a reader which side is behind.
+func StaleBinaryAdvice(running, constraint string) string {
+	build, floor := strings.TrimSpace(running), strings.TrimSpace(constraint)
+	// Spelled out per case rather than joined from clauses: a clause written to follow
+	// "and" opens a sentence in lower case the moment the other half is absent, which is
+	// exactly what the floor-only path does.
+	facts := ""
+	switch {
+	case build != "" && floor != "":
+		facts = fmt.Sprintf("This build is %s and this workspace requires %s. ", build, floor)
+	case build != "":
+		facts = fmt.Sprintf("This build is %s and this workspace declares no required_version floor. ", build)
+	case floor != "":
+		facts = fmt.Sprintf("This workspace requires %s. ", floor)
+	}
+	return "This is what an OUT-OF-DATE BINARY looks like. " + facts +
+		"Update magus (`magus self update`), or rebuild it from this checkout if you build your own. " +
+		"A binary built before your last pull is the usual cause"
+}
+
 func ExplainStaleBinary(err error, running, constraint string) error {
 	if err == nil {
 		return nil
@@ -145,18 +175,11 @@ func ExplainStaleBinary(err error, running, constraint string) error {
 	if build == "" {
 		build = "an unstamped build"
 	}
-	floor := "declares no required_version floor"
-	if constraint != "" {
-		floor = fmt.Sprintf("requires %s", constraint)
-	}
 	// MGS1021, the same code CheckRequiredVersion raises: this is the same condition
 	// caught later and by a different signal, so it should be the same thing to look
 	// up. WrapDiagnostic keeps the original diagnostic in the chain, so a caller that
 	// branches on the BZZ code still can.
 	return types.WrapDiagnostic(types.WorkspaceNeedsNewerMagus, err,
-		"%s\n\nThis is what an out-of-date magus looks like: the workspace reached for a name this "+
-			"build does not provide. This build is %s, and the workspace %s. If the workspace is newer "+
-			"than the binary, update it (`magus self update`) or rebuild it from this checkout - a binary "+
-			"built before your last pull is the usual cause. If the name is genuinely misspelled, this "+
-			"note does not apply", err, build, floor)
+		"%s\n\nThe workspace reached for a name this build does not provide. %s. If the name is "+
+			"genuinely misspelled, this note does not apply", err, StaleBinaryAdvice(build, constraint))
 }

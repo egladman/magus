@@ -1,0 +1,224 @@
+// magus rehydrate hook: prints where this checkout stands, for a session that has
+// lost its history.
+//
+// This file is the source of truth for hosts wired to `magus buzz`. It is the Buzz
+// port of magus-rehydrate.sh and prints byte-identical text without a POSIX shell,
+// so it needs neither `tr` nor `sed` and runs unchanged on Windows. The shell copy
+// stays for the hosts still wired to `sh`.
+//
+// Run it as `magus buzz -s magus-rehydrate.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports no magus Buzz module and
+// no spell: the workspace stays CLOSED, which is what lets a session-start hook add
+// its block in about 10ms rather than paying roughly 700ms to open one.
+//
+// Wire it to your host's session-start event, for the compaction and resume cases
+// at least. When a host replaces a long session's history with a summary, the model
+// keeps working from prose: the branch it is on, what it has already changed, and
+// which rules it agreed to all survive only as somebody's retelling, and each
+// retelling is a copy of a copy. Whatever this prints lands in that context window
+// instead, read off the disk at the moment it prints.
+//
+// Contract: runs `magus session --brief`, prints what it says, and adds one line
+// naming your host's own instruction file. It judges nothing, reads no event, and
+// exits 0 whatever happens. Override:
+//
+//   __MAGUS_BIN   path to the binary, when it is not on PATH
+//   REHYDRATE_RULES   your host's instruction file, relative to the workspace root
+//   REHYDRATE_FORMAT  set it to `json` for a host that reads stdout as a reply
+//
+// Two channels, because hosts disagree about what a session-start hook's stdout
+// IS. Some add plain stdout to the model's context, which is the default here.
+// Others parse stdout as a JSON reply and drop anything that is not one, so the
+// same text has to arrive as a string field:
+//
+//   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}
+//
+// The escape below is written out rather than handed to json\stringify, and that is
+// deliberate: the sh copy escapes with `tr` and `sed`, the two forms are graded byte
+// for byte against the same brief, and a stringify that ever disagreed about a tab
+// or a control character would move this file's output rather than reveal the
+// difference. The loop is the sh pipeline, transcribed.
+//
+// The rules line is the one host-shaped part, which is why it is a variable rather
+// than something magus prints: magus names the files it ships and can see
+// (AGENTS.md, the installed skill directories), and the file YOUR host reads is
+// yours to name. It prints only when that file is really there.
+//
+// NO magus-guard-coverage line, for the same reason magus-checkpoint.buzz has none: a
+// coverage declaration states how much of a VERDICT a host can carry, and this file
+// carries no verdict on no surface. It never denies, never advises, and cannot
+// change what your host does next.
+//
+// magus-guard-template: 16
+
+// EVERY call that can fail is caught, matching the templates beside it and the
+// missing `set -e` in the sh copy. A hook that can fail is a hook that can break the
+// session it was meant to help.
+
+import "io";
+import "flags";
+import "env";
+import "fs";
+import "path";
+import "proc";
+
+// JSON_REPLY is the sh copy's printf format, %s and all, written as ONE balanced template
+// rather than concatenated around the body for a lexer reason worth knowing. A backtick
+// string DOES interpolate: a `{...}` run is evaluated when its contents parse as a Buzz
+// expression and stays literal only when they do not. An unbalanced fragment therefore
+// swallows its own closing backtick and everything to the next one, silently.
+final JSON_REPLY = `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}`;
+
+fun envOr(name: str, fallback: str) > str {
+    final value = env\get(name) catch "";
+    if (value == "") { return fallback; }
+    return value;
+}
+
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
+fun isExecutable(candidate: str) > bool {
+    final info = fs\stat(candidate) catch null;
+    if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
+    final mode = info!.mode as? int;
+    if (mode == null) { return false; }
+    return (mode! & 73) != 0;
+}
+
+// parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
+// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
+// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
+fun parentDir(dir: str) > str {
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
+}
+
+// workspaceRoot walks UP to the magusfile: a hook runs in the host's session
+// directory, which is not always the workspace root. The walk is UNCONDITIONAL, unlike
+// the one in its judging siblings, because the root is also what the rules line is
+// resolved against; an explicit __MAGUS_BIN settles the binary, not the tree.
+fun workspaceRoot() > str {
+    var dir = path\abs(".") catch "";
+    while (dir != "") {
+        final found = fs\isFile("{dir}/magusfile.buzz") catch false;
+        if (found) { return dir; }
+        dir = parentDir(dir);
+    }
+    return "";
+}
+
+// resolveBin prefers the workspace's own ./magus over PATH. magus-command.buzz
+// carries the full reasoning for that preference.
+fun resolveBin(root: str) > str {
+    final declared = env\get("__MAGUS_BIN") catch "";
+    if (declared != "") { return declared; }
+    if (root != "") {
+        final candidate = "{root}/magus";
+        if (isExecutable(candidate)) { return candidate; }
+    }
+    return proc\which("magus") catch "";
+}
+
+// trimTrailingNewlines matches shell command substitution, which drops every trailing
+// newline from a captured brief.
+fun trimTrailingNewlines(s: str) > str {
+    var end = s.len();
+    while (end > 0 and s.sub(end - 1, len: 1) == "\n") { end = end - 1; }
+    return s.sub(0, len: end);
+}
+
+// escapeJSON is `tr '\001-\011\013-\037' '[ *]' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'`
+// followed by the read loop that joins the lines, transcribed byte for byte.
+//
+// Every control character but the line break becomes a space (a raw one is not legal
+// inside a JSON string), backslash and quote are escaped, and each line break becomes
+// the two characters a JSON string spells it with. Byte-indexed on purpose: a
+// multi-byte rune's continuation bytes are all above 0x7f, so they fall through
+// untouched and reassemble exactly as they arrived.
+fun escapeJSON(body: str) > str {
+    final buf = mut [<str>];
+    foreach (i in 0..body.len()) {
+        // -1 on a read that cannot happen inside this loop's bounds, chosen because 0 is a
+        // real byte: the sh copy's `tr` range starts at \001 and let a NUL through, and a
+        // NUL emitted raw makes the reply illegal JSON, so the host drops it whole.
+        final b = body.byte(i) catch -1;
+        if (b == 10) {
+            buf.append("\\n");
+        } else if (b < 32) {
+            buf.append(" ");
+        } else if (b == 92) {
+            buf.append("\\\\");
+        } else if (b == 34) {
+            buf.append("\\\"");
+        } else {
+            buf.append(body.sub(i, len: 1));
+        }
+    }
+    return buf.join("");
+}
+
+// warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this
+// file writes on stdout.
+fun warn(message: str) > void {
+    io\stderr.write("magus-rehydrate.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
+fun main(args: [str]) > void {
+    reportArgv(args);
+    final rules = envOr("REHYDRATE_RULES", fallback: "CLAUDE.md");
+    final root = workspaceRoot();
+
+    // An absent magus is SILENT, where an absent guard is loud. Nothing here is
+    // unenforced (there is no rule), so announcing it would open every compacted
+    // session with a report that an optional context block was not written.
+    final bin = resolveBin(root);
+    if (bin == "" or !isExecutable(bin)) { return; }
+
+    // Captured rather than streamed, because the json arm has to wrap it. stderr is
+    // discarded by `quiet`: a magus too old for `session --brief` prints its usage
+    // there, and that would otherwise be injected as this hook's answer.
+    final result = proc\exec(bin, args: ["session", "--brief"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null) { return; }
+
+    var brief = trimTrailingNewlines(result!.stdout);
+
+    // Nothing from magus is nothing to say, in either channel. The rules line trails
+    // the brief and points back at it, so on its own it is a sentence about a block
+    // that was never written, and an envelope carrying only that is worse than none.
+    if (brief == "") { return; }
+
+    if (root != "") {
+        final hasRules = fs\isFile("{root}/{rules}") catch false;
+        if (hasRules) {
+            brief = brief + "\nstanding rules: " + rules + "; re-read it, the summary above is not it";
+        }
+    }
+
+    if (envOr("REHYDRATE_FORMAT", fallback: "") == "json") {
+        io\stdout.write(JSON_REPLY.replace("%s", with: escapeJSON(brief + "\n"))) catch void;
+        return;
+    }
+
+    io\stdout.write(brief + "\n") catch void;
+}

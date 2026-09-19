@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -14,7 +14,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-hook-path.sh",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-path.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -24,17 +24,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-hook-observe.sh",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Read"
-      },
-      {
-        "hooks": [
-          {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -44,17 +34,17 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz",
             "timeout": 10,
             "type": "command"
           }
         ],
-        "matcher": "Agent|Task"
+        "matcher": "Read"
       },
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -64,7 +54,7 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --observes-skill-loads",
             "timeout": 10,
             "type": "command"
           }
@@ -76,7 +66,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz",
             "timeout": 10,
             "type": "command"
           }
@@ -88,7 +78,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz",
             "timeout": 10,
             "type": "command"
           }

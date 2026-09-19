@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # magus guard hook: judges ONE file path an agent is about to write.
 #
-# Companion to magus-hook-command.sh, wired to your host's file-editing tool
+# Companion to magus-command.sh, wired to your host's file-editing tool
 # rather than its shell tool. POSIX sh, no bashisms.
 #
 # The declared-output rule here is the one guard rule that is not a heuristic:
@@ -28,18 +28,18 @@
 # this one. That is a coverage difference to record, not a reason to skip it.
 #
 # __MAGUS_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
-# magus-hook-command.sh: attribution recorded on the activity event, never an
+# magus-command.sh: attribution recorded on the activity event, never an
 # input to the verdict.
 #
 # Coverage declaration, machine-read by the host-parity gate - see the longer
-# note in magus-hook-command.sh. It records what HOST_RESPONSE RENDERS, not
+# note in magus-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
 #
 # No rule asks on this surface today. The arm exists for the same reason the deny arm did
 # before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 # Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 # renders as a deny.
-# magus-guard-template: 15
+# magus-guard-template: 16
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 
@@ -49,7 +49,10 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
-# Same split, and the same reason, as in magus-hook-command.sh: a host that
+# The one arm on this surface that does not fail open; see the truncated-envelope check
+# below. Plain assignment for the same reason as the rest: a `}` would end a ${...}.
+[ -n "$__MAGUS_UNREADABLE_RESPONSE" ] || __MAGUS_UNREADABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this write from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}'
+# Same split, and the same reason, as in magus-command.sh: a host that
 # REJECTS the context key can mark the hook run failed and continue the call, so an
 # advisory it cannot take disarms that call rather than merely going unread. No
 # host wired to this file is in that position; the flag is there for the one you
@@ -60,7 +63,7 @@ else
   [ -n "$HOST_ADVISE_BRANCH" ] || HOST_ADVISE_BRANCH='{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}'
 fi
 # HOST_RESPONSE's default is assembled once the event is read, because telling Codex apart
-# reads the event; see magus-hook-command.sh.
+# reads the event; see magus-command.sh.
 # Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
 # newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
 # not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
@@ -96,10 +99,32 @@ fi
 # id to attribute it to. `// empty` keeps a host without that field at the empty
 # string rather than the literal "null".
 event=$(cat)
+
+# A payload that opens like an envelope but does not parse is a TRUNCATED one, not a path.
+# Judged as text it matches no rule and passes, so it is refused here while its shape still
+# says what it was. magus itself denies an unreadable payload for the same reason.
+case $event in
+  '{'*)
+    if ! printf '%s' "$event" | jq -e . >/dev/null 2>&1; then
+      printf '%s' "$__MAGUS_UNREADABLE_RESPONSE"
+      exit 0
+    fi
+    ;;
+esac
+
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 
-# Codex by name or by its event's turn_id, exactly as magus-hook-command.sh decides it. No
+# Which payload magus gets: the WHOLE envelope, or the one string HOST_EVENT_PATH selects.
+# magus reads a write target off the ENVELOPE under every `*_path` spelling, so selecting one
+# dot-path here left NotebookEdit's `notebook_path` unjudged. See magus-path.buzz.
+whole_event=1
+if [ "$(printf '%s' "$event" | jq -r '(.tool_name // "") | startswith("mcp__")' 2>/dev/null)" != true ] &&
+  [ "$(printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH | type" 2>/dev/null)" = string ]; then
+  whole_event=
+fi
+
+# Codex by name or by its event's turn_id, exactly as magus-command.sh decides it. No
 # Codex rule prompts for a write, so there an ask renders as a deny.
 if [ -z "$HOST_ASK_BRANCH" ]; then
   if [ "$__MAGUS_AGENT_NAME" = codex ] || [ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ]; then
@@ -108,7 +133,7 @@ if [ -z "$HOST_ASK_BRANCH" ]; then
     HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":{{toJson .reason}}}}'
   fi
 fi
-# A decision this file does not know is refused, never allowed; see magus-hook-command.sh.
+# A decision this file does not know is refused, never allowed; see magus-command.sh.
 # Only a reply assembled here claims --renders-ask: a HOST_RESPONSE the reader wrote gets a
 # deny from magus rather than an ask it may render as nothing.
 renders_ask=
@@ -122,9 +147,13 @@ fi
 # exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
 # attribution, fall back to the call this script made before it existed.
 guard() {
-  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$__MAGUS_BIN" shell --path "$@" -o "template=$HOST_RESPONSE"
+  if [ -n "$whole_event" ]; then
+    printf '%s' "$event"
+  else
+    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH"
+  fi | "$__MAGUS_BIN" shell --path "$@" -o "template=$HOST_RESPONSE"
 }
-# Same discrimination as magus-hook-command.sh, and for the same reason now that this
+# Same discrimination as magus-command.sh, and for the same reason now that this
 # surface can render a deny: a DENY exits non-zero (2) with the verdict on stdout, so a
 # bare `||` retry would treat every blocked write as "this binary rejected the attribution
 # flags" and judge it a second time - unattributed, and recorded twice in the activity
@@ -139,7 +168,7 @@ if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   status=$?
 fi
 
-# A pass and a broken guard both render nothing; see magus-hook-command.sh for why
+# A pass and a broken guard both render nothing; see magus-command.sh for why
 # telling them apart matters. Kept identical here so neither surface grows a behavior
 # the other lacks - the difference is only that this one has no default message,
 # because for most hosts an empty response on this surface already means "allow".

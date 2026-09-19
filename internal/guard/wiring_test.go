@@ -15,9 +15,9 @@ func TestHookWiringSubjectNamesEveryDocumentedHost(t *testing.T) {
 	for _, path := range []string{
 		".claude/settings.json",
 		".claude/settings.local.json",
-		".claude/hooks/magus-hook-command.sh",
+		".claude/hooks/magus-command.sh",
 		"/repo/.claude/settings.json",
-		"/Users/dev/.claude/hooks/magus-hook-path.sh",
+		"/Users/dev/.claude/hooks/magus-path.sh",
 		".cursor/hooks.json",
 		"/repo/.cursor/hooks/cursor-hook.sh",
 		".codex/hooks.json",

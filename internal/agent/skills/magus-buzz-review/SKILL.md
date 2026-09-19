@@ -56,6 +56,14 @@ guessing from its shape{{end}}:
 - Runs via `magus buzz --embedded <file>`, is invoked from inside another Buzz
   program (`magus\cmd("buzz", ...)`), or its own header comment says which
   surface it targets - strict rules do not apply.
+Once you have the mode, PROVE the file parses under it rather than reading for
+it: `magus buzz --check <file>` for strict, `--check --embedded` for the other.
+It runs nothing, takes several paths, and reports every diagnostic instead of
+stopping at the first{{if .Full}}, so a strict-mode finding either reproduces as a
+diagnostic naming the line or was never there. A file whose job is a side effect
+cannot be checked any other way, since running it exercises one path and says
+nothing about the rest{{end}}.
+
 - Unclear how it runs - check the CI workflow or wrapper that calls it before
   flagging a strict-mode violation{{if .Full}}. A script that happens to have no
   top-level control flow and no unlabeled second argument is ALSO valid

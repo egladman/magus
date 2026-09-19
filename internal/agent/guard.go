@@ -63,7 +63,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // the attribution flag, which no released binary accepts (v0.3.0 predates it):
 // an older binary rejected it, the plugin's judge() got unparsable stdout, and
 // every verdict silently allowed. The sh templates already retried without
-// attribution on exactly this failure (magus-hook-command.sh's guard()); the
+// attribution on exactly this failure (magus-command.sh's guard()); the
 // plugin now does the same.
 //
 // 3: that flag is now --agent-name (was --host, which read as a network host)
@@ -124,7 +124,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // compacted session is handed back renders as a JSON envelope on request, for a host that
 // parses a session-start hook's stdout as a reply rather than reading it as context.
 //
-// 13: the contract grew a third surface, MCP tool calls, and magus-hook-command.sh grew
+// 13: the contract grew a third surface, MCP tool calls, and magus-command.sh grew
 // HOST_EVENT_RAW to carry it: an MCP call has no single string to select with
 // HOST_EVENT_PATH, only a tool name and a params object, so a host wiring this surface
 // forwards the whole event instead of reducing it to one jq extraction. A copy that
@@ -145,7 +145,17 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // now refuses a decision it does not know instead of allowing it. A copy that predates
 // this renders an ask as NOTHING, which each host takes as allow: an ungated push goes out
 // with nobody asked.
-const GuardTemplateVersion = 15
+// 16: the Buzz ports take their two per-entry knobs off the wire instead of out of the
+// environment. A hook command is an argv the host splits itself, so a `VAR=value` prefix
+// only works where something re-joins and re-parses it; the ports now decide from the
+// event whether to forward the whole envelope (the field HOST_EVENT_PATH names is absent
+// on exactly the surfaces whose payload is not one string) and read their `magus shell`
+// flags from the argv `magus buzz` forwards after `--`. The sh copies are unchanged and
+// keep their variables, because sh is what runs them. This bumps because the CONFIG and
+// the glue moved together: a config written for this version wires no HOST_EVENT_RAW, and
+// a copy that predates it then selects `null` on every MCP call, spawn and skill load, so
+// those surfaces stop being judged with nothing anywhere saying so.
+const GuardTemplateVersion = 16
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

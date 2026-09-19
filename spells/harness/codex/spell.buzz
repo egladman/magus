@@ -26,19 +26,19 @@ fun codex_skills_paths() > [str] {
 }
 
 fun codex_guard_command() > str {
-    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh";
+    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-command.sh";
 }
 
 fun codex_path_command() > str {
-    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-path.sh";
+    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-path.sh";
 }
 
 fun codex_observe_command() > str {
-    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-observe.sh";
+    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-observe.sh";
 }
 
 fun codex_mcp_command() > str {
-    return "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh";
+    return "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-command.sh";
 }
 
 fun codex_rehydrate_command() > str {
@@ -212,9 +212,9 @@ test "harness_skills installs both forms under .agents/skills" {
 
 test "guard commands name the shared templates with __MAGUS_AGENT_NAME=codex" {
     assert\isTrue(codex_guard_command().indexOf("__MAGUS_AGENT_NAME=codex") != null, "command surface stamps agent name");
-    assert\isTrue(codex_guard_command().indexOf("magus-hook-command.sh") != null, "command surface");
-    assert\isTrue(codex_path_command().indexOf("magus-hook-path.sh") != null, "path surface");
-    assert\isTrue(codex_observe_command().indexOf("magus-hook-observe.sh") != null, "read observe");
+    assert\isTrue(codex_guard_command().indexOf("magus-command.sh") != null, "command surface");
+    assert\isTrue(codex_path_command().indexOf("magus-path.sh") != null, "path surface");
+    assert\isTrue(codex_observe_command().indexOf("magus-observe.sh") != null, "read observe");
     assert\isTrue(codex_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
     assert\isTrue(codex_rehydrate_command().indexOf("REHYDRATE_FORMAT=json") != null, "SessionStart needs JSON stdout");
     assert\isTrue(codex_rehydrate_command().indexOf("REHYDRATE_RULES=AGENTS.md") != null, "Codex reads AGENTS.md");
@@ -225,7 +225,7 @@ test "harness_prompts keeps the git push prompt rule the shared template looks f
     final prompts = codex_prompts();
     assert\equal(prompts.len(), 1, "one rules file");
     assert\equal("{prompts[0]["path"]}", ".codex/rules/magus.rules", "project-local Codex rules");
-    assert\isTrue(codex_rules().indexOf("[\"git\", \"push\"]") != null, "magus-hook-command.sh greps this exact pattern");
+    assert\isTrue(codex_rules().indexOf("[\"git\", \"push\"]") != null, "magus-command.sh greps this exact pattern");
     assert\isTrue(codex_rules().indexOf("decision = \"prompt\"") != null, "the rule prompts rather than forbids");
 }
 

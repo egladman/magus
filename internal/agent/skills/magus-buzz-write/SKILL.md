@@ -35,6 +35,7 @@ magus buzz hello.buzz
 | `magus buzz -e '<code>'` | run a snippet inline |
 | `echo '<code>' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t <file>` | run the file's `test "..." {}` blocks and report pass/fail |
+| `magus buzz --check <file>...` | parse and type-check, without running{{if .Full}}: every diagnostic rather than the first, several paths at once. Running a script whose job is a side effect is not a check of it{{end}} |
 | `magus buzz` (a terminal, no args) | REPL, with the magusfile at cwd loaded |
 
 ## Never guess an API: ask

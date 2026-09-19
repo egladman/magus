@@ -55,9 +55,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS1028`, `MGS3010`, `MGS3012`                                                                                             |
 | doc        |     400+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
-| dir        |     200+ | `magus query kind=dir`        | `docs/reference/rules`, `docs/reference/codes/magusfile`, `docs/reference/buzz`                                             |
+| dir        |     200+ | `magus query kind=dir`        | `docs/reference/rules`, `docs/reference/buzz`, `docs/reference/codes/magusfile`                                             |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
-| function   |    1000+ | `magus query kind=function`   | `tail`, `sign`, `claude_entries`                                                                                            |
+| function   |    1000+ | `magus query kind=function`   | `main`, `tail`, `main`                                                                                                      |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
 | rationale  |        6 | `magus query kind=rationale`  | `TODO`, `WHY`, `NOTE`                                                                                                       |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
@@ -68,7 +68,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | .                               |      49 | `magus query project=.`                               | `test`, `generate`, `buzz-test`                          |
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       7 | `magus query project=docs/guides/integrations/agents` | `format`, `preflight`, `ci`                              |
+| docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `preflight`                        |
 | libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `test`, `build`                                |
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
@@ -171,6 +171,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target                    | What it does                                                                                                                                                                                                                                                         |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`                | Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.                                                                                                                                                    |
 | `cursor-schemas-generate` | Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.                                                                                                                                                                                          |
 | `lint`                    | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
 | `test`                    | test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.                                                                                     |

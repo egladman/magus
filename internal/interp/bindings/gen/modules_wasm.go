@@ -18,6 +18,7 @@ var Modules = Set{
 	"csv":      {Register: RegisterCsv, Capabilities: Capabilities(WASM), Path: "encoding/csv"},
 	"diff":     {Register: RegisterDiff, Capabilities: Capabilities(WASM)},
 	"env":      {Register: RegisterEnv, Capabilities: Capabilities(WASM)},
+	"flags":    {Register: RegisterFlags, Capabilities: Capabilities(WASM)},
 	"fmt":      {Register: RegisterFmt, Capabilities: Capabilities(WASM)},
 	"hex":      {Register: RegisterHex, Capabilities: Capabilities(WASM), Path: "encoding/hex"},
 	"ini":      {Register: RegisterIni, Capabilities: Capabilities(WASM), Path: "encoding/ini"},

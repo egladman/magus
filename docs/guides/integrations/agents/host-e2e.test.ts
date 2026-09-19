@@ -84,12 +84,19 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
       managed_entries: Array<Record<string, unknown>>;
     };
     const managed = JSON.stringify(harness.managed_entries);
+    // Either shipped form of the observer: the sh copy, or the Buzz port a
+    // `magus buzz` wiring names. They render the same behavior, and an executed
+    // case refuses a difference; what this asks is that the host records reads
+    // at all, not which of the two files it reached for.
     assert.ok(
-      managed.includes("magus-hook-observe.sh"),
+      managed.includes("magus-observe.sh") || managed.includes("magus-observe.buzz"),
       `${harness.id} must record read observations`,
     );
+    // Either form again, for the reason above: codex is still wired to the sh copy
+    // and claude-code has moved to the Buzz port, and this asks whether the host
+    // records where the work stopped, not which runtime it spells that in.
     assert.ok(
-      managed.includes("magus-checkpoint.sh"),
+      managed.includes("magus-checkpoint.sh") || managed.includes("magus-checkpoint.buzz"),
       `${harness.id} must record stop checkpoints`,
     );
   }

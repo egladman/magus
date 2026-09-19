@@ -66,7 +66,7 @@
 # denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 # permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 # names the person's own terminal.
-# magus-guard-template: 15
+# magus-guard-template: 16
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
@@ -86,6 +86,9 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+# The one arm here that does not fail open; see the truncated-envelope check below. Plain
+# assignment for the same reason as the rest: a `}` would end a ${...}.
+[ -n "$__MAGUS_UNREADABLE_RESPONSE" ] || __MAGUS_UNREADABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this call from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}'
 # The advise arm is split out because not every host has one, and because a host
 # that REJECTS the key is worse off than one that ignores it: an unsupported field
 # can make the host mark the hook run failed and continue the call, so an advisory
@@ -136,6 +139,20 @@ done
 # held to one firing per session and the session id is what keys them. jq failing here
 # leaves the session empty, which guard_notice_once handles as an unidentified session.
 event=$(cat)
+
+# A payload that opens like an envelope but does not parse is a TRUNCATED one, not a command
+# line. Judged as text it matches no rule and passes, so it is refused here while its shape
+# still says what it was. magus denies an unreadable payload for the same reason, and leaves
+# this case to its caller because nothing inside it ever saw the bytes.
+case $event in
+  '{'*)
+    if ! printf '%s' "$event" | jq -e . >/dev/null 2>&1; then
+      printf '%s' "$__MAGUS_UNREADABLE_RESPONSE"
+      exit 0
+    fi
+    ;;
+esac
+
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
 event_name=$(printf '%s' "$event" | jq -r '.hook_event_name // empty' 2>/dev/null)
@@ -192,10 +209,14 @@ codex_cannot_prompt() {
 # unasked. turn_id is a required field of Codex's published PreToolUse input
 # (testdata/hosts/codex/pre-tool-use.command.input.schema.json) and of its
 # PermissionRequest input; no vendored Claude Code or Cursor schema names it.
+#
+# The two are kept apart rather than or-ed, because the arms below trust them differently.
+codex_named=
+codex_inferred=
+[ "$__MAGUS_AGENT_NAME" = codex ] && codex_named=1
+[ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ] && codex_inferred=1
 codex=
-if [ "$__MAGUS_AGENT_NAME" = codex ] || [ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ]; then
-  codex=1
-fi
+{ [ -n "$codex_named" ] || [ -n "$codex_inferred" ]; } && codex=1
 
 # renders_ask is the --renders-ask claim: this call's reply puts an ask in front of the
 # person, or refuses it, and never lets it through unasked. Only a reply this file assembled
@@ -208,7 +229,16 @@ renders_ask=
 # header for why this file never sends Codex permissionDecision "ask".
 if [ -z "$HOST_ASK_BRANCH" ]; then
   if [ -n "$codex" ]; then
-    ask_blocker=$(codex_cannot_prompt)
+    # Only a wiring that NAMED itself Codex may render an ask as context the agent is free
+    # to skip. Inferring the host from a turn_id key is a guess over an envelope nobody
+    # schema-types, and the two ways of being wrong are not equal: the context arm turns an
+    # ask into a note that is silently ignored, while the deny arm turns it into a refusal
+    # the person can act on. A host that adds turn_id therefore costs a deny, not a pass.
+    if [ -n "$codex_named" ]; then
+      ask_blocker=$(codex_cannot_prompt)
+    else
+      ask_blocker='this event looks like Codex but the wiring never said so, and only a config that sets __MAGUS_AGENT_NAME=codex is taken at its word here'
+    fi
     if [ -z "$ask_blocker" ]; then
       HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .reason}}}}'
     else

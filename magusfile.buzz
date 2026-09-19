@@ -2931,6 +2931,13 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
                    "libs/commentdash/go.mod", "libs/commentdash/go.sum",
                    "libs/commentdash/**/*.go");
+    // Remove the old binary first, so the link lands on a FRESH inode. `golangci-lint
+    // custom` otherwise rewrites ./custom-gcl in place, and macOS keeps a code signature
+    // keyed on that inode: the new bytes no longer match it, so the kernel SIGKILLs the
+    // next exec before main runs. It reads as an OOM kill ("signal: killed") and is not
+    // one - `./custom-gcl --version` died the same way on a machine with 13GB free, and
+    // `codesign --force --sign -` on the same file fixed it.
+    fs\remove("custom-gcl");
     proc\exec("golangci-lint", ["custom"], "libs/testlayout");
 }
 

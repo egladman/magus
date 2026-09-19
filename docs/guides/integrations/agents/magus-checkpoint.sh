@@ -30,12 +30,12 @@
 # parses the envelope itself, so a machine without jq records a checkpoint rather
 # than silently recording none.
 #
-# NO magus-guard-coverage line, for the same reason magus-hook-observe.sh has
+# NO magus-guard-coverage line, for the same reason magus-observe.sh has
 # none: a coverage declaration states how much of a VERDICT a host can carry, and
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.
 #
-# magus-guard-template: 15
+# magus-guard-template: 16
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to observe, and a record
