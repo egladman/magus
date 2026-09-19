@@ -50,7 +50,7 @@ func TestExplainStaleBinary_AnnotatesTheDeadlockShapes(t *testing.T) {
 			got := ExplainStaleBinary(realBuzzErr(t, tc.src), "0.4.0", ">= 0.4.0")
 			require.Error(t, got)
 			assert.Contains(t, got.Error(), tc.want, "the original diagnostic must survive")
-			assert.Contains(t, got.Error(), "out-of-date magus")
+			assert.Contains(t, got.Error(), "OUT-OF-DATE BINARY")
 			assert.Contains(t, got.Error(), "0.4.0", "names the running build")
 			assert.Contains(t, got.Error(), "requires >= 0.4.0", "names the declared floor")
 			assert.ErrorIs(t, got, got, "still an error chain callers can inspect")
@@ -97,7 +97,7 @@ func TestExplainStaleBinary_WorksWithNothingDeclared(t *testing.T) {
 func TestExplainStaleBinary_AppliesToDevBuilds(t *testing.T) {
 	got := ExplainStaleBinary(realBuzzErr(t, `final s = Secret{value = "x"};`), DevVersion, ">= 0.4.0")
 	require.Error(t, got)
-	assert.Contains(t, got.Error(), "out-of-date magus")
+	assert.Contains(t, got.Error(), "OUT-OF-DATE BINARY")
 
 	// And the contrast, in one place so the asymmetry is visible: the floor ward does
 	// exempt the same build.
