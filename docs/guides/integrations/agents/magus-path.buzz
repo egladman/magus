@@ -237,6 +237,11 @@ fun main(args: [str]) > void {
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
+    // The binary is resolved BEFORE stdin is drained, where magus-command.buzz reads first.
+    // That file's notices are held to one firing per session and the session id keys them,
+    // so it has to read the event to stay quiet; this surface prints nothing by default and
+    // needs no key. The cost is that a host writing to a stdin nobody reads can see a broken
+    // pipe, which is why the two orders are stated rather than assumed to match.
     final bin = resolveBin();
     if (bin == "" or !isExecutable(bin)) {
         // Prints nothing by default: for most hosts an empty response means "allow".
