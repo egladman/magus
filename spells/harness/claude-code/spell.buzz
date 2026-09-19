@@ -34,21 +34,25 @@ fun claude_skills_paths() > [str] {
 // argument applies to the interpreter, and more sharply, because a magus too old
 // to run the script renders no verdict at all.
 //
-// So a workspace that carries its own binary wires that one, and this answer is a
-// CONSTANT rather than a probe of the machine it runs on.
+// Plain `magus`, resolved through PATH, and a CONSTANT rather than a probe of the machine
+// this runs on.
 //
-// It used to test for ./magus and fall back to `magus`, which made the committed config
-// valid only on the machine that last applied it: a checkout carrying the binary wrote
-// `./magus`, and every other one then computed `magus`, compared it against what was
-// committed, and reported the harness uncovered. CI said so on every run.
+// It used to test for ./magus and fall back, which made the committed config valid only on
+// the machine that last applied it: a checkout carrying the binary wrote `./magus`, every
+// other one computed `magus`, and comparing the two reported the harness uncovered. CI said
+// so on every run.
 //
-// A config is one string with no shell to test a file in, so it cannot hold both. It
-// names the workspace binary because that is the one whose rules match the tree; a
-// checkout that has not built one yet has hooks that cannot launch, which is a real
-// state and the one `magus doctor`'s guard-binary check reports. Workspace-relative,
-// never absolute: an absolute path would ship one machine's layout to every clone.
+// `./magus` is not the safer constant either. A hook runs in the host's SESSION directory,
+// which is not always the workspace root, so a relative interpreter misses exactly where
+// resolveBin's walk-up was written to help, and the interpreter runs before any of that
+// script logic can.
+//
+// So resolution belongs to the environment, which is what PATH is for and what every other
+// repository already wants. Nothing is lost by it: the interpreter only has to be new
+// enough to run this glue, and the glue's own resolveBin still prefers the workspace binary
+// for the VERDICT. This repository puts its own build in front through mise.toml.
 fun claude_interpreter() > str {
-    return "./magus";
+    return "magus";
 }
 
 // The Buzz ports, not the sh copies beside them. Buzz needs neither jq nor a POSIX
@@ -314,7 +318,7 @@ test "the interpreter is the same string on every machine" {
     // doctor's guard-binary check reports it; it is not something to paper over by
     // writing a different config on that machine.
     final chosen = claude_interpreter();
-    assert\equal(chosen, "./magus", "the workspace binary, whether or not this machine has one");
+    assert\equal(chosen, "magus", "resolved through PATH, never a path this checkout happens to have");
     assert\isTrue(claude_glue_command("command", flags: [<str>]).startsWith("{chosen} buzz -s "), "the command carries it");
     // Every surface, because one command built by hand rather than through the helper
     // is one entry apply keeps rewriting against a config that already holds it. Each

@@ -52849,32 +52849,32 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_agent_command",
       "kind": "function",
       "label": "claude_agent_command",
-      "source": "spells/harness/claude-code/spell.buzz:100"
+      "source": "spells/harness/claude-code/spell.buzz:104"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
       "kind": "function",
       "label": "claude_buzz_command",
       "doc": "The Buzz ports, not the sh copies beside them. Buzz needs neither jq nor a POSIX shell, so the wiring works unchanged on Windows and a reader installs no runtime dependency to be guarded. The sh copies stay for the hosts still wired to them (codex, cursor, the any-host guide) and render byte-identical replies.  `-s` keeps the interpreter quiet: `magus buzz` reports an unused import and other BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an error notice, so an advisory about t",
-      "source": "spells/harness/claude-code/spell.buzz:69"
+      "source": "spells/harness/claude-code/spell.buzz:73"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_checkpoint_command",
       "kind": "function",
       "label": "claude_checkpoint_command",
-      "source": "spells/harness/claude-code/spell.buzz:119"
+      "source": "spells/harness/claude-code/spell.buzz:123"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_command_hook",
       "kind": "function",
       "label": "claude_command_hook",
-      "source": "spells/harness/claude-code/spell.buzz:123"
+      "source": "spells/harness/claude-code/spell.buzz:127"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config",
       "kind": "function",
       "label": "claude_config",
-      "source": "spells/harness/claude-code/spell.buzz:171"
+      "source": "spells/harness/claude-code/spell.buzz:175"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config_path",
@@ -52886,64 +52886,64 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_entries",
       "kind": "function",
       "label": "claude_entries",
-      "source": "spells/harness/claude-code/spell.buzz:138"
+      "source": "spells/harness/claude-code/spell.buzz:142"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
       "kind": "function",
       "label": "claude_glue_command",
-      "source": "spells/harness/claude-code/spell.buzz:75"
+      "source": "spells/harness/claude-code/spell.buzz:79"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_guard_command",
       "kind": "function",
       "label": "claude_guard_command",
       "doc": "The Bash, MCP and Skill matchers all take this one string. Their payloads differ, but a params object and a skill name both have to reach `magus shell` whole, and the glue reads that off the event rather than off the entry, so there is nothing to write on it. Three named wrappers returning identical bytes only invited a reader to look for a difference.",
-      "source": "spells/harness/claude-code/spell.buzz:83"
+      "source": "spells/harness/claude-code/spell.buzz:87"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_interpreter",
       "kind": "function",
       "label": "claude_interpreter",
-      "doc": "claude_interpreter picks which magus RUNS the glue.  Moving the glue from sh to Buzz moves the interpreter from a program that is always present and has no version to one that does. The sh copies resolved the binary that renders the VERDICT by walking up to the magusfile, precisely so a stale PATH copy could not answer with rules the tree no longer has; the same argument applies to the interpreter, and more sharply, because a magus too old to run the script renders no verdict at all.  So a workspace that ca",
-      "source": "spells/harness/claude-code/spell.buzz:50"
+      "doc": "claude_interpreter picks which magus RUNS the glue.  Moving the glue from sh to Buzz moves the interpreter from a program that is always present and has no version to one that does. The sh copies resolved the binary that renders the VERDICT by walking up to the magusfile, precisely so a stale PATH copy could not answer with rules the tree no longer has; the same argument applies to the interpreter, and more sharply, because a magus too old to run the script renders no verdict at all.  Plain `magus`, resolve",
+      "source": "spells/harness/claude-code/spell.buzz:54"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp",
       "kind": "function",
       "label": "claude_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:196"
+      "source": "spells/harness/claude-code/spell.buzz:200"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_observe_command",
       "kind": "function",
       "label": "claude_observe_command",
-      "source": "spells/harness/claude-code/spell.buzz:91"
+      "source": "spells/harness/claude-code/spell.buzz:95"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_path_command",
       "kind": "function",
       "label": "claude_path_command",
-      "source": "spells/harness/claude-code/spell.buzz:87"
+      "source": "spells/harness/claude-code/spell.buzz:91"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_pretool_entry",
       "kind": "function",
       "label": "claude_pretool_entry",
-      "source": "spells/harness/claude-code/spell.buzz:131"
+      "source": "spells/harness/claude-code/spell.buzz:135"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
       "kind": "function",
       "label": "claude_rehydrate_command",
       "doc": "The two lifecycle wrappers go through the same interpreter helper as the guard glue, so this host's whole wiring names one runtime. They judge nothing, which is why they are built from claude_buzz_command directly: their names are their own rather than a surface of the hook template.",
-      "source": "spells/harness/claude-code/spell.buzz:115"
+      "source": "spells/harness/claude-code/spell.buzz:119"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills",
       "kind": "function",
       "label": "claude_skills",
-      "source": "spells/harness/claude-code/spell.buzz:177"
+      "source": "spells/harness/claude-code/spell.buzz:181"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills_form",
@@ -52961,7 +52961,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_config",
       "kind": "function",
       "label": "harness_config",
-      "source": "spells/harness/claude-code/spell.buzz:184",
+      "source": "spells/harness/claude-code/spell.buzz:188",
       "attrs": {
         "exported": "true"
       }
@@ -52970,7 +52970,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_entries",
       "kind": "function",
       "label": "harness_entries",
-      "source": "spells/harness/claude-code/spell.buzz:192",
+      "source": "spells/harness/claude-code/spell.buzz:196",
       "attrs": {
         "exported": "true"
       }
@@ -52979,7 +52979,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_mcp",
       "kind": "function",
       "label": "harness_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:216",
+      "source": "spells/harness/claude-code/spell.buzz:220",
       "attrs": {
         "exported": "true"
       }
@@ -52988,7 +52988,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_skills",
       "kind": "function",
       "label": "harness_skills",
-      "source": "spells/harness/claude-code/spell.buzz:188",
+      "source": "spells/harness/claude-code/spell.buzz:192",
       "attrs": {
         "exported": "true"
       }
