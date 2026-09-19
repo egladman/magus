@@ -382,10 +382,15 @@ func waitForIsolationWaiters(t *testing.T, r *runIsolation, n int) {
 }
 
 // A holder in a ctx.needs fan-out is not a wedged holder. Its slots are handed back for
-// the duration, which is what the slot watch means by stalled, and the gate read that as
-// parked: every composite target holds the gate through a fan-out, so a batch whose
-// generators are silent for the grace was refused out from under itself. The fan-out
+// the duration, which is what the limiter counts against a saturated pool, and the gate
+// read that as parked: every composite target holds the gate through a fan-out, so a batch
+// whose generators are silent for the grace was refused out from under itself. The fan-out
 // inherits the lease (see runIsolation), so it can never be what is queued.
+//
+// The shape is asserted rather than assumed. Waiting for the queued step to REACH the gate
+// is what makes this a regression test: without it the batch can finish by scheduling luck,
+// with the exclusive step never queued and the fan-out never overlapping it, and the
+// predicate under test could be reverted without failing anything.
 func TestRunIsolationDoesNotRefuseAHolderInAFanOut(t *testing.T) {
 	restore := isolationWedgeGrace
 	isolationWedgeGrace = 50 * time.Millisecond
@@ -400,6 +405,8 @@ func TestRunIsolationDoesNotRefuseAHolderInAFanOut(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(ContextWithProgress(context.Background(), NewProgress()))
 	defer cancel()
+	ctx = WithRunScope(ctx)
+	isolation := isolationFrom(ctx)
 	lim := NewLimiter(4)
 	working := make(chan struct{})
 	done := make(chan error, 1)
@@ -409,7 +416,14 @@ func TestRunIsolationDoesNotRefuseAHolderInAFanOut(t *testing.T) {
 			case "holder":
 				close(working)
 				return lim.Yield(stepCtx, func() error {
-					time.Sleep(10 * isolationWedgeGrace)
+					// Held until the exclusive step is provably queued behind this
+					// fan-out, which is the shape the gate used to refuse.
+					waitForIsolationWaiters(t, isolation, 1)
+					isolation.mu.Lock()
+					_, wedged := isolation.wedgedLocked()
+					isolation.mu.Unlock()
+					assert.False(t, wedged, "a holder in its own fan-out must not read as wedged")
+					time.Sleep(2 * isolationWedgeGrace)
 					return nil
 				})
 			case "gate":
@@ -429,4 +443,53 @@ func TestRunIsolationDoesNotRefuseAHolderInAFanOut(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the batch never finished")
 	}
+}
+
+// The ctx.needs member-dispatch path inherits the lease, pinned on the context plumbing
+// that path actually uses rather than on acquireRunIsolation alone.
+//
+// This is load-bearing in a way the sibling inheritance test is not. Since a holder in a
+// fan-out reads as working, inheritance is the ONLY thing preventing the 2026-09-11 shape:
+// a needs child asking for the exclusive side while its own parent holds the shared one.
+// If SharedStepContext ever stopped carrying the parent's admission, that child would
+// queue behind a holder the gate has been taught to call healthy, and the run would hang
+// with no verdict at all.
+func TestRunIsolationNeedsChildInheritsUnderAFanOut(t *testing.T) {
+	lim := NewLimiter(4)
+	scope := WithRunScope(context.Background())
+	isolation := isolationFrom(scope)
+
+	parent, releaseParent, err := acquireRunIsolation(scope, false, "parent")
+	require.NoError(t, err)
+	defer releaseParent()
+	// Really taken from the limiter, because Yield hands back exactly what the context
+	// says is held; a marker without the acquisition releases a slot that was never taken.
+	require.NoError(t, lim.AcquireN(context.Background(), 1))
+	parent = withSlotHold(WithSlotsHeld(parent, 1), lim.watch.admit("parent", 1))
+	require.Equal(t, 1, isolationHolders(isolation))
+
+	// The base a dispatched member's context is spliced onto, as RunAll installs it.
+	base, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
+	parent = context.WithValue(parent, sharedStepBaseKey{}, base)
+
+	require.NoError(t, lim.Yield(parent, func() error {
+		// Mid-fan-out the parent is yielded, so the gate reads it as working. Nothing
+		// else may be allowed to queue behind it.
+		_, wedged := func() (map[*runIsolationLease]string, bool) {
+			isolation.mu.Lock()
+			defer isolation.mu.Unlock()
+			return isolation.wedgedLocked()
+		}()
+		assert.False(t, wedged)
+
+		member := SharedStepContext(parent)
+		child, releaseChild, err := acquireRunIsolation(member, true, "member")
+		require.NoError(t, err, "an exclusive member queued instead of inheriting")
+		defer releaseChild()
+		assert.Equal(t, 1, isolationHolders(isolation), "the member took a hold of its own")
+		assert.Same(t, admissionFrom(parent).isolation, admissionFrom(child).isolation,
+			"the member runs under a lease that is not its parent's")
+		return nil
+	}))
 }
