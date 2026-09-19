@@ -380,3 +380,53 @@ func waitForIsolationWaiters(t *testing.T, r *runIsolation, n int) {
 		}
 	}
 }
+
+// A holder in a ctx.needs fan-out is not a wedged holder. Its slots are handed back for
+// the duration, which is what the slot watch means by stalled, and the gate read that as
+// parked: every composite target holds the gate through a fan-out, so a batch whose
+// generators are silent for the grace was refused out from under itself. The fan-out
+// inherits the lease (see runIsolation), so it can never be what is queued.
+func TestRunIsolationDoesNotRefuseAHolderInAFanOut(t *testing.T) {
+	restore := isolationWedgeGrace
+	isolationWedgeGrace = 50 * time.Millisecond
+	t.Cleanup(func() { isolationWedgeGrace = restore })
+
+	root, c := openCache(t)
+	steps := []Step{
+		{ProjectPath: "gate", WorkspaceRoot: root, Target: "run"},
+		{ProjectPath: "holder", WorkspaceRoot: root, Target: "run"},
+		{ProjectPath: "queued", WorkspaceRoot: root, Target: "run", Exclusive: true, DependsOn: []string{"gate"}},
+	}
+
+	ctx, cancel := context.WithCancel(ContextWithProgress(context.Background(), NewProgress()))
+	defer cancel()
+	lim := NewLimiter(4)
+	working := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.RunAll(ctx, steps, func(stepCtx context.Context, s Step) error {
+			switch s.ProjectPath {
+			case "holder":
+				close(working)
+				return lim.Yield(stepCtx, func() error {
+					time.Sleep(10 * isolationWedgeGrace)
+					return nil
+				})
+			case "gate":
+				select {
+				case <-working:
+				case <-stepCtx.Done():
+				}
+			}
+			return nil
+		}, WithLimiter(lim))
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the batch never finished")
+	}
+}

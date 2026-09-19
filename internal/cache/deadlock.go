@@ -162,6 +162,23 @@ func (h *slotHold) stalled() bool {
 	return h.blocked != "" || h.yielded
 }
 
+// blockedElsewhere reports a hold parked on something that is not its own fan-out. It is
+// the isolation gate's reading of the same record stalled() reports, and the two differ on
+// exactly one case: a hold that yielded its slots to the targets it composes. That hold
+// cannot finish on its own, so the limiter counts it against a saturated pool; but the
+// fan-out it waits on INHERITS its gate lease (see runIsolation), so the fan-out can never
+// be what is queued behind it, and the wait is therefore not evidence of a gate cycle.
+// Reading yielded as parked refused a healthy run: every composite target holds the gate
+// through a fan-out, so one generator silent for the grace wedged the whole invocation.
+func (h *slotHold) blockedElsewhere() bool {
+	if h == nil {
+		return false
+	}
+	h.w.mu.Lock()
+	defer h.w.mu.Unlock()
+	return h.blocked != ""
+}
+
 // waitingOn names what the hold is parked on, as a refusal spells it.
 func (h *slotHold) waitingOn() string {
 	if h == nil {

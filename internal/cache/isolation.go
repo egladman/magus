@@ -264,7 +264,8 @@ func (r *runIsolation) evaluateLocked() {
 // every step holding it is itself parked.
 //
 // Conservative in both directions, like the slot watch's own verdict. One holder that is
-// still working answers no, because it can still finish and release. The invocation's
+// still working answers no, because it can still finish and release, and a holder waiting
+// on its own fan-out is working for this purpose: blockedElsewhere says why. The invocation's
 // silence is checked separately, when the grace expires: the shape can form legitimately
 // for as long as a holder is waiting on another process, and only a run where nothing
 // started, finished or printed a line for the whole grace is wedged rather than slow.
@@ -272,8 +273,14 @@ func (r *runIsolation) wedgedLocked() bool {
 	if len(r.waiters) == 0 {
 		return false
 	}
+	// No holder is not a wedge, it is the instant before a queued request is served: the
+	// gate is free and the semaphore wakes it. Stated rather than left to the loop below,
+	// which answers the empty set with the verdict.
+	if len(r.holders) == 0 {
+		return false
+	}
 	for l := range r.holders {
-		if !l.hold.stalled() {
+		if !l.hold.blockedElsewhere() {
 			return false
 		}
 	}
