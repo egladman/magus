@@ -126,10 +126,16 @@ jobs:
       # to be the same on every machine; a workspace that carries its own binary is the
       # shape this repository is checked out in. guard-wiring EXECUTES that command against
       # a synthetic event, so without the binary at the root it answered "./magus: not
-      # found" and reported the wiring incomplete on every run. Linked rather than rebuilt:
+      # found" and reported the wiring incomplete on every run. Copied rather than rebuilt:
       # setup-magus already built this exact commit.
+      #
+      # A COPY, not a symlink. setup-magus builds into the runner's tool cache, so a link
+      # would resolve outside the workspace root, which doctor's symlinks check refuses:
+      # where landlock is unavailable that is a way out of the sandbox.
       - name: Put the built magus where the committed hook config names it
-        run: ln -sf "$(command -v magus)" ./magus
+        run: |
+          cp "$(command -v magus)" ./magus
+          chmod +x ./magus
 
       - name: Doctor
         run: magus doctor
