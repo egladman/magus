@@ -1412,9 +1412,15 @@ func exitCodeOf(err error) int {
 		return exitUsage
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
-	// generic error line; the magusfile already logged whatever it wanted to.
+	// generic error line; the magusfile already logged whatever it wanted to. A bare
+	// exit is the only one that stays quiet. An ExitError that WRAPS a diagnostic is
+	// carrying the whole explanation, and dropping it is how a wedged isolation gate
+	// (MGS3015) reached a CI log as nothing but "exit code 70".
 	var exitErr types.ExitError
 	if errors.As(err, &exitErr) {
+		if exitErr.Err != nil {
+			slog.Error(exitErr.Err.Error())
+		}
 		return exitErr.Code
 	}
 	slog.Error(err.Error())
