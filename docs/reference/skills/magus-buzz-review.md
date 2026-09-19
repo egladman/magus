@@ -3,8 +3,8 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 20278
-skill_short_bytes: 15154
+skill_full_bytes: 20770
+skill_short_bytes: 15415
 ---
 
 # magus-buzz-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `85` |
+| `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `f74b1f955fcc` |
+| `skill-content` | `e98ccdab3921` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -106,6 +106,11 @@ A standalone script has to be judged by how it is actually invoked:
 - Runs via `magus buzz --embedded <file>`, is invoked from inside another Buzz
   program (`magus\cmd("buzz", ...)`), or its own header comment says which
   surface it targets - strict rules do not apply.
+Once you have the mode, PROVE the file parses under it rather than reading for
+it: `magus buzz --check <file>` for strict, `--check --embedded` for the other.
+It runs nothing, takes several paths, and reports every diagnostic instead of
+stopping at the first.
+
 - Unclear how it runs - check the CI workflow or wrapper that calls it before
   flagging a strict-mode violation.
 
@@ -384,6 +389,14 @@ guessing from its shape:
 - Runs via `magus buzz --embedded <file>`, is invoked from inside another Buzz
   program (`magus\cmd("buzz", ...)`), or its own header comment says which
   surface it targets - strict rules do not apply.
+Once you have the mode, PROVE the file parses under it rather than reading for
+it: `magus buzz --check <file>` for strict, `--check --embedded` for the other.
+It runs nothing, takes several paths, and reports every diagnostic instead of
+stopping at the first, so a strict-mode finding either reproduces as a
+diagnostic naming the line or was never there. A file whose job is a side effect
+cannot be checked any other way, since running it exercises one path and says
+nothing about the rest.
+
 - Unclear how it runs - check the CI workflow or wrapper that calls it before
   flagging a strict-mode violation. A script that happens to have no
   top-level control flow and no unlabeled second argument is ALSO valid

@@ -3,8 +3,8 @@ title: magus-buzz-write
 generated_from: internal/agent/skills/magus-buzz-write/SKILL.md
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz-write]
-skill_full_bytes: 8668
-skill_short_bytes: 7270
+skill_full_bytes: 8872
+skill_short_bytes: 7345
 ---
 
 # magus-buzz-write
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `85` |
+| `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `5dde5eee8b98` |
+| `skill-content` | `4943b90e40ec` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -87,6 +87,7 @@ magus buzz hello.buzz
 | `magus buzz -e '<code>'` | run a snippet inline |
 | `echo '<code>' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t <file>` | run the file's `test "..." {}` blocks and report pass/fail |
+| `magus buzz --check <file>...` | parse and type-check, without running |
 | `magus buzz` (a terminal, no args) | REPL, with the magusfile at cwd loaded |
 
 ## Never guess an API: ask
@@ -308,6 +309,7 @@ magus buzz hello.buzz
 | `magus buzz -e '<code>'` | run a snippet inline |
 | `echo '<code>' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t <file>` | run the file's `test "..." {}` blocks and report pass/fail |
+| `magus buzz --check <file>...` | parse and type-check, without running: every diagnostic rather than the first, several paths at once. Running a script whose job is a side effect is not a check of it |
 | `magus buzz` (a terminal, no args) | REPL, with the magusfile at cwd loaded |
 
 ## Never guess an API: ask
