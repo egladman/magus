@@ -388,24 +388,38 @@ const (
 	// checkDriftForCommit in cmd/magus. Sibling of MGS4006 (generated-output drift, the
 	// other class the same notice carries) and distinct from MGS4007 (a target rewriting
 	// an undeclared source, checked after a target runs, not after a commit is made).
-	UnformattedCommit        DiagnosticCode = "MGS4009"
-	NearDuplicateServices    DiagnosticCode = "MGS5001"
-	ServiceOpDetached        DiagnosticCode = "MGS5002"
-	CommandOpNeverExits      DiagnosticCode = "MGS5003"
-	DaemonRequired           DiagnosticCode = "MGS5004"
-	CharmPatchInvalid        DiagnosticCode = "MGS6001"
-	UnresolvableBuzzImport   DiagnosticCode = "MGS7001"
-	DanglingDocReference     DiagnosticCode = "MGS7002"
-	OutputRefMissing         DiagnosticCode = "MGS8001"
-	OutputRefAmbiguous       DiagnosticCode = "MGS8002"
-	OutputRefMalformed       DiagnosticCode = "MGS8003"
-	OutputRefForeignMachine  DiagnosticCode = "MGS8004"
-	BearerRejected           DiagnosticCode = "MGS9001"
-	InsecureTokenPermissions DiagnosticCode = "MGS9002"
-	ConnectorStoreTooNew     DiagnosticCode = "MGS9003"
-	NoAuthToken              DiagnosticCode = "MGS9004"
-	ConnectorNameExists      DiagnosticCode = "MGS9005"
-	ConnectorNotFound        DiagnosticCode = "MGS9006"
+	UnformattedCommit DiagnosticCode = "MGS4009"
+	// NarrowedWaitPastBaselineWriter is a reader step waiting on the individual targets
+	// it overlaps inside another step, where that step ALSO runs a target whose writes
+	// are only the project's baseline rather than its own declaration.
+	//
+	// The narrow wait orders every overlap the footprints name. What it stops ordering,
+	// against the whole-step wait it replaces, is whatever those baseline writers touch
+	// outside the globs anyone declared: before, such a write landed while the reader was
+	// still blocked on the step, by luck rather than by declaration.
+	//
+	// Reported, never refused: the fix is a ctx.writesFiles on the writer, which belongs
+	// to that project's author, and refusing would turn an undeclared write into a
+	// stopped build for everyone downstream of it. MGS4007 is the sibling that catches
+	// such a write once it actually happens.
+	NarrowedWaitPastBaselineWriter DiagnosticCode = "MGS4010"
+	NearDuplicateServices          DiagnosticCode = "MGS5001"
+	ServiceOpDetached              DiagnosticCode = "MGS5002"
+	CommandOpNeverExits            DiagnosticCode = "MGS5003"
+	DaemonRequired                 DiagnosticCode = "MGS5004"
+	CharmPatchInvalid              DiagnosticCode = "MGS6001"
+	UnresolvableBuzzImport         DiagnosticCode = "MGS7001"
+	DanglingDocReference           DiagnosticCode = "MGS7002"
+	OutputRefMissing               DiagnosticCode = "MGS8001"
+	OutputRefAmbiguous             DiagnosticCode = "MGS8002"
+	OutputRefMalformed             DiagnosticCode = "MGS8003"
+	OutputRefForeignMachine        DiagnosticCode = "MGS8004"
+	BearerRejected                 DiagnosticCode = "MGS9001"
+	InsecureTokenPermissions       DiagnosticCode = "MGS9002"
+	ConnectorStoreTooNew           DiagnosticCode = "MGS9003"
+	NoAuthToken                    DiagnosticCode = "MGS9004"
+	ConnectorNameExists            DiagnosticCode = "MGS9005"
+	ConnectorNotFound              DiagnosticCode = "MGS9006"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -456,7 +470,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	RunIsolationWedged,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
-	UnformattedCommit,
+	UnformattedCommit, NarrowedWaitPastBaselineWriter,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,

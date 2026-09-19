@@ -42,6 +42,9 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 	if err := order.SameStep.Refusal(); err != nil {
 		return nil, err
 	}
+	if advice := order.Narrowed.Advice(); advice != "" {
+		slog.WarnContext(ctx, advice)
+	}
 	if advice := order.SameStep.Advice(); advice != "" {
 		// Cross-project pairs are reported, not refused: their sequencing may belong
 		// to another project's magusfile, and doctor lists every one.
@@ -52,6 +55,16 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 		for _, up := range order.RunAfter[key] {
 			if !slices.Contains(steps[i].RunAfter, up) {
 				steps[i].RunAfter = append(steps[i].RunAfter, up)
+			}
+		}
+		for _, w := range order.RunAfterMembers[key] {
+			if !slices.Contains(steps[i].RunAfterMembers, w) {
+				steps[i].RunAfterMembers = append(steps[i].RunAfterMembers, w)
+			}
+		}
+		for _, member := range order.ReleasedMembers[key] {
+			if !slices.Contains(steps[i].ReleasedMembers, member) {
+				steps[i].ReleasedMembers = append(steps[i].ReleasedMembers, member)
 			}
 		}
 	}

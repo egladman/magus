@@ -1549,6 +1549,15 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// lease, so its own exclusive policy is enforced without holding the parent
 	// slot or lock across the child scheduler.
 	ctx = cache.WithRunScope(ctx)
+	projectByDir := make(map[string]string)
+	for _, p := range m.ws.All() {
+		// Dir is empty when the workspace could not resolve one, and Clean would turn
+		// that into ".", claiming the root project's key for a project nobody located.
+		if p.Dir == "" {
+			continue
+		}
+		projectByDir[filepath.Clean(p.Dir)] = p.Path
+	}
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err
 	}
@@ -1568,9 +1577,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// In collapse mode the project's subprocess output is withheld, so attach a
 		// stage observer: it prints a progress line as each magus.needs sub-target
 		// completes, giving the reader a checklist of what ran in place of the wall.
+		release := releaseObserver{projectByDir: projectByDir, get: m.Get}
 		if m.cache.Collapsing() {
-			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label, policies: policiesOf(p)})
+			release.next = stageObserver{cache: m.cache, label: s.Label, policies: policiesOf(p)}
 		}
+		spanCtx = buzz.WithObserver(spanCtx, release)
 		if s.NoCache {
 			// An uncached composer still executes its body, so this is the runtime
 			// boundary at which a same-project ctx.needs target can become an
@@ -1605,6 +1616,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 					}
 					return invoke(workerCtx)
 				}, cacheOpts...)
+				// A replayed member never reaches the observer. Same project by
+				// construction: CrossDispatch strips this interceptor before dispatching
+				// into another one, so name always belongs to p.
+				cache.ReleaseMember(memberCtx, cache.DepKey(p.Path, name), memberVerdict(m.Get, p.Path, name, err))
 				return err
 			}))
 		}
@@ -1689,6 +1704,41 @@ func (o stageObserver) TargetEnd(ctx context.Context, name string, elapsed time.
 	// ctx, not _: LogStage puts runErr.Error() in an attr, and a magusfile can throw an
 	// interpolated credential. Without the context the record redacts against nothing.
 	o.cache.LogStage(ctx, o.label, name, elapsed, err, o.policies[name].Advisory)
+}
+
+// releaseObserver tells the batch barrier each ctx.needs member finished, so a step
+// waiting on that member's writes starts without waiting out the rest of this step
+// (cache.Step.ReleasedMembers). The project comes from the pool's source, not the
+// step: a cross-project dispatch runs the other project's members under this observer.
+type releaseObserver struct {
+	projectByDir map[string]string
+	get          func(path string) *types.Project
+	next         buzz.TargetObserver
+}
+
+func (o releaseObserver) TargetEnd(ctx context.Context, name string, elapsed time.Duration, err error) {
+	if src := interp.SourceFromContext(ctx); src != nil {
+		if project, ok := o.projectByDir[filepath.Clean(src.Dir)]; ok {
+			cache.ReleaseMember(ctx, cache.DepKey(project, name), memberVerdict(o.get, project, name, err))
+		}
+	}
+	if o.next != nil {
+		o.next.TargetEnd(ctx, name, elapsed, err)
+	}
+}
+
+// memberVerdict is what a member's readers inherit. An advisory member's failure is not
+// theirs: the composite carries on past it, so the step passes and a reader that refused
+// to run would fail a batch nothing else fails. Every other failure propagates, or the
+// reader runs against bytes its writer never finished and caches the result.
+func memberVerdict(get func(path string) *types.Project, project, name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if p := get(project); p != nil && p.TargetPolicies[name].Advisory {
+		return nil
+	}
+	return err
 }
 
 // dedupeByProject returns one step per ProjectPath (first seen).

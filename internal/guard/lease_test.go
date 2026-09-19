@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -609,11 +610,23 @@ func TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm(t *testing.T) {
 		onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, tc.path))
 		require.Equal(t, "deny", onPath.Decision,
 			"the PATH surface passed %s, so this row is no longer testing two surfaces against one another", tc.path)
-		assert.Equal(t, onPath.Reason, onCommand,
+		assert.Equal(t, withoutLeaseAge(onPath.Reason), withoutLeaseAge(onCommand),
 			"the two surfaces refused %q in DIFFERENT words.\n"+
 				"It is one mistake however it is spelled, so it gets one explanation. The command surface is meant to call gradeLeasedWrite, the path surface's own grader; a difference here means something re-decided the verdict instead of reusing it, and the two will drift from now on.",
 			tc.command)
 	}
+}
+
+// leaseAge matches the owner's age in a refusal, which is read from the clock as the
+// message is built. The unit stays outside the capture, so two surfaces that render the
+// same elapsed time differently (0s against 0ms, 90s against 1m30s) still differ.
+var leaseAge = regexp.MustCompile(`was last updated \d+s ago`)
+
+// withoutLeaseAge blanks that figure. The two surfaces render their refusal at different
+// moments, so an age that ticks over between them is a difference in the clock, not in
+// the wording the comparison is about.
+func withoutLeaseAge(reason string) string {
+	return leaseAge.ReplaceAllString(reason, "was last updated <n>s ago")
 }
 
 // TestDenyLeaseScopedLaneWriteStaysQuiet covers the silences. The rule is a seatbelt for

@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v14). Query it instead of grepping:
+This workspace has a knowledge graph (schema v13). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -54,7 +54,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS1028`, `MGS3010`, `MGS3012`                                                                                             |
-| doc        |     400+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
+| doc        |     400+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir        |     200+ | `magus query kind=dir`        | `docs/reference/rules`, `docs/reference/codes/magusfile`, `docs/reference/buzz`                                             |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
 | function   |    1000+ | `magus query kind=function`   | `tail`, `sign`, `claude_entries`                                                                                            |

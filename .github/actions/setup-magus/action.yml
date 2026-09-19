@@ -200,13 +200,19 @@ runs:
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: ${{ inputs.source-path != '' && inputs.source-path || '.setup-magus-src' }}/go.mod
-        # No cache: true here. The Go this step provisions is a one-shot,
-        # transient toolchain used only for the magus source build below; the
-        # workflow's primary Go comes from mise, and doubling up the GHA
-        # actions/cache on ~/go/pkg/mod produced silent tar failures when HOME
-        # changed between cache create and restore. Cold source build is
-        # ~30s slower on the rare path; it is rare because the prebuilt
-        # artifact is the normal install route.
+        # cache: false, stated rather than assumed. setup-go caches by DEFAULT since
+        # v4, so the sentence that used to sit here ("No cache: true here") described
+        # an intent the file no longer carried: a ~459MB GOCACHE was restored on every
+        # source install, keyed to the Go this step resolves from go.mod's `go 1.26`
+        # (the newest patch) while mise's pinned Go compiles everything that follows.
+        # Different compiler, different build IDs, so nothing in it was ever reused.
+        #
+        # The Go here is a one-shot toolchain for the magus source build below; the
+        # workflow's primary Go comes from mise. Doubling up the GHA actions/cache on
+        # ~/go/pkg/mod also produced silent tar failures when HOME changed between
+        # cache create and restore. Cold source build is ~30s slower on the rare path;
+        # it is rare because the prebuilt artifact is the normal install route.
+        cache: false
 
     # Supply-chain gate: a source build has no signature to check (unlike the
     # prebuilt path above), so before compiling and running whatever git-ref
