@@ -933,7 +933,9 @@ func runsAShippedTemplate(entry map[string]any) bool {
 	collectCommands(entry, &commands)
 	for _, command := range commands {
 		switch {
-		case strings.Contains(command, "magus-hook-"),
+		case strings.Contains(command, "magus-command"),
+			strings.Contains(command, "magus-path"),
+			strings.Contains(command, "magus-observe"),
 			strings.Contains(command, "cursor-hook."),
 			strings.Contains(command, "magus-checkpoint"),
 			strings.Contains(command, "magus-rehydrate"):
@@ -1003,11 +1005,13 @@ func configInvokesMagus(config map[string]any) bool {
 
 // invokesMagus reports whether a host hook command actually calls Magus.
 // Coverage is transport-shaped: shipped script basenames (aligned with
-// doctor's guardTemplateBasenames plus magus-hook-observe), or a magus
+// doctor's guardTemplateBasenames plus magus-observe), or a magus
 // session/session-hook invocation. A generic *-guard.sh does not count.
 func invokesMagus(command string) bool {
 	switch {
-	case strings.Contains(command, "magus-hook-"):
+	case strings.Contains(command, "magus-command"),
+		strings.Contains(command, "magus-path"),
+		strings.Contains(command, "magus-observe"):
 		return true
 	case strings.Contains(command, "cursor-hook.sh"):
 		return true
@@ -1120,6 +1124,37 @@ func writeHarnessAtomically(path string, body []byte) error {
 // union, which is fine. A blank entry inside wired is not: empty and whitespace-
 // only names are rejected rather than skipped, so a bad AddHarness cannot
 // disappear into the union.
+
+// HarnessConfigPaths resolves the config file of every known harness that has one in this
+// checkout, skipping any that cannot be resolved or is not there.
+//
+// It deliberately does not verify: VerifyHarness RUNS the wired command, so it reports
+// nothing for a checkout whose wired interpreter is missing, which is exactly the state a
+// caller asking which configs exist needs to inspect.
+func HarnessConfigPaths(ctx context.Context, root string, wired ...string) []string {
+	ids, err := KnownHarnesses(ctx, root, wired...)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		d, _, err := LoadHarness(ctx, root, id)
+		if err != nil || d.Config.Path == "" {
+			continue
+		}
+		path, err := harnessConfigPath(root, d.Config.Path)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(path); err != nil {
+			continue
+		}
+		out = append(out, path)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
 func KnownHarnesses(ctx context.Context, root string, wired ...string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

@@ -47,7 +47,7 @@ env __MAGUS_AGENT_NAME=testscript
 # JSON would create two opportunities for the recorded contract to drift.
 # hosts: claude-code,codex
 
-# --- magus-hook-command.sh: the shared Claude Code / Codex shape ------------
+# --- magus-command.sh: the shared Claude Code / Codex shape ------------
 
 # case: command/deny
 stdin deny-command.json
@@ -90,7 +90,7 @@ stdin pass-command.json
 exec sh $WORK/parity.sh command
 ! stdout .
 
-# --- magus-hook-command.sh: MCP tool calls, via HOST_EVENT_RAW ---------------
+# --- magus-command.sh: MCP tool calls, via HOST_EVENT_RAW ---------------
 
 # Both MCP cases run under a BOUND lease, in the one fixture workspace this archive
 # carries, because the rule that reads an MCP call is lease-scoped. The row is declared
@@ -230,8 +230,8 @@ env HOST_EVENT_RAW=
 # anyway. A misconfigured entry must not block work, and must not be silent: both halves are
 # asserted below, because either one alone is a shape somebody would settle for.
 stdin $WORK/deny-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-hook-command.buzz -- --not-a-flag
-stderr 'magus-hook-command.buzz: unsupported argument --not-a-flag'
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --not-a-flag
+stderr 'magus-command.buzz: unsupported argument --not-a-flag'
 stderr 'judged WITHOUT it'
 stderr 'Supported: --observes-skill-loads'
 stdout '"permissionDecision":"deny"'
@@ -245,7 +245,7 @@ cd $WORK
 # cannot make deterministic: the gate-repeat count, the stale symbol index, the stale
 # binary. A case here would pass for a reason that is not this transport.
 
-# --- magus-hook-path.sh: the same hosts, their file-writing tool -------------
+# --- magus-path.sh: the same hosts, their file-writing tool -------------
 
 # case: path/advise
 stdin advise-path.json
@@ -261,6 +261,25 @@ stdin advise-path.json
 exec sh $WORK/parity.sh path
 ! stdout .
 env __MAGUS_NO_ADVISE=
+
+# case: path/advise
+# A host tool that names its target something other than file_path. magus reads every
+# `*_path` spelling off the ENVELOPE, so this only reaches a rule when the whole event is
+# forwarded; selecting one dot-path handed the guard the literal "null" and every write
+# rule went unrun, on a matcher both shipped configs wire.
+stdin notebook-path.json
+exec sh $WORK/parity.sh path
+stdout '"additionalContext":"'
+stdout 'magus memory put'
+
+# case: path/deny
+# An envelope that arrives truncated. Judged as text it matches no rule and passes, which
+# is the one silent failure on this surface: the intact event advises, and a byte short of
+# it said nothing at all.
+stdin truncated-path.json
+exec sh $WORK/parity.sh path
+stdout '"permissionDecision":"deny"'
+stdout 'nothing was judged'
 
 # case: path/pass
 stdin pass-path.json
@@ -372,7 +391,7 @@ exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
 stdout '"permission":"allow"'
 ! stdout 'deny'
 
-# --- magus-hook-observe.sh: the verdict-free one ------------------------------
+# --- magus-observe.sh: the verdict-free one ------------------------------
 #
 # It declares no guard coverage, so the contract gate above owes it no case and
 # would never have asked for one. That exemption is exactly how an untested shell
@@ -851,7 +870,7 @@ event=$(cat)
 # named for themselves. Resolving the stem here rather than at every call site keeps the
 # sixty cases above reading as they did when only the hook templates had a Buzz port.
 case $surface in
-  command|path|observe) stem=magus-hook-$surface ;;
+  command|path|observe) stem=magus-$surface ;;
   *) stem=magus-$surface ;;
 esac
 
@@ -981,6 +1000,10 @@ exit 2
 {"session_id": "s1", "tool_name": "mcp__magus__magus_describe", "tool_input": {"command": "git stash"}}
 -- advise-path.json --
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
+-- notebook-path.json --
+{"session_id": "s1", "tool_name": "NotebookEdit", "tool_input": {"notebook_path": "AGENTS.md"}}
+-- truncated-path.json --
+{"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}
 -- pass-path.json --
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "README.md"}}
 -- deny-path.json --

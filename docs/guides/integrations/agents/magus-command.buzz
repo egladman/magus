@@ -1,12 +1,12 @@
 // magus guard hook: judges ONE shell command an agent is about to run.
 //
 // This file is the source of truth for hosts wired to `magus buzz`. It is the
-// Buzz port of magus-hook-command.sh and renders byte-identical replies; the
+// Buzz port of magus-command.sh and renders byte-identical replies; the
 // shell copy stays for hosts wired to `sh`. Buzz needs no jq and no POSIX shell,
 // so the two runtime dependencies the shell copy carries are gone and the file
 // runs unchanged on Windows.
 //
-// Run it as `magus buzz magus-hook-command.buzz`. It imports no magus Buzz
+// Run it as `magus buzz magus-command.buzz`. It imports no magus Buzz
 // module and no spell, which is what keeps the workspace CLOSED: a script that
 // reads no workspace member starts in about 10ms, where opening one costs
 // roughly 700ms on every tool call.
@@ -91,7 +91,7 @@
 // names the person's own terminal.
 // It declares claude-code only, and no codex row, even though the Codex arms above are
 // implemented and graded: a coverage declaration states what a HOST gets, and codex is
-// wired to magus-hook-command.sh. The arms ship ahead of the wiring for the same reason
+// wired to magus-command.sh. The arms ship ahead of the wiring for the same reason
 // the deny arm shipped ahead of its first rule, so a Codex config can move to Buzz
 // without a window where a decision renders as nothing.
 // magus-guard-template: 16
@@ -124,8 +124,11 @@ final ASK_CLAUDE = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEv
 
 final ASK_CODEX_PROMPTS = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .reason}}}}`;
 
-// A raw string scans its braces for balance, so a template is spliced through a
-// placeholder rather than concatenated around an open `{{`.
+// A backtick string DOES interpolate: a `{...}` run is evaluated when its contents parse as
+// a Buzz expression, and stays literal only when they do not. Go template braces do not
+// parse, which is the only reason these render verbatim, and a `{name}` fragment would not.
+// So a template is spliced through this placeholder rather than concatenated around an
+// open `{{`, which would swallow its own closing backtick.
 final BLOCKER_SLOT = "__MAGUS_ASK_BLOCKER__";
 final ASK_CODEX_BLOCKED = `{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason "\n\nThis call needs the approval of the person you work for, and __MAGUS_ASK_BLOCKER__. Ask them to run it from their own terminal.")}}}}`;
 
@@ -146,6 +149,11 @@ final CONTEXT_REPLY = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","addi
 
 final UNAVAILABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard."}}`;
 
+// The one arm here that does not fail open. Elsewhere magus is missing or cannot answer;
+// here nothing arrived, so no rule was ever offered the call. `magus shell` denies an
+// unreadable payload for the same reason and leaves this case to its caller.
+final UNREADABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this call from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}`;
+
 // The characters that let one command line become several, or become a different
 // one. A push carrying any of them reaches no Codex prefix rule.
 final SHELL_METACHARACTERS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\\", "\n"];
@@ -154,6 +162,10 @@ final SHELL_METACHARACTERS = [";", "&", "|", "`", "$", "(", ")", "<", ">", "\\",
 // which stays in its matcher: this is the wire convention `magus shell` itself reads a
 // tool call out of, and wholeEvent explains why the name has to be tested at all.
 final MCP_TOOL_PREFIX = "mcp__";
+
+// What magus's own decoder tests to tell an envelope from a bare command line. `\{` escapes
+// the interpolation a lone brace would open.
+final ENVELOPE_PREFIX = "\{";
 
 // Every `magus shell` flag an entry may declare on this script's argv, by exact spelling.
 //
@@ -314,12 +326,18 @@ fun resolveBin() > str {
 // the empty string at the top, which is what ends the walk. fs\dirname is not that
 // function, because it answers "/" for a top-level directory and the walk would
 // never terminate.
+//
+// Both separators, because this file claims to run unchanged on Windows. Splitting on `/`
+// alone made `C:\...` a single part, so the walk never ran once and resolveBin fell
+// straight through to PATH, which is the staleness it exists to avoid.
 fun parentDir(dir: str) > str {
-    final parts = dir.split("/");
-    if (parts.len() <= 1) { return ""; }
-    var head = mut [<str>];
-    foreach (i in 0..parts.len() - 1) { head.append(parts[i]); }
-    return head.join("/");
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
 }
 
 // findUp returns the nearest ancestor holding relative, or "" when there is none.
@@ -401,7 +419,7 @@ fun shellFlags(args: [str]) > [str] {
 // warn names the file, because a host reports a hook's stderr with the entry's matcher at
 // best and nothing at all at worst, and a reader with eight entries needs to know which.
 fun warn(message: str) > void {
-    io\stderr.write("magus-hook-command.buzz: {message}\n") catch void;
+    io\stderr.write("magus-command.buzz: {message}\n") catch void;
 }
 
 // noticeOnce succeeds the first time family fires in this session and fails on every
@@ -417,12 +435,17 @@ fun warn(message: str) > void {
 //
 // A host that reports no session id shares one marker aged out after __MAGUS_NOTICE_WINDOW
 // minutes, so the first session on such a host cannot silence every session after it.
+//
+// family carries the SURFACE as well as the kind of failure. All six PreToolUse entries run
+// this one file, so keying on the kind alone let the first surface to break consume the
+// session's only notice and left the other five silent about a different binary, a
+// different flag and a different reason.
 fun noticeOnce(session: str, family: str) > bool {
     final tmp = envOr("TMPDIR", fallback: "/tmp");
     final dir = "{tmp}/magus-guard-notices";
     var key = session;
     if (key == "") { key = "anon"; }
-    final marker = "{dir}/{fileSafe(key)}.{family}";
+    final marker = "{dir}/{fileSafe(key)}.{fileSafe(family)}";
     fs\mkdirAll(dir) catch null;
     final exists = fs\isFile(marker) catch false;
     if (exists) {
@@ -464,9 +487,12 @@ object Guard {
     response: str,
 }
 
+// The entry's own flags ride in `extra` with everything else, so the unattributed retry
+// drops them too. Keeping them there meant a binary too old for `--observes-skill-loads`
+// failed BOTH attempts and the spawn surface could never recover where Bash did, and a
+// binary too old to accept the flag cannot observe a skill load to begin with.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     var args = mut ["shell"];
-    foreach (flag in guard.flags) { args.append(flag); }
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
@@ -541,8 +567,16 @@ fun permissionResponse(pushRule: str?) > str {
 }
 
 fun main(args: [str]) > void {
-    final raw = io\stdin.readAll() catch "";
-    final event = json\parse(raw) catch null;
+    final raw = io\stdin.readAll() catch null;
+    final event = json\parse(raw ?? "") catch null;
+
+    // A payload that opens like an envelope but does not parse is a TRUNCATED one, not a
+    // command line. Judged as text it matches no rule and passes, so it is refused here
+    // while its shape still says what it was. The prefix test is magus's own decoder's.
+    if (raw == null or (event == null and raw!.startsWith(ENVELOPE_PREFIX))) {
+        io\stdout.write(envOr("__MAGUS_UNREADABLE_RESPONSE", fallback: UNREADABLE_DEFAULT)) catch void;
+        return;
+    }
 
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
@@ -555,6 +589,7 @@ fun main(args: [str]) > void {
     final session = field(event, dotPath: sessionPath);
     final transcript = field(event, dotPath: transcriptPath);
     final eventName = field(event, dotPath: "hook_event_name");
+    final toolName = field(event, dotPath: "tool_name");
 
     var pushRule: str? = null;
     if (!rawEvent) { pushRule = pushRuleFor(field(event, dotPath: eventPath)); }
@@ -578,13 +613,13 @@ fun main(args: [str]) > void {
 
     final bin = resolveBin();
     if (bin == "" or !isExecutable(bin)) {
-        if (noticeOnce(session, family: "unavailable")) {
+        if (noticeOnce(session, family: "unavailable-{toolName}")) {
             io\stdout.write(envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: UNAVAILABLE_DEFAULT)) catch void;
         }
         return;
     }
 
-    var payload = raw;
+    var payload = raw!;
     if (!rawEvent) { payload = rawField(event, dotPath: eventPath) + "\n"; }
     final guard = Guard{ bin = bin, payload = payload, flags = shellFlags(args), response = response };
 
@@ -605,7 +640,11 @@ fun main(args: [str]) > void {
     //
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
-    var attributed = mut ["--agent-name", agentName, "--session", session, "--transcript", transcript];
+    var attributed = mut [<str>];
+    foreach (flag in guard.flags) { attributed.append(flag); }
+    foreach (word in ["--agent-name", agentName, "--session", session, "--transcript", transcript]) {
+        attributed.append(word);
+    }
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {
@@ -621,7 +660,7 @@ fun main(args: [str]) > void {
     // Fail OPEN either way. A guard that blocks work because it cannot judge it has its
     // priorities backwards, and an unguarded session you know about beats one you do not.
     if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {
-        if (noticeOnce(session, family: "failed")) {
+        if (noticeOnce(session, family: "failed-{toolName}")) {
             final chosen = env\get("__MAGUS_FAILED_RESPONSE") catch "";
             if (chosen != "") {
                 io\stdout.write(chosen) catch void;

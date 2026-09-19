@@ -86,6 +86,9 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+# The one arm here that does not fail open; see the truncated-envelope check below. Plain
+# assignment for the same reason as the rest: a `}` would end a ${...}.
+[ -n "$__MAGUS_UNREADABLE_RESPONSE" ] || __MAGUS_UNREADABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"magus guard could not read this call from the host, so nothing was judged. A payload that arrives truncated reads exactly like an empty one, which is why this is blocked rather than cleared. Retry the call."}}'
 # The advise arm is split out because not every host has one, and because a host
 # that REJECTS the key is worse off than one that ignores it: an unsupported field
 # can make the host mark the hook run failed and continue the call, so an advisory
@@ -136,6 +139,20 @@ done
 # held to one firing per session and the session id is what keys them. jq failing here
 # leaves the session empty, which guard_notice_once handles as an unidentified session.
 event=$(cat)
+
+# A payload that opens like an envelope but does not parse is a TRUNCATED one, not a command
+# line. Judged as text it matches no rule and passes, so it is refused here while its shape
+# still says what it was. magus denies an unreadable payload for the same reason, and leaves
+# this case to its caller because nothing inside it ever saw the bytes.
+case $event in
+  '{'*)
+    if ! printf '%s' "$event" | jq -e . >/dev/null 2>&1; then
+      printf '%s' "$__MAGUS_UNREADABLE_RESPONSE"
+      exit 0
+    fi
+    ;;
+esac
+
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
 event_name=$(printf '%s' "$event" | jq -r '.hook_event_name // empty' 2>/dev/null)

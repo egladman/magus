@@ -1,10 +1,10 @@
 // magus observe hook: records ONE path an agent reached, and judges nothing.
 //
 // This file is the source of truth for hosts wired to `magus buzz`. It is the
-// Buzz port of magus-hook-observe.sh and behaves identically without jq or a
+// Buzz port of magus-observe.sh and behaves identically without jq or a
 // POSIX shell.
 //
-// Run it as `magus buzz magus-hook-observe.buzz`. It imports no magus Buzz
+// Run it as `magus buzz magus-observe.buzz`. It imports no magus Buzz
 // module and no spell: a read hook fires on every file an agent opens, so the
 // 10ms start a closed workspace buys is worth more here than anywhere else.
 //
@@ -91,13 +91,16 @@ fun isExecutable(candidate: str) > bool {
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
-// what ends the walk. fs\dirname answers "/" there and would never terminate.
+// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
+// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
 fun parentDir(dir: str) > str {
-    final parts = dir.split("/");
-    if (parts.len() <= 1) { return ""; }
-    var head = mut [<str>];
-    foreach (i in 0..parts.len() - 1) { head.append(parts[i]); }
-    return head.join("/");
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
 }
 
 // resolveBin prefers the workspace's own ./magus over PATH, for the same reason its two

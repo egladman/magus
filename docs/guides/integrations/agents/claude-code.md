@@ -86,11 +86,11 @@ observation, and sub-agent spawns. Each runs a shipped script that talks to
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-path.buzz", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-path.buzz", "timeout": 10 }]
       }
     ]
   }
@@ -103,7 +103,7 @@ See [guard templates](guard-templates.md) for the files and the variables that
 adapt them.
 
 The Claude Code harness wires the Buzz form, which needs neither a POSIX shell
-nor `jq`. Its sh twin, `magus-hook-command.sh`, is the same guard and renders the
+nor `jq`. Its sh twin, `magus-command.sh`, is the same guard and renders the
 same replies; an executed case runs both against every recorded event and fails
 on one byte of difference. Wire the sh copy instead if you would rather not pin
 the guard to a `magus buzz`, and see below for what that pin costs.
@@ -188,7 +188,7 @@ the command and file surfaces:
       {
         "matcher": "mcp__magus__.*",
         "hooks": [
-          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
         ]
       }
     ]
@@ -210,7 +210,7 @@ ships, with no new host wiring, because the transport is already here.
 ## Recording what was read
 
 A third `PreToolUse` entry, matching `Read`, runs
-[`magus-hook-observe.buzz`](guard-templates.md#magus-hook-observebuzz). It judges
+[`magus-observe.buzz`](guard-templates.md#magus-observebuzz). It judges
 nothing and prints nothing: it records the path on the activity trail so a later
 `magus session show` can say what a session looked at, not only what it changed.
 
@@ -223,7 +223,7 @@ nothing and prints nothing: it records the path on the activity trail so a later
         "hooks": [
           {
             "type": "command",
-            "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-observe.buzz",
+            "command": "./magus buzz -s docs/guides/integrations/agents/magus-observe.buzz",
             "timeout": 10
           }
         ]
@@ -253,7 +253,7 @@ claude-code` installs this entry alongside the surfaces above:
       {
         "matcher": "Agent|Task",
         "hooks": [
-          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz -- --observes-skill-loads", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --observes-skill-loads", "timeout": 10 }
         ]
       }
     ]

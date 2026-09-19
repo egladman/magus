@@ -94,7 +94,7 @@ other templates.
 // belongs to by callID. That append is what replaced a console.warn, which reached
 // the person and never the model. The declarations below record it, and they
 // are machine-read by the host-parity gate; see the longer note in
-// magus-hook-command.sh.
+// magus-command.sh.
 //
 // It also carries the two jobs that are not verdicts: a compacting session is
 // handed this checkout back through the compaction prompt, and a checkpoint is
@@ -239,7 +239,7 @@ function workspaceMagus(): string | null {
 
 export const MagusGuard: Plugin = async () => {
   // Prefer the workspace's own ./magus over PATH, for the reason spelled out in
-  // magus-hook-command.sh: an older PATH binary does not fail when it lacks a rule, it
+  // magus-command.sh: an older PATH binary does not fail when it lacks a rule, it
   // fails to recognize the config key that arms the rule and returns pass.
   const magus = process.env.__MAGUS_BIN ?? workspaceMagus() ?? "magus";
 
@@ -304,7 +304,7 @@ export const MagusGuard: Plugin = async () => {
    * empty and every verdict silently disappears. So: try as called, and on an
    * empty reply - which under `-o json` only happens when the call itself failed,
    * since even a pass renders `{"decision":"pass",...}` - retry with `--agent-name` and
-   * its value stripped out. Same shape as magus-hook-command.sh's `guard()`
+   * its value stripped out. Same shape as magus-command.sh's `guard()`
    * fallback, fixed there after the same gap (memory:
    * agent-host-attribution-not-captured) and ported here so this plugin degrades
    * the same way.

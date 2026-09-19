@@ -30,7 +30,7 @@
 # parses the envelope itself, so a machine without jq records a checkpoint rather
 # than silently recording none.
 #
-# NO magus-guard-coverage line, for the same reason magus-hook-observe.sh has
+# NO magus-guard-coverage line, for the same reason magus-observe.sh has
 # none: a coverage declaration states how much of a VERDICT a host can carry, and
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.

@@ -101,6 +101,6 @@ Two limits worth knowing:
 - Doctor decides "installed" from ONE anchor skill and grades the skills it
   finds, so a skill that goes missing after provisioning is invisible to it.
   Provisioning records the installed count and the probe re-counts.
-- `magus-hook-observe.sh` is not among the basenames doctor grades. The probe
+- `magus-observe.sh` is not among the basenames doctor grades. The probe
   checks that it exists and carries a version marker; its currency rides on the
   other two, since all three are copied from one checkout in one step.

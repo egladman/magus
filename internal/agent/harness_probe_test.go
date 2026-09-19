@@ -80,7 +80,7 @@ func writeFakeMagusBinary(t *testing.T, root string) {
 }
 
 // TestVerifyHarnessProbeCatchesABrokenWiredCommand is defect 2's pinning test: a
-// config that carries the declared "sh magus-hook-command.sh" entry byte-for-byte
+// config that carries the declared "sh magus-command.sh" entry byte-for-byte
 // (so the OLD presence-comparison VerifyHarness said "verified") but whose script
 // does not exist at that path: the exact shape of the incident that motivated this
 // change, a wired command that looks right and does nothing. This must FAIL against
@@ -89,14 +89,14 @@ func writeFakeMagusBinary(t *testing.T, root string) {
 func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
 	root := t.TempDir()
 	writeFakeMagusBinary(t, root)
-	writeProbeableHarness(t, root, "broken", "sh magus-hook-command.sh")
+	writeProbeableHarness(t, root, "broken", "sh magus-command.sh")
 	// Deliberately never written: the script the config names does not exist.
 
 	result, err := VerifyHarness(context.Background(), root, "broken")
 	require.NoError(t, err)
 	assert.NotEqual(t, HarnessVerified, result.Status, "a wired command that cannot even run must never read as verified")
 	assert.Equal(t, HarnessUncovered, result.Status)
-	assert.Contains(t, result.Reason, "magus-hook-command.sh")
+	assert.Contains(t, result.Reason, "magus-command.sh")
 }
 
 // TestVerifyHarnessProbeAcceptsAWorkingWiredCommand is the positive twin: the same
@@ -105,8 +105,8 @@ func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
 func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 	root := t.TempDir()
 	writeFakeMagusBinary(t, root)
-	writeStubGuardScript(t, root, "magus-hook-command.sh", "deny")
-	writeProbeableHarness(t, root, "working", "sh magus-hook-command.sh")
+	writeStubGuardScript(t, root, "magus-command.sh", "deny")
+	writeProbeableHarness(t, root, "working", "sh magus-command.sh")
 
 	result, err := VerifyHarness(context.Background(), root, "working")
 	require.NoError(t, err)
@@ -121,8 +121,8 @@ func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 func TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered(t *testing.T) {
 	root := t.TempDir()
 	writeFakeMagusBinary(t, root)
-	writeStubGuardScript(t, root, "magus-hook-command.sh", "pass")
-	writeProbeableHarness(t, root, "wrongdecision", "sh magus-hook-command.sh")
+	writeStubGuardScript(t, root, "magus-command.sh", "pass")
+	writeProbeableHarness(t, root, "wrongdecision", "sh magus-command.sh")
 
 	result, err := VerifyHarness(context.Background(), root, "wrongdecision")
 	require.NoError(t, err)
@@ -137,8 +137,8 @@ func TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered(t *testing.T) {
 func TestVerifyHarnessProbeReportsMissingJQAsUnprobed(t *testing.T) {
 	root := t.TempDir()
 	writeFakeMagusBinary(t, root)
-	writeStubGuardScript(t, root, "magus-hook-command.sh", "deny")
-	writeProbeableHarness(t, root, "nojq", "sh magus-hook-command.sh")
+	writeStubGuardScript(t, root, "magus-command.sh", "deny")
+	writeProbeableHarness(t, root, "nojq", "sh magus-command.sh")
 
 	// Resolved and copied BEFORE PATH is overridden below.
 	shOnlyPATH := buildMinimalPATH(t, "sh")
@@ -156,8 +156,8 @@ func TestVerifyHarnessProbeReportsMissingJQAsUnprobed(t *testing.T) {
 func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 	root := t.TempDir()
 	// No writeFakeMagusBinary this time: root/magus is deliberately absent.
-	writeStubGuardScript(t, root, "magus-hook-command.sh", "deny")
-	writeProbeableHarness(t, root, "nomagus", "sh magus-hook-command.sh")
+	writeStubGuardScript(t, root, "magus-command.sh", "deny")
+	writeProbeableHarness(t, root, "nomagus", "sh magus-command.sh")
 
 	shAndJQOnlyPATH := buildMinimalPATH(t, "sh", "jq")
 	t.Setenv("PATH", shAndJQOnlyPATH)

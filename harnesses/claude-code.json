@@ -17,7 +17,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
               "timeout": 10
             }
           ]
@@ -27,7 +27,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-path.buzz",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-path.buzz",
               "timeout": 10
             }
           ]
@@ -37,7 +37,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
               "timeout": 10
             }
           ]
@@ -47,7 +47,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-observe.buzz",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz",
               "timeout": 10
             }
           ]
@@ -57,7 +57,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "magus buzz -s docs/guides/integrations/agents/magus-hook-command.buzz",
+              "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
               "timeout": 10
             }
           ]

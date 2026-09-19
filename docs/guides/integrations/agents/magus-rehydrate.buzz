@@ -60,11 +60,11 @@ import "fs";
 import "path";
 import "proc";
 
-// JSON_REPLY is the sh copy's printf format, %s and all, and it is written as ONE
-// balanced template rather than concatenated around the body for a lexer reason worth
-// knowing: a raw string counts braces even though it never interpolates, so a fragment
-// carrying `{{` and no `}}` swallows its own closing backtick and everything after it,
-// silently, as far as the next backtick.
+// JSON_REPLY is the sh copy's printf format, %s and all, written as ONE balanced template
+// rather than concatenated around the body for a lexer reason worth knowing. A backtick
+// string DOES interpolate: a `{...}` run is evaluated when its contents parse as a Buzz
+// expression and stays literal only when they do not. An unbalanced fragment therefore
+// swallows its own closing backtick and everything to the next one, silently.
 final JSON_REPLY = `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}`;
 
 fun envOr(name: str, fallback: str) > str {
@@ -82,13 +82,16 @@ fun isExecutable(candidate: str) > bool {
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
-// what ends the walk. fs\dirname answers "/" there and would never terminate.
+// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
+// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
 fun parentDir(dir: str) > str {
-    final parts = dir.split("/");
-    if (parts.len() <= 1) { return ""; }
-    var head = mut [<str>];
-    foreach (i in 0..parts.len() - 1) { head.append(parts[i]); }
-    return head.join("/");
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
 }
 
 // workspaceRoot walks UP to the magusfile: a hook runs in the host's session
@@ -105,7 +108,7 @@ fun workspaceRoot() > str {
     return "";
 }
 
-// resolveBin prefers the workspace's own ./magus over PATH. magus-hook-command.buzz
+// resolveBin prefers the workspace's own ./magus over PATH. magus-command.buzz
 // carries the full reasoning for that preference.
 fun resolveBin(root: str) > str {
     final declared = env\get("__MAGUS_BIN") catch "";

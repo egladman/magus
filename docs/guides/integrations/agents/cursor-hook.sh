@@ -21,7 +21,7 @@
 #     "sessionEnd":   [{"command": "./.cursor/hooks/cursor-hook.sh"}]}}
 #
 # Self-contained on purpose. The other hosts' templates delegate to
-# magus-hook-command.sh, but Cursor would then need three files downloaded to
+# magus-command.sh, but Cursor would then need three files downloaded to
 # work, and a guard nobody finishes installing guards nothing.
 #
 # WHICH EVENT CARRIES WHICH HALF of a verdict is the thing to read here, because
@@ -47,7 +47,7 @@
 # the session ones, so the session is attributable too; neither can change a verdict.
 #
 # Coverage declarations, machine-read by the host-parity gate - see the longer
-# note in magus-hook-command.sh. Both surfaces now reach the model on both
+# note in magus-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
 # magus-guard-template: 16
@@ -163,7 +163,7 @@ advise_template='{{if eq .decision "advise"}}{"additional_context":{{toJson .con
 
 # guard_notice_once succeeds the first time $1 fires in this session and fails on every
 # repeat, so a caller writes `guard_notice_once <family> && printf ...`. See
-# magus-hook-command.sh for the full reasoning; the short version is that these notices
+# magus-command.sh for the full reasoning; the short version is that these notices
 # report a broken installation, which is a fact for the person with nothing in it an agent
 # can act on, so a repeat is noise.
 #

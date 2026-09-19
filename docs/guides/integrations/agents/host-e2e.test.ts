@@ -89,7 +89,7 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
     // case refuses a difference; what this asks is that the host records reads
     // at all, not which of the two files it reached for.
     assert.ok(
-      managed.includes("magus-hook-observe.sh") || managed.includes("magus-hook-observe.buzz"),
+      managed.includes("magus-observe.sh") || managed.includes("magus-observe.buzz"),
       `${harness.id} must record read observations`,
     );
     // Either form again, for the reason above: codex is still wired to the sh copy

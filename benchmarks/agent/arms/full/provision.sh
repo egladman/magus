@@ -33,7 +33,7 @@ MAGUS_HINTS_ENABLED=false "$BIN" agent install --dir "$WT" .claude/skills --forc
 find "$WT/.claude/skills" -name SKILL.md | wc -l | tr -d ' ' > "$WT/.benchmark/skills.expected"
 
 mkdir -p "$WT/.claude/hooks"
-for t in magus-hook-command.sh magus-hook-path.sh magus-hook-observe.sh; do
+for t in magus-command.sh magus-path.sh magus-observe.sh; do
     cp "$TEMPLATES/$t" "$WT/.claude/hooks/$t"
 done
 
@@ -43,15 +43,15 @@ cat > "$WT/.claude/settings.json" <<'JSON'
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-hook-command.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-command.sh", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-hook-path.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-path.sh", "timeout": 10 }]
       },
       {
         "matcher": "Read",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-hook-observe.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-observe.sh", "timeout": 10 }]
       }
     ]
   }

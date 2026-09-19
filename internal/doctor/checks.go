@@ -1743,6 +1743,17 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 
 	bin := filepath.Join(r.ws.Root(), "magus")
 	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+		// A config that NAMES ./magus is not covered by a magus on PATH: the host runs the
+		// command string as written, so the hook fails to launch and no glue survives to
+		// say so. Reported before the PATH fallback, which would otherwise call it healthy.
+		if wired := configsNamingOwnBinary(r.runCtx(), r.ws.Root(), workspaceHarnesses(r.ws)...); len(wired) > 0 {
+			return types.DoctorCheck{
+				Name:    name,
+				Status:  types.DoctorFail,
+				Message: "no ./magus, and a wired hook command runs ./magus, so every one of its hooks fails to launch",
+				Details: append(append([]string{}, wired...), "build one: "+hint.Run.With("build", ".")),
+			}
+		}
 		if found, lookErr := exec.LookPath("magus"); lookErr == nil {
 			return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "hook would run " + found + " (from PATH; no ./magus built)"}
 		}
@@ -1957,14 +1968,14 @@ func newestGoSource(root string) (time.Time, string) {
 // pointed at by another config's text, is checked directly in the directory
 // branch of checkGuardWiring instead of appearing here.
 var guardTemplateBasenames = []string{
-	"magus-hook-command.sh",
-	"magus-hook-path.sh",
+	"magus-command.sh",
+	"magus-path.sh",
 	// The Buzz ports of the two above, which a `magus buzz` wiring names instead.
 	// They carry the same verdicts, so a stale copy of one fails the same way a
 	// stale copy of its sh twin does, and both names have to be gradeable.
-	"magus-hook-command.buzz",
-	"magus-hook-path.buzz",
-	"magus-hook-observe.buzz",
+	"magus-command.buzz",
+	"magus-path.buzz",
+	"magus-observe.buzz",
 	"cursor-hook.sh",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository

@@ -63,7 +63,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // the attribution flag, which no released binary accepts (v0.3.0 predates it):
 // an older binary rejected it, the plugin's judge() got unparsable stdout, and
 // every verdict silently allowed. The sh templates already retried without
-// attribution on exactly this failure (magus-hook-command.sh's guard()); the
+// attribution on exactly this failure (magus-command.sh's guard()); the
 // plugin now does the same.
 //
 // 3: that flag is now --agent-name (was --host, which read as a network host)
@@ -124,7 +124,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // compacted session is handed back renders as a JSON envelope on request, for a host that
 // parses a session-start hook's stdout as a reply rather than reading it as context.
 //
-// 13: the contract grew a third surface, MCP tool calls, and magus-hook-command.sh grew
+// 13: the contract grew a third surface, MCP tool calls, and magus-command.sh grew
 // HOST_EVENT_RAW to carry it: an MCP call has no single string to select with
 // HOST_EVENT_PATH, only a tool name and a params object, so a host wiring this surface
 // forwards the whole event instead of reducing it to one jq extraction. A copy that

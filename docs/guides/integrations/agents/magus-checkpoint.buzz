@@ -35,7 +35,7 @@
 // There is no JSON import here, unlike its judging siblings. This wrapper selects
 // nothing: magus parses the envelope itself, so the event is forwarded whole.
 //
-// NO magus-guard-coverage line, for the same reason magus-hook-observe.buzz has
+// NO magus-guard-coverage line, for the same reason magus-observe.buzz has
 // none: a coverage declaration states how much of a VERDICT a host can carry, and
 // this file carries no verdict on no surface. It never denies, never advises, and
 // cannot change what your host does next.
@@ -68,18 +68,21 @@ fun isExecutable(candidate: str) > bool {
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
-// what ends the walk. fs\dirname answers "/" there and would never terminate.
+// what ends the walk. fs\dirname answers "/" there and would never terminate. Both
+// separators, because a `/`-only split makes `C:\...` one part and the walk never runs.
 fun parentDir(dir: str) > str {
-    final parts = dir.split("/");
-    if (parts.len() <= 1) { return ""; }
-    var head = mut [<str>];
-    foreach (i in 0..parts.len() - 1) { head.append(parts[i]); }
-    return head.join("/");
+    var i = dir.len() - 1;
+    while (i >= 0) {
+        final ch = dir.sub(i, len: 1);
+        if (ch == "/" or ch == "\\") { return dir.sub(0, len: i); }
+        i = i - 1;
+    }
+    return "";
 }
 
 // resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the
 // magusfile: a hook runs in the host's session directory, which is not always the
-// workspace root. magus-hook-command.buzz carries the full reasoning.
+// workspace root. magus-command.buzz carries the full reasoning.
 fun resolveBin() > str {
     final declared = env\get("__MAGUS_BIN") catch "";
     if (declared != "") { return declared; }

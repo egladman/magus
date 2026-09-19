@@ -207,9 +207,9 @@ func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
 // exemption is what erodes, and a session-start hook that opens the workspace pays its
 // 700ms at the one moment a person is watching the model come back.
 var guardGlueScripts = []string{
-	"magus-hook-command.buzz",
-	"magus-hook-path.buzz",
-	"magus-hook-observe.buzz",
+	"magus-command.buzz",
+	"magus-path.buzz",
+	"magus-observe.buzz",
 	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
 }

@@ -68,7 +68,7 @@ fun claude_buzz_command(script: str, flags: [str]) > str {
 }
 
 fun claude_glue_command(surface: str, flags: [str]) > str {
-    return claude_buzz_command("magus-hook-{surface}", flags: flags);
+    return claude_buzz_command("magus-{surface}", flags: flags);
 }
 
 fun claude_guard_command() > str {
@@ -237,9 +237,9 @@ test "harness_skills installs both forms under .claude/skills" {
 }
 
 test "guard commands name the Buzz glue, never the sh copies" {
-    assert\isTrue(claude_guard_command().indexOf("magus-hook-command.buzz") != null, "command surface");
-    assert\isTrue(claude_path_command().indexOf("magus-hook-path.buzz") != null, "path surface");
-    assert\isTrue(claude_observe_command().indexOf("magus-hook-observe.buzz") != null, "read observe");
+    assert\isTrue(claude_guard_command().indexOf("magus-command.buzz") != null, "command surface");
+    assert\isTrue(claude_path_command().indexOf("magus-path.buzz") != null, "path surface");
+    assert\isTrue(claude_observe_command().indexOf("magus-observe.buzz") != null, "read observe");
     assert\isTrue(claude_guard_command().indexOf(".sh") == null, "no POSIX shell dependency");
     assert\isTrue(claude_guard_command().indexOf("buzz -s ") != null, "quiet interpreter");
 }
@@ -290,9 +290,12 @@ test "the lifecycle wrappers name the Buzz ports too" {
 test "the interpreter is the workspace binary where there is one" {
     // Both shapes, because a clone that has not built magus yet wires PATH and a
     // checkout that carries its own binary must never be sent to PATH's vintage.
+    //
+    // The choice is made HERE, at apply time, and written into a committed config that
+    // nothing re-checks, so a checkout that later loses ./magus has every hook fail to
+    // launch. No test can see that; doctor's guard-binary check is what names it.
     final chosen = claude_interpreter();
     assert\isTrue(chosen == "./magus" or chosen == "magus", "one of the two shapes");
-    assert\equal(chosen == "./magus", fs\isFile("magus"), "the workspace binary wins when it exists");
     assert\isTrue(claude_glue_command("command", flags: [<str>]).startsWith("{chosen} buzz -s "), "the command carries it");
     // Every surface, because one command built by hand rather than through the helper
     // is one entry apply keeps rewriting against a config that already holds it. Each
@@ -318,8 +321,13 @@ test "harness_entries covers PreToolUse SessionStart and Stop" {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");
         assert\equal("{hooks[0]["type"]}", "command", "Claude Code hook type");
-        assert\equal(hooks[0]["timeout"] as int, 10, "timeout seconds");
-        assert\isTrue("{entry["matcher"]}".len() > 0, "matcher present");
+        // `as?` rather than `as`: a bare cast COERCES, so a timeout written 10.0 would
+        // pass the assertion whose job is noticing that the emitted JSON changed.
+        assert\equal(hooks[0]["timeout"] as? int, 10, "timeout seconds");
+        // Interpolating an absent key renders "null", four characters, so a length test
+        // over the rendered form passes for an entry carrying no matcher at all.
+        final matcher = entry["matcher"] as? str;
+        assert\isTrue(matcher != null and matcher!.len() > 0, "matcher present");
     }
     final start = entries[1];
     final start_path = start["path"] as [str];
@@ -337,10 +345,13 @@ test "harness_mcp prints Claude Code host CLI guidance" {
 }
 
 test "harness_* contract wrappers return the same pure helpers" {
-    final t = null;
+    // These wrappers ignore both arguments, which is what lets a test call them with no
+    // target at all. gopherbuzz's checker accepts the null for a declared Target; a
+    // stricter one would not, so this is the shape magus calls them with, not a legal one.
+    final noTarget = null;
     final cb = fun(_: any) > void {};
-    assert\equal("{harness_config(t, cb)["path"]}", claude_config_path(), "config path");
-    assert\equal("{harness_skills(t, cb)["form"]}", claude_skills_form(), "skills form");
-    assert\equal(harness_entries(t, cb).len(), claude_entries().len(), "entries length");
-    assert\equal("{harness_mcp(t, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
+    assert\equal("{harness_config(noTarget, cb)["path"]}", claude_config_path(), "config path");
+    assert\equal("{harness_skills(noTarget, cb)["form"]}", claude_skills_form(), "skills form");
+    assert\equal(harness_entries(noTarget, cb).len(), claude_entries().len(), "entries length");
+    assert\equal("{harness_mcp(noTarget, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
 }

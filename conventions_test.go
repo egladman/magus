@@ -385,21 +385,21 @@ func TestSkillsGenerateDeclaresEveryShippedSkill(t *testing.T) {
 // The two generic sh templates share a page because two hosts share the files;
 // Cursor's and OpenCode's are self-contained and sit with their host.
 var templatePage = map[string]string{
-	"magus-hook-command.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-hook-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
-	"magus-hook-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-checkpoint.sh":   "docs/guides/integrations/agents/guard-templates.md",
-	"magus-rehydrate.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-command.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-path.sh":       "docs/guides/integrations/agents/guard-templates.md",
+	"magus-observe.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.sh": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.sh":  "docs/guides/integrations/agents/guard-templates.md",
 	// The Buzz ports sit on the same page as the files they mirror, so a reader
 	// choosing between the two forms is looking at both when they choose.
-	"magus-hook-command.buzz": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-hook-path.buzz":    "docs/guides/integrations/agents/guard-templates.md",
-	"magus-hook-observe.buzz": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-checkpoint.buzz":   "docs/guides/integrations/agents/guard-templates.md",
-	"magus-rehydrate.buzz":    "docs/guides/integrations/agents/guard-templates.md",
-	"codex-hooks.json":        "docs/guides/integrations/agents/codex.md",
-	"cursor-hook.sh":          "docs/guides/integrations/agents/cursor.md",
-	"opencode-plugin.ts":      "docs/guides/integrations/agents/opencode.md",
+	"magus-command.buzz":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-path.buzz":       "docs/guides/integrations/agents/guard-templates.md",
+	"magus-observe.buzz":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.buzz": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.buzz":  "docs/guides/integrations/agents/guard-templates.md",
+	"codex-hooks.json":      "docs/guides/integrations/agents/codex.md",
+	"cursor-hook.sh":        "docs/guides/integrations/agents/cursor.md",
+	"opencode-plugin.ts":    "docs/guides/integrations/agents/opencode.md",
 	// The three session-load adapters share a page with the contract they emit and
 	// the coverage table that compares them, because choosing between hosts is
 	// exactly the question that page answers.
@@ -414,13 +414,13 @@ var templatePage = map[string]string{
 // something anyone copies into a host, so the list is explicit rather than a
 // directory walk that would drag all of it into the guide.
 var hookTemplates = []string{
-	"magus-hook-command.sh",
-	"magus-hook-path.sh",
+	"magus-command.sh",
+	"magus-path.sh",
 	// The two templates that carry no verdict: one records a path an agent reached,
 	// the other where the work stood when a session stopped, and neither judges
 	// anything. So they declare no guard coverage and owe no parity row. See the note
 	// at the top of each for why that absence is deliberate rather than a hole.
-	"magus-hook-observe.sh",
+	"magus-observe.sh",
 	"magus-checkpoint.sh",
 	// The third of them: it reports where a checkout stands to a session that lost
 	// its history, and judges nothing either.
@@ -431,9 +431,9 @@ var hookTemplates = []string{
 	// coverage declarations. guard_templates.txtar runs both forms of every recorded
 	// event and refuses a byte of difference, so what they owe the gates below is the
 	// same as what their sh twins owe.
-	"magus-hook-command.buzz",
-	"magus-hook-path.buzz",
-	"magus-hook-observe.buzz",
+	"magus-command.buzz",
+	"magus-path.buzz",
+	"magus-observe.buzz",
 	// And the Buzz ports of the two verdict-free wrappers, which is what leaves this
 	// repository's Claude Code wiring needing neither a POSIX shell nor jq.
 	"magus-checkpoint.buzz",
@@ -540,7 +540,7 @@ func configTemplates(t *testing.T, path string) map[string]bool {
 // and, where the matcher selects magus's MCP tools, by that surface too.
 //
 // Keyed by job rather than by file because a template wired twice under different
-// matchers is two jobs: claude-code runs magus-hook-command.sh on Bash AND on the
+// matchers is two jobs: claude-code runs magus-command.sh on Bash AND on the
 // MCP tool call, and a gate collecting basenames alone reads the second as nothing
 // new, which is the whole absence it exists to report.
 func configJobs(t *testing.T, path string) map[string]bool {
@@ -1046,8 +1046,8 @@ var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\
 // worse noise. Overturning that is a decision for whoever made it; leaving it
 // undeclared here is what this table refuses.
 var failOpenSilentByDesign = map[string]string{
-	"magus-hook-path.sh":   "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
-	"magus-hook-path.buzz": "the same decision as its sh twin, and the same executed case: the archive runs both forms against the same event and refuses a difference",
+	"magus-path.sh":   "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
+	"magus-path.buzz": "the same decision as its sh twin, and the same executed case: the archive runs both forms against the same event and refuses a difference",
 }
 
 // TestFailOpenArmsAnnounceThemselves is the doctrine's enforcement point: a
@@ -1061,7 +1061,7 @@ var failOpenSilentByDesign = map[string]string{
 // Structural on purpose: it finds the arms by the conditions the templates test
 // and asks each one for an unconditional notice, so rewording a message costs
 // nothing and DELETING one fails. A template with no coverage declaration is not
-// asked, which is how magus-hook-observe.sh is exempt: it carries no verdict,
+// asked, which is how magus-observe.sh is exempt: it carries no verdict,
 // so it has no fail-open to announce.
 func TestFailOpenArmsAnnounceThemselves(t *testing.T) {
 	for _, name := range hookTemplates {
@@ -1138,7 +1138,7 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 	assert.Fail(t, "fail-open arm says nothing",
 		"%s answers without a magus verdict at line %d and emits no default notice.\n"+
 			"A guard that stopped enforcing looks exactly like a clean session, so every fail-open arm\n"+
-			"announces itself (see magus-hook-command.sh's __MAGUS_UNAVAILABLE_RESPONSE). Add a notice,\n"+
+			"announces itself (see magus-command.sh's __MAGUS_UNAVAILABLE_RESPONSE). Add a notice,\n"+
 			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
 		name, line)
 }
