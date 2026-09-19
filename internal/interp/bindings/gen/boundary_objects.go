@@ -67,6 +67,26 @@ func ObjectCharm(v spells.Charm) vm.Value {
 	return out
 }
 
+func ObjectFlagParse(v types.FlagParse) vm.Value {
+	out := vm.NewMap()
+	mappedValues := vm.NewMap()
+	for keyValues, itemValues := range v.Values {
+		mappedValues.MapSet(keyValues, vm.StrValue(itemValues))
+	}
+	out.MapSet("values", mappedValues)
+	itemsPositionals := make([]vm.Value, len(v.Positionals))
+	for indexPositionals := range v.Positionals {
+		itemsPositionals[indexPositionals] = vm.StrValue(v.Positionals[indexPositionals])
+	}
+	out.MapSet("positionals", vm.ListValue(itemsPositionals))
+	itemsUnknown := make([]vm.Value, len(v.Unknown))
+	for indexUnknown := range v.Unknown {
+		itemsUnknown[indexUnknown] = vm.StrValue(v.Unknown[indexUnknown])
+	}
+	out.MapSet("unknown", vm.ListValue(itemsUnknown))
+	return out
+}
+
 func ObjectFileInfo(v types.FileInfo) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("size", vm.IntValue(int64(v.Size)))

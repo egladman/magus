@@ -73,6 +73,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "SemverVersion", Type: reflect.TypeFor[types.SemverVersion](), RuntimeObject: true},
 	{Name: "SemverNext", Type: reflect.TypeFor[types.SemverNext](), RuntimeObject: true},
 	{Name: "URL", Type: reflect.TypeFor[types.URL](), RuntimeObject: true},
+	{Name: "FlagParse", Type: reflect.TypeFor[types.FlagParse](), RuntimeObject: true},
 	{Name: "Tag", Type: reflect.TypeFor[types.VCSTag](), RuntimeObject: true},
 	{Name: "Affected", Type: reflect.TypeFor[types.AffectedResult](), RuntimeObject: true},
 	{Name: "Graph", Type: reflect.TypeFor[types.GraphView](), RuntimeObject: true},
