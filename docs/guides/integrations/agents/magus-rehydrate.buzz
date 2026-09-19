@@ -56,6 +56,7 @@
 // session it was meant to help.
 
 import "io";
+import "flags";
 import "env";
 import "fs";
 import "path";
@@ -163,7 +164,25 @@ fun escapeJSON(body: str) > str {
     return buf.join("");
 }
 
+// warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this
+// file writes on stdout.
+fun warn(message: str) > void {
+    io\stderr.write("magus-rehydrate.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final rules = envOr("REHYDRATE_RULES", fallback: "CLAUDE.md");
     final root = workspaceRoot();
 

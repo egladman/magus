@@ -43,6 +43,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "FileHotspot", Zero: types.FileHotspot{}, Encode: func(v any) vm.Value { return ObjectFileHotspot(v.(types.FileHotspot)) }},
 	{Name: "FileInfo", Zero: types.FileInfo{}, Encode: func(v any) vm.Value { return ObjectFileInfo(v.(types.FileInfo)) }},
 	{Name: "FileReport", Zero: types.FileReport{}, Encode: func(v any) vm.Value { return ObjectFileReport(v.(types.FileReport)) }},
+	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "GateEvidence", Zero: types.GateEvidence{}, Encode: func(v any) vm.Value { return ObjectGateEvidence(v.(types.GateEvidence)) }},
 	{Name: "GateStatus", Zero: types.GateStatus{}, Encode: func(v any) vm.Value { return ObjectGateStatus(v.(types.GateStatus)) }},
 	{Name: "Graph", Zero: types.GraphView{}, Encode: func(v any) vm.Value { return ObjectGraphView(v.(types.GraphView)) }},

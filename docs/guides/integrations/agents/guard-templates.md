@@ -1005,6 +1005,7 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 // reply it already renders for the command surface carries a deny or an advise on this one too.
 
 import "std";
+import "flags";
 import "io";
 import "encoding/json" as json;
 import "env";
@@ -1318,20 +1319,30 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
 // here (see the unavailable and could-not-judge notices): the call is not blocked for a
 // misconfiguration, and the misconfiguration is not silent. A host shows a hook's stderr
 // as an error notice, so the person who wrote the entry is the one who reads it.
+// The parse is the flags module's; the POLICY is this file's. It declares what it
+// supports, and decides for itself that an argument it did not declare is reported and
+// dropped rather than refused, because a misconfigured entry must not block work.
 fun shellFlags(args: [str]) > [str] {
-    final flags = mut [<str>];
-    foreach (word in args) {
-        if (SUPPORTED_FLAGS.indexOf(word) == null) {
-            // Named in quotes because an empty or whitespace argument otherwise produces
-            // "unsupported argument ;", and this line is the only remedy a misconfigured
-            // reader is offered.
-            warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
-                + "Supported: {SUPPORTED_FLAGS.join(", ")}. Fix the hook command in your host config.");
-        } else if (flags.indexOf(word) == null) {
-            flags.append(word);
-        }
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [<str>]) catch null;
+    if (parsed == null) {
+        // Unreachable while every supported flag is a switch, and caught anyway: NOTHING
+        // here may raise, and a `catch` that exists only for that is cheaper than a
+        // guarantee that has to be re-checked whenever the list grows a valued flag.
+        warn("could not parse this entry's arguments; the call was judged without them");
+        return [<str>];
     }
-    return flags;
+    foreach (word in parsed!.unknown) {
+        // Named in quotes because an empty or whitespace argument otherwise produces
+        // "unsupported argument ;", and this line is the only remedy a misconfigured
+        // reader is offered.
+        warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
+            + "Supported: {SUPPORTED_FLAGS.join(", ")}. Fix the hook command in your host config.");
+    }
+    final supported = mut [<str>];
+    foreach (name in SUPPORTED_FLAGS) {
+        if (parsed!.values[name] != null) { supported.append(name); }
+    }
+    return supported;
 }
 
 // warn names the file, because a host reports a hook's stderr with the entry's matcher at
@@ -1712,6 +1723,7 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 
 import "io";
+import "flags";
 import "encoding/json" as json;
 import "env";
 import "fs";
@@ -1874,7 +1886,29 @@ fun adviseBranch() > str {
     return envOr("HOST_ADVISE_BRANCH", fallback: ADVISE_DEFAULT);
 }
 
+// warn names the file: a host reports a hook's stderr with the entry's matcher at best
+// and nothing at all at worst, and a reader with several entries needs to know which.
+fun warn(message: str) > void {
+    io\stderr.write("magus-path.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv ANYWAY.
+//
+// An argument that arrives here means the wiring meant something by it, and reading none
+// at all accepted that in silence. Reported and then ignored, which is the same policy
+// every other arm of this file takes: a misconfigured entry must not block work, and must
+// not be invisible either.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
@@ -2013,6 +2047,7 @@ The observer, in Buzz. It prints nothing, always exits 0, and declares no covera
 // all. An optional record must never be able to do that.
 
 import "io";
+import "flags";
 import "encoding/json" as json;
 import "env";
 import "fs";
@@ -2100,7 +2135,25 @@ fun resolveBin() > str {
     return proc\which("magus") catch "";
 }
 
+// warn names the file; see magus-command.buzz. STDERR, which is why it does not break
+// this file's contract to print nothing: stdout is what the host reads as a verdict.
+fun warn(message: str) > void {
+    io\stderr.write("magus-observe.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
@@ -2199,6 +2252,7 @@ does, so it selects nothing and imports no JSON reader at all.
 // worth strictly less than the work.
 
 import "io";
+import "flags";
 import "env";
 import "fs";
 import "path";
@@ -2255,7 +2309,25 @@ fun resolveBin() > str {
     return proc\which("magus") catch "";
 }
 
+// warn names the file; see magus-command.buzz. STDERR, which is why it does not break
+// this file's contract to print nothing: stdout is what the host reads as a verdict.
+fun warn(message: str) > void {
+    io\stderr.write("magus-checkpoint.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
@@ -2344,6 +2416,7 @@ escape its sh twin builds out of a pipeline is one byte-indexed loop here.
 // session it was meant to help.
 
 import "io";
+import "flags";
 import "env";
 import "fs";
 import "path";
@@ -2451,7 +2524,25 @@ fun escapeJSON(body: str) > str {
     return buf.join("");
 }
 
+// warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this
+// file writes on stdout.
+fun warn(message: str) > void {
+    io\stderr.write("magus-rehydrate.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final rules = envOr("REHYDRATE_RULES", fallback: "CLAUDE.md");
     final root = workspaceRoot();
 

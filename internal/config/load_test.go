@@ -278,7 +278,7 @@ func TestUnknownKeyMessage(t *testing.T) {
 		// is appended. "unknown key" alone reads as "you misspelled it", and the two
 		// have opposite fixes; ward owns the sentence so both surfaces say it the same.
 		"nothing close enough to suggest": {
-			doc:  "concurrency: 2\nzzzzzzzz: 1\n",
+			doc: "concurrency: 2\nzzzzzzzz: 1\n",
 			want: `magus.yaml:2: unknown key "zzzzzzzz"; this magus does not know that key. ` +
 				ward.StaleBinaryAdvice("", "") + ". If the key is genuinely misspelled, this note does not apply",
 		},
