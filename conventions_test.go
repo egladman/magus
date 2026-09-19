@@ -29,7 +29,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"unicode"
 
@@ -2065,28 +2064,26 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 		t.Fatalf("walk: %v", err)
 	}
 
-	var mu sync.Mutex
-	var violations []string
-	g := errgroup.Group{}
+	// Indexed by file rather than appended under a mutex: the result is in walk order
+	// whatever order the scheduler finishes in, so a failure reads the same way twice
+	// without a sort, and there is no shared slice to guard.
+	found := make([][]string, len(files))
+	var g errgroup.Group
 	g.SetLimit(runtime.GOMAXPROCS(0))
-	for _, path := range files {
+	for i, path := range files {
 		g.Go(func() error {
-			found, err := hostSpecificLines(path)
-			if err != nil {
-				return err
-			}
-			mu.Lock()
-			violations = append(violations, found...)
-			mu.Unlock()
-			return nil
+			lines, err := hostSpecificLines(path)
+			found[i] = lines
+			return err
 		})
 	}
 	if err := g.Wait(); err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	// The fan-out finishes in whatever order the scheduler hands back, and a failure
-	// lists every violation: sorted, the list reads the same way twice.
-	sort.Strings(violations)
+	var violations []string
+	for _, lines := range found {
+		violations = append(violations, lines...)
+	}
 
 	assert.Empty(t, violations,
 		"magus must not encode agent-host specifics.\n"+

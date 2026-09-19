@@ -562,6 +562,12 @@ func laneFleet() []types.Job {
 func TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm(t *testing.T) {
 	ctx, root := fleetFixture(t, laneFleet()...)
 
+	// Whether withoutLeaseAge blanked anything at all. Not every row renders an age (a
+	// path the acting lease's own row DENIES names no owner), but if no row does, the
+	// normalizer has silently become the identity function and this table has quietly
+	// reverted to the clock-flaky comparison it was written to replace.
+	normalized := false
+
 	for _, tc := range []struct {
 		command string
 		path    string
@@ -610,11 +616,16 @@ func TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm(t *testing.T) {
 		onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, tc.path))
 		require.Equal(t, "deny", onPath.Decision,
 			"the PATH surface passed %s, so this row is no longer testing two surfaces against one another", tc.path)
+		normalized = normalized || leaseAge.MatchString(onPath.Reason)
 		assert.Equal(t, withoutLeaseAge(onPath.Reason), withoutLeaseAge(onCommand),
 			"the two surfaces refused %q in DIFFERENT words.\n"+
 				"It is one mistake however it is spelled, so it gets one explanation. The command surface is meant to call gradeLeasedWrite, the path surface's own grader; a difference here means something re-decided the verdict instead of reusing it, and the two will drift from now on.",
 			tc.command)
 	}
+
+	assert.True(t, normalized,
+		"withoutLeaseAge blanked nothing across the whole table, so it is no longer normalizing the figure it exists for.\n"+
+			"Either the refusal stopped naming the owner's age, or it names it in wording leaseAge no longer matches. Update the pattern; leaving it is how this table starts failing on the clock instead of on the wording.")
 }
 
 // leaseAge matches the owner's age in a refusal, which is read from the clock as the
