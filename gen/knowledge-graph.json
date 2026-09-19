@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6388,
-  "edge_count": 11426,
+  "node_count": 6387,
+  "edge_count": 11424,
   "relations": [
     {
       "id": "annotates",
@@ -45971,214 +45971,223 @@
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:63"
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot; see magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader because Buzz binds `&` tighter than `!=` where C and Go do the reverse.",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:66"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:104"
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:108"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:74"
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:78"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the magusfile: a hook runs in the host's session directory, which is not always the workspace root. magus-command.buzz carries the full reasoning.",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:87"
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:91"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:adviseBranch",
       "kind": "function",
       "label": "adviseBranch",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:556"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:607"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:askBranch",
       "kind": "function",
       "label": "askBranch",
       "doc": "askBranch picks the ask arm for the host that sent this event. Only a reply this file assembled may claim --renders-ask; see the header for why Codex never receives permissionDecision \"ask\".",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:547"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:589"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:codexPromptBlocker",
       "kind": "function",
       "label": "codexPromptBlocker",
       "doc": "codexPromptBlocker states why Codex will not put this call in front of the person, and \"\" when its own approval prompt will.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:377"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:385"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:contextReply",
       "kind": "function",
       "label": "contextReply",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:539"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:567"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
       "kind": "function",
       "label": "dig",
       "doc": "dig walks a jq-style dot-path and returns null where jq would print nothing.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:198"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:202"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:digKey",
       "kind": "function",
       "label": "digKey",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:191"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:195"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
       "kind": "function",
       "label": "envOr",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:185"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:189"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
       "kind": "function",
       "label": "failureNotice",
       "doc": "failureNotice states WHICH binary went silent, what version it is, and what it actually said, the three facts a reader otherwise spends a session collecting.  It re-runs the guard to capture stderr, which the verdict path discards. One extra process, only on the path that is already broken. WARN lines are dropped because a config the binary is too old to parse warns BEFORE it fails, and that warning is a symptom of the same staleness, not the error.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:519"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:547"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:field",
       "kind": "function",
       "label": "field",
       "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string rather than the literal \"null\".",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:215"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:219"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:fileSafe",
       "kind": "function",
       "label": "fileSafe",
       "doc": "fileSafe keeps a session id that may hold slashes or dots from becoming a path.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:466"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:494"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:findUp",
       "kind": "function",
       "label": "findUp",
       "doc": "findUp returns the nearest ancestor holding relative, or \"\" when there is none.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:350"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:358"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:firstLine",
       "kind": "function",
       "label": "firstLine",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:286"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:290"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:hasKey",
       "kind": "function",
       "label": "hasKey",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:272"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:276"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:292"
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot: one named `magus` at the workspace root carries the execute bits too, and accepting it sent the caller to the arm that names a path it then cannot run.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:297"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:judge",
       "kind": "function",
       "label": "judge",
       "doc": "The entry's own flags ride in `extra` with everything else, so the unattributed retry drops them too. Keeping them there meant a binary too old for `--observes-skill-loads` failed BOTH attempts and the spawn surface could never recover where Bash did, and a binary too old to accept the flag cannot observe a skill load to begin with.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:500"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:528"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:575"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:626"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
       "kind": "function",
       "label": "noticeOnce",
       "doc": "noticeOnce succeeds the first time family fires in this session and fails on every repeat.  The notices it holds report a BROKEN INSTALLATION. That is a fact for the person, and there is nothing in it an agent can act on, so a repeat is pure noise: measured at 2,741 firings over recent sessions, 99% of them same-session repeats of text already declined.  The marker lives under TMPDIR rather than in magus's own state because this runs when magus is missing or too broken to judge, so it cannot ask magus for a",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:449"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:466"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "kind": "function",
+      "label": "noticeReply",
+      "doc": "noticeReply renders a notice in the dialect of the event that asked for it.  A PermissionRequest reply carries a decision and no context field, so the PreToolUse envelope the other surfaces use is one the host rejects outright: on the single surface where the notice is the only thing written, it arrived unreadable. There the prose goes to the person on stderr and stdout carries the envelope that leaves the decision alone.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:578"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
       "kind": "function",
       "label": "olderThanWindow",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:476"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:504"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it strips the last path element and yields the empty string at the top, which is what ends the walk. fs\\dirname is not that function, because it answers \"/\" for a top-level directory and the walk would never terminate.  Both separators, because this file claims to run unchanged on Windows. Splitting on `/` alone made `C:\\...` a single part, so the walk never ran once and resolveBin fell straight through to PATH, which is the staleness it exists to avoid.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:339"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:347"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:permissionResponse",
       "kind": "function",
       "label": "permissionResponse",
       "doc": "permissionResponse answers the approval request Codex raises just before its own prompt. No decision object leaves the prompt to the person; allow skips it, and is answered only for a plain push, because this event fires for every approval Codex asks and a pass from the guard is not the person's consent to anything else.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:566"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:617"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:pushRuleFor",
       "kind": "function",
       "label": "pushRuleFor",
       "doc": "pushRuleFor names the Codex prefix rule a bare push reaches, or null for anything else: a compound line, `git -C dir push`, an MCP call. Those reach no rule, so Codex would run them unprompted and no answer here may assume it prompts.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:364"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:372"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:rawField",
       "kind": "function",
       "label": "rawField",
       "doc": "rawField is `jq -r \".<dotPath>\"` with no default, so an absent field reaches magus as the literal \"null\".",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:223"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:227"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:render",
       "kind": "function",
       "label": "render",
       "doc": "render prints a value the way `jq -r` does: a string bare, anything else as JSON.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:208"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:212"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH. A repository that builds magus, or pins a newer one than is installed, keeps its RULES in that binary, and an older PATH copy does not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule, warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured 2026-08-13, when a write into a declared notes store was allowed by a binary that predated the knowledge.notes key while `magus doctor` repor",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:314"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:322"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:shellFlags",
       "kind": "function",
       "label": "shellFlags",
       "doc": "shellFlags parses this script's own argv: the `magus shell` flags the entry that wired it declares about itself, already split into words by the host that ran the command.  Parsed against SUPPORTED_FLAGS, never filtered by shape. The three answers are: a flag this file knows, which is used; anything else, which is REPORTED on stderr and left out; and no argv at all, which is the ordinary entry. There is no fourth.  Reporting is the whole point. Dropping an argument silently leaves a guard judging with flags",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:412"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:426"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:trimTrailingNewlines",
       "kind": "function",
       "label": "trimTrailingNewlines",
       "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured verdict.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:280"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:284"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
       "kind": "function",
       "label": "warn",
       "doc": "warn names the file, because a host reports a hook's stderr with the entry's matcher at best and nothing at all at worst, and a reader with eight entries needs to know which.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:427"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:444"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:wholeEvent",
       "kind": "function",
       "label": "wholeEvent",
       "doc": "wholeEvent decides which of the two payloads `magus shell` gets: the WHOLE envelope, or the one string HOST_EVENT_PATH selects out of it.  The event answers this itself, which is why no entry has to. Selecting a field is the NARROW case and needs two facts to be true at once; everything else forwards the envelope, because magus's own decoder knows every payload shape magus reads (a command, a written path, a skill name, a spawn prompt, an MCP call) and answers \"nothing to judge\" for the rest, while a field",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:265"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:269"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:dig",
@@ -46202,130 +46211,132 @@
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:field",
       "kind": "function",
       "label": "field",
-      "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string rather than the literal \"null\".",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:79"
+      "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string rather than the literal \"null\". Only a STRING is a path. Rendering an object or a list as JSON instead recorded the serialized blob as the file the agent reached, which the judging surfaces treat as a shape they cannot read; nothing to record beats recording something untrue.",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:82"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:86"
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot; see magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader because Buzz binds `&` tighter than `!=` where C and Go do the reverse.",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:91"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:131"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:137"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:97"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:103"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH, for the same reason its two siblings do, and this file needs it MORE than they do, because it is silent by design. An older PATH copy does not know --observe at all: it rejects the flag, prints its usage to a stream this script discards, and exits non-zero, so the observation is simply never recorded, forever, with nothing anywhere saying so. Measured 2026-08-14 in magus's own repository, where the wiring was correct, the binary was wrong, and the tr",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:114"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:120"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:adviseBranch",
       "kind": "function",
       "label": "adviseBranch",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:222"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:228"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:dig",
       "kind": "function",
       "label": "dig",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:111"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:113"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:digKey",
       "kind": "function",
       "label": "digKey",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:105"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:107"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:envOr",
       "kind": "function",
       "label": "envOr",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:99"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:101"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:field",
       "kind": "function",
       "label": "field",
       "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:126"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:128"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:hasKey",
       "kind": "function",
       "label": "hasKey",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:149"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:151"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:163"
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot; see magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader because Buzz binds `&` tighter than `!=` where C and Go do the reverse.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:168"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:judge",
       "kind": "function",
       "label": "judge",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:210"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:216"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:228"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:234"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:174"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:180"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:rawField",
       "kind": "function",
       "label": "rawField",
       "doc": "rawField is `jq -r \".<dotPath>\"`, so an absent field reaches magus as \"null\".",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:133"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:135"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:render",
       "kind": "function",
       "label": "render",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:120"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:122"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the magusfile rather than testing ./magus alone. magus-command.buzz carries the full reasoning and the two measurements behind it.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:187"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:193"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:trimTrailingNewlines",
       "kind": "function",
       "label": "trimTrailingNewlines",
       "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured verdict.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:157"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:159"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:wholeEvent",
       "kind": "function",
       "label": "wholeEvent",
       "doc": "wholeEvent decides whether `magus shell` gets the whole envelope or just the string HOST_EVENT_PATH selects. magus reads a write target off the ENVELOPE under every `*_path` spelling, so selecting one dot-path here left NotebookEdit's `notebook_path` unjudged.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:142"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:144"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:envOr",
@@ -46338,47 +46349,48 @@
       "kind": "function",
       "label": "escapeJSON",
       "doc": "escapeJSON is `tr '\\001-\\011\\013-\\037' '[ *]' | sed -e 's/\\\\/\\\\\\\\/g' -e 's/\"/\\\\\"/g'` followed by the read loop that joins the lines, transcribed byte for byte.  Every control character but the line break becomes a space (a raw one is not legal inside a JSON string), backslash and quote are escaped, and each line break becomes the two characters a JSON string spells it with. Byte-indexed on purpose: a multi-byte rune's continuation bytes are all above 0x7f, so they fall through untouched and reassemble exact",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:140"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:144"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:77"
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot; see magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader because Buzz binds `&` tighter than `!=` where C and Go do the reverse.",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:80"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:159"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:166"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:88"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:92"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH. magus-command.buzz carries the full reasoning for that preference.",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:114"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:118"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:trimTrailingNewlines",
       "kind": "function",
       "label": "trimTrailingNewlines",
       "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured brief.",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:126"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:130"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:workspaceRoot",
       "kind": "function",
       "label": "workspaceRoot",
       "doc": "workspaceRoot walks UP to the magusfile: a hook runs in the host's session directory, which is not always the workspace root. The walk is UNCONDITIONAL, unlike the one in its judging siblings, because the root is also what the rules line is resolved against; an explicit __MAGUS_BIN settles the binary, not the tree.",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:102"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:106"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:ci",
@@ -52754,7 +52766,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_agent_command",
       "kind": "function",
       "label": "claude_agent_command",
-      "source": "spells/harness/claude-code/spell.buzz:99"
+      "source": "spells/harness/claude-code/spell.buzz:95"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
@@ -52767,19 +52779,19 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_checkpoint_command",
       "kind": "function",
       "label": "claude_checkpoint_command",
-      "source": "spells/harness/claude-code/spell.buzz:119"
+      "source": "spells/harness/claude-code/spell.buzz:114"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_command_hook",
       "kind": "function",
       "label": "claude_command_hook",
-      "source": "spells/harness/claude-code/spell.buzz:123"
+      "source": "spells/harness/claude-code/spell.buzz:118"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config",
       "kind": "function",
       "label": "claude_config",
-      "source": "spells/harness/claude-code/spell.buzz:171"
+      "source": "spells/harness/claude-code/spell.buzz:166"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config_path",
@@ -52791,7 +52803,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_entries",
       "kind": "function",
       "label": "claude_entries",
-      "source": "spells/harness/claude-code/spell.buzz:138"
+      "source": "spells/harness/claude-code/spell.buzz:133"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
@@ -52803,7 +52815,8 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_guard_command",
       "kind": "function",
       "label": "claude_guard_command",
-      "source": "spells/harness/claude-code/spell.buzz:74"
+      "doc": "The Bash, MCP and Skill matchers all take this one string. Their payloads differ, but a params object and a skill name both have to reach `magus shell` whole, and the glue reads that off the event rather than off the entry, so there is nothing to write on it. Three named wrappers returning identical bytes only invited a reader to look for a difference.",
+      "source": "spells/harness/claude-code/spell.buzz:78"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_interpreter",
@@ -52816,51 +52829,38 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp",
       "kind": "function",
       "label": "claude_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:196"
-    },
-    {
-      "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
-      "kind": "function",
-      "label": "claude_mcp_command",
-      "doc": "The MCP and Skill surfaces run the guard glue with no flags at all, the same string the Bash matcher gets. Their payload is a params object or a skill name rather than one shell line, so the whole event has to reach `magus shell`, and the glue reads that off the event: the field HOST_EVENT_PATH names is absent on exactly these surfaces. Nothing distinguishes the ENTRY, so nothing is written on it.",
-      "source": "spells/harness/claude-code/spell.buzz:91"
+      "source": "spells/harness/claude-code/spell.buzz:191"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_observe_command",
       "kind": "function",
       "label": "claude_observe_command",
-      "source": "spells/harness/claude-code/spell.buzz:82"
+      "source": "spells/harness/claude-code/spell.buzz:86"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_path_command",
       "kind": "function",
       "label": "claude_path_command",
-      "source": "spells/harness/claude-code/spell.buzz:78"
+      "source": "spells/harness/claude-code/spell.buzz:82"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_pretool_entry",
       "kind": "function",
       "label": "claude_pretool_entry",
-      "source": "spells/harness/claude-code/spell.buzz:131"
+      "source": "spells/harness/claude-code/spell.buzz:126"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
       "kind": "function",
       "label": "claude_rehydrate_command",
       "doc": "The two lifecycle wrappers go through the same interpreter helper as the guard glue, so this host's whole wiring names one runtime. They judge nothing, which is why they are built from claude_buzz_command directly: their names are their own rather than a surface of the hook template.",
-      "source": "spells/harness/claude-code/spell.buzz:115"
-    },
-    {
-      "id": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
-      "kind": "function",
-      "label": "claude_skill_command",
-      "source": "spells/harness/claude-code/spell.buzz:95"
+      "source": "spells/harness/claude-code/spell.buzz:110"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills",
       "kind": "function",
       "label": "claude_skills",
-      "source": "spells/harness/claude-code/spell.buzz:177"
+      "source": "spells/harness/claude-code/spell.buzz:172"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills_form",
@@ -52878,7 +52878,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_config",
       "kind": "function",
       "label": "harness_config",
-      "source": "spells/harness/claude-code/spell.buzz:184",
+      "source": "spells/harness/claude-code/spell.buzz:179",
       "attrs": {
         "exported": "true"
       }
@@ -52887,7 +52887,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_entries",
       "kind": "function",
       "label": "harness_entries",
-      "source": "spells/harness/claude-code/spell.buzz:192",
+      "source": "spells/harness/claude-code/spell.buzz:187",
       "attrs": {
         "exported": "true"
       }
@@ -52896,7 +52896,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_mcp",
       "kind": "function",
       "label": "harness_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:216",
+      "source": "spells/harness/claude-code/spell.buzz:211",
       "attrs": {
         "exported": "true"
       }
@@ -52905,7 +52905,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_skills",
       "kind": "function",
       "label": "harness_skills",
-      "source": "spells/harness/claude-code/spell.buzz:188",
+      "source": "spells/harness/claude-code/spell.buzz:183",
       "attrs": {
         "exported": "true"
       }
@@ -124526,6 +124526,14 @@
     },
     {
       "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
       "target": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
       "relation": "contains",
       "confidence": "extracted",
@@ -134958,14 +134966,6 @@
     },
     {
       "source": "file:spells/harness/claude-code/spell.buzz",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/harness/claude-code/spell.buzz"
-    },
-    {
-      "source": "file:spells/harness/claude-code/spell.buzz",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_observe_command",
       "relation": "contains",
       "confidence": "extracted",
@@ -134991,14 +134991,6 @@
     {
       "source": "file:spells/harness/claude-code/spell.buzz",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/harness/claude-code/spell.buzz"
-    },
-    {
-      "source": "file:spells/harness/claude-code/spell.buzz",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -138054,14 +138046,6 @@
     },
     {
       "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
-      "target": "function:docs/guides/integrations/agents/magus-command.buzz:contextReply",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
-    },
-    {
-      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
       "target": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
       "relation": "calls",
       "confidence": "extracted",
@@ -138111,6 +138095,14 @@
     {
       "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
       "target": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -138191,6 +138183,30 @@
     {
       "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
       "target": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:contextReply",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -141798,14 +141814,6 @@
     },
     {
       "source": "function:spells/harness/claude-code/spell.buzz:claude_entries",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/harness/claude-code/spell.buzz"
-    },
-    {
-      "source": "function:spells/harness/claude-code/spell.buzz:claude_entries",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_observe_command",
       "relation": "calls",
       "confidence": "extracted",
@@ -141837,14 +141845,6 @@
       "provenance": "spells/harness/claude-code/spell.buzz"
     },
     {
-      "source": "function:spells/harness/claude-code/spell.buzz:claude_entries",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/harness/claude-code/spell.buzz"
-    },
-    {
       "source": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
       "relation": "calls",
@@ -141854,14 +141854,6 @@
     },
     {
       "source": "function:spells/harness/claude-code/spell.buzz:claude_guard_command",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/harness/claude-code/spell.buzz"
-    },
-    {
-      "source": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
       "relation": "calls",
       "confidence": "extracted",
@@ -141895,14 +141887,6 @@
     {
       "source": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/harness/claude-code/spell.buzz"
-    },
-    {
-      "source": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,

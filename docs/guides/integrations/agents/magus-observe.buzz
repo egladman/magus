@@ -76,19 +76,25 @@ fun dig(event: any?, dotPath: str) > any? {
 
 // field is `jq -r ".<dotPath> // empty"`: absent reads as the empty string rather
 // than the literal "null".
+// Only a STRING is a path. Rendering an object or a list as JSON instead recorded the
+// serialized blob as the file the agent reached, which the judging surfaces treat as a
+// shape they cannot read; nothing to record beats recording something untrue.
 fun field(event: any?, dotPath: str) > str {
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return ""; }
-    if (value is str) { return value as str; }
-    return json\stringify(value) catch "";
+    return (value as? str) ?? "";
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    return (mode! & 73) != 0;
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is

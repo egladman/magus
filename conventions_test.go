@@ -1018,9 +1018,11 @@ var failOpenRetryRe = regexp.MustCompile(`\$\(guard\b|runOnce\(|judge\(guard, ex
 // failOpenNoticeRe matches an arm SAYING it did not judge the call: prose on
 // stderr, a console warning, or one of the __MAGUS_*_RESPONSE envelopes. The Buzz
 // ports read that envelope through envOr, so the fallback they hand it is the
-// notice, and it is named here rather than reached through a variable.
+// notice, and it is named here rather than reached through a variable. That
+// fallback is now a CALL, because the PermissionRequest surface has no context
+// field to carry prose and takes the same notice by another route.
 var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$__MAGUS_[A-Z_]+_RESPONSE` +
-	`|fallback: UNAVAILABLE_DEFAULT`)
+	`|text: UNAVAILABLE_TEXT`)
 
 // failOpenOptInRe matches the shape that makes a notice OPT-IN: the arm prints
 // only when the reader has set the variable, so by default it prints nothing.

@@ -209,10 +209,14 @@ codex_cannot_prompt() {
 # unasked. turn_id is a required field of Codex's published PreToolUse input
 # (testdata/hosts/codex/pre-tool-use.command.input.schema.json) and of its
 # PermissionRequest input; no vendored Claude Code or Cursor schema names it.
+#
+# The two are kept apart rather than or-ed, because the arms below trust them differently.
+codex_named=
+codex_inferred=
+[ "$__MAGUS_AGENT_NAME" = codex ] && codex_named=1
+[ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ] && codex_inferred=1
 codex=
-if [ "$__MAGUS_AGENT_NAME" = codex ] || [ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ]; then
-  codex=1
-fi
+{ [ -n "$codex_named" ] || [ -n "$codex_inferred" ]; } && codex=1
 
 # renders_ask is the --renders-ask claim: this call's reply puts an ask in front of the
 # person, or refuses it, and never lets it through unasked. Only a reply this file assembled
@@ -225,7 +229,16 @@ renders_ask=
 # header for why this file never sends Codex permissionDecision "ask".
 if [ -z "$HOST_ASK_BRANCH" ]; then
   if [ -n "$codex" ]; then
-    ask_blocker=$(codex_cannot_prompt)
+    # Only a wiring that NAMED itself Codex may render an ask as context the agent is free
+    # to skip. Inferring the host from a turn_id key is a guess over an envelope nobody
+    # schema-types, and the two ways of being wrong are not equal: the context arm turns an
+    # ask into a note that is silently ignored, while the deny arm turns it into a refusal
+    # the person can act on. A host that adds turn_id therefore costs a deny, not a pass.
+    if [ -n "$codex_named" ]; then
+      ask_blocker=$(codex_cannot_prompt)
+    else
+      ask_blocker='this event looks like Codex but the wiring never said so, and only a config that sets __MAGUS_AGENT_NAME=codex is taken at its word here'
+    fi
     if [ -z "$ask_blocker" ]; then
       HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .reason}}}}'
     else

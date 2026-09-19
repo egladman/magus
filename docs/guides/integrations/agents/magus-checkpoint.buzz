@@ -9,13 +9,13 @@
 // is load-bearing. It imports no magus Buzz module
 // and no spell, which is what keeps the workspace CLOSED: a Stop hook fires once
 // per session rather than once per tool call, so the 700ms an open costs would
-// be affordable here - and it is still refused, because the rule that keeps the
-// glue closed is worth more than the one exception that would erode it.
+// be affordable here; it is still refused, because the rule that keeps the glue
+// closed is worth more than the one exception that would erode it.
 //
 // Wire it to your host's stop or session-end event. It records the revision,
 // branch and dirtiness of the tree, plus your host's session id and transcript
-// path as opaque pointers, so that whoever comes back to this repository - you
-// tomorrow, or another session - reads `magus session` instead of reconstructing
+// path as opaque pointers, so that whoever comes back to this repository (you
+// tomorrow, or another session) reads `magus session` instead of reconstructing
 // where the work stopped. That reconstruction is the cost this exists to remove:
 // it was measured at a session id passed by hand, a guessed transcript location,
 // and three failed commands before it emerged the work had never been pushed.
@@ -29,7 +29,7 @@
 //   __MAGUS_BIN   path to the binary, when it is not on PATH
 //
 // A host whose envelope spells those fields differently passes them as flags
-// instead - `--session` and `--transcript` outrank the envelope - and a host that
+// instead, since `--session` and `--transcript` outrank the envelope, and a host that
 // cannot supply either still records a usable checkpoint, because the part that
 // matters is read from the tree rather than from the event.
 //
@@ -60,12 +60,16 @@ fun envOr(name: str, fallback: str) > str {
     return value;
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    return (mode! & 73) != 0;
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
@@ -105,7 +109,7 @@ fun main(args: [str]) > void {
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
-    // unenforced - there is no rule - so announcing it would interrupt the end of
+    // unenforced, because there is no rule, so announcing it would interrupt the end of
     // every session to report that an optional record was not written.
     //
     // Checked before stdin is touched, exactly as the sh copy leaves the event unread

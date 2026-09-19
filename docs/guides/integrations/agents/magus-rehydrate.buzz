@@ -74,12 +74,16 @@ fun envOr(name: str, fallback: str) > str {
     return value;
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    return (mode! & 73) != 0;
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
@@ -138,12 +142,15 @@ fun trimTrailingNewlines(s: str) > str {
 // multi-byte rune's continuation bytes are all above 0x7f, so they fall through
 // untouched and reassemble exactly as they arrived.
 fun escapeJSON(body: str) > str {
-    var buf = mut [<str>];
+    final buf = mut [<str>];
     foreach (i in 0..body.len()) {
-        final b = body.byte(i) catch 0;
+        // -1 on a read that cannot happen inside this loop's bounds, chosen because 0 is a
+        // real byte: the sh copy's `tr` range starts at \001 and let a NUL through, and a
+        // NUL emitted raw makes the reply illegal JSON, so the host drops it whole.
+        final b = body.byte(i) catch -1;
         if (b == 10) {
             buf.append("\\n");
-        } else if (b > 0 and b < 32) {
+        } else if (b < 32) {
             buf.append(" ");
         } else if (b == 92) {
             buf.append("\\\\");

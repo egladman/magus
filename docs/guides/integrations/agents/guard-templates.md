@@ -323,10 +323,14 @@ codex_cannot_prompt() {
 # unasked. turn_id is a required field of Codex's published PreToolUse input
 # (testdata/hosts/codex/pre-tool-use.command.input.schema.json) and of its
 # PermissionRequest input; no vendored Claude Code or Cursor schema names it.
+#
+# The two are kept apart rather than or-ed, because the arms below trust them differently.
+codex_named=
+codex_inferred=
+[ "$__MAGUS_AGENT_NAME" = codex ] && codex_named=1
+[ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ] && codex_inferred=1
 codex=
-if [ "$__MAGUS_AGENT_NAME" = codex ] || [ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ]; then
-  codex=1
-fi
+{ [ -n "$codex_named" ] || [ -n "$codex_inferred" ]; } && codex=1
 
 # renders_ask is the --renders-ask claim: this call's reply puts an ask in front of the
 # person, or refuses it, and never lets it through unasked. Only a reply this file assembled
@@ -339,7 +343,16 @@ renders_ask=
 # header for why this file never sends Codex permissionDecision "ask".
 if [ -z "$HOST_ASK_BRANCH" ]; then
   if [ -n "$codex" ]; then
-    ask_blocker=$(codex_cannot_prompt)
+    # Only a wiring that NAMED itself Codex may render an ask as context the agent is free
+    # to skip. Inferring the host from a turn_id key is a guess over an envelope nobody
+    # schema-types, and the two ways of being wrong are not equal: the context arm turns an
+    # ask into a note that is silently ignored, while the deny arm turns it into a refusal
+    # the person can act on. A host that adds turn_id therefore costs a deny, not a pass.
+    if [ -n "$codex_named" ]; then
+      ask_blocker=$(codex_cannot_prompt)
+    else
+      ask_blocker='this event looks like Codex but the wiring never said so, and only a config that sets __MAGUS_AGENT_NAME=codex is taken at its word here'
+    fi
     if [ -z "$ask_blocker" ]; then
       HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .reason}}}}'
     else
@@ -1035,7 +1048,9 @@ final PERMISSION_UNKNOWN = `{{else}}{"hookSpecificOutput":{"hookEventName":"Perm
 final CONTEXT_SLOT = "__MAGUS_CONTEXT__";
 final CONTEXT_REPLY = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":__MAGUS_CONTEXT__}}`;
 
-final UNAVAILABLE_DEFAULT = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard."}}`;
+// The prose, not the reply: the two surfaces wrap it differently, and holding it once is
+// what keeps them from drifting into two different sentences about one fact.
+final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard.";
 
 // The one arm here that does not fail open. Elsewhere magus is missing or cannot answer;
 // here nothing arrived, so no rule was ever offered the call. `magus shell` denies an
@@ -1144,8 +1159,8 @@ fun rawField(event: any?, dotPath: str) > str {
 // schema for its SETTINGS and one for hook STDOUT, neither of which types an event, and
 // Cursor publishes no hook input schema at all. Shape is the only fact on offer, which is
 // why the safe direction has to be the one that reads the whole thing.
-fun wholeEvent(event: any?, dotPath: str) > bool {
-    if (field(event, dotPath: "tool_name").startsWith(MCP_TOOL_PREFIX)) { return true; }
+fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
+    if (field(event, dotPath: toolPath).startsWith(MCP_TOOL_PREFIX)) { return true; }
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return true; }
     return !(value is str);
@@ -1166,17 +1181,21 @@ fun trimTrailingNewlines(s: str) > str {
 }
 
 fun firstLine(s: str) > str {
-    final lines = s.split("\n");
-    if (lines.len() == 0) { return ""; }
-    return lines[0];
+    return s.split("\n")[0];
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot: one named
+// `magus` at the workspace root carries the execute bits too, and accepting it sent the
+// caller to the arm that names a path it then cannot run.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    // 73 is 0111, the three execute bits. Parenthesized for the reader, not the parser:
+    // Buzz binds `&` tighter than `!=`, which is the opposite of C and Go.
+    return (mode! & 73) != 0;
 }
 
 // resolveBin prefers the workspace's own ./magus over PATH. A repository that builds
@@ -1266,11 +1285,17 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
     }
     final rules = findUp(".codex/rules/magus.rules");
     if (rules != "") {
-        final body = fs\readFile(rules) catch "";
+        // A file that is THERE and unreadable is not the same as one that carries no
+        // matching rule, and collapsing the two produced a deny whose stated reason was
+        // false. Named separately so the person is told what to look at.
+        final body = fs\readFile(rules) catch null;
+        if (body == null) {
+            return "{rules} exists but could not be read, so whether it carries the prompt rule for this push is unknown";
+        }
         // Compared with the spacing removed, so the rule matches however it is
         // formatted. The leading bracket is what keeps the git rule from being found
         // inside jj's ["jj", "git", "push"].
-        final packed = body.replace(" ", with: "").replace("\t", with: "");
+        final packed = body!.replace(" ", with: "").replace("\t", with: "");
         if (packed.indexOf(pushRule!) != null) { return ""; }
     }
     return "no .codex/rules/magus.rules carries the prompt rule for this push, which magus agent harness apply --id codex writes";
@@ -1292,13 +1317,16 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
 // misconfiguration, and the misconfiguration is not silent. A host shows a hook's stderr
 // as an error notice, so the person who wrote the entry is the one who reads it.
 fun shellFlags(args: [str]) > [str] {
-    var flags = mut [<str>];
+    final flags = mut [<str>];
     foreach (word in args) {
-        if (SUPPORTED_FLAGS.indexOf(word) != null) {
-            flags.append(word);
-        } else {
-            warn("unsupported argument {word}; this call was judged WITHOUT it. "
+        if (SUPPORTED_FLAGS.indexOf(word) == null) {
+            // Named in quotes because an empty or whitespace argument otherwise produces
+            // "unsupported argument ;", and this line is the only remedy a misconfigured
+            // reader is offered.
+            warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
                 + "Supported: {SUPPORTED_FLAGS.join(", ")}. Fix the hook command in your host config.");
+        } else if (flags.indexOf(word) == null) {
+            flags.append(word);
         }
     }
     return flags;
@@ -1330,23 +1358,34 @@ fun warn(message: str) > void {
 // different flag and a different reason.
 fun noticeOnce(session: str, family: str) > bool {
     final tmp = envOr("TMPDIR", fallback: "/tmp");
-    final dir = "{tmp}/magus-guard-notices";
+    // Per user, because a world-writable /tmp lets anyone pre-create someone else's marker
+    // and silence their guard notices permanently.
+    final dir = "{tmp}/magus-guard-notices-{fileSafe(envOr("USER", fallback: "anon"))}";
     var key = session;
     if (key == "") { key = "anon"; }
     final marker = "{dir}/{fileSafe(key)}.{fileSafe(family)}";
-    fs\mkdirAll(dir) catch null;
+    fs\mkdirAll(dir) catch void;
     final exists = fs\isFile(marker) catch false;
     if (exists) {
         if (session != "") { return false; }
         if (!olderThanWindow(marker)) { return false; }
     }
-    fs\writeFile(marker, content: "") catch null;
+    fs\writeFile(marker, content: "") catch void;
+    // A marker that did not land is a notice nothing can hold to one firing, and every
+    // filesystem call above fails toward firing. Left alone that reinstates the 2,741
+    // repeats this exists to stop, so the agent's channel stays quiet and the person is
+    // told on stderr, which is theirs and which no host injects into a context window.
+    if (!(fs\isFile(marker) catch false)) {
+        warn("could not write {marker}, so a guard notice cannot be held to one firing "
+            + "per session; reporting it here instead of in the reply");
+        return false;
+    }
     return true;
 }
 
 // fileSafe keeps a session id that may hold slashes or dots from becoming a path.
 fun fileSafe(key: str) > str {
-    var parts = mut [<str>];
+    final parts = mut [<str>];
     foreach (i in 0..key.len()) {
         final ch = key.sub(i, len: 1);
         final ok = (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "-" or ch == "_";
@@ -1380,7 +1419,7 @@ object Guard {
 // failed BOTH attempts and the spawn surface could never recover where Bash did, and a
 // binary too old to accept the flag cannot observe a skill load to begin with.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
-    var args = mut ["shell"];
+    final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
@@ -1423,13 +1462,36 @@ fun contextReply(text: str) > str {
     return CONTEXT_REPLY.replace(CONTEXT_SLOT, with: encoded);
 }
 
+// noticeReply renders a notice in the dialect of the event that asked for it.
+//
+// A PermissionRequest reply carries a decision and no context field, so the PreToolUse
+// envelope the other surfaces use is one the host rejects outright: on the single surface
+// where the notice is the only thing written, it arrived unreadable. There the prose goes
+// to the person on stderr and stdout carries the envelope that leaves the decision alone.
+fun noticeReply(eventName: str, text: str) > str {
+    if (eventName == "PermissionRequest") {
+        warn(text);
+        return PERMISSION_NO_DECISION;
+    }
+    return contextReply(text);
+}
+
 // askBranch picks the ask arm for the host that sent this event. Only a reply this
 // file assembled may claim --renders-ask; see the header for why Codex never receives
 // permissionDecision "ask".
-fun askBranch(event: any?, isCodex: bool, pushRule: str?) > str {
+fun askBranch(event: any?, codexNamed: bool, codexInferred: bool, pushRule: str?) > str {
     final declared = env\get("HOST_ASK_BRANCH") catch "";
     if (declared != "") { return declared; }
-    if (!isCodex) { return ASK_CLAUDE; }
+    if (!codexNamed and !codexInferred) { return ASK_CLAUDE; }
+    // Only a wiring that NAMED itself Codex may render an ask as context the agent is free
+    // to skip. Inferring the host from a `turn_id` key is a guess over an envelope nobody
+    // schema-types, and the two ways of being wrong are not equal: the context arm turns an
+    // ask into a note that is silently ignored, while the deny arm turns it into a refusal
+    // the person can act on. A host that adds `turn_id` therefore costs a deny, not a pass.
+    if (!codexNamed) {
+        return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT,
+            with: "this event looks like Codex but the wiring never said so, and only a config that sets __MAGUS_AGENT_NAME=codex is taken at its word here");
+    }
     final blocker = codexPromptBlocker(event, pushRule: pushRule);
     if (blocker == "") { return ASK_CODEX_PROMPTS; }
     return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT, with: blocker);
@@ -1470,14 +1532,18 @@ fun main(args: [str]) > void {
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
-    final rawEvent = wholeEvent(event, dotPath: eventPath);
+    // Overridable alongside the other dot-paths rather than fixed: a host that points
+    // HOST_EVENT_PATH at a field it DOES populate for MCP calls loses the namespace test
+    // otherwise, and gets that field judged as a shell command.
+    final toolPath = envOr("HOST_TOOL_PATH", fallback: "tool_name");
+    final rawEvent = wholeEvent(event, dotPath: eventPath, toolPath: toolPath);
 
     // Read BEFORE the availability check below, because the notices that check prints
     // are held to one firing per session and the session id is what keys them.
     final session = field(event, dotPath: sessionPath);
     final transcript = field(event, dotPath: transcriptPath);
     final eventName = field(event, dotPath: "hook_event_name");
-    final toolName = field(event, dotPath: "tool_name");
+    final toolName = field(event, dotPath: toolPath);
 
     var pushRule: str? = null;
     if (!rawEvent) { pushRule = pushRuleFor(field(event, dotPath: eventPath)); }
@@ -1486,7 +1552,10 @@ fun main(args: [str]) > void {
     // __MAGUS_AGENT_NAME still never receives permissionDecision "ask", which it would run
     // unasked. turn_id is a required field of Codex's published PreToolUse input and of its
     // PermissionRequest input; no vendored Claude Code or Cursor schema names it.
-    final isCodex = agentName == "codex" or hasKey(event, key: "turn_id");
+    //
+    // The two are kept apart rather than or-ed, because askBranch trusts them differently.
+    final codexNamed = agentName == "codex";
+    final codexInferred = hasKey(event, key: "turn_id");
 
     var response = env\get("HOST_RESPONSE") catch "";
     var rendersAsk = [<str>];
@@ -1494,7 +1563,7 @@ fun main(args: [str]) > void {
         response = permissionResponse(pushRule);
         rendersAsk = ["--renders-ask"];
     } else if (response == "") {
-        response = DENY_HEAD + askBranch(event, isCodex: isCodex, pushRule: pushRule)
+        response = DENY_HEAD + askBranch(event, codexNamed: codexNamed, codexInferred: codexInferred, pushRule: pushRule)
             + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         rendersAsk = ["--renders-ask"];
     }
@@ -1502,7 +1571,8 @@ fun main(args: [str]) > void {
     final bin = resolveBin();
     if (bin == "" or !isExecutable(bin)) {
         if (noticeOnce(session, family: "unavailable-{toolName}")) {
-            io\stdout.write(envOr("__MAGUS_UNAVAILABLE_RESPONSE", fallback: UNAVAILABLE_DEFAULT)) catch void;
+            io\stdout.write(envOr("__MAGUS_UNAVAILABLE_RESPONSE",
+                fallback: noticeReply(eventName, text: UNAVAILABLE_TEXT))) catch void;
         }
         return;
     }
@@ -1528,7 +1598,7 @@ fun main(args: [str]) > void {
     //
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
-    var attributed = mut [<str>];
+    final attributed = mut [<str>];
     foreach (flag in guard.flags) { attributed.append(flag); }
     foreach (word in ["--agent-name", agentName, "--session", session, "--transcript", transcript]) {
         attributed.append(word);
@@ -1553,7 +1623,7 @@ fun main(args: [str]) > void {
             if (chosen != "") {
                 io\stdout.write(chosen) catch void;
             } else {
-                io\stdout.write(contextReply(failureNotice(guard)) + "\n") catch void;
+                io\stdout.write(noticeReply(eventName, text: failureNotice(guard)) + "\n") catch void;
             }
         }
         return;
@@ -1708,8 +1778,8 @@ fun rawField(event: any?, dotPath: str) > str {
 // wholeEvent decides whether `magus shell` gets the whole envelope or just the string
 // HOST_EVENT_PATH selects. magus reads a write target off the ENVELOPE under every `*_path`
 // spelling, so selecting one dot-path here left NotebookEdit's `notebook_path` unjudged.
-fun wholeEvent(event: any?, dotPath: str) > bool {
-    if (field(event, dotPath: "tool_name").startsWith(MCP_TOOL_PREFIX)) { return true; }
+fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
+    if (field(event, dotPath: toolPath).startsWith(MCP_TOOL_PREFIX)) { return true; }
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return true; }
     return !(value is str);
@@ -1729,12 +1799,16 @@ fun trimTrailingNewlines(s: str) > str {
     return s.sub(0, len: end);
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    return (mode! & 73) != 0;
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
@@ -1777,7 +1851,7 @@ object Guard {
 }
 
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
-    var args = mut ["shell", "--path"];
+    final args = mut ["shell", "--path"];
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
@@ -1839,7 +1913,10 @@ fun main(args: [str]) > void {
     }
 
     var payload = raw!;
-    if (!wholeEvent(event, dotPath: eventPath)) { payload = rawField(event, dotPath: eventPath) + "\n"; }
+    final toolPath = envOr("HOST_TOOL_PATH", fallback: "tool_name");
+    if (!wholeEvent(event, dotPath: eventPath, toolPath: toolPath)) {
+        payload = rawField(event, dotPath: eventPath) + "\n";
+    }
     final guard = Guard{ bin = bin, payload = payload, response = response };
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate
@@ -1851,7 +1928,7 @@ fun main(args: [str]) > void {
     // The retry tests status AND emptiness together, for the same reason as the command
     // template now that this surface can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
-    var attributed = mut ["--agent-name", agentName, "--session", session, "--transcript", transcript];
+    final attributed = mut ["--agent-name", agentName, "--session", session, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {
@@ -1954,19 +2031,25 @@ fun dig(event: any?, dotPath: str) > any? {
 
 // field is `jq -r ".<dotPath> // empty"`: absent reads as the empty string rather
 // than the literal "null".
+// Only a STRING is a path. Rendering an object or a list as JSON instead recorded the
+// serialized blob as the file the agent reached, which the judging surfaces treat as a
+// shape they cannot read; nothing to record beats recording something untrue.
 fun field(event: any?, dotPath: str) > str {
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return ""; }
-    if (value is str) { return value as str; }
-    return json\stringify(value) catch "";
+    return (value as? str) ?? "";
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    return (mode! & 73) != 0;
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
@@ -2116,12 +2199,16 @@ fun envOr(name: str, fallback: str) > str {
     return value;
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    return (mode! & 73) != 0;
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
@@ -2264,12 +2351,16 @@ fun envOr(name: str, fallback: str) > str {
     return value;
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    return (mode! & 73) != 0;
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
@@ -2328,12 +2419,15 @@ fun trimTrailingNewlines(s: str) > str {
 // multi-byte rune's continuation bytes are all above 0x7f, so they fall through
 // untouched and reassemble exactly as they arrived.
 fun escapeJSON(body: str) > str {
-    var buf = mut [<str>];
+    final buf = mut [<str>];
     foreach (i in 0..body.len()) {
-        final b = body.byte(i) catch 0;
+        // -1 on a read that cannot happen inside this loop's bounds, chosen because 0 is a
+        // real byte: the sh copy's `tr` range starts at \001 and let a NUL through, and a
+        // NUL emitted raw makes the reply illegal JSON, so the host drops it whole.
+        final b = body.byte(i) catch -1;
         if (b == 10) {
             buf.append("\\n");
-        } else if (b > 0 and b < 32) {
+        } else if (b < 32) {
             buf.append(" ");
         } else if (b == 92) {
             buf.append("\\\\");

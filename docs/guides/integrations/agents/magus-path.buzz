@@ -38,7 +38,9 @@
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
-//   HOST_EVENT_PATH, HOST_SESSION_PATH, HOST_TRANSCRIPT_PATH  dot-paths into the event
+//   HOST_EVENT_PATH, HOST_TOOL_PATH, HOST_SESSION_PATH, HOST_TRANSCRIPT_PATH  dot-paths
+//                    into the event; the tool name is what decides whether the whole
+//                    envelope goes rather than one field selected out of it
 //   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
 //   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
 //   __MAGUS_AGENT_NAME, __MAGUS_BIN  attribution, and the binary when it is not on PATH
@@ -139,8 +141,8 @@ fun rawField(event: any?, dotPath: str) > str {
 // wholeEvent decides whether `magus shell` gets the whole envelope or just the string
 // HOST_EVENT_PATH selects. magus reads a write target off the ENVELOPE under every `*_path`
 // spelling, so selecting one dot-path here left NotebookEdit's `notebook_path` unjudged.
-fun wholeEvent(event: any?, dotPath: str) > bool {
-    if (field(event, dotPath: "tool_name").startsWith(MCP_TOOL_PREFIX)) { return true; }
+fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
+    if (field(event, dotPath: toolPath).startsWith(MCP_TOOL_PREFIX)) { return true; }
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return true; }
     return !(value is str);
@@ -160,12 +162,16 @@ fun trimTrailingNewlines(s: str) > str {
     return s.sub(0, len: end);
 }
 
+// isExecutable answers "could proc\exec run this", which a directory cannot; see
+// magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader
+// because Buzz binds `&` tighter than `!=` where C and Go do the reverse.
 fun isExecutable(candidate: str) > bool {
     final info = fs\stat(candidate) catch null;
     if (info == null) { return false; }
+    if ((info!.is_dir as? bool) ?? false) { return false; }
     final mode = info!.mode as? int;
     if (mode == null) { return false; }
-    return mode! & 73 != 0;
+    return (mode! & 73) != 0;
 }
 
 // parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is
@@ -208,7 +214,7 @@ object Guard {
 }
 
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
-    var args = mut ["shell", "--path"];
+    final args = mut ["shell", "--path"];
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
@@ -270,7 +276,10 @@ fun main(args: [str]) > void {
     }
 
     var payload = raw!;
-    if (!wholeEvent(event, dotPath: eventPath)) { payload = rawField(event, dotPath: eventPath) + "\n"; }
+    final toolPath = envOr("HOST_TOOL_PATH", fallback: "tool_name");
+    if (!wholeEvent(event, dotPath: eventPath, toolPath: toolPath)) {
+        payload = rawField(event, dotPath: eventPath) + "\n";
+    }
     final guard = Guard{ bin = bin, payload = payload, response = response };
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate
@@ -282,7 +291,7 @@ fun main(args: [str]) > void {
     // The retry tests status AND emptiness together, for the same reason as the command
     // template now that this surface can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
-    var attributed = mut ["--agent-name", agentName, "--session", session, "--transcript", transcript];
+    final attributed = mut ["--agent-name", agentName, "--session", session, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {

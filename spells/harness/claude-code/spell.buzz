@@ -71,6 +71,10 @@ fun claude_glue_command(surface: str, flags: [str]) > str {
     return claude_buzz_command("magus-{surface}", flags: flags);
 }
 
+// The Bash, MCP and Skill matchers all take this one string. Their payloads differ, but a
+// params object and a skill name both have to reach `magus shell` whole, and the glue reads
+// that off the event rather than off the entry, so there is nothing to write on it. Three
+// named wrappers returning identical bytes only invited a reader to look for a difference.
 fun claude_guard_command() > str {
     return claude_glue_command("command", flags: [<str>]);
 }
@@ -83,25 +87,16 @@ fun claude_observe_command() > str {
     return claude_glue_command("observe", flags: [<str>]);
 }
 
-// The MCP and Skill surfaces run the guard glue with no flags at all, the same string the
-// Bash matcher gets. Their payload is a params object or a skill name rather than one
-// shell line, so the whole event has to reach `magus shell`, and the glue reads that off
-// the event: the field HOST_EVENT_PATH names is absent on exactly these surfaces. Nothing
-// distinguishes the ENTRY, so nothing is written on it.
-fun claude_mcp_command() > str {
-    return claude_glue_command("command", flags: [<str>]);
-}
-
-fun claude_skill_command() > str {
-    return claude_glue_command("command", flags: [<str>]);
-}
+// The matcher that makes skill loads observable, named once so the entry that DECLARES
+// they are observable can be checked against the entry that produces them. "Keep the two
+// in step" used to be a comment; the invariant test below is what keeps them.
+final SKILL_MATCHER = "Skill";
 
 fun claude_agent_command() > str {
-    // --observes-skill-loads because THIS config wires the Skill matcher above. A rule
-    // that requires a skill before a spawn can only be satisfied where loads are
-    // reported, so the wiring that reports them is what declares it; a harness without
-    // that matcher passes nothing here and those rules stand down rather than denying
-    // every spawn forever. Keep the two in step: drop the matcher and drop this.
+    // --observes-skill-loads because THIS config wires SKILL_MATCHER. A rule that requires
+    // a skill before a spawn can only be satisfied where loads are reported, so the wiring
+    // that reports them is what declares it; a harness without that matcher passes nothing
+    // here and those rules stand down rather than denying every spawn forever.
     //
     // It is the one thing this entry knows that the event cannot say, which is why it is
     // the one thing written on the entry.
@@ -142,9 +137,9 @@ fun claude_entries() > [any] {
             "entries": [
                 claude_pretool_entry("Bash", claude_guard_command()),
                 claude_pretool_entry("Edit|Write|NotebookEdit", claude_path_command()),
-                claude_pretool_entry("^mcp__magus__", claude_mcp_command()),
+                claude_pretool_entry("^mcp__magus__", claude_guard_command()),
                 claude_pretool_entry("Read", claude_observe_command()),
-                claude_pretool_entry("Skill", claude_skill_command()),
+                claude_pretool_entry(SKILL_MATCHER, claude_guard_command()),
                 claude_pretool_entry("Agent|Task", claude_agent_command()),
             ],
         },
@@ -266,8 +261,26 @@ test "the one per-entry flag rides after the argv separator" {
     // from the bare guard command at all.
     assert\equal(claude_agent_command(), claude_guard_command() + " -- --observes-skill-loads",
         "the spawn entry is the guard command plus one forwarded flag");
-    assert\equal(claude_mcp_command(), claude_guard_command(), "the MCP surface needs nothing written on it");
-    assert\equal(claude_skill_command(), claude_guard_command(), "nor does the skill surface");
+}
+
+// The spawn entry claims loads are REPORTED, and only the skill matcher reports them. Left
+// to a comment, dropping the matcher leaves the claim standing, and guard.denySpawnWithoutBrief
+// then denies every spawn over a load the host can no longer observe. Derived from the
+// entries rather than pinned as a pair, so the coupling is what fails when it breaks.
+test "the spawn entry declares observed skill loads only while a matcher reports them" {
+    final pre = claude_entries()[0];
+    var reports_loads = false;
+    var claims_loads = false;
+    foreach (entry in pre["entries"] as [any]) {
+        final matcher = (entry["matcher"] as? str) ?? "";
+        if (matcher == SKILL_MATCHER) { reports_loads = true; }
+        foreach (hook in entry["hooks"] as [any]) {
+            final command = (hook["command"] as? str) ?? "";
+            if (command.indexOf("--observes-skill-loads") != null) { claims_loads = true; }
+        }
+    }
+    assert\equal(claims_loads, reports_loads,
+        "an entry declares --observes-skill-loads exactly when a matcher reports them");
 }
 
 test "the lifecycle wrappers name the Buzz ports too" {
@@ -300,8 +313,7 @@ test "the interpreter is the workspace binary where there is one" {
     // Every surface, because one command built by hand rather than through the helper
     // is one entry apply keeps rewriting against a config that already holds it. Each
     // STARTS with the interpreter now: nothing precedes the program any more.
-    assert\isTrue(claude_mcp_command().startsWith("{chosen} buzz"), "MCP surface");
-    assert\isTrue(claude_skill_command().startsWith("{chosen} buzz"), "skill surface");
+    assert\isTrue(claude_guard_command().startsWith("{chosen} buzz"), "command mcp and skill surfaces");
     assert\isTrue(claude_agent_command().startsWith("{chosen} buzz"), "spawn surface");
     assert\isTrue(claude_path_command().startsWith("{chosen} buzz"), "path surface");
     assert\isTrue(claude_observe_command().startsWith("{chosen} buzz"), "read surface");

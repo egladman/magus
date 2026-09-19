@@ -231,11 +231,29 @@ env HOST_EVENT_RAW=
 # asserted below, because either one alone is a shape somebody would settle for.
 stdin $WORK/deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --not-a-flag
-stderr 'magus-command.buzz: unsupported argument --not-a-flag'
+stderr 'magus-command.buzz: unsupported argument "--not-a-flag"'
 stderr 'judged WITHOUT it'
 stderr 'Supported: --observes-skill-loads'
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
+
+# case: command/deny
+# An EMPTY argument, which a host config produces by expanding a variable that is unset.
+# The remedy line is the only one a misconfigured reader gets, and unquoted it read
+# "unsupported argument ;" with no subject at all.
+stdin $WORK/deny-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- ''
+stderr 'magus-command.buzz: unsupported argument ""'
+stdout '"permissionDecision":"deny"'
+
+# case: command/deny
+# A supported flag given twice, which is what two hook entries merged by hand look like.
+# Forwarded twice it reached `magus shell` as a repeated flag; deduped, the verdict is the
+# one the single-flag case above already pins.
+stdin $WORK/deny-command.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --observes-skill-loads --observes-skill-loads
+! stderr 'unsupported argument'
+stdout '"permissionDecision":"deny"'
 
 cd $WORK
 
@@ -752,13 +770,18 @@ exec sh $WORK/parity.sh command
 stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
 
 # case: command/ask
-# A Codex wiring that forgot __MAGUS_AGENT_NAME is still Codex: its event carries turn_id,
-# and it still never receives permissionDecision "ask", which Codex would run unasked.
+# A wiring that forgot __MAGUS_AGENT_NAME, judged on its event's turn_id alone. It still
+# never receives permissionDecision "ask", which Codex would run unasked, and it does NOT
+# get the context arm either: a field test over an untyped envelope is a guess, and the
+# guess that is wrong on Claude Code turns an ask into a note nobody has to act on. An
+# inferred host gets the refusal instead, which is wrong in the direction a person can see.
 env __MAGUS_AGENT_NAME=
 stdin $WORK/push-command-turn.json
 exec sh $WORK/parity.sh command
 ! stdout '"permissionDecision":"ask"'
-stdout '"additionalContext":"pushing'
+! stdout '"additionalContext":"pushing'
+stdout '"permissionDecision":"deny"'
+stdout 'the wiring never said so'
 env __MAGUS_AGENT_NAME=codex
 
 # case: command/pass
