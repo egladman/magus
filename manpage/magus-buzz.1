@@ -3,7 +3,7 @@
 magus\-buzz \- Run a Buzz script
 .SH SYNOPSIS
 .B magus
-.RI "buzz [file|\-|lsp] [flags]"
+.RI "buzz [file...|\-|lsp] [flags]"
 .SH DESCRIPTION
 Run Buzz source from a REPL, a file, stdin, or an inline snippet.
 .PP
@@ -26,11 +26,27 @@ code in this ecosystem is tested. \-\-coverprofile writes an LCOV report for
 the file under \-t (entry file only; imports are measured when they are the
 \-t subject). The lsp subcommand speaks the Language Server Protocol over
 stdio for an editor integration.
+.PP
+\-\-check parses and type\-checks the named files and does not run them, which
+is the only way to judge a script whose whole job is a side effect: a hook
+that reads stdin and shells out cannot be validated by running it. It takes
+several paths, reports every diagnostic rather than stopping at the first,
+and fails only on errors; warnings print and pass. Resolving a file import
+still executes that module's top level, since there is no check\-only import
+pass.
+.PP
+It cannot resolve magus/spell/*, which the workspace loader binds, so a
+magusfile or a target definition reports an unresolved import. Those are
+the files magus already checks by loading them; \-\-check is for the ones
+nothing loads.
 .SH OPTIONS
 .RS
 .TP
 \fB\-C\fR \fIstring\fR
 Working directory for the REPL's import resolution (default: cwd)
+.TP
+\fB\-\-check\fR
+Parse and type\-check the named files without running them; report every diagnostic
 .TP
 \fB\-\-coverprofile\fR \fI-t\fR
 Write an LCOV coverprofile for the file under `\-t` (requires `\-t`)
@@ -79,6 +95,12 @@ magus buzz -e 'import "std"; fun main() > void { std\(rsprint("hi"); } main();'
 .PP
 .EX
 magus buzz -t scripts/report.buzz
+.EE
+.PP
+\fICheck files without running them\fR
+.PP
+.EX
+magus buzz --check scripts/report.buzz scripts/build.buzz
 .EE
 .PP
 \fIRun a magusfile\-style file\fR

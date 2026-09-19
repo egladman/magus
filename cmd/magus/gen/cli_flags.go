@@ -87,6 +87,8 @@ const (
 	FlagAgentTar = "tar"
 	// buzz: --C
 	FlagBuzzC = "C"
+	// buzz: --check
+	FlagBuzzCheck = "check"
 	// buzz: --coverprofile
 	FlagBuzzCoverprofile = "coverprofile"
 	// buzz: --e
@@ -1582,6 +1584,7 @@ func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
 type BuzzFlags struct {
 	E            string // -e
 	Test         bool   // -t, --test
+	Check        bool   // --check
 	Coverprofile string // --coverprofile
 	Embedded     bool   // --embedded
 	NoAutoload   bool   // --no-autoload
@@ -1594,6 +1597,7 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.StringVar(&f.E, FlagBuzzE, "", "Execute `code` given on the command line instead of a file")
 	fs.BoolVar(&f.Test, FlagBuzzT, false, "Run the file's test \"...\" {} blocks and report pass/fail")
 	fs.BoolVar(&f.Test, FlagBuzzTest, false, "Alias for -t")
+	fs.BoolVar(&f.Check, FlagBuzzCheck, false, "Parse and type-check the named files without running them; report every diagnostic")
 	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
