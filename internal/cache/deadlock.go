@@ -149,27 +149,16 @@ func (h *slotHold) done() {
 	h.w.evaluateLocked()
 }
 
-// stalled reports a hold that cannot finish on its own: it is blocked on something else,
-// or its slots are handed back for a fan-out it is waiting on. A nil hold is read as
-// working, which is the conservative answer for a step that has not been admitted yet and
-// for a run whose limiter keeps no records.
-func (h *slotHold) stalled() bool {
-	if h == nil {
-		return false
-	}
-	h.w.mu.Lock()
-	defer h.w.mu.Unlock()
-	return h.blocked != "" || h.yielded
-}
-
-// blockedElsewhere reports a hold parked on something that is not its own fan-out. It is
-// the isolation gate's reading of the same record stalled() reports, and the two differ on
-// exactly one case: a hold that yielded its slots to the targets it composes. That hold
-// cannot finish on its own, so the limiter counts it against a saturated pool; but the
-// fan-out it waits on INHERITS its gate lease (see runIsolation), so the fan-out can never
-// be what is queued behind it, and the wait is therefore not evidence of a gate cycle.
-// Reading yielded as parked refused a healthy run: every composite target holds the gate
-// through a fan-out, so one generator silent for the grace wedged the whole invocation.
+// blockedElsewhere reports a hold parked on something that is not its own fan-out. A nil
+// hold is read as working, the conservative answer for a step not yet admitted and for a
+// run whose limiter keeps no records.
+//
+// The yielded case is the one this deliberately excludes. A hold that handed its slots to
+// the targets it composes cannot finish on its own, which is why the pool counts it; but
+// the fan-out it waits on INHERITS its gate lease (see runIsolation), so the fan-out can
+// never be what is queued behind it, and the wait is not evidence of a gate cycle. Reading
+// yielded as parked refused a healthy run: every composite target holds the gate through a
+// fan-out, so one generator silent for the grace wedged the whole invocation.
 func (h *slotHold) blockedElsewhere() bool {
 	if h == nil {
 		return false
