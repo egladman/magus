@@ -540,18 +540,20 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
 // failureNotice states WHICH binary went silent, what version it is, and what it
 // actually said, the three facts a reader otherwise spends a session collecting.
 //
-// It re-runs the guard to capture stderr, which the verdict path discards. One extra
-// process, only on the path that is already broken. WARN lines are dropped because a
+// The stderr comes from the attempt that ALREADY failed rather than a fresh one. Re-running
+// cost a third process inside the host's 10s budget, on the path where the binary is the
+// thing going wrong, so the arm that exists to make a silent failure visible was the
+// likeliest to be killed before writing anything; it also reported whatever a NEW run
+// printed, which is not necessarily what went wrong. WARN lines are dropped because a
 // config the binary is too old to parse warns BEFORE it fails, and that warning is a
 // symptom of the same staleness, not the error.
-fun failureNotice(guard: Guard) > str {
+fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
     var version = "";
     final probe = proc\exec(guard.bin, args: ["version"], opts: {"quiet": true, "allow_failure": true}) catch null;
     if (probe != null) { version = firstLine(probe!.stdout); }
     if (version == "") { version = "version unreadable"; }
 
     var why = "";
-    final failed = judge(guard, extra: [<str>]) catch null;
     if (failed != null) {
         foreach (line in failed!.stderr.split("\n")) {
             if (why == "" and line != "" and line.indexOf("WARN") == null) { why = line; }
@@ -730,7 +732,7 @@ fun main(args: [str]) > void {
             if (chosen != "") {
                 io\stdout.write(chosen) catch void;
             } else {
-                io\stdout.write(noticeReply(eventName, text: failureNotice(guard)) + "\n") catch void;
+                io\stdout.write(noticeReply(eventName, text: failureNotice(guard, failed: result)) + "\n") catch void;
             }
         }
         return;

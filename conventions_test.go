@@ -1035,7 +1035,7 @@ var failOpenDefaultRe = regexp.MustCompile(`\$(__MAGUS_[A-Z_]+_RESPONSE)`)
 // failOpenComputedNoticeRe matches an arm that BUILDS its notice from what it observed
 // rather than printing a canned string. There is no variable to give a default to, and
 // the evidence is the point: which binary went silent, its version, what it printed.
-var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\b|failureNotice\(guard\)`)
+var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\b|failureNotice\(guard\b`)
 
 // failOpenSilentByDesign records the verdict-carrying templates whose fail-open
 // arms deliberately announce NOTHING, and where that decision is written down.

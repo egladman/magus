@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 6387,
-  "edge_count": 11424,
+  "edge_count": 11423,
   "relations": [
     {
       "id": "annotates",
@@ -45998,14 +45998,14 @@
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:adviseBranch",
       "kind": "function",
       "label": "adviseBranch",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:607"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:609"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:askBranch",
       "kind": "function",
       "label": "askBranch",
       "doc": "askBranch picks the ask arm for the host that sent this event. Only a reply this file assembled may claim --renders-ask; see the header for why Codex never receives permissionDecision \"ask\".",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:589"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:591"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:codexPromptBlocker",
@@ -46018,7 +46018,7 @@
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:contextReply",
       "kind": "function",
       "label": "contextReply",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:567"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:569"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
@@ -46043,8 +46043,8 @@
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
       "kind": "function",
       "label": "failureNotice",
-      "doc": "failureNotice states WHICH binary went silent, what version it is, and what it actually said, the three facts a reader otherwise spends a session collecting.  It re-runs the guard to capture stderr, which the verdict path discards. One extra process, only on the path that is already broken. WARN lines are dropped because a config the binary is too old to parse warns BEFORE it fails, and that warning is a symptom of the same staleness, not the error.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:547"
+      "doc": "failureNotice states WHICH binary went silent, what version it is, and what it actually said, the three facts a reader otherwise spends a session collecting.  The stderr comes from the attempt that ALREADY failed rather than a fresh one. Re-running cost a third process inside the host's 10s budget, on the path where the binary is the thing going wrong, so the arm that exists to make a silent failure visible was the likeliest to be killed before writing anything; it also reported whatever a NEW run printed,",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:550"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:field",
@@ -46097,7 +46097,7 @@
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:626"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:628"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
@@ -46111,7 +46111,7 @@
       "kind": "function",
       "label": "noticeReply",
       "doc": "noticeReply renders a notice in the dialect of the event that asked for it.  A PermissionRequest reply carries a decision and no context field, so the PreToolUse envelope the other surfaces use is one the host rejects outright: on the single surface where the notice is the only thing written, it arrived unreadable. There the prose goes to the person on stderr and stdout carries the envelope that leaves the decision alone.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:578"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:580"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
@@ -46131,7 +46131,7 @@
       "kind": "function",
       "label": "permissionResponse",
       "doc": "permissionResponse answers the approval request Codex raises just before its own prompt. No decision object leaves the prompt to the person; allow skips it, and is answered only for a plain push, because this event fires for every approval Codex asks and a pass from the guard is not the person's consent to anything else.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:617"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:619"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:pushRuleFor",
@@ -137991,14 +137991,6 @@
     {
       "source": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
       "target": "function:docs/guides/integrations/agents/magus-command.buzz:firstLine",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
-    },
-    {
-      "source": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
-      "target": "function:docs/guides/integrations/agents/magus-command.buzz:judge",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
