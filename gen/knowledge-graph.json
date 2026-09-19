@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6315,
-  "edge_count": 11236,
+  "node_count": 6424,
+  "edge_count": 11497,
   "relations": [
     {
       "id": "annotates",
@@ -1690,6 +1690,16 @@
       }
     },
     {
+      "id": "dir:docs/guides/integrations/agents/lib",
+      "kind": "dir",
+      "label": "docs/guides/integrations/agents/lib",
+      "source": "docs/guides/integrations/agents/lib",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "buzz"
+      }
+    },
+    {
       "id": "dir:docs/guides/integrations/editor",
       "kind": "dir",
       "label": "docs/guides/integrations/editor",
@@ -1725,7 +1735,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1926",
+        "dir_files": "1930",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1985,7 +1995,7 @@
       "label": "docs/reference/buzz",
       "source": "docs/reference/buzz",
       "attrs": {
-        "dir_files": "362",
+        "dir_files": "366",
         "dir_languages": "markdown,md#abs,md#add,md#affected,md#affectedimpact,md#after,md#afterfunc,md#append,md#appendfile,md#arch,md#archive,md#at,md#attention,md#base,md#base64,md#base64decodebytes,md#base64encodebytes,md#basename,md#before,md#beforefunc,md#build,md#bustcache,m"
       }
     },
@@ -4863,6 +4873,18 @@
         "section": "reference",
         "tags": "env,module,stdlib,magusfile",
         "title": "env module"
+      }
+    },
+    {
+      "id": "doc:docs/reference/buzz/flags.md",
+      "kind": "doc",
+      "label": "docs/reference/buzz/flags.md",
+      "source": "docs/reference/buzz/flags.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "flags,module,stdlib,magusfile",
+        "title": "flags module"
       }
     },
     {
@@ -19404,6 +19426,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/claude-code.md#when-the-hook-itself-cannot-run",
+      "kind": "docsection",
+      "label": "When the hook itself cannot run",
+      "source": "docs/guides/integrations/agents/claude-code.md#when-the-hook-itself-cannot-run",
+      "attrs": {
+        "anchor": "when-the-hook-itself-cannot-run",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/codex.md#codex",
       "kind": "docsection",
       "label": "Codex",
@@ -19624,6 +19656,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-checkpointbuzz",
+      "kind": "docsection",
+      "label": "magus-checkpoint.buzz",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-checkpointbuzz",
+      "attrs": {
+        "anchor": "magus-checkpointbuzz",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-checkpointsh",
       "kind": "docsection",
       "label": "magus-checkpoint.sh",
@@ -19634,33 +19676,73 @@
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-commandsh",
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-commandbuzz",
       "kind": "docsection",
-      "label": "magus-hook-command.sh",
-      "source": "docs/guides/integrations/agents/guard-templates.md#magus-hook-commandsh",
+      "label": "magus-command.buzz",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-commandbuzz",
       "attrs": {
-        "anchor": "magus-hook-commandsh",
+        "anchor": "magus-commandbuzz",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-commandsh",
+      "kind": "docsection",
+      "label": "magus-command.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-commandsh",
+      "attrs": {
+        "anchor": "magus-commandsh",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-observesh",
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-observebuzz",
       "kind": "docsection",
-      "label": "magus-hook-observe.sh",
-      "source": "docs/guides/integrations/agents/guard-templates.md#magus-hook-observesh",
+      "label": "magus-observe.buzz",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-observebuzz",
       "attrs": {
-        "anchor": "magus-hook-observesh",
+        "anchor": "magus-observebuzz",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-observesh",
+      "kind": "docsection",
+      "label": "magus-observe.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-observesh",
+      "attrs": {
+        "anchor": "magus-observesh",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-pathsh",
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-pathbuzz",
       "kind": "docsection",
-      "label": "magus-hook-path.sh",
-      "source": "docs/guides/integrations/agents/guard-templates.md#magus-hook-pathsh",
+      "label": "magus-path.buzz",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-pathbuzz",
       "attrs": {
-        "anchor": "magus-hook-pathsh",
+        "anchor": "magus-pathbuzz",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-pathsh",
+      "kind": "docsection",
+      "label": "magus-path.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-pathsh",
+      "attrs": {
+        "anchor": "magus-pathsh",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-rehydratebuzz",
+      "kind": "docsection",
+      "label": "magus-rehydrate.buzz",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-rehydratebuzz",
+      "attrs": {
+        "anchor": "magus-rehydratebuzz",
+        "level": "3"
       }
     },
     {
@@ -19670,6 +19752,16 @@
       "source": "docs/guides/integrations/agents/guard-templates.md#magus-rehydratesh",
       "attrs": {
         "anchor": "magus-rehydratesh",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
+      "kind": "docsection",
+      "label": "The Buzz ports",
+      "source": "docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
+      "attrs": {
+        "anchor": "the-buzz-ports",
         "level": "2"
       }
     },
@@ -19691,6 +19783,16 @@
       "attrs": {
         "anchor": "what-a-template-must-not-get-wrong",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#why-the-two-forms-differ-on-knobs",
+      "kind": "docsection",
+      "label": "Why the two forms differ on knobs",
+      "source": "docs/guides/integrations/agents/guard-templates.md#why-the-two-forms-differ-on-knobs",
+      "attrs": {
+        "anchor": "why-the-two-forms-differ-on-knobs",
+        "level": "3"
       }
     },
     {
@@ -25520,6 +25622,36 @@
       "source": "docs/reference/buzz/env.md#unset",
       "attrs": {
         "anchor": "unset",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/buzz/flags.md#flags",
+      "kind": "docsection",
+      "label": "flags",
+      "source": "docs/reference/buzz/flags.md#flags",
+      "attrs": {
+        "anchor": "flags",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/buzz/flags.md#methods",
+      "kind": "docsection",
+      "label": "Methods",
+      "source": "docs/reference/buzz/flags.md#methods",
+      "attrs": {
+        "anchor": "methods",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/buzz/flags.md#parse",
+      "kind": "docsection",
+      "label": "parse",
+      "source": "docs/reference/buzz/flags.md#parse",
+      "attrs": {
+        "anchor": "parse",
         "level": "3"
       }
     },
@@ -42206,6 +42338,60 @@
       }
     },
     {
+      "id": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "kind": "file",
+      "label": "docs/guides/integrations/agents/lib/embed.buzz",
+      "source": "docs/guides/integrations/agents/lib/embed.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "kind": "file",
+      "label": "docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "kind": "file",
+      "label": "docs/guides/integrations/agents/magus-command.buzz",
+      "source": "docs/guides/integrations/agents/magus-command.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "kind": "file",
+      "label": "docs/guides/integrations/agents/magus-observe.buzz",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "kind": "file",
+      "label": "docs/guides/integrations/agents/magus-path.buzz",
+      "source": "docs/guides/integrations/agents/magus-path.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "kind": "file",
+      "label": "docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:docs/guides/integrations/agents/magusfile.buzz",
       "kind": "file",
       "label": "docs/guides/integrations/agents/magusfile.buzz",
@@ -44378,6 +44564,15 @@
       }
     },
     {
+      "id": "file:std/flags.go",
+      "kind": "file",
+      "label": "std/flags.go",
+      "source": "std/flags.go",
+      "attrs": {
+        "language": "go"
+      }
+    },
+    {
       "id": "file:std/fmt.go",
       "kind": "file",
       "label": "std/fmt.go",
@@ -45897,11 +46092,552 @@
       "source": "docs/engine/search.buzz:22"
     },
     {
+      "id": "function:docs/guides/integrations/agents/lib/embed.buzz:embedNames",
+      "kind": "function",
+      "label": "embedNames",
+      "doc": "embedNames lists the files a template asks for, in page order. The template declares what it needs, so adding a block is one marker rather than a marker and a list.",
+      "source": "docs/guides/integrations/agents/lib/embed.buzz:36",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/lib/embed.buzz:fenceFor",
+      "kind": "function",
+      "label": "fenceFor",
+      "doc": "fenceFor picks the info string from the extension, so the marker names one thing and nothing has to be kept in step with it.",
+      "source": "docs/guides/integrations/agents/lib/embed.buzz:20",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/lib/embed.buzz:markerName",
+      "kind": "function",
+      "label": "markerName",
+      "doc": "markerName returns the file a marker line names, or \"\" for any other line.",
+      "source": "docs/guides/integrations/agents/lib/embed.buzz:26",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/lib/embed.buzz:render",
+      "kind": "function",
+      "label": "render",
+      "doc": "render replaces every marker with its file's contents. A marker naming a file the caller did not hand in RAISES rather than rendering an empty block: a page that silently lost a template is the failure this generator exists to remove.",
+      "source": "docs/guides/integrations/agents/lib/embed.buzz:56",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/lib/embed.buzz:trimTrailingNewlines",
+      "kind": "function",
+      "label": "trimTrailingNewlines",
+      "doc": "trimTrailingNewlines keeps a file's final newline from becoming a blank line above the closing fence.",
+      "source": "docs/guides/integrations/agents/lib/embed.buzz:47"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:envOr",
+      "kind": "function",
+      "label": "envOr",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:58"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:isExecutable",
+      "kind": "function",
+      "label": "isExecutable",
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot; see magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader because Buzz binds `&` tighter than `!=` where C and Go do the reverse.",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:67"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:main",
+      "kind": "function",
+      "label": "main",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:126"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:parentDir",
+      "kind": "function",
+      "label": "parentDir",
+      "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:79"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:reportArgv",
+      "kind": "function",
+      "label": "reportArgv",
+      "doc": "This surface declares no flags, and parses its argv anyway: an argument arriving here means the wiring meant something by it, and reading none at all accepted that silently.",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:117"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:resolveBin",
+      "kind": "function",
+      "label": "resolveBin",
+      "doc": "resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the magusfile: a hook runs in the host's session directory, which is not always the workspace root. magus-command.buzz carries the full reasoning.",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:92"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:warn",
+      "kind": "function",
+      "label": "warn",
+      "doc": "warn names the file; see magus-command.buzz. STDERR, which is why it does not break this file's contract to print nothing: stdout is what the host reads as a verdict.",
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:111"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:adviseBranch",
+      "kind": "function",
+      "label": "adviseBranch",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:620"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:askBranch",
+      "kind": "function",
+      "label": "askBranch",
+      "doc": "askBranch picks the ask arm for the host that sent this event. Only a reply this file assembled may claim --renders-ask; see the header for why Codex never receives permissionDecision \"ask\".",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:602"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:codexPromptBlocker",
+      "kind": "function",
+      "label": "codexPromptBlocker",
+      "doc": "codexPromptBlocker states why Codex will not put this call in front of the person, and \"\" when its own approval prompt will.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:386"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:contextReply",
+      "kind": "function",
+      "label": "contextReply",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:580"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
+      "kind": "function",
+      "label": "dig",
+      "doc": "dig walks a jq-style dot-path and returns null where jq would print nothing.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:203"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:digKey",
+      "kind": "function",
+      "label": "digKey",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:196"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
+      "kind": "function",
+      "label": "envOr",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:190"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
+      "kind": "function",
+      "label": "failureNotice",
+      "doc": "failureNotice states WHICH binary went silent, what version it is, and what it actually said, the three facts a reader otherwise spends a session collecting.  The stderr comes from the attempt that ALREADY failed rather than a fresh one. Re-running cost a third process inside the host's 10s budget, on the path where the binary is the thing going wrong, so the arm that exists to make a silent failure visible was the likeliest to be killed before writing anything; it also reported whatever a NEW run printed,",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:561"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:field",
+      "kind": "function",
+      "label": "field",
+      "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string rather than the literal \"null\".",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:220"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:fileSafe",
+      "kind": "function",
+      "label": "fileSafe",
+      "doc": "fileSafe keeps a session id that may hold slashes or dots from becoming a path.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:505"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:findUp",
+      "kind": "function",
+      "label": "findUp",
+      "doc": "findUp returns the nearest ancestor holding relative, or \"\" when there is none.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:359"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:firstLine",
+      "kind": "function",
+      "label": "firstLine",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:291"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:hasKey",
+      "kind": "function",
+      "label": "hasKey",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:277"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:isExecutable",
+      "kind": "function",
+      "label": "isExecutable",
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot: one named `magus` at the workspace root carries the execute bits too, and accepting it sent the caller to the arm that names a path it then cannot run.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:298"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:judge",
+      "kind": "function",
+      "label": "judge",
+      "doc": "The entry's own flags ride in `extra` with everything else, so the unattributed retry drops them too. Keeping them there meant a binary too old for `--observes-skill-loads` failed BOTH attempts and the spawn surface could never recover where Bash did, and a binary too old to accept the flag cannot observe a skill load to begin with.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:539"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "kind": "function",
+      "label": "main",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:639"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "kind": "function",
+      "label": "noticeOnce",
+      "doc": "noticeOnce succeeds the first time family fires in this session and fails on every repeat.  The notices it holds report a BROKEN INSTALLATION. That is a fact for the person, and there is nothing in it an agent can act on, so a repeat is pure noise: measured at 2,741 firings over recent sessions, 99% of them same-session repeats of text already declined.  The marker lives under TMPDIR rather than in magus's own state because this runs when magus is missing or too broken to judge, so it cannot ask magus for a",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:477"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "kind": "function",
+      "label": "noticeReply",
+      "doc": "noticeReply renders a notice in the dialect of the event that asked for it.  A PermissionRequest reply carries a decision and no context field, so the PreToolUse envelope the other surfaces use is one the host rejects outright: on the single surface where the notice is the only thing written, it arrived unreadable. There the prose goes to the person on stderr and stdout carries the envelope that leaves the decision alone.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:591"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
+      "kind": "function",
+      "label": "olderThanWindow",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:515"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:parentDir",
+      "kind": "function",
+      "label": "parentDir",
+      "doc": "parentDir is the shell's ${dir%/*}: it strips the last path element and yields the empty string at the top, which is what ends the walk. fs\\dirname is not that function, because it answers \"/\" for a top-level directory and the walk would never terminate.  Both separators, because this file claims to run unchanged on Windows. Splitting on `/` alone made `C:\\...` a single part, so the walk never ran once and resolveBin fell straight through to PATH, which is the staleness it exists to avoid.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:348"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:permissionResponse",
+      "kind": "function",
+      "label": "permissionResponse",
+      "doc": "permissionResponse answers the approval request Codex raises just before its own prompt. No decision object leaves the prompt to the person; allow skips it, and is answered only for a plain push, because this event fires for every approval Codex asks and a pass from the guard is not the person's consent to anything else.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:630"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:pushRuleFor",
+      "kind": "function",
+      "label": "pushRuleFor",
+      "doc": "pushRuleFor names the Codex prefix rule a bare push reaches, or null for anything else: a compound line, `git -C dir push`, an MCP call. Those reach no rule, so Codex would run them unprompted and no answer here may assume it prompts.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:373"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:rawField",
+      "kind": "function",
+      "label": "rawField",
+      "doc": "rawField is `jq -r \".<dotPath>\"` with no default, so an absent field reaches magus as the literal \"null\".",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:228"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:render",
+      "kind": "function",
+      "label": "render",
+      "doc": "render prints a value the way `jq -r` does: a string bare, anything else as JSON.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:213"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:resolveBin",
+      "kind": "function",
+      "label": "resolveBin",
+      "doc": "resolveBin prefers the workspace's own ./magus over PATH. A repository that builds magus, or pins a newer one than is installed, keeps its RULES in that binary, and an older PATH copy does not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule, warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured 2026-08-13, when a write into a declared notes store was allowed by a binary that predated the knowledge.notes key while `magus doctor` repor",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:323"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:shellFlags",
+      "kind": "function",
+      "label": "shellFlags",
+      "doc": "shellFlags parses this script's own argv: the `magus shell` flags the entry that wired it declares about itself, already split into words by the host that ran the command.  Parsed against SUPPORTED_FLAGS, never filtered by shape. The three answers are: a flag this file knows, which is used; anything else, which is REPORTED on stderr and left out; and no argv at all, which is the ordinary entry. There is no fourth.  Reporting is the whole point. Dropping an argument silently leaves a guard judging with flags",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:430"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:trimTrailingNewlines",
+      "kind": "function",
+      "label": "trimTrailingNewlines",
+      "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured verdict.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:285"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
+      "kind": "function",
+      "label": "warn",
+      "doc": "warn names the file, because a host reports a hook's stderr with the entry's matcher at best and nothing at all at worst, and a reader with eight entries needs to know which.",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:455"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-command.buzz:wholeEvent",
+      "kind": "function",
+      "label": "wholeEvent",
+      "doc": "wholeEvent decides which of the two payloads `magus shell` gets: the WHOLE envelope, or the one string HOST_EVENT_PATH selects out of it.  The event answers this itself, which is why no entry has to. Selecting a field is the NARROW case and needs two facts to be true at once; everything else forwards the envelope, because magus's own decoder knows every payload shape magus reads (a command, a written path, a skill name, a spawn prompt, an MCP call) and answers \"nothing to judge\" for the rest, while a field",
+      "source": "docs/guides/integrations/agents/magus-command.buzz:270"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:dig",
+      "kind": "function",
+      "label": "dig",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:69"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:digKey",
+      "kind": "function",
+      "label": "digKey",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:63"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:envOr",
+      "kind": "function",
+      "label": "envOr",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:57"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:field",
+      "kind": "function",
+      "label": "field",
+      "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string rather than the literal \"null\". Only a STRING is a path. Rendering an object or a list as JSON instead recorded the serialized blob as the file the agent reached, which the judging surfaces treat as a shape they cannot read; nothing to record beats recording something untrue.",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:83"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:isExecutable",
+      "kind": "function",
+      "label": "isExecutable",
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot; see magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader because Buzz binds `&` tighter than `!=` where C and Go do the reverse.",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:92"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
+      "kind": "function",
+      "label": "main",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:155"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:parentDir",
+      "kind": "function",
+      "label": "parentDir",
+      "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:104"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:reportArgv",
+      "kind": "function",
+      "label": "reportArgv",
+      "doc": "This surface declares no flags, and parses its argv anyway: an argument arriving here means the wiring meant something by it, and reading none at all accepted that silently.",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:146"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:resolveBin",
+      "kind": "function",
+      "label": "resolveBin",
+      "doc": "resolveBin prefers the workspace's own ./magus over PATH, for the same reason its two siblings do, and this file needs it MORE than they do, because it is silent by design. An older PATH copy does not know --observe at all: it rejects the flag, prints its usage to a stream this script discards, and exits non-zero, so the observation is simply never recorded, forever, with nothing anywhere saying so. Measured 2026-08-14 in magus's own repository, where the wiring was correct, the binary was wrong, and the tr",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:121"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-observe.buzz:warn",
+      "kind": "function",
+      "label": "warn",
+      "doc": "warn names the file; see magus-command.buzz. STDERR, which is why it does not break this file's contract to print nothing: stdout is what the host reads as a verdict.",
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:140"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:adviseBranch",
+      "kind": "function",
+      "label": "adviseBranch",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:229"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:dig",
+      "kind": "function",
+      "label": "dig",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:114"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:digKey",
+      "kind": "function",
+      "label": "digKey",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:108"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:envOr",
+      "kind": "function",
+      "label": "envOr",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:102"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:field",
+      "kind": "function",
+      "label": "field",
+      "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:129"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:hasKey",
+      "kind": "function",
+      "label": "hasKey",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:152"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:isExecutable",
+      "kind": "function",
+      "label": "isExecutable",
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot; see magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader because Buzz binds `&` tighter than `!=` where C and Go do the reverse.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:169"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:judge",
+      "kind": "function",
+      "label": "judge",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:217"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "kind": "function",
+      "label": "main",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:256"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:parentDir",
+      "kind": "function",
+      "label": "parentDir",
+      "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:181"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:rawField",
+      "kind": "function",
+      "label": "rawField",
+      "doc": "rawField is `jq -r \".<dotPath>\"`, so an absent field reaches magus as \"null\".",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:136"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:render",
+      "kind": "function",
+      "label": "render",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:123"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:reportArgv",
+      "kind": "function",
+      "label": "reportArgv",
+      "doc": "This surface declares no flags, and parses its argv ANYWAY.  An argument that arrives here means the wiring meant something by it, and reading none at all accepted that in silence. Reported and then ignored, which is the same policy every other arm of this file takes: a misconfigured entry must not block work, and must not be invisible either.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:247"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:resolveBin",
+      "kind": "function",
+      "label": "resolveBin",
+      "doc": "resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the magusfile rather than testing ./magus alone. magus-command.buzz carries the full reasoning and the two measurements behind it.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:194"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:trimTrailingNewlines",
+      "kind": "function",
+      "label": "trimTrailingNewlines",
+      "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured verdict.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:160"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:warn",
+      "kind": "function",
+      "label": "warn",
+      "doc": "warn names the file: a host reports a hook's stderr with the entry's matcher at best and nothing at all at worst, and a reader with several entries needs to know which.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:237"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-path.buzz:wholeEvent",
+      "kind": "function",
+      "label": "wholeEvent",
+      "doc": "wholeEvent decides whether `magus shell` gets the whole envelope or just the string HOST_EVENT_PATH selects. magus reads a write target off the ENVELOPE under every `*_path` spelling, so selecting one dot-path here left NotebookEdit's `notebook_path` unjudged.",
+      "source": "docs/guides/integrations/agents/magus-path.buzz:145"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:envOr",
+      "kind": "function",
+      "label": "envOr",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:72"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:escapeJSON",
+      "kind": "function",
+      "label": "escapeJSON",
+      "doc": "escapeJSON is `tr '\\001-\\011\\013-\\037' '[ *]' | sed -e 's/\\\\/\\\\\\\\/g' -e 's/\"/\\\\\"/g'` followed by the read loop that joins the lines, transcribed byte for byte.  Every control character but the line break becomes a space (a raw one is not legal inside a JSON string), backslash and quote are escaped, and each line break becomes the two characters a JSON string spells it with. Byte-indexed on purpose: a multi-byte rune's continuation bytes are all above 0x7f, so they fall through untouched and reassemble exact",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:145"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:isExecutable",
+      "kind": "function",
+      "label": "isExecutable",
+      "doc": "isExecutable answers \"could proc\\exec run this\", which a directory cannot; see magus-command.buzz. 73 is 0111, the three execute bits, parenthesized for the reader because Buzz binds `&` tighter than `!=` where C and Go do the reverse.",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:81"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "kind": "function",
+      "label": "main",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:184"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:parentDir",
+      "kind": "function",
+      "label": "parentDir",
+      "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:93"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:reportArgv",
+      "kind": "function",
+      "label": "reportArgv",
+      "doc": "This surface declares no flags, and parses its argv anyway: an argument arriving here means the wiring meant something by it, and reading none at all accepted that silently.",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:175"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:resolveBin",
+      "kind": "function",
+      "label": "resolveBin",
+      "doc": "resolveBin prefers the workspace's own ./magus over PATH. magus-command.buzz carries the full reasoning for that preference.",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:119"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:trimTrailingNewlines",
+      "kind": "function",
+      "label": "trimTrailingNewlines",
+      "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured brief.",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:131"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:warn",
+      "kind": "function",
+      "label": "warn",
+      "doc": "warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this file writes on stdout.",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:169"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:workspaceRoot",
+      "kind": "function",
+      "label": "workspaceRoot",
+      "doc": "workspaceRoot walks UP to the magusfile: a hook runs in the host's session directory, which is not always the workspace root. The walk is UNCONDITIONAL, unlike the one in its judging siblings, because the root is also what the rules line is resolved against; an explicit __MAGUS_BIN settles the binary, not the tree.",
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:107"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magusfile.buzz:checkBuzz",
+      "kind": "function",
+      "label": "checkBuzz",
+      "doc": "checkBuzz type-checks this directory's Buzz without running it.  Running is what stood in for this before, and it is not the same question: these templates read an event on stdin and shell out, so executing one exercises the path its fixture happens to take and says nothing about the rest of the file. A check reads all of it.  TWO invocations because the two sets parse under different rules, and the split is not cosmetic: the templates are upstream-strict, which is what lets a reader run one with a stock Bu",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:201"
+    },
+    {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked at the repo root: conventions_test.go verifies that this repository's own hook config invokes them, that the guide embeds them verbatim, and that each declares a stance for every decision and surface in the guard contract (the magus-guard-coverage lines).  This comment used to claim the templates' behavior was asserted",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:151",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:261",
       "attrs": {
         "exported": "true"
       }
@@ -45911,7 +46647,7 @@
       "kind": "function",
       "label": "cursor_schemas_generate",
       "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.  A GENERATOR where every other Cursor schema in that tree is a hand transcription, which is the point: a transcription is partial by construction and goes stale in silence, and this one cannot, because its source is a pinned package and the drift gate compares the output byte for byte.  The output lands in the ROOT project's testdata, because that is where the host schemas live and where host_schema_test.go reads them. Declared with",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:66",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:142",
       "attrs": {
         "exported": "true"
       }
@@ -45921,17 +46657,34 @@
       "kind": "function",
       "label": "format",
       "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates. The docs project cannot do it: dprint discovers this project's dprint.json and would format the subtree under it, which is a parent target writing into a descendant project (MGS3001). So the pages are formatted by the project that owns them, which is the same rule every other project with Markdown follows.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:162",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:272",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magusfile.buzz:generate",
+      "kind": "function",
+      "label": "generate",
+      "doc": "Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.  The page is a verbatim copy of ten templates a reader downloads, and kept by hand it went stale where no gate could see. conventions_test.go compares the EXECUTABLE lines, so a comment rewritten in a template and not in the page passed every check and shipped the old text; three of the ten had drifted that way at once. Generated, the page cannot: the drift gate regenerates it and compares byte",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:85",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magusfile.buzz:generatedOutputs",
+      "kind": "function",
+      "label": "generatedOutputs",
+      "doc": "Everything generate writes, project-relative because that is where this target runs. The schema DIRECTORY rather than its files: drift\\expand walks it, so a schema the SDK starts emitting is covered without this list being edited to notice.",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:69"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:host_integration",
       "kind": "function",
       "label": "host_integration",
       "doc": "host-integration is deliberately NOT a dependency of ci. It starts real, locally installed agent hosts, so it can consume the caller's authentication and quota. A person opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness descriptors explicitly:  MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \\ host-e2e/example.json  The runner creates a disposable workspace and applies each descriptor's config. A missing local host is a structured skip; a present host t",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:134",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:244",
       "attrs": {
         "exported": "true"
       }
@@ -45941,14 +46694,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:78"
+      "source": "docs/guides/integrations/agents/magusfile.buzz:154"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). proc.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:86",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:162",
       "attrs": {
         "exported": "true"
       }
@@ -45957,7 +46710,7 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:54",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:64",
       "attrs": {
         "exported": "true"
       }
@@ -45967,7 +46720,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.  It runs under node, not bun, even though the plugin's runtime is bun. The test supplies Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified, which is a better trade than putting a second JS runtime in every contributor's toolchain for one file. The residual gap is bun-versus-node spawn semant",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:116",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:226",
       "attrs": {
         "exported": "true"
       }
@@ -49743,7 +50496,7 @@
       "kind": "function",
       "label": "agent_bench_report",
       "doc": "Turns a results tree into the benchmark report: build benchreport, then extract one metrics record per run, analyze the paired deltas, render report.md. `-- --results <dir>` names a tree under benchmarks/agent other than results/; `-- --synthetic` generates the pipeline's own control, a synthetic tree, and reports on that instead. Reads run artifacts that change under it, so it never replays from cache. The analysis tests are ordinary Go tests in the root module, so `test` covers them and there is no separa",
-      "source": "magusfile.buzz:3108",
+      "source": "magusfile.buzz:3115",
       "attrs": {
         "exported": "true"
       }
@@ -49753,7 +50506,7 @@
       "kind": "function",
       "label": "agent_bench_run",
       "doc": "Runs a benchmark manifest with a login the launching shell never held. The long-lived token `claude setup-token` mints is read through the workspace's secret provider under the reference below, handed to run.sh as the one environment variable the runner's scrub keeps, and redacted from everything magus captures. It never touches argv, which the run log records, and it never has to be exported by the person, or the agent, typing this command: `MAGUS_SECRET_PROVIDER=system-keychain magus run agent-bench-run .",
-      "source": "magusfile.buzz:3227",
+      "source": "magusfile.buzz:3234",
       "attrs": {
         "exported": "true"
       }
@@ -49830,7 +50583,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:3054",
+      "source": "magusfile.buzz:3061",
       "attrs": {
         "exported": "true"
       }
@@ -49840,7 +50593,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.  Transport only: the plan names its own outputs and renders its own summary, so porting this to another provider is a rewrite of the two file formats and nothing else.",
-      "source": "magusfile.buzz:3279",
+      "source": "magusfile.buzz:3286",
       "attrs": {
         "exported": "true"
       }
@@ -49857,7 +50610,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:3075",
+      "source": "magusfile.buzz:3082",
       "attrs": {
         "exported": "true"
       }
@@ -49867,7 +50620,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:3257",
+      "source": "magusfile.buzz:3264",
       "attrs": {
         "exported": "true"
       }
@@ -49918,7 +50671,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:3406",
+      "source": "magusfile.buzz:3413",
       "attrs": {
         "exported": "true"
       }
@@ -49955,7 +50708,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than prettier because it needs no Node in the format path, and rather than biome because biome does not read Markdown at all. Every project with Markdown carries its own dprint.json and runs the op itself; see this project's for what a root-started run covers.",
-      "source": "magusfile.buzz:3030",
+      "source": "magusfile.buzz:3037",
       "attrs": {
         "exported": "true"
       }
@@ -50091,7 +50844,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint USED to go through the go spell's op so the spell's version probe (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which code passes while every cache entry replays the old verdict.",
-      "source": "magusfile.buzz:2959",
+      "source": "magusfile.buzz:2966",
       "attrs": {
         "exported": "true"
       }
@@ -50169,7 +50922,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:3367"
+      "source": "magusfile.buzz:3374"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -50228,7 +50981,7 @@
       "kind": "function",
       "label": "publish_report",
       "doc": "publish_report commits a rendered report at benchmarks/agent/reports/<date>/<provider>/<model>.md with the environment stamped after its title, the way BENCHMARKS.md carries its own: a number on the docs site has to trace to a date, a build and a machine. The provider is given, because a model id does not carry it; the model is the one the runs used, so a tree that mixes models is refused rather than filed under one of them. The docs project mirrors every file under that directory into a page.",
-      "source": "magusfile.buzz:3170"
+      "source": "magusfile.buzz:3177"
     },
     {
       "id": "function:magusfile.buzz:publish_variant",
@@ -50256,7 +51009,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:3329"
+      "source": "magusfile.buzz:3336"
     },
     {
       "id": "function:magusfile.buzz:refuse_overwrite",
@@ -50330,7 +51083,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:3341"
+      "source": "magusfile.buzz:3348"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -50359,7 +51112,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:3453",
+      "source": "magusfile.buzz:3460",
       "attrs": {
         "exported": "true"
       }
@@ -50389,7 +51142,7 @@
       "kind": "function",
       "label": "swegrade_build",
       "doc": "Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from. Built on the host from the root module so it shares the workspace's JSON codec and its tests, rather than as a throwaway module inside a grader image; the binary is gitignored under benchmarks/agent/bin, undeclared like ./magus for the same reason.",
-      "source": "magusfile.buzz:3211",
+      "source": "magusfile.buzz:3218",
       "attrs": {
         "exported": "true"
       }
@@ -50456,7 +51209,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:3449",
+      "source": "magusfile.buzz:3456",
       "attrs": {
         "exported": "true"
       }
@@ -52284,25 +53037,32 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_agent_command",
       "kind": "function",
       "label": "claude_agent_command",
-      "source": "spells/harness/claude-code/spell.buzz:51"
+      "source": "spells/harness/claude-code/spell.buzz:104"
+    },
+    {
+      "id": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
+      "kind": "function",
+      "label": "claude_buzz_command",
+      "doc": "The Buzz ports, not the sh copies beside them. Buzz needs neither jq nor a POSIX shell, so the wiring works unchanged on Windows and a reader installs no runtime dependency to be guarded. The sh copies stay for the hosts still wired to them (codex, cursor, the any-host guide) and render byte-identical replies.  `-s` keeps the interpreter quiet: `magus buzz` reports an unused import and other BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an error notice, so an advisory about t",
+      "source": "spells/harness/claude-code/spell.buzz:73"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_checkpoint_command",
       "kind": "function",
       "label": "claude_checkpoint_command",
-      "source": "spells/harness/claude-code/spell.buzz:71"
+      "source": "spells/harness/claude-code/spell.buzz:123"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_command_hook",
       "kind": "function",
       "label": "claude_command_hook",
-      "source": "spells/harness/claude-code/spell.buzz:75"
+      "source": "spells/harness/claude-code/spell.buzz:127"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config",
       "kind": "function",
       "label": "claude_config",
-      "source": "spells/harness/claude-code/spell.buzz:123"
+      "source": "spells/harness/claude-code/spell.buzz:175"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config_path",
@@ -52314,61 +53074,64 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_entries",
       "kind": "function",
       "label": "claude_entries",
-      "source": "spells/harness/claude-code/spell.buzz:90"
+      "source": "spells/harness/claude-code/spell.buzz:142"
+    },
+    {
+      "id": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
+      "kind": "function",
+      "label": "claude_glue_command",
+      "source": "spells/harness/claude-code/spell.buzz:79"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_guard_command",
       "kind": "function",
       "label": "claude_guard_command",
-      "source": "spells/harness/claude-code/spell.buzz:28"
+      "doc": "The Bash, MCP and Skill matchers all take this one string. Their payloads differ, but a params object and a skill name both have to reach `magus shell` whole, and the glue reads that off the event rather than off the entry, so there is nothing to write on it. Three named wrappers returning identical bytes only invited a reader to look for a difference.",
+      "source": "spells/harness/claude-code/spell.buzz:87"
+    },
+    {
+      "id": "function:spells/harness/claude-code/spell.buzz:claude_interpreter",
+      "kind": "function",
+      "label": "claude_interpreter",
+      "doc": "claude_interpreter picks which magus RUNS the glue.  Moving the glue from sh to Buzz moves the interpreter from a program that is always present and has no version to one that does. The sh copies resolved the binary that renders the VERDICT by walking up to the magusfile, precisely so a stale PATH copy could not answer with rules the tree no longer has; the same argument applies to the interpreter, and more sharply, because a magus too old to run the script renders no verdict at all.  Plain `magus`, resolve",
+      "source": "spells/harness/claude-code/spell.buzz:54"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp",
       "kind": "function",
       "label": "claude_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:148"
-    },
-    {
-      "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
-      "kind": "function",
-      "label": "claude_mcp_command",
-      "source": "spells/harness/claude-code/spell.buzz:40"
+      "source": "spells/harness/claude-code/spell.buzz:200"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_observe_command",
       "kind": "function",
       "label": "claude_observe_command",
-      "source": "spells/harness/claude-code/spell.buzz:36"
+      "source": "spells/harness/claude-code/spell.buzz:95"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_path_command",
       "kind": "function",
       "label": "claude_path_command",
-      "source": "spells/harness/claude-code/spell.buzz:32"
+      "source": "spells/harness/claude-code/spell.buzz:91"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_pretool_entry",
       "kind": "function",
       "label": "claude_pretool_entry",
-      "source": "spells/harness/claude-code/spell.buzz:83"
+      "source": "spells/harness/claude-code/spell.buzz:135"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
       "kind": "function",
       "label": "claude_rehydrate_command",
-      "source": "spells/harness/claude-code/spell.buzz:67"
-    },
-    {
-      "id": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
-      "kind": "function",
-      "label": "claude_skill_command",
-      "source": "spells/harness/claude-code/spell.buzz:44"
+      "doc": "The two lifecycle wrappers go through the same interpreter helper as the guard glue, so this host's whole wiring names one runtime. They judge nothing, which is why they are built from claude_buzz_command directly: their names are their own rather than a surface of the hook template.",
+      "source": "spells/harness/claude-code/spell.buzz:119"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills",
       "kind": "function",
       "label": "claude_skills",
-      "source": "spells/harness/claude-code/spell.buzz:129"
+      "source": "spells/harness/claude-code/spell.buzz:181"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills_form",
@@ -52386,7 +53149,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_config",
       "kind": "function",
       "label": "harness_config",
-      "source": "spells/harness/claude-code/spell.buzz:136",
+      "source": "spells/harness/claude-code/spell.buzz:188",
       "attrs": {
         "exported": "true"
       }
@@ -52395,7 +53158,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_entries",
       "kind": "function",
       "label": "harness_entries",
-      "source": "spells/harness/claude-code/spell.buzz:144",
+      "source": "spells/harness/claude-code/spell.buzz:196",
       "attrs": {
         "exported": "true"
       }
@@ -52404,7 +53167,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_mcp",
       "kind": "function",
       "label": "harness_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:168",
+      "source": "spells/harness/claude-code/spell.buzz:220",
       "attrs": {
         "exported": "true"
       }
@@ -52413,7 +53176,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_skills",
       "kind": "function",
       "label": "harness_skills",
-      "source": "spells/harness/claude-code/spell.buzz:140",
+      "source": "spells/harness/claude-code/spell.buzz:192",
       "attrs": {
         "exported": "true"
       }
@@ -52872,14 +53635,14 @@
       "kind": "function",
       "label": "has",
       "doc": "has reports whether haystack contains needle.  Buzz's str.indexOf returns NULL when the substring is absent, not -1, so comparing the result to a number raises \"cannot compare null and int\" rather than answering false. That is why this is a named helper instead of an inline comparison at four call sites.",
-      "source": "spells/onepassword/spell.buzz:39"
+      "source": "spells/onepassword/spell.buzz:37"
     },
     {
       "id": "function:spells/onepassword/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
       "doc": "\"onepassword\", not \"op\": a spell's registered name has to stand alone - it is what `magus describe spells` and every diagnostic show, with no directory around it to supply the context. `op` is the binary, not the product.",
-      "source": "spells/onepassword/spell.buzz:31",
+      "source": "spells/onepassword/spell.buzz:29",
       "attrs": {
         "exported": "true"
       }
@@ -52888,7 +53651,7 @@
       "id": "function:spells/onepassword/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "source": "spells/onepassword/spell.buzz:120",
+      "source": "spells/onepassword/spell.buzz:118",
       "attrs": {
         "exported": "true"
       }
@@ -52898,7 +53661,7 @@
       "kind": "function",
       "label": "resolve_secret",
       "doc": "resolve_secret is the secret-provider contract, detected by name and invoked by magus\\secret.read(). It receives the reference as payload.ref and returns a Secret.  `> Secret`, not `> str`: Buzz checks function signatures, so this one is enforced at compile time - a provider returning the wrong shape fails to load rather than failing at the first read. Secret comes from magus/spell, like Target and Command.  The reference may be written either way, because both read naturally at a call site:  magus\\secret.r",
-      "source": "spells/onepassword/spell.buzz:65",
+      "source": "spells/onepassword/spell.buzz:63",
       "attrs": {
         "exported": "true"
       }
@@ -53616,6 +54379,14 @@
       "source": "tools/toolchain.buzz:64"
     },
     {
+      "id": "import:../../../../tools/drift",
+      "kind": "import",
+      "label": "../../../../tools/drift",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
       "id": "import:../../spells/golang/gomod",
       "kind": "import",
       "label": "../../spells/golang/gomod",
@@ -53667,6 +54438,14 @@
       "id": "import:../tools/toolchain-policy",
       "kind": "import",
       "label": "../tools/toolchain-policy",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:./lib/embed",
+      "kind": "import",
+      "label": "./lib/embed",
       "attrs": {
         "diagnostic": "MGS7001"
       }
@@ -53873,6 +54652,14 @@
       "id": "import:ffi",
       "kind": "import",
       "label": "ffi"
+    },
+    {
+      "id": "import:flags",
+      "kind": "import",
+      "label": "flags",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
     },
     {
       "id": "import:fs",
@@ -54514,6 +55301,15 @@
       "source": "https://buzz-lang.dev/0.5.0/reference/std/std.html",
       "attrs": {
         "host": "buzz-lang.dev"
+      }
+    },
+    {
+      "id": "link:https://code.claude.com/docs/en/hooks",
+      "kind": "link",
+      "label": "https://code.claude.com/docs/en/hooks",
+      "source": "https://code.claude.com/docs/en/hooks",
+      "attrs": {
+        "host": "code.claude.com"
       }
     },
     {
@@ -55711,6 +56507,15 @@
       "doc": "Remove name from the current process environment.",
       "attrs": {
         "buzz": "env\\unset(name)"
+      }
+    },
+    {
+      "id": "method:flags.parse",
+      "kind": "method",
+      "label": "flags.parse",
+      "doc": "Parse argv against the declared flags, returning {values, positionals, unknown}: switches take no value and record \"true\", valued flags take the next word or an =value suffix, everything after `--` is a positional, and every argument that was not declared is returned in unknown rather than guessed at. Errors when a valued flag is given no value.",
+      "attrs": {
+        "buzz": "flags\\parse(argv, switches, valued) -> FlagParse"
       }
     },
     {
@@ -57419,6 +58224,12 @@
       "kind": "module",
       "label": "env",
       "doc": "Process environment variable access."
+    },
+    {
+      "id": "module:flags",
+      "kind": "module",
+      "label": "flags",
+      "doc": "Parse a script's argv against the flags it declares."
     },
     {
       "id": "module:fmt",
@@ -59178,7 +59989,7 @@
       "source": "docs/guides/integrations/agents",
       "attrs": {
         "engine": "buzz",
-        "target_count": "7"
+        "target_count": "8"
       }
     },
     {
@@ -59252,11 +60063,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:3075:TODO",
+      "id": "rationale:magusfile.buzz:3082:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:3075"
+      "source": "magusfile.buzz:3082"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -60041,6 +60852,16 @@
       "kind": "target",
       "label": "format",
       "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates.",
+      "source": "docs/guides/integrations/agents",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:docs/guides/integrations/agents:generate",
+      "kind": "target",
+      "label": "generate",
+      "doc": "Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.",
       "source": "docs/guides/integrations/agents",
       "attrs": {
         "engine": "buzz"
@@ -61030,6 +61851,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "console"
+    },
+    {
+      "source": "charm:rw",
+      "target": "target:docs/guides/integrations/agents:generate",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
     },
     {
       "source": "charm:rw",
@@ -62384,6 +63213,14 @@
       "provenance": "docs/guides/integrations/pr-advice.md"
     },
     {
+      "source": "dir:docs/guides/integrations/agents/lib",
+      "target": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
       "source": "dir:docs/guides/integrations/editor",
       "target": "doc:docs/guides/integrations/editor/design.md",
       "relation": "contains",
@@ -62942,6 +63779,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/buzz/env.md"
+    },
+    {
+      "source": "dir:docs/reference/buzz",
+      "target": "doc:docs/reference/buzz/flags.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
     },
     {
       "source": "dir:docs/reference/buzz",
@@ -67342,6 +68187,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "std/env.go"
+    },
+    {
+      "source": "dir:std",
+      "target": "file:std/flags.go",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "std/flags.go"
     },
     {
       "source": "dir:std",
@@ -75513,7 +76366,23 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/claude-code.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/claude-code.md",
       "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/claude-code.md",
+      "target": "doc:docs/reference/manpage/magus-shell.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -75531,6 +76400,14 @@
       "source": "doc:docs/guides/integrations/agents/claude-code.md",
       "target": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
       "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/claude-code.md",
+      "target": "link:https://code.claude.com/docs/en/hooks",
+      "relation": "references",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents/claude-code.md"
@@ -75757,6 +76634,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/guard-templates.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/guides/integrations/agents/guard-templates.md"
     },
     {
@@ -78456,6 +79341,30 @@
       "provenance": "docs/reference/buzz/env.md"
     },
     {
+      "source": "doc:docs/reference/buzz/flags.md",
+      "target": "docsection:docs/reference/buzz/flags.md#flags",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/flags.md",
+      "target": "file:std/flags.go",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/flags.md",
+      "target": "module:flags",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
       "source": "doc:docs/reference/buzz/fmt.md",
       "target": "docsection:docs/reference/buzz/fmt.md#fmt",
       "relation": "contains",
@@ -78666,6 +79575,14 @@
     {
       "source": "doc:docs/reference/buzz/index.md",
       "target": "doc:docs/reference/buzz/env.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/index.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/index.md",
+      "target": "doc:docs/reference/buzz/flags.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -106280,6 +107197,14 @@
       "provenance": "docs/guides/integrations/agents/claude-code.md"
     },
     {
+      "source": "docsection:docs/guides/integrations/agents/claude-code.md#guard-hook",
+      "target": "docsection:docs/guides/integrations/agents/claude-code.md#when-the-hook-itself-cannot-run",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
       "source": "docsection:docs/guides/integrations/agents/codex.md#codex",
       "target": "docsection:docs/guides/integrations/agents/codex.md#coverage-and-limits",
       "relation": "contains",
@@ -106441,7 +107366,7 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
-      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-commandsh",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-commandsh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -106449,7 +107374,7 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
-      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-observesh",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-observesh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -106457,7 +107382,7 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
-      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-pathsh",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-pathsh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -106466,6 +107391,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
       "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-rehydratesh",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -106482,6 +107415,54 @@
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
       "target": "docsection:docs/guides/integrations/agents/guard-templates.md#what-a-template-must-not-get-wrong",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#how-they-fit-together",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#why-the-two-forms-differ-on-knobs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-checkpointbuzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-commandbuzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-observebuzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-pathbuzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-rehydratebuzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -110790,6 +111771,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/buzz/env.md"
+    },
+    {
+      "source": "docsection:docs/reference/buzz/flags.md#flags",
+      "target": "docsection:docs/reference/buzz/flags.md#methods",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
+    },
+    {
+      "source": "docsection:docs/reference/buzz/flags.md#methods",
+      "target": "docsection:docs/reference/buzz/flags.md#parse",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/buzz/flags.md"
     },
     {
       "source": "docsection:docs/reference/buzz/fmt.md#fmt",
@@ -123792,6 +124789,926 @@
       "provenance": "docs/engine/types.buzz"
     },
     {
+      "source": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:embedNames",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:fenceFor",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:markerName",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:render",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:trimTrailingNewlines",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "target": "import:assert",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:envOr",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:isExecutable",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:main",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:parentDir",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:reportArgv",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:resolveBin",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:warn",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "import:env",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "import:flags",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "import:io",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "import:path",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "target": "import:proc",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:adviseBranch",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:askBranch",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:codexPromptBlocker",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:contextReply",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:digKey",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:field",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:fileSafe",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:findUp",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:firstLine",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:hasKey",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:isExecutable",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:judge",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:parentDir",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:permissionResponse",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:pushRuleFor",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:rawField",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:render",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:resolveBin",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:shellFlags",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:trimTrailingNewlines",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:wholeEvent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:encoding/json",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:env",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:flags",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:io",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:path",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:proc",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "target": "import:std",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:dig",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:digKey",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:envOr",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:field",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:isExecutable",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:parentDir",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:reportArgv",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:resolveBin",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:warn",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "import:encoding/json",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "import:env",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "import:flags",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "import:io",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "import:path",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "target": "import:proc",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:adviseBranch",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:dig",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:digKey",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:envOr",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:field",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:hasKey",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:isExecutable",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:judge",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:parentDir",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:rawField",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:render",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:reportArgv",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:resolveBin",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:trimTrailingNewlines",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:warn",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:wholeEvent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "import:encoding/json",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "import:env",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "import:flags",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "import:io",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "import:path",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "target": "import:proc",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:envOr",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:escapeJSON",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:isExecutable",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:parentDir",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:reportArgv",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:resolveBin",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:trimTrailingNewlines",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:warn",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:workspaceRoot",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "import:env",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "import:flags",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "import:io",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "import:path",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "target": "import:proc",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:checkBuzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
       "source": "file:docs/guides/integrations/agents/magusfile.buzz",
       "target": "function:docs/guides/integrations/agents/magusfile.buzz:ci",
       "relation": "contains",
@@ -123810,6 +125727,22 @@
     {
       "source": "file:docs/guides/integrations/agents/magusfile.buzz",
       "target": "function:docs/guides/integrations/agents/magusfile.buzz:format",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:generatedOutputs",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -123853,6 +125786,22 @@
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "import:../../../../tools/drift",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "import:./lib/embed",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
       "provenance": "docs/guides/integrations/agents/magusfile.buzz"
     },
     {
@@ -133625,6 +135574,14 @@
     },
     {
       "source": "file:spells/harness/claude-code/spell.buzz",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "file:spells/harness/claude-code/spell.buzz",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_checkpoint_command",
       "relation": "contains",
       "confidence": "extracted",
@@ -133665,6 +135622,14 @@
     },
     {
       "source": "file:spells/harness/claude-code/spell.buzz",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "file:spells/harness/claude-code/spell.buzz",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_guard_command",
       "relation": "contains",
       "confidence": "extracted",
@@ -133673,7 +135638,7 @@
     },
     {
       "source": "file:spells/harness/claude-code/spell.buzz",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_mcp",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_interpreter",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -133681,7 +135646,7 @@
     },
     {
       "source": "file:spells/harness/claude-code/spell.buzz",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_mcp",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -133714,14 +135679,6 @@
     {
       "source": "file:spells/harness/claude-code/spell.buzz",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/harness/claude-code/spell.buzz"
-    },
-    {
-      "source": "file:spells/harness/claude-code/spell.buzz",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -134402,14 +136359,6 @@
     {
       "source": "file:spells/onepassword/spell.buzz",
       "target": "import:magus/spell",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "spells/onepassword/spell.buzz"
-    },
-    {
-      "source": "file:spells/onepassword/spell.buzz",
-      "target": "import:os",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -136630,6 +138579,766 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/engine/search.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/lib/embed.buzz:embedNames",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:markerName",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/lib/embed.buzz:render",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:fenceFor",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/lib/embed.buzz:render",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:markerName",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/lib/embed.buzz:render",
+      "target": "function:docs/guides/integrations/agents/lib/embed.buzz:trimTrailingNewlines",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib/embed.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:reportArgv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:resolveBin",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:reportArgv",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:parentDir",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:adviseBranch",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:askBranch",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:codexPromptBlocker",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:codexPromptBlocker",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:field",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:codexPromptBlocker",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:findUp",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:digKey",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:firstLine",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:field",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:field",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:render",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:findUp",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:parentDir",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:adviseBranch",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:askBranch",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:field",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:hasKey",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:judge",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:permissionResponse",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:pushRuleFor",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:rawField",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:resolveBin",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:shellFlags",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:trimTrailingNewlines",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:wholeEvent",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:fileSafe",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:contextReply",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:noticeReply",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:rawField",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:rawField",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:render",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:parentDir",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:shellFlags",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:wholeEvent",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-command.buzz:wholeEvent",
+      "target": "function:docs/guides/integrations/agents/magus-command.buzz:field",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:dig",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:digKey",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:field",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:dig",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:field",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:reportArgv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:resolveBin",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:reportArgv",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-observe.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-observe.buzz:parentDir",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:adviseBranch",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:dig",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:digKey",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:field",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:dig",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:field",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:render",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:adviseBranch",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:field",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:hasKey",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:judge",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:rawField",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:reportArgv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:resolveBin",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:trimTrailingNewlines",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:wholeEvent",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:rawField",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:dig",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:rawField",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:render",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:reportArgv",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:parentDir",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:wholeEvent",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:dig",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-path.buzz:wholeEvent",
+      "target": "function:docs/guides/integrations/agents/magus-path.buzz:field",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:envOr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:escapeJSON",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:reportArgv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:resolveBin",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:trimTrailingNewlines",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:workspaceRoot",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:reportArgv",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:resolveBin",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:isExecutable",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:workspaceRoot",
+      "target": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:parentDir",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magusfile.buzz:generate",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:generatedOutputs",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
+      "target": "function:docs/guides/integrations/agents/magusfile.buzz:checkBuzz",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
     },
     {
       "source": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
@@ -139832,6 +142541,30 @@
       "provenance": "spells/golang/gomod.buzz"
     },
     {
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_agent_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_interpreter",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_checkpoint_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
       "source": "function:spells/harness/claude-code/spell.buzz:claude_config",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_config_path",
       "relation": "calls",
@@ -139873,14 +142606,6 @@
     },
     {
       "source": "function:spells/harness/claude-code/spell.buzz:claude_entries",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/harness/claude-code/spell.buzz"
-    },
-    {
-      "source": "function:spells/harness/claude-code/spell.buzz:claude_entries",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_observe_command",
       "relation": "calls",
       "confidence": "extracted",
@@ -139912,8 +142637,32 @@
       "provenance": "spells/harness/claude-code/spell.buzz"
     },
     {
-      "source": "function:spells/harness/claude-code/spell.buzz:claude_entries",
-      "target": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_guard_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_observe_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_path_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -139922,6 +142671,14 @@
     {
       "source": "function:spells/harness/claude-code/spell.buzz:claude_pretool_entry",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_command_hook",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -140904,6 +143661,13 @@
     {
       "source": "module:env",
       "target": "method:env.unset",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:flags",
+      "target": "method:flags.parse",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -144571,6 +147335,14 @@
     },
     {
       "source": "project:docs/guides/integrations/agents",
+      "target": "dir:docs/guides/integrations/agents/lib",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/lib"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
       "target": "doc:docs/guides/integrations/agents/any-host.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -144659,6 +147431,46 @@
     },
     {
       "source": "project:docs/guides/integrations/agents",
+      "target": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-checkpoint.buzz"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
+      "target": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-command.buzz"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
+      "target": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-observe.buzz"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
+      "target": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-path.buzz"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
+      "target": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-rehydrate.buzz"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
       "target": "file:docs/guides/integrations/agents/magusfile.buzz",
       "relation": "contains",
       "confidence": "extracted",
@@ -144684,6 +147496,14 @@
     {
       "source": "project:docs/guides/integrations/agents",
       "target": "target:docs/guides/integrations/agents:format",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
+      "target": "target:docs/guides/integrations/agents:generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -145370,12 +148190,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:3075:TODO",
+      "source": "rationale:magusfile.buzz:3082:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:3075"
+      "provenance": "magusfile.buzz:3082"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -147458,7 +150278,87 @@
     },
     {
       "source": "target:docs/guides/integrations/agents:format",
+      "target": "target:docs/guides/integrations/agents:generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:format",
       "target": "target:docs/guides/integrations/agents:preflight",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "doc:docs/guides/integrations/agents/guard-templates.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "file:docs/guides/integrations/agents/lib/embed.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "file:docs/guides/integrations/agents/magus-checkpoint.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "file:docs/guides/integrations/agents/magus-command.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "file:docs/guides/integrations/agents/magus-observe.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "file:docs/guides/integrations/agents/magus-path.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "file:docs/guides/integrations/agents/magus-rehydrate.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "target:docs/guides/integrations/agents:generate",
+      "target": "target:docs/guides/integrations/agents:cursor-schemas-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -147875,6 +150775,14 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/buzz/env.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/buzz/flags.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

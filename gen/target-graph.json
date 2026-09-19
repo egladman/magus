@@ -2599,6 +2599,45 @@
           "reads_secrets": false
         },
         {
+          "name": "generate",
+          "doc": "Renders guard-templates.md: the prose in guard-templates.md.tmpl, with each marker replaced by the file it names.",
+          "dependencies": [
+            "cursor-schemas-generate"
+          ],
+          "charms": [
+            "rw"
+          ],
+          "chain": [
+            {
+              "target": "cursor-schemas-generate"
+            }
+          ],
+          "reads_files": [
+            {
+              "project": "docs/guides/integrations/agents",
+              "glob": "guard-templates.md.tmpl"
+            },
+            {
+              "project": "docs/guides/integrations/agents",
+              "glob": "*.sh"
+            },
+            {
+              "project": "docs/guides/integrations/agents",
+              "glob": "*.buzz"
+            },
+            {
+              "project": "docs/guides/integrations/agents",
+              "glob": "lib/*.buzz"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "guard-templates.md"
+            }
+          ]
+        },
+        {
           "name": "cursor-schemas-generate",
           "declared": "cursor_schemas_generate",
           "doc": "Emits testdata/hosts/cursor/gen from the zod schemas @cursor/sdk publishes.",
@@ -2684,7 +2723,8 @@
           "name": "format",
           "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates.",
           "dependencies": [
-            "preflight"
+            "preflight",
+            "generate"
           ],
           "spells": [
             {
@@ -2703,6 +2743,10 @@
           "chain": [
             {
               "target": "preflight"
+            },
+            {
+              "target": "generate",
+              "callIndex": 1
             }
           ],
           "reads_secrets": false,
