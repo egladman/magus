@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6384,
-  "edge_count": 11415,
+  "node_count": 6387,
+  "edge_count": 11422,
   "relations": [
     {
       "id": "annotates",
@@ -19741,6 +19741,16 @@
       "attrs": {
         "anchor": "what-a-template-must-not-get-wrong",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#why-the-two-forms-differ-on-knobs",
+      "kind": "docsection",
+      "label": "Why the two forms differ on knobs",
+      "source": "docs/guides/integrations/agents/guard-templates.md#why-the-two-forms-differ-on-knobs",
+      "attrs": {
+        "anchor": "why-the-two-forms-differ-on-knobs",
+        "level": "3"
       }
     },
     {
@@ -45987,173 +45997,187 @@
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:adviseBranch",
       "kind": "function",
       "label": "adviseBranch",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:434"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:524"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:askBranch",
       "kind": "function",
       "label": "askBranch",
       "doc": "askBranch picks the ask arm for the host that sent this event. Only a reply this file assembled may claim --renders-ask; see the header for why Codex never receives permissionDecision \"ask\".",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:425"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:515"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:codexPromptBlocker",
       "kind": "function",
       "label": "codexPromptBlocker",
       "doc": "codexPromptBlocker states why Codex will not put this call in front of the person, and \"\" when its own approval prompt will.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:286"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:353"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:contextReply",
       "kind": "function",
       "label": "contextReply",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:417"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:507"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:dig",
       "kind": "function",
       "label": "dig",
       "doc": "dig walks a jq-style dot-path and returns null where jq would print nothing.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:154"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:180"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:digKey",
       "kind": "function",
       "label": "digKey",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:147"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:173"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:envOr",
       "kind": "function",
       "label": "envOr",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:141"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:167"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:failureNotice",
       "kind": "function",
       "label": "failureNotice",
       "doc": "failureNotice states WHICH binary went silent, what version it is, and what it actually said, the three facts a reader otherwise spends a session collecting.  It re-runs the guard to capture stderr, which the verdict path discards. One extra process, only on the path that is already broken. WARN lines are dropped because a config the binary is too old to parse warns BEFORE it fails, and that warning is a symptom of the same staleness, not the error.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:397"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:487"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:field",
       "kind": "function",
       "label": "field",
       "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string rather than the literal \"null\".",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:171"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:197"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:fileSafe",
       "kind": "function",
       "label": "fileSafe",
       "doc": "fileSafe keeps a session id that may hold slashes or dots from becoming a path.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:347"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:437"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:findUp",
       "kind": "function",
       "label": "findUp",
       "doc": "findUp returns the nearest ancestor holding relative, or \"\" when there is none.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:259"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:326"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:firstLine",
       "kind": "function",
       "label": "firstLine",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:201"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:268"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:hasKey",
       "kind": "function",
       "label": "hasKey",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:187"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:254"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:207"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:274"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:judge",
       "kind": "function",
       "label": "judge",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:377"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:467"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:453"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:543"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:noticeOnce",
       "kind": "function",
       "label": "noticeOnce",
       "doc": "noticeOnce succeeds the first time family fires in this session and fails on every repeat.  The notices it holds report a BROKEN INSTALLATION. That is a fact for the person, and there is nothing in it an agent can act on, so a repeat is pure noise: measured at 2,741 firings over recent sessions, 99% of them same-session repeats of text already declined.  The marker lives under TMPDIR rather than in magus's own state because this runs when magus is missing or too broken to judge, so it cannot ask magus for a",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:330"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:420"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:olderThanWindow",
       "kind": "function",
       "label": "olderThanWindow",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:357"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:447"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it strips the last path element and yields the empty string at the top, which is what ends the walk. fs\\dirname is not that function, because it answers \"/\" for a top-level directory and the walk would never terminate.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:250"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:317"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:permissionResponse",
       "kind": "function",
       "label": "permissionResponse",
       "doc": "permissionResponse answers the approval request Codex raises just before its own prompt. No decision object leaves the prompt to the person; allow skips it, and is answered only for a plain push, because this event fires for every approval Codex asks and a pass from the guard is not the person's consent to anything else.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:444"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:534"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:pushRuleFor",
       "kind": "function",
       "label": "pushRuleFor",
       "doc": "pushRuleFor names the Codex prefix rule a bare push reaches, or null for anything else: a compound line, `git -C dir push`, an MCP call. Those reach no rule, so Codex would run them unprompted and no answer here may assume it prompts.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:273"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:340"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:rawField",
       "kind": "function",
       "label": "rawField",
-      "doc": "rawField is `jq -r \".<dotPath>\"` with no default, so an absent field reaches magus as the literal \"null\". The MCP surface depends on that: an MCP event carries no tool_input.command, and magus judging the text \"null\" is what makes the unwired case a pass rather than an accident.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:181"
+      "doc": "rawField is `jq -r \".<dotPath>\"` with no default, so an absent field reaches magus as the literal \"null\".",
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:205"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:render",
       "kind": "function",
       "label": "render",
       "doc": "render prints a value the way `jq -r` does: a string bare, anything else as JSON.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:164"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:190"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH. A repository that builds magus, or pins a newer one than is installed, keeps its RULES in that binary, and an older PATH copy does not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule, warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured 2026-08-13, when a write into a declared notes store was allowed by a binary that predated the knowledge.notes key while `magus doctor` repor",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:229"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:296"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:shellFlags",
       "kind": "function",
       "label": "shellFlags",
-      "doc": "shellFlags splits __MAGUS_SHELL_FLAGS the way the shell word-splits it. Word-split on purpose, so a wiring may declare more than one capability.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:308"
+      "doc": "shellFlags parses this script's own argv: the `magus shell` flags the entry that wired it declares about itself, already split into words by the host that ran the command.  Parsed against SUPPORTED_FLAGS, never filtered by shape. The three answers are: a flag this file knows, which is used; anything else, which is REPORTED on stderr and left out; and no argv at all, which is the ordinary entry. There is no fourth.  Reporting is the whole point. Dropping an argument silently leaves a guard judging with flags",
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:388"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:trimTrailingNewlines",
       "kind": "function",
       "label": "trimTrailingNewlines",
       "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured verdict.",
-      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:195"
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:262"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:warn",
+      "kind": "function",
+      "label": "warn",
+      "doc": "warn names the file, because a host reports a hook's stderr with the entry's matcher at best and nothing at all at worst, and a reader with eight entries needs to know which.",
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:403"
+    },
+    {
+      "id": "function:docs/guides/integrations/agents/magus-hook-command.buzz:wholeEvent",
+      "kind": "function",
+      "label": "wholeEvent",
+      "doc": "wholeEvent decides which of the two payloads `magus shell` gets: the WHOLE envelope, or the one string HOST_EVENT_PATH selects out of it.  The event answers this itself, which is why no entry has to. Selecting a field is the NARROW case and needs two facts to be true at once; everything else forwards the envelope, because magus's own decoder knows every payload shape magus reads (a command, a written path, a skill name, a spawn prompt, an MCP call) and answers \"nothing to judge\" for the rest, while a field",
+      "source": "docs/guides/integrations/agents/magus-hook-command.buzz:247"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-hook-observe.buzz:dig",
@@ -52722,32 +52746,32 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_agent_command",
       "kind": "function",
       "label": "claude_agent_command",
-      "source": "spells/harness/claude-code/spell.buzz:89"
+      "source": "spells/harness/claude-code/spell.buzz:99"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_buzz_command",
       "kind": "function",
       "label": "claude_buzz_command",
       "doc": "The Buzz ports, not the sh copies beside them. Buzz needs neither jq nor a POSIX shell, so the wiring works unchanged on Windows and a reader installs no runtime dependency to be guarded. The sh copies stay for the hosts still wired to them (codex, cursor, the any-host guide) and render byte-identical replies.  `-s` keeps the interpreter quiet: `magus buzz` reports an unused import and other BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an error notice, so an advisory about t",
-      "source": "spells/harness/claude-code/spell.buzz:58"
+      "source": "spells/harness/claude-code/spell.buzz:64"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_checkpoint_command",
       "kind": "function",
       "label": "claude_checkpoint_command",
-      "source": "spells/harness/claude-code/spell.buzz:113"
+      "source": "spells/harness/claude-code/spell.buzz:119"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_command_hook",
       "kind": "function",
       "label": "claude_command_hook",
-      "source": "spells/harness/claude-code/spell.buzz:117"
+      "source": "spells/harness/claude-code/spell.buzz:123"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config",
       "kind": "function",
       "label": "claude_config",
-      "source": "spells/harness/claude-code/spell.buzz:165"
+      "source": "spells/harness/claude-code/spell.buzz:171"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config_path",
@@ -52759,19 +52783,19 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_entries",
       "kind": "function",
       "label": "claude_entries",
-      "source": "spells/harness/claude-code/spell.buzz:132"
+      "source": "spells/harness/claude-code/spell.buzz:138"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_glue_command",
       "kind": "function",
       "label": "claude_glue_command",
-      "source": "spells/harness/claude-code/spell.buzz:62"
+      "source": "spells/harness/claude-code/spell.buzz:70"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_guard_command",
       "kind": "function",
       "label": "claude_guard_command",
-      "source": "spells/harness/claude-code/spell.buzz:66"
+      "source": "spells/harness/claude-code/spell.buzz:74"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_interpreter",
@@ -52784,50 +52808,51 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp",
       "kind": "function",
       "label": "claude_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:190"
+      "source": "spells/harness/claude-code/spell.buzz:196"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
       "kind": "function",
       "label": "claude_mcp_command",
-      "source": "spells/harness/claude-code/spell.buzz:78"
+      "doc": "The MCP and Skill surfaces run the guard glue with no flags at all, the same string the Bash matcher gets. Their payload is a params object or a skill name rather than one shell line, so the whole event has to reach `magus shell`, and the glue reads that off the event: the field HOST_EVENT_PATH names is absent on exactly these surfaces. Nothing distinguishes the ENTRY, so nothing is written on it.",
+      "source": "spells/harness/claude-code/spell.buzz:91"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_observe_command",
       "kind": "function",
       "label": "claude_observe_command",
-      "source": "spells/harness/claude-code/spell.buzz:74"
+      "source": "spells/harness/claude-code/spell.buzz:82"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_path_command",
       "kind": "function",
       "label": "claude_path_command",
-      "source": "spells/harness/claude-code/spell.buzz:70"
+      "source": "spells/harness/claude-code/spell.buzz:78"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_pretool_entry",
       "kind": "function",
       "label": "claude_pretool_entry",
-      "source": "spells/harness/claude-code/spell.buzz:125"
+      "source": "spells/harness/claude-code/spell.buzz:131"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
       "kind": "function",
       "label": "claude_rehydrate_command",
       "doc": "The two lifecycle wrappers go through the same interpreter helper as the guard glue, so this host's whole wiring names one runtime. They judge nothing, which is why they are built from claude_buzz_command directly: their names are their own rather than a surface of the hook template.",
-      "source": "spells/harness/claude-code/spell.buzz:109"
+      "source": "spells/harness/claude-code/spell.buzz:115"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
       "kind": "function",
       "label": "claude_skill_command",
-      "source": "spells/harness/claude-code/spell.buzz:82"
+      "source": "spells/harness/claude-code/spell.buzz:95"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills",
       "kind": "function",
       "label": "claude_skills",
-      "source": "spells/harness/claude-code/spell.buzz:171"
+      "source": "spells/harness/claude-code/spell.buzz:177"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills_form",
@@ -52845,7 +52870,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_config",
       "kind": "function",
       "label": "harness_config",
-      "source": "spells/harness/claude-code/spell.buzz:178",
+      "source": "spells/harness/claude-code/spell.buzz:184",
       "attrs": {
         "exported": "true"
       }
@@ -52854,7 +52879,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_entries",
       "kind": "function",
       "label": "harness_entries",
-      "source": "spells/harness/claude-code/spell.buzz:186",
+      "source": "spells/harness/claude-code/spell.buzz:192",
       "attrs": {
         "exported": "true"
       }
@@ -52863,7 +52888,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_mcp",
       "kind": "function",
       "label": "harness_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:210",
+      "source": "spells/harness/claude-code/spell.buzz:216",
       "attrs": {
         "exported": "true"
       }
@@ -52872,7 +52897,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_skills",
       "kind": "function",
       "label": "harness_skills",
-      "source": "spells/harness/claude-code/spell.buzz:182",
+      "source": "spells/harness/claude-code/spell.buzz:188",
       "attrs": {
         "exported": "true"
       }
@@ -106948,6 +106973,14 @@
       "provenance": "docs/guides/integrations/agents/guard-templates.md"
     },
     {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#how-they-fit-together",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#why-the-two-forms-differ-on-knobs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#the-buzz-ports",
       "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-checkpointbuzz",
       "relation": "contains",
@@ -124557,6 +124590,22 @@
     },
     {
       "source": "file:docs/guides/integrations/agents/magus-hook-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-hook-command.buzz:warn",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-hook-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-hook-command.buzz",
+      "target": "function:docs/guides/integrations/agents/magus-hook-command.buzz:wholeEvent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-hook-command.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magus-hook-command.buzz",
       "target": "import:encoding/json",
       "relation": "imports",
       "confidence": "inferred",
@@ -138100,6 +138149,14 @@
       "provenance": "docs/guides/integrations/agents/magus-hook-command.buzz"
     },
     {
+      "source": "function:docs/guides/integrations/agents/magus-hook-command.buzz:main",
+      "target": "function:docs/guides/integrations/agents/magus-hook-command.buzz:wholeEvent",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-hook-command.buzz"
+    },
+    {
       "source": "function:docs/guides/integrations/agents/magus-hook-command.buzz:noticeOnce",
       "target": "function:docs/guides/integrations/agents/magus-hook-command.buzz:envOr",
       "relation": "calls",
@@ -138158,6 +138215,30 @@
     {
       "source": "function:docs/guides/integrations/agents/magus-hook-command.buzz:resolveBin",
       "target": "function:docs/guides/integrations/agents/magus-hook-command.buzz:parentDir",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-hook-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-hook-command.buzz:shellFlags",
+      "target": "function:docs/guides/integrations/agents/magus-hook-command.buzz:warn",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-hook-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-hook-command.buzz:wholeEvent",
+      "target": "function:docs/guides/integrations/agents/magus-hook-command.buzz:dig",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/magus-hook-command.buzz"
+    },
+    {
+      "source": "function:docs/guides/integrations/agents/magus-hook-command.buzz:wholeEvent",
+      "target": "function:docs/guides/integrations/agents/magus-hook-command.buzz:field",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
