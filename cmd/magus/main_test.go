@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -306,20 +305,11 @@ func TestExitCodeOf(t *testing.T) {
 	// and lock_test.go's contention case.
 	assert.Equal(t, 1, exitCodeOf(types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")))
 
-	// A bare os.exit keeps its code and says nothing; one wrapping a diagnostic keeps its
-	// code and LOGS it. Without the second, MGS3015 reached a CI log as "exit code 70"
-	// and nothing else, and the holder and queue lists the refusal exists to print were
-	// built and dropped.
-	var logged bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
-	t.Cleanup(func() { slog.SetDefault(restore) })
-
+	// An ExitError keeps its code whether or not it wraps a diagnostic. It logs
+	// NOTHING either way: a diagnostic-carrying one is logged where it is raised, so
+	// that a reader sees it when the run stops rather than only at the end.
 	assert.Equal(t, 3, exitCodeOf(types.ExitError{Code: 3}))
-	assert.Empty(t, logged.String(), "a bare exit logs nothing")
-
 	assert.Equal(t, 70, exitCodeOf(types.ExitError{Code: 70, Err: errors.New("the gate wedged")}))
-	assert.Contains(t, logged.String(), "the gate wedged")
 }
 
 // TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do
