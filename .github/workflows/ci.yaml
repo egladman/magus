@@ -56,6 +56,10 @@ env:
   # Measured since: the skew is the root project's own tests, not one project's step
   # blocking another's, whose longest observed wait is a minute. Root is simply the
   # biggest unit the planner has to place, and a third shard is where it lands alone.
+  #
+  # That 21m PREDATES the two-run test split in this same change, which takes roughly
+  # 170s off a root test run. The ceiling stands on the shape of the skew rather than on
+  # its size, and the size is due a re-measure once the split has a few runs behind it.
   MAGUS_CI_MAX_SHARDS: '3'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you

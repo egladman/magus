@@ -2605,7 +2605,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     //
     // Two runs, because cmd/magus is raced at a price nothing else here pays.
     // MEASURED on this tree: the whole suite is 311s with -race and 119s without, and
-    // cmd/magus alone is 200s against 30s with coverage held constant - 8x, where the
+    // cmd/magus alone is 200s against 30s with coverage held constant, 6.7x, where the
     // rest of the tree is under 2x. TestScripts is 93% of that package, and the reason
     // is process count rather than test work: 487 `exec magus` lines each re-execute the
     // race-instrumented binary, ~0.83s a piece, with `magus version` alone costing 1s.
@@ -2654,13 +2654,34 @@ fun raced_packages() > [str] !> any {
         final pkg = line.trim();
         if (pkg != "" and pkg != skip) { raced.append(pkg); }
     }
+    // An empty or truncated listing would hand `go test` no package arguments at all,
+    // which tests the current directory and nothing else: the suite silently shrinks to
+    // two packages and the only thing between that and a green gate is whether the
+    // coverage figure happens to clear the floor. proc\exec raises on a non-zero exit,
+    // so this covers the quiet failure rather than the loud one.
+    if (raced.len() < 2) {
+        throw "test: `go list ./...` named " + "{raced.len()}" + " package(s) to race; expected the whole module";
+    }
     return raced;
 }
 
 // merge_profiles concatenates two Go coverage profiles. Both carry a `mode:` header line
 // and the same mode (atomic), so the second file's body appends under the first's header;
 // `go tool cover` refuses a profile with two headers.
-fun merge_profiles(first: str, second: str) > str {
+//
+// The headers are CHECKED rather than assumed, because every way this goes wrong produces
+// a plausible number instead of an error. A missing file leaves a body under a blank first
+// line; two different modes splice count semantics under an atomic header; and the `cd`
+// charm on go-test appends its own `-coverprofile=coverage.out` after the flags here, so
+// under `test:cd` the second run overwrites the first's profile and the merge would report
+// cmd/magus twice and call it the tree.
+fun merge_profiles(first: str, second: str) > str !> any {
+    final head = first.split("\n")[0].trim();
+    final other = second.split("\n")[0].trim();
+    if (!head.startsWith("mode:") or head != other) {
+        throw "test: refusing to merge coverage profiles with headers " + head + " and " + other +
+              "; both must name the same mode (`test:cd` overwrites the raced profile, see the note above)";
+    }
     final body = second.split("\n");
     var merged = mut [first.trim()];
     foreach (i, line in body) {
