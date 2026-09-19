@@ -6,7 +6,8 @@
 // so it needs neither `tr` nor `sed` and runs unchanged on Windows. The shell copy
 // stays for the hosts still wired to `sh`.
 //
-// Run it as `magus buzz magus-rehydrate.buzz`. It imports no magus Buzz module and
+// Run it as `magus buzz -s magus-rehydrate.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports no magus Buzz module and
 // no spell: the workspace stays CLOSED, which is what lets a session-start hook add
 // its block in about 10ms rather than paying roughly 700ms to open one.
 //

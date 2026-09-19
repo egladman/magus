@@ -4,7 +4,8 @@
 // rather than its shell tool. The Buzz port of magus-path.sh, rendering
 // byte-identical replies without jq or a POSIX shell.
 //
-// Run it as `magus buzz magus-path.buzz`. It imports no magus Buzz module
+// Run it as `magus buzz -s magus-path.buzz`; see magus-command.buzz for why `-s` is
+// load-bearing. It imports no magus Buzz module
 // and no spell, so the workspace stays closed and the script starts in about
 // 10ms instead of paying roughly 700ms per tool call.
 //
@@ -20,7 +21,7 @@
 // path, because an advisory fired on a guess trains the reader to ignore it.
 //
 // HOST_RESPONSE renders BOTH arms even though the rules shipping today only
-// advise. That is deliberate and it is why this template exists at version 2.
+// advise. That is deliberate, and it is why the arm predates any rule that fires it.
 // These files are COPIED into a reader's config and never self-correct, so a
 // deny arm added at the same time as the first denying rule would fail OPEN on
 // every already-installed copy: the deny renders empty, magus exits non-zero,
@@ -34,6 +35,17 @@
 // __MAGUS_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: attribution recorded on the activity event, never an
 // input to the verdict.
+//
+// Every knob this file reads, each meaning what its magus-command.buzz twin means:
+//
+//   HOST_EVENT_PATH, HOST_SESSION_PATH, HOST_TRANSCRIPT_PATH  dot-paths into the event
+//   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
+//   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
+//   __MAGUS_AGENT_NAME, __MAGUS_BIN  attribution, and the binary when it is not on PATH
+//   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found
+//   __MAGUS_FAILED_RESPONSE  the same, for a magus found but unable to judge
+//   __MAGUS_UNREADABLE_RESPONSE  what to print when the write never arrived, the one
+//                    case here that denies rather than failing open
 //
 // NOTHING here may raise. Claude Code reads hook exit 2 as a BLOCK whose message
 // comes from stderr, so an uncaught Buzz error would refuse a write with a stack

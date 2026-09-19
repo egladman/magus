@@ -888,7 +888,9 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 // so the two runtime dependencies the shell copy carries are gone and the file
 // runs unchanged on Windows.
 //
-// Run it as `magus buzz magus-command.buzz`. It imports no magus Buzz
+// Run it as `magus buzz -s magus-command.buzz`. `-s` is load-bearing, not tidiness:
+// without it a BZZ advisory on stderr reads to the host as a hook error, so the glue
+// reports itself broken. It imports no magus Buzz
 // module and no spell, which is what keeps the workspace CLOSED: a script that
 // reads no workspace member starts in about 10ms, where opening one costs
 // roughly 700ms on every tool call.
@@ -934,6 +936,10 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 //                    the command. Left unset, this file builds one from evidence:
 //                    which binary it resolved, that binary's version, and the
 //                    error it actually printed
+//   __MAGUS_UNREADABLE_RESPONSE  what to print when the call never arrived, which is
+//                    the one case here that denies rather than failing open
+//   __MAGUS_NOTICE_WINDOW  minutes a notice marker survives on a host that reports
+//                    no session id, so one session cannot silence every later one
 //
 // The defaults are Claude Code's event and response shape.
 //
@@ -1567,7 +1573,8 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 // rather than its shell tool. The Buzz port of magus-path.sh, rendering
 // byte-identical replies without jq or a POSIX shell.
 //
-// Run it as `magus buzz magus-path.buzz`. It imports no magus Buzz module
+// Run it as `magus buzz -s magus-path.buzz`; see magus-command.buzz for why `-s` is
+// load-bearing. It imports no magus Buzz module
 // and no spell, so the workspace stays closed and the script starts in about
 // 10ms instead of paying roughly 700ms per tool call.
 //
@@ -1583,7 +1590,7 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 // path, because an advisory fired on a guess trains the reader to ignore it.
 //
 // HOST_RESPONSE renders BOTH arms even though the rules shipping today only
-// advise. That is deliberate and it is why this template exists at version 2.
+// advise. That is deliberate, and it is why the arm predates any rule that fires it.
 // These files are COPIED into a reader's config and never self-correct, so a
 // deny arm added at the same time as the first denying rule would fail OPEN on
 // every already-installed copy: the deny renders empty, magus exits non-zero,
@@ -1597,6 +1604,17 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 // __MAGUS_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: attribution recorded on the activity event, never an
 // input to the verdict.
+//
+// Every knob this file reads, each meaning what its magus-command.buzz twin means:
+//
+//   HOST_EVENT_PATH, HOST_SESSION_PATH, HOST_TRANSCRIPT_PATH  dot-paths into the event
+//   HOST_RESPONSE, HOST_ASK_BRANCH, HOST_ADVISE_BRANCH  the reply template and its arms
+//   __MAGUS_NO_ADVISE  render an advise as nothing, for a host with no context channel
+//   __MAGUS_AGENT_NAME, __MAGUS_BIN  attribution, and the binary when it is not on PATH
+//   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found
+//   __MAGUS_FAILED_RESPONSE  the same, for a magus found but unable to judge
+//   __MAGUS_UNREADABLE_RESPONSE  what to print when the write never arrived, the one
+//                    case here that denies rather than failing open
 //
 // NOTHING here may raise. Claude Code reads hook exit 2 as a BLOCK whose message
 // comes from stderr, so an uncaught Buzz error would refuse a write with a stack
@@ -1864,7 +1882,8 @@ The observer, in Buzz. It prints nothing, always exits 0, and declares no covera
 // Buzz port of magus-observe.sh and behaves identically without jq or a
 // POSIX shell.
 //
-// Run it as `magus buzz magus-observe.buzz`. It imports no magus Buzz
+// Run it as `magus buzz -s magus-observe.buzz`; see magus-command.buzz for why `-s` is
+// load-bearing. It imports no magus Buzz
 // module and no spell: a read hook fires on every file an agent opens, so the
 // 10ms start a closed workspace buys is worth more here than anywhere else.
 //
@@ -2042,7 +2061,8 @@ does, so it selects nothing and imports no JSON reader at all.
 // shell, so the wiring works unchanged on Windows. The shell copy stays for the
 // hosts still wired to `sh`.
 //
-// Run it as `magus buzz magus-checkpoint.buzz`. It imports no magus Buzz module
+// Run it as `magus buzz -s magus-checkpoint.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports no magus Buzz module
 // and no spell, which is what keeps the workspace CLOSED: a Stop hook fires once
 // per session rather than once per tool call, so the 700ms an open costs would
 // be affordable here - and it is still refused, because the rule that keeps the
@@ -2176,7 +2196,8 @@ escape its sh twin builds out of a pipeline is one byte-indexed loop here.
 // so it needs neither `tr` nor `sed` and runs unchanged on Windows. The shell copy
 // stays for the hosts still wired to `sh`.
 //
-// Run it as `magus buzz magus-rehydrate.buzz`. It imports no magus Buzz module and
+// Run it as `magus buzz -s magus-rehydrate.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports no magus Buzz module and
 // no spell: the workspace stays CLOSED, which is what lets a session-start hook add
 // its block in about 10ms rather than paying roughly 700ms to open one.
 //

@@ -45965,420 +45965,420 @@
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:envOr",
       "kind": "function",
       "label": "envOr",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:56"
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:57"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:62"
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:63"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:103"
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:104"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:73"
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:74"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-checkpoint.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the magusfile: a hook runs in the host's session directory, which is not always the workspace root. magus-command.buzz carries the full reasoning.",
-      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:86"
+      "source": "docs/guides/integrations/agents/magus-checkpoint.buzz:87"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:adviseBranch",
       "kind": "function",
       "label": "adviseBranch",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:550"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:556"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:askBranch",
       "kind": "function",
       "label": "askBranch",
       "doc": "askBranch picks the ask arm for the host that sent this event. Only a reply this file assembled may claim --renders-ask; see the header for why Codex never receives permissionDecision \"ask\".",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:541"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:547"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:codexPromptBlocker",
       "kind": "function",
       "label": "codexPromptBlocker",
       "doc": "codexPromptBlocker states why Codex will not put this call in front of the person, and \"\" when its own approval prompt will.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:371"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:377"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:contextReply",
       "kind": "function",
       "label": "contextReply",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:533"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:539"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:dig",
       "kind": "function",
       "label": "dig",
       "doc": "dig walks a jq-style dot-path and returns null where jq would print nothing.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:192"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:198"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:digKey",
       "kind": "function",
       "label": "digKey",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:185"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:191"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:envOr",
       "kind": "function",
       "label": "envOr",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:179"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:185"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:failureNotice",
       "kind": "function",
       "label": "failureNotice",
       "doc": "failureNotice states WHICH binary went silent, what version it is, and what it actually said, the three facts a reader otherwise spends a session collecting.  It re-runs the guard to capture stderr, which the verdict path discards. One extra process, only on the path that is already broken. WARN lines are dropped because a config the binary is too old to parse warns BEFORE it fails, and that warning is a symptom of the same staleness, not the error.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:513"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:519"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:field",
       "kind": "function",
       "label": "field",
       "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string rather than the literal \"null\".",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:209"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:215"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:fileSafe",
       "kind": "function",
       "label": "fileSafe",
       "doc": "fileSafe keeps a session id that may hold slashes or dots from becoming a path.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:460"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:466"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:findUp",
       "kind": "function",
       "label": "findUp",
       "doc": "findUp returns the nearest ancestor holding relative, or \"\" when there is none.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:344"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:350"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:firstLine",
       "kind": "function",
       "label": "firstLine",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:280"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:286"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:hasKey",
       "kind": "function",
       "label": "hasKey",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:266"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:272"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:286"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:292"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:judge",
       "kind": "function",
       "label": "judge",
       "doc": "The entry's own flags ride in `extra` with everything else, so the unattributed retry drops them too. Keeping them there meant a binary too old for `--observes-skill-loads` failed BOTH attempts and the spawn surface could never recover where Bash did, and a binary too old to accept the flag cannot observe a skill load to begin with.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:494"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:500"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:569"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:575"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:noticeOnce",
       "kind": "function",
       "label": "noticeOnce",
       "doc": "noticeOnce succeeds the first time family fires in this session and fails on every repeat.  The notices it holds report a BROKEN INSTALLATION. That is a fact for the person, and there is nothing in it an agent can act on, so a repeat is pure noise: measured at 2,741 firings over recent sessions, 99% of them same-session repeats of text already declined.  The marker lives under TMPDIR rather than in magus's own state because this runs when magus is missing or too broken to judge, so it cannot ask magus for a",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:443"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:449"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:olderThanWindow",
       "kind": "function",
       "label": "olderThanWindow",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:470"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:476"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it strips the last path element and yields the empty string at the top, which is what ends the walk. fs\\dirname is not that function, because it answers \"/\" for a top-level directory and the walk would never terminate.  Both separators, because this file claims to run unchanged on Windows. Splitting on `/` alone made `C:\\...` a single part, so the walk never ran once and resolveBin fell straight through to PATH, which is the staleness it exists to avoid.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:333"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:339"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:permissionResponse",
       "kind": "function",
       "label": "permissionResponse",
       "doc": "permissionResponse answers the approval request Codex raises just before its own prompt. No decision object leaves the prompt to the person; allow skips it, and is answered only for a plain push, because this event fires for every approval Codex asks and a pass from the guard is not the person's consent to anything else.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:560"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:566"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:pushRuleFor",
       "kind": "function",
       "label": "pushRuleFor",
       "doc": "pushRuleFor names the Codex prefix rule a bare push reaches, or null for anything else: a compound line, `git -C dir push`, an MCP call. Those reach no rule, so Codex would run them unprompted and no answer here may assume it prompts.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:358"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:364"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:rawField",
       "kind": "function",
       "label": "rawField",
       "doc": "rawField is `jq -r \".<dotPath>\"` with no default, so an absent field reaches magus as the literal \"null\".",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:217"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:223"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:render",
       "kind": "function",
       "label": "render",
       "doc": "render prints a value the way `jq -r` does: a string bare, anything else as JSON.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:202"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:208"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH. A repository that builds magus, or pins a newer one than is installed, keeps its RULES in that binary, and an older PATH copy does not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule, warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured 2026-08-13, when a write into a declared notes store was allowed by a binary that predated the knowledge.notes key while `magus doctor` repor",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:308"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:314"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:shellFlags",
       "kind": "function",
       "label": "shellFlags",
       "doc": "shellFlags parses this script's own argv: the `magus shell` flags the entry that wired it declares about itself, already split into words by the host that ran the command.  Parsed against SUPPORTED_FLAGS, never filtered by shape. The three answers are: a flag this file knows, which is used; anything else, which is REPORTED on stderr and left out; and no argv at all, which is the ordinary entry. There is no fourth.  Reporting is the whole point. Dropping an argument silently leaves a guard judging with flags",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:406"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:412"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:trimTrailingNewlines",
       "kind": "function",
       "label": "trimTrailingNewlines",
       "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured verdict.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:274"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:280"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:warn",
       "kind": "function",
       "label": "warn",
       "doc": "warn names the file, because a host reports a hook's stderr with the entry's matcher at best and nothing at all at worst, and a reader with eight entries needs to know which.",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:421"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:427"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-command.buzz:wholeEvent",
       "kind": "function",
       "label": "wholeEvent",
       "doc": "wholeEvent decides which of the two payloads `magus shell` gets: the WHOLE envelope, or the one string HOST_EVENT_PATH selects out of it.  The event answers this itself, which is why no entry has to. Selecting a field is the NARROW case and needs two facts to be true at once; everything else forwards the envelope, because magus's own decoder knows every payload shape magus reads (a command, a written path, a skill name, a spawn prompt, an MCP call) and answers \"nothing to judge\" for the rest, while a field",
-      "source": "docs/guides/integrations/agents/magus-command.buzz:259"
+      "source": "docs/guides/integrations/agents/magus-command.buzz:265"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:dig",
       "kind": "function",
       "label": "dig",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:67"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:68"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:digKey",
       "kind": "function",
       "label": "digKey",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:61"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:62"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:envOr",
       "kind": "function",
       "label": "envOr",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:55"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:56"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:field",
       "kind": "function",
       "label": "field",
       "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string rather than the literal \"null\".",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:78"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:79"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:85"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:86"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:130"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:131"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:96"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:97"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-observe.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH, for the same reason its two siblings do, and this file needs it MORE than they do, because it is silent by design. An older PATH copy does not know --observe at all: it rejects the flag, prints its usage to a stream this script discards, and exits non-zero, so the observation is simply never recorded, forever, with nothing anywhere saying so. Measured 2026-08-14 in magus's own repository, where the wiring was correct, the binary was wrong, and the tr",
-      "source": "docs/guides/integrations/agents/magus-observe.buzz:113"
+      "source": "docs/guides/integrations/agents/magus-observe.buzz:114"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:adviseBranch",
       "kind": "function",
       "label": "adviseBranch",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:210"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:222"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:dig",
       "kind": "function",
       "label": "dig",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:99"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:111"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:digKey",
       "kind": "function",
       "label": "digKey",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:93"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:105"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:envOr",
       "kind": "function",
       "label": "envOr",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:87"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:99"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:field",
       "kind": "function",
       "label": "field",
       "doc": "field is `jq -r \".<dotPath> // empty\"`: absent reads as the empty string.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:114"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:126"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:hasKey",
       "kind": "function",
       "label": "hasKey",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:137"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:149"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:151"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:163"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:judge",
       "kind": "function",
       "label": "judge",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:198"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:210"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:216"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:228"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:162"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:174"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:rawField",
       "kind": "function",
       "label": "rawField",
       "doc": "rawField is `jq -r \".<dotPath>\"`, so an absent field reaches magus as \"null\".",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:121"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:133"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:render",
       "kind": "function",
       "label": "render",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:108"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:120"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH, found by walking UP to the magusfile rather than testing ./magus alone. magus-command.buzz carries the full reasoning and the two measurements behind it.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:175"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:187"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:trimTrailingNewlines",
       "kind": "function",
       "label": "trimTrailingNewlines",
       "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured verdict.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:145"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:157"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-path.buzz:wholeEvent",
       "kind": "function",
       "label": "wholeEvent",
       "doc": "wholeEvent decides whether `magus shell` gets the whole envelope or just the string HOST_EVENT_PATH selects. magus reads a write target off the ENVELOPE under every `*_path` spelling, so selecting one dot-path here left NotebookEdit's `notebook_path` unjudged.",
-      "source": "docs/guides/integrations/agents/magus-path.buzz:130"
+      "source": "docs/guides/integrations/agents/magus-path.buzz:142"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:envOr",
       "kind": "function",
       "label": "envOr",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:70"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:71"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:escapeJSON",
       "kind": "function",
       "label": "escapeJSON",
       "doc": "escapeJSON is `tr '\\001-\\011\\013-\\037' '[ *]' | sed -e 's/\\\\/\\\\\\\\/g' -e 's/\"/\\\\\"/g'` followed by the read loop that joins the lines, transcribed byte for byte.  Every control character but the line break becomes a space (a raw one is not legal inside a JSON string), backslash and quote are escaped, and each line break becomes the two characters a JSON string spells it with. Byte-indexed on purpose: a multi-byte rune's continuation bytes are all above 0x7f, so they fall through untouched and reassemble exact",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:139"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:140"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:isExecutable",
       "kind": "function",
       "label": "isExecutable",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:76"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:77"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:158"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:159"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:parentDir",
       "kind": "function",
       "label": "parentDir",
       "doc": "parentDir is the shell's ${dir%/*}: it yields the empty string at the top, which is what ends the walk. fs\\dirname answers \"/\" there and would never terminate. Both separators, because a `/`-only split makes `C:\\...` one part and the walk never runs.",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:87"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:88"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:resolveBin",
       "kind": "function",
       "label": "resolveBin",
       "doc": "resolveBin prefers the workspace's own ./magus over PATH. magus-command.buzz carries the full reasoning for that preference.",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:113"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:114"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:trimTrailingNewlines",
       "kind": "function",
       "label": "trimTrailingNewlines",
       "doc": "trimTrailingNewlines matches shell command substitution, which drops every trailing newline from a captured brief.",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:125"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:126"
     },
     {
       "id": "function:docs/guides/integrations/agents/magus-rehydrate.buzz:workspaceRoot",
       "kind": "function",
       "label": "workspaceRoot",
       "doc": "workspaceRoot walks UP to the magusfile: a hook runs in the host's session directory, which is not always the workspace root. The walk is UNCONDITIONAL, unlike the one in its judging siblings, because the root is also what the rules line is resolved against; an explicit __MAGUS_BIN settles the binary, not the tree.",
-      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:101"
+      "source": "docs/guides/integrations/agents/magus-rehydrate.buzz:102"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:ci",

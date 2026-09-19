@@ -5,7 +5,8 @@
 // shell, so the wiring works unchanged on Windows. The shell copy stays for the
 // hosts still wired to `sh`.
 //
-// Run it as `magus buzz magus-checkpoint.buzz`. It imports no magus Buzz module
+// Run it as `magus buzz -s magus-checkpoint.buzz`; see magus-command.buzz for why `-s`
+// is load-bearing. It imports no magus Buzz module
 // and no spell, which is what keeps the workspace CLOSED: a Stop hook fires once
 // per session rather than once per tool call, so the 700ms an open costs would
 // be affordable here - and it is still refused, because the rule that keeps the

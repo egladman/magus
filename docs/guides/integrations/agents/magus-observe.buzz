@@ -4,7 +4,8 @@
 // Buzz port of magus-observe.sh and behaves identically without jq or a
 // POSIX shell.
 //
-// Run it as `magus buzz magus-observe.buzz`. It imports no magus Buzz
+// Run it as `magus buzz -s magus-observe.buzz`; see magus-command.buzz for why `-s` is
+// load-bearing. It imports no magus Buzz
 // module and no spell: a read hook fires on every file an agent opens, so the
 // 10ms start a closed workspace buys is worth more here than anywhere else.
 //
