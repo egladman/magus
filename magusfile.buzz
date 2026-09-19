@@ -2533,7 +2533,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // Declared so coverage_render can read them after a cache HIT: without this the
     // profiles are undeclared residue, restored by nothing, and the render target
     // finds no file to measure whenever the suite replays.
-    ctx.writesFiles("coverage.out", "coverage.hand.out");
+    ctx.writesFiles("coverage.out", "coverage.hand.out", "coverage.cmd.out");
     // The tree this suite compiles and runs, restated. It is NOT redundant with the
     // project's sources: a ctx.readsFiles call REPLACES a target's footprint rather than
     // adding to it (buildStep in run.go keeps only the magusfiles, then folds these refs
@@ -2602,7 +2602,27 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format, buzz_test);
     // Explicit args replace go-test's `./...` default, so the whole-tree scope this
     // suite exists for has to be stated alongside the flags.
-    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
+    //
+    // Two runs, because cmd/magus is raced at a price nothing else here pays.
+    // MEASURED on this tree: the whole suite is 311s with -race and 119s without, and
+    // cmd/magus alone is 200s against 30s with coverage held constant - 8x, where the
+    // rest of the tree is under 2x. TestScripts is 93% of that package, and the reason
+    // is process count rather than test work: 487 `exec magus` lines each re-execute the
+    // race-instrumented binary, ~0.83s a piece, with `magus version` alone costing 1s.
+    //
+    // What that buys is a detector pointed at a package whose own concurrency is eight
+    // signal, timeout and server-plumbing goroutines. The engine's real concurrency is
+    // raced directly, by the packages that own it: internal/cache, internal/proc/run and
+    // the root package all keep -race below. A data race those tests cannot reach, in
+    // code cmd/magus does not run concurrently, is not what 170 seconds a run buys.
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
+        {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"] + raced_packages()});
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
+        {"args": ["-covermode=atomic", "-coverprofile=" + CMD_MAGUS_PROFILE, CMD_MAGUS_PKG]});
+    // One profile again, or the badge and the floor below would measure the raced half
+    // of the tree and call it the tree.
+    fs\writeFile("coverage.out",
+        merge_profiles(fs\readFile("coverage.out"), second: fs\readFile(CMD_MAGUS_PROFILE)));
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
     // the Buzz mirrors) are hundreds of functions no test will ever call, so
     // leaving them in makes the figure a statement about the code generators and
@@ -2616,6 +2636,37 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     if (std\parseInt(coverage_percent().split(".")[0]) < 70) {
         throw "test: coverage " + coverage_percent() + "% is below the 70% floor; investigate the regression or lower the floor deliberately";
     }
+}
+
+// The package `test` runs without -race, and where its own profile lands. Named once:
+// the split reads as an accident wherever the string appears twice.
+final CMD_MAGUS_PKG = "./cmd/magus";
+final CMD_MAGUS_PROFILE = "coverage.cmd.out";
+
+// raced_packages is every package of this module except the one `test` runs separately.
+// `go list` rather than a hand-kept list, so a package added tomorrow is raced without
+// anyone remembering this, and `./...` stays the single statement of scope.
+fun raced_packages() > [str] !> any {
+    final module = cov\modulePath(fs\readFile("go.mod"));
+    final skip = module + CMD_MAGUS_PKG.sub(1);
+    var raced = mut [<str>];
+    foreach (line in proc\exec("go", ["list", "./..."], ".", {"quiet": true}).stdout.split("\n")) {
+        final pkg = line.trim();
+        if (pkg != "" and pkg != skip) { raced.append(pkg); }
+    }
+    return raced;
+}
+
+// merge_profiles concatenates two Go coverage profiles. Both carry a `mode:` header line
+// and the same mode (atomic), so the second file's body appends under the first's header;
+// `go tool cover` refuses a profile with two headers.
+fun merge_profiles(first: str, second: str) > str {
+    final body = second.split("\n");
+    var merged = mut [first.trim()];
+    foreach (i, line in body) {
+        if (i > 0 and line.trim() != "") { merged.append(line); }
+    }
+    return merged.join("\n") + "\n";
 }
 
 // coverage_percent is THIS machine's figure over THIS module, and the 70% floor in

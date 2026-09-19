@@ -63,6 +63,9 @@ console/gen/
 # CD and published with the site, never committed.
 coverage.out
 coverage.hand.out
+# The half of that profile `test` measures without -race (cmd/magus), merged into
+# coverage.out as the suite finishes.
+coverage.cmd.out
 /coverage/buzz/
 
 # Local build artifacts: `go build ./cmd/<name>` at the repo root drops the bare
