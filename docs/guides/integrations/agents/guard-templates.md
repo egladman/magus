@@ -1723,6 +1723,7 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 
 import "io";
+import "flags";
 import "encoding/json" as json;
 import "env";
 import "fs";
@@ -1885,7 +1886,29 @@ fun adviseBranch() > str {
     return envOr("HOST_ADVISE_BRANCH", fallback: ADVISE_DEFAULT);
 }
 
+// warn names the file: a host reports a hook's stderr with the entry's matcher at best
+// and nothing at all at worst, and a reader with several entries needs to know which.
+fun warn(message: str) > void {
+    io\stderr.write("magus-path.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv ANYWAY.
+//
+// An argument that arrives here means the wiring meant something by it, and reading none
+// at all accepted that in silence. Reported and then ignored, which is the same policy
+// every other arm of this file takes: a misconfigured entry must not block work, and must
+// not be invisible either.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
@@ -2024,6 +2047,7 @@ The observer, in Buzz. It prints nothing, always exits 0, and declares no covera
 // all. An optional record must never be able to do that.
 
 import "io";
+import "flags";
 import "encoding/json" as json;
 import "env";
 import "fs";
@@ -2111,7 +2135,25 @@ fun resolveBin() > str {
     return proc\which("magus") catch "";
 }
 
+// warn names the file; see magus-command.buzz. STDERR, which is why it does not break
+// this file's contract to print nothing: stdout is what the host reads as a verdict.
+fun warn(message: str) > void {
+    io\stderr.write("magus-observe.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
@@ -2210,6 +2252,7 @@ does, so it selects nothing and imports no JSON reader at all.
 // worth strictly less than the work.
 
 import "io";
+import "flags";
 import "env";
 import "fs";
 import "path";
@@ -2266,7 +2309,25 @@ fun resolveBin() > str {
     return proc\which("magus") catch "";
 }
 
+// warn names the file; see magus-command.buzz. STDERR, which is why it does not break
+// this file's contract to print nothing: stdout is what the host reads as a verdict.
+fun warn(message: str) > void {
+    io\stderr.write("magus-checkpoint.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
@@ -2355,6 +2416,7 @@ escape its sh twin builds out of a pipeline is one byte-indexed loop here.
 // session it was meant to help.
 
 import "io";
+import "flags";
 import "env";
 import "fs";
 import "path";
@@ -2462,7 +2524,25 @@ fun escapeJSON(body: str) > str {
     return buf.join("");
 }
 
+// warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this
+// file writes on stdout.
+fun warn(message: str) > void {
+    io\stderr.write("magus-rehydrate.buzz: {message}\n") catch void;
+}
+
+// This surface declares no flags, and parses its argv anyway: an argument arriving here
+// means the wiring meant something by it, and reading none at all accepted that silently.
+fun reportArgv(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares none. "
+            + "Fix the hook command in your host config.");
+    }
+}
+
 fun main(args: [str]) > void {
+    reportArgv(args);
     final rules = envOr("REHYDRATE_RULES", fallback: "CLAUDE.md");
     final root = workspaceRoot();
 

@@ -69,10 +69,15 @@ func FlagsParse(_ context.Context, argv, switches, valued []string) (types.FlagP
 		Positionals: []string{},
 		Unknown:     []string{},
 	}
-	for i := 0; i < len(argv); i++ {
-		word := argv[i]
+	// Consumed from the front rather than walked by index: a valued flag eats the word
+	// after it, and "what is left" says that plainly where an index the loop also
+	// increments does not.
+	rest := argv
+	for len(rest) > 0 {
+		word := rest[0]
+		rest = rest[1:]
 		if word == "--" {
-			parsed.Positionals = append(parsed.Positionals, argv[i+1:]...)
+			parsed.Positionals = append(parsed.Positionals, rest...)
 			break
 		}
 		switch {
@@ -82,11 +87,11 @@ func FlagsParse(_ context.Context, argv, switches, valued []string) (types.FlagP
 			// The value is the NEXT word, and running off the end is an error rather
 			// than an empty string: a flag whose value silently became "" is the shape
 			// that makes a misconfigured call look like a configured one.
-			if i+1 >= len(argv) {
+			if len(rest) == 0 {
 				return types.FlagParse{}, fmt.Errorf("flags.parse: %s takes a value and none followed it", word)
 			}
-			i++
-			parsed.Values[word] = argv[i]
+			parsed.Values[word] = rest[0]
+			rest = rest[1:]
 		default:
 			// The =value form, accepted only for a flag declared as valued. Split on the
 			// FIRST = so a value may contain one.
