@@ -60,20 +60,14 @@ func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []str
 	return out
 }
 
-// movedInputs names every hashed input that changed while the step ran, whoever changed
-// it. Unlike [mutatedSources] it exempts only ctx.modifiesExistingFiles, because it answers
-// a different question: not "did this target misbehave" but "does this key still describe
-// the tree it was computed from".
+// movedInputs names every hashed input that changed while the step ran, whoever changed it.
+// It exempts only ctx.modifiesExistingFiles, whose key is computed from the pre-edit bytes
+// by declaration.
 //
-// The two must not share an exemption. mutatedSources ignores anything a project declares
-// as an output so MGS4007 does not accuse a target of writing a generated file, and that
-// exemption was load-bearing for BLAME and catastrophic for STORAGE: run.go fills
-// OwnedOutputs with every project's outputs, so a peer rewriting a generated file inside
-// this step's hash window was claimed, ignored, and the entry stored under a key computed
-// from the bytes that file used to hold.
-//
-// An in-place update is exempt because the key is computed from the pre-edit bytes on
-// purpose: that is what ctx.modifiesExistingFiles declares.
+// The exemptions must NOT be shared with [mutatedSources], which answers "did this target
+// misbehave" and so ignores every declared output to keep MGS4007 from accusing a target of
+// writing a generated file. This answers "does the key still describe the tree it was
+// computed from", where a peer rewriting a generated file mid-hash is the whole danger.
 func movedInputs(before, after sourceFingerprint, updates []string) []string {
 	return mutatedSources(before, after, updates, nil)
 }
@@ -103,18 +97,16 @@ func (c *Cache) checkSourceMutation(ctx context.Context, s *Step, before sourceF
 		s.ProjectPath, s.Target, pluralFiles(len(changed)), joinCapped(changed, 5))
 }
 
-// keyStillDescribesInputs reports whether this step's hashed inputs are unchanged, and
-// names what moved when they are not. A false answer means the entry about to be written
-// would be filed under a key describing a tree that no longer exists.
+// keyStillDescribesInputs reports whether this step's hashed inputs are unchanged, and names
+// what moved when they are not.
 //
-// It REFUSES THE ENTRY, never the run. The step's work succeeded and its output is good;
-// what is unsafe is recording that output under this key, where a later run whose tree
-// really does hash to it would replay bytes built from different sources. Failing the run
-// instead would turn a benign interleaving into a red build, and would punish the target
-// that was READ rather than the one that wrote.
+// Callers REFUSE THE ENTRY, never the run: the work succeeded and its output is good, and
+// only filing it under this key is unsafe, since a later run that really does hash to it
+// would replay bytes built from different sources. Failing instead would punish the target
+// that was read rather than the one that wrote.
 //
-// Returns true when the fingerprint cannot be taken. A tree magus cannot stat twice is not
-// evidence of anything, and the alternative is to stop caching whenever a stat races.
+// True when the fingerprint cannot be taken: a tree magus cannot stat twice is evidence of
+// nothing, and the alternative stops caching whenever a stat races.
 func (c *Cache) keyStillDescribesInputs(ctx context.Context, s *Step, before sourceFingerprint) ([]string, bool) {
 	if before == nil {
 		return nil, true

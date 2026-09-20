@@ -363,8 +363,8 @@ func (s JobState) Terminal() bool {
 //
 // EXITED IS LIVE, which reads oddly next to Terminal and is the safe direction. A holder
 // that filed its result still holds the lease on its checkout, and a verification that
-// rejects sends it back to the same write paths; dropping the job out of live here would leave
-// every write after `job exit` graded by nothing at all.
+// rejects sends it back to the same write paths; dropping the job out of live here would
+// leave every write after `job exit` graded by nothing at all.
 func (s JobState) Live() bool {
 	return s == StateDeclared || s == StateRunning || s == StateExited
 }
