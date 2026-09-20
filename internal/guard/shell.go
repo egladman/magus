@@ -611,17 +611,13 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 // preserving compound verbs (`go mod tidy`, `go tool govulncheck`). It is empty when the
 // rendering names no subcommand, which rawToolMatch reads as a single-purpose program.
 //
-// It consumes a valued global flag's OPERAND as well as its name, which the invocation
-// side also does. Skipping the name alone left a rendering of `go -C <dir> test` with the
-// prefix ["<dir>"], and for any real path subcommandWord then rejected it, returned nil,
-// and rawToolMatch read `go` as a single-purpose program whose every spelling is covered:
-// one spell rendering that argv would have denied `go version` workspace-wide.
+// It consumes a valued global flag's OPERAND as well as its name: leaving the operand in
+// place makes it read as the subcommand, and a nil answer here claims the program has NO
+// subcommands, which covers every spelling of it.
 //
-// An unknown flag is SKIPPED here, unlike on the invocation side, and the asymmetry is the
-// point. This argv is magus's own rendering, so a misread costs a rule that matches
-// nothing; the other side is a caller's argv, where the same misread invents a deny. A
-// nil answer here is not the cautious option, it is the claim that the program has no
-// subcommands at all.
+// An unknown flag is SKIPPED here and ends the read on the invocation side. The asymmetry
+// is the point: this argv is magus's own rendering, where a misread costs a rule that
+// matches nothing, while there it would invent a deny.
 func commandPrefix(program string, args []string) []string {
 	valued := valuedGlobalFlags[filepath.Base(program)]
 	first := 0
@@ -631,9 +627,7 @@ func commandPrefix(program string, args []string) []string {
 		}
 		first++
 	}
-	// >=, not ==: a valued flag consumes the word after it, so an argv ENDING on one
-	// (["-C"], or ["-x", "-C"]) advances past the end, and equality would let the index
-	// below run off it. afterGlobalFlags states the same bound as i+1 >= len(args).
+	// >=, not ==: an argv ending on a valued flag (["-C"]) advances past the end.
 	if first >= len(args) || !subcommandWord(args[first]) {
 		return nil
 	}

@@ -1545,19 +1545,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}()
 	ctx = service.WithSession(ctx, svcSession)
 	// The pre-run composed gates and RunAll's batch steps share one isolation scope. A
-	// dynamically admitted needs child INHERITS its parent's lease and takes nothing of
-	// its own, so it can never queue for a gate its own ancestor holds.
-	//
-	// This said the opposite until 2026-09-19, describing a yield-and-retake of the lease.
-	// That design (YieldRunIsolation) was real and was removed in two steps: its exclusive
-	// half on 2026-09-08, after a run sat 27 minutes at 13s of CPU with no child process
-	// running, and its shared half on 2026-09-11, after a gate held every project lock for
-	// 19 minutes with `magus status` reporting nothing running. Inheritance replaced both.
-	//
-	// It is now the ONLY thing keeping a needs child off a gate its own ancestor holds: the
-	// wedge verdict that used to catch that shape was deleted on 2026-09-19 for answering
-	// off an aliased record. A reader who resolves the two the wrong way reintroduces the
-	// hang with nothing left to name it.
+	// dynamically admitted needs child INHERITS its parent's lease rather than taking its
+	// own, which is the ONLY thing keeping it off a gate its own ancestor holds. Nothing
+	// detects that shape any more, so breaking the inheritance rule brings back a wedged
+	// run with nothing left to name it.
 	ctx = cache.WithRunScope(ctx)
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err

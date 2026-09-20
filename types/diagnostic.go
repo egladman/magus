@@ -421,14 +421,9 @@ const (
 	ReviewAuthorshipUnknown DiagnosticCode = "MGS1103"
 )
 
-// MGS3015 was RunIsolationWedged, retired 2026-09-19 and deliberately absent above. It
-// refused a run when every holder of the isolation gate looked stalled, and it read that
-// from a record the gate did not own: a composite step's lease pointed at whichever
-// descendant was admitted last. It could not fire for a simple step and did fire for
-// healthy composite ones. See internal/cache/isolation.go.
-//
-// The number is not reused. A retired code that comes back means two different things in
-// one search of a log archive.
+// MGS3015 is retired and deliberately absent above; docs/decisions/0001 says why. The
+// number is not reused: a retired code that comes back means two different things in one
+// search of a log archive.
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
 // in sync with the const block above; it is the enumeration source for tooling

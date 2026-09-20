@@ -830,9 +830,9 @@ func vcsMutation(c hint.Invocation) string {
 // denyWriteOutsideLease refuses a shell line that writes outside the acting lease's
 // write paths, in the words the path surface would have used for the same file.
 //
-// The boundary used to be enforced only where a host reported a PATH, so a bound worker that
-// redirected, tee'd, sed -i'd or cp'd into a sibling's tree was passed while the identical
-// editor-tool write was denied.
+// A shell line is graded because a host reports no PATH for one: without this, a bound
+// worker that redirects, tees, sed -i's or cp's into a sibling's tree passes while the
+// identical editor-tool write is denied.
 //
 // It calls the path surface's own grader rather than deciding anything itself, so the two
 // cannot drift about who owns a path or how the refusal reads, and the extraction that

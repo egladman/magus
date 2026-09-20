@@ -49,37 +49,13 @@ env:
   # Unset this variable and the cache is simply not wired: no error, no remote hits.
   # Setting it is what turns on both the cache and its verification, together.
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
-  # This DECIDES the shard count; it does not bound a forecast. MEASURED 2026-09-19 against
-  # the same 10 affected projects: cap 1 gives 1 shard, 3 gives 3, 6 gives 6, 8 gives 8, and
-  # 20 gives 10. The count is min(cap, affected projects) and nothing else, so the forecaster
-  # contributes no number here and this line is the only lever on runner concurrency. That is
-  # why it is set in the workflow rather than in magus.yaml: it is a fact about the runner
-  # pool, not about the workspace, and a developer planning locally spawns no runners.
+  # Decides the shard count outright: it is min(this, affected projects), and the forecaster
+  # contributes nothing. Unset means 8, so there is no "no cap". It lives here rather than in
+  # magus.yaml because it sizes a runner pool, and a local plan spawns no runners.
   #
-  # Leaving it unset does not mean "no cap": it means 8, the binary's own default, which is
-  # the same decision made somewhere harder to find.
-  #
-  # MEASURED, from the 21m31s shard's own log rather than from memory: libs/gopherbuzz
-  # 439s, cmd/magus 195s, the root package 67s, and the shard ran as a CHAIN, not a pack.
-  # Root sat waiting 7m49s for gopherbuzz's whole ci, and docs then waited on root.
-  #
-  # So the skew was never root's own tests, and two earlier versions of this comment said it
-  # was. The 439s was a test loop that ran to 64-bit overflow, since bounded, and that one
-  # fix is worth more than every other change around it.
-  #
-  # No measurement asks for more than two. The bound is max(longest unit, total/N), and on
-  # the 3-shard run that followed, shards 1 and 2 summed to 4m9s against shard 0's 10m34s:
-  # two shards give the identical makespan, and the third co-located commentdash with root
-  # for 1m15s of pure wait.
-  #
-  # It is 6 anyway, bought with runner concurrency rather than justified by a timing. The
-  # packer is edge-blind: a depends_on edge only exists when it puts both projects on one
-  # runner, so the 21m chain was an artifact of packing tightly, and a thinner pack cannot
-  # form one. That is a reason to fix the packer. Until somebody does, spreading wider is
-  # what stops it recurring, and the 3 extra runners are the price.
-  #
-  # Do not re-derive any of this from a comment. Take per-package and per-target timings off
-  # a green run.
+  # No timing asks for more than 2. It is 6 to keep packs thin, because the packer only
+  # creates a depends_on edge when it puts both projects on one runner, which is what built
+  # the 21m chain. Fixing the packer is the real answer; the extra runners are the stopgap.
   MAGUS_CI_MAX_SHARDS: '6'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you

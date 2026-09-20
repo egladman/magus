@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The wedge that held the gate for 19 minutes on 2026-09-11, at its smallest: a composed
+// The wedge that held the gate for 19 minutes, at its smallest: a composed
 // target's skip-cache gate is dispatched through RunAside from inside a step that already
 // holds the shared side, and asks for the exclusive one. It waited on its own ancestor,
 // and every later shared request parked behind it.
@@ -285,9 +285,9 @@ func heldSeats(t *testing.T, r *runIsolation) int64 {
 	return -1
 }
 
-// This is load-bearing in a way the sibling inheritance test is not. With the wedge verdict
-// deleted, inheritance is the ONLY thing preventing the 2026-09-11 shape: a needs child
-// asking for the exclusive side while its own parent holds the shared one. If
+// This is load-bearing in a way the sibling inheritance test is not. Nothing detects the
+// wedge, so inheritance is the ONLY thing preventing it: a needs child asking for the
+// exclusive side while its own parent holds the shared one. If
 // SharedStepContext ever stopped carrying the parent's admission, that child would queue
 // behind its own parent and the run would hang until the 15-minute stall watchdog, with
 // nothing naming the gate.
@@ -311,8 +311,8 @@ func TestRunIsolationNeedsChildInheritsUnderAFanOut(t *testing.T) {
 	parent = context.WithValue(parent, sharedStepBaseKey{}, base)
 
 	require.NoError(t, lim.Yield(parent, func() error {
-		// Mid-fan-out, with the parent's slots handed back: the shape that used to be
-		// refused, and the one a dispatched member really runs in.
+		// Mid-fan-out, with the parent's slots handed back: the context a dispatched
+		// member really runs in.
 		member := SharedStepContext(parent)
 		child, releaseChild, err := acquireRunIsolation(member, true)
 		require.NoError(t, err, "an exclusive member queued instead of inheriting")
