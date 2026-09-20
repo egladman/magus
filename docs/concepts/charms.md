@@ -111,9 +111,8 @@ disk, and `trivy image:update` refreshes it first. Nothing is locked, and the qu
 identical: may this run replace what it pinned of the outside world?
 
 That is why the charm is `update` rather than the `relock` it was named while `go mod
-tidy` was the only op claiming it. `relock` still works everywhere `update` does and
-resolves to it, for one release; magus prints the new spelling the first time you use the
-old one.
+tidy` was the only op claiming it. `relock` was accepted as an alias for one release and
+is gone; a target that still spells it that way now fails as an undeclared charm.
 
 ### They stack
 

@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6426,
-  "edge_count": 11493,
+  "node_count": 6428,
+  "edge_count": 11495,
   "relations": [
     {
       "id": "annotates",
@@ -8772,6 +8772,16 @@
       }
     },
     {
+      "id": "docsection:CHANGELOG.md#removed-2",
+      "kind": "docsection",
+      "label": "Removed",
+      "source": "CHANGELOG.md#removed-2",
+      "attrs": {
+        "anchor": "removed-2",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:CHANGELOG.md#security",
       "kind": "docsection",
       "label": "Security",
@@ -12138,6 +12148,16 @@
       "source": "docs/changelog.md#removed-1",
       "attrs": {
         "anchor": "removed-1",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/changelog.md#removed-2",
+      "kind": "docsection",
+      "label": "Removed",
+      "source": "docs/changelog.md#removed-2",
+      "attrs": {
+        "anchor": "removed-2",
         "level": "3"
       }
     },
@@ -99111,6 +99131,14 @@
       "provenance": "CHANGELOG.md"
     },
     {
+      "source": "docsection:CHANGELOG.md#unreleased",
+      "target": "docsection:CHANGELOG.md#removed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CHANGELOG.md"
+    },
+    {
       "source": "docsection:CHANGELOG.md#v010---2026-07-05",
       "target": "docsection:CHANGELOG.md#added-8",
       "relation": "contains",
@@ -99312,7 +99340,7 @@
     },
     {
       "source": "docsection:CHANGELOG.md#v042---2026-09-03",
-      "target": "docsection:CHANGELOG.md#removed",
+      "target": "docsection:CHANGELOG.md#removed-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -99320,7 +99348,7 @@
     },
     {
       "source": "docsection:CHANGELOG.md#v042---2026-09-03",
-      "target": "docsection:CHANGELOG.md#removed-1",
+      "target": "docsection:CHANGELOG.md#removed-2",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -101503,6 +101531,14 @@
       "provenance": "docs/changelog.md"
     },
     {
+      "source": "docsection:docs/changelog.md#unreleased",
+      "target": "docsection:docs/changelog.md#removed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/changelog.md"
+    },
+    {
       "source": "docsection:docs/changelog.md#v010---2026-07-05",
       "target": "docsection:docs/changelog.md#added-8",
       "relation": "contains",
@@ -101704,7 +101740,7 @@
     },
     {
       "source": "docsection:docs/changelog.md#v042---2026-09-03",
-      "target": "docsection:docs/changelog.md#removed",
+      "target": "docsection:docs/changelog.md#removed-1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -101712,7 +101748,7 @@
     },
     {
       "source": "docsection:docs/changelog.md#v042---2026-09-03",
-      "target": "docsection:docs/changelog.md#removed-1",
+      "target": "docsection:docs/changelog.md#removed-2",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

@@ -259,8 +259,8 @@ already a slight metaphor over `go.mod` and `go.sum`; magus itself ships unrelat
 reader could reasonably want to type as a target. Those were accepted while the charm
 covered one concrete artifact. They stopped being worth paying once it did not.
 
-`relock` remains accepted as a compatibility alias for one release, resolving to
-`update` wherever a charm name is read.
+`relock` was accepted as a compatibility alias for one release and has been removed;
+`update` is the only spelling a charm name is read as.
 
 Question 5 settles what the candidates kept reopening. "May pinned upstream state
 change?" is one axis, and it is binary, so it takes one charm and no guard. Splitting

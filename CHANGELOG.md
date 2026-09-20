@@ -673,6 +673,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   holds before exiting rather than the first, since exiting at the first one turned one fix
   into four rounds, each revealing exactly one more problem.
 
+### Removed
+
+- **The `relock` charm alias is gone; `update` is the only spelling.** `relock` was the
+  charm's name while `go mod tidy` was the only op claiming it, and it was kept resolving
+  to `update` for one release with a hint on every use. A target that still spells it
+  `relock` now fails as an undeclared charm; rename the suffix to `update`.
+
 ## [v0.4.3] - 2026-09-06
 
 See the full changelog at
