@@ -445,7 +445,7 @@ func (m *Magus) computeSymbolIndexStatus(ctx context.Context) []types.SymbolInde
 	// Probed once for the whole sweep, the way a run probes once per invocation: each
 	// tool version costs a subprocess spawn.
 	toolVersions := m.toolVersionsByProject(ctx, capable)
-	observations := m.probeObservations(ctx, capable)
+	observations := m.probeObservations(ctx, capable, nil)
 	c := m.freshnessCache(ctx)
 	out := make([]types.SymbolIndexStatus, 0, len(capable))
 	for _, p := range capable {

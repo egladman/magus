@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ import (
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
+	"golang.org/x/sync/errgroup"
 )
 
 // RunOption configures a [Magus.Run], [Magus.RunCI], or [Magus.RunAffected] invocation.
@@ -720,7 +722,8 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	// Not part of sweepReuse: an observation probe runs only for a project whose
 	// spells declare one, so the sweep's re-probe cost this memoizes for versions does
 	// not arise. Keyed the same as a run so `describe target --cache` mints the same key.
-	observations := m.probeObservations(ctx, []*types.Project{p})
+	observations := m.probeObservations(ctx, []*types.Project{p},
+		map[string]map[string]bool{p.Path: targetDrivenBins(p, target)})
 	step := m.buildStep(p, target)
 	applyRunKeying(&step, toolVersions[p.Path], observationsForTarget(p, target, observations[p.Path]), charms)
 	return m.cache.StepKeyMemo(ctx, &step, memo)
@@ -956,13 +959,7 @@ func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extra
 	if mode == "off" {
 		return nil
 	}
-	// One probe, two consumers: the cache key wants a narrowed token, the window gate
-	// wants the whole version. BOTH are memoized. The memo is keyed on (spell, dir, tool)
-	// and the gate per PROJECT, so two projects sharing a dir take the hit path: a memo
-	// holding only the token would leave every project after the first unchecked, and
-	// silently, since the gate reads an absent version as "could not compare".
-	type reading struct{ token, full string }
-	memo := make(map[string]reading)
+	memo := m.probeReadings(ctx, projects, mode)
 	out := make(map[string][]string, len(projects))
 	for _, p := range projects {
 		dir := p.Dir
@@ -974,48 +971,13 @@ func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extra
 			// One uniform loop over every declared tool. There is no privileged
 			// "primary" binary any more: `go` had one for historical cache-key reasons
 			// and nothing principled separated it from golangci-lint, so both key as
-			// spell:tool:version. Memoized on (spell, dir, tool) so N tools cost N
-			// spawns per project per run rather than N per target.
+			// spell:tool:version.
 			for _, tool := range s.ToolNames() {
-				t, _ := s.Tool(tool)
-				if !t.HasProbe() {
+				if t, _ := s.Tool(tool); !t.HasProbe() {
 					continue
 				}
-				tk := s.Name() + "\x00" + dir + "\x00" + tool
-				r, hit := memo[tk]
-				if !hit {
-					// A declared constant needs no process. It stays out of `full`:
-					// an author typed it, so there is nothing for the gate to compare.
-					if t.Probe.Bin == "" {
-						r.token = t.Key.Const
-					} else {
-						probed, err := s.ProbeVersion(ctx, tool, dir)
-						switch {
-						case err != nil:
-							slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
-								slog.String("spell", s.Name()), slog.String("tool", tool),
-								slog.String("dir", dir), slog.String("err", err.Error()))
-							r.token = "UNPROBED"
-						default:
-							token, note := spells.VersionToken(probed, t.Key)
-							if note != "" {
-								slog.WarnContext(ctx, "magus: tool-version key degraded; cache key is coarser than declared",
-									slog.String("spell", s.Name()), slog.String("tool", tool),
-									slog.String("dir", dir), slog.String("note", note))
-							}
-							slog.DebugContext(ctx, "magus: tool-version probe",
-								slog.String("spell", s.Name()), slog.String("tool", tool),
-								slog.String("output", probed), slog.String("token", token))
-							r.token = token
-							if full, ok := spells.ExtractVersion(probed); ok {
-								r.full = full
-							}
-						}
-					}
-					memo[tk] = r
-				}
-				// Outside the miss branch: a project taking the hit path still needs its
-				// own gate entry. See the reading type above.
+				r := memo[s.Name()+"\x00"+dir+"\x00"+tool]
+				// A project sharing a dir with another still needs its own gate entry.
 				if extracted != nil && r.full != "" {
 					extracted[p.Path+"\x00"+s.Name()+"\x00"+tool] = r.full
 				}
@@ -1027,6 +989,110 @@ func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extra
 		}
 	}
 	return out
+}
+
+// toolReading is one probe's two consumers: the cache key wants a narrowed token, the
+// window gate wants the whole version, and both come from the same spawn.
+type toolReading struct{ token, full string }
+
+// probeReadings resolves every distinct (spell, dir, tool) a run needs, CONCURRENTLY.
+//
+// Distinct is what makes it safe to share: the probe is keyed on the directory because a
+// project may pin its own toolchain, and two projects under one dir provably resolve the
+// same binary. Sharing on the resolved PATH instead would be wrong wherever a shim is one
+// path serving many versions, which is what asdf and mise install.
+//
+// Concurrent is what makes it affordable. This used to be a serial loop inside
+// probeTools, so a run paid one spawn per project per tool before any target started, and
+// the pool's concurrency could not touch it because nothing had been submitted yet. At 50
+// projects against the go spell that was 150 spawns and ~10s of a run that had already
+// decided every target was a cache hit. "A version probe is cheap" holds for one project
+// and stops holding at the workspace sizes magus is for.
+func (m *Magus) probeReadings(ctx context.Context, projects []*types.Project, mode string) map[string]toolReading {
+	type want struct {
+		spell *spells.Spell
+		dir   string
+		tool  string
+	}
+	wants := make(map[string]want)
+	for _, p := range projects {
+		dir := p.Dir
+		if mode == "workspace" {
+			dir = m.ws.Root
+		}
+		for _, s := range p.ResolvedSpells {
+			for _, tool := range s.ToolNames() {
+				if t, _ := s.Tool(tool); !t.HasProbe() {
+					continue
+				}
+				wants[s.Name()+"\x00"+dir+"\x00"+tool] = want{spell: s, dir: dir, tool: tool}
+			}
+		}
+	}
+	if len(wants) == 0 {
+		return nil
+	}
+
+	readings := make(map[string]toolReading, len(wants))
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(m.probeConcurrency())
+	for key, w := range wants {
+		g.Go(func() error {
+			r := m.probeOne(gctx, w.spell, w.tool, w.dir)
+			mu.Lock()
+			readings[key] = r
+			mu.Unlock()
+			return nil
+		})
+	}
+	// Every probe records its own failure as UNPROBED, so nothing here returns an error
+	// and Wait is only a barrier.
+	_ = g.Wait()
+	return readings
+}
+
+// probeConcurrency bounds the probe fan-out. It rides the run's own concurrency setting
+// so one knob governs both, and never drops below 1, which a zero or negative setting
+// would otherwise turn into a deadlocked errgroup.
+func (m *Magus) probeConcurrency() int {
+	if n := m.cfg.Concurrency; n > 0 {
+		return n
+	}
+	return runtime.NumCPU()
+}
+
+// probeOne reads one tool's version, recording a failure as UNPROBED rather than
+// returning an error: a tool that cannot say which build it is keeps the miss
+// deterministic, where keying on nothing would replay across an upgrade.
+func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string) toolReading {
+	t, _ := s.Tool(tool)
+	// A declared constant needs no process. It stays out of `full`: an author typed it,
+	// so there is nothing for the gate to compare.
+	if t.Probe.Bin == "" {
+		return toolReading{token: t.Key.Const}
+	}
+	probed, err := s.ProbeVersion(ctx, tool, dir)
+	if err != nil {
+		slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
+			slog.String("spell", s.Name()), slog.String("tool", tool),
+			slog.String("dir", dir), slog.String("err", err.Error()))
+		return toolReading{token: "UNPROBED"}
+	}
+	token, note := spells.VersionToken(probed, t.Key)
+	if note != "" {
+		slog.WarnContext(ctx, "magus: tool-version key degraded; cache key is coarser than declared",
+			slog.String("spell", s.Name()), slog.String("tool", tool),
+			slog.String("dir", dir), slog.String("note", note))
+	}
+	slog.DebugContext(ctx, "magus: tool-version probe",
+		slog.String("spell", s.Name()), slog.String("tool", tool),
+		slog.String("output", probed), slog.String("token", token))
+	r := toolReading{token: token}
+	if full, ok := spells.ExtractVersion(probed); ok {
+		r.full = full
+	}
+	return r
 }
 
 // probeObservations runs each resolved spell's declared observation probes and returns
@@ -1042,10 +1108,11 @@ func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extra
 // A probe that fails records UNPROBED, like a version probe: a scanner that cannot say
 // which database it holds is a worse reason to key on nothing than to key on a constant,
 // since the constant at least keeps the miss deterministic.
-func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project) map[string]map[string]string {
+func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project, driven map[string]map[string]bool) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	memo := map[string]string{}
 	for _, p := range projects {
+		drivenHere := driven[p.Path]
 		for _, s := range p.ResolvedSpells {
 			if !s.HasObservationProbe() {
 				continue
@@ -1053,6 +1120,13 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 			for _, tool := range s.ToolNames() {
 				t, _ := s.Tool(tool)
 				if !t.HasObservationProbe() {
+					continue
+				}
+				// The spawn the doc above promises a target does not pay for unless it
+				// drives the binary. observationsForTarget already dropped an undriven
+				// tool from the KEY, so skipping it here changes no key; it only stops
+				// `magus run build` paying govulncheck's spawn on every project.
+				if driven != nil && !drivenHere[s.Name()+":"+tool] {
 					continue
 				}
 				tk := s.Name() + "\x00" + p.Dir + "\x00" + tool
@@ -1076,6 +1150,27 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 		}
 	}
 	return out
+}
+
+// targetDrivenBins is the "spell:bin" set target's body statically reaches, the same
+// walk observationsForTarget narrows the key with. Returning it separately is what lets
+// the SPAWN be skipped rather than only the key line: a nil result means the target
+// drives nothing, and probeObservations reads nil as "probe everything" for callers that
+// have no target to scope by, so the two are not interchangeable.
+func targetDrivenBins(p *types.Project, target string) map[string]bool {
+	driven := map[string]bool{}
+	for _, use := range p.TargetSpellOps[target] {
+		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
+		if i < 0 {
+			continue
+		}
+		for _, opName := range use.Ops {
+			if op, ok := p.ResolvedSpells[i].Op(opName); ok && op.Bin != "" {
+				driven[use.Spell+":"+op.Bin] = true
+			}
+		}
+	}
+	return driven
 }
 
 // observationsForTarget narrows a project's probed observations to the ones target
@@ -1323,7 +1418,20 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// The keying every step of this invocation shares. runComposedSkipCacheGates mints
 	// steps outside the stage loop, so the two would otherwise key differently.
-	obs := m.probeObservations(ctx, uniqueProjects)
+	// Scoped per project to the union of the targets this invocation will key, since
+	// newStep mints steps for every stage off this one probe.
+	drivenByProject := make(map[string]map[string]bool, len(uniqueProjects))
+	for _, st := range stages {
+		for _, p := range st.projects {
+			if drivenByProject[p.Path] == nil {
+				drivenByProject[p.Path] = map[string]bool{}
+			}
+			for bin := range targetDrivenBins(p, st.target) {
+				drivenByProject[p.Path][bin] = true
+			}
+		}
+	}
+	obs := m.probeObservations(ctx, uniqueProjects, drivenByProject)
 	newStep := func(p *types.Project, target string) cache.Step {
 		step := m.buildStep(p, target)
 		applyRunKeying(&step, toolVer[p.Path], observationsForTarget(p, target, obs[p.Path]), charmKey)
