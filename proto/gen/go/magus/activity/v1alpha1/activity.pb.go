@@ -74,11 +74,11 @@ const (
 	// under this kind is a READ, audited because this is the only door that can serve the PRIVATE
 	// note store, which lives outside any repository and which nothing else attributes.
 	Kind_KIND_NOTES Kind = 10
-	// A path under a job's declared write lane changed, as the daemon's file watcher saw it.
-	// action is the repo-relative path and unit is the job whose lane covers it. The producer
+	// A path under a job's declared write paths changed, as the daemon's file watcher saw it.
+	// action is the repo-relative path and unit is the job whose write paths cover it. The producer
 	// is the FILESYSTEM, not an agent: this is the one kind that needs no cooperation from
 	// the worker being watched, which is the whole reason a person can see what a worker is
-	// doing without asking it. An empty unit means no live lane covered the path.
+	// doing without asking it. An empty unit means no live job covered the path.
 	Kind_KIND_FILE_CHANGE Kind = 11
 	// A run magus recorded against a job: its check, one of its completion gates, or the
 	// daemon's own last run of a catalog job. action is the rendered command and preview
@@ -248,7 +248,7 @@ type ActivityEvent struct {
 	Unit string `protobuf:"bytes,16,opt,name=unit,proto3" json:"unit,omitempty"`
 	// On a KIND_FILE_CHANGE, the leases that BOTH declared this path, set only when more than
 	// one did. unit is then empty, because there is no answer to "whose write is this": the
-	// lanes are meant to be disjoint and this path is the evidence they are not.
+	// write paths are meant to be disjoint and this path is the evidence they are not.
 	//
 	// A repeated field rather than a sentence in preview, because a reader watching one lease
 	// has to ask "am I one of these" on every row, and parsing prose to answer it is how the
@@ -423,7 +423,7 @@ type ActivityQuery struct {
 	Units    []string `protobuf:"bytes,5,rep,name=units,proto3" json:"units,omitempty"`       // restrict to these leases (magus calls one a job)
 	Sessions []string `protobuf:"bytes,6,rep,name=sessions,proto3" json:"sessions,omitempty"` // restrict to these host session ids
 	// Restrict to file changes under these paths. A path matches the way a declared write
-	// lane does, so naming a directory answers for what is under it. It selects FILE events
+	// path does, so naming a directory answers for what is under it. It selects FILE events
 	// only: a tool call and a run are attributed by lease, not by path, and quietly returning
 	// them for a path filter would report reach nobody asked about.
 	Paths         []string `protobuf:"bytes,7,rep,name=paths,proto3" json:"paths,omitempty"`

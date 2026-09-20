@@ -68,7 +68,7 @@ type ActivityServiceClient interface {
 	//
 	// It merges three producers into the one envelope, which is why the filter is where it
 	// is rather than on the client: file changes the daemon's watcher saw, attributed to the
-	// job whose declared write lane covers the path; the guard's tool-call observations,
+	// job whose declared write paths cover the path; the guard's tool-call observations,
 	// attributed by the lease the hook resolved; and the runs recorded against a job. A
 	// reader narrows by job, session or path and gets one time-ordered stream of all three,
 	// so "what is that worker doing" is one subscription rather than three.
@@ -143,7 +143,7 @@ type ActivityServiceHandler interface {
 	//
 	// It merges three producers into the one envelope, which is why the filter is where it
 	// is rather than on the client: file changes the daemon's watcher saw, attributed to the
-	// job whose declared write lane covers the path; the guard's tool-call observations,
+	// job whose declared write paths cover the path; the guard's tool-call observations,
 	// attributed by the lease the hook resolved; and the runs recorded against a job. A
 	// reader narrows by job, session or path and gets one time-ordered stream of all three,
 	// so "what is that worker doing" is one subscription rather than three.
