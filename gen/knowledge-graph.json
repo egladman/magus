@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 6427,
-  "edge_count": 11492,
+  "edge_count": 11489,
   "relations": [
     {
       "id": "annotates",
@@ -1002,14 +1002,6 @@
       }
     },
     {
-      "id": "diagnostic:MGS3015",
-      "kind": "diagnostic",
-      "label": "MGS3015",
-      "attrs": {
-        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3015/"
-      }
-    },
-    {
       "id": "diagnostic:MGS4001",
       "kind": "diagnostic",
       "label": "MGS4001",
@@ -1657,8 +1649,8 @@
       "label": "docs/decisions",
       "source": "docs/decisions",
       "attrs": {
-        "dir_files": "15",
-        "dir_languages": "markdown,md#adr-0001-bounded-concurrency-with-recursive-invocation,md#alternatives-considered,md#consequences,md#context,md#decision,md#rejected-earlier-recorded-so-they-are-not-re-proposed,md#rejected-now,md#the-contradiction-already-in-the-codebase,md#th"
+        "dir_files": "16",
+        "dir_languages": "markdown,md#adr-0001-bounded-concurrency-with-recursive-invocation,md#alternatives-considered,md#consequences,md#context,md#corrections-to-this-documents-first-draft,md#decision,md#rejected-earlier-recorded-so-they-are-not-re-proposed,md#the-contradiction-"
       }
     },
     {
@@ -3320,7 +3312,9 @@
       "label": "CHANGELOG.md",
       "source": "CHANGELOG.md",
       "attrs": {
-        "role": "changelog"
+        "diagnostic": "MGS7002",
+        "role": "changelog",
+        "unknown_codes": "MGS3015"
       }
     },
     {
@@ -3689,9 +3683,11 @@
       "label": "docs/changelog.md",
       "source": "docs/changelog.md",
       "attrs": {
+        "diagnostic": "MGS7002",
         "role": "changelog",
         "tags": "changelog,releases,versions,upgrade,breaking-changes",
-        "title": "Changelog"
+        "title": "Changelog",
+        "unknown_codes": "MGS3015"
       }
     },
     {
@@ -4203,10 +4199,12 @@
       "label": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
       "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
       "attrs": {
+        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "decisions",
         "tags": "adr,decision,concurrency,deadlock,scheduler,recursion,slots,isolation",
-        "title": "ADR 0001: bounded concurrency with recursive invocation"
+        "title": "ADR 0001: bounded concurrency with recursive invocation",
+        "unknown_codes": "MGS3015"
       }
     },
     {
@@ -6347,10 +6345,12 @@
       "label": "docs/reference/codes/sandbox/README.md",
       "source": "docs/reference/codes/sandbox/README.md",
       "attrs": {
+        "diagnostic": "MGS7002",
         "role": "readme",
         "section": "reference",
         "tags": "sandbox,diagnostics,error codes,MGS2xxx,security,permissions,landlock,supply chain",
-        "title": "sandbox diagnostics"
+        "title": "sandbox diagnostics",
+        "unknown_codes": "MGS3015"
       }
     },
     {
@@ -17846,6 +17846,16 @@
       }
     },
     {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#corrections-to-this-documents-first-draft",
+      "kind": "docsection",
+      "label": "Corrections to this document's first draft",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#corrections-to-this-documents-first-draft",
+      "attrs": {
+        "anchor": "corrections-to-this-documents-first-draft",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#decision",
       "kind": "docsection",
       "label": "Decision",
@@ -17862,16 +17872,6 @@
       "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#rejected-earlier-recorded-so-they-are-not-re-proposed",
       "attrs": {
         "anchor": "rejected-earlier-recorded-so-they-are-not-re-proposed",
-        "level": "3"
-      }
-    },
-    {
-      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#rejected-now",
-      "kind": "docsection",
-      "label": "Rejected now",
-      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#rejected-now",
-      "attrs": {
-        "anchor": "rejected-now",
         "level": "3"
       }
     },
@@ -17906,22 +17906,32 @@
       }
     },
     {
-      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-everyone-else-does",
-      "kind": "docsection",
-      "label": "What everyone else does",
-      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-everyone-else-does",
-      "attrs": {
-        "anchor": "what-everyone-else-does",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-magus-does-today",
       "kind": "docsection",
       "label": "What magus does today",
       "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-magus-does-today",
       "attrs": {
         "anchor": "what-magus-does-today",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-other-systems-do",
+      "kind": "docsection",
+      "label": "What other systems do",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-other-systems-do",
+      "attrs": {
+        "anchor": "what-other-systems-do",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys-stated-precisely",
+      "kind": "docsection",
+      "label": "What this buys, stated precisely",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys-stated-precisely",
+      "attrs": {
+        "anchor": "what-this-buys-stated-precisely",
         "level": "3"
       }
     },
@@ -69268,14 +69278,6 @@
     },
     {
       "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS3015",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS4003",
       "relation": "documents",
       "confidence": "inferred",
@@ -71093,14 +71095,6 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS3014",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS3015",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -74909,14 +74903,6 @@
     {
       "source": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
       "target": "diagnostic:MGS3013",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
-    },
-    {
-      "source": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
-      "target": "diagnostic:MGS3015",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -84797,14 +84783,6 @@
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS3014",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/codes/sandbox/README.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/README.md",
-      "target": "diagnostic:MGS3015",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -105948,6 +105926,14 @@
     },
     {
       "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#corrections-to-this-documents-first-draft",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
       "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#decision",
       "relation": "contains",
       "confidence": "extracted",
@@ -105956,7 +105942,7 @@
     },
     {
       "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
-      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-everyone-else-does",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-other-systems-do",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -105981,14 +105967,6 @@
     {
       "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#alternatives-considered",
       "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#rejected-earlier-recorded-so-they-are-not-re-proposed",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
-    },
-    {
-      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#alternatives-considered",
-      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#rejected-now",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -106021,6 +105999,14 @@
     {
       "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#context",
       "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-magus-does-today",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#decision",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys-stated-precisely",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
