@@ -25,7 +25,7 @@ done
 
 settings=$WT/.claude/settings.json
 [ -f "$settings" ] || arm_die "no .claude/settings.json, so nothing invokes the guard"
-wired=$(jq -r '[.hooks.PreToolUse[].hooks[] | select(.command | test("\\.claude/hooks/magus-guard-"))] | length' "$settings")
+wired=$(jq -r '[.hooks.PreToolUse[].hooks[] | select(.command | test("\\.claude/hooks/magus-(command|path|observe)\\.sh"))] | length' "$settings")
 [ "$wired" = "3" ] || arm_die "$wired hook(s) point at the installed templates, expected 3"
 
 [ -s "$WT/MAGUS.md" ] || arm_die "MAGUS.md is missing or empty, so there is no routing index"

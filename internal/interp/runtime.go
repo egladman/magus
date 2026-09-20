@@ -79,6 +79,11 @@ var removedMagusfileAPI = []struct {
 	{[]string{"needs"}, "call ctx.needs(<target>)"},
 	{[]string{"glob"}, `call ctx.glob("<pattern>")`},
 	{[]string{"insightMarkdown"}, `build the document from magus\insight()'s typed report`},
+	{[]string{"ledger", "clear"}, `call magus\job.clear()`},
+	{[]string{"ledger", "list"}, `call magus\job.list()`},
+	{[]string{"ledger", "put"}, `call magus\job.put()`},
+	{[]string{"ledger", "register"}, `call magus\job.register()`},
+	{[]string{"ledger"}, `use magus\job, which replaced it`},
 }
 
 // RemovedAPINames returns the dotted member path of every removed call, without the
