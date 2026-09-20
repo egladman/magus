@@ -356,7 +356,7 @@ jobs:
           exit "$status"
 
   ci:
-    name: magus shard ${{ matrix.shard }}
+    name: "magus shard ${{ matrix.shard }}: ${{ matrix.label }}"
     needs: plan
     if: fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest

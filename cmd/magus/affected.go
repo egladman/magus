@@ -478,6 +478,24 @@ type planOutput struct {
 type planShard struct {
 	Shard    string `json:"shard"    yaml:"shard"`
 	Projects string `json:"projects" yaml:"projects"`
+	// Label is Projects shortened for a CI job name. Separate from Projects because a
+	// provider passes that one to `magus run ci <projects>` and must not receive an
+	// elision.
+	Label string `json:"label" yaml:"label"`
+}
+
+// shardLabel names a shard by what is in it. A CI job list is scanned, not studied, so
+// this shows the first few paths and counts the rest; a bare shard number says nothing
+// about what is red.
+func shardLabel(paths []string) string {
+	const shown = 3
+	switch {
+	case len(paths) == 0:
+		return "no projects"
+	case len(paths) <= shown:
+		return strings.Join(paths, " ")
+	}
+	return fmt.Sprintf("%s +%d", strings.Join(paths[:shown], " "), len(paths)-shown)
 }
 
 // planPublish is one CI job output. Value is always single-line: providers write
@@ -731,7 +749,11 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Matrix:      make([]planShard, len(plan.Shards)),
 	}
 	for i, s := range plan.Shards {
-		out.Matrix[i] = planShard{Shard: s.ID, Projects: strings.Join(s.ProjectPaths, " ")}
+		out.Matrix[i] = planShard{
+			Shard:    s.ID,
+			Projects: strings.Join(s.ProjectPaths, " "),
+			Label:    shardLabel(s.ProjectPaths),
+		}
 	}
 	if inherit != nil {
 		pi := &planInherit{Run: inherit.Run, Commit: inherit.Commit, Summary: inherit.SummaryMarkdown()}
