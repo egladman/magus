@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6427,
-  "edge_count": 11495,
+  "node_count": 6426,
+  "edge_count": 11493,
   "relations": [
     {
       "id": "annotates",
@@ -3312,9 +3312,7 @@
       "label": "CHANGELOG.md",
       "source": "CHANGELOG.md",
       "attrs": {
-        "diagnostic": "MGS7002",
-        "role": "changelog",
-        "unknown_codes": "MGS3015"
+        "role": "changelog"
       }
     },
     {
@@ -3683,11 +3681,9 @@
       "label": "docs/changelog.md",
       "source": "docs/changelog.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "changelog",
         "tags": "changelog,releases,versions,upgrade,breaking-changes",
-        "title": "Changelog",
-        "unknown_codes": "MGS3015"
+        "title": "Changelog"
       }
     },
     {
@@ -9226,16 +9222,6 @@
       }
     },
     {
-      "id": "docsection:README.md#if-you-only-have-one-project",
-      "kind": "docsection",
-      "label": "If you only have one project",
-      "source": "README.md#if-you-only-have-one-project",
-      "attrs": {
-        "anchor": "if-you-only-have-one-project",
-        "level": "3"
-      }
-    },
-    {
       "id": "docsection:README.md#install",
       "kind": "docsection",
       "label": "Install",
@@ -9253,6 +9239,16 @@
       "attrs": {
         "anchor": "magus",
         "level": "1"
+      }
+    },
+    {
+      "id": "docsection:README.md#non-goals",
+      "kind": "docsection",
+      "label": "Non-goals",
+      "source": "README.md#non-goals",
+      "attrs": {
+        "anchor": "non-goals",
+        "level": "2"
       }
     },
     {
@@ -9362,16 +9358,6 @@
       "source": "README.md#what-keeps-it-warm",
       "attrs": {
         "anchor": "what-keeps-it-warm",
-        "level": "3"
-      }
-    },
-    {
-      "id": "docsection:README.md#who-it-is-not-for",
-      "kind": "docsection",
-      "label": "Who it is not for",
-      "source": "README.md#who-it-is-not-for",
-      "attrs": {
-        "anchor": "who-it-is-not-for",
         "level": "3"
       }
     },
@@ -69998,14 +69984,6 @@
     },
     {
       "source": "doc:README.md",
-      "target": "doc:docs/reference/manpage/magus-init.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "README.md"
-    },
-    {
-      "source": "doc:README.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
@@ -99742,6 +99720,14 @@
     },
     {
       "source": "docsection:README.md#magus",
+      "target": "docsection:README.md#non-goals",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "docsection:README.md#magus",
       "target": "docsection:README.md#the-browser-console",
       "relation": "contains",
       "confidence": "extracted",
@@ -99783,22 +99769,6 @@
     {
       "source": "docsection:README.md#the-browser-console",
       "target": "docsection:README.md#the-apps",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "docsection:README.md#who-this-is-for",
-      "target": "docsection:README.md#if-you-only-have-one-project",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "docsection:README.md#who-this-is-for",
-      "target": "docsection:README.md#who-it-is-not-for",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

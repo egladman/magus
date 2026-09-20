@@ -35,108 +35,45 @@ magus informs; it never decides. It hands you everything it knows about your rep
 ## Why magus exists
 
 magus is the tool you type all day: build, test, lint, and ask the repo a
-question. Two problems shape everything else on this page. The first is what
-those commands cost you in time. The second is what they need you to already
-know.
+question. Two things make that hurt. What the commands cost you in time, and
+what they need you to already know.
 
-The tools you run in a monorepo, you run all day. Build, test, lint, switch
-branches, do it again. So friction compounds fast. A few wasted seconds a run,
-one flaky target, a teammate's botched merge that starts failing on your
-checkout, and now you are babysitting the build instead of shipping the feature.
-Tooling this central earns its place by getting out of the way. It should be
-fast, and genuinely good at the narrow thing it does.
+Time compounds. A few wasted seconds a run, one flaky target, a teammate's
+botched merge that starts failing on your checkout, and you are babysitting the
+build instead of shipping. Tooling this central earns its place by being fast
+and staying out of the way.
 
-The other half of the job is knowledge. Monorepos outgrow the people and tools
-reading them. Humans grep; AI agents grep faster and guess more confidently;
-both drown in generated files, unfamiliar patterns, and dependency chains nobody
-holds in their head. magus takes the opposite bet. The build tool already has to
-know the repo precisely, down to every project, every target's inputs and
-declared outputs, and what a diff reaches, so it hands that knowledge back as
-answers instead of leaving everyone to rediscover it.
+Knowledge is the harder half. Monorepos outgrow the people and the tools reading
+them, so humans grep, agents grep faster and guess more confidently, and both
+drown in generated files and dependency chains nobody holds in their head. A
+build tool already has to know the repo precisely: every project, every target's
+inputs and outputs, and what a diff reaches. magus hands that back as answers
+rather than leaving everyone to rediscover it.
 
-That is the rule for the whole surface. Every verb answers a question,
-deterministically, from declared sources: which projects a change affects,
-whether a file is generated and by what, where a symbol is used, how two things
-relate. Nothing in magus decides for you, plans for you, or injects itself into
-your workflow. Answering is the tool's job; deciding is yours, or your agent's.
+So every verb answers a question deterministically, from declared sources.
+Nothing decides for you, plans for you, or injects itself into your workflow.
+Query the [knowledge graph](docs/concepts/knowledge.md) instead of grepping, run
+[targets](docs/concepts/targets.md) instead of raw tools, and let
+`magus affected ci` prove what a change touched. For agents, see
+[Agents](docs/guides/integrations/agents.md).
 
-The same discipline serves both audiences. A teammate on day one and an AI agent
-in a fresh session have the same problem: a repo they cannot yet trust their
-guesses about. magus gives them the same fix. Query the
-[knowledge graph](docs/concepts/knowledge.md) instead of grepping, run
-[targets](docs/concepts/targets.md) instead of raw tools, and let `magus affected ci`
-prove what a change touched. For agents, see [Agents](docs/guides/integrations/agents.md).
-
-The longer argument behind that position, and what it was a reaction to, is in
+The longer argument is in
 [I think our tools are the problem](https://eli.gladman.cc/magus/blog/2026/08/18/i-think-our-tools-are-the-problem/).
 
 ## Who this is for
 
-If two or three of these are your week, read on:
+Repos that run more than one language, CI that reruns work your change never
+reached, and builds whose author has moved on. One project works too: caching
+and the knowledge graph key off a target's own declared inputs either way, and
+only the affected set has nothing to narrow until you split out a second
+project.
 
-- You came back to your own project after three months and cannot remember which
-  command is the real one.
-- Your CI runs everything on every commit, you know most of it was pointless, and
-  you cannot prove which part.
-- You inherited the build, whoever wrote it has gone, and you need to change one
-  step without discovering what else it fed.
-- You run more than one language in one repo, and your task runner was built for
-  one of them.
-- Your agent greps and guesses. It is fast, it is confident, and it is wrong in
-  ways that take longer to catch than to fix.
-- A merge changed the lockfile and nothing told you. Your next command ran
-  against stale dependencies and failed somewhere unrelated.
-
-One shape runs under all of them: a question about your own repository that
-something already knows and nothing will tell you.
-
-The last one wastes whole afternoons, so magus runs your package manager's
-install as a step of the build rather than as something you remember after a
-merge. A stale `node_modules` then fails at the install, where the message makes
-sense, instead of four steps later.
-
-There is a bias here, and it will not suit everyone. magus prefers declarations
-you can read over inference you have to trust: you say what a target reads and
-writes, and magus refuses when your declaration and the run disagree. That costs
-you a few lines in a magusfile. What you get back is a build you can debug
-yourself without knowing how the tool works inside.
-
-### If you only have one project
-
-Most of the above still holds. A cache key is built from that target's own
-declared inputs, so a warm re-run skips work in a one-project repo exactly as it
-does in this repository's ten, and the knowledge graph indexes symbols, docs and
-generated files rather than only the edges between projects.
-
-What thins out is the affected set. With one project, "what did this change
-reach" has one answer, and the shard planning behind `magus affected ci` has
-nothing to plan. That part starts paying when you split out a second project,
-which is why `magus init` scaffolds one and expects to be right for a while.
-
-### Who it is not for
-
-A list of strengths on its own is advertising, so here is the other half:
-
-- **You need a build farm.** There is no remote execution. magus caches results
-  and shares them. It does not run your work on someone else's machine.
-- **You want your toolchain versions installed for you.** magus compares what ran
-  against what you declared and stops. It will not select, install or switch a
-  version. See [Scope](docs/scope.md).
-- **You need a sandbox that fails on undeclared reads.** magus's sandbox is a
-  supply-chain defense: off by default, with no kernel layer on macOS. If Bazel's
-  hermeticity guarantee is what you need, magus does not offer it and should not
-  be read as claiming it. See [Sandbox](docs/concepts/sandbox.md).
-- **You want your build steps to run in containers.** magus is one binary and
-  requires no container runtime, because an orchestrator that needs one cannot
-  bootstrap the machine it runs on. It offers no opt-in container isolation
-  either. (The `container` charm changes what a target _produces_, an image
-  rather than a binary. The build still runs on the host.) If a fixed execution
-  environment is what you are buying, a container-native runner fits better.
-- **You want a large ecosystem.** magus is young and mostly one person's work.
-  The plugin surface is small, the community is smaller, and you will hit
-  behavior nobody has hit before you. The other side of that trade: it is one Go
-  binary and one [Buzz](docs/concepts/spells/buzz.md) file, both of which you can read,
-  so a problem you find is a problem you can fix.
+The tradeoff: you declare what a target reads and writes, and magus stops when a
+run disagrees with the declaration. That costs a few lines in a magusfile and
+buys a build you can debug without knowing how the tool works inside. It also
+means your package manager's install is a step of the build, so a stale
+`node_modules` fails at the install, where the message makes sense, instead of
+four steps later.
 
 ## How it works
 
@@ -207,6 +144,23 @@ The band at the bottom holds still while your output scrolls past it. Nothing is
 cleared, the alternate screen is never touched, and your scrollback survives -
 so selection, copy and paste keep working the way they always did. Every one of
 these surfaces degrades to plain text when there is no terminal to draw on.
+
+## Non-goals
+
+- No remote execution. magus caches results and shares them. It does not run
+  your work on someone else's machine.
+- No toolchain management. magus compares what ran against what you declared and
+  stops. It will not select, install or switch a version.
+- No hermetic sandbox. The sandbox is a supply-chain defense, off by default,
+  with no kernel layer on macOS. It will not fail a build on an undeclared read.
+- No container isolation. Steps run on the host. The `container` charm changes
+  what a target produces, not where it runs.
+- Small ecosystem. magus is young and mostly one person's work, so you will hit
+  behavior nobody has hit before you. It is one Go binary and one
+  [Buzz](docs/concepts/spells/buzz.md) file, both of which you can read.
+
+[Scope](docs/scope.md) says why each line is there;
+[Sandbox](docs/concepts/sandbox.md) covers the third.
 
 ## Getting started
 
