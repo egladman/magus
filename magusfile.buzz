@@ -1050,6 +1050,14 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
 // never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // Both lines below COMPILE the module, so this races every sibling that writes Go
+    // under internal/ or types/gen exactly as changelog_generate does. It declared no
+    // reads at all, which left MGS4008 blind to the race rather than free of it. The
+    // reasoning is written out once, at changelog_generate.
+    ctx.needs(spells_generate, bindings_generate, langservice_generate, mcp_tools_generate,
+              config_generate, mocks_generate);
+    ctx.readsFiles("cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
+        "go.mod", "go.sum", "go.work", "go.work.sum");
     ctx.writesFiles("manpage/*.1", "internal/cli/testdata/api.lock");
     fs\mkdirAll("manpage");
     proc\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
