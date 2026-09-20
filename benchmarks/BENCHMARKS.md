@@ -8,21 +8,21 @@ measurement of the work the scenario describes.
 ## Environment
 
 ```text
-Date: 2026-09-20T15:34:14Z
+Date: 2026-09-20T16:47:37Z
 Go: go1.26.6-X:jsonv2
 Kernel: Darwin Elis-MacBook-Air.local 25.6.0 Darwin Kernel Version 25.6.0: Fri Jul 31 19:16:20 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T8142 arm64
 CPU: Apple M5
 CPU cores: 10
 RAM: 25165824 kB
-magus commit: 1928b209f02f4522e324f166094c9fe5d4ec3c5f
+magus commit: 34a4a12b31f1ba77f956c992029e846fe11b5d48
 ```
 
 ### Tool versions (observed)
 
 ```text
-hyperfine: hyperfine 1.19.0
-magus: magus v0.4.3-42-g1928b209f (1928b209f) built 2026-09-20T09:46:13-05:00
-make (gmake): GNU Make 4.4.1
+  hyperfine: hyperfine 1.19.0
+  magus: magus v0.4.3-46-g34a4a12b3 (34a4a12b3) built 2026-09-20T11:42:48-05:00
+  make (gmake): GNU Make 4.4.1
 ```
 
 ---
@@ -31,45 +31,46 @@ make (gmake): GNU Make 4.4.1
 
 ### S1: Startup overhead (`--version`)
 
-| Tool  | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
-| ----- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
-| make  | off    |        1 |         2 |           1 |   0.21 |        2 |   50 |
-| magus | on     |        9 |        11 |          11 |      2 |       15 |   50 |
-| magus | off    |       18 |        39 |          36 |     16 |      101 |   50 |
+| Tool | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
+| ---- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
+| magus      | on         |     0.00 |      0.00 |        0.00 |   0.00 |     0.00 |   50 |
+| make       | off        |        1 |         1 |           1 |   0.14 |        2 |   50 |
+| magus      | off        |        9 |         9 |           9 |   0.63 |       13 |   50 |
 
 ### S2: Project discovery
 
-| Tool  | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
-| ----- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
-| magus | off    |      174 |       213 |         217 |     27 |      245 |   10 |
+| Tool | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
+| ---- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
+| magus      | off        |      103 |       104 |         104 |   0.86 |      106 |   10 |
 
 ### S3: Affected dry-run (1 file changed)
 
-| Tool  | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
-| ----- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
-| magus | on     |       33 |        37 |          36 |      3 |       43 |   10 |
-| magus | off    |      110 |       151 |         154 |     25 |      189 |   10 |
+| Tool | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
+| ---- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
+| magus      | on         |       38 |        39 |          38 |   0.66 |       39 |   10 |
+| magus      | off        |       90 |       102 |         101 |      7 |      117 |   10 |
 
 ### S4: Cold build, parallel
 
-| Tool  | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
-| ----- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
-| make  | off    |     1254 |      1298 |        1291 |     34 |     1358 |   10 |
-| magus | off    |    15582 |     19387 |       19529 |   2236 |    23278 |   10 |
-| magus | on     |    18893 |     20864 |       20010 |   2101 |    24337 |   10 |
+| Tool | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
+| ---- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
+| make       | off        |     1309 |      1349 |        1355 |     22 |     1373 |   10 |
+| magus      | on         |     3291 |      3552 |        3342 |    324 |     4073 |   10 |
+| magus      | off        |     3527 |      3748 |        3574 |    363 |     4603 |   10 |
 
 ### S5: Warm cache replay
 
-| Tool  | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
-| ----- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
-| make  | off    |        4 |         4 |           4 |   0.23 |        5 |   10 |
-| magus | off    |    15295 |     16766 |       15910 |   1574 |    19716 |   10 |
-| magus | on     |    17796 |     19785 |       18929 |   2374 |    25638 |   10 |
+| Tool | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
+| ---- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
+| make       | off        |        5 |         5 |           5 |   0.12 |        5 |   10 |
+| magus      | off        |     1884 |      2083 |        1902 |    389 |     2914 |   10 |
+| magus      | on         |     2178 |      2414 |        2271 |    272 |     2901 |   10 |
 
 ### S6: One leaf file changed
 
-| Tool  | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
-| ----- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
-| make  | off    |      110 |       120 |         114 |     15 |      152 |   10 |
-| magus | off    |    15656 |     16634 |       16235 |   1045 |    18849 |   10 |
-| magus | on     |    17951 |     18458 |       18171 |    731 |    20277 |   10 |
+| Tool | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |
+| ---- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |
+| make       | off        |      107 |       110 |         108 |      2 |      115 |   10 |
+| magus      | off        |     1891 |      2126 |        2004 |    317 |     2865 |   10 |
+| magus      | on         |     2254 |      2470 |        2368 |    253 |     2940 |   10 |
+
