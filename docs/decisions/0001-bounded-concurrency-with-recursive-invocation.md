@@ -72,7 +72,7 @@ wrong record refuses healthy runs. Both happened; the second is why MGS3015 is g
 - **`Step.Exclusive`** (named 2026-07-01, renamed from `isolated`). Adopted with **no
   recorded reason**: no motivating target, no incident. Everything built on it since serves
   a flag nobody argued for. `generate` at the root, which drove that engineering, dropped
-  the flag once the engine honoured it, because honouring it serialized every `ci` member.
+  the flag once the engine honored it, because honoring it serialized every `ci` member.
 - **Lease inheritance (Sept 2026).** Two hangs forced it: 27 minutes at 13s of CPU when a
   needs child double-claimed memory its parent held, and 19 minutes with every project lock
   held when a child asked for the exclusive side of a gate its ancestor held shared.
@@ -188,7 +188,7 @@ its whole life); releasing the shared lease (it reopened the window inheritance 
 RWMutex as the gate (not context-aware; writer preference parked sixteen readers); clamping
 an oversized machine claim (moves the arbiter to the OOM killer); a timeout as the answer to
 a nested-lock deadlock (converts a hang into a late failure that still does not say why); and
-a detector for the cross-root machine wedge, built and dropped 26 minutes later in favour of
+a detector for the cross-root machine wedge, built and dropped 26 minutes later in favor of
 a structural rule.
 
 ## What other systems do
@@ -216,7 +216,7 @@ asked for: "executing", rather than a seat held by a body that is waiting.
 
 - **`--step` changes meaning, and is answered rather than noted.** Today it sets concurrency
   to 1 and means "one target at a time". Under leaf acquisition that would become "one
-  subprocess at a time", with every body interleaving its output: a behaviour change in a
+  subprocess at a time", with every body interleaving its output: a behavior change in a
   debugging feature, which is the worst place for one. The answer reuses stage 0: `--step`
   wraps each step's body in a named exclusion, which restores "one target at a time" exactly
   and adds no second scheduling mode. Decided in stage 2, not discovered in it.
