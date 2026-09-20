@@ -6,7 +6,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -17,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // hyperfineOutput is the JSON schema emitted by hyperfine --export-json.
@@ -222,7 +223,11 @@ func memTotal() string {
 
 // capture runs bin and returns its first output line, or unknown.
 func capture(bin string, args ...string) string {
-	out, err := exec.Command(bin, args...).Output()
+	// The binary MAGUS_BIN/MAKE_BIN names is what the run measured, and recording which
+	// version that was means spawning it. `MAKE_BIN=gmake` is how a macOS run measures
+	// GNU Make 4.x rather than Apple's 3.81; reporting the bare name would record the
+	// wrong one.
+	out, err := exec.Command(bin, args...).Output() //nolint:gosec // G702: the tool under measurement, named by the operator
 	if err != nil {
 		return unknown
 	}
@@ -238,13 +243,13 @@ func capture(bin string, args ...string) string {
 
 func sysInfo() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Date: %s\n", time.Now().UTC().Format(time.RFC3339)))
-	sb.WriteString(fmt.Sprintf("Go: %s\n", runtime.Version()))
-	sb.WriteString(fmt.Sprintf("Kernel: %s\n", capture("uname", "-a")))
-	sb.WriteString(fmt.Sprintf("CPU: %s\n", cpuModel()))
-	sb.WriteString(fmt.Sprintf("CPU cores: %d\n", runtime.NumCPU()))
-	sb.WriteString(fmt.Sprintf("RAM: %s\n", memTotal()))
-	sb.WriteString(fmt.Sprintf("magus commit: %s\n", capture("git", "rev-parse", "HEAD")))
+	fmt.Fprintf(&sb, "Date: %s\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Fprintf(&sb, "Go: %s\n", runtime.Version())
+	fmt.Fprintf(&sb, "Kernel: %s\n", capture("uname", "-a"))
+	fmt.Fprintf(&sb, "CPU: %s\n", cpuModel())
+	fmt.Fprintf(&sb, "CPU cores: %d\n", runtime.NumCPU())
+	fmt.Fprintf(&sb, "RAM: %s\n", memTotal())
+	fmt.Fprintf(&sb, "magus commit: %s\n", capture("git", "rev-parse", "HEAD"))
 	return sb.String()
 }
 
@@ -268,10 +273,10 @@ func headline(results []*benchResult) string {
 	sort.Strings(fixtures)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf(
+	fmt.Fprintf(&sb,
 		"Measured in this run: %s, on the %s fixture(s).\n",
 		strings.Join(tools, ", "), strings.Join(fixtures, ", "),
-	))
+	)
 	sb.WriteString("A tool absent from the tables below produced no results here and is\n")
 	sb.WriteString("not being compared. A row marked FAILED exited non-zero and is not a\n")
 	sb.WriteString("measurement of the work the scenario describes.\n\n")
@@ -384,7 +389,7 @@ func main() {
 	}
 
 	// Collect and sort group keys
-	var gkeys []groupKey
+	gkeys := make([]groupKey, 0, len(groups))
 	for k := range groups {
 		gkeys = append(gkeys, k)
 	}
@@ -423,7 +428,7 @@ func main() {
 			if gk.size == 0 {
 				sizeStr = "fixed"
 			}
-			md.WriteString(fmt.Sprintf("## Fixture: %s (N=%s)\n\n", gk.fixture, sizeStr))
+			fmt.Fprintf(&md, "## Fixture: %s (N=%s)\n\n", gk.fixture, sizeStr)
 			prevFixture = gk.fixture
 			prevSize = gk.size
 		}
@@ -432,7 +437,7 @@ func main() {
 		if scenarioName == "" {
 			scenarioName = gk.scenario
 		}
-		md.WriteString(fmt.Sprintf("### %s: %s\n\n", gk.scenario, scenarioName))
+		fmt.Fprintf(&md, "### %s: %s\n\n", gk.scenario, scenarioName)
 		md.WriteString("| Tool | Daemon | min (ms) | mean (ms) | median (ms) | stddev | p99 (ms) | runs |\n")
 		md.WriteString("| ---- | ------ | -------: | --------: | ----------: | -----: | -------: | ---: |\n")
 
@@ -448,31 +453,32 @@ func main() {
 		var notes []string
 		for _, r := range rows {
 			daemon := r.key.daemon
-			if daemon == "daemonless" {
+			switch daemon {
+			case "daemonless":
 				daemon = "off"
-			} else if daemon == "daemon" {
+			case "daemon":
 				daemon = "on"
 			}
 			if r.failed() {
-				md.WriteString(fmt.Sprintf(
+				fmt.Fprintf(&md,
 					"| %-10s | %-10s | %8s | %9s | %11s | %6s | %8s | %4d |\n",
 					r.key.tool, daemon,
 					"FAILED", "FAILED", "FAILED", "FAILED", "FAILED",
 					r.runs,
-				))
+				)
 				notes = append(notes, fmt.Sprintf(
 					"`%s` (daemon %s) exited %d in %d of %d runs; timings withheld.",
 					r.key.tool, daemon, r.failExit, r.failCount, r.runs,
 				))
 				continue
 			}
-			md.WriteString(fmt.Sprintf(
+			fmt.Fprintf(&md,
 				"| %-10s | %-10s | %8s | %9s | %11s | %6s | %8s | %4d |\n",
 				r.key.tool, daemon,
 				fmtMS(r.minMS), fmtMS(r.meanMS), fmtMS(r.medianMS),
 				fmtMS(r.stddevMS), fmtMS(r.p99MS),
 				r.runs,
-			))
+			)
 		}
 		md.WriteString("\n")
 		for _, n := range notes {
@@ -561,7 +567,7 @@ func writeMermaidChart(results []*benchResult, resultsDir string) {
 	if best.size == 0 {
 		sizeStr = "fixed"
 	}
-	sb.WriteString(fmt.Sprintf("```mermaid\nxychart-beta\n    title \"S5: Warm Cache Replay (%s, N=%s)\"\n", best.fixture, sizeStr))
+	fmt.Fprintf(&sb, "```mermaid\nxychart-beta\n    title \"S5: Warm Cache Replay (%s, N=%s)\"\n", best.fixture, sizeStr)
 	var toolLabels []string
 	var vals []string
 	for _, t := range uniqTools {
@@ -569,9 +575,9 @@ func writeMermaidChart(results []*benchResult, resultsDir string) {
 		mk := fmt.Sprintf("%s-%d-%s", best.fixture, best.size, t)
 		vals = append(vals, fmtMS(minByGroup[mk]))
 	}
-	sb.WriteString(fmt.Sprintf("    x-axis [%s]\n", strings.Join(toolLabels, ", ")))
+	fmt.Fprintf(&sb, "    x-axis [%s]\n", strings.Join(toolLabels, ", "))
 	sb.WriteString("    y-axis \"time (ms)\"\n")
-	sb.WriteString(fmt.Sprintf("    bar [%s]\n", strings.Join(vals, ", ")))
+	fmt.Fprintf(&sb, "    bar [%s]\n", strings.Join(vals, ", "))
 	sb.WriteString("```\n")
 
 	chartPath := filepath.Join(resultsDir, "chart.mmd")

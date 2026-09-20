@@ -83,12 +83,6 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 		// A codec too: CPython's json.dumps and a number-preserving loads, which the
 		// benchmark's byte-identical output depends on and no shared codec can be.
 		"benchmarks/agent/internal/pycompat/json.go": true,
-		// Its own Go module, so Go's internal rule forbids it reaching this package no
-		// matter what its go.mod requires. It imported it anyway from 2026-07-31 until
-		// 2026-09-20, which nothing caught because no target compiles this tree: the
-		// aggregator simply stopped building and BENCHMARKS.md stopped regenerating.
-		// Folding the module into the root one is the fix that would retire this entry.
-		"benchmarks/aggregate/main.go": true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)
