@@ -1051,9 +1051,8 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 // never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Both lines below COMPILE the module, so this races every sibling that writes Go
-    // under internal/ or types/gen exactly as changelog_generate does. It declared no
-    // reads at all, which left MGS4008 blind to the race rather than free of it. The
-    // reasoning is written out once, at changelog_generate.
+    // under internal/ or types/gen. Declaring the reads is what lets MGS4008 see it.
+    // The reasoning is written out once, at changelog_generate.
     ctx.needs(spells_generate, bindings_generate, langservice_generate, mcp_tools_generate,
               config_generate, mocks_generate);
     ctx.readsFiles("cmd/magus-manpage/**/*.go", "internal/**/*.go", "types/**/*.go",
@@ -2618,11 +2617,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // is process count rather than test work: 487 `exec magus` lines each re-execute the
     // race-instrumented binary, ~0.83s a piece, with `magus version` alone costing 1s.
     //
-    // What that buys is a detector pointed at a package whose own concurrency is eight
-    // signal, timeout and server-plumbing goroutines. The engine's real concurrency is
-    // raced directly, by the packages that own it: internal/cache, internal/proc/run and
-    // the root package all keep -race below. A data race those tests cannot reach, in
-    // code cmd/magus does not run concurrently, is not what 170 seconds a run buys.
+    // What that buys is a detector pointed at eight signal, timeout and server-plumbing
+    // goroutines. The engine's real concurrency keeps -race below, in the packages that
+    // own it: internal/cache, internal/proc/run and the root package.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
         {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"] + raced_packages()});
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
@@ -2662,11 +2659,10 @@ fun raced_packages() > [str] !> any {
         final pkg = line.trim();
         if (pkg != "" and pkg != skip) { raced.append(pkg); }
     }
-    // An empty or truncated listing would hand `go test` no package arguments at all,
-    // which tests the current directory and nothing else: the suite silently shrinks to
-    // two packages and the only thing between that and a green gate is whether the
-    // coverage figure happens to clear the floor. proc\exec raises on a non-zero exit,
-    // so this covers the quiet failure rather than the loud one.
+    // An empty listing hands `go test` no packages, which tests the current directory
+    // alone: the suite shrinks silently and only the coverage floor stands between that
+    // and a green gate. proc\exec already raises on a non-zero exit; this is the QUIET
+    // failure.
     if (raced.len() < 2) {
         throw "test: `go list ./...` named " + "{raced.len()}" + " package(s) to race; expected the whole module";
     }
