@@ -15,8 +15,6 @@ The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or
 
 **Version probe (golangci-lint):** `golangci-lint --version`
 
-**Version probe (govulncheck):** `govulncheck -version`
-
 ## Passing arguments to ops
 
 Every op is invoked as `go["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:

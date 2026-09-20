@@ -1055,6 +1055,12 @@ func (m *Magus) probeReadings(ctx context.Context, projects []*types.Project, mo
 // probeConcurrency bounds the probe fan-out. It rides the run's own concurrency setting
 // so one knob governs both, and never drops below 1, which a zero or negative setting
 // would otherwise turn into a deadlocked errgroup.
+//
+// Raising it above that width was tried and reverted. A probe looks like it should be
+// wait-bound, but the binaries are large Go programs whose startup is runtime init, so
+// 150 of them cost real kernel CPU: measured on the 50-project go fixture, widening 8 to
+// 32 moved a 2.33s cached replay to 2.16s while sys time stayed at 4.1s. The spawns are
+// CPU-bound, and past the core count there is nothing left to overlap.
 func (m *Magus) probeConcurrency() int {
 	if n := m.cfg.Concurrency; n > 0 {
 		return n
