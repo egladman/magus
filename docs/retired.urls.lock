@@ -309,3 +309,4 @@ tags/magus-ledger/
 # libs/diagram now declare "**/*.buzz"/"*.buzz" as a plain source instead of
 # through a spell, so there is no successor spell page to send a reader to.
 concepts/spells/buzz/
+reference/codes/sandbox/MGS3015/

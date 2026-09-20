@@ -2,36 +2,14 @@ package cache
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
-	"slices"
-	"strings"
-	"sync"
-	"time"
 
 	"golang.org/x/sync/semaphore"
-
-	"github.com/egladman/magus/types"
 )
 
 // isolationSeats is the gate's width: a shared request takes one seat, an exclusive one
 // takes every seat. Wide enough that the shared side is never the scarce resource, since
 // bounding concurrency is the limiter's job and not this gate's.
 const isolationSeats = 1 << 20
-
-// isolationWedgeGrace is how long the wedged shape must hold, with the whole invocation
-// silent, before the wait is called impossible. Two of the 15s wait heartbeats every
-// other in-process wait uses, so a run that beats at all outlives it comfortably.
-//
-// A var, not a const, for the reason lock.go gives about its own wait timings: a test
-// that has to spend the real cadence either sleeps for it or does not cover it.
-var isolationWedgeGrace = 30 * time.Second
-
-// ExitCodeRunIsolationWedged is what a wedged-gate refusal asks for: 70, EX_SOFTWARE.
-// Unlike the slot deadlock, which a magusfile causes and a magusfile fixes, this shape is
-// magus arranging its own waits into a cycle, so the honest status is an internal fault
-// and a wrapper must not retry it.
-const ExitCodeRunIsolationWedged = 70
 
 // runIsolation serializes Step.Exclusive steps against the rest of one invocation: an
 // exclusive step takes the whole gate, every other step takes one seat.
@@ -77,74 +55,55 @@ const ExitCodeRunIsolationWedged = 70
 // moving it beats for itself, and if it is not, the beat is the invocation telling the
 // watchdog it is fine while nothing happens.
 //
-// # What the verdict no longer catches
+// # Why there is no verdict here any more
 //
-// Since 2026-09-19 a holder parked on its own fan-out reads as working (blockedWaits says
-// why), which means the 2026-09-11 shape above can no longer produce a verdict: the parent
-// in that incident was mid-fan-out, so its hold was yielded rather than blocked. That is
-// deliberate, because reading yielded as parked refused healthy runs, and it is safe only
-// because inheritance makes the shape unreachable. The inheritance rule is therefore no
-// longer belt AND braces here, it is the only thing standing between this run and that
-// hang, which is why TestRunIsolationNeedsChildInheritsUnderAFanOut pins it directly.
+// This type used to carry a wedge detector (MGS3015, exit 70) that refused a run when every
+// gate holder looked parked. It was deleted on 2026-09-19 because it could not answer
+// correctly, in three independent ways:
 //
-// What survives is narrower than the name suggests: a verdict now means every holder is
-// blocked on a slot, a cache lock or the machine gate while something is queued and the
-// whole invocation has gone silent.
+//   - It read the WRONG RECORD. [Cache.admit] attached each admitted step's slot record to
+//     the lease its context carried, and a ctx.needs member inherits its ANCESTOR's lease,
+//     so a composite step's lease pointed at whichever descendant admitted last and then at
+//     a retired record whose blocked field stays empty forever. Measured with a probe: the
+//     parent read blocked="1 build slot(s)" while the gate saw an empty string.
+//   - For a LEAF step it could not fire at all. The lease has no slot record until admit
+//     returns, and the only other waits it could observe are the cache lock, which beats the
+//     invocation heartbeat every 15s so the silence condition never opens, and the slot
+//     queue, whose own verdict (MGS3013) fires at 3s against this one's 30s.
+//   - What it did fire on was healthy. A holder mid-fan-out has handed its slots back, which
+//     the pool counts as stalled, so one generator silent for the grace refused a whole run:
+//     that is the CI failure this branch started from.
+//
+// The 2026-09-11 shape it was built for is prevented upstream by the inheritance rule
+// above, not detected here, and TestRunIsolationNeedsChildInheritsUnderAFanOut pins that
+// rule directly. A hang that escapes it is caught by the stall watchdog (MGS3012), whose
+// subject is the whole invocation rather than this gate's shape. Detecting a cycle rather
+// than guessing at one needs a wait-for graph over every resource in this package, which is
+// a different design than three timers with three graces.
+// A semaphore and nothing else. The bookkeeping that used to sit beside it (holders,
+// waiters, a heartbeat, a captured context, a grace timer) existed only to feed the verdict
+// described above, and went with it.
 type runIsolation struct {
 	gate *semaphore.Weighted
-
-	mu      sync.Mutex
-	holders map[*runIsolationLease]struct{}
-	waiters map[*isolationWaiter]struct{}
-	// prog is the invocation's heartbeat, captured from the first context to queue. Nil
-	// when no heartbeat is installed, which makes the wedge verdict unreachable: Idle
-	// reports zero on a nil Progress, so a run nobody watches is never refused.
-	prog *Progress
-	// logCtx carries the logging attributes of the first context to queue, for the one
-	// line the refusal prints. Held because the verdict fires from a timer, with no call
-	// stack to take a context from, which is the same reason the stall watchdog keeps
-	// one. Its CANCELLATION is irrelevant here: this logs at the moment the run is being
-	// refused, and a cancelled context still carries the attributes a record needs.
-	logCtx context.Context
-	// wedgedSince is when the gate last entered the wedged shape, zero when it is not in
-	// it. A verdict needs the shape to have HELD for the grace, not merely to have been
-	// seen twice.
-	wedgedSince time.Time
-	timer       *time.Timer
 }
 
 func newRunIsolation() *runIsolation {
-	return &runIsolation{
-		gate:    semaphore.NewWeighted(isolationSeats),
-		holders: map[*runIsolationLease]struct{}{},
-		waiters: map[*isolationWaiter]struct{}{},
-	}
+	return &runIsolation{gate: semaphore.NewWeighted(isolationSeats)}
 }
 
 type runIsolationKey struct{}
 
-// runIsolationLease is one path's hold on the gate: what it took, who took it, and the
-// slot record that says whether it is still working. A context carrying one is INSIDE the
-// region, whether it acquired the lease itself or inherited it from an ancestor.
+// runIsolationLease is one path's hold on the gate. A context carrying one is INSIDE the
+// region, whether it acquired the lease itself or inherited it from an ancestor, and that
+// is the whole of what a lease is for: [acquireRunIsolation] reads its presence and takes
+// nothing more.
+//
+// It no longer carries the holder's slot record. Attaching one aliased every composite
+// step's lease to whichever descendant admitted last, which is the defect that made the
+// deleted verdict answer about a stranger.
 type runIsolationLease struct {
 	isolation *runIsolation
 	exclusive bool
-	holder    string
-	// hold is the holder's slot-watch record, attached by [Cache.admit] once the step has
-	// a seat and nil until then. It is how the wedge verdict tells a holder that is
-	// working from one that is parked; a holder without one is read as working, so an
-	// unlimited limiter (which keeps no records) can never produce a verdict.
-	hold *slotHold
-}
-
-// isolationWaiter is one queued request. cancel is what a refusal pulls: the waiter is
-// parked in the semaphore, and cancelling its context is the only way to hand it an
-// answer.
-type isolationWaiter struct {
-	label     string
-	exclusive bool
-	cancel    context.CancelFunc
-	err       error
 }
 
 // WithRunScope attaches the isolation gate shared by a top-level invocation and
@@ -171,9 +130,8 @@ func isolationFrom(ctx context.Context) *runIsolation {
 // admission rather than by upgrading it. See runIsolation for why that is the policy and
 // not a shortcut.
 //
-// The wait is cancellable, so a sibling's failure, a Ctrl-C or the wedge verdict all
-// reach a parked step; it returns that cause unchanged, and MGS3015 when the gate refused
-// the wait outright.
+// The wait is cancellable, so a sibling's failure or a Ctrl-C reaches a parked step, and
+// it returns that cause unchanged.
 func acquireRunIsolation(ctx context.Context, exclusive bool, label string) (context.Context, func(), error) {
 	ctx = WithRunScope(ctx)
 	if lease := admissionFrom(ctx).isolation; lease != nil {
@@ -196,208 +154,15 @@ func (r *runIsolation) acquire(ctx context.Context, exclusive bool, label string
 	}
 	// Marked as a blocking hold for the same reason acquireWatched marks its own: a step
 	// already holding slots that parks here is the hold-and-wait half of a deadlock, and
-	// this is the only way into the queue, so the mark cannot be forgotten.
+	// this is the only way into the queue, so the mark cannot be forgotten. The SLOT
+	// watch reads that mark (MGS3013); this gate no longer reads anything.
 	unblock := BlockedOn(ctx, "the run-isolation gate ("+isolationSide(exclusive)+")")
 	defer unblock()
 
-	waitCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	w := r.beginWait(ctx, label, exclusive, cancel)
-	err := r.gate.Acquire(waitCtx, weight)
-	refusal := r.endWait(w)
-	if err != nil {
-		if refusal != nil {
-			return nil, nil, refusal
-		}
+	if err := r.gate.Acquire(ctx, weight); err != nil {
 		return nil, nil, err
 	}
-	lease := &runIsolationLease{isolation: r, exclusive: exclusive, holder: label}
-	r.mu.Lock()
-	r.holders[lease] = struct{}{}
-	r.evaluateLocked()
-	r.mu.Unlock()
-	return lease, func() {
-		r.mu.Lock()
-		delete(r.holders, lease)
-		r.evaluateLocked()
-		r.mu.Unlock()
-		r.gate.Release(weight)
-	}, nil
-}
-
-// attach records the holder's slot-watch record on the lease, so the wedge verdict can
-// read whether this holder is working or parked. A no-op outside an admitted step.
-func (l *runIsolationLease) attach(h *slotHold) {
-	if l == nil || h == nil {
-		return
-	}
-	l.isolation.mu.Lock()
-	defer l.isolation.mu.Unlock()
-	l.hold = h
-	l.isolation.evaluateLocked()
-}
-
-func (r *runIsolation) beginWait(ctx context.Context, label string, exclusive bool, cancel context.CancelFunc) *isolationWaiter {
-	w := &isolationWaiter{label: label, exclusive: exclusive, cancel: cancel}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.prog == nil {
-		r.prog = ProgressFromContext(ctx)
-	}
-	if r.logCtx == nil {
-		r.logCtx = context.WithoutCancel(ctx)
-	}
-	r.waiters[w] = struct{}{}
-	r.evaluateLocked()
-	return w
-}
-
-// endWait retires a waiter and returns the refusal it was handed, if any. Read here
-// rather than from the acquire error because a cancelled acquire reports only
-// context.Canceled, which says nothing about who cancelled it or why.
-func (r *runIsolation) endWait(w *isolationWaiter) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.waiters, w)
-	r.evaluateLocked()
-	return w.err
-}
-
-// evaluateLocked arms or disarms the timer that turns a wedged gate into a refusal. It
-// runs while anything is queued rather than only while the wedged shape is showing,
-// because the shape forms without the gate being told: a holder becomes parked by
-// blocking somewhere else entirely, and that edge is the slot watch's, not this one's.
-func (r *runIsolation) evaluateLocked() {
-	if len(r.waiters) == 0 {
-		r.wedgedSince = time.Time{}
-		if r.timer != nil {
-			r.timer.Stop()
-			r.timer = nil
-		}
-		return
-	}
-	if _, wedged := r.wedgedLocked(); wedged {
-		if r.wedgedSince.IsZero() {
-			r.wedgedSince = time.Now()
-		}
-	} else {
-		// Cleared the moment the shape breaks, not only when the queue empties. Left
-		// standing, a stamp from an earlier wedge is what a LATER one is measured
-		// against, so a shape that forms fresh is refused with none of its own grace.
-		r.wedgedSince = time.Time{}
-	}
-	if r.timer == nil {
-		r.timer = time.AfterFunc(isolationWedgeGrace, r.fireVerdict)
-	}
-}
-
-// wedgedLocked reports the shape no wait can end: something is queued for the gate and
-// every step holding it is itself parked. It returns what each holder was parked on, so
-// the refusal describes the same instant the verdict was reached from.
-//
-// Conservative in both directions, like the slot watch's own verdict. One holder that is
-// still working answers no, because it can still finish and release, and a holder waiting
-// on its own fan-out counts as working: blockedWaits says why, and names the one case
-// (a wait across a process boundary) it leaves to the stall watchdog instead.
-//
-// The invocation's silence is checked separately, when the grace expires: the shape can
-// form legitimately for as long as a holder is waiting on another process, and only a run
-// where nothing started, finished or printed a line for the whole grace is wedged rather
-// than slow.
-//
-// Lock order is this gate's mutex then the slot watch's, taken inside blockedWaits and
-// nowhere reversed: every path that holds the watch mutex reaches only the watch's own
-// fields, and a waiter it cancels wakes a semaphore rather than running a callback under
-// the lock.
-func (r *runIsolation) wedgedLocked() (map[*runIsolationLease]string, bool) {
-	if len(r.waiters) == 0 {
-		return nil, false
-	}
-	// No holder is not a wedge, it is the instant before a queued request is served: the
-	// gate is free and the semaphore wakes it. Stated rather than left to blockedWaits,
-	// which would answer the empty set with the verdict.
-	if len(r.holders) == 0 {
-		return nil, false
-	}
-	holds := make(map[*runIsolationLease]*slotHold, len(r.holders))
-	for l := range r.holders {
-		holds[l] = l.hold
-	}
-	return blockedWaits(holds)
-}
-
-// fireVerdict runs the grace after the gate wedged, and cancels every waiter with the
-// refusal when the wedge has held for the whole of it with nothing else moving. It
-// re-reads the state rather than trusting the timer: the wedge may have broken and
-// re-formed, in which case the new one has only the remainder of its own grace to outlive.
-func (r *runIsolation) fireVerdict() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.timer = nil
-	if len(r.waiters) == 0 {
-		r.wedgedSince = time.Time{}
-		return
-	}
-	defer func() {
-		if r.timer == nil {
-			r.timer = time.AfterFunc(isolationWedgeGrace, r.fireVerdict)
-		}
-	}()
-	waits, wedged := r.wedgedLocked()
-	if !wedged {
-		r.wedgedSince = time.Time{}
-		return
-	}
-	if r.wedgedSince.IsZero() {
-		r.wedgedSince = time.Now()
-		return
-	}
-	if remaining := isolationWedgeGrace - time.Since(r.wedgedSince); remaining > 0 {
-		r.timer = time.AfterFunc(remaining, r.fireVerdict)
-		return
-	}
-	idle := r.prog.Idle()
-	if idle < isolationWedgeGrace {
-		r.timer = time.AfterFunc(isolationWedgeGrace-idle, r.fireVerdict)
-		return
-	}
-	err := r.refusalLocked(idle, waits)
-	// Logged here as well as returned, the rule the stall watchdog states for itself: a
-	// reader should learn why the run stopped at the moment it stops, not only from a
-	// final error that a caller may convert to an exit code and discard. This refusal
-	// reached one CI log as nothing but "exit code 70".
-	slog.ErrorContext(r.logCtx, err.Error())
-	for w := range r.waiters {
-		w.err = err
-		w.cancel()
-	}
-}
-
-// refusalLocked builds the MGS3015 error. It names every holder, what each is parked on,
-// and everything queued behind them, in the shape MGS3013 names its own: a wait a reader
-// cannot attribute is a wait they can only interrupt.
-func (r *runIsolation) refusalLocked(idle time.Duration, waits map[*runIsolationLease]string) error {
-	holders := make([]string, 0, len(r.holders))
-	for l := range r.holders {
-		holders = append(holders, fmt.Sprintf("%s holds the %s side and is waiting on %s",
-			l.holder, isolationSide(l.exclusive), waits[l]))
-	}
-	slices.Sort(holders)
-	queued := make([]string, 0, len(r.waiters))
-	for w := range r.waiters {
-		queued = append(queued, fmt.Sprintf("%s needs the %s side", w.label, isolationSide(w.exclusive)))
-	}
-	slices.Sort(queued)
-	// Carries its exit status the way the slot refusal does and for the same reason: a
-	// step the daemon runs for an adopted client crosses a socket that erases the Go
-	// type, and the daemon reads the code off the error.
-	return types.ExitError{Code: ExitCodeRunIsolationWedged, Err: types.DiagnosticErrorf(types.RunIsolationWedged,
-		"refusing to keep waiting for this run's isolation gate: every step holding it is itself waiting,"+
-			" nothing in this run has started, finished or printed a line for %s, and what is queued cannot"+
-			" start until a holder finishes. Holding: %s. Queued: %s."+
-			" A step waiting for the gate its own ancestor holds is the shape this catches; report it with"+
-			" the run's captured log, since no magusfile can produce it.",
-		idle.Round(time.Second), strings.Join(holders, "; "), strings.Join(queued, "; "))}
+	return &runIsolationLease{isolation: r, exclusive: exclusive}, func() { r.gate.Release(weight) }, nil
 }
 
 // isolationSide names which half of the gate a request is for, as a message spells it.

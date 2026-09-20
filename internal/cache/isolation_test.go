@@ -90,7 +90,7 @@ func TestRunIsolationSharedChildAdmittedBehindAQueuedExclusiveRequest(t *testing
 		}
 		close(queued)
 	}()
-	waitForIsolationWaiters(t, isolation, 1)
+	waitForGateWaiter(t, isolation)
 
 	childDone := make(chan error, 1)
 	go func() {
@@ -133,18 +133,22 @@ func TestRunIsolationNestedRequestsInheritTheAncestorLease(t *testing.T) {
 			ancestor, releaseAncestor, err := acquireRunIsolation(scope, tc.ancestorExclusive, "ancestor")
 			require.NoError(t, err)
 			defer releaseAncestor()
-			require.Equal(t, 1, isolationHolders(isolation), "the ancestor's own acquisition")
+			wantSeats := int64(1)
+			if tc.ancestorExclusive {
+				wantSeats = -1
+			}
+			require.Equal(t, wantSeats, heldSeats(t, isolation), "the ancestor's own acquisition")
 
 			child, releaseChild, err := acquireRunIsolation(ancestor, tc.childExclusive, "child")
 			require.NoError(t, err)
-			assert.Equal(t, 1, isolationHolders(isolation), "the child took a second hold on the gate")
+			assert.Equal(t, wantSeats, heldSeats(t, isolation), "the child took a seat of its own")
 			assert.Same(t, admissionFrom(ancestor).isolation, admissionFrom(child).isolation,
 				"the child runs under a lease that is not its ancestor's")
 
 			// Releasing an inherited lease must hand nothing back: the ancestor is still
 			// inside its own region, and an exclusive one is still excluding everyone.
 			releaseChild()
-			assert.Equal(t, 1, isolationHolders(isolation), "releasing the inherited lease retired the ancestor's hold")
+			assert.Equal(t, wantSeats, heldSeats(t, isolation), "releasing the inherited lease handed back a seat")
 			if tc.ancestorExclusive {
 				assert.False(t, isolation.gate.TryAcquire(1), "an exclusive ancestor stopped excluding once its child released")
 				return
@@ -152,111 +156,6 @@ func TestRunIsolationNestedRequestsInheritTheAncestorLease(t *testing.T) {
 			require.True(t, isolation.gate.TryAcquire(1), "a shared ancestor's seat is the only one taken")
 			isolation.gate.Release(1)
 		})
-	}
-}
-
-// A wedge the engine cannot unwind has to end in a verdict rather than in a hang, and the
-// verdict has to say who was holding and who was queued: the 19-minute stall was
-// unattributable from the outside, with `magus status` reporting nothing running.
-func TestRunIsolationWedgeIsRefusedAndNamesTheWaiters(t *testing.T) {
-	restore := isolationWedgeGrace
-	isolationWedgeGrace = 50 * time.Millisecond
-	t.Cleanup(func() { isolationWedgeGrace = restore })
-
-	root, c := openCache(t)
-	// The exclusive step is held behind a gate step rather than raced into place: it can
-	// only queue once the holder has taken its seat.
-	steps := []Step{
-		{ProjectPath: "gate", WorkspaceRoot: root, Target: "run"},
-		{ProjectPath: "holder", WorkspaceRoot: root, Target: "run"},
-		{ProjectPath: "queued", WorkspaceRoot: root, Target: "run", Exclusive: true, DependsOn: []string{"gate"}},
-	}
-
-	// The heartbeat has to be installed and quiet: a wedge is only a wedge when nothing
-	// in the invocation is moving, and a run nobody watches is never refused.
-	ctx, cancel := context.WithCancel(ContextWithProgress(context.Background(), NewProgress()))
-	defer cancel()
-	blocked := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		// The budget is what turns the refusal into an unwind: the holder is parked on a
-		// wait only this batch's cancellation can end, which is the wedge's own shape.
-		_, err := c.RunAll(ctx, steps, func(stepCtx context.Context, s Step) error {
-			switch s.ProjectPath {
-			case "holder":
-				unblock := BlockedOn(stepCtx, "a wait only this test can end")
-				defer unblock()
-				close(blocked)
-				<-stepCtx.Done()
-			case "gate":
-				select {
-				case <-blocked:
-				case <-stepCtx.Done():
-				}
-			}
-			return nil
-		}, WithLimiter(NewLimiter(4)), WithMaxFailures(1))
-		done <- err
-	}()
-
-	var err error
-	select {
-	case err = <-done:
-	case <-time.After(10 * time.Second):
-		cancel()
-		<-done
-		t.Fatal("the wedged gate was never refused")
-	}
-
-	require.ErrorIs(t, err, types.RunIsolationWedged)
-	assert.ErrorContains(t, err, "holder run holds the shared side and is waiting on a wait only this test can end")
-	assert.ErrorContains(t, err, "queued run needs the exclusive side")
-	var exit types.ExitError
-	require.ErrorAs(t, err, &exit)
-	assert.Equal(t, ExitCodeRunIsolationWedged, exit.Code)
-}
-
-// A holder that is still working answers "not wedged" however long it takes, which is
-// what keeps a silent-but-busy run (a long link, a test package that prints only when it
-// finishes) from being refused out from under a legitimately queued exclusive step.
-func TestRunIsolationDoesNotRefuseWhileAHolderIsWorking(t *testing.T) {
-	restore := isolationWedgeGrace
-	isolationWedgeGrace = 50 * time.Millisecond
-	t.Cleanup(func() { isolationWedgeGrace = restore })
-
-	root, c := openCache(t)
-	steps := []Step{
-		{ProjectPath: "gate", WorkspaceRoot: root, Target: "run"},
-		{ProjectPath: "holder", WorkspaceRoot: root, Target: "run"},
-		{ProjectPath: "queued", WorkspaceRoot: root, Target: "run", Exclusive: true, DependsOn: []string{"gate"}},
-	}
-
-	ctx, cancel := context.WithCancel(ContextWithProgress(context.Background(), NewProgress()))
-	defer cancel()
-	working := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		_, err := c.RunAll(ctx, steps, func(stepCtx context.Context, s Step) error {
-			switch s.ProjectPath {
-			case "holder":
-				close(working)
-				time.Sleep(10 * isolationWedgeGrace)
-			case "gate":
-				select {
-				case <-working:
-				case <-stepCtx.Done():
-				}
-			}
-			return nil
-		}, WithLimiter(NewLimiter(4)))
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(10 * time.Second):
-		t.Fatal("the batch never finished")
 	}
 }
 
@@ -281,16 +180,10 @@ func (a *queueingAdmitter) Request(_ context.Context, waiter string, c types.Mac
 func (a *queueingAdmitter) Release(_ context.Context, id string)  { a.budget.Release(id) }
 func (a *queueingAdmitter) Drop(_ context.Context, waiter string) { a.budget.Drop(waiter) }
 
-// The acquisition order keeps a saturated machine budget from wedging a batch outright.
-// The cycle it reproduces, with the budget full and the gate taken first:
-//
-//  1. the shared step is admitted and holds a seat on the gate and the whole budget;
-//  2. the exclusive peer needs every seat, so it waits for the shared step to finish;
-//  3. the shared step is waiting for that peer to reach the budget it holds;
-//  4. neither can move, and neither is anywhere it would see a cancelled context.
-//
-// Bounded here rather than left to the package timeout, which reports a hang as an
-// infrastructure failure nobody attributes to this.
+// The acquisition order keeps a saturated machine budget from wedging a batch outright:
+// the machine claim is taken BEFORE the gate, so a step queued for the budget is holding
+// no seat anybody needs. Bounded here rather than left to the package timeout, which
+// reports a hang as an infrastructure failure nobody attributes to this.
 func TestRunAllExclusiveStepQueuesForTheMachineWithoutTheLease(t *testing.T) {
 	// Memory-only arbitration (unlimited slots), so the two 9 GB steps are what
 	// saturates the budget and the gate step below never competes for a seat.
@@ -353,107 +246,51 @@ func TestRunAllExclusiveStepQueuesForTheMachineWithoutTheLease(t *testing.T) {
 	}
 }
 
-// isolationHolders counts the leases currently holding the gate, which is the direct
-// reading of "acquired at most once per path".
-func isolationHolders(r *runIsolation) int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.holders)
-}
-
-// waitForIsolationWaiters blocks until n requests are queued for the gate, so a test can
-// order a step against a queue rather than against a sleep.
-func waitForIsolationWaiters(t *testing.T, r *runIsolation, n int) {
+// waitForGateWaiter blocks until a request is queued for the gate, so a test can order a
+// step against a queue rather than against a sleep.
+//
+// Read off the semaphore itself, because the gate keeps no waiter bookkeeping any more:
+// Go's TryAcquire refuses while anything is queued, so with seats plentiful a refused
+// single-seat request means exactly one thing, that somebody is waiting.
+func waitForGateWaiter(t *testing.T, r *runIsolation) {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
 	for {
-		r.mu.Lock()
-		got := len(r.waiters)
-		r.mu.Unlock()
-		if got >= n {
+		if r.gate.TryAcquire(1) {
+			r.gate.Release(1)
+		} else {
 			return
 		}
 		select {
 		case <-deadline:
-			t.Fatalf("waiters on the isolation gate = %d, want %d", got, n)
+			t.Fatal("no request ever queued for the isolation gate")
 		case <-time.After(time.Millisecond):
 		}
 	}
 }
 
-// A holder in a ctx.needs fan-out is not a wedged holder. Its slots are handed back for
-// the duration, which is what the limiter counts against a saturated pool, and the gate
-// read that as parked: every composite target holds the gate through a fan-out, so a batch
-// whose generators are silent for the grace was refused out from under itself. The fan-out
-// inherits the lease (see runIsolation), so it can never be what is queued.
+// heldSeats reports how many seats the gate currently has out, by taking every remaining
+// one. It replaces a direct read of a holders map: the gate keeps no bookkeeping beyond
+// the semaphore now, and the semaphore is the thing the invariant is actually about.
 //
-// The shape is asserted rather than assumed. Waiting for the queued step to REACH the gate
-// is what makes this a regression test: without it the batch can finish by scheduling luck,
-// with the exclusive step never queued and the fan-out never overlapping it, and the
-// predicate under test could be reverted without failing anything.
-func TestRunIsolationDoesNotRefuseAHolderInAFanOut(t *testing.T) {
-	restore := isolationWedgeGrace
-	isolationWedgeGrace = 50 * time.Millisecond
-	t.Cleanup(func() { isolationWedgeGrace = restore })
-
-	root, c := openCache(t)
-	steps := []Step{
-		{ProjectPath: "gate", WorkspaceRoot: root, Target: "run"},
-		{ProjectPath: "holder", WorkspaceRoot: root, Target: "run"},
-		{ProjectPath: "queued", WorkspaceRoot: root, Target: "run", Exclusive: true, DependsOn: []string{"gate"}},
+// Returns -1 when the gate is held exclusively, since no seat is free to count against.
+func heldSeats(t *testing.T, r *runIsolation) int64 {
+	t.Helper()
+	for n := int64(0); n <= 4; n++ {
+		if r.gate.TryAcquire(isolationSeats - n) {
+			r.gate.Release(isolationSeats - n)
+			return n
+		}
 	}
-
-	ctx, cancel := context.WithCancel(ContextWithProgress(context.Background(), NewProgress()))
-	defer cancel()
-	ctx = WithRunScope(ctx)
-	isolation := isolationFrom(ctx)
-	lim := NewLimiter(4)
-	working := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		_, err := c.RunAll(ctx, steps, func(stepCtx context.Context, s Step) error {
-			switch s.ProjectPath {
-			case "holder":
-				close(working)
-				return lim.Yield(stepCtx, func() error {
-					// Held until the exclusive step is provably queued behind this
-					// fan-out, which is the shape the gate used to refuse.
-					waitForIsolationWaiters(t, isolation, 1)
-					isolation.mu.Lock()
-					_, wedged := isolation.wedgedLocked()
-					isolation.mu.Unlock()
-					assert.False(t, wedged, "a holder in its own fan-out must not read as wedged")
-					time.Sleep(2 * isolationWedgeGrace)
-					return nil
-				})
-			case "gate":
-				select {
-				case <-working:
-				case <-stepCtx.Done():
-				}
-			}
-			return nil
-		}, WithLimiter(lim))
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(10 * time.Second):
-		t.Fatal("the batch never finished")
-	}
+	return -1
 }
-
-// The ctx.needs member-dispatch path inherits the lease, pinned on the context plumbing
-// that path actually uses rather than on acquireRunIsolation alone.
 //
-// This is load-bearing in a way the sibling inheritance test is not. Since a holder in a
-// fan-out reads as working, inheritance is the ONLY thing preventing the 2026-09-11 shape:
-// a needs child asking for the exclusive side while its own parent holds the shared one.
-// If SharedStepContext ever stopped carrying the parent's admission, that child would
-// queue behind a holder the gate has been taught to call healthy, and the run would hang
-// with no verdict at all.
+// This is load-bearing in a way the sibling inheritance test is not. With the wedge verdict
+// deleted, inheritance is the ONLY thing preventing the 2026-09-11 shape: a needs child
+// asking for the exclusive side while its own parent holds the shared one. If
+// SharedStepContext ever stopped carrying the parent's admission, that child would queue
+// behind its own parent and the run would hang until the 15-minute stall watchdog, with
+// nothing naming the gate.
 func TestRunIsolationNeedsChildInheritsUnderAFanOut(t *testing.T) {
 	lim := NewLimiter(4)
 	scope := WithRunScope(context.Background())
@@ -466,7 +303,7 @@ func TestRunIsolationNeedsChildInheritsUnderAFanOut(t *testing.T) {
 	// says is held; a marker without the acquisition releases a slot that was never taken.
 	require.NoError(t, lim.AcquireN(context.Background(), 1))
 	parent = withSlotHold(WithSlotsHeld(parent, 1), lim.watch.admit("parent", 1))
-	require.Equal(t, 1, isolationHolders(isolation))
+	require.Equal(t, int64(1), heldSeats(t, isolation))
 
 	// The base a dispatched member's context is spliced onto, as RunAll installs it.
 	base, cancelBase := context.WithCancel(context.Background())
@@ -474,20 +311,13 @@ func TestRunIsolationNeedsChildInheritsUnderAFanOut(t *testing.T) {
 	parent = context.WithValue(parent, sharedStepBaseKey{}, base)
 
 	require.NoError(t, lim.Yield(parent, func() error {
-		// Mid-fan-out the parent is yielded, so the gate reads it as working. Nothing
-		// else may be allowed to queue behind it.
-		_, wedged := func() (map[*runIsolationLease]string, bool) {
-			isolation.mu.Lock()
-			defer isolation.mu.Unlock()
-			return isolation.wedgedLocked()
-		}()
-		assert.False(t, wedged)
-
+		// Mid-fan-out, with the parent's slots handed back: the shape that used to be
+		// refused, and the one a dispatched member really runs in.
 		member := SharedStepContext(parent)
 		child, releaseChild, err := acquireRunIsolation(member, true, "member")
 		require.NoError(t, err, "an exclusive member queued instead of inheriting")
 		defer releaseChild()
-		assert.Equal(t, 1, isolationHolders(isolation), "the member took a hold of its own")
+		assert.Equal(t, int64(1), heldSeats(t, isolation), "the member took a seat of its own")
 		assert.Same(t, admissionFrom(parent).isolation, admissionFrom(child).isolation,
 			"the member runs under a lease that is not its parent's")
 		return nil

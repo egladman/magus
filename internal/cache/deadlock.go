@@ -149,55 +149,6 @@ func (h *slotHold) done() {
 	h.w.evaluateLocked()
 }
 
-// blockedWaits reports what each hold is parked on, and whether EVERY one of them is.
-// The whole sweep runs under one hold of the watch mutex, so the answer describes a
-// single instant rather than a set of per-holder samples: this type's doc promises that
-// property for its own verdict, and the isolation gate's verdict needs the same one. The
-// strings come back with it, so a refusal renders what the sweep saw instead of re-reading
-// fields a holder may have changed since.
-//
-// "Parked" here means blocked, and deliberately NOT yielded. A hold that handed its slots
-// to the targets it composes cannot finish on its own, which is why the POOL counts it
-// against a saturated limiter; but for the gate, the fan-out it waits on INHERITS its gate
-// lease (see runIsolation), so the fan-out can never be the thing queued behind it. Reading
-// yielded as parked refused healthy runs: every composite target holds the gate through a
-// fan-out, so one generator silent for the grace wedged the whole invocation.
-//
-// The exception is the yield that crosses a PROCESS boundary (proc.RunChildSync): nothing
-// inherits anything there, and a hung child leaves its holder unable to finish. This sweep
-// reads that holder as working, so the gate will not refuse it; the stall watchdog
-// (MGS3012, see watchdog.go) is what ends that run, on total invocation silence rather
-// than on gate shape. That is the acknowledged backstop, not an oversight.
-//
-// ok is false the moment any hold is working, unattached, or recorded by a different
-// watch, all of which are the conservative answer.
-func blockedWaits(holds map[*runIsolationLease]*slotHold) (map[*runIsolationLease]string, bool) {
-	var w *slotWatch
-	for _, h := range holds {
-		if h == nil {
-			return nil, false
-		}
-		if w == nil {
-			w = h.w
-		}
-		if h.w != w {
-			return nil, false
-		}
-	}
-	if w == nil {
-		return nil, false
-	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	waits := make(map[*runIsolationLease]string, len(holds))
-	for lease, h := range holds {
-		if h.blocked == "" {
-			return nil, false
-		}
-		waits[lease] = h.blocked
-	}
-	return waits, true
-}
 
 // block marks the hold as waiting on what until the returned func runs. Nested waits
 // restore the outer one, so a mark is never lost by a deeper wait finishing first.
