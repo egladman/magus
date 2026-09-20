@@ -17926,12 +17926,12 @@
       }
     },
     {
-      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys-stated-precisely",
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys",
       "kind": "docsection",
-      "label": "What this buys, stated precisely",
-      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys-stated-precisely",
+      "label": "What this buys",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys",
       "attrs": {
-        "anchor": "what-this-buys-stated-precisely",
+        "anchor": "what-this-buys",
         "level": "3"
       }
     },
@@ -106006,7 +106006,7 @@
     },
     {
       "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#decision",
-      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys-stated-precisely",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

@@ -1,7 +1,7 @@
 ---
 title: "ADR 0001: bounded concurrency with recursive invocation"
 order: 1
-description: Where magus takes a concurrency slot, and why it stops taking one for a target's whole body and starts taking one around the work that actually executes. Records the forces behind the isolation gate, the slot yield and the deadlock detectors, the alternatives rejected since May 2026, what other build systems that support recursive invocation do, and the staged path that keeps each step reversible.
+description: Where magus takes a concurrency slot, and why it stops taking one for a target's whole body and starts taking one around the work that executes. Records the forces behind the isolation gate, the slot yield and the deadlock detectors, the alternatives rejected since May 2026, what other build systems that support recursive invocation do, and the staged path that keeps each step reversible.
 tags: [adr, decision, concurrency, deadlock, scheduler, recursion, slots, isolation]
 ---
 
@@ -13,15 +13,14 @@ tags: [adr, decision, concurrency, deadlock, scheduler, recursion, slots, isolat
 
 ## Why this document exists
 
-magus's concurrency machinery has been rebuilt repeatedly since May 2026, and several runs
-hung along the way. Most of them are one shape: work dispatched inside a running target
-waited for a resource that target's own ancestor held. Each change fixed the instance in
-front of it; none wrote down the rule.
+magus has rebuilt its concurrency machinery several times since May 2026, and runs hung
+along the way. Most of them are one shape: work dispatched inside a running target waited
+for a resource that target's own ancestor held. Each change fixed the instance in front of
+it, and nobody wrote down the rule.
 
-This ADR exists because the most recent change deleted a mechanism nobody had ever
-justified, and establishing that took an afternoon of archaeology. It also exists because
-the first draft of this document asserted five things about the code that were false. Both
-are recorded below, because an ADR that hides its own corrections teaches nothing.
+The most recent change deleted a mechanism nobody had ever justified, and establishing that
+took an afternoon of archaeology. The first draft of this document then asserted five
+things about the code that were false. Both are recorded below.
 
 ## Context
 
@@ -52,15 +51,15 @@ Two watchers remain, plus one deleted:
 | MGS3012 | invocation silence | 15m | timeout |
 | ~~MGS3015~~ | the isolation gate | 30s | deleted 2026-09-19 |
 
-MGS3013 is not a timeout guessing at deadlock: its predicate is "no holder can release and
-the free count cannot satisfy any waiter". But it is **one-sided**, and its own code says so:
-raw acquisitions that register no hold "leave the sum short" and answer no. The Buzz pool,
-the spell fan-out, `os.with_slots`, `archive.*` and the daemon's adopted runs all acquire
-raw. It cannot produce a false positive from that; it is simply blind to any wedge through
-one of those holders.
+MGS3013's 3s grace is a settling delay rather than the test. The test is a predicate: "no
+holder can release and the free count cannot satisfy any waiter". But it is **one-sided**,
+and its own code says so: raw acquisitions that register no hold "leave the sum short" and
+answer no. The Buzz pool, the spell fan-out, `os.with_slots`, `archive.*` and the daemon's
+adopted runs all acquire raw. It cannot produce a false positive from that; it is blind to
+any wedge through one of those holders.
 
-What *is* a guess is the marking discipline: a `blocked` string somebody must remember to
-set. A wait that forgets it reads as running and hangs silently; a mark attributed to the
+The marking discipline is the guess: a `blocked` string somebody must remember to set. A
+wait that forgets it reads as running and hangs silently; a mark attributed to the
 wrong record refuses healthy runs. Both happened; the second is why MGS3015 is gone.
 
 ### The forces, recovered from the history
@@ -81,7 +80,8 @@ wrong record refuses healthy runs. Both happened; the second is why MGS3015 is g
 
 The dependency barrier has never deadlocked, and its doc says why: *"Every goroutine is
 launched immediately and blocks on deps without holding a slot, so the pool never
-deadlocks."* That is the opposite principle from `Yield`, in the same package, unexamined.
+deadlocks."* That is the opposite principle from `Yield`, in the same package, and nobody
+reconciled the two.
 
 ## Decision
 
@@ -127,10 +127,10 @@ which is what it was implemented as.
   did not act on it: "narrowing the exclusive region to the measurement is the fix, and it is
   not this line."
 
-Folding exclusivity into "acquire every slot at a leaf" would have been actively wrong here:
-it changes those targets from "this body runs alone" to "each subprocess runs alone with
-peers interleaved between them", and a peer writing the tree between the generator and the
-`git status` is precisely the race the flag exists to prevent. Buck2's `ExclusiveAccess` and
+Folding exclusivity into "acquire every slot at a leaf" would have been wrong here: it
+changes those targets from "this body runs alone" to "each subprocess runs alone with peers
+interleaved between them", and a peer writing the tree between the generator and the
+`git status` is the race the flag exists to prevent. Buck2's `ExclusiveAccess` and
 Bazel's `exclusive` are per-action because their actions are leaves; magus's are bodies.
 
 With the flag gone, the run-isolation gate, its lease and the inheritance rule go with it.
@@ -138,7 +138,7 @@ With the flag gone, the run-isolation gate, its lease and the inheritance rule g
 MGS3012 stays throughout, as the only timer. It bounds invocation *silence*, not a resource
 wait, and it is the backstop for waits whose subject is outside this process.
 
-### What this buys, stated precisely
+### What this buys
 
 Hold-and-wait is one of Coffman's four necessary conditions. Removing it for the resource
 recursion re-enters makes that cycle impossible rather than detected. A slot x cache-lock
@@ -201,7 +201,7 @@ a structural rule.
 | **Bazel** | no, actions are leaves | `--jobs` over actions | not evidence about recursion |
 | **Tokio** | yes | worker threads | `block_in_place` hands the worker's tasks away first |
 
-make holds its bound across a nested wait, deliberately, with bounded overshoot; that is
+make holds its bound across a nested wait by design, with bounded overshoot; that is
 stage 1. Shake, Buck2 and Tokio move the bound off the suspending computation; that is
 stages 2 and 3.
 
@@ -219,13 +219,14 @@ asked for: "executing", rather than a seat held by a body that is waiting.
   subprocess at a time", with every body interleaving its output: a behavior change in a
   debugging feature, which is the worst place for one. The answer reuses stage 0: `--step`
   wraps each step's body in a named exclusion, which restores "one target at a time" exactly
-  and adds no second scheduling mode. Decided in stage 2, not discovered in it.
+  and adds no second scheduling mode.
 - **Peak live state is less bounded, and unmeasured.** Every step past its dependencies
   becomes a live goroutine plus a Buzz session, and the worker pool caps retention rather
   than creation. Stage 2 must measure session RSS times live steps before stage 3.
 - **The discipline moves rather than disappearing.** "A slot is taken where work executes"
   is itself something a future site must remember to do. It fails **open** (oversubscription)
-  rather than closed (a silent hang), which is the better direction, but it is not nothing.
+  rather than closed (a silent hang), which is the better direction. A site that forgets
+  still oversubscribes the pool.
 - **Leaf weight is the target's own declaration**, while the machine claim keeps the chain
   fold. Without that split a parent's own small step would be weighted at its fan-out's
   summed peak.
@@ -247,7 +248,7 @@ that, and the cycle named in the refusal. Pair it with stage 1 regardless.
 
 ## Corrections to this document's first draft
 
-Recorded because the errors are instructive and a reader may have seen the draft.
+Recorded because a reader may have seen the draft.
 
 - It claimed the CI shard forecaster arbitrates declared `memory_mb`. It does not: it packs
   on measured peak RSS from run history and reads no declaration.
