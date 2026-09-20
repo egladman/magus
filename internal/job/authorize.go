@@ -113,7 +113,7 @@ func refuse(actor Actor, id, rule string) error {
 // An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
 // it landed on, SHRINK its write paths (which is how the skill has it release one), and
 // end itself in fail, no_return, or exited; on any other row it may only CREATE a child of itself
-// inside its own boundary. Widening a lane, changing the plan's shape, and grading a row
+// inside its own boundary. Widening a boundary, changing the plan's shape, and grading a row
 // are the orchestrator's, which is the asymmetry the whole rule exists for: a worker that
 // can widen its own row has no boundary at all.
 func authorizeRow(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
@@ -152,7 +152,7 @@ func authorizeRow(actor Actor, id string, prev, next types.Job, exists bool, row
 // authorizeChild grades a bound worker's write to a row that is not its own: a new child
 // of its own lease, inside its own boundary, and nothing else.
 //
-// EVERY LANE THE GUARD READS IS SUBSETTED, not just the write one. A child's read paths are
+// EVERY BOUNDARY THE GUARD READS IS SUBSETTED, not just the write one. A child's read paths are
 // the READ boundary (cmd/magus/guard_focus.go) and its deny paths are subtracted from the
 // write one, so a worker that could widen either by spawning has no boundary: it binds a
 // session to the child and reads or writes what its own row denies it.
@@ -177,7 +177,7 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 	switch {
 	case !subset(next.WritePaths, parent.WritePaths):
 		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
-	case !subset(readLane(next), readLane(parent)):
+	case !subset(readBoundary(next), readBoundary(parent)):
 		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
 	case !subset(parent.DenyPaths, next.DenyPaths):
 		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
@@ -233,10 +233,10 @@ func checkLine(row types.Job) string {
 	return strings.Join(lines, ", ")
 }
 
-// readLane is the declarations a row may READ: its read paths when it declares any, else
-// its own write lane, which is the fallback cmd/magus/guard_focus.go makes. A parent's
-// write lane rides along either way, since a child may already be handed it.
-func readLane(row types.Job) []string {
+// readBoundary is the declarations a row may READ: its read paths when it declares any, else
+// its own write paths, which is the fallback cmd/magus/guard_focus.go makes. A parent's
+// write paths ride along either way, since a child may already be handed them.
+func readBoundary(row types.Job) []string {
 	if len(row.ReadPaths) == 0 {
 		return row.WritePaths
 	}

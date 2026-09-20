@@ -148,13 +148,13 @@ var mergeFields = []string{
 	"depends_on", "model", "check", "validation", "completion_gates", "state", "read_only", "timeout",
 }
 
-// renamedFields pairs each lane's pre-rename JSON key with the one it answers to now.
+// renamedFields pairs each boundary field's pre-rename JSON key with the one it answers to now.
 //
 // ParseMerge itself no longer accepts these spellings on a fork; that compat, and the
 // guard's mirrored allowance, were deleted outright since the MCP put surface never
 // shipped them. This table survives for a narrower, still-live reason: Store.mergeRowRaw
 // (store.go) strips an old key out of a row's raw bytes on every merge so it cannot ride
-// back out under both spellings after foldStoredLanes (decode.go) folds it onto the
+// back out under both spellings after foldStoredNames (decode.go) folds it onto the
 // current field on read. types.Declaration keeps its own legacy input fields
 // separately, for a client still reading `magus job fork --stdin` in the old vocabulary.
 var renamedFields = [][2]string{

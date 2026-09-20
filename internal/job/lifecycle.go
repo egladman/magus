@@ -186,7 +186,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 
 	// The GATES decide this verdict, not the whole result. VerifyGates also applies the
 	// rules a filed result must satisfy (a change set that is not empty, paths inside the
-	// lanes, descendants the store carries), and a job still in flight has filed no result
+	// declared boundary, descendants the store carries), and a job still in flight has filed no result
 	// to hold to them: inherited, they report every unfinished job as failing for reasons
 	// that have nothing to do with what was asked. The violations stay in the status, so a
 	// reader still sees them; only the verdict is narrowed to the question.

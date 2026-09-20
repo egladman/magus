@@ -10,7 +10,7 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 8,
+      "const": 9,
       "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See JobSchemaVersion."
     },
     "id": {
@@ -36,21 +36,21 @@
       "items": {
         "type": "string"
       },
-      "description": "WritePaths is the declared write lane, empty on a read-only row by design."
+      "description": "WritePaths is what this lease may write, empty on a read-only row by design."
     },
     "deny_paths": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "DenyPaths are the paths inside that lane this lease may not write."
+      "description": "DenyPaths are the paths inside those this lease may not write."
     },
     "read_paths": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "ReadPaths is the declared READ lane, widened to those projects' dependencies by the guard. Empty means write_paths stands in."
+      "description": "ReadPaths is what it may READ, widened to those projects' dependencies by the guard. Empty means write_paths stands in."
     },
     "depends_on": {
       "type": "array",

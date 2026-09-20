@@ -516,7 +516,7 @@ var Magus = Module{
 						"declared; a key present with an empty value is an explicit clear. id is the " +
 						"row's identity to upsert on - the value an orchestrator should also put in " +
 						"the worker's prompt, so the console can join activity to the row. " +
-						"created/updated/releases/lane_proof are stamped by the store and cannot be set " +
+						"created/updated/releases/write_proof are stamped by the store and cannot be set " +
 						"here. A put that CREATES a row raises when its write_paths cover a file the " +
 						"workspace has to load (a magusfile, a magus.yaml, an imported spell source) " +
 						"while another live job with write paths is bound to this checkout: that job " +
@@ -826,7 +826,7 @@ var magusMCPTools = []MCPTool{
 			{Name: "checkpoint", Type: TypeString, Doc: "fork only: the working state this job was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
 			{Name: "write_paths", Type: TypeString, Doc: "fork only: space-separated paths the job may edit. Empty on a read-only job by design. Shrinking this set IS how a job announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed, which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits: a digest that no longer matches at verification time means it built on a tree the releaser never saw."},
 			{Name: "deny_paths", Type: TypeString, Doc: "fork only: space-separated paths the job must not touch. Empty on a read-only job by design."},
-			{Name: "read_paths", Type: TypeString, Doc: "fork only: space-separated paths whose projects the job may READ, widened to those projects' own depends_on. Omit and write_paths stands in, which is right for a worker pointed at one project; set it to hand a worker read access to a library it must not write. This is the only way to widen the read lane: the guard advises on an out-of-lane read and denies one under a bound job, and there is no environment variable that turns it off."},
+			{Name: "read_paths", Type: TypeString, Doc: "fork only: space-separated paths whose projects the job may READ, widened to those projects' own depends_on. Omit and write_paths stands in, which is right for a worker pointed at one project; set it to hand a worker read access to a library it must not write. This is the only way to widen what the job may read: the guard advises on a read outside that boundary and denies one under a bound job, and there is no environment variable that turns it off."},
 			{Name: "depends_on", Type: TypeString, Doc: "fork only: space-separated ids of jobs that must land before this one."},
 			{Name: "model", Type: TypeString, Doc: "fork only: the model or effort tier the work was matched to, e.g. principal, standard, economy."},
 			{Name: "check", Type: TypeString, Doc: "fork only: the one check this job runs, as `<target> <project> [-- args]`. The `magus run` is implied, and a flag before the `--` is refused: acceptance binds a worker's evidence to this target and project, so a flag read as a positional would bind it to a run nobody made."},

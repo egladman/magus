@@ -27,7 +27,7 @@ const LeaseMarkerName = "lease"
 //
 // A checkout used to hold exactly one, which made the binding a fact about the DIRECTORY.
 // Three workers sharing a checkout therefore could not each hold a lease: the second
-// bind was refused as a rebind, all three ran unattributed, and every lane rule fell
+// bind was refused as a rebind, all three ran unattributed, and every write-path rule fell
 // silent at once while looking exactly like a guarded session.
 const leaseMarkerDir = "leases"
 
@@ -86,7 +86,7 @@ func (c Checkout) ActingLease() string {
 	// The MARKER wins. It is written by `magus job exec` into the checkout that took the
 	// lease, so it is a fact about where the work is happening; the env member is a claim
 	// the worker makes about itself, and letting a claim override the record meant a
-	// worker bound to one job could be graded against another job's lanes by exporting
+	// worker bound to one job could be graded against another job's write paths by exporting
 	// its id.
 	//
 	// Not a fail-open case: a checkout with neither answer is a question magus cannot ask
@@ -263,21 +263,21 @@ func heldHere(rows []types.Job, cacheDir, forking string) []types.Job {
 	return out
 }
 
-// RefuseSharedCheckout refuses a fork whose write lane covers a file the WORKSPACE has to
+// RefuseSharedCheckout refuses a fork whose write paths cover a file the WORKSPACE has to
 // load, while another live job with write paths is already bound to this checkout.
 //
-// THE ONE COLLISION A WORKER CANNOT SEE. Two lanes overlapping costs the two workers
+// THE ONE COLLISION A WORKER CANNOT SEE. Two jobs overlapping costs the two workers
 // involved a conflict they can read; a half-saved magusfile costs every worker in the
 // checkout `magus run` itself, including the tests they are being graded on, and the
-// worker that caused it is doing exactly what its lane told it to. It is refused rather
-// than advised for that reason, and the fix it names is a worktree rather than a narrower
-// lane: the file has one owner, so the only way two jobs can both be right is for one of
-// them to be somewhere else.
+// worker that caused it is doing exactly what its declaration told it to. It is refused
+// rather than advised for that reason, and the fix it names is a worktree rather than a
+// narrower declaration: the file has one owner, so the only way two jobs can both be right
+// is for one of them to be somewhere else.
 //
-// Narrow by construction. It says nothing about a lane that merely overlaps (that is
-// recorded, see LaneProof), nothing about a checkout holding no other live job, and
-// nothing about a job whose lane covers no load file. Refusing more than magus can prove
-// is how a guard becomes something to route around.
+// Narrow by construction. It says nothing about write paths that merely overlap (that is
+// recorded, see WriteProof), nothing about a checkout holding no other live job, and
+// nothing about a job whose write paths cover no load file. Refusing more than magus can
+// prove is how a guard becomes something to route around.
 func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate types.Job) error {
 	if store == nil || len(candidate.WritePaths) == 0 {
 		return nil
@@ -289,24 +289,24 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate t
 	// Read only once something else holds the checkout: the walk touches the tree, and a
 	// fork into an unshared checkout is the common case and must stay free.
 	for _, load := range describe.WorkspaceLoadFiles(store.root) {
-		lane, covered := laneCovering(candidate.WritePaths, load)
+		declared, covered := writePathCovering(candidate.WritePaths, load)
 		if !covered {
 			continue
 		}
 		return fmt.Errorf("job: %s declares %q, which covers %s, and %s is live in this checkout (%s)."+
 			" A magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
 			" so every job here loses `magus run` until it lands, not just this one."+
-			" Give %s its own worktree and fork it there, or leave %s out of its lane."+
-			" `%s` names what else that lane covers",
-			id, lane, load, held[0].ID, store.root, id, load, hint.DescribeFile.With(load))
+			" Give %s its own worktree and fork it there, or leave %s out of its write paths."+
+			" `%s` names what else that write path covers",
+			id, declared, load, held[0].ID, store.root, id, load, hint.DescribeFile.With(load))
 	}
 	return nil
 }
 
-// laneCovering reports which declared write path covers rel, using the same reading the
+// writePathCovering reports which declared write path covers rel, using the same reading the
 // guard gives a write: a declaration covers the subtree beneath what it names.
-func laneCovering(lane []string, rel string) (string, bool) {
-	for _, decl := range lane {
+func writePathCovering(paths []string, rel string) (string, bool) {
+	for _, decl := range paths {
 		if covers(decl, rel) {
 			return decl, true
 		}
@@ -314,24 +314,26 @@ func laneCovering(lane []string, rel string) (string, bool) {
 	return "", false
 }
 
-// LaneProofFor grades candidate's lane against every other live job bound to this
-// checkout. See [types.JobLaneProof] for why the three answers are distinct.
-func LaneProofFor(store *Store, rows []types.Job, id string, candidate types.Job) types.JobLaneProof {
-	if store == nil {
-		return types.LaneProofAlone
+// WriteProof grades candidate's write paths against every other live job bound to this
+// checkout. See [types.JobWriteProof] for why the three answers are distinct.
+//
+// A nil Store answers alone: a caller with no store knows of no other holder.
+func (s *Store) WriteProof(rows []types.Job, id string, candidate types.Job) types.JobWriteProof {
+	if s == nil {
+		return types.WriteProofAlone
 	}
-	held := heldHere(rows, store.cacheDir, id)
+	held := heldHere(rows, s.cacheDir, id)
 	if len(held) == 0 {
-		return types.LaneProofAlone
+		return types.WriteProofAlone
 	}
 	for _, row := range held {
 		for _, mine := range candidate.WritePaths {
 			for _, theirs := range row.WritePaths {
 				if types.PathsIntersect(mine, theirs) {
-					return types.LaneProofOverlapping
+					return types.WriteProofOverlapping
 				}
 			}
 		}
 	}
-	return types.LaneProofDisjoint
+	return types.WriteProofDisjoint
 }

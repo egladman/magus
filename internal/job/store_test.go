@@ -416,7 +416,7 @@ func TestStoreRefusesARowFromANewerMagus(t *testing.T) {
 }
 
 // compat: see the legacy fields on Row. A plan written before the rename keeps its
-// boundaries; without the fold every lane would read empty and the next put would store
+// boundaries; without the fold every one of them would read empty and the next put would store
 // that as the truth.
 func TestStoreReadsAPlanWrittenBeforeTheRename(t *testing.T) {
 	t.Parallel()
@@ -629,10 +629,10 @@ func TestStoreUpdatePreservesAnUnknownMember(t *testing.T) {
 	assert.Equal(t, types.StatePass, rows[0].State, "the field the update named was still applied")
 }
 
-// A pre-rename lane spelling folded onto its current field by foldStoredLanes must not
+// A pre-rename spelling folded onto its current field by foldStoredNames must not
 // ride back out under the old name too: mergeRowRaw's raw baggage would otherwise carry it
-// forward forever, and the NEXT read would find the lane declared under both spellings,
-// which foldStoredLanes refuses outright.
+// forward forever, and the NEXT read would find the field declared under both spellings,
+// which foldStoredNames refuses outright.
 func TestStoreUpdateDropsAFoldedLegacySpelling(t *testing.T) {
 	t.Parallel()
 

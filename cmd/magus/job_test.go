@@ -107,7 +107,7 @@ func TestLeasedBoundarySkipsTheRowsAncestors(t *testing.T) {
 	for _, b := range leasedBoundary(rows[2], rows) {
 		owners = append(owners, b.Path)
 	}
-	assert.Equal(t, []string{"internal/guard"}, owners, "a sibling's lane is off limits, an ancestor's is where the leaf was forked")
+	assert.Equal(t, []string{"internal/guard"}, owners, "a sibling's boundary is off limits, an ancestor's is where the leaf was forked")
 }
 
 func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
@@ -236,7 +236,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 }
 
 // A path flag takes both spellings, and refuses the empty segment a trailing comma
-// leaves: a lane that silently shrank is the failure --skip already refuses.
+// leaves: a boundary that silently shrank is the failure --skip already refuses.
 func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
 	t.Parallel()
 
@@ -306,7 +306,7 @@ func TestJobExecVacateRefusesAnInFlightJob(t *testing.T) {
 // TestJobExecVacateAllowsAJobThatAlreadyExited is the exact shape of the four-day bug
 // this verb exists to fix: a checkout bound to a job that returned its result (exited)
 // and that nobody will ever wait on. types.JobState.Live counts exited as live, on
-// purpose, so a rejected wait can send work back to the same lanes; but that is a
+// purpose, so a rejected wait can send work back to the same write paths; but that is a
 // property of grading writes against a LIVE lease, not a reason to keep a checkout
 // hostage to a lease its own holder is done with. Every later state (pass, fail,
 // no_return) vacates the same way, and so does every state the store never declared at
