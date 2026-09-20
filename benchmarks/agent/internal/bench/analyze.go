@@ -3,15 +3,17 @@ package bench
 import (
 	"bytes"
 	"fmt"
+	"hash/fnv"
 	"maps"
 	"math"
+	"math/bits"
+	"math/rand/v2"
 	"os"
 	"reflect"
 	"slices"
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 	"github.com/egladman/magus/internal/json"
 )
 
@@ -34,19 +36,19 @@ type metric struct {
 	label    string
 	digits   int
 	headline bool
-	read     func(*ScoredRun) *pycompat.Number
+	read     func(*ScoredRun) *float64
 }
 
-func intMetric(read func(*ScoredRun) int64) func(*ScoredRun) *pycompat.Number {
-	return func(r *ScoredRun) *pycompat.Number {
-		n := pycompat.Int(read(r))
+func intMetric(read func(*ScoredRun) int64) func(*ScoredRun) *float64 {
+	return func(r *ScoredRun) *float64 {
+		n := float64(read(r))
 		return &n
 	}
 }
 
-func floatMetric(read func(*ScoredRun) float64) func(*ScoredRun) *pycompat.Number {
-	return func(r *ScoredRun) *pycompat.Number {
-		n := pycompat.Float(read(r))
+func floatMetric(read func(*ScoredRun) float64) func(*ScoredRun) *float64 {
+	return func(r *ScoredRun) *float64 {
+		n := read(r)
 		return &n
 	}
 }
@@ -61,9 +63,9 @@ var metrics = []metric{
 	{name: "dollars", label: "dollars", digits: 4, headline: true,
 		read: floatMetric(func(r *ScoredRun) float64 { return r.Dollars })},
 	{name: "wall_ms", label: "wall clock (ms)", digits: 1, headline: true,
-		read: func(r *ScoredRun) *pycompat.Number { return r.WallMs }},
-	{name: "time_to_first_edit_ms", read: func(r *ScoredRun) *pycompat.Number { return r.TimeToFirstEditMs }},
-	{name: "time_to_done_ms", read: func(r *ScoredRun) *pycompat.Number { return r.TimeToDoneMs }},
+		read: func(r *ScoredRun) *float64 { return r.WallMs }},
+	{name: "time_to_first_edit_ms", read: func(r *ScoredRun) *float64 { return r.TimeToFirstEditMs }},
+	{name: "time_to_done_ms", read: func(r *ScoredRun) *float64 { return r.TimeToDoneMs }},
 	{name: "turns", label: "turns", digits: 1, headline: true,
 		read: intMetric(func(r *ScoredRun) int64 { return r.Turns })},
 	{name: "tool_calls", label: "tool calls", digits: 1, headline: true,
@@ -94,8 +96,8 @@ func wilsonInterval(successes, total int64) [2]*float64 {
 }
 
 // percentile takes the value at index `floor(q * (n - 1))` of an already sorted
-// list, the index the Python's bootstrap used; it is not the nearest-rank
-// definition, and the CIs pinned in testdata depend on this one.
+// list. Deliberately not the nearest-rank definition, which rounds up and would
+// move every bound; the CIs pinned in testdata depend on this one.
 func percentile(sorted []float64, q float64) *float64 {
 	if len(sorted) == 0 {
 		return nil
@@ -107,19 +109,19 @@ func percentile(sorted []float64, q float64) *float64 {
 // bootstrapPaired bootstraps the mean of paired deltas; it returns the CI and
 // a two-sided p value. The RNG is seeded from the metric and task name so
 // each interval is independent of how many other cells are analyzed
-// alongside it. The resampled mean accumulates left to right, as the Python
-// did; a compensated sum here would move the CI bounds.
-func bootstrapPaired(deltas []pycompat.Number, seedKey string) (ci [2]*float64, p *float64) {
+// alongside it. The resampled mean accumulates left to right; a compensated sum
+// here would move the CI bounds, so it stays a plain accumulate on purpose.
+func bootstrapPaired(deltas []float64, seedKey string) (ci [2]*float64, p *float64) {
 	n := len(deltas)
 	if n == 0 {
 		return ci, nil
 	}
-	rng := pycompat.NewRandomString(seedKey)
+	rng := seededRNG(seedKey)
 	means := make([]float64, bootstrapIters)
 	for i := range means {
 		total := 0.0
 		for range n {
-			total += deltas[rng.RandRange(n)].Float64()
+			total += deltas[rng.IntN(n)]
 		}
 		means[i] = total / float64(n)
 	}
@@ -169,30 +171,34 @@ func holm(pvalues map[string]*float64) map[string]*float64 {
 	return adjusted
 }
 
-func sortNumbers(values []pycompat.Number) {
-	sort.SliceStable(values, func(i, j int) bool { return values[i].Less(values[j]) })
+// seededRNG derives a deterministic generator from a metric-and-task key, so a
+// cell's interval does not depend on how many other cells were analyzed beside
+// it. FNV-1a rather than maphash: maphash.MakeSeed is per process, which would
+// move every interval between two runs over the same inputs.
+func seededRNG(seedKey string) *rand.Rand {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(seedKey)) // hash.Hash.Write never returns an error
+	sum := h.Sum64()
+	// A reproducible interval is the whole point, so a generator nobody can
+	// reseed would defeat it.
+	return rand.New(rand.NewPCG(sum, bits.ReverseBytes64(sum))) //nolint:gosec // G404: resampling, not cryptography
 }
 
 // median is statistics.median over a sorted list: the middle value as it is,
 // or the true-division mean of the middle two.
-func median(sorted []pycompat.Number) pycompat.Number {
+func median(sorted []float64) float64 {
 	n := len(sorted)
 	if n%2 == 1 {
 		return sorted[n/2]
 	}
-	return pycompat.Float(sorted[n/2-1].Add(sorted[n/2]).TrueDiv(2))
+	return (sorted[n/2-1] + sorted[n/2]) / 2
 }
 
-// fmean is statistics.fmean: fsum, then one division.
-func fmean(values []pycompat.Number) float64 {
-	floats := make([]float64, len(values))
-	for i, v := range values {
-		floats[i] = v.Float64()
-	}
-	total, err := pycompat.FSum(floats)
-	if err != nil {
-		// FSum only fails on inf or nan, which parseNumber never admits.
-		panic(err)
+// fmean is the arithmetic mean: one pass, then one division.
+func fmean(values []float64) float64 {
+	var total float64
+	for _, v := range values {
+		total += v
 	}
 	return total / float64(len(values))
 }
@@ -200,20 +206,20 @@ func fmean(values []pycompat.Number) float64 {
 // quartiles is statistics.quantiles(n=4, method="inclusive") over a sorted
 // list of at least two values: linear interpolation between neighbors,
 // which always yields floats.
-func quartiles(sorted []pycompat.Number) [2]*pycompat.Number {
+func quartiles(sorted []float64) [2]*float64 {
 	m := int64(len(sorted) - 1)
-	var out [2]*pycompat.Number
+	var out [2]*float64
 	for k, i := range []int64{1, 3} {
 		j, delta := (i*m)/4, (i*m)%4
-		q := pycompat.Float(sorted[j].MulInt(4 - delta).Add(sorted[j+1].MulInt(delta)).TrueDiv(4))
+		q := (sorted[j]*float64(4-delta) + sorted[j+1]*float64(delta)) / 4
 		out[k] = &q
 	}
 	return out
 }
 
 // describe is the Spread of values, nil values dropped first.
-func describe(values []*pycompat.Number) Spread {
-	var clean []pycompat.Number
+func describe(values []*float64) Spread {
+	var clean []float64
 	for _, v := range values {
 		if v != nil {
 			clean = append(clean, *v)
@@ -222,11 +228,11 @@ func describe(values []*pycompat.Number) Spread {
 	if len(clean) == 0 {
 		return Spread{}
 	}
-	sortNumbers(clean)
-	var iqr [2]*pycompat.Number
+	sort.Float64s(clean)
+	var iqr [2]*float64
 	if len(clean) == 1 {
 		q := clean[0]
-		iqr = [2]*pycompat.Number{&q, &q}
+		iqr = [2]*float64{&q, &q}
 	} else {
 		iqr = quartiles(clean)
 	}
@@ -385,7 +391,7 @@ func cellStats(runs []*ScoredRun) CellStats {
 func spreads(runs []*ScoredRun) map[string]Spread {
 	out := map[string]Spread{}
 	for _, m := range metrics {
-		values := make([]*pycompat.Number, len(runs))
+		values := make([]*float64, len(runs))
 		for i, run := range runs {
 			values[i] = m.read(run)
 		}
@@ -399,9 +405,9 @@ func spreads(runs []*ScoredRun) map[string]Spread {
 func armSummary(runs []*ScoredRun) ArmSummary {
 	n := int64(len(runs))
 	var successes, graded int64
-	dollars := make([]*pycompat.Number, len(runs))
+	dollars := make([]*float64, len(runs))
 	for i, run := range runs {
-		d := pycompat.Float(run.Dollars)
+		d := run.Dollars
 		dollars[i] = &d
 		if run.Success != nil {
 			graded++
@@ -436,13 +442,13 @@ func pairedDelta(treated, baseline map[int64]*ScoredRun, m metric, seedKey strin
 		}
 	}
 	slices.Sort(reps)
-	var deltas, baseValues []pycompat.Number
+	var deltas, baseValues []float64
 	for _, rep := range reps {
 		after, before := m.read(treated[rep]), m.read(baseline[rep])
 		if after == nil || before == nil {
 			continue
 		}
-		deltas = append(deltas, after.Sub(*before))
+		deltas = append(deltas, *after-*before)
 		baseValues = append(baseValues, *before)
 	}
 	ci, p := bootstrapPaired(deltas, seedKey)
@@ -450,15 +456,15 @@ func pairedDelta(treated, baseline map[int64]*ScoredRun, m metric, seedKey strin
 	if len(deltas) == 0 {
 		return out
 	}
-	sortNumbers(baseValues)
+	sort.Float64s(baseValues)
 	baseMedian := median(baseValues)
 	deltaMean := fmean(deltas)
-	sortedDeltas := append([]pycompat.Number(nil), deltas...)
-	sortNumbers(sortedDeltas)
+	sortedDeltas := append([]float64(nil), deltas...)
+	sort.Float64s(sortedDeltas)
 	deltaMedian := median(sortedDeltas)
 	out.DeltaMean, out.DeltaMedian, out.BaselineMedian = &deltaMean, &deltaMedian, &baseMedian
-	if !baseMedian.IsZero() {
-		rel := deltaMean / baseMedian.Float64()
+	if baseMedian != 0 {
+		rel := deltaMean / baseMedian
 		out.Relative = &rel
 	}
 	out.CIExcludesZero = ci[0] != nil && ci[1] != nil && (*ci[0] > 0 || *ci[1] < 0)
@@ -506,7 +512,7 @@ func pairedDeltas(c cellRuns, tasks []string, seed int64) map[string]map[string]
 }
 
 func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQuality {
-	var unpaired []UnpairedRep
+	unpaired := []UnpairedRep{} // serialized; see runIDs
 	for _, task := range tasks {
 		repsByArm := map[string]map[int64]*ScoredRun{}
 		union := map[int64]bool{}
@@ -535,17 +541,18 @@ func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQualit
 	// is a HOST error. Only a ratio that MOVES with the mix could be a table
 	// error, since a wrong rate on one category shows up as a different multiple
 	// on every run.
-	var ratios []pycompat.Number
+	var ratios []float64
 	for _, run := range runs {
 		if run.ReportedCostUSD != nil && *run.ReportedCostUSD != 0 {
-			ratios = append(ratios, pycompat.Float(run.TableDollarsUSD / *run.ReportedCostUSD))
+			ratios = append(ratios, run.TableDollarsUSD / *run.ReportedCostUSD)
 		}
 	}
 	var ratioMedian *float64
 	if len(ratios) > 0 {
-		sortNumbers(ratios)
-		// Index n//2 is median_high, which the Python took; the byte pin depends on it.
-		v := ratios[len(ratios)/2].Float64()
+		sort.Float64s(ratios)
+		// Index n//2 is the high median, deliberately: an even count takes the
+		// upper of the two middles rather than interpolating between them.
+		v := ratios[len(ratios)/2]
 		ratioMedian = &v
 	}
 	return DataQuality{
@@ -561,8 +568,11 @@ func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQualit
 	}
 }
 
+// runIDs starts from an empty slice rather than nil: these lists are serialized
+// and iterated by readers of analysis.json, and the workspace codec writes a nil
+// slice as null, which is a different shape to consume than an empty list.
 func runIDs(runs []*ScoredRun, keep func(*ScoredRun) bool) []string {
-	var ids []string
+	ids := []string{}
 	for _, run := range runs {
 		if keep(run) {
 			ids = append(ids, run.RunID)
@@ -591,7 +601,7 @@ func controlSummary(controls []*ControlRun, tasks []string) map[string]ControlCe
 
 func controlCount(controls []*ControlRun, task, kind string) ControlCount {
 	var successes []*bool
-	var ids []string
+	ids := []string{} // serialized; see runIDs
 	for _, run := range controls {
 		if run.Task == task && run.Control == kind {
 			successes = append(successes, run.Success)
@@ -674,10 +684,9 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 	}, nil
 }
 
-// JSON is analysis.json's bytes: sorted keys, two-space indent, and a
-// trailing newline.
+// JSON is analysis.json's bytes: two-space indent and a trailing newline.
 func (a *Analysis) JSON() ([]byte, error) {
-	raw, err := pycompat.Marshal(a, 2)
+	raw, err := json.MarshalIndent(a, "", "  ")
 	if err != nil {
 		return nil, err
 	}

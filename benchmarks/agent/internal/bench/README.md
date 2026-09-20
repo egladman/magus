@@ -8,13 +8,11 @@ re-running an agent. `records.go` holds the record types the stages hand each
 other; their json tags are the file formats. No dependency beyond the standard
 library and the workspace's own JSON codec.
 
-The pipeline was ported from Python and its numbers still reproduce the
-Python's byte for byte: `internal/pycompat/` carries the pieces of CPython they
-depend on (random.Random's Mersenne Twister and seeding, math.fsum, float
-repr, json.dumps with sort_keys). `testdata/fixture-*` pins the output over the
-synthetic tree, which the tests reproduce exactly; the metrics and analysis
-files are the Python's, and the report is this binary's, since it counts tool
-calls the Python dropped and pads its tables the way dprint does.
+The pipeline was ported from Python. It no longer reproduces the Python's bytes,
+and nothing should re-derive that: statistics are plain float64, resampling is
+seeded from the metric and task name through the standard library, and JSON goes
+through the workspace codec. `testdata/fixture-*` pins the output over the
+synthetic tree, which the tests reproduce exactly.
 
 ## Invocations
 

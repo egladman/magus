@@ -16,7 +16,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/pricing"
 )
@@ -91,7 +90,7 @@ func contentText(content any) (string, error) {
 		}
 		return strings.Join(parts, "\n"), nil
 	}
-	raw, err := pycompat.Marshal(content, 0)
+	raw, err := json.Marshal(content)
 	return string(raw), err
 }
 
@@ -107,18 +106,21 @@ func blockText(block any) (string, error) {
 		case "image":
 			return "[image]", nil
 		}
-		raw, err := pycompat.Marshal(b, 0)
+		raw, err := json.Marshal(b)
 		return string(raw), err
 	}
 	return "", nil
 }
 
+// intField reads a counter a transcript writes as a JSON number. A fractional
+// value reports absent rather than truncating: a token count is never 3.5, so
+// one means the field is not what this reader takes it for.
 func intField(m map[string]any, key string) (int64, bool) {
-	n, ok := m[key].(pycompat.Number)
-	if !ok {
+	n, ok := m[key].(float64)
+	if !ok || n != math.Trunc(n) {
 		return 0, false
 	}
-	return n.Int64()
+	return int64(n), true
 }
 
 // intOrZero is `usage.get(key) or 0` for the counters a transcript may omit.
@@ -224,9 +226,8 @@ func (t *transcript) take(rec any) error {
 			}
 		}
 	case "result":
-		if cost, ok := m["total_cost_usd"].(pycompat.Number); ok {
-			c := cost.Float64()
-			t.reportedCostUSD = &c
+		if cost, ok := m["total_cost_usd"].(float64); ok {
+			t.reportedCostUSD = &cost
 		}
 		if usage, ok := m["usage"].(map[string]any); ok {
 			if out, ok := intField(usage, "output_tokens"); ok {
@@ -257,7 +258,7 @@ func (t *transcript) takeAssistant(message map[string]any) error {
 		}
 	}
 	if id, ok := message["id"]; ok && id != nil {
-		key, err := pycompat.Marshal(id, 0)
+		key, err := json.Marshal(id)
 		if err != nil {
 			return err
 		}
@@ -409,8 +410,8 @@ func readTranscript(file, runID, defaultModel string) (*transcript, error) {
 		if len(bytes.TrimSpace(line)) == 0 {
 			return nil
 		}
-		rec, err := pycompat.Unmarshal(line)
-		if err != nil {
+		var rec any
+		if err := json.Unmarshal(line, &rec); err != nil {
 			return fmt.Errorf("%s: malformed transcript.jsonl line: %w", runID, err)
 		}
 		return t.take(rec)
@@ -440,8 +441,8 @@ func readGuardEvents(file string) (events GuardEvents, captured bool, err error)
 	}
 	defer fh.Close()
 	err = jsonlLines(fh, func(line []byte) error {
-		doc, unmarshalErr := pycompat.Unmarshal(line)
-		if unmarshalErr != nil {
+		var doc any
+		if unmarshalErr := json.Unmarshal(line, &doc); unmarshalErr != nil {
 			return nil //nolint:nilerr // a malformed line is skipped by design; the rest of the trail still counts
 		}
 		event, ok := doc.(map[string]any)
@@ -481,7 +482,7 @@ func readInvariantViolations(file string) (InvariantViolations, error) {
 	if err != nil {
 		return InvariantViolations{}, err
 	}
-	var deleted []string
+	deleted := []string{} // serialized into metrics.jsonl; see runIDs
 	current := ""
 	for _, line := range strings.SplitAfter(string(raw), "\n") {
 		if strings.HasPrefix(line, "diff --git ") {
@@ -524,9 +525,9 @@ func readCheckExit(runDir string) *int64 {
 }
 
 type timing struct {
-	WallMs            *pycompat.Number `json:"wall_ms"`
-	TimeToFirstEditMs *pycompat.Number `json:"time_to_first_edit_ms"`
-	TimeToDoneMs      *pycompat.Number `json:"time_to_done_ms"`
+	WallMs            *float64 `json:"wall_ms"`
+	TimeToFirstEditMs *float64 `json:"time_to_first_edit_ms"`
+	TimeToDoneMs      *float64 `json:"time_to_done_ms"`
 }
 
 func readTiming(runDir string) (timing, error) {
@@ -545,9 +546,9 @@ func readTiming(runDir string) (timing, error) {
 }
 
 // readMeta returns meta.json's bytes and its control kind ("" for a scored
-// run) once the keys every run needs are present and non-empty. rep is read
-// as a Number so a float names the key at fault instead of failing the whole
-// decode into the record's int64.
+// run) once the keys every run needs are present and non-empty. rep is read as
+// a float so a fractional one names the key at fault instead of failing the
+// whole decode into the record's int64.
 func readMeta(runDir string) (raw []byte, control string, err error) {
 	raw, err = os.ReadFile(filepath.Join(runDir, "meta.json"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -565,11 +566,11 @@ func readMeta(runDir string) (raw []byte, control string, err error) {
 			return nil, "", fmt.Errorf("%s: meta.json has no %s", runDir, name)
 		}
 	}
-	var rep pycompat.Number
+	var rep float64
 	if err := json.Unmarshal(fields["rep"], &rep); err != nil {
 		return nil, "", fmt.Errorf("%s: meta.json rep: %w", runDir, err)
 	}
-	if _, ok := rep.Int64(); !ok {
+	if rep != math.Trunc(rep) {
 		return nil, "", fmt.Errorf("%s: meta.json rep is not an int", runDir)
 	}
 	if kind, ok := fields["control"]; ok {
@@ -718,11 +719,11 @@ func (r RunRecord) ID() string {
 	return r.Scored.RunID
 }
 
-// JSON is one metrics.jsonl line: whichever record kind is set, in
-// json.dumps form without the newline.
+// JSON is one metrics.jsonl line: whichever record kind is set, without the
+// newline.
 func (r RunRecord) JSON() ([]byte, error) {
 	if r.Control != nil {
-		return pycompat.Marshal(r.Control, 0)
+		return json.Marshal(r.Control)
 	}
-	return pycompat.Marshal(r.Scored, 0)
+	return json.Marshal(r.Scored)
 }

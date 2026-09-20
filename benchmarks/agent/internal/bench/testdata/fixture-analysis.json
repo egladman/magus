@@ -1,1159 +1,1581 @@
 {
-  "arm_summary": {
-    "full": {
-      "cost_of_pass_usd": {
-        "infinite": false,
-        "value": 0.08900000000000001
-      },
-      "dollars": {
-        "iqr": [
-          0.088,
-          0.09
-        ],
-        "mean": 0.08900000000000001,
-        "median": 0.089,
-        "n": 6
-      },
-      "n": 6,
-      "pass_rate": 1.0,
-      "pass_rate_ci": [
-        0.6096657120978346,
-        1.0
-      ],
-      "successes": 6
-    },
-    "rampant": {
-      "cost_of_pass_usd": {
-        "infinite": false,
-        "value": 0.25935
-      },
-      "dollars": {
-        "iqr": [
-          0.2135,
-          0.21875000000000003
-        ],
-        "mean": 0.216125,
-        "median": 0.216125,
-        "n": 6
-      },
-      "n": 6,
-      "pass_rate": 0.8333333333333334,
-      "pass_rate_ci": [
-        0.43649717781352987,
-        0.9699466302516935
-      ],
-      "successes": 5
-    }
-  },
+  "seed": 20260902,
+  "bootstrap_iters": 10000,
+  "min_relative_delta": 0.1,
+  "runs": 12,
   "arms": [
     "full",
     "rampant"
   ],
-  "bootstrap_iters": 10000,
+  "tasks": [
+    "task-a",
+    "task-b"
+  ],
+  "models": [
+    "claude-opus-5"
+  ],
+  "controls": {
+    "task-a": {
+      "golden": {
+        "n": 0,
+        "passes": 0,
+        "run_ids": []
+      },
+      "null": {
+        "n": 0,
+        "passes": 0,
+        "run_ids": []
+      },
+      "discriminates": false
+    },
+    "task-b": {
+      "golden": {
+        "n": 0,
+        "passes": 0,
+        "run_ids": []
+      },
+      "null": {
+        "n": 0,
+        "passes": 0,
+        "run_ids": []
+      },
+      "discriminates": false
+    }
+  },
   "cells": {
     "full/task-a": {
+      "n": 3,
+      "successes": 3,
+      "unknown_outcomes": 0,
+      "pass_at_1": 1,
+      "pass_at_1_ci": [
+        0.4385029682449546,
+        1
+      ],
       "k": 3,
+      "pass_pow_k": 1,
       "metrics": {
         "cache_read_tokens": {
-          "iqr": [
-            32000.0,
-            32000.0
-          ],
-          "mean": 32000.0,
+          "n": 3,
           "median": 32000,
-          "n": 3
+          "iqr": [
+            32000,
+            32000
+          ],
+          "mean": 32000
         },
         "cache_write_tokens": {
-          "iqr": [
-            4800.0,
-            4800.0
-          ],
-          "mean": 4800.0,
+          "n": 3,
           "median": 4800,
-          "n": 3
+          "iqr": [
+            4800,
+            4800
+          ],
+          "mean": 4800
         },
         "dollars": {
+          "n": 3,
+          "median": 0.088,
           "iqr": [
             0.087,
             0.089
           ],
-          "mean": 0.08800000000000001,
-          "median": 0.088,
-          "n": 3
+          "mean": 0.08800000000000001
         },
         "file_reads": {
-          "iqr": [
-            4.0,
-            4.0
-          ],
-          "mean": 4.0,
+          "n": 3,
           "median": 4,
-          "n": 3
+          "iqr": [
+            4,
+            4
+          ],
+          "mean": 4
         },
         "input_tokens": {
-          "iqr": [
-            4200.0,
-            4600.0
-          ],
-          "mean": 4400.0,
+          "n": 3,
           "median": 4400,
-          "n": 3
+          "iqr": [
+            4200,
+            4600
+          ],
+          "mean": 4400
         },
         "output_tokens": {
-          "iqr": [
-            800.0,
-            800.0
-          ],
-          "mean": 800.0,
+          "n": 3,
           "median": 800,
-          "n": 3
+          "iqr": [
+            800,
+            800
+          ],
+          "mean": 800
         },
         "re_read_rate": {
+          "n": 3,
+          "median": 0,
           "iqr": [
-            0.0,
-            0.0
+            0,
+            0
           ],
-          "mean": 0.0,
-          "median": 0.0,
-          "n": 3
+          "mean": 0
         },
         "time_to_done_ms": {
-          "iqr": [
-            119500.0,
-            120500.0
-          ],
-          "mean": 120000.0,
+          "n": 3,
           "median": 120000,
-          "n": 3
+          "iqr": [
+            119500,
+            120500
+          ],
+          "mean": 120000
         },
         "time_to_first_edit_ms": {
-          "iqr": [
-            30750.0,
-            31250.0
-          ],
-          "mean": 31000.0,
+          "n": 3,
           "median": 31000,
-          "n": 3
+          "iqr": [
+            30750,
+            31250
+          ],
+          "mean": 31000
         },
         "tool_calls": {
-          "iqr": [
-            8.0,
-            8.0
-          ],
-          "mean": 8.0,
+          "n": 3,
           "median": 8,
-          "n": 3
+          "iqr": [
+            8,
+            8
+          ],
+          "mean": 8
         },
         "tool_result_bytes": {
-          "iqr": [
-            4000.0,
-            4000.0
-          ],
-          "mean": 4000.0,
+          "n": 3,
           "median": 4000,
-          "n": 3
+          "iqr": [
+            4000,
+            4000
+          ],
+          "mean": 4000
         },
         "total_billed_tokens": {
-          "iqr": [
-            41800.0,
-            42200.0
-          ],
-          "mean": 42000.0,
+          "n": 3,
           "median": 42000,
-          "n": 3
+          "iqr": [
+            41800,
+            42200
+          ],
+          "mean": 42000
         },
         "turns": {
-          "iqr": [
-            4.0,
-            4.0
-          ],
-          "mean": 4.0,
+          "n": 3,
           "median": 4,
-          "n": 3
+          "iqr": [
+            4,
+            4
+          ],
+          "mean": 4
         },
         "wall_ms": {
-          "iqr": [
-            121500.0,
-            122500.0
-          ],
-          "mean": 122000.0,
+          "n": 3,
           "median": 122000,
-          "n": 3
+          "iqr": [
+            121500,
+            122500
+          ],
+          "mean": 122000
         }
       },
       "metrics_success_only": {
         "cache_read_tokens": {
-          "iqr": [
-            32000.0,
-            32000.0
-          ],
-          "mean": 32000.0,
+          "n": 3,
           "median": 32000,
-          "n": 3
+          "iqr": [
+            32000,
+            32000
+          ],
+          "mean": 32000
         },
         "cache_write_tokens": {
-          "iqr": [
-            4800.0,
-            4800.0
-          ],
-          "mean": 4800.0,
+          "n": 3,
           "median": 4800,
-          "n": 3
+          "iqr": [
+            4800,
+            4800
+          ],
+          "mean": 4800
         },
         "dollars": {
+          "n": 3,
+          "median": 0.088,
           "iqr": [
             0.087,
             0.089
           ],
-          "mean": 0.08800000000000001,
-          "median": 0.088,
-          "n": 3
+          "mean": 0.08800000000000001
         },
         "file_reads": {
-          "iqr": [
-            4.0,
-            4.0
-          ],
-          "mean": 4.0,
+          "n": 3,
           "median": 4,
-          "n": 3
+          "iqr": [
+            4,
+            4
+          ],
+          "mean": 4
         },
         "input_tokens": {
-          "iqr": [
-            4200.0,
-            4600.0
-          ],
-          "mean": 4400.0,
+          "n": 3,
           "median": 4400,
-          "n": 3
+          "iqr": [
+            4200,
+            4600
+          ],
+          "mean": 4400
         },
         "output_tokens": {
-          "iqr": [
-            800.0,
-            800.0
-          ],
-          "mean": 800.0,
+          "n": 3,
           "median": 800,
-          "n": 3
+          "iqr": [
+            800,
+            800
+          ],
+          "mean": 800
         },
         "re_read_rate": {
+          "n": 3,
+          "median": 0,
           "iqr": [
-            0.0,
-            0.0
+            0,
+            0
           ],
-          "mean": 0.0,
-          "median": 0.0,
-          "n": 3
+          "mean": 0
         },
         "time_to_done_ms": {
-          "iqr": [
-            119500.0,
-            120500.0
-          ],
-          "mean": 120000.0,
+          "n": 3,
           "median": 120000,
-          "n": 3
+          "iqr": [
+            119500,
+            120500
+          ],
+          "mean": 120000
         },
         "time_to_first_edit_ms": {
-          "iqr": [
-            30750.0,
-            31250.0
-          ],
-          "mean": 31000.0,
+          "n": 3,
           "median": 31000,
-          "n": 3
+          "iqr": [
+            30750,
+            31250
+          ],
+          "mean": 31000
         },
         "tool_calls": {
-          "iqr": [
-            8.0,
-            8.0
-          ],
-          "mean": 8.0,
+          "n": 3,
           "median": 8,
-          "n": 3
+          "iqr": [
+            8,
+            8
+          ],
+          "mean": 8
         },
         "tool_result_bytes": {
-          "iqr": [
-            4000.0,
-            4000.0
-          ],
-          "mean": 4000.0,
+          "n": 3,
           "median": 4000,
-          "n": 3
+          "iqr": [
+            4000,
+            4000
+          ],
+          "mean": 4000
         },
         "total_billed_tokens": {
-          "iqr": [
-            41800.0,
-            42200.0
-          ],
-          "mean": 42000.0,
+          "n": 3,
           "median": 42000,
-          "n": 3
+          "iqr": [
+            41800,
+            42200
+          ],
+          "mean": 42000
         },
         "turns": {
-          "iqr": [
-            4.0,
-            4.0
-          ],
-          "mean": 4.0,
+          "n": 3,
           "median": 4,
-          "n": 3
+          "iqr": [
+            4,
+            4
+          ],
+          "mean": 4
         },
         "wall_ms": {
-          "iqr": [
-            121500.0,
-            122500.0
-          ],
-          "mean": 122000.0,
+          "n": 3,
           "median": 122000,
-          "n": 3
+          "iqr": [
+            121500,
+            122500
+          ],
+          "mean": 122000
         }
-      },
-      "n": 3,
-      "pass_at_1": 1.0,
-      "pass_at_1_ci": [
-        0.4385029682449546,
-        1.0
-      ],
-      "pass_pow_k": 1.0,
-      "successes": 3,
-      "unknown_outcomes": 0
+      }
     },
     "full/task-b": {
+      "n": 3,
+      "successes": 3,
+      "unknown_outcomes": 0,
+      "pass_at_1": 1,
+      "pass_at_1_ci": [
+        0.4385029682449546,
+        1
+      ],
       "k": 3,
+      "pass_pow_k": 1,
       "metrics": {
         "cache_read_tokens": {
-          "iqr": [
-            32000.0,
-            32000.0
-          ],
-          "mean": 32000.0,
+          "n": 3,
           "median": 32000,
-          "n": 3
+          "iqr": [
+            32000,
+            32000
+          ],
+          "mean": 32000
         },
         "cache_write_tokens": {
-          "iqr": [
-            4800.0,
-            4800.0
-          ],
-          "mean": 4800.0,
+          "n": 3,
           "median": 4800,
-          "n": 3
+          "iqr": [
+            4800,
+            4800
+          ],
+          "mean": 4800
         },
         "dollars": {
+          "n": 3,
+          "median": 0.09,
           "iqr": [
             0.089,
             0.091
           ],
-          "mean": 0.09000000000000001,
-          "median": 0.09,
-          "n": 3
+          "mean": 0.09000000000000001
         },
         "file_reads": {
-          "iqr": [
-            4.0,
-            4.0
-          ],
-          "mean": 4.0,
+          "n": 3,
           "median": 4,
-          "n": 3
+          "iqr": [
+            4,
+            4
+          ],
+          "mean": 4
         },
         "input_tokens": {
-          "iqr": [
-            4200.0,
-            4600.0
-          ],
-          "mean": 4400.0,
+          "n": 3,
           "median": 4400,
-          "n": 3
+          "iqr": [
+            4200,
+            4600
+          ],
+          "mean": 4400
         },
         "output_tokens": {
-          "iqr": [
-            800.0,
-            800.0
-          ],
-          "mean": 800.0,
+          "n": 3,
           "median": 800,
-          "n": 3
+          "iqr": [
+            800,
+            800
+          ],
+          "mean": 800
         },
         "re_read_rate": {
+          "n": 3,
+          "median": 0,
           "iqr": [
-            0.0,
-            0.0
+            0,
+            0
           ],
-          "mean": 0.0,
-          "median": 0.0,
-          "n": 3
+          "mean": 0
         },
         "time_to_done_ms": {
-          "iqr": [
-            119500.0,
-            120500.0
-          ],
-          "mean": 120000.0,
+          "n": 3,
           "median": 120000,
-          "n": 3
+          "iqr": [
+            119500,
+            120500
+          ],
+          "mean": 120000
         },
         "time_to_first_edit_ms": {
-          "iqr": [
-            30750.0,
-            31250.0
-          ],
-          "mean": 31000.0,
+          "n": 3,
           "median": 31000,
-          "n": 3
+          "iqr": [
+            30750,
+            31250
+          ],
+          "mean": 31000
         },
         "tool_calls": {
-          "iqr": [
-            8.0,
-            8.0
-          ],
-          "mean": 8.0,
+          "n": 3,
           "median": 8,
-          "n": 3
+          "iqr": [
+            8,
+            8
+          ],
+          "mean": 8
         },
         "tool_result_bytes": {
-          "iqr": [
-            4000.0,
-            4000.0
-          ],
-          "mean": 4000.0,
+          "n": 3,
           "median": 4000,
-          "n": 3
+          "iqr": [
+            4000,
+            4000
+          ],
+          "mean": 4000
         },
         "total_billed_tokens": {
-          "iqr": [
-            41800.0,
-            42200.0
-          ],
-          "mean": 42000.0,
+          "n": 3,
           "median": 42000,
-          "n": 3
+          "iqr": [
+            41800,
+            42200
+          ],
+          "mean": 42000
         },
         "turns": {
-          "iqr": [
-            4.0,
-            4.0
-          ],
-          "mean": 4.0,
+          "n": 3,
           "median": 4,
-          "n": 3
+          "iqr": [
+            4,
+            4
+          ],
+          "mean": 4
         },
         "wall_ms": {
-          "iqr": [
-            121500.0,
-            122500.0
-          ],
-          "mean": 122000.0,
+          "n": 3,
           "median": 122000,
-          "n": 3
+          "iqr": [
+            121500,
+            122500
+          ],
+          "mean": 122000
         }
       },
       "metrics_success_only": {
         "cache_read_tokens": {
-          "iqr": [
-            32000.0,
-            32000.0
-          ],
-          "mean": 32000.0,
+          "n": 3,
           "median": 32000,
-          "n": 3
+          "iqr": [
+            32000,
+            32000
+          ],
+          "mean": 32000
         },
         "cache_write_tokens": {
-          "iqr": [
-            4800.0,
-            4800.0
-          ],
-          "mean": 4800.0,
+          "n": 3,
           "median": 4800,
-          "n": 3
+          "iqr": [
+            4800,
+            4800
+          ],
+          "mean": 4800
         },
         "dollars": {
+          "n": 3,
+          "median": 0.09,
           "iqr": [
             0.089,
             0.091
           ],
-          "mean": 0.09000000000000001,
-          "median": 0.09,
-          "n": 3
+          "mean": 0.09000000000000001
         },
         "file_reads": {
-          "iqr": [
-            4.0,
-            4.0
-          ],
-          "mean": 4.0,
+          "n": 3,
           "median": 4,
-          "n": 3
+          "iqr": [
+            4,
+            4
+          ],
+          "mean": 4
         },
         "input_tokens": {
-          "iqr": [
-            4200.0,
-            4600.0
-          ],
-          "mean": 4400.0,
+          "n": 3,
           "median": 4400,
-          "n": 3
+          "iqr": [
+            4200,
+            4600
+          ],
+          "mean": 4400
         },
         "output_tokens": {
-          "iqr": [
-            800.0,
-            800.0
-          ],
-          "mean": 800.0,
+          "n": 3,
           "median": 800,
-          "n": 3
+          "iqr": [
+            800,
+            800
+          ],
+          "mean": 800
         },
         "re_read_rate": {
+          "n": 3,
+          "median": 0,
           "iqr": [
-            0.0,
-            0.0
+            0,
+            0
           ],
-          "mean": 0.0,
-          "median": 0.0,
-          "n": 3
+          "mean": 0
         },
         "time_to_done_ms": {
-          "iqr": [
-            119500.0,
-            120500.0
-          ],
-          "mean": 120000.0,
+          "n": 3,
           "median": 120000,
-          "n": 3
+          "iqr": [
+            119500,
+            120500
+          ],
+          "mean": 120000
         },
         "time_to_first_edit_ms": {
-          "iqr": [
-            30750.0,
-            31250.0
-          ],
-          "mean": 31000.0,
+          "n": 3,
           "median": 31000,
-          "n": 3
+          "iqr": [
+            30750,
+            31250
+          ],
+          "mean": 31000
         },
         "tool_calls": {
-          "iqr": [
-            8.0,
-            8.0
-          ],
-          "mean": 8.0,
+          "n": 3,
           "median": 8,
-          "n": 3
+          "iqr": [
+            8,
+            8
+          ],
+          "mean": 8
         },
         "tool_result_bytes": {
-          "iqr": [
-            4000.0,
-            4000.0
-          ],
-          "mean": 4000.0,
+          "n": 3,
           "median": 4000,
-          "n": 3
+          "iqr": [
+            4000,
+            4000
+          ],
+          "mean": 4000
         },
         "total_billed_tokens": {
-          "iqr": [
-            41800.0,
-            42200.0
-          ],
-          "mean": 42000.0,
+          "n": 3,
           "median": 42000,
-          "n": 3
+          "iqr": [
+            41800,
+            42200
+          ],
+          "mean": 42000
         },
         "turns": {
-          "iqr": [
-            4.0,
-            4.0
-          ],
-          "mean": 4.0,
+          "n": 3,
           "median": 4,
-          "n": 3
+          "iqr": [
+            4,
+            4
+          ],
+          "mean": 4
         },
         "wall_ms": {
-          "iqr": [
-            121500.0,
-            122500.0
-          ],
-          "mean": 122000.0,
+          "n": 3,
           "median": 122000,
-          "n": 3
+          "iqr": [
+            121500,
+            122500
+          ],
+          "mean": 122000
         }
-      },
-      "n": 3,
-      "pass_at_1": 1.0,
-      "pass_at_1_ci": [
-        0.4385029682449546,
-        1.0
-      ],
-      "pass_pow_k": 1.0,
-      "successes": 3,
-      "unknown_outcomes": 0
+      }
     },
     "rampant/task-a": {
-      "k": 3,
-      "metrics": {
-        "cache_read_tokens": {
-          "iqr": [
-            84000.0,
-            84000.0
-          ],
-          "mean": 84000.0,
-          "median": 84000,
-          "n": 3
-        },
-        "cache_write_tokens": {
-          "iqr": [
-            10500.0,
-            10500.0
-          ],
-          "mean": 10500.0,
-          "median": 10500,
-          "n": 3
-        },
-        "dollars": {
-          "iqr": [
-            0.214375,
-            0.217875
-          ],
-          "mean": 0.216125,
-          "median": 0.216125,
-          "n": 3
-        },
-        "file_reads": {
-          "iqr": [
-            7.0,
-            7.0
-          ],
-          "mean": 7.0,
-          "median": 7,
-          "n": 3
-        },
-        "input_tokens": {
-          "iqr": [
-            10850.0,
-            11550.0
-          ],
-          "mean": 11200.0,
-          "median": 11200,
-          "n": 3
-        },
-        "output_tokens": {
-          "iqr": [
-            2100.0,
-            2100.0
-          ],
-          "mean": 2100.0,
-          "median": 2100,
-          "n": 3
-        },
-        "re_read_rate": {
-          "iqr": [
-            0.5714285714285714,
-            0.5714285714285714
-          ],
-          "mean": 0.5714285714285714,
-          "median": 0.5714285714285714,
-          "n": 3
-        },
-        "time_to_done_ms": {
-          "iqr": [
-            239500.0,
-            240500.0
-          ],
-          "mean": 240000.0,
-          "median": 240000,
-          "n": 3
-        },
-        "time_to_first_edit_ms": {
-          "iqr": [
-            60750.0,
-            61250.0
-          ],
-          "mean": 61000.0,
-          "median": 61000,
-          "n": 3
-        },
-        "tool_calls": {
-          "iqr": [
-            14.0,
-            14.0
-          ],
-          "mean": 14.0,
-          "median": 14,
-          "n": 3
-        },
-        "tool_result_bytes": {
-          "iqr": [
-            12600.0,
-            12600.0
-          ],
-          "mean": 12600.0,
-          "median": 12600,
-          "n": 3
-        },
-        "total_billed_tokens": {
-          "iqr": [
-            107450.0,
-            108150.0
-          ],
-          "mean": 107800.0,
-          "median": 107800,
-          "n": 3
-        },
-        "turns": {
-          "iqr": [
-            7.0,
-            7.0
-          ],
-          "mean": 7.0,
-          "median": 7,
-          "n": 3
-        },
-        "wall_ms": {
-          "iqr": [
-            241500.0,
-            242500.0
-          ],
-          "mean": 242000.0,
-          "median": 242000,
-          "n": 3
-        }
-      },
-      "metrics_success_only": {
-        "cache_read_tokens": {
-          "iqr": [
-            84000.0,
-            84000.0
-          ],
-          "mean": 84000.0,
-          "median": 84000,
-          "n": 3
-        },
-        "cache_write_tokens": {
-          "iqr": [
-            10500.0,
-            10500.0
-          ],
-          "mean": 10500.0,
-          "median": 10500,
-          "n": 3
-        },
-        "dollars": {
-          "iqr": [
-            0.214375,
-            0.217875
-          ],
-          "mean": 0.216125,
-          "median": 0.216125,
-          "n": 3
-        },
-        "file_reads": {
-          "iqr": [
-            7.0,
-            7.0
-          ],
-          "mean": 7.0,
-          "median": 7,
-          "n": 3
-        },
-        "input_tokens": {
-          "iqr": [
-            10850.0,
-            11550.0
-          ],
-          "mean": 11200.0,
-          "median": 11200,
-          "n": 3
-        },
-        "output_tokens": {
-          "iqr": [
-            2100.0,
-            2100.0
-          ],
-          "mean": 2100.0,
-          "median": 2100,
-          "n": 3
-        },
-        "re_read_rate": {
-          "iqr": [
-            0.5714285714285714,
-            0.5714285714285714
-          ],
-          "mean": 0.5714285714285714,
-          "median": 0.5714285714285714,
-          "n": 3
-        },
-        "time_to_done_ms": {
-          "iqr": [
-            239500.0,
-            240500.0
-          ],
-          "mean": 240000.0,
-          "median": 240000,
-          "n": 3
-        },
-        "time_to_first_edit_ms": {
-          "iqr": [
-            60750.0,
-            61250.0
-          ],
-          "mean": 61000.0,
-          "median": 61000,
-          "n": 3
-        },
-        "tool_calls": {
-          "iqr": [
-            14.0,
-            14.0
-          ],
-          "mean": 14.0,
-          "median": 14,
-          "n": 3
-        },
-        "tool_result_bytes": {
-          "iqr": [
-            12600.0,
-            12600.0
-          ],
-          "mean": 12600.0,
-          "median": 12600,
-          "n": 3
-        },
-        "total_billed_tokens": {
-          "iqr": [
-            107450.0,
-            108150.0
-          ],
-          "mean": 107800.0,
-          "median": 107800,
-          "n": 3
-        },
-        "turns": {
-          "iqr": [
-            7.0,
-            7.0
-          ],
-          "mean": 7.0,
-          "median": 7,
-          "n": 3
-        },
-        "wall_ms": {
-          "iqr": [
-            241500.0,
-            242500.0
-          ],
-          "mean": 242000.0,
-          "median": 242000,
-          "n": 3
-        }
-      },
       "n": 3,
-      "pass_at_1": 1.0,
+      "successes": 3,
+      "unknown_outcomes": 0,
+      "pass_at_1": 1,
       "pass_at_1_ci": [
         0.4385029682449546,
-        1.0
+        1
       ],
-      "pass_pow_k": 1.0,
-      "successes": 3,
-      "unknown_outcomes": 0
-    },
-    "rampant/task-b": {
       "k": 3,
+      "pass_pow_k": 1,
       "metrics": {
         "cache_read_tokens": {
-          "iqr": [
-            84000.0,
-            84000.0
-          ],
-          "mean": 84000.0,
+          "n": 3,
           "median": 84000,
-          "n": 3
+          "iqr": [
+            84000,
+            84000
+          ],
+          "mean": 84000
         },
         "cache_write_tokens": {
-          "iqr": [
-            10500.0,
-            10500.0
-          ],
-          "mean": 10500.0,
+          "n": 3,
           "median": 10500,
-          "n": 3
+          "iqr": [
+            10500,
+            10500
+          ],
+          "mean": 10500
         },
         "dollars": {
+          "n": 3,
+          "median": 0.216125,
           "iqr": [
             0.214375,
             0.217875
           ],
-          "mean": 0.216125,
-          "median": 0.216125,
-          "n": 3
+          "mean": 0.216125
         },
         "file_reads": {
-          "iqr": [
-            7.0,
-            7.0
-          ],
-          "mean": 7.0,
+          "n": 3,
           "median": 7,
-          "n": 3
+          "iqr": [
+            7,
+            7
+          ],
+          "mean": 7
         },
         "input_tokens": {
-          "iqr": [
-            10850.0,
-            11550.0
-          ],
-          "mean": 11200.0,
+          "n": 3,
           "median": 11200,
-          "n": 3
+          "iqr": [
+            10850,
+            11550
+          ],
+          "mean": 11200
         },
         "output_tokens": {
-          "iqr": [
-            2100.0,
-            2100.0
-          ],
-          "mean": 2100.0,
+          "n": 3,
           "median": 2100,
-          "n": 3
+          "iqr": [
+            2100,
+            2100
+          ],
+          "mean": 2100
         },
         "re_read_rate": {
+          "n": 3,
+          "median": 0.5714285714285714,
           "iqr": [
             0.5714285714285714,
             0.5714285714285714
           ],
-          "mean": 0.5714285714285714,
-          "median": 0.5714285714285714,
-          "n": 3
+          "mean": 0.5714285714285714
         },
         "time_to_done_ms": {
-          "iqr": [
-            239500.0,
-            240500.0
-          ],
-          "mean": 240000.0,
+          "n": 3,
           "median": 240000,
-          "n": 3
+          "iqr": [
+            239500,
+            240500
+          ],
+          "mean": 240000
         },
         "time_to_first_edit_ms": {
-          "iqr": [
-            60750.0,
-            61250.0
-          ],
-          "mean": 61000.0,
+          "n": 3,
           "median": 61000,
-          "n": 3
+          "iqr": [
+            60750,
+            61250
+          ],
+          "mean": 61000
         },
         "tool_calls": {
-          "iqr": [
-            14.0,
-            14.0
-          ],
-          "mean": 14.0,
+          "n": 3,
           "median": 14,
-          "n": 3
+          "iqr": [
+            14,
+            14
+          ],
+          "mean": 14
         },
         "tool_result_bytes": {
-          "iqr": [
-            12600.0,
-            12600.0
-          ],
-          "mean": 12600.0,
+          "n": 3,
           "median": 12600,
-          "n": 3
+          "iqr": [
+            12600,
+            12600
+          ],
+          "mean": 12600
         },
         "total_billed_tokens": {
-          "iqr": [
-            107450.0,
-            108150.0
-          ],
-          "mean": 107800.0,
+          "n": 3,
           "median": 107800,
-          "n": 3
+          "iqr": [
+            107450,
+            108150
+          ],
+          "mean": 107800
         },
         "turns": {
-          "iqr": [
-            7.0,
-            7.0
-          ],
-          "mean": 7.0,
+          "n": 3,
           "median": 7,
-          "n": 3
+          "iqr": [
+            7,
+            7
+          ],
+          "mean": 7
         },
         "wall_ms": {
-          "iqr": [
-            241500.0,
-            242500.0
-          ],
-          "mean": 242000.0,
+          "n": 3,
           "median": 242000,
-          "n": 3
+          "iqr": [
+            241500,
+            242500
+          ],
+          "mean": 242000
         }
       },
       "metrics_success_only": {
         "cache_read_tokens": {
+          "n": 3,
+          "median": 84000,
           "iqr": [
-            84000.0,
-            84000.0
+            84000,
+            84000
           ],
-          "mean": 84000.0,
-          "median": 84000.0,
-          "n": 2
+          "mean": 84000
         },
         "cache_write_tokens": {
+          "n": 3,
+          "median": 10500,
           "iqr": [
-            10500.0,
-            10500.0
+            10500,
+            10500
           ],
-          "mean": 10500.0,
-          "median": 10500.0,
-          "n": 2
+          "mean": 10500
         },
         "dollars": {
-          "iqr": [
-            0.21437499999999998,
-            0.21787500000000004
-          ],
-          "mean": 0.216125,
+          "n": 3,
           "median": 0.216125,
-          "n": 2
+          "iqr": [
+            0.214375,
+            0.217875
+          ],
+          "mean": 0.216125
         },
         "file_reads": {
+          "n": 3,
+          "median": 7,
           "iqr": [
-            7.0,
-            7.0
+            7,
+            7
           ],
-          "mean": 7.0,
-          "median": 7.0,
-          "n": 2
+          "mean": 7
         },
         "input_tokens": {
+          "n": 3,
+          "median": 11200,
           "iqr": [
-            10850.0,
-            11550.0
+            10850,
+            11550
           ],
-          "mean": 11200.0,
-          "median": 11200.0,
-          "n": 2
+          "mean": 11200
         },
         "output_tokens": {
+          "n": 3,
+          "median": 2100,
           "iqr": [
-            2100.0,
-            2100.0
+            2100,
+            2100
           ],
-          "mean": 2100.0,
-          "median": 2100.0,
-          "n": 2
+          "mean": 2100
         },
         "re_read_rate": {
+          "n": 3,
+          "median": 0.5714285714285714,
           "iqr": [
             0.5714285714285714,
             0.5714285714285714
           ],
-          "mean": 0.5714285714285714,
-          "median": 0.5714285714285714,
-          "n": 2
+          "mean": 0.5714285714285714
         },
         "time_to_done_ms": {
+          "n": 3,
+          "median": 240000,
           "iqr": [
-            239500.0,
-            240500.0
+            239500,
+            240500
           ],
-          "mean": 240000.0,
-          "median": 240000.0,
-          "n": 2
+          "mean": 240000
         },
         "time_to_first_edit_ms": {
+          "n": 3,
+          "median": 61000,
           "iqr": [
-            60750.0,
-            61250.0
+            60750,
+            61250
           ],
-          "mean": 61000.0,
-          "median": 61000.0,
-          "n": 2
+          "mean": 61000
         },
         "tool_calls": {
+          "n": 3,
+          "median": 14,
           "iqr": [
-            14.0,
-            14.0
+            14,
+            14
           ],
-          "mean": 14.0,
-          "median": 14.0,
-          "n": 2
+          "mean": 14
         },
         "tool_result_bytes": {
+          "n": 3,
+          "median": 12600,
           "iqr": [
-            12600.0,
-            12600.0
+            12600,
+            12600
           ],
-          "mean": 12600.0,
-          "median": 12600.0,
-          "n": 2
+          "mean": 12600
         },
         "total_billed_tokens": {
+          "n": 3,
+          "median": 107800,
           "iqr": [
-            107450.0,
-            108150.0
+            107450,
+            108150
           ],
-          "mean": 107800.0,
-          "median": 107800.0,
-          "n": 2
+          "mean": 107800
         },
         "turns": {
+          "n": 3,
+          "median": 7,
           "iqr": [
-            7.0,
-            7.0
+            7,
+            7
           ],
-          "mean": 7.0,
-          "median": 7.0,
-          "n": 2
+          "mean": 7
         },
         "wall_ms": {
+          "n": 3,
+          "median": 242000,
           "iqr": [
-            241500.0,
-            242500.0
+            241500,
+            242500
           ],
-          "mean": 242000.0,
-          "median": 242000.0,
-          "n": 2
+          "mean": 242000
         }
-      },
+      }
+    },
+    "rampant/task-b": {
       "n": 3,
+      "successes": 2,
+      "unknown_outcomes": 0,
       "pass_at_1": 0.6666666666666666,
       "pass_at_1_ci": [
         0.2076596008020477,
         0.9385080552796037
       ],
-      "pass_pow_k": 0.0,
-      "successes": 2,
-      "unknown_outcomes": 0
+      "k": 3,
+      "pass_pow_k": 0,
+      "metrics": {
+        "cache_read_tokens": {
+          "n": 3,
+          "median": 84000,
+          "iqr": [
+            84000,
+            84000
+          ],
+          "mean": 84000
+        },
+        "cache_write_tokens": {
+          "n": 3,
+          "median": 10500,
+          "iqr": [
+            10500,
+            10500
+          ],
+          "mean": 10500
+        },
+        "dollars": {
+          "n": 3,
+          "median": 0.216125,
+          "iqr": [
+            0.214375,
+            0.217875
+          ],
+          "mean": 0.216125
+        },
+        "file_reads": {
+          "n": 3,
+          "median": 7,
+          "iqr": [
+            7,
+            7
+          ],
+          "mean": 7
+        },
+        "input_tokens": {
+          "n": 3,
+          "median": 11200,
+          "iqr": [
+            10850,
+            11550
+          ],
+          "mean": 11200
+        },
+        "output_tokens": {
+          "n": 3,
+          "median": 2100,
+          "iqr": [
+            2100,
+            2100
+          ],
+          "mean": 2100
+        },
+        "re_read_rate": {
+          "n": 3,
+          "median": 0.5714285714285714,
+          "iqr": [
+            0.5714285714285714,
+            0.5714285714285714
+          ],
+          "mean": 0.5714285714285714
+        },
+        "time_to_done_ms": {
+          "n": 3,
+          "median": 240000,
+          "iqr": [
+            239500,
+            240500
+          ],
+          "mean": 240000
+        },
+        "time_to_first_edit_ms": {
+          "n": 3,
+          "median": 61000,
+          "iqr": [
+            60750,
+            61250
+          ],
+          "mean": 61000
+        },
+        "tool_calls": {
+          "n": 3,
+          "median": 14,
+          "iqr": [
+            14,
+            14
+          ],
+          "mean": 14
+        },
+        "tool_result_bytes": {
+          "n": 3,
+          "median": 12600,
+          "iqr": [
+            12600,
+            12600
+          ],
+          "mean": 12600
+        },
+        "total_billed_tokens": {
+          "n": 3,
+          "median": 107800,
+          "iqr": [
+            107450,
+            108150
+          ],
+          "mean": 107800
+        },
+        "turns": {
+          "n": 3,
+          "median": 7,
+          "iqr": [
+            7,
+            7
+          ],
+          "mean": 7
+        },
+        "wall_ms": {
+          "n": 3,
+          "median": 242000,
+          "iqr": [
+            241500,
+            242500
+          ],
+          "mean": 242000
+        }
+      },
+      "metrics_success_only": {
+        "cache_read_tokens": {
+          "n": 2,
+          "median": 84000,
+          "iqr": [
+            84000,
+            84000
+          ],
+          "mean": 84000
+        },
+        "cache_write_tokens": {
+          "n": 2,
+          "median": 10500,
+          "iqr": [
+            10500,
+            10500
+          ],
+          "mean": 10500
+        },
+        "dollars": {
+          "n": 2,
+          "median": 0.216125,
+          "iqr": [
+            0.21437499999999998,
+            0.217875
+          ],
+          "mean": 0.216125
+        },
+        "file_reads": {
+          "n": 2,
+          "median": 7,
+          "iqr": [
+            7,
+            7
+          ],
+          "mean": 7
+        },
+        "input_tokens": {
+          "n": 2,
+          "median": 11200,
+          "iqr": [
+            10850,
+            11550
+          ],
+          "mean": 11200
+        },
+        "output_tokens": {
+          "n": 2,
+          "median": 2100,
+          "iqr": [
+            2100,
+            2100
+          ],
+          "mean": 2100
+        },
+        "re_read_rate": {
+          "n": 2,
+          "median": 0.5714285714285714,
+          "iqr": [
+            0.5714285714285714,
+            0.5714285714285714
+          ],
+          "mean": 0.5714285714285714
+        },
+        "time_to_done_ms": {
+          "n": 2,
+          "median": 240000,
+          "iqr": [
+            239500,
+            240500
+          ],
+          "mean": 240000
+        },
+        "time_to_first_edit_ms": {
+          "n": 2,
+          "median": 61000,
+          "iqr": [
+            60750,
+            61250
+          ],
+          "mean": 61000
+        },
+        "tool_calls": {
+          "n": 2,
+          "median": 14,
+          "iqr": [
+            14,
+            14
+          ],
+          "mean": 14
+        },
+        "tool_result_bytes": {
+          "n": 2,
+          "median": 12600,
+          "iqr": [
+            12600,
+            12600
+          ],
+          "mean": 12600
+        },
+        "total_billed_tokens": {
+          "n": 2,
+          "median": 107800,
+          "iqr": [
+            107450,
+            108150
+          ],
+          "mean": 107800
+        },
+        "turns": {
+          "n": 2,
+          "median": 7,
+          "iqr": [
+            7,
+            7
+          ],
+          "mean": 7
+        },
+        "wall_ms": {
+          "n": 2,
+          "median": 242000,
+          "iqr": [
+            241500,
+            242500
+          ],
+          "mean": 242000
+        }
+      }
     }
   },
-  "controls": {
-    "task-a": {
-      "discriminates": false,
-      "golden": {
-        "n": 0,
-        "passes": 0,
-        "run_ids": []
+  "arm_summary": {
+    "full": {
+      "n": 6,
+      "successes": 6,
+      "pass_rate": 1,
+      "pass_rate_ci": [
+        0.6096657120978346,
+        1
+      ],
+      "dollars": {
+        "n": 6,
+        "median": 0.089,
+        "iqr": [
+          0.088,
+          0.09
+        ],
+        "mean": 0.08899999999999998
       },
-      "null": {
-        "n": 0,
-        "passes": 0,
-        "run_ids": []
+      "cost_of_pass_usd": {
+        "value": 0.08899999999999998,
+        "infinite": false
       }
     },
-    "task-b": {
-      "discriminates": false,
-      "golden": {
-        "n": 0,
-        "passes": 0,
-        "run_ids": []
+    "rampant": {
+      "n": 6,
+      "successes": 5,
+      "pass_rate": 0.8333333333333334,
+      "pass_rate_ci": [
+        0.43649717781352987,
+        0.9699466302516935
+      ],
+      "dollars": {
+        "n": 6,
+        "median": 0.216125,
+        "iqr": [
+          0.2135,
+          0.21875
+        ],
+        "mean": 0.216125
       },
-      "null": {
-        "n": 0,
-        "passes": 0,
-        "run_ids": []
+      "cost_of_pass_usd": {
+        "value": 0.25935,
+        "infinite": false
+      }
+    }
+  },
+  "paired": {
+    "cache_read_tokens": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -52000,
+        "delta_median": -52000,
+        "ci_low": -52000,
+        "ci_high": -52000,
+        "p": 0.0001,
+        "baseline_median": 84000,
+        "relative": -0.6190476190476191,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -52000,
+        "delta_median": -52000,
+        "ci_low": -52000,
+        "ci_high": -52000,
+        "p": 0.0001,
+        "baseline_median": 84000,
+        "relative": -0.6190476190476191,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "cache_write_tokens": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -5700,
+        "delta_median": -5700,
+        "ci_low": -5700,
+        "ci_high": -5700,
+        "p": 0.0001,
+        "baseline_median": 10500,
+        "relative": -0.5428571428571428,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -5700,
+        "delta_median": -5700,
+        "ci_low": -5700,
+        "ci_high": -5700,
+        "p": 0.0001,
+        "baseline_median": 10500,
+        "relative": -0.5428571428571428,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "dollars": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -0.12812500000000002,
+        "delta_median": -0.12812500000000002,
+        "ci_low": -0.12962500000000002,
+        "ci_high": -0.12662500000000002,
+        "p": 0.0001,
+        "baseline_median": 0.216125,
+        "relative": -0.5928282244071719,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -0.12612500000000001,
+        "delta_median": -0.12812500000000002,
+        "ci_low": -0.12962500000000002,
+        "ci_high": -0.12062500000000002,
+        "p": 0.0001,
+        "baseline_median": 0.216125,
+        "relative": -0.5835743204164258,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "file_reads": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -3,
+        "delta_median": -3,
+        "ci_low": -3,
+        "ci_high": -3,
+        "p": 0.0001,
+        "baseline_median": 7,
+        "relative": -0.42857142857142855,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -3,
+        "delta_median": -3,
+        "ci_low": -3,
+        "ci_high": -3,
+        "p": 0.0001,
+        "baseline_median": 7,
+        "relative": -0.42857142857142855,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "input_tokens": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -6800,
+        "delta_median": -6800,
+        "ci_low": -7100,
+        "ci_high": -6500,
+        "p": 0.0001,
+        "baseline_median": 11200,
+        "relative": -0.6071428571428571,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -6800,
+        "delta_median": -6800,
+        "ci_low": -7100,
+        "ci_high": -6500,
+        "p": 0.0001,
+        "baseline_median": 11200,
+        "relative": -0.6071428571428571,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "output_tokens": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -1300,
+        "delta_median": -1300,
+        "ci_low": -1300,
+        "ci_high": -1300,
+        "p": 0.0001,
+        "baseline_median": 2100,
+        "relative": -0.6190476190476191,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -1300,
+        "delta_median": -1300,
+        "ci_low": -1300,
+        "ci_high": -1300,
+        "p": 0.0001,
+        "baseline_median": 2100,
+        "relative": -0.6190476190476191,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "re_read_rate": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -0.5714285714285714,
+        "delta_median": -0.5714285714285714,
+        "ci_low": -0.5714285714285714,
+        "ci_high": -0.5714285714285714,
+        "p": 0.0001,
+        "baseline_median": 0.5714285714285714,
+        "relative": -1,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -0.5714285714285714,
+        "delta_median": -0.5714285714285714,
+        "ci_low": -0.5714285714285714,
+        "ci_high": -0.5714285714285714,
+        "p": 0.0001,
+        "baseline_median": 0.5714285714285714,
+        "relative": -1,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "time_to_done_ms": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -120000,
+        "delta_median": -120000,
+        "ci_low": -120000,
+        "ci_high": -120000,
+        "p": 0.0001,
+        "baseline_median": 240000,
+        "relative": -0.5,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -120000,
+        "delta_median": -120000,
+        "ci_low": -120000,
+        "ci_high": -120000,
+        "p": 0.0001,
+        "baseline_median": 240000,
+        "relative": -0.5,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "time_to_first_edit_ms": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -30000,
+        "delta_median": -30000,
+        "ci_low": -30000,
+        "ci_high": -30000,
+        "p": 0.0001,
+        "baseline_median": 61000,
+        "relative": -0.4918032786885246,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -30000,
+        "delta_median": -30000,
+        "ci_low": -30000,
+        "ci_high": -30000,
+        "p": 0.0001,
+        "baseline_median": 61000,
+        "relative": -0.4918032786885246,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "tool_calls": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -6,
+        "delta_median": -6,
+        "ci_low": -6,
+        "ci_high": -6,
+        "p": 0.0001,
+        "baseline_median": 14,
+        "relative": -0.42857142857142855,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -6,
+        "delta_median": -6,
+        "ci_low": -6,
+        "ci_high": -6,
+        "p": 0.0001,
+        "baseline_median": 14,
+        "relative": -0.42857142857142855,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "tool_result_bytes": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -8600,
+        "delta_median": -8600,
+        "ci_low": -8600,
+        "ci_high": -8600,
+        "p": 0.0001,
+        "baseline_median": 12600,
+        "relative": -0.6825396825396826,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -8600,
+        "delta_median": -8600,
+        "ci_low": -8600,
+        "ci_high": -8600,
+        "p": 0.0001,
+        "baseline_median": 12600,
+        "relative": -0.6825396825396826,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "total_billed_tokens": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -65800,
+        "delta_median": -65800,
+        "ci_low": -66100,
+        "ci_high": -65500,
+        "p": 0.0001,
+        "baseline_median": 107800,
+        "relative": -0.6103896103896104,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -65800,
+        "delta_median": -65800,
+        "ci_low": -66100,
+        "ci_high": -65500,
+        "p": 0.0001,
+        "baseline_median": 107800,
+        "relative": -0.6103896103896104,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "turns": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -3,
+        "delta_median": -3,
+        "ci_low": -3,
+        "ci_high": -3,
+        "p": 0.0001,
+        "baseline_median": 7,
+        "relative": -0.42857142857142855,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -3,
+        "delta_median": -3,
+        "ci_low": -3,
+        "ci_high": -3,
+        "p": 0.0001,
+        "baseline_median": 7,
+        "relative": -0.42857142857142855,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      }
+    },
+    "wall_ms": {
+      "task-a": {
+        "n_pairs": 3,
+        "delta_mean": -120000,
+        "delta_median": -120000,
+        "ci_low": -120000,
+        "ci_high": -120000,
+        "p": 0.0001,
+        "baseline_median": 242000,
+        "relative": -0.49586776859504134,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
+      },
+      "task-b": {
+        "n_pairs": 3,
+        "delta_mean": -120000,
+        "delta_median": -120000,
+        "ci_low": -120000,
+        "ci_high": -120000,
+        "p": 0.0001,
+        "baseline_median": 242000,
+        "relative": -0.49586776859504134,
+        "ci_excludes_zero": true,
+        "verdict": "lower under full",
+        "p_holm": 0.0002
       }
     }
   },
   "data_quality": {
-    "incomplete_pairs": [],
+    "table_to_billed_ratio_median": null,
+    "runs_without_billed_cost": [
+      "full-task-a-r1-20260909T120000Z",
+      "full-task-a-r2-20260909T120000Z",
+      "full-task-a-r3-20260909T120000Z",
+      "full-task-b-r1-20260909T120000Z",
+      "full-task-b-r2-20260909T120000Z",
+      "full-task-b-r3-20260909T120000Z",
+      "rampant-task-a-r1-20260909T120000Z",
+      "rampant-task-a-r2-20260909T120000Z",
+      "rampant-task-a-r3-20260909T120000Z",
+      "rampant-task-b-r1-20260909T120000Z",
+      "rampant-task-b-r2-20260909T120000Z",
+      "rampant-task-b-r3-20260909T120000Z"
+    ],
+    "runs_without_guard_events": [
+      "full-task-a-r3-20260909T120000Z"
+    ],
+    "runs_without_check": [],
     "runs_with_assumed_cache_ttl": [
       "full-task-a-r1-20260909T120000Z",
       "full-task-a-r2-20260909T120000Z",
@@ -1170,428 +1592,6 @@
     "runs_with_invariant_violations": [
       "rampant-task-a-r1-20260909T120000Z"
     ],
-    "runs_without_billed_cost": [
-      "full-task-a-r1-20260909T120000Z",
-      "full-task-a-r2-20260909T120000Z",
-      "full-task-a-r3-20260909T120000Z",
-      "full-task-b-r1-20260909T120000Z",
-      "full-task-b-r2-20260909T120000Z",
-      "full-task-b-r3-20260909T120000Z",
-      "rampant-task-a-r1-20260909T120000Z",
-      "rampant-task-a-r2-20260909T120000Z",
-      "rampant-task-a-r3-20260909T120000Z",
-      "rampant-task-b-r1-20260909T120000Z",
-      "rampant-task-b-r2-20260909T120000Z",
-      "rampant-task-b-r3-20260909T120000Z"
-    ],
-    "runs_without_check": [],
-    "runs_without_guard_events": [
-      "full-task-a-r3-20260909T120000Z"
-    ],
-    "table_to_billed_ratio_median": null
-  },
-  "min_relative_delta": 0.1,
-  "models": [
-    "claude-opus-5"
-  ],
-  "paired": {
-    "cache_read_tokens": {
-      "task-a": {
-        "baseline_median": 84000,
-        "ci_excludes_zero": true,
-        "ci_high": -52000.0,
-        "ci_low": -52000.0,
-        "delta_mean": -52000.0,
-        "delta_median": -52000,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6190476190476191,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 84000,
-        "ci_excludes_zero": true,
-        "ci_high": -52000.0,
-        "ci_low": -52000.0,
-        "delta_mean": -52000.0,
-        "delta_median": -52000,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6190476190476191,
-        "verdict": "lower under full"
-      }
-    },
-    "cache_write_tokens": {
-      "task-a": {
-        "baseline_median": 10500,
-        "ci_excludes_zero": true,
-        "ci_high": -5700.0,
-        "ci_low": -5700.0,
-        "delta_mean": -5700.0,
-        "delta_median": -5700,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.5428571428571428,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 10500,
-        "ci_excludes_zero": true,
-        "ci_high": -5700.0,
-        "ci_low": -5700.0,
-        "delta_mean": -5700.0,
-        "delta_median": -5700,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.5428571428571428,
-        "verdict": "lower under full"
-      }
-    },
-    "dollars": {
-      "task-a": {
-        "baseline_median": 0.216125,
-        "ci_excludes_zero": true,
-        "ci_high": -0.12662500000000002,
-        "ci_low": -0.12962500000000002,
-        "delta_mean": -0.12812500000000002,
-        "delta_median": -0.12812500000000002,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.5928282244071719,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 0.216125,
-        "ci_excludes_zero": true,
-        "ci_high": -0.12062500000000002,
-        "ci_low": -0.12962500000000002,
-        "delta_mean": -0.12612500000000001,
-        "delta_median": -0.12812500000000002,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.5835743204164258,
-        "verdict": "lower under full"
-      }
-    },
-    "file_reads": {
-      "task-a": {
-        "baseline_median": 7,
-        "ci_excludes_zero": true,
-        "ci_high": -3.0,
-        "ci_low": -3.0,
-        "delta_mean": -3.0,
-        "delta_median": -3,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.42857142857142855,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 7,
-        "ci_excludes_zero": true,
-        "ci_high": -3.0,
-        "ci_low": -3.0,
-        "delta_mean": -3.0,
-        "delta_median": -3,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.42857142857142855,
-        "verdict": "lower under full"
-      }
-    },
-    "input_tokens": {
-      "task-a": {
-        "baseline_median": 11200,
-        "ci_excludes_zero": true,
-        "ci_high": -6500.0,
-        "ci_low": -7100.0,
-        "delta_mean": -6800.0,
-        "delta_median": -6800,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6071428571428571,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 11200,
-        "ci_excludes_zero": true,
-        "ci_high": -6500.0,
-        "ci_low": -7100.0,
-        "delta_mean": -6800.0,
-        "delta_median": -6800,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6071428571428571,
-        "verdict": "lower under full"
-      }
-    },
-    "output_tokens": {
-      "task-a": {
-        "baseline_median": 2100,
-        "ci_excludes_zero": true,
-        "ci_high": -1300.0,
-        "ci_low": -1300.0,
-        "delta_mean": -1300.0,
-        "delta_median": -1300,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6190476190476191,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 2100,
-        "ci_excludes_zero": true,
-        "ci_high": -1300.0,
-        "ci_low": -1300.0,
-        "delta_mean": -1300.0,
-        "delta_median": -1300,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6190476190476191,
-        "verdict": "lower under full"
-      }
-    },
-    "re_read_rate": {
-      "task-a": {
-        "baseline_median": 0.5714285714285714,
-        "ci_excludes_zero": true,
-        "ci_high": -0.5714285714285714,
-        "ci_low": -0.5714285714285714,
-        "delta_mean": -0.5714285714285714,
-        "delta_median": -0.5714285714285714,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -1.0,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 0.5714285714285714,
-        "ci_excludes_zero": true,
-        "ci_high": -0.5714285714285714,
-        "ci_low": -0.5714285714285714,
-        "delta_mean": -0.5714285714285714,
-        "delta_median": -0.5714285714285714,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -1.0,
-        "verdict": "lower under full"
-      }
-    },
-    "time_to_done_ms": {
-      "task-a": {
-        "baseline_median": 240000,
-        "ci_excludes_zero": true,
-        "ci_high": -120000.0,
-        "ci_low": -120000.0,
-        "delta_mean": -120000.0,
-        "delta_median": -120000,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.5,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 240000,
-        "ci_excludes_zero": true,
-        "ci_high": -120000.0,
-        "ci_low": -120000.0,
-        "delta_mean": -120000.0,
-        "delta_median": -120000,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.5,
-        "verdict": "lower under full"
-      }
-    },
-    "time_to_first_edit_ms": {
-      "task-a": {
-        "baseline_median": 61000,
-        "ci_excludes_zero": true,
-        "ci_high": -30000.0,
-        "ci_low": -30000.0,
-        "delta_mean": -30000.0,
-        "delta_median": -30000,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.4918032786885246,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 61000,
-        "ci_excludes_zero": true,
-        "ci_high": -30000.0,
-        "ci_low": -30000.0,
-        "delta_mean": -30000.0,
-        "delta_median": -30000,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.4918032786885246,
-        "verdict": "lower under full"
-      }
-    },
-    "tool_calls": {
-      "task-a": {
-        "baseline_median": 14,
-        "ci_excludes_zero": true,
-        "ci_high": -6.0,
-        "ci_low": -6.0,
-        "delta_mean": -6.0,
-        "delta_median": -6,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.42857142857142855,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 14,
-        "ci_excludes_zero": true,
-        "ci_high": -6.0,
-        "ci_low": -6.0,
-        "delta_mean": -6.0,
-        "delta_median": -6,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.42857142857142855,
-        "verdict": "lower under full"
-      }
-    },
-    "tool_result_bytes": {
-      "task-a": {
-        "baseline_median": 12600,
-        "ci_excludes_zero": true,
-        "ci_high": -8600.0,
-        "ci_low": -8600.0,
-        "delta_mean": -8600.0,
-        "delta_median": -8600,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6825396825396826,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 12600,
-        "ci_excludes_zero": true,
-        "ci_high": -8600.0,
-        "ci_low": -8600.0,
-        "delta_mean": -8600.0,
-        "delta_median": -8600,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6825396825396826,
-        "verdict": "lower under full"
-      }
-    },
-    "total_billed_tokens": {
-      "task-a": {
-        "baseline_median": 107800,
-        "ci_excludes_zero": true,
-        "ci_high": -65500.0,
-        "ci_low": -66100.0,
-        "delta_mean": -65800.0,
-        "delta_median": -65800,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6103896103896104,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 107800,
-        "ci_excludes_zero": true,
-        "ci_high": -65500.0,
-        "ci_low": -66100.0,
-        "delta_mean": -65800.0,
-        "delta_median": -65800,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.6103896103896104,
-        "verdict": "lower under full"
-      }
-    },
-    "turns": {
-      "task-a": {
-        "baseline_median": 7,
-        "ci_excludes_zero": true,
-        "ci_high": -3.0,
-        "ci_low": -3.0,
-        "delta_mean": -3.0,
-        "delta_median": -3,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.42857142857142855,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 7,
-        "ci_excludes_zero": true,
-        "ci_high": -3.0,
-        "ci_low": -3.0,
-        "delta_mean": -3.0,
-        "delta_median": -3,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.42857142857142855,
-        "verdict": "lower under full"
-      }
-    },
-    "wall_ms": {
-      "task-a": {
-        "baseline_median": 242000,
-        "ci_excludes_zero": true,
-        "ci_high": -120000.0,
-        "ci_low": -120000.0,
-        "delta_mean": -120000.0,
-        "delta_median": -120000,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.49586776859504134,
-        "verdict": "lower under full"
-      },
-      "task-b": {
-        "baseline_median": 242000,
-        "ci_excludes_zero": true,
-        "ci_high": -120000.0,
-        "ci_low": -120000.0,
-        "delta_mean": -120000.0,
-        "delta_median": -120000,
-        "n_pairs": 3,
-        "p": 0.0001,
-        "p_holm": 0.0002,
-        "relative": -0.49586776859504134,
-        "verdict": "lower under full"
-      }
-    }
-  },
-  "runs": 12,
-  "seed": 20260902,
-  "tasks": [
-    "task-a",
-    "task-b"
-  ]
+    "incomplete_pairs": []
+  }
 }

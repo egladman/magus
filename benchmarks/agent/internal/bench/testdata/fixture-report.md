@@ -39,8 +39,8 @@ Rep i of one arm is paired with rep i of the other. CI is a seeded 10000-sample 
 
 | task   | pairs | median delta | mean delta | 95% CI               | relative | p (Holm) | verdict          |
 | ------ | ----- | ------------ | ---------- | -------------------- | -------- | -------- | ---------------- |
-| task-a | 3     | -65800       | -65800.0   | [-66100.0, -65500.0] | -61%     | 0.000    | lower under full |
-| task-b | 3     | -65800       | -65800.0   | [-66100.0, -65500.0] | -61%     | 0.000    | lower under full |
+| task-a | 3     | -65800.0     | -65800.0   | [-66100.0, -65500.0] | -61%     | 0.000    | lower under full |
+| task-b | 3     | -65800.0     | -65800.0   | [-66100.0, -65500.0] | -61%     | 0.000    | lower under full |
 
 ### dollars
 
@@ -53,29 +53,29 @@ Rep i of one arm is paired with rep i of the other. CI is a seeded 10000-sample 
 
 | task   | pairs | median delta | mean delta | 95% CI                 | relative | p (Holm) | verdict          |
 | ------ | ----- | ------------ | ---------- | ---------------------- | -------- | -------- | ---------------- |
-| task-a | 3     | -120000      | -120000.0  | [-120000.0, -120000.0] | -50%     | 0.000    | lower under full |
-| task-b | 3     | -120000      | -120000.0  | [-120000.0, -120000.0] | -50%     | 0.000    | lower under full |
+| task-a | 3     | -120000.0    | -120000.0  | [-120000.0, -120000.0] | -50%     | 0.000    | lower under full |
+| task-b | 3     | -120000.0    | -120000.0  | [-120000.0, -120000.0] | -50%     | 0.000    | lower under full |
 
 ### turns
 
 | task   | pairs | median delta | mean delta | 95% CI       | relative | p (Holm) | verdict          |
 | ------ | ----- | ------------ | ---------- | ------------ | -------- | -------- | ---------------- |
-| task-a | 3     | -3           | -3.0       | [-3.0, -3.0] | -43%     | 0.000    | lower under full |
-| task-b | 3     | -3           | -3.0       | [-3.0, -3.0] | -43%     | 0.000    | lower under full |
+| task-a | 3     | -3.0         | -3.0       | [-3.0, -3.0] | -43%     | 0.000    | lower under full |
+| task-b | 3     | -3.0         | -3.0       | [-3.0, -3.0] | -43%     | 0.000    | lower under full |
 
 ### tool calls
 
 | task   | pairs | median delta | mean delta | 95% CI       | relative | p (Holm) | verdict          |
 | ------ | ----- | ------------ | ---------- | ------------ | -------- | -------- | ---------------- |
-| task-a | 3     | -6           | -6.0       | [-6.0, -6.0] | -43%     | 0.000    | lower under full |
-| task-b | 3     | -6           | -6.0       | [-6.0, -6.0] | -43%     | 0.000    | lower under full |
+| task-a | 3     | -6.0         | -6.0       | [-6.0, -6.0] | -43%     | 0.000    | lower under full |
+| task-b | 3     | -6.0         | -6.0       | [-6.0, -6.0] | -43%     | 0.000    | lower under full |
 
 ### file reads
 
 | task   | pairs | median delta | mean delta | 95% CI       | relative | p (Holm) | verdict          |
 | ------ | ----- | ------------ | ---------- | ------------ | -------- | -------- | ---------------- |
-| task-a | 3     | -3           | -3.0       | [-3.0, -3.0] | -43%     | 0.000    | lower under full |
-| task-b | 3     | -3           | -3.0       | [-3.0, -3.0] | -43%     | 0.000    | lower under full |
+| task-a | 3     | -3.0         | -3.0       | [-3.0, -3.0] | -43%     | 0.000    | lower under full |
+| task-b | 3     | -3.0         | -3.0       | [-3.0, -3.0] | -43%     | 0.000    | lower under full |
 
 ### re-read rate
 
@@ -88,8 +88,8 @@ Rep i of one arm is paired with rep i of the other. CI is a seeded 10000-sample 
 
 | task   | pairs | median delta | mean delta | 95% CI             | relative | p (Holm) | verdict          |
 | ------ | ----- | ------------ | ---------- | ------------------ | -------- | -------- | ---------------- |
-| task-a | 3     | -8600        | -8600.0    | [-8600.0, -8600.0] | -68%     | 0.000    | lower under full |
-| task-b | 3     | -8600        | -8600.0    | [-8600.0, -8600.0] | -68%     | 0.000    | lower under full |
+| task-a | 3     | -8600.0      | -8600.0    | [-8600.0, -8600.0] | -68%     | 0.000    | lower under full |
+| task-b | 3     | -8600.0      | -8600.0    | [-8600.0, -8600.0] | -68%     | 0.000    | lower under full |
 
 ## pass@1 and pass^k
 
