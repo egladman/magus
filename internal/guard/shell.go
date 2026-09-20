@@ -638,34 +638,26 @@ func commandPrefix(program string, args []string) []string {
 	return prefix
 }
 
-// valuedGlobalFlags names, per program, the flags that appear BEFORE a subcommand and take
-// a SEPARATE operand. Per program because the word that follows one is otherwise
-// indistinguishable from the subcommand itself, and reading it wrong is what invents a
-// deny rather than what misses one.
+// valuedGlobalFlags names, per program, the flags that precede a subcommand and take a
+// SEPARATE operand. Per program because the word after one is otherwise indistinguishable
+// from the subcommand, and reading it wrong invents a deny rather than missing one.
 //
-// `go` takes exactly one. Nothing else is listed yet, so `npm -w <pkg> test` and its
-// siblings still walk past their denies: that is the same hole this closes for go, left
-// open deliberately rather than guessed at, because a wrong entry here is worse than a
-// missing one.
+// `npm -w <pkg> test` and its siblings still walk past their denies. The gap is left open
+// deliberately: a wrong entry here is worse than a missing one.
 var valuedGlobalFlags = map[string]map[string]bool{
 	"go": {"-C": true},
 }
 
 // afterGlobalFlags drops the options a tool takes BEFORE its subcommand, so a rule matches
-// the command rather than one spelling of it, and answers nil when it cannot tell.
+// the command rather than one spelling of it: `go -C <dir> test ./...` is `go test ./...`.
+// It answers nil when it cannot tell.
 //
-// `go -C <dir> test ./...` is the case that named this: same module, same effect as
-// `go test ./...`, and it ran while that one was denied.
+// An UNKNOWN flag ends the read, because skipping it cannot distinguish a lone flag from
+// one whose operand follows: `npx --package nx some-bin` would present `nx` as the
+// subcommand and earn a deny nobody invoked. Missing a deny beats inventing one.
 //
-// An UNKNOWN flag ends the read. The alternative, skipping it and carrying on, cannot tell
-// a lone flag from one whose operand follows, so `npx --package nx some-bin` would present
-// `nx` as the subcommand and be denied as an nx operation nobody invoked. A guard that
-// refuses only what it can prove would rather miss that deny than invent this one, and
-// missing it is what happened before this function existed at all.
-//
-// A `--flag=value` carries its operand, so nothing can follow it; but the operand still
-// has to be READ when the flag is one that points the tool at a tree, or `-C=../sibling`
-// walks through the escape check below by spelling itself differently.
+// A `--flag=value` carries its operand, so nothing follows it, but the value still has to
+// be READ: `-C=../sibling` otherwise spells its way around the escape check.
 func afterGlobalFlags(program string, args []string) []string {
 	valued := valuedGlobalFlags[filepath.Base(program)]
 	for i := 0; i < len(args); i++ {
@@ -693,12 +685,9 @@ func afterGlobalFlags(program string, args []string) []string {
 	return nil
 }
 
-// escapesWorkspace reports a path that names something outside the workspace.
-//
-// Cleaned first, which is still a purely textual read and touches no filesystem: a raw
-// prefix test called `./..` and `a/../..` in-tree, so the deny they earned pointed the
-// caller at a target that builds a different module. That is the exact misdirection the
-// check exists to prevent, so the cheap spelling was not the safe one.
+// escapesWorkspace reports a path that names something outside the workspace. Textual: it
+// touches no filesystem. Cleaned first because a raw prefix test reads `./..` and
+// `a/../..` as in-tree.
 func escapesWorkspace(path string) bool {
 	clean := filepath.Clean(path)
 	return filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator))
