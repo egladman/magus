@@ -799,8 +799,9 @@ by construction. Rendering that committed capture IS pure, so
 ## On disk: just files
 
 The cache lives at **`.magus/`** in the workspace root (override with
-`MAGUS_CACHE_DIR`, or `cache.dir` in `magus.yaml`). Its layout is three
-directories plus a hash memo:
+`MAGUS_CACHE_DIR`, or `cache.dir` in `magus.yaml`). Three directories plus a hash
+memo carry a cache hit; `.magus/` holds more beside them, including the lock
+files, the run journals, the knowledge shards and the symbol index:
 
 ```text
 .magus/

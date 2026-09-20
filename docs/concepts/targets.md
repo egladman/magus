@@ -401,8 +401,8 @@ A target string goes through three stages before any tool is invoked:
 ParseTarget(s)          → Target{Name:"test", Charms:[...]}
       │                   types/target.go
       ▼
-Workspace.ExpandPath(t) → []Target (one concrete entry per matched project)
-      │                   magus/select.go
+Magus.ExpandPath(t)     → []Target (one concrete entry per matched project)
+      │                   magus.go
       │
       │   (alternative: ExpandCwd resolves for the project under cwd)
       │   (alternative: ExpandAffected uses VCS diff to select projects,
