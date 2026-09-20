@@ -1214,6 +1214,27 @@ func probedSpell(name, tool string, key spells.VersionKey, out func(dir string) 
 	)
 }
 
+// An observation-only tool must contribute NOTHING here. probeTools feeds the unscoped
+// channel: its result keys every target in the project, while an observation is scoped to
+// the targets whose ops drive the binary (observationsForTarget below covers that half).
+//
+// Guarded by one line in probeTools, and deleting that line restores the 2026-09-20
+// defect exactly: `govulncheck -version` prints the vulnerability database's publication
+// date, so every release of that database invalidated every build, test and lint entry in
+// every Go project. Nothing else in this file fails if the line goes.
+func TestProbeToolsLeavesAnObservationOnlyToolOutOfTheVersionKey(t *testing.T) {
+	sp := spells.NewSpell("go", spells.WithTools(map[string]spells.Tool{
+		"govulncheck": {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
+	}))
+	p := &types.Project{Path: ".", Dir: "/tmp/root", ResolvedSpells: []*spells.Spell{sp}}
+
+	full := map[string]string{}
+	got := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+
+	assert.Empty(t, got, "no version line for a tool that declares no version probe")
+	assert.Empty(t, full, "and nothing for the window gate, which has no reading to compare")
+}
+
 // The cache key wants a narrowed token and the window gate wants the whole version. Both
 // come out of one probe, and the two must not disagree about what was read.
 func TestProbeToolsRecordsTheKeyTokenAndTheFullVersion(t *testing.T) {

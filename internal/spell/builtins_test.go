@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -387,5 +388,29 @@ func TestBuiltinSpellsDecodeVersionKeyFromEnum(t *testing.T) {
 	// A spell that declares nothing keeps the whole-output default.
 	if bash, ok := reg["bash"]; ok {
 		assert.Empty(t, bash.Tools)
+	}
+}
+
+// TestBuiltinToolsNeverKeyAnObservationAsAVersion is MGS1037's invariant, checked over
+// the SHIPPED registry rather than over one workspace's bindings.
+//
+// The doctor check walks projects -> ResolvedSpells, so it only ever sees a spell some
+// magusfile imports. rust, python, aws/s3-cache and onepassword are compiled into this
+// binary and bound by nothing here, so the same defect reintroduced in any of them would
+// ship green. This is the wider half; MGS1037 is the half that can see a USER's spell.
+func TestBuiltinToolsNeverKeyAnObservationAsAVersion(t *testing.T) {
+	for name, d := range Builtins() {
+		for tool, tl := range d.Tools {
+			if tl.Probe.Bin == "" || tl.Observe.Bin == "" {
+				continue
+			}
+			if tl.Probe.Bin != tl.Observe.Bin || !slices.Equal(tl.Probe.Args, tl.Observe.Args) {
+				continue
+			}
+			assert.Falsef(t, tl.Key.IsZero(),
+				"%s: %s declares `%s %s` as both probe and observe with no key, so the feed's clock keys every "+
+					"target in every project binding the spell (MGS1037)",
+				name, tool, tl.Probe.Bin, strings.Join(tl.Probe.Args, " "))
+		}
 	}
 }
