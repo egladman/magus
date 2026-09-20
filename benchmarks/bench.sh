@@ -17,7 +17,18 @@
 #   BENCH_RUNS=10               hyperfine measurement runs (default 10)
 #   BENCH_SKIP_VERSION_CHECK=1  skip versions.lock comparison
 #   BENCH_DRY_RUN=1             print commands without running them
+#   BENCH_JOBS=8                parallelism handed to every tool (default 8)
 #   MAGUS_BIN=magus             override the magus binary
+#   MAKE_BIN=make               override the make binary (see below)
+#
+# Which make: versions.lock pins GNU Make 4.4.1. macOS ships GNU Make 3.81 as
+# `make`, so a mac run needs MAKE_BIN=gmake to compare against the pinned one;
+# the version check warns when it does not, and BENCHMARKS.md records whichever
+# binary actually ran.
+#
+# Parallelism: every tool is given BENCH_JOBS explicitly. Left to itself each
+# one picks its own default (usually the host core count), which on a 10-core
+# machine handed the tools without a flag a ~25% wider pool than the rest.
 #
 # Daemon variants tested:
 #   magus : "daemonless" (no daemon) and "daemon" (stable daemon running)
@@ -34,9 +45,21 @@ HF_WARMUP="${BENCH_WARMUP:-1}"
 HF_RUNS="${BENCH_RUNS:-10}"
 SKIP_VER="${BENCH_SKIP_VERSION_CHECK:-0}"
 DRY_RUN="${BENCH_DRY_RUN:-0}"
+JOBS="${BENCH_JOBS:-8}"
 MAGUS="${MAGUS_BIN:-magus}"
+MAKE="${MAKE_BIN:-make}"
+
+# The aggregator probes the same binaries to record what was measured.
+export MAGUS_BIN="$MAGUS"
+export MAKE_BIN="$MAKE"
 
 # ── colors ───────────────────────────────────────────────────────────────────
+# live: false during a dry run. It guards every side effect outside hyperfine:
+# warm-up builds, cache clears, the scratch commits the change scenarios need,
+# and daemon start/stop. Without it "print the commands" meant "run most of
+# them, then print one".
+live() { [[ "$DRY_RUN" != "1" ]]; }
+
 red()     { printf '\033[1;31m%s\033[0m\n' "$*"; }
 green()   { printf '\033[1;32m%s\033[0m\n' "$*"; }
 yellow()  { printf '\033[1;33m%s\033[0m\n' "$*"; }
@@ -77,6 +100,8 @@ check_versions() {
         local got=""
         case "$key" in
             hyperfine) got=$(hyperfine --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true) ;;
+            magus)     got=$("$MAGUS" version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true) ;;
+            make)      got=$("$MAKE" --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true) ;;
             node)      got=$(node --version 2>/dev/null | tr -d 'v' || true) ;;
             pnpm)      got=$(pnpm --version 2>/dev/null || true) ;;
             turbo)     got=$(turbo --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true) ;;
@@ -93,23 +118,29 @@ check_versions() {
 }
 
 # ── tool availability check ───────────────────────────────────────────────────
+
+# works: run the tool's own version command and require it to succeed. `command
+# -v` passes for a shim that exits non-zero on every invocation, which then
+# shows up as a tool that is astonishingly fast at everything.
+works() { "$@" >/dev/null 2>&1; }
+
 check_tools() {
-    command -v hyperfine >/dev/null 2>&1 || die "hyperfine not found. Install: sudo apt install hyperfine"
+    works hyperfine --version || die "hyperfine not found or not runnable. Install: sudo apt install hyperfine"
     local missing=()
     for t in "${TOOLS[@]}"; do
         local fam="${t%%-*}"
         case "$fam" in
-            magus) command -v "$MAGUS" >/dev/null 2>&1 || missing+=("magus (build: cd magus && go build -o magus ./cmd/magus)") ;;
-            make)  command -v make >/dev/null 2>&1  || missing+=("make") ;;
-            turbo) command -v turbo >/dev/null 2>&1 || missing+=("turbo  (pnpm install -g turbo@latest)") ;;
-            nx)    command -v nx    >/dev/null 2>&1 || missing+=("nx     (pnpm install -g nx@latest)") ;;
-            lage)  command -v lage  >/dev/null 2>&1 || missing+=("lage   (pnpm install -g @microsoft/lage@latest)") ;;
-            moon)  command -v moon  >/dev/null 2>&1 || missing+=("moon   (curl -fsSL https://moonrepo.dev/install/moon.sh | bash)") ;;
-            bazel) command -v bazel >/dev/null 2>&1 || missing+=("bazel  (https://bazel.build/install)") ;;
+            magus) works "$MAGUS" version   || missing+=("magus (build: magus run go-build .)") ;;
+            make)  works "$MAKE" --version  || missing+=("make   (MAKE_BIN=$MAKE)") ;;
+            turbo) works turbo --version    || missing+=("turbo  (pnpm install -g turbo@latest)") ;;
+            nx)    works nx --version       || missing+=("nx     (pnpm install -g nx@latest)") ;;
+            lage)  works lage --version     || missing+=("lage   (pnpm install -g @microsoft/lage@latest)") ;;
+            moon)  works moon --version     || missing+=("moon   (curl -fsSL https://moonrepo.dev/install/moon.sh | bash)") ;;
+            bazel) works bazel --version    || missing+=("bazel  (https://bazel.build/install)") ;;
         esac
     done
     if [[ "${#missing[@]}" -gt 0 ]]; then
-        die "missing tools:  ${missing[*]}"
+        die "missing or broken tools:  ${missing[*]}"
     fi
 }
 
@@ -130,6 +161,7 @@ _stable_sock() {
 # the socket to disappear. `magus server stop` connects directly to the
 # daemon socket via adopt.Shutdown (it is not forwarded through adopt.Forward).
 _ensure_no_magus_daemon() {
+    live || return 0
     local sock; sock=$(_stable_sock)
     unset MAGUS_DAEMON_SOCKET
     if [[ -S "$sock" ]]; then
@@ -147,6 +179,7 @@ DAEMON_STARTED=0
 
 # start_magus_daemon: start a fresh magus stable daemon and wait for socket.
 start_magus_daemon() {
+    live || return 0
     _ensure_no_magus_daemon
     "$MAGUS" server start >/dev/null 2>&1 &
     local sock; sock=$(_stable_sock)
@@ -196,10 +229,18 @@ get_cmd() {
         case "$scenario" in S4|S5|S6|S7) echo "n/a"; return;; esac
     fi
 
+    # The go fixture is N independent services with no shared libs, so it has no
+    # upstream to change: fixtures/go/gen.sh points .bench-upstream-file at the
+    # same file as the leaf. Running S7 there re-measured S6 and published it
+    # under the "one upstream lib changed" heading.
+    if [[ "$fixture" == "go" && "$scenario" == "S7" ]]; then
+        echo "n/a"; return
+    fi
+
     case "$family:$scenario" in
         # S1 — startup
         magus:S1)  echo "${MAGUS} version" ;;
-        make:S1)   echo "make --version" ;;
+        make:S1)   echo "${MAKE} --version" ;;
         turbo:S1)  echo "turbo --version" ;;
         nx:S1)     echo "${nx_prefix}nx --version" ;;
         lage:S1)   echo "lage --version" ;;
@@ -223,51 +264,51 @@ get_cmd() {
         # change, so the comparison ref is the previous commit. Without it magus
         # defaults to origin/main, which the throwaway bench repo lacks (git exit
         # 128), silently falling back to "all projects" and inflating S3.
+        #
+        # nx gets the same baseline. It also gets --graph=stdout, because
+        # `nx affected` has no --dry-run: that flag belongs to the generator
+        # commands, and nx forwards an unrecognized option to the executor, so
+        # `nx affected --target=build --dry-run` ran every affected build. The
+        # scenario is planning-only, and --graph=stdout is nx's planning output.
         magus:S3)  echo "${MAGUS} affected build --dry-run --base HEAD~1" ;;
         make:S3)   echo "n/a" ;;
         turbo:S3)  echo "turbo run build --dry --filter=[HEAD~1]" ;;
-        nx:S3)     echo "${nx_prefix}nx affected --target=build --dry-run" ;;
+        nx:S3)     echo "${nx_prefix}nx affected --target=build --base=HEAD~1 --head=HEAD --graph=stdout" ;;
         lage:S3)   echo "n/a" ;;  # lage has no affected computation
         moon:S3)   echo "moon ci --base=HEAD~1 --dryRun" ;;
         bazel:S3)  echo "n/a" ;;  # would need file-to-label mapping
 
-        # S4 — cold build (prepare handles cache clear)
-        magus:S4)  echo "${MAGUS} run build --concurrency=8" ;;
-        make:S4)   echo "make -j8 all" ;;
-        turbo:S4)  echo "turbo run build --concurrency=8" ;;
-        nx:S4)     echo "${nx_prefix}nx run-many -t build --parallel=8" ;;
-        lage:S4)   echo "lage build" ;;
-        moon:S4)   echo "moon run :build" ;;
-        bazel:S4)  echo "bazel build //..." ;;
-
-        # S5 — warm cache (cache persists from prior S4 population)
-        magus:S5)  echo "${MAGUS} run build --concurrency=8" ;;
-        make:S5)   echo "make -j8 all" ;;
-        turbo:S5)  echo "turbo run build --concurrency=8" ;;
-        nx:S5)     echo "${nx_prefix}nx run-many -t build --parallel=8" ;;
-        lage:S5)   echo "lage build" ;;
-        moon:S5)   echo "moon run :build" ;;
-        bazel:S5)  echo "bazel build //..." ;;
-
-        # S6 — one leaf file changed
-        magus:S6)  echo "${MAGUS} run build --concurrency=8" ;;
-        make:S6)   echo "make -j8 all" ;;
-        turbo:S6)  echo "turbo run build --concurrency=8" ;;
-        nx:S6)     echo "${nx_prefix}nx run-many -t build --parallel=8" ;;
-        lage:S6)   echo "lage build" ;;
-        moon:S6)   echo "moon run :build" ;;
-        bazel:S6)  echo "bazel build //..." ;;
-
-        # S7 — one upstream lib changed
-        magus:S7)  echo "${MAGUS} run build --concurrency=8" ;;
         make:S7)   echo "n/a" ;;  # make has no dependency graph
-        turbo:S7)  echo "turbo run build --concurrency=8" ;;
-        nx:S7)     echo "${nx_prefix}nx run-many -t build --parallel=8" ;;
-        lage:S7)   echo "lage build" ;;
-        moon:S7)   echo "moon run :build" ;;
-        bazel:S7)  echo "bazel build //..." ;;
+
+        # S4-S7 are all "build everything, let the tool decide what to skip";
+        # they differ only in what the harness does to the tree beforehand.
+        magus:S4|magus:S5|magus:S6|magus:S7|\
+        make:S4|make:S5|make:S6|\
+        turbo:S4|turbo:S5|turbo:S6|turbo:S7|\
+        nx:S4|nx:S5|nx:S6|nx:S7|\
+        lage:S4|lage:S5|lage:S6|lage:S7|\
+        moon:S4|moon:S5|moon:S6|moon:S7|\
+        bazel:S4|bazel:S5|bazel:S6|bazel:S7)
+            build_cmd "$family" "$nx_prefix" ;;
 
         *) echo "n/a" ;;
+    esac
+}
+
+# build_cmd <family> <nx-prefix>: the tool's "build everything" invocation, with
+# parallelism pinned to JOBS for every tool so none of them is silently running
+# with a wider pool than the others.
+build_cmd() {
+    local family="$1" nx_prefix="$2"
+    case "$family" in
+        magus) echo "${MAGUS} run build --concurrency=${JOBS}" ;;
+        make)  echo "${MAKE} -j${JOBS} all" ;;
+        turbo) echo "turbo run build --concurrency=${JOBS}" ;;
+        nx)    echo "${nx_prefix}nx run-many -t build --parallel=${JOBS}" ;;
+        lage)  echo "lage build --concurrency ${JOBS}" ;;
+        moon)  echo "moon run :build --concurrency ${JOBS}" ;;
+        bazel) echo "bazel build --jobs=${JOBS} //..." ;;
+        *)     echo "n/a" ;;
     esac
 }
 
@@ -285,7 +326,7 @@ get_clear_cache() {
     [[ "$fixture" == "ts" ]] && ts_clear="; ${_ts_extra_clear}"
     case "$family" in
         magus) echo "rm -rf .magus${ts_clear}" ;;
-        make)  echo "make clean 2>/dev/null || rm -rf out" ;;
+        make)  echo "${MAKE} clean 2>/dev/null || rm -rf out" ;;
         turbo) echo "rm -rf .turbo${ts_clear}" ;;
         nx)    echo "rm -rf .nx/cache${ts_clear}" ;;
         lage)  echo "rm -rf node_modules/.cache/lage${ts_clear}" ;;
@@ -343,14 +384,18 @@ run_all_scenarios() {
         echo "S3 affected dry-run..."
         local leaf; leaf=$(cat "$FIXTURE_DIR/.bench-leaf-file")
         local scratch="$leaf.s3-scratch"
-        echo "// bench-s3" > "$scratch"
-        git add -A >/dev/null
-        git -c commit.gpgsign=false commit -q -m "bench: S3 scratch" >/dev/null
+        if live; then
+            echo "// bench-s3" > "$scratch"
+            git add -A >/dev/null
+            git -c commit.gpgsign=false commit -q -m "bench: S3 scratch" >/dev/null
+        fi
         run_bench "$RESULTS_DIR/${prefix}-S3.json" "$HF_WARMUP" "$HF_RUNS" "" "$cmd"
-        git reset --hard HEAD~1 >/dev/null
-        rm -f "$scratch"
-        git add -A >/dev/null
-        git -c commit.gpgsign=false commit -q -m "bench: revert S3 scratch" >/dev/null 2>&1 || true
+        if live; then
+            git reset --hard HEAD~1 >/dev/null
+            rm -f "$scratch"
+            git add -A >/dev/null
+            git -c commit.gpgsign=false commit -q -m "bench: revert S3 scratch" >/dev/null 2>&1 || true
+        fi
     fi
 
     # ── S4: cold build ────────────────────────────────────────────────────────
@@ -366,8 +411,10 @@ run_all_scenarios() {
     if [[ "$cmd" != "n/a" ]]; then
         echo "S5 warm cache..."
         local clear; clear=$(get_clear_cache "$tool" "$fixture")
-        if [[ -n "$clear" ]]; then eval "$clear" >/dev/null 2>&1 || true; fi
-        eval "$cmd" >/dev/null 2>&1 || true
+        if live; then
+            if [[ -n "$clear" ]]; then eval "$clear" >/dev/null 2>&1 || true; fi
+            eval "$cmd" >/dev/null 2>&1 || true
+        fi
         run_bench "$RESULTS_DIR/${prefix}-S5.json" 2 "$HF_RUNS" "" "$cmd"
     fi
 
@@ -377,14 +424,16 @@ run_all_scenarios() {
         echo "S6 one leaf changed..."
         local leaf; leaf=$(cat "$FIXTURE_DIR/.bench-leaf-file")
         local clear; clear=$(get_clear_cache "$tool" "$fixture")
-        if [[ -n "$clear" ]]; then eval "$clear" >/dev/null 2>&1 || true; fi
-        eval "$cmd" >/dev/null 2>&1 || true
         local cache_dir; cache_dir=$(tool_cache_dir "$tool")
         local snap="${cache_dir}-s6-snap"
-        if [[ -n "$cache_dir" && -d "$cache_dir" ]]; then cp -r "$cache_dir" "$snap" 2>/dev/null || true; fi
-        echo "// bench-s6-change" >> "$leaf"
-        git add -A >/dev/null
-        git -c commit.gpgsign=false commit -q -m "bench: S6 leaf change"
+        if live; then
+            if [[ -n "$clear" ]]; then eval "$clear" >/dev/null 2>&1 || true; fi
+            eval "$cmd" >/dev/null 2>&1 || true
+            if [[ -n "$cache_dir" && -d "$cache_dir" ]]; then cp -r "$cache_dir" "$snap" 2>/dev/null || true; fi
+            echo "// bench-s6-change" >> "$leaf"
+            git add -A >/dev/null
+            git -c commit.gpgsign=false commit -q -m "bench: S6 leaf change"
+        fi
         local prep=""
         if [[ -n "$cache_dir" && -d "$snap" ]]; then
             prep="rm -rf '${cache_dir}' && cp -r '${snap}' '${cache_dir}' && printf '// bench-s6-%s\n' \$(date +%N) >> '${leaf}' && git add -A && git -c commit.gpgsign=false commit -q -m bench-s6"
@@ -392,11 +441,13 @@ run_all_scenarios() {
             prep="printf '// bench-s6-%s\n' \$(date +%N) >> '${leaf}' && git add -A && git -c commit.gpgsign=false commit -q -m bench-s6"
         fi
         run_bench "$RESULTS_DIR/${prefix}-S6.json" 1 "$HF_RUNS" "$prep" "$cmd"
-        git reset --hard "$INITIAL_SHA" >/dev/null
-        if [[ -n "$cache_dir" && -d "$snap" ]]; then
-            rm -rf "$cache_dir" && cp -r "$snap" "$cache_dir" 2>/dev/null || true
+        if live; then
+            git reset --hard "$INITIAL_SHA" >/dev/null
+            if [[ -n "$cache_dir" && -d "$snap" ]]; then
+                rm -rf "$cache_dir" && cp -r "$snap" "$cache_dir" 2>/dev/null || true
+            fi
+            rm -rf "$snap" 2>/dev/null || true
         fi
-        rm -rf "$snap" 2>/dev/null || true
     fi
 
     # ── S7: upstream lib changed ──────────────────────────────────────────────
@@ -405,14 +456,16 @@ run_all_scenarios() {
         echo "S7 upstream lib changed..."
         local upstream; upstream=$(cat "$FIXTURE_DIR/.bench-upstream-file")
         local clear; clear=$(get_clear_cache "$tool" "$fixture")
-        if [[ -n "$clear" ]]; then eval "$clear" >/dev/null 2>&1 || true; fi
-        eval "$cmd" >/dev/null 2>&1 || true
         local cache_dir; cache_dir=$(tool_cache_dir "$tool")
         local snap="${cache_dir}-s7-snap"
-        if [[ -n "$cache_dir" && -d "$cache_dir" ]]; then cp -r "$cache_dir" "$snap" 2>/dev/null || true; fi
-        echo "// bench-s7-change" >> "$upstream"
-        git add -A >/dev/null
-        git -c commit.gpgsign=false commit -q -m "bench: S7 upstream change"
+        if live; then
+            if [[ -n "$clear" ]]; then eval "$clear" >/dev/null 2>&1 || true; fi
+            eval "$cmd" >/dev/null 2>&1 || true
+            if [[ -n "$cache_dir" && -d "$cache_dir" ]]; then cp -r "$cache_dir" "$snap" 2>/dev/null || true; fi
+            echo "// bench-s7-change" >> "$upstream"
+            git add -A >/dev/null
+            git -c commit.gpgsign=false commit -q -m "bench: S7 upstream change"
+        fi
         local prep=""
         if [[ -n "$cache_dir" && -d "$snap" ]]; then
             prep="rm -rf '${cache_dir}' && cp -r '${snap}' '${cache_dir}' && printf '// bench-s7-%s\n' \$(date +%N) >> '${upstream}' && git add -A && git -c commit.gpgsign=false commit -q -m bench-s7"
@@ -420,11 +473,13 @@ run_all_scenarios() {
             prep="printf '// bench-s7-%s\n' \$(date +%N) >> '${upstream}' && git add -A && git -c commit.gpgsign=false commit -q -m bench-s7"
         fi
         run_bench "$RESULTS_DIR/${prefix}-S7.json" 1 "$HF_RUNS" "$prep" "$cmd"
-        git reset --hard "$INITIAL_SHA" >/dev/null
-        if [[ -n "$cache_dir" && -d "$snap" ]]; then
-            rm -rf "$cache_dir" && cp -r "$snap" "$cache_dir" 2>/dev/null || true
+        if live; then
+            git reset --hard "$INITIAL_SHA" >/dev/null
+            if [[ -n "$cache_dir" && -d "$snap" ]]; then
+                rm -rf "$cache_dir" && cp -r "$snap" "$cache_dir" 2>/dev/null || true
+            fi
+            rm -rf "$snap" 2>/dev/null || true
         fi
-        rm -rf "$snap" 2>/dev/null || true
     fi
 }
 
@@ -529,11 +584,23 @@ done
 cd "$BENCH_DIR"
 
 # Aggregate results → BENCHMARKS.md
+#
+# The redirect goes to a temp file, never to BENCHMARKS.md: `> BENCHMARKS.md`
+# truncates before the aggregator runs, so any aggregator failure replaced the
+# published results with an empty file. A dry run does not aggregate at all,
+# because it measured nothing and the only thing it could write is emptiness.
 section "Aggregating results"
-if (cd "$BENCH_DIR/aggregate" && GOWORK=off go run . "$RESULTS_DIR") > BENCHMARKS.md; then
-    green "BENCHMARKS.md updated"
+if [[ "$DRY_RUN" == "1" ]]; then
+    yellow "dry run: BENCHMARKS.md left untouched"
 else
-    yellow "aggregator failed; raw JSON in $RESULTS_DIR"
+    AGG_TMP="$(mktemp "${TMPDIR:-/tmp}/benchmarks.XXXXXX.md")"
+    if (cd "$BENCH_DIR/aggregate" && GOWORK=off go run . "$RESULTS_DIR") > "$AGG_TMP"; then
+        mv "$AGG_TMP" "$BENCH_DIR/BENCHMARKS.md"
+        green "BENCHMARKS.md updated"
+    else
+        rm -f "$AGG_TMP"
+        yellow "aggregator failed; BENCHMARKS.md unchanged, raw JSON in $RESULTS_DIR"
+    fi
 fi
 
 green "Done. Results in $RESULTS_DIR"

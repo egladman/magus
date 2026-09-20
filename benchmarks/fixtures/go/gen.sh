@@ -93,8 +93,9 @@ done
 # ── bench marker files ────────────────────────────────────────────────────────
 # Leaf: first service (no downstream dependents)
 echo "svc-0/main.go" > "$SCRIPT_DIR/.bench-leaf-file"
-# Upstream: same as leaf for Go fixture (services are independent; no graph)
-# S7 is n/a for Go fixture; this file is written for bench.sh uniformity.
+# Upstream: same as leaf, because these services are independent and there is no
+# upstream to change. bench.sh marks S7 n/a for this fixture and never reads
+# this file; it is written so every fixture presents the same marker pair.
 echo "svc-0/main.go" > "$SCRIPT_DIR/.bench-upstream-file"
 
 echo "generated $N Go services → $GEN" >&2
