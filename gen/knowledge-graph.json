@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6446,
-  "edge_count": 11533,
+  "node_count": 6454,
+  "edge_count": 11544,
   "relations": [
     {
       "id": "annotates",
@@ -783,6 +783,14 @@
       "label": "MGS1036",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1036/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1037",
+      "kind": "diagnostic",
+      "label": "MGS1037",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1037/"
       }
     },
     {
@@ -1729,7 +1737,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1918",
+        "dir_files": "1925",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1999,7 +2007,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "544",
+        "dir_files": "551",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -2049,7 +2057,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "221",
+        "dir_files": "228",
         "dir_languages": "markdown,md#an-endpoint-carries-this-in-a-sharper-form,md#cause,md#codes,md#confirming-the-fix,md#detection,md#exact-paths-only,md#example,md#fix,md#fixing-it,md#keeping-the-name,md#magusfile-authoring-diagnostics,md#members-that-declare-into-a-workspace,m"
       }
     },
@@ -5853,6 +5861,18 @@
         "section": "reference",
         "tags": "MGS1036,magusfile,sources,cache,readsFiles,footprint,doctor",
         "title": "MGS1036: a narrowed footprint dropped the files its own ops read"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1037.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1037.md",
+      "source": "docs/reference/codes/magusfile/MGS1037.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1037,magusfile,cache,observations,versions,scanners,spells",
+        "title": "MGS1037: a tool's observation is keyed as its version"
       }
     },
     {
@@ -30758,6 +30778,66 @@
       "source": "docs/reference/codes/magusfile/MGS1036.md#why-this-matters",
       "attrs": {
         "anchor": "why-this-matters",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1037.md#mgs1037-a-tools-observation-is-keyed-as-its-version",
+      "kind": "docsection",
+      "label": "MGS1037: a tool's observation is keyed as its version",
+      "source": "docs/reference/codes/magusfile/MGS1037.md#mgs1037-a-tools-observation-is-keyed-as-its-version",
+      "attrs": {
+        "anchor": "mgs1037-a-tools-observation-is-keyed-as-its-version",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1037.md#resolve-it",
+      "kind": "docsection",
+      "label": "Resolve it",
+      "source": "docs/reference/codes/magusfile/MGS1037.md#resolve-it",
+      "attrs": {
+        "anchor": "resolve-it",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1037.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/codes/magusfile/MGS1037.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1037.md#the-two-probes-differ-in-reach-not-in-what-they-run",
+      "kind": "docsection",
+      "label": "The two probes differ in reach, not in what they run",
+      "source": "docs/reference/codes/magusfile/MGS1037.md#the-two-probes-differ-in-reach-not-in-what-they-run",
+      "attrs": {
+        "anchor": "the-two-probes-differ-in-reach-not-in-what-they-run",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1037.md#what-it-cost-when-it-happened",
+      "kind": "docsection",
+      "label": "What it cost when it happened",
+      "source": "docs/reference/codes/magusfile/MGS1037.md#what-it-cost-when-it-happened",
+      "attrs": {
+        "anchor": "what-it-cost-when-it-happened",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1037.md#why-it-is-declared-not-measured",
+      "kind": "docsection",
+      "label": "Why it is declared, not measured",
+      "source": "docs/reference/codes/magusfile/MGS1037.md#why-it-is-declared-not-measured",
+      "attrs": {
+        "anchor": "why-it-is-declared-not-measured",
         "level": "2"
       }
     },
@@ -64724,6 +64804,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1037.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -83129,6 +83217,46 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1037.md",
+      "target": "diagnostic:MGS1033",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1037.md",
+      "target": "diagnostic:MGS1037",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1037.md",
+      "target": "doc:docs/concepts/cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1037.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1033.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1037.md",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1037.md#mgs1037-a-tools-observation-is-keyed-as-its-version",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -115329,6 +115457,46 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1037.md#mgs1037-a-tools-observation-is-keyed-as-its-version",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1037.md#resolve-it",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1037.md#mgs1037-a-tools-observation-is-keyed-as-its-version",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1037.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1037.md#mgs1037-a-tools-observation-is-keyed-as-its-version",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1037.md#the-two-probes-differ-in-reach-not-in-what-they-run",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1037.md#mgs1037-a-tools-observation-is-keyed-as-its-version",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1037.md#what-it-cost-when-it-happened",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1037.md#mgs1037-a-tools-observation-is-keyed-as-its-version",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1037.md#why-it-is-declared-not-measured",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1037.md"
     },
     {
       "source": "docsection:docs/reference/codes/magusfile/README.md#magusfile-authoring-diagnostics",

@@ -379,6 +379,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkCacheableExternalOps,
 	},
 	{
+		Name:           "observation-keyed-as-version",
+		Doc:            "a tool whose observation probe is also its version probe, so the feed keys every target",
+		Code:           types.ObservationKeyedAsVersion,
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            (*runner).checkObservationKeyedAsVersion,
+	},
+	{
 		Name:           "redundant-footprint-globs",
 		Doc:            "a per-target output glob already declared project-wide",
 		Code:           types.RedundantFootprintGlob,

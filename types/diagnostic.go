@@ -207,6 +207,26 @@ const (
 	// spell probe the external data's identity (Tool.observe) so it keys like any other
 	// input. A mutates-external op has only the first: a side effect cannot be hashed.
 	CacheableExternalOp DiagnosticCode = "MGS1033"
+	// ObservationKeyedAsVersion is a spell declaring one command as BOTH a tool's version
+	// probe and its observation probe, with no VersionKey narrowing the version half.
+	//
+	// The two probes have deliberately different reach: an observation is scoped to the
+	// targets whose ops drive the binary, while a version probe keys EVERY target in
+	// every project that binds the spell. Declaring one command as both, and narrowing
+	// neither, routes the observation-class half of its output through the unscoped
+	// channel. Whatever moves on the feed's clock then invalidates targets that never
+	// run the tool.
+	//
+	// MEASURED once, which is why it is a code rather than a comment: the go spell
+	// declared `govulncheck -version` as both, and that output ends with the
+	// vulnerability database's publication date, so every database release invalidated
+	// every build, test and lint entry in every Go project.
+	//
+	// Two answers. Drop the version probe and keep the observation, which is right when
+	// the command cannot report the tool's own version separately from the feed's. Or
+	// declare a VersionKey that extracts the version alone, which keeps a genuine tool
+	// upgrade keying everything while the feed keys only its drivers.
+	ObservationKeyedAsVersion DiagnosticCode = "MGS1037"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -440,7 +460,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
-	FootprintDropsOpGlobs,
+	FootprintDropsOpGlobs, ObservationKeyedAsVersion,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
