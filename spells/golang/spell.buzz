@@ -62,7 +62,10 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // these ops need to function - 1.21 is where the toolchain line in go.mod became
 // something the module ops rely on - not which Go a repo has qualified. A ceiling here
 // would be this spell deciding that nobody may run a newer Go, which is a workspace's
-// call: `tools:` in magus.yaml is where that goes, and the two are intersected.
+// call: the `tools` key on magus\project is where that goes, and the two are intersected.
+// On the project and NOT in magus.yaml, deliberately, because config merges a user-global
+// tier beneath the workspace and a bound living there would gate every workspace on one
+// machine from a file nobody else reads. types/project.go states the rule.
 //
 // golangci-lint and govulncheck declare no window. Neither has a version below which
 // the ops are known to break, and inventing one to look thorough would fail builds over
@@ -189,7 +192,9 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
-// pinned by whatever the workspace uses, and mgs_getVersionProbes records which.
+// pinned by whatever the workspace uses, and the OBSERVE probe records which, alongside the
+// database date, for the targets that compose this op. There is no version probe: see the
+// tools table above for why one would key every target in the project.
 fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."], external = External.reads}; }
 // magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands
 // in the tree; scip-go writes there via --output. The runner resolves the bare

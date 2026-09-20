@@ -452,10 +452,11 @@ project's whole cache on a clock. The scoping comes from the same static op list
 `describe target` prints, so a target reaching the op through a helper the walk cannot
 follow gets no observation, and no protection.
 
-The other half of a probed observation is that the tool must be able to run OFFLINE.
-`trivy image` passes `--skip-db-update` by default and answers from the copy on disk,
-and the `update` charm drops the flag so the scan refreshes first. In magus's own
-workspace that is the whole difference between the two spellings:
+The other half of a probed observation is that the copy the probe OBSERVES has to be the
+copy the scan READS. A tool holding a local copy satisfies that by not refreshing it
+behind your back. `trivy image` passes `--skip-db-update` by default and answers from the
+copy on disk, and the `update` charm drops the flag so the scan refreshes first. In
+magus's own workspace that is the whole difference between the two spellings:
 
 ```sh
 magus run image-scan          # scan against the database on disk; cacheable, keyed on it
@@ -464,6 +465,13 @@ magus run image-scan:update   # refresh the database first, then scan
 
 Without that split there is nothing stable to observe: a scan that silently refreshed
 its own feed would change its verdict under an unchanged tree and an unchanged key.
+
+A tool that holds NO local copy satisfies the same invariant the other way. `govulncheck`
+reads <https://vuln.go.dev> on every run and caches nothing, so its probe and its scan read
+one feed: when the database moves, the key moves with it. There is no `update` arm because
+there is no pin to move forward, and `update` is the grant to replace a pin. The residual
+is a seconds-wide window where a publication lands between the probe and the scan, which
+costs a re-run rather than a stale pass, since the next probe carries the new date.
 
 `magus doctor` checks the pairing. A cacheable target composing an op that declares
 `external` and has neither a probe nor `skip_cache` is
