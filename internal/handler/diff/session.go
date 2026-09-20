@@ -554,7 +554,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		// wrong in its own way. The wire field is gone for the same reason.
 		sess = h.Sessions.AddComment(h.Root, types.DiffComment{
 			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body,
-			Anchor: h.Sessions.AnchorFor(h.Root, req.Path, req.Line),
+			Anchor: h.Sessions.Anchor(h.Root, req.Path, req.Line),
 		}, types.DiffAuthorHuman)
 		if h.Telemetry != nil {
 			h.Telemetry.RecordReviewRemark(r.Context(), string(types.DiffAuthorHuman))

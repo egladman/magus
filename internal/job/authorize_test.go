@@ -94,7 +94,7 @@ func TestBoundWorkerEndsItselfInFailureOrExit(t *testing.T) {
 }
 
 // The plan's shape is the orchestrator's. A worker that rewrites its own validation has
-// chosen the check it is graded by, which is the same escape as widening the lane.
+// chosen the check it is graded by, which is the same escape as widening the boundary.
 func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 	t.Parallel()
 
@@ -166,8 +166,8 @@ func TestBoundWorkerCannotClearTheLedger(t *testing.T) {
 	assert.Len(t, rows, 1)
 }
 
-// Spawning is not a way around the boundary: a child holds no lane its parent does not.
-func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
+// Spawning is not a way around the boundary: a child holds no path its parent does not.
+func TestChildCarriesEveryWritePathOfItsParent(t *testing.T) {
 	t.Parallel()
 
 	parent := types.Job{
@@ -185,7 +185,7 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "inside every lane",
+			name:  "inside every boundary",
 			child: types.Job{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md", "go.mod"}, ReadPaths: []string{"internal/hint"}},
 		},
 		{
@@ -193,7 +193,7 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 			child: types.Job{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}},
 		},
 		{
-			name:  "a wider read lane",
+			name:  "a wider read boundary",
 			child: types.Job{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}, ReadPaths: []string{"/"}},
 			want:  "may only read what its parent reads",
 		},

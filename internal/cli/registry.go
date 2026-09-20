@@ -123,8 +123,8 @@ step at a time.`,
 		{Name: "targets", Short: "List every target the workspace defines"},
 		{
 			Name:        "job",
-			Short:       "Print one job's terms: its criteria, lanes, check and dependencies",
-			Description: "Print what one job grants its holder: the criteria, the write and read lanes, the one check, its completion gates, the dependencies, the paths this workspace puts out of reach, and the graph's blast radius for each write path.",
+			Short:       "Print one job's terms: its criteria, paths, check and dependencies",
+			Description: "Print what one job grants its holder: the criteria, the write and read paths, the one check, its completion gates, the dependencies, the paths this workspace puts out of reach, and the graph's blast radius for each write path.",
 			Long: `Print one job's terms, which is what a holder reads on arrival.
 
 It carries no procedure. Taking a job is ` + "`magus job exec`" + `'s work to DO, and a
@@ -1774,7 +1774,7 @@ var jobCommand = Command{
 	Description: "The POSIX child lifecycle over delegated work: fork declares a job, exec takes the lease on it in this checkout, exit returns it with its result, wait verifies that result, and run submits one of the daemon's own jobs.",
 	Tags:        []string{"cli", "magus job", "job", "jobs", "lease", "agents", "delegation"},
 	Long: `Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
-is the grant one holder has on it: its write and read lanes, plus the one check
+is the grant one holder has on it: its write and read paths, plus the one check
 it runs. A job is not a run: ` + "`magus run`" + ` executes a target with no job involved,
 while a job's check and the daemon's maintenance each cause runs.
 
@@ -1783,7 +1783,7 @@ is a person's, and they reach the same store and the same rules. One author per
 JOB is the property that matters, and the store enforces it: a session holding a
 lease may record the base it landed on, shrink its own write paths, end its own
 job in fail or no_return, and fork a child of itself inside its own paths.
-Everything else, widening a lane and verifying a job included, is refused by name.
+Everything else, widening a boundary and verifying a job included, is refused by name.
 
 Jobs are kept per repository rather than per checkout, so a session forking in one
 worktree and a holder working in another see the same set.
@@ -1843,8 +1843,8 @@ them and magus describe job prints one job's terms.`,
 				"It refuses a job whose write paths cover a file the workspace has to LOAD (any project's magusfile.buzz, " +
 				"its magus.yaml, or a spell source a magusfile imports) while another live job with write paths is bound " +
 				"to this checkout, because a half-saved one of those stops the workspace loading for every job here at " +
-				"once: give that job its own worktree. Every other fork records what it could prove about its lane against " +
-				"the jobs already here, in lane_proof, which `magus ls jobs` prints.",
+				"once: give that job its own worktree. Every other fork records what it could prove about its write paths against " +
+				"the jobs already here, in write_proof, which `magus ls jobs` prints.",
 			Flags: []Flag{
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
@@ -1853,7 +1853,7 @@ them and magus describe job prints one job's terms.`,
 				{Name: "parent", Kind: FlagString, Doc: "The job this one is forked from"},
 				{Name: "checkpoint", Kind: FlagString, Doc: "The working state this job is handed, as `magus vcs checkpoint -o name` prints it"},
 				{Name: "write-paths", Kind: FlagCustom, Doc: "A path this job may write; repeatable or comma-separated"},
-				{Name: "deny-paths", Kind: FlagCustom, Doc: "A path inside the lane this job may not write; repeatable or comma-separated"},
+				{Name: "deny-paths", Kind: FlagCustom, Doc: "A path inside the write paths this job may not write; repeatable or comma-separated"},
 				{Name: "read-paths", Kind: FlagCustom, Doc: "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)"},
 				{Name: "depends-on", Kind: FlagCustom, Doc: "A job this one waits on; repeatable or comma-separated"},
 				{Name: "check", Kind: FlagString, Doc: "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)"},
@@ -1898,7 +1898,7 @@ them and magus describe job prints one job's terms.`,
 		{
 			Name:        "watch",
 			Short:       "Follow what a job's holder is doing, until interrupted",
-			Description: "Print one line per event as it happens: files changed under the job's declared write lane, tool calls the guard observed under its lease, and the runs magus recorded against it, merged in time order.",
+			Description: "Print one line per event as it happens: files changed under the job's declared write paths, tool calls the guard observed under its lease, and the runs magus recorded against it, merged in time order.",
 			Long: `Follow one job's holder without asking it anything.
 
 The three sources are the filesystem, the guard's activity trail, and the job's
@@ -1907,9 +1907,9 @@ which is the point: messaging a worker to ask how it is going costs it the turn
 it was in the middle of, and the answer you get is the worker's account of
 itself rather than what happened.
 
-A changed file is attributed to the job whose declared write lane covers it. The
-lanes are disjoint, so the attribution is exact and needs nothing from the
-worker; where two live lanes somehow cover one path the line says so and
+A changed file is attributed to the job whose declared write paths cover it. The
+write paths are disjoint, so the attribution is exact and needs nothing from the
+worker; where two live jobs somehow cover one path the line says so and
 attributes it to neither, because there is nothing in a path to break the tie.
 
 It reads this checkout and needs no daemon. The same feed is served over the

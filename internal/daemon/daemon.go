@@ -441,7 +441,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// with the same cross-origin guards as metrics (the dashboard is a hosted-site
 			// browser client) and unconditionally: the trail is readable even when metrics are off.
 			// The two extra sources WatchActivityEvents merges with the trail: the job plan
-			// (so a file change can be attributed to the lane that covers it, and a job's
+			// (so a file change can be attributed to the write path that covers it, and a job's
 			// recorded runs reach the feed) and the watcher fan-out above. Both degrade to
 			// nothing rather than failing the mount: without them the stream still serves
 			// the guard's observations, which is what this service served before.

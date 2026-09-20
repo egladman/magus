@@ -10,7 +10,7 @@ import (
 )
 
 // validChunkBytes compiles a tiny program and marshals it, yielding a known-good
-// .bo blob to seed the fuzz corpus with (and to exercise the round-trip path).
+// .bo blob to seed the fuzz inputs with (and to exercise the round-trip path).
 func validChunkBytes(t *testing.T) []byte {
 	t.Helper()
 	prog, err := buzz.ParseEmbedded(`var x: int = 42;`)

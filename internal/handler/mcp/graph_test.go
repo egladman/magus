@@ -71,12 +71,12 @@ func (f fakeGraphResolver) SymbolGaps(context.Context) ([]types.KnowledgeSymbolG
 // which is what the paging tests are about. The verdict tests supply their own.
 func noGaps() ([]types.KnowledgeSymbolGap, bool) { return nil, true }
 
-// verdictFor builds the classifier pagedQuery takes, exactly as queryTool.Invoke does. It
+// classifier builds the classifier pagedQuery takes, exactly as queryTool.Invoke does. It
 // routes through knowledge.Answer rather than restating the rules, or the test would pin a
 // second implementation instead of the shipped one.
-func verdictFor(input string, seedsLazyLayer bool, probe gapProbe) answerFn {
+func classifier(input string, seedsLazyLayer bool, probe gapProbe) answerFn {
 	return func(matched bool) types.KnowledgeAnswer {
-		return knowledge.Answer(input, matched, coverageFor(input, seedsLazyLayer, probe))
+		return knowledge.Answer(input, matched, coverage(input, seedsLazyLayer, probe))
 	}
 }
 
@@ -162,7 +162,7 @@ func TestQueryHashDiffersByQuery(t *testing.T) {
 // TestPagedQueryUnpaged: no limit and no cursor returns the plain result with no
 // cursor attached (backward compatible).
 func TestPagedQueryUnpaged(t *testing.T) {
-	resp, err := pagedQuery(pagedGraph(5), "kind:target", 50, 0, "", verdictFor("kind:target", false, noGaps))
+	resp, err := pagedQuery(pagedGraph(5), "kind:target", 50, 0, "", classifier("kind:target", false, noGaps))
 	require.NoError(t, err)
 	assert.Equal(t, 5, resp.MatchCount)
 	assert.Empty(t, resp.NextCursor, "an unpaged query has no next cursor")
@@ -176,7 +176,7 @@ func TestPagedQueryWalksAllPages(t *testing.T) {
 	cursor := ""
 	pages := 0
 	for {
-		resp, err := pagedQuery(g, "kind:target", 50, 2, cursor, verdictFor("kind:target", false, noGaps))
+		resp, err := pagedQuery(g, "kind:target", 50, 2, cursor, classifier("kind:target", false, noGaps))
 		require.NoError(t, err)
 		assert.Equal(t, 5, resp.MatchCount)
 		seen += len(resp.Matches)
@@ -193,17 +193,17 @@ func TestPagedQueryWalksAllPages(t *testing.T) {
 
 func TestPagedQueryRejectsStaleCursor(t *testing.T) {
 	g := pagedGraph(5)
-	first, err := pagedQuery(g, "kind:target", 50, 2, "", verdictFor("kind:target", false, noGaps))
+	first, err := pagedQuery(g, "kind:target", 50, 2, "", classifier("kind:target", false, noGaps))
 	require.NoError(t, err)
 	require.NotEmpty(t, first.NextCursor)
 
 	// A cursor from a different query is rejected.
-	_, err = pagedQuery(g, "kind:spell", 50, 2, first.NextCursor, verdictFor("kind:spell", false, noGaps))
+	_, err = pagedQuery(g, "kind:spell", 50, 2, first.NextCursor, classifier("kind:spell", false, noGaps))
 	assert.ErrorContains(t, err, "does not match this query")
 
 	// A cursor issued against a since-changed graph is rejected.
 	g.AddNode(types.KnowledgeNode{ID: "target:pkg/a:zzz", Kind: types.KindTarget, Label: "zzz"})
-	_, err = pagedQuery(g, "kind:target", 50, 2, first.NextCursor, verdictFor("kind:target", false, noGaps))
+	_, err = pagedQuery(g, "kind:target", 50, 2, first.NextCursor, classifier("kind:target", false, noGaps))
 	assert.ErrorContains(t, err, "graph changed")
 }
 
@@ -321,14 +321,14 @@ func TestPagedRefsVerdictSurvivesPaging(t *testing.T) {
 // Zero matches on a query that never seeded symbols says nothing about whether a code
 // symbol by that name exists, and the output has to say so.
 func TestPagedQueryVerdictOnZeroMatches(t *testing.T) {
-	resp, err := pagedQuery(pagedGraph(3), "nothingmatchesthis", 50, 0, "", verdictFor("nothingmatchesthis", false, noGaps))
+	resp, err := pagedQuery(pagedGraph(3), "nothingmatchesthis", 50, 0, "", classifier("nothingmatchesthis", false, noGaps))
 	require.NoError(t, err)
 	require.Zero(t, resp.MatchCount)
 	assert.Equal(t, types.VerdictUnknown, resp.Answer.Verdict)
 	assert.Equal(t, types.ReasonSymbolsNotLoaded, resp.Answer.Reason)
 
 	// The same query with symbols loaded and full coverage is a verified absence.
-	resp, err = pagedQuery(pagedGraph(3), "nothingmatchesthis", 50, 0, "", verdictFor("nothingmatchesthis", true, noGaps))
+	resp, err = pagedQuery(pagedGraph(3), "nothingmatchesthis", 50, 0, "", classifier("nothingmatchesthis", true, noGaps))
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictAbsent, resp.Answer.Verdict)
 }
@@ -339,7 +339,7 @@ func TestPagedQueryVerdictOnZeroMatches(t *testing.T) {
 // relevant. Both now hand their observations to knowledge.Answer, so there is one rule.
 func TestPagedQueryAgreesWithTheCLIOnAnIrrelevantLayer(t *testing.T) {
 	const q = "kind:target nothingmatchesthis"
-	resp, err := pagedQuery(pagedGraph(3), q, 50, 0, "", verdictFor(q, false, noGaps))
+	resp, err := pagedQuery(pagedGraph(3), q, 50, 0, "", classifier(q, false, noGaps))
 	require.NoError(t, err)
 	require.Zero(t, resp.MatchCount)
 	assert.Equal(t, knowledge.Answer(q, false, knowledge.Coverage{}), resp.Answer)
@@ -351,7 +351,7 @@ func TestPagedQueryAgreesWithTheCLIOnAnIrrelevantLayer(t *testing.T) {
 // filed about: the tool must not assert an absence it never looked for.
 func TestPagedQueryLazyLayerKindWithoutSymbolsIsUnknown(t *testing.T) {
 	const q = "kind:file nothingmatchesthis"
-	resp, err := pagedQuery(pagedGraph(3), q, 50, 0, "", verdictFor(q, false, noGaps))
+	resp, err := pagedQuery(pagedGraph(3), q, 50, 0, "", classifier(q, false, noGaps))
 	require.NoError(t, err)
 	assert.Equal(t, types.VerdictUnknown, resp.Answer.Verdict)
 	assert.Equal(t, types.ReasonSymbolsNotLoaded, resp.Answer.Reason)
@@ -395,7 +395,7 @@ func TestPathNormalizationIsSharedWithCLI(t *testing.T) {
 		"kind:file " + filepath.Join(root, "console", "magusfile.buzz"),
 		`kind:file console\magusfile.buzz`,
 	} {
-		resp, err := pagedQuery(g, q, 50, 0, "", verdictFor(q, true, noGaps))
+		resp, err := pagedQuery(g, q, 50, 0, "", classifier(q, true, noGaps))
 		require.NoError(t, err)
 		require.Lenf(t, resp.Matches, 1, "%q should resolve", q)
 		assert.Equal(t, want, resp.Matches[0].ID)

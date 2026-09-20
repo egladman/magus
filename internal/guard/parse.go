@@ -226,10 +226,10 @@ func shellPayload(words []string) (string, bool) {
 	return "", false
 }
 
-// Which files a shell line would WRITE. Two rules ask it, the cache dir's and the lease
-// lane's, and a second extraction would drift from the first the moment either learned a
-// spelling, so the walk lives here with the rest of the tokenizing and each rule brings
-// only its own boundary.
+// Which files a shell line would WRITE. Two rules ask it, the cache dir's and the lease's
+// write paths, and a second extraction would drift from the first the moment either
+// learned a spelling, so the walk lives here with the rest of the tokenizing and each rule
+// brings only its own boundary.
 
 // writeReaders are the commands that only READ what they are pointed at. Everything else
 // is treated as a writer.

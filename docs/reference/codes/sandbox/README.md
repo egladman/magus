@@ -117,5 +117,9 @@ Two layers run together:
 - [MGS3012](MGS3012.md): invocation stalled with its project locks held.
 - [MGS3013](MGS3013.md): every build slot held by a step that is itself waiting.
 - [MGS3014](MGS3014.md): gate superseded by a later gate on the same tree.
-- [MGS3015](MGS3015.md): every holder of the run's isolation gate is itself
-  waiting.
+
+MGS3015 was retired in 2026-09. It refused a run when every holder of the
+isolation gate looked stalled, and it read that from a record the gate did not
+own, so it could not fire for a simple step and did fire for healthy composite
+ones. The shape it was built for is prevented rather than detected; a hang that
+escapes that prevention is caught by MGS3012. The number is not reused.

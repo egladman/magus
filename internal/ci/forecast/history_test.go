@@ -922,3 +922,40 @@ func TestRunLog(t *testing.T) {
 		t.Fatalf("re-merge duplicated: %d runs; want 2", n)
 	}
 }
+
+// TestFoldTargetHistoriesCombinesEverySpellServingATarget pins the fold both remaining
+// bare-key readers depend on. A project bound to several spells has one history per
+// spell, and a caller naming the bare target must see all of them: `magus affected
+// --bisect` asks by the name a person types, and the knowledge graph keys its timing
+// attributes by the same name the graph's own target nodes carry.
+func TestFoldTargetHistoriesCombinesEverySpellServingATarget(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	h := History{Projects: map[string]map[string]Stats{
+		"p": {
+			"magusfile/ci": {P75Ms: 200, Samples: 10, PassCount: 4,
+				RecentOutcomes: []Outcome{{Result: OutcomePass, At: now.Add(-time.Minute)}}},
+			"go/ci": {P75Ms: 50, Samples: 3, FailCount: 1,
+				RecentOutcomes: []Outcome{{Result: OutcomeFail, At: now}}},
+		},
+	}}
+
+	got, ok := h.FoldTargetHistories("p", "ci")
+	require.True(t, ok)
+	assert.Equal(t, int64(250), got.P75Ms, "a project runs each spell's implementation, so durations add")
+	assert.Equal(t, 13, got.Samples)
+	assert.Equal(t, 4, got.PassCount)
+	assert.Equal(t, 1, got.FailCount, "a failure in any spell failed the target")
+	require.Len(t, got.RecentOutcomes, 2)
+	assert.Equal(t, OutcomeFail, got.RecentOutcomes[1].Result, "outcomes interleave by time, newest last")
+
+	// An exact key still answers alone, so the callers that record and read
+	// "<spell>/<target>" are unchanged by the fold.
+	exact, ok := h.FoldTargetHistories("p", "go/ci")
+	require.True(t, ok)
+	assert.Equal(t, int64(50), exact.P75Ms)
+
+	_, ok = h.FoldTargetHistories("p", "nope")
+	assert.False(t, ok)
+}

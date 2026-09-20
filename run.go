@@ -1544,10 +1544,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		svcSession.ReleaseAll(shutdownCtx)
 	}()
 	ctx = service.WithSession(ctx, svcSession)
-	// The pre-run composed gates and RunAll's batch steps share one isolation
-	// scope. A dynamically admitted needs child temporarily yields its parent's
-	// lease, so its own exclusive policy is enforced without holding the parent
-	// slot or lock across the child scheduler.
+	// The pre-run composed gates and RunAll's batch steps share one isolation scope. A
+	// dynamically admitted needs child INHERITS its parent's lease rather than taking its
+	// own, which is the ONLY thing keeping it off a gate its own ancestor holds. Nothing
+	// detects that shape any more, so breaking the inheritance rule brings back a wedged
+	// run with nothing left to name it.
 	ctx = cache.WithRunScope(ctx)
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err

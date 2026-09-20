@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6416,
-  "edge_count": 11483,
+  "node_count": 6427,
+  "edge_count": 11495,
   "relations": [
     {
       "id": "annotates",
@@ -1002,14 +1002,6 @@
       }
     },
     {
-      "id": "diagnostic:MGS3015",
-      "kind": "diagnostic",
-      "label": "MGS3015",
-      "attrs": {
-        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3015/"
-      }
-    },
-    {
       "id": "diagnostic:MGS4001",
       "kind": "diagnostic",
       "label": "MGS4001",
@@ -1652,6 +1644,16 @@
       }
     },
     {
+      "id": "dir:docs/decisions",
+      "kind": "dir",
+      "label": "docs/decisions",
+      "source": "docs/decisions",
+      "attrs": {
+        "dir_files": "16",
+        "dir_languages": "markdown,md#adr-0001-bounded-concurrency-with-recursive-invocation,md#alternatives-considered,md#consequences,md#context,md#corrections-to-this-documents-first-draft,md#decision,md#rejected-earlier-recorded-so-they-are-not-re-proposed,md#the-contradiction-"
+      }
+    },
+    {
       "id": "dir:docs/engine",
       "kind": "dir",
       "label": "docs/engine",
@@ -1727,7 +1729,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1925",
+        "dir_files": "1918",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1997,7 +1999,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "551",
+        "dir_files": "544",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -2077,7 +2079,7 @@
       "label": "docs/reference/codes/sandbox",
       "source": "docs/reference/codes/sandbox",
       "attrs": {
-        "dir_files": "144",
+        "dir_files": "137",
         "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#configuring-the-prose-class,md#configuring-the-window,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#exit-status,md#extending-the-allowlist,md#fix,md#how-the-handov"
       }
     },
@@ -3310,7 +3312,9 @@
       "label": "CHANGELOG.md",
       "source": "CHANGELOG.md",
       "attrs": {
-        "role": "changelog"
+        "diagnostic": "MGS7002",
+        "role": "changelog",
+        "unknown_codes": "MGS3015"
       }
     },
     {
@@ -3679,9 +3683,11 @@
       "label": "docs/changelog.md",
       "source": "docs/changelog.md",
       "attrs": {
+        "diagnostic": "MGS7002",
         "role": "changelog",
         "tags": "changelog,releases,versions,upgrade,breaking-changes",
-        "title": "Changelog"
+        "title": "Changelog",
+        "unknown_codes": "MGS3015"
       }
     },
     {
@@ -4185,6 +4191,20 @@
         "role": "doc",
         "tags": "conventions,documentation,placeholders,examples,style,reference",
         "title": "Conventions"
+      }
+    },
+    {
+      "id": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "kind": "doc",
+      "label": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "attrs": {
+        "diagnostic": "MGS7002",
+        "role": "doc",
+        "section": "decisions",
+        "tags": "adr,decision,concurrency,deadlock,scheduler,recursion,slots,isolation",
+        "title": "ADR 0001: bounded concurrency with recursive invocation",
+        "unknown_codes": "MGS3015"
       }
     },
     {
@@ -6320,27 +6340,17 @@
       }
     },
     {
-      "id": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "kind": "doc",
-      "label": "docs/reference/codes/sandbox/MGS3015.md",
-      "source": "docs/reference/codes/sandbox/MGS3015.md",
-      "attrs": {
-        "role": "doc",
-        "section": "reference",
-        "tags": "MGS3015,deadlock,concurrency,isolation,exclusive,ctx.needs,hang,stall",
-        "title": "MGS3015: run isolation wedged"
-      }
-    },
-    {
       "id": "doc:docs/reference/codes/sandbox/README.md",
       "kind": "doc",
       "label": "docs/reference/codes/sandbox/README.md",
       "source": "docs/reference/codes/sandbox/README.md",
       "attrs": {
+        "diagnostic": "MGS7002",
         "role": "readme",
         "section": "reference",
         "tags": "sandbox,diagnostics,error codes,MGS2xxx,security,permissions,landlock,supply chain",
-        "title": "sandbox diagnostics"
+        "title": "sandbox diagnostics",
+        "unknown_codes": "MGS3015"
       }
     },
     {
@@ -17796,6 +17806,156 @@
       }
     },
     {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "kind": "docsection",
+      "label": "ADR 0001: bounded concurrency with recursive invocation",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "attrs": {
+        "anchor": "adr-0001-bounded-concurrency-with-recursive-invocation",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#alternatives-considered",
+      "kind": "docsection",
+      "label": "Alternatives considered",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#alternatives-considered",
+      "attrs": {
+        "anchor": "alternatives-considered",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#consequences",
+      "kind": "docsection",
+      "label": "Consequences",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#consequences",
+      "attrs": {
+        "anchor": "consequences",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#context",
+      "kind": "docsection",
+      "label": "Context",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#context",
+      "attrs": {
+        "anchor": "context",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#corrections-to-this-documents-first-draft",
+      "kind": "docsection",
+      "label": "Corrections to this document's first draft",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#corrections-to-this-documents-first-draft",
+      "attrs": {
+        "anchor": "corrections-to-this-documents-first-draft",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#decision",
+      "kind": "docsection",
+      "label": "Decision",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#decision",
+      "attrs": {
+        "anchor": "decision",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#rejected-earlier-recorded-so-they-are-not-re-proposed",
+      "kind": "docsection",
+      "label": "Rejected earlier, recorded so they are not re-proposed",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#rejected-earlier-recorded-so-they-are-not-re-proposed",
+      "attrs": {
+        "anchor": "rejected-earlier-recorded-so-they-are-not-re-proposed",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-contradiction-already-in-the-codebase",
+      "kind": "docsection",
+      "label": "The contradiction already in the codebase",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-contradiction-already-in-the-codebase",
+      "attrs": {
+        "anchor": "the-contradiction-already-in-the-codebase",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-forces-recovered-from-the-history",
+      "kind": "docsection",
+      "label": "The forces, recovered from the history",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-forces-recovered-from-the-history",
+      "attrs": {
+        "anchor": "the-forces-recovered-from-the-history",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-requirement-that-shapes-everything",
+      "kind": "docsection",
+      "label": "The requirement that shapes everything",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-requirement-that-shapes-everything",
+      "attrs": {
+        "anchor": "the-requirement-that-shapes-everything",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-magus-does-today",
+      "kind": "docsection",
+      "label": "What magus does today",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-magus-does-today",
+      "attrs": {
+        "anchor": "what-magus-does-today",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-other-systems-do",
+      "kind": "docsection",
+      "label": "What other systems do",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-other-systems-do",
+      "attrs": {
+        "anchor": "what-other-systems-do",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys",
+      "kind": "docsection",
+      "label": "What this buys",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys",
+      "attrs": {
+        "anchor": "what-this-buys",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#when-to-revisit",
+      "kind": "docsection",
+      "label": "When to revisit",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#when-to-revisit",
+      "attrs": {
+        "anchor": "when-to-revisit",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#why-this-document-exists",
+      "kind": "docsection",
+      "label": "Why this document exists",
+      "source": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#why-this-document-exists",
+      "attrs": {
+        "anchor": "why-this-document-exists",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/doctrine.md#a-cache-is-an-accelerator-never-a-dependency",
       "kind": "docsection",
       "label": "A cache is an accelerator, never a dependency",
@@ -19816,12 +19976,12 @@
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/guard.md#focus-the-read-lane",
+      "id": "docsection:docs/guides/integrations/agents/guard.md#focus-the-read-boundary",
       "kind": "docsection",
-      "label": "Focus: the read lane",
-      "source": "docs/guides/integrations/agents/guard.md#focus-the-read-lane",
+      "label": "Focus: the read boundary",
+      "source": "docs/guides/integrations/agents/guard.md#focus-the-read-boundary",
       "attrs": {
-        "anchor": "focus-the-read-lane",
+        "anchor": "focus-the-read-boundary",
         "level": "2"
       }
     },
@@ -32402,66 +32562,6 @@
       "source": "docs/reference/codes/sandbox/MGS3014.md#why-the-later-run-wins",
       "attrs": {
         "anchor": "why-the-later-run-wins",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:docs/reference/codes/sandbox/MGS3015.md#mgs3015-run-isolation-wedged",
-      "kind": "docsection",
-      "label": "MGS3015: run isolation wedged",
-      "source": "docs/reference/codes/sandbox/MGS3015.md#mgs3015-run-isolation-wedged",
-      "attrs": {
-        "anchor": "mgs3015-run-isolation-wedged",
-        "level": "1"
-      }
-    },
-    {
-      "id": "docsection:docs/reference/codes/sandbox/MGS3015.md#resolve-it",
-      "kind": "docsection",
-      "label": "Resolve it",
-      "source": "docs/reference/codes/sandbox/MGS3015.md#resolve-it",
-      "attrs": {
-        "anchor": "resolve-it",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:docs/reference/codes/sandbox/MGS3015.md#see-also",
-      "kind": "docsection",
-      "label": "See also",
-      "source": "docs/reference/codes/sandbox/MGS3015.md#see-also",
-      "attrs": {
-        "anchor": "see-also",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:docs/reference/codes/sandbox/MGS3015.md#the-rule-this-protects",
-      "kind": "docsection",
-      "label": "The rule this protects",
-      "source": "docs/reference/codes/sandbox/MGS3015.md#the-rule-this-protects",
-      "attrs": {
-        "anchor": "the-rule-this-protects",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:docs/reference/codes/sandbox/MGS3015.md#what-it-does-not-fire-on",
-      "kind": "docsection",
-      "label": "What it does not fire on",
-      "source": "docs/reference/codes/sandbox/MGS3015.md#what-it-does-not-fire-on",
-      "attrs": {
-        "anchor": "what-it-does-not-fire-on",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:docs/reference/codes/sandbox/MGS3015.md#what-it-usually-means",
-      "kind": "docsection",
-      "label": "What it usually means",
-      "source": "docs/reference/codes/sandbox/MGS3015.md#what-it-usually-means",
-      "attrs": {
-        "anchor": "what-it-usually-means",
         "level": "2"
       }
     },
@@ -50426,7 +50526,7 @@
       "kind": "function",
       "label": "advice_test",
       "doc": "Runs the PR advisors' `test \"...\" {}` blocks.  They are the only .buzz sources in this tree that parse standalone: everything else imports magus/magus\\spell and uses embedding-only constructs, which is why the old standalone-Buzz test targets were deleted rather than repointed. The advisors run under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need checked, and `-t` is the runner.  Run from each script's own directory, not the project root, because they do `import \"advice\"` for",
-      "source": "magusfile.buzz:2521",
+      "source": "magusfile.buzz:2528",
       "attrs": {
         "exported": "true"
       }
@@ -50436,7 +50536,7 @@
       "kind": "function",
       "label": "agent_bench_report",
       "doc": "Turns a results tree into the benchmark report: build benchreport, then extract one metrics record per run, analyze the paired deltas, render report.md. `-- --results <dir>` names a tree under benchmarks/agent other than results/; `-- --synthetic` generates the pipeline's own control, a synthetic tree, and reports on that instead. Reads run artifacts that change under it, so it never replays from cache. The analysis tests are ordinary Go tests in the root module, so `test` covers them and there is no separa",
-      "source": "magusfile.buzz:3064",
+      "source": "magusfile.buzz:3140",
       "attrs": {
         "exported": "true"
       }
@@ -50446,7 +50546,7 @@
       "kind": "function",
       "label": "agent_bench_run",
       "doc": "Runs a benchmark manifest with a login the launching shell never held. The long-lived token `claude setup-token` mints is read through the workspace's secret provider under the reference below, handed to run.sh as the one environment variable the runner's scrub keeps, and redacted from everything magus captures. It never touches argv, which the run log records, and it never has to be exported by the person, or the agent, typing this command: `MAGUS_SECRET_PROVIDER=system-keychain magus run agent-bench-run .",
-      "source": "magusfile.buzz:3183",
+      "source": "magusfile.buzz:3259",
       "attrs": {
         "exported": "true"
       }
@@ -50456,7 +50556,7 @@
       "kind": "function",
       "label": "bindings_generate",
       "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
-      "source": "magusfile.buzz:1102",
+      "source": "magusfile.buzz:1109",
       "attrs": {
         "exported": "true"
       }
@@ -50466,7 +50566,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:2854",
+      "source": "magusfile.buzz:2930",
       "attrs": {
         "exported": "true"
       }
@@ -50482,7 +50582,7 @@
       "id": "function:magusfile.buzz:build_release_variant",
       "kind": "function",
       "label": "build_release_variant",
-      "source": "magusfile.buzz:1672"
+      "source": "magusfile.buzz:1679"
     },
     {
       "id": "function:magusfile.buzz:built_by",
@@ -50496,7 +50596,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine, and holds their merged line coverage above a floor. Each -t invocation emits an LCOV fragment for the entry file only; imports are measured when THEY are the -t subject. The fragments and the merged figure are throwaways under coverage/buzz/ (gitignored); coverage-render publishes the badge.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on P",
-      "source": "magusfile.buzz:2729",
+      "source": "magusfile.buzz:2805",
       "attrs": {
         "exported": "true"
       }
@@ -50506,7 +50606,7 @@
       "kind": "function",
       "label": "changelog_generate",
       "doc": "CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a reverse docs -> root output edge while letting docs publication depend on the same execution stage.",
-      "source": "magusfile.buzz:1062",
+      "source": "magusfile.buzz:1069",
       "attrs": {
         "exported": "true"
       }
@@ -50523,7 +50623,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:3010",
+      "source": "magusfile.buzz:3086",
       "attrs": {
         "exported": "true"
       }
@@ -50533,7 +50633,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.  Transport only: the plan names its own outputs and renders its own summary, so porting this to another provider is a rewrite of the two file formats and nothing else.",
-      "source": "magusfile.buzz:3235",
+      "source": "magusfile.buzz:3311",
       "attrs": {
         "exported": "true"
       }
@@ -50550,7 +50650,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:3031",
+      "source": "magusfile.buzz:3107",
       "attrs": {
         "exported": "true"
       }
@@ -50560,7 +50660,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:3213",
+      "source": "magusfile.buzz:3289",
       "attrs": {
         "exported": "true"
       }
@@ -50570,7 +50670,7 @@
       "kind": "function",
       "label": "config_generate",
       "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go. One generator invocation, four trees: the flag/bind plumbing beside the CLI, the schema field list, and the env applier next to config itself. All four are declared - undeclared they classified as ordinary source, so magus told a reader they were safe to hand-edit.",
-      "source": "magusfile.buzz:1297",
+      "source": "magusfile.buzz:1304",
       "attrs": {
         "exported": "true"
       }
@@ -50580,21 +50680,21 @@
       "kind": "function",
       "label": "coverage_blocks_ran",
       "doc": "coverage_blocks_ran unions one platform's module profiles into \"block -> did it run\". A block absent from every profile was never compiled there, which is not the same answer as compiled-and-never-entered.",
-      "source": "magusfile.buzz:2632"
+      "source": "magusfile.buzz:2708"
     },
     {
       "id": "function:magusfile.buzz:coverage_percent",
       "kind": "function",
       "label": "coverage_percent",
       "doc": "coverage_percent is THIS machine's figure over THIS module, and the 70% floor in `test` gates on it. Per-platform by design: the floor guards against a regression in the suite that just ran, so it has to answer for the tree that suite compiled. The published badge is the whole-tree figure and belongs to coverage_render.",
-      "source": "magusfile.buzz:2625"
+      "source": "magusfile.buzz:2701"
     },
     {
       "id": "function:magusfile.buzz:coverage_render",
       "kind": "function",
       "label": "coverage_render",
       "doc": "Renders the three language coverage badges into the assembled site, gen/site/assets/. The CD site job runs it after deploy-generate on every push to main, so the figures are measured once, on one pinned toolchain, and published rather than committed. A committed badge measured on one machine cannot be gated consistently: Go coverage legitimately differs by platform, and Node's line coverage moves with its patch version.  NOT named *-generate, deliberately: `generate` composes ctx.glob(\"*-generate\"), so that",
-      "source": "magusfile.buzz:2654",
+      "source": "magusfile.buzz:2730",
       "attrs": {
         "exported": "true"
       }
@@ -50611,7 +50711,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:3362",
+      "source": "magusfile.buzz:3438",
       "attrs": {
         "exported": "true"
       }
@@ -50621,7 +50721,7 @@
       "kind": "function",
       "label": "escape_module_path",
       "doc": "Applies the module cache's case encoding: an uppercase letter becomes \"!\" plus its lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig. Without this every capitalized module path looks unlicensed - a false \"missing license\" that would abort a release for no reason.",
-      "source": "magusfile.buzz:1660"
+      "source": "magusfile.buzz:1667"
     },
     {
       "id": "function:magusfile.buzz:exact_release_tag",
@@ -50641,14 +50741,14 @@
       "id": "function:magusfile.buzz:failed",
       "kind": "function",
       "label": "failed",
-      "source": "magusfile.buzz:2026"
+      "source": "magusfile.buzz:2033"
     },
     {
       "id": "function:magusfile.buzz:format",
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than prettier because it needs no Node in the format path, and rather than biome because biome does not read Markdown at all. Every project with Markdown carries its own dprint.json and runs the op itself; see this project's for what a root-started run covers.",
-      "source": "magusfile.buzz:2986",
+      "source": "magusfile.buzz:3062",
       "attrs": {
         "exported": "true"
       }
@@ -50658,7 +50758,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = a path whose bytes the generators changed, measured by hashing before and after rather than by asking whether the tree is clean, so the gate works on a dirty tree. An uncommitted-but-current generated file still passes: its bytes do not move.  This is NOT the engine's drift gate repeated. The engine hashes each target's DECLARED outputs, which is the right scope for attributing staleness to a change. This one is wh",
-      "source": "magusfile.buzz:1400",
+      "source": "magusfile.buzz:1407",
       "attrs": {
         "exported": "true"
       }
@@ -50678,14 +50778,14 @@
       "kind": "function",
       "label": "goarm_level",
       "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix. Maps an ASSET architecture token to the GOARM level it implies, or \"\" for the arches that",
-      "source": "magusfile.buzz:1580"
+      "source": "magusfile.buzz:1587"
     },
     {
       "id": "function:magusfile.buzz:graph_generate",
       "kind": "function",
       "label": "graph_generate",
       "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. Written into gen/ because they are generated, not authored: the knowledge graph previously sat at docs/graph.json as a hand-run export with no generating target at all, which made it stale by construction with nothing to say so. Whole-workspace scope is why this lives at the root rather than in docs/ - a describe from inside a pro",
-      "source": "magusfile.buzz:1324",
+      "source": "magusfile.buzz:1331",
       "attrs": {
         "exported": "true"
       }
@@ -50748,7 +50848,7 @@
       "kind": "function",
       "label": "index_generate",
       "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:1311",
+      "source": "magusfile.buzz:1318",
       "attrs": {
         "exported": "true"
       }
@@ -50758,7 +50858,7 @@
       "kind": "function",
       "label": "job_generate",
       "doc": "Regenerates the published job schemas (internal/job/gen/*.schema.json) from the structs that decode a job declaration and a holder's result.  The schemas were hand-written beside those structs, so every field was declared twice and a test could only report that the two copies had already diverged.",
-      "source": "magusfile.buzz:1163",
+      "source": "magusfile.buzz:1170",
       "attrs": {
         "exported": "true"
       }
@@ -50768,7 +50868,7 @@
       "kind": "function",
       "label": "langservice_generate",
       "doc": "Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads.  It has a target at all because it did not: the file carried a \"regenerate with `go run`\" header and nothing else, so a std descriptor edit left it stale with only its own drift test to say so, one commit later. A generated file whose only regeneration route is a hand-typed command is a file that rots.",
-      "source": "magusfile.buzz:1142",
+      "source": "magusfile.buzz:1149",
       "attrs": {
         "exported": "true"
       }
@@ -50784,7 +50884,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint USED to go through the go spell's op so the spell's version probe (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which code passes while every cache entry replays the old verdict.",
-      "source": "magusfile.buzz:2915",
+      "source": "magusfile.buzz:2991",
       "attrs": {
         "exported": "true"
       }
@@ -50794,7 +50894,7 @@
       "kind": "function",
       "label": "lint_build",
       "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
-      "source": "magusfile.buzz:2875",
+      "source": "magusfile.buzz:2951",
       "attrs": {
         "exported": "true"
       }
@@ -50818,14 +50918,14 @@
       "kind": "function",
       "label": "local_branches",
       "doc": "Local branch names, the ones that can shadow a tag.  refs/heads only, which is a claim about git's disambiguation. A short ref resolves through refs/, refs/tags/, refs/heads/, then refs/remotes/, and a name renders long only when two of those match it: refs/remotes/origin/v0.4.0 shortens to `origin/v0.4.0` and collides with nothing, while refs/heads/v0.4.0 collides. Measured in this repository, which carries both a v0.4.0 tag and a v0.4.0 branch, `for-each-ref` renders that tag as `tags/v0.4.0` and `git rev",
-      "source": "magusfile.buzz:2039"
+      "source": "magusfile.buzz:2046"
     },
     {
       "id": "function:magusfile.buzz:magusfile_api_generate",
       "kind": "function",
       "label": "magusfile_api_generate",
       "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. Named for the magusfile surface rather than \"api\" alone, because two other things in this repo are also an API surface - internal/cli/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives completions.  The regeneration route is a TEST, not a generator, which is why this target exists: the snapshot is written by TestMagusSurfaceLocked under UPDATE_MAGUS_API_LOCK, so withou",
-      "source": "magusfile.buzz:1126",
+      "source": "magusfile.buzz:1133",
       "attrs": {
         "exported": "true"
       }
@@ -50845,24 +50945,31 @@
       "kind": "function",
       "label": "mcp_tools_generate",
       "doc": "Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the same std descriptors bindings_generate reads.  The catalog was hand-written, and it was the one agent-facing surface with no generator and no drift gate behind it: a tool could duplicate another, or keep wrapping a member that had been renamed, and nothing said so.",
-      "source": "magusfile.buzz:1153",
+      "source": "magusfile.buzz:1160",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:magusfile.buzz:merge_profiles",
+      "kind": "function",
+      "label": "merge_profiles",
+      "doc": "merge_profiles concatenates two Go coverage profiles. Both carry a `mode:` header line and the same mode (atomic), so the second file's body appends under the first's header; `go tool cover` refuses a profile with two headers.  The headers are CHECKED rather than assumed, because every way this goes wrong produces a plausible number instead of an error. A missing file leaves a body under a blank first line; two different modes splice count semantics under an atomic header; and the `cd` charm on go-test appe",
+      "source": "magusfile.buzz:2682"
     },
     {
       "id": "function:magusfile.buzz:missing_input",
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:3323"
+      "source": "magusfile.buzz:3399"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
       "kind": "function",
       "label": "mocks_generate",
       "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. Mocks are committed and drift-gated like every other generated tree; mockery is pinned in the go.mod tool block.",
-      "source": "magusfile.buzz:1187",
+      "source": "magusfile.buzz:1194",
       "attrs": {
         "exported": "true"
       }
@@ -50871,7 +50978,7 @@
       "id": "function:magusfile.buzz:noted",
       "kind": "function",
       "label": "noted",
-      "source": "magusfile.buzz:2027"
+      "source": "magusfile.buzz:2034"
     },
     {
       "id": "function:magusfile.buzz:pad",
@@ -50883,14 +50990,14 @@
       "id": "function:magusfile.buzz:passed",
       "kind": "function",
       "label": "passed",
-      "source": "magusfile.buzz:2025"
+      "source": "magusfile.buzz:2032"
     },
     {
       "id": "function:magusfile.buzz:postflight",
       "kind": "function",
       "label": "postflight",
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step summary is the CI-facing equivalent.",
-      "source": "magusfile.buzz:1377",
+      "source": "magusfile.buzz:1384",
       "attrs": {
         "exported": "true"
       }
@@ -50900,7 +51007,7 @@
       "kind": "function",
       "label": "publish_graph",
       "doc": "publish_graph pushes the knowledge graph to GHCR as an OCI artifact, so a collaborator or a later CI job can fetch it instead of paying for a full symbol reindex. The published copy carries the SCIP shards, which are the expensive half and are never committed; gen/knowledge-graph.json is already in the repository, so republishing that alone would add nothing.  The artifact is the knowledge store SHARD BY SHARD, one layer per shard titled with its content fingerprint, plus the store's routing manifest. That",
-      "source": "magusfile.buzz:1359"
+      "source": "magusfile.buzz:1366"
     },
     {
       "id": "function:magusfile.buzz:publish_registries",
@@ -50914,7 +51021,7 @@
       "kind": "function",
       "label": "publish_report",
       "doc": "publish_report commits a rendered report at benchmarks/agent/reports/<date>/<provider>/<model>.md with the environment stamped after its title, the way BENCHMARKS.md carries its own: a number on the docs site has to trace to a date, a build and a machine. The provider is given, because a model id does not carry it; the model is the one the runs used, so a tree that mixes models is refused rather than filed under one of them. The docs project mirrors every file under that directory into a page.",
-      "source": "magusfile.buzz:3126"
+      "source": "magusfile.buzz:3202"
     },
     {
       "id": "function:magusfile.buzz:publish_variant",
@@ -50924,31 +51031,38 @@
       "source": "magusfile.buzz:587"
     },
     {
+      "id": "function:magusfile.buzz:raced_packages",
+      "kind": "function",
+      "label": "raced_packages",
+      "doc": "raced_packages is every package of this module except the one `test` runs separately. `go list` rather than a hand-kept list, so a package added tomorrow is raced without anyone remembering this, and `./...` stays the single statement of scope.",
+      "source": "magusfile.buzz:2654"
+    },
+    {
       "id": "function:magusfile.buzz:read_module_license",
       "kind": "function",
       "label": "read_module_license",
       "doc": "Reads one module's license text from the module cache, or \"\" when none is present.",
-      "source": "magusfile.buzz:1646"
+      "source": "magusfile.buzz:1653"
     },
     {
       "id": "function:magusfile.buzz:rebuild_console",
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:3285"
+      "source": "magusfile.buzz:3361"
     },
     {
       "id": "function:magusfile.buzz:refuse_overwrite",
       "kind": "function",
       "label": "refuse_overwrite",
       "doc": "The `immutable` charm makes release writes write-once: an existing archive, sidecar, or signature refuses instead of being replaced. The rule is releaser\\overwriteRefusal; this binds it to the filesystem and the charm.",
-      "source": "magusfile.buzz:1554"
+      "source": "magusfile.buzz:1561"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
-      "source": "magusfile.buzz:2264",
+      "source": "magusfile.buzz:2271",
       "attrs": {
         "exported": "true"
       }
@@ -50958,14 +51072,14 @@
       "kind": "function",
       "label": "release_asset_name",
       "doc": "The one place a release asset name is spelled. build_release_variant writes it and the preflight predicts it, so a change to the scheme cannot reach a tag while only one of them knows.",
-      "source": "magusfile.buzz:1547"
+      "source": "magusfile.buzz:1554"
     },
     {
       "id": "function:magusfile.buzz:release_build",
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is STATIC (CGO_ENABLED=0), and the `dynamic` charm (`magus run release-build:dynamic`) opts into the cgo build.  The default is static so that every layer says the same thing: the bare command produces the bare asset, and that asset is the one that runs anywhere - no loader, no glibc, no system libzstd. Inverted - the bare command producing the cgo build while the bare ARCHIVE is the static one - `release-build` and `magus_<v>_<os>_<arch>.tar.gz` would mea",
-      "source": "magusfile.buzz:1847",
+      "source": "magusfile.buzz:1854",
       "attrs": {
         "exported": "true"
       }
@@ -50975,7 +51089,7 @@
       "kind": "function",
       "label": "release_index",
       "doc": "Builds docs/gen/public/release/index.json from releases/*.yaml, signs it into index.json.sig, regenerates the files derived from the changelog the cut rewrote, and, under the cd charm, publishes whatever changed as a pull request. args[0] is what produced the index, as a sentence fragment (\"the v0.4.0 release\", \"a manual refresh\"); it names the commit and the pull request.  The pull request is the whole point. index.json only changes when a release is cut, and only a job holding MAGUS_SIGNING_KEY can sign i",
-      "source": "magusfile.buzz:1924",
+      "source": "magusfile.buzz:1931",
       "attrs": {
         "exported": "true"
       }
@@ -50985,14 +51099,14 @@
       "kind": "function",
       "label": "release_preflight",
       "doc": "Every check that has to hold BEFORE a tag exists, given the tag names this release would add to the ones HEAD already carries.  Timing is what this adds. Each gating check already had an owner: the asset name in release-build, the changelog and manifest path in `magus-utils cut`. Both fired hours after the tag was pushed, and the Go module proxy caches a tag within the hour, so a failed release burns the version number.  Returns a LIST rather than throwing on the first failure. A rehearsal that stops at the",
-      "source": "magusfile.buzz:2090"
+      "source": "magusfile.buzz:2097"
     },
     {
       "id": "function:magusfile.buzz:release_sign",
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:1894",
+      "source": "magusfile.buzz:1901",
       "attrs": {
         "exported": "true"
       }
@@ -51002,14 +51116,14 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:1811"
+      "source": "magusfile.buzz:1818"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:3297"
+      "source": "magusfile.buzz:3373"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -51038,7 +51152,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:3409",
+      "source": "magusfile.buzz:3485",
       "attrs": {
         "exported": "true"
       }
@@ -51048,7 +51162,7 @@
       "kind": "function",
       "label": "skills_generate",
       "doc": "Reinstalls the agent skills from their embedded sources in internal/agent/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is absent here because ma",
-      "source": "magusfile.buzz:1240",
+      "source": "magusfile.buzz:1247",
       "attrs": {
         "exported": "true"
       }
@@ -51058,7 +51172,7 @@
       "kind": "function",
       "label": "spells_generate",
       "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen), the Buzz value-type mirrors (internal/spell/gen/types) and the per-module host declarations (internal/spell/gen/decls), all driven by the go:generate directives in internal/spell.  Both trees are declared: undeclared, magus classified them as ordinary source, so `magus describe file` told a reader a generated file was safe to hand-edit and the agent guard's generated-file advisory stayed silent on every one of them.",
-      "source": "magusfile.buzz:1177",
+      "source": "magusfile.buzz:1184",
       "attrs": {
         "exported": "true"
       }
@@ -51068,7 +51182,7 @@
       "kind": "function",
       "label": "swegrade_build",
       "doc": "Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from. Built on the host from the root module so it shares the workspace's JSON codec and its tests, rather than as a throwaway module inside a grader image; the binary is gitignored under benchmarks/agent/bin, undeclared like ./magus for the same reason.",
-      "source": "magusfile.buzz:3167",
+      "source": "magusfile.buzz:3243",
       "attrs": {
         "exported": "true"
       }
@@ -51085,7 +51199,7 @@
       "kind": "function",
       "label": "termcast_generate",
       "doc": "Renders tapes/core-loop.capture into the README's animated SVG.  Deterministic - it replays committed bytes through the terminal emulator and emits text - so it can be drift-gated, and is. That gate is the point: a recording nothing checks goes stale in silence, until the README's alt text is describing a project count magus no longer reports.",
-      "source": "magusfile.buzz:1496",
+      "source": "magusfile.buzz:1503",
       "attrs": {
         "exported": "true"
       }
@@ -51095,7 +51209,7 @@
       "kind": "function",
       "label": "termcast_record",
       "doc": "Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh.  Opt-in and NOT named *_generate: `generate` globs that suffix and drift-gates what it finds, and a session is not byte-reproducible, so the gate would be red by construction. The unreproducibility stops at the bytes, though - RENDERING them is arithmetic, which is what termcast_generate gates instead.  Run it when magus's output changes, commit the capture, and let the rend",
-      "source": "magusfile.buzz:1467",
+      "source": "magusfile.buzz:1474",
       "attrs": {
         "exported": "true"
       }
@@ -51105,7 +51219,7 @@
       "kind": "function",
       "label": "termcast_showcase",
       "doc": "Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real keystrokes, showing the surfaces a transcript cannot - the pinned band, the failure tree beside its captured output, the picker searching the graph.  Opt-in and not named *_generate, for the reason termcast_record is not: it runs a live session and no two runs agree byte for byte. Rendering the result is deterministic and is gated with the rest.",
-      "source": "magusfile.buzz:1483",
+      "source": "magusfile.buzz:1490",
       "attrs": {
         "exported": "true"
       }
@@ -51115,7 +51229,7 @@
       "kind": "function",
       "label": "termshots_generate",
       "doc": "Renders the still SVGs of magus's interactive terminal surfaces for the docs.  Recorded nothing: these are CONDITIONS - a run stalled on another process's lock, a failed target awaiting a choice - and staging those in a live shell reliably enough to record is painful. The frames come from driving the real Zone, Notifier and picker through the terminal emulator, so the layout is what a terminal would receive even though the scenario is staged.",
-      "source": "magusfile.buzz:1513",
+      "source": "magusfile.buzz:1520",
       "attrs": {
         "exported": "true"
       }
@@ -51125,7 +51239,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection and a coverage floor. The published badge is coverage_render's.",
-      "source": "magusfile.buzz:2531",
+      "source": "magusfile.buzz:2538",
       "attrs": {
         "exported": "true"
       }
@@ -51135,7 +51249,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:3405",
+      "source": "magusfile.buzz:3481",
       "attrs": {
         "exported": "true"
       }
@@ -51145,14 +51259,14 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:2501"
+      "source": "magusfile.buzz:2508"
     },
     {
       "id": "function:magusfile.buzz:types_generate",
       "kind": "function",
       "label": "types_generate",
       "doc": "Regenerates everything derived from the boundary registry: the enum helpers (Values/Valid/String for each boundaryEnum), the runtime boundary list, and the Go-to-Buzz encoders. The reflection lives only in magus-utils while writing those files; the emitted encoders use direct field access, so Magus never reflects at a Buzz boundary.  Every directive lives in cmd/magus-utils rather than beside its output, so one `go generate` runs them all. When the enum directive lived in types/, adding a boundaryEnums entr",
-      "source": "magusfile.buzz:1094",
+      "source": "magusfile.buzz:1101",
       "attrs": {
         "exported": "true"
       }
@@ -51162,7 +51276,7 @@
       "kind": "function",
       "label": "verify_release_workflow",
       "doc": "Does release.yaml still upload what this file thinks it uploads, and trigger on what this file thinks triggers it?  Neither constant is derived from the workflow, so nothing but this notices when one side is edited alone. An asset glob the uploader no longer uses is worse than no constant at all, because the preflight would go on approving names against a pattern nobody reads.",
-      "source": "magusfile.buzz:2056"
+      "source": "magusfile.buzz:2063"
     },
     {
       "id": "function:magusfile.buzz:version",
@@ -51176,7 +51290,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:2487",
+      "source": "magusfile.buzz:2494",
       "attrs": {
         "exported": "true"
       }
@@ -51193,7 +51307,7 @@
       "kind": "function",
       "label": "write_notices",
       "doc": "Writes THIRD-PARTY-NOTICES beside the staged binary, reading the module list OUT OF THAT BINARY rather than out of go.mod.  That distinction is the whole point. The two variants link different modules - the dynamic build carries ebitengine/purego for FFI, the static build carries ulikunitz/xz for pure-Go compression, and no shipped artifact contains both. A notices file resolved from go.mod would name modules that are not in the archive it sits in, which is the precise inaccuracy this file exists to prevent",
-      "source": "magusfile.buzz:1603"
+      "source": "magusfile.buzz:1610"
     },
     {
       "id": "function:proto/magusfile.buzz:ci",
@@ -59989,11 +60103,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:3031:TODO",
+      "id": "rationale:magusfile.buzz:3107:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:3031"
+      "source": "magusfile.buzz:3107"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -62883,6 +62997,14 @@
       "provenance": "docs/concepts/workspace/providers.md"
     },
     {
+      "source": "dir:docs/decisions",
+      "target": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
       "source": "dir:docs/engine",
       "target": "file:docs/engine/blog.buzz",
       "relation": "contains",
@@ -64737,14 +64859,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS3014.md"
-    },
-    {
-      "source": "dir:docs/reference/codes/sandbox",
-      "target": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
@@ -69164,14 +69278,6 @@
     },
     {
       "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS3015",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS4003",
       "relation": "documents",
       "confidence": "inferred",
@@ -70989,14 +71095,6 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS3014",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS3015",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -74793,6 +74891,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/conventions.md"
+    },
+    {
+      "source": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "target": "diagnostic:MGS3012",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "target": "diagnostic:MGS3013",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
     },
     {
       "source": "doc:docs/doctrine.md",
@@ -84539,70 +84669,6 @@
       "provenance": "docs/reference/codes/sandbox/MGS3014.md"
     },
     {
-      "source": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "target": "diagnostic:MGS3012",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "target": "diagnostic:MGS3013",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "target": "diagnostic:MGS3015",
-      "relation": "documents",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "target": "doc:docs/concepts/concurrency.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "target": "doc:docs/reference/codes/sandbox/MGS3012.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "target": "doc:docs/reference/codes/sandbox/MGS3013.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/MGS3015.md",
-      "target": "docsection:docs/reference/codes/sandbox/MGS3015.md#mgs3015-run-isolation-wedged",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -84724,14 +84790,6 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
-      "target": "diagnostic:MGS3015",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/codes/sandbox/README.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -84845,14 +84903,6 @@
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3014.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/README.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/README.md",
-      "target": "doc:docs/reference/codes/sandbox/MGS3015.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -105851,6 +105901,118 @@
       "provenance": "docs/conventions.md"
     },
     {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#alternatives-considered",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#consequences",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#context",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#corrections-to-this-documents-first-draft",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#decision",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-other-systems-do",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#when-to-revisit",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#adr-0001-bounded-concurrency-with-recursive-invocation",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#why-this-document-exists",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#alternatives-considered",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#rejected-earlier-recorded-so-they-are-not-re-proposed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#context",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-contradiction-already-in-the-codebase",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#context",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-forces-recovered-from-the-history",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#context",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#the-requirement-that-shapes-everything",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#context",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-magus-does-today",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
+      "source": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#decision",
+      "target": "docsection:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md#what-this-buys",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md"
+    },
+    {
       "source": "docsection:docs/doctrine.md#doctrine",
       "target": "docsection:docs/doctrine.md#judgment",
       "relation": "contains",
@@ -107380,7 +107542,7 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard.md#the-guard",
-      "target": "docsection:docs/guides/integrations/agents/guard.md#focus-the-read-lane",
+      "target": "docsection:docs/guides/integrations/agents/guard.md#focus-the-read-boundary",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -116113,46 +116275,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS3014.md"
-    },
-    {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3015.md#mgs3015-run-isolation-wedged",
-      "target": "docsection:docs/reference/codes/sandbox/MGS3015.md#resolve-it",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3015.md#mgs3015-run-isolation-wedged",
-      "target": "docsection:docs/reference/codes/sandbox/MGS3015.md#see-also",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3015.md#mgs3015-run-isolation-wedged",
-      "target": "docsection:docs/reference/codes/sandbox/MGS3015.md#the-rule-this-protects",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3015.md#mgs3015-run-isolation-wedged",
-      "target": "docsection:docs/reference/codes/sandbox/MGS3015.md#what-it-does-not-fire-on",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
-    },
-    {
-      "source": "docsection:docs/reference/codes/sandbox/MGS3015.md#mgs3015-run-isolation-wedged",
-      "target": "docsection:docs/reference/codes/sandbox/MGS3015.md#what-it-usually-means",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS3015.md"
     },
     {
       "source": "docsection:docs/reference/codes/sandbox/README.md#the-sandbox",
@@ -132004,6 +132126,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:merge_profiles",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:missing_input",
       "relation": "contains",
       "confidence": "extracted",
@@ -132077,6 +132207,14 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:publish_variant",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:raced_packages",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -141427,6 +141565,22 @@
       "provenance": "magusfile.buzz"
     },
     {
+      "source": "function:magusfile.buzz:test",
+      "target": "function:magusfile.buzz:merge_profiles",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:test",
+      "target": "function:magusfile.buzz:raced_packages",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
       "source": "function:magusfile.buzz:verify_release_workflow",
       "target": "function:magusfile.buzz:failed",
       "relation": "calls",
@@ -146797,6 +146951,14 @@
     },
     {
       "source": "project:docs",
+      "target": "dir:docs/decisions",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/decisions"
+    },
+    {
+      "source": "project:docs",
       "target": "dir:docs/engine",
       "relation": "contains",
       "confidence": "extracted",
@@ -148004,12 +148166,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:3031:TODO",
+      "source": "rationale:magusfile.buzz:3107:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:3031"
+      "provenance": "magusfile.buzz:3107"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -149461,6 +149623,54 @@
     {
       "source": "target:.:magusfile-api-generate",
       "target": "target:.:bindings-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:man-generate",
+      "target": "target:.:bindings-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:man-generate",
+      "target": "target:.:config-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:man-generate",
+      "target": "target:.:langservice-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:man-generate",
+      "target": "target:.:mcp-tools-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:man-generate",
+      "target": "target:.:mocks-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:man-generate",
+      "target": "target:.:spells-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,

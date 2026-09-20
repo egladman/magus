@@ -125,14 +125,14 @@ func normalizeReturn(v any) any {
 	return out
 }
 
-// ReturnFor reads back what project's target invocation recorded, for the cache
+// RecordedReturn reads back what project's target invocation recorded, for the cache
 // to store alongside the entry it is snapshotting.
 //
 // The cache needs this because a HIT never invokes the target: without the value
 // on the entry, a target would print its result on the first run and nothing on
 // the second, which is worse than not returning values at all. Store on snapshot,
 // re-capture on replay, and the two runs agree.
-func ReturnFor(ctx context.Context, project, target string) (any, bool) {
+func RecordedReturn(ctx context.Context, project, target string) (any, bool) {
 	r, ok := ctx.Value(returnCaptureKey{}).(*returnCapture)
 	if !ok {
 		return nil, false

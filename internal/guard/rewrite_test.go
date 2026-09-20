@@ -74,7 +74,7 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 		// A bare (no `=`) comparison, same reasoning.
 		"awk '$1 > 5' internal/ledger/store.go",
 
-		// Not an interpreter: a heredoc into cat is data, and the lane rule is what judges
+		// Not an interpreter: a heredoc into cat is data, and the write-path rule is what judges
 		// where it lands.
 		"cat > internal/ledger/store.go <<'EOF'\npackage ledger\nEOF",
 

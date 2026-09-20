@@ -202,14 +202,14 @@ type NextServer func(next []hint.Next) []hint.Next
 // pre-authorize.
 func ServedIn(cacheDir, root string) NextServer {
 	return func(next []hint.Next) []hint.Next {
-		role, lane := hint.RoleUnbound, []string(nil)
+		role, writePaths := hint.RoleUnbound, []string(nil)
 		if id := job.ActingLease(cacheDir); id != "" {
 			role = hint.RoleWorker
 			if rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List(); err == nil {
-				role, lane = hint.RoleFor(rows, id)
+				role, writePaths = hint.LeaseRole(rows, id)
 			}
 		}
-		served := hint.ServableTo(role, lane, next)
+		served := hint.ServableTo(role, writePaths, next)
 		hint.AppendServedNext(cacheDir, served)
 		return served
 	}

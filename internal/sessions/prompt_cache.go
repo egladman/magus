@@ -148,29 +148,29 @@ func (w PromptCacheWindowStatus) Describe(now time.Time) string {
 	at, by := time.UnixMilli(w.ClosesAtMs), time.UnixMilli(w.ClosesByMs)
 	if at.Equal(by) {
 		if w.Closed {
-			return "closed " + idleFor(now.Sub(by)) + " ago"
+			return "closed " + renderSpan(now.Sub(by)) + " ago"
 		}
-		return "closes in " + idleFor(by.Sub(now))
+		return "closes in " + renderSpan(by.Sub(now))
 	}
 	switch {
 	case w.Closed:
-		return "closed " + idleFor(now.Sub(at)) + " to " + idleFor(now.Sub(by)) + " ago"
+		return "closed " + renderSpan(now.Sub(at)) + " to " + renderSpan(now.Sub(by)) + " ago"
 	case now.Before(at):
-		return "closes in " + idleFor(at.Sub(now)) + " to " + idleFor(by.Sub(now))
+		return "closes in " + renderSpan(at.Sub(now)) + " to " + renderSpan(by.Sub(now))
 	default:
-		return "closed " + idleFor(now.Sub(at)) + " ago at the earliest, closes in " + idleFor(by.Sub(now)) + " at the latest"
+		return "closed " + renderSpan(now.Sub(at)) + " ago at the earliest, closes in " + renderSpan(by.Sub(now)) + " at the latest"
 	}
 }
 
 // SinceText renders how long ago the clock's activity was; SinceMs is the value.
 func (c PromptCacheClock) SinceText() string {
-	return idleFor(time.Duration(c.SinceMs) * time.Millisecond)
+	return renderSpan(time.Duration(c.SinceMs) * time.Millisecond)
 }
 
-// idleFor renders a span at the precision a reader of this clock acts on. Seconds
+// renderSpan renders a span at the precision a reader of this clock acts on. Seconds
 // matter inside a minute and are noise past one, which is what separates it from
 // time.Duration.String and its "55m0s".
-func idleFor(d time.Duration) string {
+func renderSpan(d time.Duration) string {
 	if d < 0 {
 		d = 0
 	}

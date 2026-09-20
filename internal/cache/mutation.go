@@ -60,6 +60,18 @@ func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []str
 	return out
 }
 
+// movedInputs names every hashed input that changed while the step ran, whoever changed it.
+// It exempts only ctx.modifiesExistingFiles, whose key is computed from the pre-edit bytes
+// by declaration.
+//
+// The exemptions must NOT be shared with [mutatedSources], which answers "did this target
+// misbehave" and so ignores every declared output to keep MGS4007 from accusing a target of
+// writing a generated file. This answers "does the key still describe the tree it was
+// computed from", where a peer rewriting a generated file mid-hash is the whole danger.
+func movedInputs(before, after sourceFingerprint, updates []string) []string {
+	return mutatedSources(before, after, updates, nil)
+}
+
 // checkSourceMutation reports MGS4007 when a target rewrote its own declared sources
 // without declaring them via ctx.modifiesExistingFiles. Callers invoke it only after
 // fn succeeded, so it never stacks on top of a target's own failure.
@@ -83,6 +95,30 @@ func (c *Cache) checkSourceMutation(ctx context.Context, s *Step, before sourceF
 	return types.DiagnosticErrorf(types.UndeclaredSourceModified,
 		"%s:%s modified %s it declared as sources; declare them with ctx.modifiesExistingFiles(...) or stop writing them: %s",
 		s.ProjectPath, s.Target, pluralFiles(len(changed)), joinCapped(changed, 5))
+}
+
+// keyStillDescribesInputs reports whether this step's hashed inputs are unchanged, and names
+// what moved when they are not.
+//
+// Callers REFUSE THE ENTRY, never the run: the work succeeded and its output is good, and
+// only filing it under this key is unsafe, since a later run that really does hash to it
+// would replay bytes built from different sources. Failing instead would punish the target
+// that was read rather than the one that wrote.
+//
+// True when the fingerprint cannot be taken: a tree magus cannot stat twice is evidence of
+// nothing, and the alternative stops caching whenever a stat races.
+func (c *Cache) keyStillDescribesInputs(ctx context.Context, s *Step, before sourceFingerprint) ([]string, bool) {
+	if before == nil {
+		return nil, true
+	}
+	after, err := c.fingerprintSources(ctx, s)
+	if err != nil {
+		c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+			fmt.Sprintf("key staleness check skipped for %s: %v", s.ProjectPath, err)))
+		return nil, true
+	}
+	moved := movedInputs(before, after, s.Updates)
+	return moved, len(moved) == 0
 }
 
 func pluralFiles(n int) string {

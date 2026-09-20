@@ -86,7 +86,7 @@ func gradeHookWiringWrite(actingLease, writePath string) writeGrade {
 	if actingLease != "" {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: leave the host's wiring alone. "+leaseActorClause("rewire a host")+"\n"+
-				"%s is %s: it is the guard's own installation, so an edit here decides whether every rule you are being graded by runs at all from the host's next session on. Lease %s is bound to this checkout, and no lane anybody hands out includes that switch.",
+				"%s is %s: it is the guard's own installation, so an edit here decides whether every rule you are being graded by runs at all from the host's next session on. Lease %s is bound to this checkout, and no write paths anybody hands out include that switch.",
 			writePath, what, actingLease)}
 	}
 	return writeGrade{Decision: "advise", Kind: advisoryHookWiring, Context: fmt.Sprintf(

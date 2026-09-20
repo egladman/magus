@@ -49,12 +49,15 @@ env:
   # Unset this variable and the cache is simply not wired: no error, no remote hits.
   # Setting it is what turns on both the cache and its verification, together.
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
-  # A CEILING, not a target: the forecaster picks the count, and may raise it to
-  # split a shard predicted to exceed the runner's memory. Held at 2 deliberately -
-  # shard count is not runner spend, but it is runner *concurrency*, and the OOM
-  # that made this knob interesting turned out to be one magusfile allocating 13GB,
-  # not too much work on one machine. Raise it when a measurement asks for it.
-  MAGUS_CI_MAX_SHARDS: '2'
+  # -1 is unlimited, bounded by the affected project count. Nothing here picks a number:
+  # `magus affected ci --plan` warns when fewer shards would finish just as fast and names
+  # the count to cap at, so that decision gets made against a measurement instead of in
+  # this file. Unset would mean 8, which is a number nobody measured either.
+  #
+  # Capping is also what creates memory risk, because co-location is what puts two peaks on
+  # one runner. It lives here rather than in magus.yaml because it sizes a runner pool, and
+  # a local plan spawns no runners.
+  MAGUS_CI_MAX_SHARDS: '-1'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you
   # are sitting at and wrong in a log nobody reads until it goes red: a green run
@@ -354,7 +357,7 @@ jobs:
           exit "$status"
 
   ci:
-    name: magus shard ${{ matrix.shard }}
+    name: "magus shard ${{ matrix.shard }}: ${{ matrix.label }}"
     needs: plan
     if: fromJSON(needs.plan.outputs.count) > 0 && needs.plan.outputs.inherit != 'true'
     runs-on: ubuntu-latest

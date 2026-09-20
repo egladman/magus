@@ -239,7 +239,7 @@ func TestUngatedPushAsksTheOrchestrator(t *testing.T) {
 }
 
 // TestUngatedPushDeniesALeasedWorker pins that a bound session is never offered the prompt:
-// approving it would publish from a lane that does not own the branch.
+// approving it would publish from a boundary that does not own the branch.
 func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	lease := narrowLease()
 	v := judgePush(t, "", lease.ID, lease)

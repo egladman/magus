@@ -598,7 +598,7 @@ export object Job {
     readOnly: bool = false,
     releases: [JobRelease] = [],
     unattributed: [JobUnattributedWrite] = [],
-    laneProof: str = "",
+    writeProof: str = "",
     reportedBase: str = "",
     baseVerdict: str = "",
     registeredBy: JobActor = JobActor{},

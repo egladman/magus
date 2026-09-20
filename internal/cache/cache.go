@@ -683,7 +683,24 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		return fail(mutErr)
 	}
 
-	if c.mutable && !s.NoCache {
+	// The write phase of the read-execute-validate cycle this already performs: hashStep
+	// read, fn executed, and this is the validation it was missing. An input that moved
+	// after it was hashed means the key names a tree that no longer exists, so the entry
+	// is skipped rather than filed. The run keeps its result and stays green.
+	//
+	// Without it a concurrent peer rewriting a generated file inside this window produced
+	// an entry mapping the OLD key to output built from the NEW bytes, and pushToRemote
+	// below handed that to every other machine. A failing stat was the lucky outcome; this
+	// is the one that was silent.
+	storable := c.mutable && !s.NoCache
+	if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
+		storable = false
+		c.log.WarnContext(ctx, fmt.Sprintf(
+			"magus/cache: not recording %s:%s under %s: %s changed while it ran, so the key no longer describes its inputs: %s",
+			s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5)))
+	}
+
+	if storable {
 		_, endSnap := tracer.StartSpan(ctx, "magus.cache.snapshot")
 		outs, err := c.snapshot(ctx, s, hash, time.Since(start))
 		endSnap(err)
@@ -706,7 +723,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// exported an entry with no descriptor at all (or, on a repeat miss, a previous
 	// attempt's), so a consumer could not resolve the producer's ref: the whole
 	// point of shipping them.
-	if c.mutable && !s.NoCache {
+	if storable {
 		if c.remote != nil {
 			c.pushToRemote(ctx, s, hash)
 		}
@@ -957,9 +974,6 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 		return ctx, 0, nil, err
 	}
 	ctx = withSlotHold(ctx, hold)
-	// The isolation lease keeps the same record, so the gate's wedge verdict can tell a
-	// holder that is working from one that is parked (see runIsolation).
-	admissionFrom(ctx).isolation.attach(hold)
 	// Report occupancy on both edges of the slot's life, so an interactive run can show a
 	// live pool counter. Handlers that render no status line ignore the event, so piped
 	// and CI output are unchanged.
@@ -1058,7 +1072,7 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
 	defer releaseMachine()
-	ctx, releaseIsolation, err := acquireRunIsolation(ctx, s.Exclusive, stepLabel(s))
+	ctx, releaseIsolation, err := acquireRunIsolation(ctx, s.Exclusive)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
@@ -1210,13 +1224,11 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				return fail(machineErr)
 			}
 			defer releaseMachine()
-			stepCtx, releaseIsolation, isoErr := acquireRunIsolation(machineCtx, s.Exclusive, stepLabel(s))
+			stepCtx, releaseIsolation, isoErr := acquireRunIsolation(machineCtx, s.Exclusive)
 			if isoErr != nil {
-				// A refused gate is an independent finding for the same reason a
-				// deadlocked pool is: nothing upstream failed and the batch was not
-				// cancelled, this run's own waits arranged themselves into a cycle. A
-				// cancelled wait is the batch unwinding and stays a consequence.
-				ran = errors.Is(isoErr, types.RunIsolationWedged) && gctx.Err() == nil
+				// The gate refuses nothing of its own any more, so every error here is
+				// the batch unwinding around this step: a peer's failure or a Ctrl-C,
+				// both of which are consequences rather than findings.
 				return fail(isoErr)
 			}
 			defer releaseIsolation()

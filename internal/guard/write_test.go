@@ -124,14 +124,14 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	})
 
 	t.Run("outside the acting lease's own write paths", func(t *testing.T) {
-		// Ground nobody else claims. The lane the orchestrator handed out is still the
-		// lane, and a worker that widens its own is what the declaration exists to catch.
+		// Ground nobody else claims. The boundary the orchestrator handed out is still the
+		// boundary, and a worker that widens its own is what the declaration exists to catch.
 		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "README.md"))
 		require.Equal(t, "deny", got.Decision)
 		assert.Contains(t, got.Reason, "lease-b")
 		assert.Contains(t, got.Reason, "README.md")
 		assert.Contains(t, got.Reason, "write_paths", "the denial must name the field that decided it")
-		assert.Contains(t, got.Reason, "cmd/magus/**", "the denial must list the lane it was measured against")
+		assert.Contains(t, got.Reason, "cmd/magus/**", "the denial must list the write paths it was measured against")
 	})
 
 	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
@@ -163,7 +163,7 @@ func TestGradeLeasedWritePasses(t *testing.T) {
 	})
 
 	t.Run("a lease that declared no write paths", func(t *testing.T) {
-		// An empty owned set is a boundary nobody wrote, not a lane of size zero, so it
+		// An empty owned set is a boundary nobody wrote, not a boundary of size zero, so it
 		// scopes nothing. read_only is what says a lease writes nothing on purpose.
 		leases := fleetLeases()
 		leases[1].WritePaths, leases[1].DenyPaths = nil, nil
@@ -794,12 +794,12 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 }
 
 // TestGradeLeasedWriteHandsBackTheWideningCall pins what this denial should cost its
-// reader: one paste. The measured cost of a narrow lane was never the rule, it was the
+// reader: one paste. The measured cost of a narrow boundary was never the rule, it was the
 // negotiation, and a worker that has to describe its own row in prose makes the
 // orchestrator reconstruct what the ledger already knows.
 //
 // The call carries the paths the row already had, because op=put REPLACES the row: a call
-// naming only the blocked path hands back a narrower lane than the worker started with.
+// naming only the blocked path hands back a narrower boundary than the worker started with.
 func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
@@ -825,7 +825,7 @@ func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 	})
 }
 
-// dependentFleet is a plan where "waiter" is queued behind "dep" and declares the lane dep
+// dependentFleet is a plan where "waiter" is queued behind "dep" and declares the paths dep
 // has to write in. dep declares no write paths, which scopes nothing, so the only thing
 // that can deny its write is another job's ownership.
 func dependentFleet(depState types.JobState) []types.Job {

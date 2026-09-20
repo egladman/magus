@@ -726,7 +726,7 @@ func BenchmarkCompiledGlobMatchHot(b *testing.B) {
 
 // FuzzHashStep verifies that hashStep never panics on arbitrary Step
 // field values and always returns a non-empty hex string on success.
-// The seed corpus covers the common shapes: empty step, single source
+// The seeds cover the common shapes: empty step, single source
 // glob, env vars, and upstream dependency paths.
 func FuzzHashStep(f *testing.F) {
 	f.Add("api", "build", "", "")

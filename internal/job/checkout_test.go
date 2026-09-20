@@ -24,15 +24,16 @@ func loadableRoot(t *testing.T) string {
 	return root
 }
 
-// TestForkRefusesAWorkspaceLoadLaneInASharedCheckout is the refusal three workers in one
-// checkout were missing: one of them held the root magusfile in its lane, saved it
-// mid-edit, and every `magus run` in the checkout failed until it landed, including the
+// TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout is the refusal three workers in
+// one checkout were missing: one of them held the root magusfile in its write paths, saved
+// it mid-edit, and every `magus run` in the checkout failed until it landed, including the
 // other two workers' tests.
 //
-// The refusal is narrow on purpose. Two lanes overlapping is the orchestrator's problem
-// and stays an advisory; a lane covering a file the WORKSPACE has to load is the one case
-// where a worker doing exactly what it was told breaks work it cannot see.
-func TestForkRefusesAWorkspaceLoadLaneInASharedCheckout(t *testing.T) {
+// The refusal is narrow on purpose. Two workers' write paths overlapping is the
+// orchestrator's problem and stays an advisory; a write path covering a file the WORKSPACE
+// has to load is the one case where a worker doing exactly what it was told breaks work it
+// cannot see.
+func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -56,7 +57,7 @@ func TestForkRefusesAWorkspaceLoadLaneInASharedCheckout(t *testing.T) {
 	assert.Contains(t, err.Error(), "wave/worker-one")
 	assert.Contains(t, err.Error(), "worktree")
 
-	t.Run("a lane that touches no workspace-load file still forks", func(t *testing.T) {
+	t.Run("a write path that touches no workspace-load file still forks", func(t *testing.T) {
 		_, err := ForkMerge(ctx, s, "wave/worker-three", func(u *types.Job) {
 			u.State, u.WritePaths = types.StateDeclared, []string{"internal/guard"}
 		}, limits, nil)
@@ -72,10 +73,10 @@ func TestForkRefusesAWorkspaceLoadLaneInASharedCheckout(t *testing.T) {
 	})
 }
 
-// TestForkRecordsWhetherTheLanesWereProvenDisjoint pins the third half of the collision
-// proof: the orchestrator is ADVISED to prove the lanes disjoint, and the row records
+// TestForkRecordsWhetherTheWritePathsWereProvenDisjoint pins the third half of the collision
+// proof: the orchestrator is ADVISED to prove the write paths disjoint, and the row records
 // whether they are, so a plan read later says which forks were proven and which were not.
-func TestForkRecordsWhetherTheLanesWereProvenDisjoint(t *testing.T) {
+func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -87,21 +88,21 @@ func TestForkRecordsWhetherTheLanesWereProvenDisjoint(t *testing.T) {
 		u.State, u.WritePaths = types.StateRunning, []string{"internal/job"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.LaneProofAlone, alone.LaneProof, "nothing else holds the checkout")
+	assert.Equal(t, types.WriteProofAlone, alone.WriteProof, "nothing else holds the checkout")
 	require.NoError(t, Checkout{CacheDir: loc.CacheDir}.Bind(alone.ID))
 
 	disjoint, err := ForkMerge(ctx, s, "wave/second", func(u *types.Job) {
 		u.State, u.WritePaths = types.StateDeclared, []string{"internal/guard"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.LaneProofDisjoint, disjoint.LaneProof)
+	assert.Equal(t, types.WriteProofDisjoint, disjoint.WriteProof)
 
 	overlapping, err := ForkMerge(ctx, s, "wave/third", func(u *types.Job) {
 		u.State, u.WritePaths = types.StateDeclared, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.LaneProofOverlapping, overlapping.LaneProof,
-		"an overlap is recorded, never refused: widening a lane is the orchestrator's call")
+	assert.Equal(t, types.WriteProofOverlapping, overlapping.WriteProof,
+		"an overlap is recorded, never refused: widening a write path is the orchestrator's call")
 }
 
 // TestSharedCheckoutRefusalIgnoresAJobThatIsOver is why the rule reads the STATE: a
@@ -125,13 +126,13 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 		u.State, u.WritePaths = types.StateDeclared, []string{"magus.yaml"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, types.LaneProofAlone, next.LaneProof)
+	assert.Equal(t, types.WriteProofAlone, next.WriteProof)
 }
 
 // TestTwoSessionsInOneCheckoutEachHoldTheirOwnLease is the binding three workers sharing
 // this repository could not have. The marker used to be one file per CHECKOUT, so the
 // second worker's bind read the first's id, was refused as a rebind, and all three ran
-// unattributed: every lane rule fell silent at once while looking exactly like a guarded
+// unattributed: every write-path rule fell silent at once while looking exactly like a guarded
 // session.
 func TestTwoSessionsInOneCheckoutEachHoldTheirOwnLease(t *testing.T) {
 	t.Parallel()

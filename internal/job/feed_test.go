@@ -10,8 +10,8 @@ import (
 )
 
 // A changed file belongs to exactly one job, and nothing the worker does decides it: the
-// lanes are disjoint by construction, so the path alone names the holder.
-func TestAttributeWriteNamesTheOneLaneThatCoversIt(t *testing.T) {
+// write paths are disjoint by construction, so the path alone names the holder.
+func TestAttributeWriteNamesTheOneWritePathThatCoversIt(t *testing.T) {
 	rows := []types.Job{
 		{ID: "pwa/job-watch", State: types.StateRunning, WritePaths: []string{"internal/trail", "cmd/magus/job.go"}},
 		{ID: "pwa/jobs-ui", State: types.StateRunning, WritePaths: []string{"console/src/console/plan"}},
@@ -20,7 +20,7 @@ func TestAttributeWriteNamesTheOneLaneThatCoversIt(t *testing.T) {
 	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
 	assert.True(t, ok)
 	assert.Equal(t, "pwa/job-watch", got.Job)
-	assert.Equal(t, "internal/trail", got.Lane, "the reader wants the DECLARATION that covered it, not just the job")
+	assert.Equal(t, "internal/trail", got.WritePath, "the reader wants the DECLARATION that covered it, not just the job")
 	assert.Empty(t, got.Ambiguous)
 
 	got, ok = AttributeWrite(rows, "console/src/console/plan/jobs.ts")
@@ -29,7 +29,7 @@ func TestAttributeWriteNamesTheOneLaneThatCoversIt(t *testing.T) {
 }
 
 // A path nobody leased is nobody's. It is reported as unattributed rather than dropped: a
-// write outside every lane is the interesting one, and silently binning it is how the
+// write outside every declared boundary is the interesting one, and silently binning it is how the
 // console came to show a quiet tree while somebody edited it.
 func TestAttributeWriteLeavesAnUnleasedPathUnattributed(t *testing.T) {
 	rows := []types.Job{{ID: "pwa/job-watch", State: types.StateRunning, WritePaths: []string{"internal/trail"}}}
@@ -40,7 +40,7 @@ func TestAttributeWriteLeavesAnUnleasedPathUnattributed(t *testing.T) {
 	assert.Empty(t, got.Ambiguous)
 }
 
-// A job that has ENDED holds nothing, so its lane stops answering for a path. Otherwise a
+// A job that has ENDED holds nothing, so its write paths stop answering for a path. Otherwise a
 // finished job keeps collecting the next holder's writes for as long as its row is kept.
 func TestAttributeWriteIgnoresAJobThatIsNoLongerLive(t *testing.T) {
 	rows := []types.Job{
@@ -50,11 +50,11 @@ func TestAttributeWriteIgnoresAJobThatIsNoLongerLive(t *testing.T) {
 
 	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
 	assert.True(t, ok)
-	assert.Equal(t, "new", got.Job, "only a live lane answers")
+	assert.Equal(t, "new", got.Job, "only a live job answers")
 }
 
-// A path a job's lane covers but its own deny paths exclude is NOT that job's. The row
-// says so itself, and reading the write lane alone would attribute a shared build input to
+// A path a job's write paths cover but its own deny paths exclude is NOT that job's. The row
+// says so itself, and reading the write paths alone would attribute a shared build input to
 // whichever job happened to name the directory above it.
 func TestAttributeWriteHonoursTheJobsOwnDenyPaths(t *testing.T) {
 	rows := []types.Job{{
@@ -64,19 +64,19 @@ func TestAttributeWriteHonoursTheJobsOwnDenyPaths(t *testing.T) {
 	}}
 
 	_, ok := AttributeWrite(rows, "internal/agent/catalog.go")
-	assert.False(t, ok, "a denied path is outside the lane, whatever the write paths say")
+	assert.False(t, ok, "a denied path is outside the boundary, whatever the write paths say")
 
 	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
 	assert.True(t, ok)
 	assert.Equal(t, "pwa/job-watch", got.Job)
 }
 
-// TWO LIVE LANES OVER ONE PATH is the case the whole feed rests on not happening: fork
-// refuses a shared checkout and records lane_proof, and `magus ls jobs` prints the
+// TWO LIVE JOBS OVER ONE PATH is the case the whole feed rests on not happening: fork
+// refuses a shared checkout and records write_proof, and `magus ls jobs` prints the
 // overlaps. When it happens anyway the answer is NEITHER, with both names, because a feed
 // that picks one would tell a person a file moved under a worker that never touched it,
 // and there is nothing in the path to break the tie with.
-func TestAttributeWriteRefusesToPickBetweenTwoLiveLanes(t *testing.T) {
+func TestAttributeWriteRefusesToPickBetweenTwoLiveJobs(t *testing.T) {
 	rows := []types.Job{
 		{ID: "a", State: types.StateRunning, WritePaths: []string{"internal/trail"}},
 		{ID: "b", State: types.StateDeclared, WritePaths: []string{"internal"}},

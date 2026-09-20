@@ -129,39 +129,39 @@ func TestExecCommandReportsNotStartedErrorNotExitCode(t *testing.T) {
 		"a process that never started has no exit code of its own to report")
 }
 
-// TestAdviceFor pins the failure-classification rule a command op declares. Declaration
+// TestHintAdvice pins the failure-classification rule a command op declares. Declaration
 // order is the precedence, so a spell author reads the outcome off the file.
-func TestAdviceFor(t *testing.T) {
+func TestHintAdvice(t *testing.T) {
 	hints := []spells.Hint{
 		{Contains: "denied: requested access", Advise: "specific"},
 		{Contains: "denied", Advise: "general"},
 	}
 	t.Run("first declared match wins", func(t *testing.T) {
-		assert.Equal(t, "specific", adviceFor(hints, "error: denied: requested access to the resource"),
+		assert.Equal(t, "specific", hintAdvice(hints, "error: denied: requested access to the resource"),
 			"declaration order is the precedence, not match length")
 	})
 	t.Run("falls through to a later rule", func(t *testing.T) {
-		assert.Equal(t, "general", adviceFor(hints, "push denied by policy"))
+		assert.Equal(t, "general", hintAdvice(hints, "push denied by policy"))
 	})
 	t.Run("no match is silent", func(t *testing.T) {
-		assert.Empty(t, adviceFor(hints, "compilation failed"), "an unrecognized failure must not invent advice")
+		assert.Empty(t, hintAdvice(hints, "compilation failed"), "an unrecognized failure must not invent advice")
 	})
 	t.Run("an empty Contains never fires", func(t *testing.T) {
 		// strings.Contains(x, "") is TRUE, so an unguarded empty rule would advise on
 		// every failure of the command. decode rejects it; this covers a value built in Go.
-		assert.Empty(t, adviceFor([]spells.Hint{{Advise: "no contains set"}, {Contains: "x"}}, "anything x"))
+		assert.Empty(t, hintAdvice([]spells.Hint{{Advise: "no contains set"}, {Contains: "x"}}, "anything x"))
 	})
 	// The bug this signature exists to prevent: stdout ending mid-word and stderr
 	// beginning mid-word must not be joined into a match that appeared in neither.
 	t.Run("a match cannot straddle two streams", func(t *testing.T) {
 		h := []spells.Hint{{Contains: "unauthorized", Advise: "should not fire"}}
-		assert.Empty(t, adviceFor(h, "...ends with unauth", "orized: denied..."),
+		assert.Empty(t, hintAdvice(h, "...ends with unauth", "orized: denied..."),
 			"sources are matched independently, never concatenated")
 	})
 	t.Run("either stream alone can match", func(t *testing.T) {
 		h := []spells.Hint{{Contains: "unauthorized", Advise: "fires"}}
-		assert.Equal(t, "fires", adviceFor(h, "unauthorized", ""), "stdout")
-		assert.Equal(t, "fires", adviceFor(h, "", "unauthorized"), "stderr")
+		assert.Equal(t, "fires", hintAdvice(h, "unauthorized", ""), "stdout")
+		assert.Equal(t, "fires", hintAdvice(h, "", "unauthorized"), "stderr")
 	})
 }
 
@@ -200,7 +200,7 @@ func hintOp() spells.Op {
 }
 
 // TestRunCommandAdvisesOnRealFailure covers the WIRING (the tee, the fire condition, and
-// the sink) rather than adviceFor in isolation. Every defect the review found lived in
+// the sink) rather than hintAdvice in isolation. Every defect the review found lived in
 // these lines and none of them were reachable from a unit test of the matcher.
 func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 	run6 := func(ctx context.Context, op spells.Op) string {

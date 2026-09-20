@@ -411,3 +411,43 @@ func TestMemoryBudget_explicitSettingWins(t *testing.T) {
 	f := Forecaster{Target: "ci", MemoryBudgetBytes: 7 << 30}
 	assert.Equal(t, int64(7<<30), f.memoryBudget())
 }
+
+// TestPlanReadsHistoryRecordedUnderItsSpellKey crosses the boundary the drift lived on.
+// run.go records a run under "<spell>/<target>" while a plan names the bare target a
+// magusfile declares, and every test on both sides used the SAME key, which is the one
+// combination production never produces: nothing writes a bare key. So the planner read
+// the fallback for every project, LPT packed uniform weights, and no test noticed.
+func TestPlanReadsHistoryRecordedUnderItsSpellKey(t *testing.T) {
+	t.Parallel()
+
+	h := History{Projects: map[string]map[string]Stats{
+		"heavy": {"magusfile/ci": {P75Ms: 300_000, Samples: 50}},
+		"light": {"magusfile/ci": {P75Ms: 1_000, Samples: 50}},
+	}}
+
+	assert.Equal(t, 300*time.Second, h.PredictDuration("heavy", "ci", nil),
+		"a plan names the bare target; the history is keyed by the spell that ran it")
+	assert.Equal(t, time.Second, h.PredictDuration("light", "ci", nil))
+
+	// The consequence, not just the lookup: with the fallback both predict 60s, tie, and
+	// land on the lowest-index bin in path order. Real weights separate them.
+	got := Forecaster{History: h, Target: "ci"}.Plan(projects("heavy", "light"), 2)
+	require.Len(t, got, 2)
+	assert.Equal(t, "heavy", got[0][0].Path)
+	assert.Equal(t, "light", got[1][0].Path)
+}
+
+// TestPredictPeakRSSReadsTheSpellKeyToo pins the second reader of the same key. It feeds
+// the memory packer, where reading zero means "needs nothing" and packs exactly the
+// targets magus knows least about onto one runner.
+func TestPredictPeakRSSReadsTheSpellKeyToo(t *testing.T) {
+	t.Parallel()
+
+	h := History{Projects: map[string]map[string]Stats{
+		"heavy": {"magusfile/ci": {RecentOutcomes: []Outcome{{MaxRSSBytes: 3 << 30}}}},
+	}}
+
+	got, ok := h.PredictPeakRSS("heavy", "ci")
+	require.True(t, ok, "a recorded peak must be readable by the target name a plan uses")
+	assert.Equal(t, int64(3<<30), got)
+}

@@ -12,38 +12,40 @@ import (
 // Attribution is which job a changed path belongs to, and the declaration that decided it.
 //
 // Ambiguous is the failure mode spelled out rather than hidden in a bool: when two live
-// lanes cover one path there is no tie to break, and the reader needs the two names to go
-// and fix the plan. See [AttributeWrite].
+// boundaries cover one path there is no tie to break, and the reader needs the two names
+// to go and fix the plan. See [AttributeWrite].
 type Attribution struct {
-	// Job is the one live job whose lane covers the path, empty when none does or more
-	// than one does.
+	// Job is the one live job whose write paths cover the path, empty when none does or
+	// more than one does.
 	Job string
-	// Lane is the declared write path that covered it, so a reader sees WHY the path was
-	// attributed and not merely that it was.
-	Lane string
+	// WritePath is the declared write path that covered it, so a reader sees WHY the path
+	// was attributed and not merely that it was.
+	WritePath string
 	// Ambiguous names every live job that claimed the path, set only when more than one
 	// did, sorted so the pair reads the same way twice.
 	Ambiguous []string
 }
 
-// AttributeWrite names the one LIVE job whose declared write lane covers rel, a
+// AttributeWrite names the one LIVE job whose declared write paths cover rel, a
 // repository-relative path. It is what lets a person watch a worker without the worker
-// cooperating: nothing in the write itself says who made it, and the lane does.
+// cooperating: nothing in the write itself says who made it, and the declaration does.
 //
-// THE ATTRIBUTION IS EXACT BECAUSE THE LANES ARE DISJOINT, and that is a property the fork
-// already proves rather than one assumed here: [RefuseSharedCheckout] refuses a fork whose
-// lane would collide, [LaneProofFor] records what it could prove, and `magus ls jobs`
-// prints every pair that claims common ground. So the usual answer is one job or none.
+// THE ATTRIBUTION IS EXACT BECAUSE THE WRITE PATHS ARE DISJOINT, and that is a property the
+// fork already proves rather than one assumed here: [RefuseSharedCheckout] refuses a fork
+// whose write paths would collide, [Store.WriteProof] records what it could prove, and `magus
+// ls jobs` prints every pair that claims common ground. So the usual answer is one job or
+// none.
 //
-// When two live lanes DO cover one path the answer is NEITHER, with both names in
-// Ambiguous. Picking one would tell a person a file moved under a worker that never
+// When two live jobs' write paths DO cover one path the answer is NEITHER, with both names
+// in Ambiguous. Picking one would tell a person a file moved under a worker that never
 // touched it, and there is nothing in a path to break the tie with; the plan is already
 // damaged at that point, and saying so is more use than a coin toss. A job's own deny
-// paths cut its lane first, so a shared build input inside a directory somebody leased is
-// nobody's.
+// paths cut its boundary first, so a shared build input inside a directory somebody leased
+// is nobody's.
 //
-// A job that has ended holds nothing. Rows are kept after they finish, and a finished lane
-// that kept answering would collect the next holder's writes for as long as the row lived.
+// A job that has ended holds nothing. Rows are kept after they finish, and a finished
+// boundary that kept answering would collect the next holder's writes for as long as the
+// row lived.
 func AttributeWrite(rows []types.Job, rel string) (Attribution, bool) {
 	var out Attribution
 	var claimants []string
@@ -51,7 +53,7 @@ func AttributeWrite(rows []types.Job, rel string) (Attribution, bool) {
 		if !row.State.Live() {
 			continue
 		}
-		lane, covered := matching(row.WritePaths, rel)
+		declared, covered := matching(row.WritePaths, rel)
 		if !covered {
 			continue
 		}
@@ -59,7 +61,7 @@ func AttributeWrite(rows []types.Job, rel string) (Attribution, bool) {
 			continue
 		}
 		claimants = append(claimants, row.ID)
-		out.Job, out.Lane = row.ID, lane
+		out.Job, out.WritePath = row.ID, declared
 	}
 	if len(claimants) > 1 {
 		slices.Sort(claimants)
@@ -69,8 +71,8 @@ func AttributeWrite(rows []types.Job, rel string) (Attribution, bool) {
 }
 
 // Covers reports whether a declared path covers a repository-relative one, on the rule the
-// lanes are graded by: a glob matches as a glob, and a literal directory covers what is
-// under it.
+// write paths are graded by: a glob matches as a glob, and a literal directory covers what
+// is under it.
 //
 // Exported so a reader FILTERING by path asks the same question the guard asks when it
 // grades a write. Two answers to "is this file inside that path" is how a console filter
@@ -80,7 +82,7 @@ func Covers(declared, p string) bool { return covers(declared, p) }
 // Feed event kinds. They are the three things a watcher can see a worker do, and each one
 // comes from a different producer: the filesystem, the guard, and the run journal.
 const (
-	FeedFile = "file" // a path under the job's lane changed
+	FeedFile = "file" // a path under the job's write paths changed
 	FeedTool = "tool" // the guard observed a tool call under the job's lease
 	FeedRun  = "run"  // a run magus recorded against the job
 )
@@ -93,9 +95,9 @@ type FeedEvent struct {
 	Ts   int64  // unix milliseconds
 	Kind string // one of FeedFile, FeedTool, FeedRun
 	Job  string // the job this was attributed to, empty when nothing could attribute it
-	// Lane is the declaration that attributed a file event. Empty on the other kinds,
+	// WritePath is the declaration that attributed a file event. Empty on the other kinds,
 	// which are attributed by lease rather than by path.
-	Lane string
+	WritePath string
 	// Action is what happened, in the kind's own vocabulary: the path for a file event,
 	// the tool label for a tool call, the rendered command for a run.
 	Action  string
@@ -128,13 +130,13 @@ type FeedEvent struct {
 
 // FileEvents attributes changed paths to live jobs, newest-first order preserved from the
 // caller's batch. An unattributable path still produces an event, with an empty Job: a
-// write outside every lane is the one a reader most wants to see, and dropping it is how a
-// view comes to show a quiet tree while somebody is editing it.
+// write outside every declared boundary is the one a reader most wants to see, and dropping
+// it is how a view comes to show a quiet tree while somebody is editing it.
 func FileEvents(rows []types.Job, ts int64, paths []string) []FeedEvent {
 	out := make([]FeedEvent, 0, len(paths))
 	for _, p := range paths {
 		at, _ := AttributeWrite(rows, p)
-		e := FeedEvent{Ts: ts, Kind: FeedFile, Job: at.Job, Lane: at.Lane, Action: p, Outcome: trail.OutcomeOK}
+		e := FeedEvent{Ts: ts, Kind: FeedFile, Job: at.Job, WritePath: at.WritePath, Action: p, Outcome: trail.OutcomeOK}
 		if len(at.Ambiguous) > 0 {
 			e.Contested = at.Ambiguous
 			e.Note = "contested: " + strings.Join(at.Ambiguous, " and ") + " both declare this path"
@@ -221,8 +223,8 @@ func runEvent(id string, a types.JobAttempt, note string) FeedEvent {
 // and an empty one does not constrain, matching the ActivityQuery grammar the console
 // already speaks.
 //
-// Paths match the same way a lane does, so asking for a directory answers for what is
-// under it.
+// Paths match the same way a declared write path does, so asking for a directory answers
+// for what is under it.
 type FeedFilter struct {
 	Jobs     []string
 	Sessions []string

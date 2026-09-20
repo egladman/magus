@@ -138,7 +138,7 @@ func Greet(name string) string {
 `
 
 func TestCommentOnlyGo(t *testing.T) {
-	syn := syntaxFor(t, ".go")
+	syn := commentSyntax(t, ".go")
 	assert.True(t, CommentOnlyDeclared(goCode, goCode, syn), "identical")
 	assert.True(t, CommentOnlyDeclared(goCode, goCommentEdit, syn), "comments added and reworded")
 	assert.True(t, CommentOnlyDeclared(goCommentEdit, goCode, syn), "comments removed")
@@ -156,7 +156,7 @@ func TestCommentOnlyGo(t *testing.T) {
 // TestCommentOnlyGoDirectives: a directive comment is code. Editing one can
 // change what compiles, embeds, generates, or lints, so it never defers.
 func TestCommentOnlyGoDirectives(t *testing.T) {
-	syn := syntaxFor(t, ".go")
+	syn := commentSyntax(t, ".go")
 	build := "//go:build linux\n\npackage p\n"
 	assert.False(t, CommentOnlyDeclared(build, "//go:build darwin\n\npackage p\n", syn), "a build constraint edit is a code edit")
 	assert.False(t, CommentOnlyDeclared("package p\n", "package p\n\n//go:generate stringer -type=T\n", syn), "adding a generate directive is a code edit")
@@ -187,7 +187,7 @@ fun greet(name: str) > str {
 `
 
 func TestCommentOnlyBuzz(t *testing.T) {
-	syn := syntaxFor(t, ".buzz")
+	syn := commentSyntax(t, ".buzz")
 	assert.True(t, CommentOnlyDeclared(buzzCode, buzzCode, syn), "identical")
 	assert.True(t, CommentOnlyDeclared(buzzCode, buzzCommentEdit, syn), "comments added and reworded")
 	assert.True(t, CommentOnlyDeclared(buzzCommentEdit, buzzCode, syn), "comments removed")
@@ -389,7 +389,7 @@ var testSyntax = map[string]spells.CommentSyntax{
 	},
 }
 
-func syntaxFor(t *testing.T, ext string) spells.CommentSyntax {
+func commentSyntax(t *testing.T, ext string) spells.CommentSyntax {
 	t.Helper()
 	syn, ok := testSyntax[ext]
 	require.True(t, ok, "expected a test declaration for %s", ext)
@@ -400,7 +400,7 @@ func syntaxFor(t *testing.T, ext string) spells.CommentSyntax {
 // inside a string is content, a quote inside a comment is comment, and a
 // whole-line comment takes its line with it while code lines keep their bytes.
 func TestStripCommentsStateMachine(t *testing.T) {
-	py := syntaxFor(t, ".py")
+	py := commentSyntax(t, ".py")
 	assert.Equal(t, `x = "# not a comment"`+"\n", StripComments(`x = "# not a comment"`+"\n", py),
 		"a comment token inside a string is content")
 	assert.Equal(t, "x = 1\n", StripComments("x = 1  # say \"hi\"\n", py),
@@ -414,7 +414,7 @@ func TestStripCommentsStateMachine(t *testing.T) {
 // TestStripCommentsNested: rust declares nested block comments, so the outer
 // closer is the one that ends the span.
 func TestStripCommentsNested(t *testing.T) {
-	rs := syntaxFor(t, ".rs")
+	rs := commentSyntax(t, ".rs")
 	src := "let a = 1; /* outer /* inner */ still comment */ let b = 2;\n"
 	assert.Equal(t, "let a = 1; let b = 2;\n", StripComments(src, rs))
 	assert.Equal(t, `let s = r#"// not a comment "quote" "#;`+"\n",
@@ -425,7 +425,7 @@ func TestStripCommentsNested(t *testing.T) {
 // TestCommentOnlyDeclared: the comparison the classifier runs for declared
 // languages, including the no-whitespace-normalization rule.
 func TestCommentOnlyDeclared(t *testing.T) {
-	py := syntaxFor(t, ".py")
+	py := commentSyntax(t, ".py")
 	assert.True(t, CommentOnlyDeclared("x = 1\n", "x = 1  # note\n", py), "a trailing comment appeared")
 	assert.True(t, CommentOnlyDeclared("x = 1\n", "# header\nx = 1\n", py), "a comment line appeared")
 	assert.False(t, CommentOnlyDeclared("x = 1\n", "x = 2  # note\n", py), "code changed alongside")
@@ -434,7 +434,7 @@ func TestCommentOnlyDeclared(t *testing.T) {
 	assert.False(t, CommentOnlyDeclared(`s = """doc"""`+"\n", `s = """docs"""`+"\n", py),
 		"a docstring is a runtime value, so editing it is a code edit")
 
-	ts := syntaxFor(t, ".ts")
+	ts := commentSyntax(t, ".ts")
 	assert.True(t, CommentOnlyDeclared("const a = 1;\n", "const a = 1; /* note */\n", ts))
 	assert.False(t, CommentOnlyDeclared("const u = `//x`;\n", "const u = `//y`;\n", ts),
 		"a comment token inside a template literal is content")
@@ -443,13 +443,13 @@ func TestCommentOnlyDeclared(t *testing.T) {
 // TestCommentOnlyDeclaredDirectives: a directive comment is code per the
 // declaring language, so touching one never reads comment-only.
 func TestCommentOnlyDeclaredDirectives(t *testing.T) {
-	py := syntaxFor(t, ".py")
+	py := commentSyntax(t, ".py")
 	assert.False(t, CommentOnlyDeclared("x = f()  # type: int\n", "x = f()  # type: str\n", py), "a type comment edit is a code edit")
 	assert.False(t, CommentOnlyDeclared("import os  # noqa\n", "import os\n", py), "removing a noqa is a code edit")
 	assert.True(t, CommentOnlyDeclared("import os  # noqa\n# old\n", "import os  # noqa\n# new\n", py),
 		"an untouched directive does not stop ordinary comment edits from deferring")
 
-	ts := syntaxFor(t, ".ts")
+	ts := commentSyntax(t, ".ts")
 	assert.False(t, CommentOnlyDeclared("// @ts-ignore\nf();\n", "f();\n", ts), "removing a ts directive is a code edit")
 }
 
@@ -496,7 +496,7 @@ func TestInheritOffWhenAnOptionWasDropped(t *testing.T) {
 // stubbed, so the decision is exercised with no repository and no CI provider.
 // The classifier carries no blob readers, which is the strict setting: a code
 // language cannot read as comment-only by accident.
-func inheritProbeFor(green string, found bool, history []types.Commit, changed []string) InheritProbe {
+func newInheritProbe(green string, found bool, history []types.Commit, changed []string) InheritProbe {
 	return InheritProbe{
 		LastGreenRun: func(context.Context) (string, string, bool) {
 			return "https://example/run/7", green, found
@@ -518,7 +518,7 @@ var inheritHistory = []types.Commit{
 // inherited verdict is only defensible if a reader can reconstruct it; a
 // change that thins the report has to fail here.
 func TestInheritProbeFires(t *testing.T) {
-	p := inheritProbeFor("green0123456789", true, inheritHistory, []string{"docs/x.md"})
+	p := newInheritProbe("green0123456789", true, inheritHistory, []string{"docs/x.md"})
 	got, ok := p.Evaluate(context.Background())
 	require.True(t, ok)
 	assert.Equal(t, "https://example/run/7", got.Run)
@@ -552,11 +552,11 @@ func TestInheritProbeDeclines(t *testing.T) {
 		{ID: "green0123456789", Parents: []string{"c0"}},
 	}
 	cases := map[string]InheritProbe{
-		"no green run":       inheritProbeFor("green0123456789", false, inheritHistory, []string{"docs/x.md"}),
-		"green run unnamed":  inheritProbeFor("", true, inheritHistory, []string{"docs/x.md"}),
-		"code in the delta":  inheritProbeFor("green0123456789", true, inheritHistory, []string{"docs/x.md", "internal/y.go"}),
-		"merge in the range": inheritProbeFor("green0123456789", true, pushedMerge, []string{"docs/x.md"}),
-		"green out of reach": inheritProbeFor("unreachable", true, inheritHistory, []string{"docs/x.md"}),
+		"no green run":       newInheritProbe("green0123456789", false, inheritHistory, []string{"docs/x.md"}),
+		"green run unnamed":  newInheritProbe("", true, inheritHistory, []string{"docs/x.md"}),
+		"code in the delta":  newInheritProbe("green0123456789", true, inheritHistory, []string{"docs/x.md", "internal/y.go"}),
+		"merge in the range": newInheritProbe("green0123456789", true, pushedMerge, []string{"docs/x.md"}),
+		"green out of reach": newInheritProbe("unreachable", true, inheritHistory, []string{"docs/x.md"}),
 		"disabled":           {Disabled: true},
 		"no provider wired":  {},
 	}
@@ -573,12 +573,12 @@ func TestInheritProbeDeclines(t *testing.T) {
 // proceeds exactly as it would have without this feature.
 func TestInheritProbeSurvivesBrokenInputs(t *testing.T) {
 	boom := errors.New("no such revision")
-	p := inheritProbeFor("green0123456789", true, inheritHistory, []string{"docs/x.md"})
+	p := newInheritProbe("green0123456789", true, inheritHistory, []string{"docs/x.md"})
 	p.History = func(context.Context) ([]types.Commit, error) { return nil, boom }
 	_, ok := p.Evaluate(context.Background())
 	assert.False(t, ok, "an unreadable history declines")
 
-	p = inheritProbeFor("green0123456789", true, inheritHistory, nil)
+	p = newInheritProbe("green0123456789", true, inheritHistory, nil)
 	p.Changed = func(context.Context, string) ([]string, error) { return nil, boom }
 	_, ok = p.Evaluate(context.Background())
 	assert.False(t, ok, "an unreadable diff declines")
@@ -587,7 +587,7 @@ func TestInheritProbeSurvivesBrokenInputs(t *testing.T) {
 // An empty delta is the boundary case: nothing changed since green, so the
 // verdict inherits and both reports say so rather than printing an empty table.
 func TestInheritProbeEmptyDelta(t *testing.T) {
-	p := inheritProbeFor("green0123456789", true, inheritHistory, nil)
+	p := newInheritProbe("green0123456789", true, inheritHistory, nil)
 	got, ok := p.Evaluate(context.Background())
 	require.True(t, ok)
 	assert.Contains(t, got.AnnotationText(), "\nno paths changed since that run")

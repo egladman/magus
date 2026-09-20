@@ -76,7 +76,7 @@ export const RunJobResponseSchema: GenMessage<RunJobResponse> = /*@__PURE__*/
  * running now, its most recent run, and the current magnitude of the resource it maintains.
  *
  * ONE message for both kinds. A catalog job fills the description and target; a delegated
- * one fills the lanes and the check it was given; both carry id, holder and state, which is
+ * one fills the write paths and the check it was given; both carry id, holder and state, which is
  * what lets a client render the two in one list without branching on which it has.
  *
  * @generated from message magus.job.v1alpha1.Job

@@ -478,6 +478,24 @@ type planOutput struct {
 type planShard struct {
 	Shard    string `json:"shard"    yaml:"shard"`
 	Projects string `json:"projects" yaml:"projects"`
+	// Label is Projects shortened for a CI job name. Separate from Projects because a
+	// provider passes that one to `magus run ci <projects>` and must not receive an
+	// elision.
+	Label string `json:"label" yaml:"label"`
+}
+
+// shardLabel names a shard by what is in it. A CI job list is scanned, not studied, so
+// this shows the first few paths and counts the rest; a bare shard number says nothing
+// about what is red.
+func shardLabel(paths []string) string {
+	const shown = 3
+	switch {
+	case len(paths) == 0:
+		return "no projects"
+	case len(paths) <= shown:
+		return strings.Join(paths, " ")
+	}
+	return fmt.Sprintf("%s +%d", strings.Join(paths[:shown], " "), len(paths)-shown)
 }
 
 // planPublish is one CI job output. Value is always single-line: providers write
@@ -723,6 +741,18 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		slog.Int("shards", len(plan.Shards)),
 		slog.String("source", plan.Source),
 		slog.String("forecast", globalCfg.HistoryPath))
+	// Advice, once, where a person reads it. Both facts are about runner spend and
+	// runner death, neither of which the shard table shows.
+	if n := plan.Sufficient; n > 0 && n < len(plan.Shards) {
+		slog.WarnContext(ctx, fmt.Sprintf(
+			"magus: %d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--ci-max-shards=%d`)",
+			len(plan.Shards), n, n))
+	}
+	if len(plan.OverBudget) > 0 {
+		slog.WarnContext(ctx, fmt.Sprintf(
+			"magus: shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--ci-max-shards` splits them, unless one project exceeds the budget alone)",
+			strings.Join(plan.OverBudget, ", ")))
+	}
 
 	out := planOutput{
 		Count:       len(plan.Shards),
@@ -731,7 +761,11 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Matrix:      make([]planShard, len(plan.Shards)),
 	}
 	for i, s := range plan.Shards {
-		out.Matrix[i] = planShard{Shard: s.ID, Projects: strings.Join(s.ProjectPaths, " ")}
+		out.Matrix[i] = planShard{
+			Shard:    s.ID,
+			Projects: strings.Join(s.ProjectPaths, " "),
+			Label:    shardLabel(s.ProjectPaths),
+		}
 	}
 	if inherit != nil {
 		pi := &planInherit{Run: inherit.Run, Commit: inherit.Commit, Summary: inherit.SummaryMarkdown()}

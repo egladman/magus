@@ -484,7 +484,7 @@ func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	// run holding half its state each, so failures pinned by one were
 	// unreachable from the other.
 	//
-	// Keyed on w being standard error, the same identity check tty.ZoneFor
+	// Keyed on w being standard error, the same identity check tty.ZoneOf
 	// makes, so a handler pointed at a log file or test buffer is its own.
 	if w != os.Stderr {
 		return newPrettyHandler(w, level, tty.SystemProbe)
@@ -492,7 +492,7 @@ func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	stderrPrettyMu.Lock()
 	defer stderrPrettyMu.Unlock()
 	if stderrPretty == nil {
-		stderrPretty = newPrettyHandlerZone(w, level, tty.SystemProbe, tty.ZoneFor(w), tty.NotifierFor(w))
+		stderrPretty = newPrettyHandlerZone(w, level, tty.SystemProbe, tty.ZoneOf(w), tty.NotifierOf(w))
 		return stderrPretty
 	}
 	// The level comes from the most recent caller. In the CLI both callers read
@@ -1888,7 +1888,7 @@ func FailureHintPlain() string {
 	return hintLead + hintRerun + "   " + hintFocus + "   " + hintCopy + "   " + hintOutput + "   " + hintDone
 }
 
-// NewPrettyHandlerFor returns a handler that draws into w, measured through p.
+// NewPrettyHandlerWith returns a handler that draws into w, measured through p.
 //
 // Exported for a caller that is deliberately NOT the process terminal: the
 // documentation renderer, which drives a real handler against an in-memory
@@ -1899,7 +1899,7 @@ func FailureHintPlain() string {
 // process band.
 // A nil now defaults to time.Now; pass a fixed one to render a picture whose
 // bytes do not depend on when it was rendered.
-func NewPrettyHandlerFor(w io.Writer, level slog.Level, p tty.Probe, now func() time.Time) *PrettyHandler {
+func NewPrettyHandlerWith(w io.Writer, level slog.Level, p tty.Probe, now func() time.Time) *PrettyHandler {
 	h := newPrettyHandler(w, level, p)
 	if now != nil {
 		h.now = now

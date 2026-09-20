@@ -595,7 +595,7 @@ func (s *Store) read() (jobsFile, map[string]json.RawMessage, error) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		return jobsFile{}, nil, err
 	}
-	if err := foldStoredLanes(raw, f.Jobs); err != nil {
+	if err := foldStoredNames(raw, f.Jobs); err != nil {
 		return jobsFile{}, nil, fmt.Errorf("job: %s: %w", s.path, err)
 	}
 	// A row this binary cannot read whole stops every operation, not just the read of that
@@ -760,9 +760,9 @@ func mergeRowRaw(row types.Job, prevRaw json.RawMessage) (json.RawMessage, error
 		// baggage at all.
 		return json.Marshal(row)
 	}
-	// The pre-rename lane spellings are folded onto their current field on every read
-	// (foldStoredLanes) and must not ride back out under the old name too, or the next read
-	// finds a lane declared under both spellings, which foldStoredLanes refuses.
+	// The pre-rename spellings are folded onto their current field on every read
+	// (foldStoredNames) and must not ride back out under the old name too, or the next read
+	// finds a field declared under both spellings, which foldStoredNames refuses.
 	for _, pair := range renamedFields {
 		delete(base, pair[0])
 	}

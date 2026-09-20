@@ -89,7 +89,7 @@ func TestPromptCacheDescriptionsNeverSayExpired(t *testing.T) {
 	}
 }
 
-func TestIdleFor(t *testing.T) {
+func TestRenderSpan(t *testing.T) {
 	for d, want := range map[time.Duration]string{
 		-time.Second:                  "0s",
 		500 * time.Millisecond:        "1s",
@@ -100,6 +100,6 @@ func TestIdleFor(t *testing.T) {
 		24*time.Hour + time.Hour:      "25h",
 		23*time.Hour + 59*time.Minute: "23h59m",
 	} {
-		assert.Equal(t, want, idleFor(d), "idleFor(%s)", d)
+		assert.Equal(t, want, renderSpan(d), "renderSpan(%s)", d)
 	}
 }

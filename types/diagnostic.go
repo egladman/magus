@@ -338,17 +338,7 @@ const (
 	//
 	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
 	// command is valid again the moment the later gate finishes.
-	GateSuperseded DiagnosticCode = "MGS3014"
-	// RunIsolationWedged is a run magus refused because every step holding its isolation
-	// gate is itself waiting, nothing has started, finished or printed a line for the
-	// grace, and what is queued for the gate cannot start until a holder finishes.
-	//
-	// It exits 70 (EX_SOFTWARE) rather than the 75 MGS3009/MGS3010/MGS3014 use: those say
-	// the same command is valid again once the tree settles, and this says magus queued a
-	// step behind a gate its own ancestor holds, so the run's captured log is what to read.
-	// "Wedged" and not "deadlocked" because it is observed from a grace with nothing
-	// moving, never from the proven wait cycle MGS3013 reports.
-	RunIsolationWedged        DiagnosticCode = "MGS3015"
+	GateSuperseded            DiagnosticCode = "MGS3014"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -431,6 +421,10 @@ const (
 	ReviewAuthorshipUnknown DiagnosticCode = "MGS1103"
 )
 
+// MGS3015 is retired and deliberately absent above; docs/decisions/0001 says why. The
+// number is not reused: a retired code that comes back means two different things in one
+// search of a log archive.
+
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
 // in sync with the const block above; it is the enumeration source for tooling
 // (the knowledge graph turns each into a diagnostic node) since Go const blocks
@@ -453,7 +447,6 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
-	RunIsolationWedged,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

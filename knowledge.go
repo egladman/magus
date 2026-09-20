@@ -224,7 +224,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 		Immutable: cacheImmutable(cfg),
 		Refresh:   refresh,
 		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
-		Remote:    remoteShardsFor(ws),
+		Remote:    remoteShards(ws),
 	}, in, log)
 }
 
@@ -276,7 +276,13 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 	}
 	var out []types.KnowledgeTiming
 	for project, targets := range h.Projects {
-		for target, st := range targets {
+		// Keyed "<spell>/<target>" here and by the bare target in the graph, so emitting
+		// the raw key minted a node id nothing matched and every timing attr was dropped.
+		for _, target := range bareTargetNames(targets) {
+			st, ok := h.FoldTargetHistories(project, target)
+			if !ok {
+				continue
+			}
 			out = append(out, types.KnowledgeTiming{
 				Project:        project,
 				Target:         target,
@@ -482,7 +488,7 @@ func symbolStore(ws types.Inspector, root string, cfg config.Config, log *slog.L
 	if log == nil {
 		log = slog.Default()
 	}
-	return knowledge.NewStore(resolveCacheDir(root, cfg), cacheImmutable(cfg), int64(cfg.Knowledge.MaxSizeMB)*1024*1024, remoteShardsFor(ws), log)
+	return knowledge.NewStore(resolveCacheDir(root, cfg), cacheImmutable(cfg), int64(cfg.Knowledge.MaxSizeMB)*1024*1024, remoteShards(ws), log)
 }
 
 // MergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
@@ -1239,11 +1245,11 @@ func (c shardChain) PutShard(ctx context.Context, key string, r io.Reader) error
 	return c[0].PutShard(ctx, key, r)
 }
 
-// remoteShardsFor returns the shard backing for a workspace: the build cache's remote
+// remoteShards returns the shard backing for a workspace: the build cache's remote
 // backend when ws is a cache-backed *Magus, then whatever UsePublishedShards installed.
 // nil means local-only, which is what an Inspect-constructed *Magus with no published ref
 // gets, because it has no cache either.
-func remoteShardsFor(ws types.Inspector) knowledge.RemoteShards {
+func remoteShards(ws types.Inspector) knowledge.RemoteShards {
 	m, ok := ws.(*Magus)
 	if !ok {
 		return nil
@@ -1329,4 +1335,24 @@ func (m *Magus) KnowledgeGraphWithSymbolsForRef(ctx context.Context, ref string)
 // pays the cache-first rebuild per command (equally fresh, just not warm).
 func (m *Magus) WatchKnowledgeGraph(ctx context.Context) (func(), error) {
 	return m.warmKnowledgeGraph().watch(ctx, m.Root())
+}
+
+// bareTargetNames lists the target names behind a project's history keys, deduplicated
+// and sorted. The history keys a target as "<spell>/<target>"; everything outside that
+// package names the bare target a magusfile declares.
+func bareTargetNames(targets map[string]forecast.Stats) []string {
+	seen := make(map[string]bool, len(targets))
+	for key := range targets {
+		name := key
+		if i := strings.LastIndex(key, "/"); i >= 0 {
+			name = key[i+1:]
+		}
+		seen[name] = true
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
 }

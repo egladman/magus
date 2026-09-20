@@ -121,8 +121,8 @@ func TestScopeDriftRecordsNothingWithoutABase(t *testing.T) {
 	assert.Empty(t, touchedProjects(markers))
 }
 
-// A worker writing inside the lane its orchestrator declared is in scope by
-// declaration, whatever the graph says about the projects that lane spans.
+// A worker writing inside the write paths its orchestrator declared is in scope by
+// declaration, whatever the graph says about the projects those paths span.
 func TestLeaseCoversWrite(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	base, root := t.TempDir(), t.TempDir()

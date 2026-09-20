@@ -109,7 +109,7 @@ func takeStderrZone() *Zone {
 	return z
 }
 
-// ZoneFor returns the Zone that owns w's bottom rows: the process-wide
+// ZoneOf returns the Zone that owns w's bottom rows: the process-wide
 // [StderrZone] when w IS standard error, and a fresh unshared Zone otherwise.
 //
 // The identity check is the point. Sharing an owner is only correct for
@@ -117,7 +117,7 @@ func takeStderrZone() *Zone {
 // property of the descriptor, not of anyone's intent to cooperate. A handler
 // pointed at a log file or a test buffer gets its own Zone and cannot disturb
 // the real one.
-func ZoneFor(w io.Writer) *Zone {
+func ZoneOf(w io.Writer) *Zone {
 	if w == os.Stderr {
 		return StderrZone()
 	}

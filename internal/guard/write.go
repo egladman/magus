@@ -335,9 +335,9 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 //
 // A deny path beats a write path, because a denied entry inside a leased tree is the more
 // specific of two declarations the same orchestrator wrote. A write outside a DECLARED
-// write set is denied whether or not another lease claims the path: the set is the lane
-// the orchestrator handed out, and a worker that widens its own lane is the failure the
-// declaration exists to catch. An EMPTY write set is not a lane of size zero, it is a
+// write set is denied whether or not another lease claims the path: the set is the boundary
+// the orchestrator handed out, and a worker that widens its own is the failure the
+// declaration exists to catch. An EMPTY write set is not a boundary of size zero, it is a
 // boundary nobody declared, so it scopes nothing. owners are the live leases that claim
 // their paths, see owningLeases.
 func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string) writeGrade {
@@ -351,7 +351,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string) writeGra
 			me.ID, criteriaLine(me), rel)}
 	}
 	// BEFORE the path checks, because a lease that has not exec'd should not be writing anywhere,
-	// not merely outside its lane. A checkpoint is what says which base the work applies to and
+	// not merely outside its write paths. A checkpoint is what says which base the work applies to and
 	// what makes its diff locatable afterwards (it records a revision and a patch DIGEST, so it
 	// never makes the work recoverable), and both facts are worth nothing recorded afterwards.
 	//
@@ -408,7 +408,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string) writeGra
 		return writeGrade{}
 	}
 	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen this lane")+"\n"+
+		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen these write paths")+"\n"+
 			"%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
 			"Report it as this call, which is the whole widening:\n  %s",
 		me.ID, strings.Join(me.WritePaths, ", "), rel, me.ID, criteriaLine(me), widenCall(me, rel))}
@@ -478,7 +478,7 @@ func liveLease(live []types.Job, id string) (types.Job, bool) {
 func ownerOf(live []types.Job, rel, exclude string) (types.Job, bool, error) {
 	now := time.Now().Unix()
 	for _, u := range live {
-		// An overdue lease's own writes are denied, so its lane would otherwise block
+		// An overdue lease's own writes are denied, so its write paths would otherwise block
 		// everyone, the holder included, until somebody ends the row.
 		if u.ID == exclude || u.Overdue(now) {
 			continue

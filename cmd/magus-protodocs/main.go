@@ -789,10 +789,10 @@ func pagePath(protoFile string) string {
 
 func (a api) pagePathOf(s service) string { return pagePath(s.File) }
 
-// pageFor returns the output path of the page that canonically documents a magus package,
+// page returns the output path of the page that canonically documents a magus package,
 // and whether one exists (it does for every magus.* package that declares a service or a
 // top-level type; it does not for an external or well-known package).
-func (a api) pageFor(pkg string) (string, bool) {
+func (a api) page(pkg string) (string, bool) {
 	if path, ok := a.svcOfPkg[pkg]; ok {
 		return path, true
 	}
@@ -833,7 +833,7 @@ func (a api) typeLink(disp, full, fromPkg, fromPath string) string {
 	if pkg == fromPkg {
 		return fmt.Sprintf("[%s](#%s)", disp, anchor(full))
 	}
-	if path, ok := a.pageFor(pkg); ok {
+	if path, ok := a.page(pkg); ok {
 		return fmt.Sprintf("[%s](%s.md#%s)", disp, relLink(fromPath, path), anchor(full))
 	}
 	return "`" + disp + "`"
@@ -1068,7 +1068,7 @@ func (a api) exampleJSON(inputFull string) string {
 		if f.Ref != "" && !f.RefIsEnum {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("%q:%s", f.JSONName, placeholderFor(f)))
+		lines = append(lines, fmt.Sprintf("%q:%s", f.JSONName, f.placeholder()))
 	}
 	if len(lines) == 0 {
 		return "{}"
@@ -1076,7 +1076,7 @@ func (a api) exampleJSON(inputFull string) string {
 	return "{" + strings.Join(lines, ",") + "}"
 }
 
-func placeholderFor(f field) string {
+func (f field) placeholder() string {
 	if f.RefIsEnum {
 		if f.EnumFallback != "" {
 			return `"` + f.EnumFallback + `"`

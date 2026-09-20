@@ -8,7 +8,7 @@ import (
 )
 
 func TestImprovementCandidateRemainsAProposal(t *testing.T) {
-	candidate := improvementCandidateFor(trail.GuardFeedback{
+	candidate := improvementCandidate(trail.GuardFeedback{
 		Rule: "raw-tool", Surface: "shell.command", Denied: 3, Sessions: 1,
 		FollowedSessions: 1, Evidence: []string{"test-host:session-1 (3 denials)"},
 	})

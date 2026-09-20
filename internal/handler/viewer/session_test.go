@@ -124,14 +124,14 @@ func TestGetSessionActivityNoWrite(t *testing.T) {
 // a peer that is not loopback.
 func TestGetSessionActivityRefusals(t *testing.T) {
 	unwired := NewService(&fakeOutputs{}, &fakeRuns{})
-	_, err := unwired.sessionActivityFor("127.0.0.1:5000", "sess", "a.go")
+	_, err := unwired.loadSessionActivity("127.0.0.1:5000", "sess", "a.go")
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
 	wired := NewService(&fakeOutputs{}, &fakeRuns{}, WithSessionRoot(t.TempDir()))
-	_, err = wired.sessionActivityFor("127.0.0.1:5000", "../etc", "a.go")
+	_, err = wired.loadSessionActivity("127.0.0.1:5000", "../etc", "a.go")
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
-	_, err = wired.sessionActivityFor("192.168.1.20:5000", "sess", "a.go")
+	_, err = wired.loadSessionActivity("192.168.1.20:5000", "sess", "a.go")
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 }
 

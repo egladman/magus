@@ -56,7 +56,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 Job is the full picture of one job: what it is, who holds it, whether an instance is running now, its most recent run, and the current magnitude of the resource it maintains.
 
-ONE message for both kinds. A catalog job fills the description and target; a delegated one fills the lanes and the check it was given; both carry id, holder and state, which is what lets a client render the two in one list without branching on which it has.
+ONE message for both kinds. A catalog job fills the description and target; a delegated one fills the write paths and the check it was given; both carry id, holder and state, which is what lets a client render the two in one list without branching on which it has.
 
 Source: [job.proto:74](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L74).
 

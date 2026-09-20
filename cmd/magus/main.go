@@ -1413,6 +1413,12 @@ func exitCodeOf(err error) int {
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
 	// generic error line; the magusfile already logged whatever it wanted to.
+	//
+	// A diagnostic-carrying ExitError stays quiet HERE and logs at the site that
+	// raised it, which is the rule the stall watchdog already follows (watchdog.go)
+	// and the reason it gives: a reader should learn why the run stopped at the moment
+	// it stops, not only in the final error. Logging again here printed MGS3012 twice
+	// and promoted MGS3014, a deliberate non-failure, from Warn to Error.
 	var exitErr types.ExitError
 	if errors.As(err, &exitErr) {
 		return exitErr.Code

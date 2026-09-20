@@ -28,8 +28,8 @@ func declaration(members ...string) *strings.Reader {
 }
 
 // compat: see the legacy fields on types.Declaration. A client one release behind still registers, and
-// one that names a lane twice is refused rather than silently taking either spelling.
-func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
+// one that names a field twice is refused rather than silently taking either spelling.
+func TestDecodeDeclarationReadsAFieldUnderItsOldName(t *testing.T) {
 	t.Parallel()
 
 	row, err := DecodeDeclaration(declaration(
@@ -46,7 +46,7 @@ func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 	}, row)
 }
 
-func TestDecodeDeclarationRefusesALaneSpelledBothWays(t *testing.T) {
+func TestDecodeDeclarationRefusesAFieldSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeDeclaration(declaration(`"id":"adj/ledger"`, `"owned_paths":["a"]`, `"write_paths":["b"]`))
@@ -182,7 +182,7 @@ func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
 // row the other would have recorded. ParseMerge is the MCP tool's decoder and
 // types.Declaration is the CLI's. types.Declaration alone still carries the pre-rename
-// spellings (owned_paths/forbidden_paths/focus/tier; see types.Declaration.FoldLegacyLanes):
+// spellings (owned_paths/forbidden_paths/focus/tier; see types.Declaration.FoldLegacyNames):
 // that compat is its own and was never mirrored into ParseMerge, so it is excluded from
 // this comparison rather than asserted as shared vocabulary.
 func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {

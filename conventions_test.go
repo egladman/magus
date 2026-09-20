@@ -32,6 +32,8 @@ import (
 	"testing"
 	"unicode"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
@@ -2034,9 +2036,13 @@ var hostAgnosticSkipDirs = map[string]bool{
 	"skills": true, "releases": true, "manpage": true, "schema": true,
 }
 
+// The walk names the files and the scanning is fanned out across them: three regexes per
+// LINE over every non-test .go file in the tree is the package's longest test, and under
+// -race a single goroutine spends that time alone while the other cores idle.
 func TestNoHostSpecificBehaviorInCode(t *testing.T) {
-	var violations []string
+	t.Parallel()
 
+	var files []string
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -2049,29 +2055,34 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 		}
 		// Tests may name a host: a test asserting the guard's behavior against a
 		// real host event is describing the world, not encoding a code path.
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+		if strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			files = append(files, path)
 		}
-
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = f.Close() }()
-
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		for line := 1; sc.Scan(); line++ {
-			text := sc.Text()
-			if !hostSpecificLine(text) {
-				continue
-			}
-			violations = append(violations, fmt.Sprintf("%s:%d: %s", path, line, strings.TrimSpace(text)))
-		}
-		return sc.Err()
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("walk: %v", err)
+	}
+
+	// Indexed by file rather than appended under a mutex: the result is in walk order
+	// whatever order the scheduler finishes in, so a failure reads the same way twice
+	// without a sort, and there is no shared slice to guard.
+	found := make([][]string, len(files))
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+	for i, path := range files {
+		g.Go(func() error {
+			lines, err := hostSpecificLines(path)
+			found[i] = lines
+			return err
+		})
+	}
+	if err := g.Wait(); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	var violations []string
+	for _, lines := range found {
+		violations = append(violations, lines...)
 	}
 
 	assert.Empty(t, violations,
@@ -2081,6 +2092,27 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 			"instructions, help text, a per-host branch - belongs in docs the reader owns, or the next\n"+
 			"change to that host becomes a magus release.\n\nviolations:\n%s",
 		strings.Join(violations, "\n"))
+}
+
+// hostSpecificLines is every line of one file that names a host, located for a reader.
+func hostSpecificLines(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	var out []string
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for line := 1; sc.Scan(); line++ {
+		text := sc.Text()
+		if !hostSpecificLine(text) {
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s:%d: %s", path, line, strings.TrimSpace(text)))
+	}
+	return out, sc.Err()
 }
 
 // TestHostSpecificLineMatcher grades the matcher against lines rather than against the

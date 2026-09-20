@@ -114,6 +114,23 @@ func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 	assert.True(t, result.Guarded)
 }
 
+// TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr pins the stream
+// split. The wiring this repository recommends puts a released magus on PATH that
+// redirects to the workspace's own binary and says so on stderr, which the host
+// never reads; grading it as part of the answer reported a guard that was denying
+// correctly as uncovered.
+func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) {
+	root := t.TempDir()
+	writeFakeMagusBinary(t, root)
+	script := "#!/bin/sh\ncat >/dev/null\necho 'magus: using this workspace ...' >&2\nprintf 'deny'\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-command.sh"), []byte(script), 0o755))
+	writeProbeableHarness(t, root, "chatty", "sh magus-command.sh")
+
+	result, err := VerifyHarness(context.Background(), root, "chatty")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
+}
+
 // TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered covers a command that
 // runs, and answers, but not with a decision a working guard would ever render for
 // this event: the case a raw "it produced non-empty output" check would have

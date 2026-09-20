@@ -29,11 +29,11 @@ func isGraphRelevant(paths []string) bool {
 
 // JobFeed turns the daemon's one file watcher into a feed any number of readers can
 // subscribe to, with each changed path already attributed to the job whose declared write
-// lane covers it.
+// paths cover it.
 //
 // THIS IS THE HALF THAT NEEDS NO COOPERATION FROM THE WORKER. A guard event exists because
 // an agent host ran a hook; a run exists because somebody recorded one. A file change is
-// the filesystem reporting a fact, and the lane is what turns it into "that worker is
+// the filesystem reporting a fact, and the write paths are what turn it into "that worker is
 // editing this". Nothing the worker does can make it quiet.
 //
 // One watcher, many subscribers: two readers pulling from one channel would each get half
@@ -120,9 +120,9 @@ func (f *JobFeed) publish(batch watch.Batch) {
 	ts := batch.At.UnixMilli()
 	rel := make([]string, 0, len(batch.Paths))
 	for _, p := range batch.Paths {
-		// The watcher reports absolute paths and a lane is declared repo-relative, so a path
-		// that will not relativize is one from outside this root: skipped rather than
-		// attributed, since no lane here could honestly cover it.
+		// The watcher reports absolute paths and a write path is declared repo-relative, so a
+		// path that will not relativize is one from outside this root: skipped rather than
+		// attributed, since no declaration here could honestly cover it.
 		r, err := filepath.Rel(f.root, p)
 		if err != nil || strings.HasPrefix(r, "..") {
 			continue

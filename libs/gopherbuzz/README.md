@@ -72,7 +72,7 @@ Each is a call to make deliberately, with the migration budgeted -- not a gap to
 patch. The one structural item worth naming: **optionality is erased**, which is
 what blocks two of them and would be the next real piece of type-system work.
 
-The fuzz corpus is upstream's checked-in AFL output, not hand-written tests: the
+The fuzz seeds are upstream's checked-in AFL output, not hand-written tests: the
 filenames are AFL's (`id_000123,sig_06,src_000051,op_flip1,pos_1`), where `sig_06` is
 the signal that crashed the target and `op_flip1`/`op_arith8` is the mutation applied.
 The contents are real Buzz programs with a byte corrupted -- `mnssage:` for `message:`,

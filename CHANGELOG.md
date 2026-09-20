@@ -403,7 +403,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **The lease store refuses a write to somebody else's row, and binding is one-way.** A
   session acting under a lease may register the base it landed on, shrink its own owned
   paths (which is how it releases one), end its own row in `fail` or `no_return`, and
-  declare a child of itself inside its own paths. Widening a lane, rewriting the plan,
+  declare a child of itself inside its own paths. Widening a boundary, rewriting the plan,
   clearing the book and accepting a row are refused by name, with the remedy and the actor
   in the text. The rule lives in the store, so the CLI, the `magus_ledger` tool and
   `magus\ledger` all carry it; the guard's own denial text used to read as an invitation to
@@ -610,7 +610,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   reach it before they even run: `magus session lease <other-id>`, `magus ledger accept`,
   `magus ledger register`, `op=clear`, and any `put` or `register` naming a row other than
   the caller's own. A `put` on the caller's own row is denied too, with one exception: a put
-  that only drops entries from its own `owned_paths` passes through, since giving a lane
+  that only drops entries from its own `owned_paths` passes through, since giving a path
   back cannot widen a role and the store already judges whether a particular shrink is
   legitimate; `op=register` on the caller's own row passes, since recording the base a lease
   landed on is a procedure the write surface demands. Reading (`op=list`, `magus session
@@ -621,7 +621,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   verdict now carries the lease it was graded under.** `.claude/settings.json` and its
   hooks, `.cursor/hooks.json`, `.codex/hooks.json` and `.opencode/plugins/` decide whether
   the guard runs at all from the host's next session start, so an edit there is refused
-  regardless of the lane, even one that happens to contain the file; an unbound session gets
+  regardless of the write paths, even ones that happen to contain the file; an unbound session gets
   a once-per-session advisory instead. `lease` on the verdict names the row a write was
   graded against: an id the ledger does not declare is now a deny rather than a silent
   pass-through, and an id naming a terminal row (`pass`, `fail`, `no_return`) prints one

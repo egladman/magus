@@ -418,7 +418,7 @@ func TestTrackHunksRelocatesADraftWhoseCodeMoved(t *testing.T) {
 
 	sess := s.AddComment(root, types.DiffComment{
 		Path: "a.go", Hunk: 0, Line: 12, Body: "why is this not a pointer",
-		Anchor: s.AnchorFor(root, "a.go", 12),
+		Anchor: s.Anchor(root, "a.go", 12),
 	}, types.DiffAuthorHuman)
 	require.Len(t, sess.Comments, 1)
 	require.Equal(t, "\treturn x", sess.Comments[0].Anchor.Quote, "the server captured what the reader saw")

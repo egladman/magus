@@ -11,7 +11,7 @@ import (
 )
 
 // TestGuardGradesTwoSessionsInOneCheckoutSeparately is the enforcement half of the
-// per-session binding: each session's own marker decides which lane its writes are graded
+// per-session binding: each session's own marker decides which write paths its writes are graded
 // against, so two workers sharing a checkout are each denied outside their own paths
 // rather than both running ungraded.
 func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
@@ -46,7 +46,7 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 
 // TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld pins the advisory that makes the
 // collision proof unskippable: an orchestrator handing out a second worker in a checkout
-// somebody is already writing in is told so, with the union of the lanes to check and the
+// somebody is already writing in is told so, with the union of the write paths to check and the
 // worktree that makes the check unnecessary.
 func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
 	held := types.Job{

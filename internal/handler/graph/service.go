@@ -35,10 +35,10 @@ func NewService(ws resolver) *Service { return &Service{ws: ws} }
 
 var _ graphv1alpha1connect.GraphServiceHandler = (*Service)(nil)
 
-// graphFor resolves the flavor a lookup needs. Only a symbol-seeded input pays for the
+// graph resolves the flavor a lookup needs. Only a symbol-seeded input pays for the
 // @symbols shards; everything else answers from the warm, symbol-free graph, which is what
 // keeps the default export lazy.
-func (s *Service) graphFor(ctx context.Context, input string) (*knowledge.Graph, bool, error) {
+func (s *Service) graph(ctx context.Context, input string) (*knowledge.Graph, bool, error) {
 	if knowledge.SeedsLazyLayer(input) {
 		g, err := s.ws.KnowledgeGraphWithSymbols(ctx)
 		return g, true, err
@@ -68,7 +68,7 @@ func (s *Service) QueryNodes(
 	if query == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(`graph: query is required (e.g. "kind=target project=api")`))
 	}
-	g, seeded, err := s.graphFor(ctx, query)
+	g, seeded, err := s.graph(ctx, query)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -95,7 +95,7 @@ func (s *Service) ResolveNodes(
 	if ref == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: reference is required"))
 	}
-	g, _, err := s.graphFor(ctx, ref)
+	g, _, err := s.graph(ctx, ref)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -110,7 +110,7 @@ func (s *Service) ExplainNode(
 	if name == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: name is required"))
 	}
-	g, _, err := s.graphFor(ctx, name)
+	g, _, err := s.graph(ctx, name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -134,7 +134,7 @@ func (s *Service) FindPath(
 	if from == "" || to == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("graph: from and to are both required"))
 	}
-	g, _, err := s.graphFor(ctx, from+" "+to)
+	g, _, err := s.graph(ctx, from+" "+to)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

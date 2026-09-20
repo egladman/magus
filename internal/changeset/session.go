@@ -219,13 +219,13 @@ func (s *Store) relocate(root string) {
 	}
 }
 
-// AnchorFor captures what a remark at path:line should remember about the code under it, from the
+// Anchor captures what a remark at path:line should remember about the code under it, from the
 // patch this session last tracked.
 //
 // Zero when the session has never tracked that file, which is the same honest answer CaptureAnchor
 // gives for a line no hunk covers: there is nothing under the remark to remember, and inventing
 // something would put a quote on the record that nobody was shown.
-func (s *Store) AnchorFor(root, path string, line int) types.CommentAnchor {
+func (s *Store) Anchor(root, path string, line int) types.CommentAnchor {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

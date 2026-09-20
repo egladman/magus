@@ -304,6 +304,12 @@ func TestExitCodeOf(t *testing.T) {
 	// that claim it are pinned where they are built: TestMachineBusyRidesTheExitCodeSeam
 	// and lock_test.go's contention case.
 	assert.Equal(t, 1, exitCodeOf(types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")))
+
+	// An ExitError keeps its code whether or not it wraps a diagnostic. It logs
+	// NOTHING either way: a diagnostic-carrying one is logged where it is raised, so
+	// that a reader sees it when the run stops rather than only at the end.
+	assert.Equal(t, 3, exitCodeOf(types.ExitError{Code: 3}))
+	assert.Equal(t, 70, exitCodeOf(types.ExitError{Code: 70, Err: errors.New("the gate wedged")}))
 }
 
 // TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do

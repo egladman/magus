@@ -129,7 +129,7 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 				row.ProbeTime = timestamppb.New(pr.at)
 			}
 			row.Verdict = verdict(effective, pr.version)
-			row.DiagnosticCode = diagnosticFor(row.Verdict)
+			row.DiagnosticCode = diagnosticCode(row.Verdict)
 			out = append(out, row)
 		}
 	}
@@ -195,9 +195,9 @@ func verdict(b spells.VersionBounds, version string) toolv1.Verdict {
 	}
 }
 
-// diagnosticFor is the code the CLI raises for a verdict. Derived, not returned beside
+// diagnosticCode is the code the CLI raises for a verdict. Derived, not returned beside
 // it, so a new verdict cannot be wired with its code left blank.
-func diagnosticFor(v toolv1.Verdict) string {
+func diagnosticCode(v toolv1.Verdict) string {
 	switch v {
 	case toolv1.Verdict_VERDICT_TOO_OLD:
 		return string(types.ToolTooOld)

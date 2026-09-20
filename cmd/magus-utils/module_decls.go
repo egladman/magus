@@ -78,7 +78,7 @@ func renderModuleDecls(mod std.Module) (string, error) {
 	var b strings.Builder
 	// Enums first: an object mirror may use one as a field type, and Buzz needs the
 	// declaration before the use.
-	enums, err := enumsFor(mod)
+	enums, err := collectEnums(mod)
 	if err != nil {
 		return "", err
 	}
@@ -87,12 +87,12 @@ func renderModuleDecls(mod std.Module) (string, error) {
 		b.WriteByte('\n')
 	}
 
-	mirrors, err := mirrorsFor(mod)
+	mirrors, err := collectMirrors(mod)
 	if err != nil {
 		return "", err
 	}
 	for _, name := range mirrors {
-		entry, _ := boundaryTypeNamed(name) // mirrorsFor already resolved every name it returns
+		entry, _ := boundaryTypeNamed(name) // collectMirrors already resolved every name it returns
 		out, err := renderBuzzMirrorDecl(name, entry.Type)
 		if err != nil {
 			return "", err
@@ -388,7 +388,7 @@ func buzzReturnType(m std.Method) (string, error) {
 	return buzzArgType(r.Type)
 }
 
-// mirrorsFor returns the object mirrors a module's declarations must carry, in
+// collectMirrors returns the object mirrors a module's declarations must carry, in
 // leaf-first order: every object its methods return, plus every object those
 // reference transitively. Derived from the returns rather than hand-listed, so a new
 // object return cannot be declared without its mirror traveling with it.
@@ -398,7 +398,7 @@ func buzzReturnType(m std.Method) (string, error) {
 // module whose mirror was missing while the extern still referenced it by name, which
 // parses fine (buzz.Parse is syntax-only) and is then rejected at check time, dropping
 // the module's declarations wholesale, with no codegen error to say why.
-func mirrorsFor(mod std.Module) ([]string, error) {
+func collectMirrors(mod std.Module) ([]string, error) {
 	seen := map[string]bool{}
 	var order []string
 	var visit func(name string) error
@@ -457,11 +457,11 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 	return order, nil
 }
 
-// enumsFor returns the enum declarations a module's signatures name, in first-use
+// collectEnums returns the enum declarations a module's signatures name, in first-use
 // order.
 //
 // Derived from the signatures rather than hand-listed, for the same reason
-// mirrorsFor is: an Arg.Enum naming a type whose declaration does not travel with it
+// collectMirrors is: an Arg.Enum naming a type whose declaration does not travel with it
 // produces a module whose extern references an undefined name. That parses (buzz.Parse
 // is syntax-only) and is then rejected at CHECK time, which drops the module's whole
 // declaration set with no codegen error saying why.
@@ -469,7 +469,7 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 // This is why an enum reachable only from a signature needs collecting at all: the
 // types generator emits an enum into the mirror of the OBJECT whose field uses it, so
 // an enum no object references had nowhere to be declared.
-func enumsFor(mod std.Module) ([]boundaryEnum, error) {
+func collectEnums(mod std.Module) ([]boundaryEnum, error) {
 	seen := map[string]bool{}
 	var order []boundaryEnum
 	add := func(name, where string) error {
@@ -526,7 +526,7 @@ func sortedMethods(mod std.Module) []std.Method {
 //
 // time.Time is excluded explicitly: it is a struct, but it crosses the boundary as an
 // RFC3339 str (see buzzType), so treating it as a referenced object would ask for a
-// mirror named "Time" that must not exist. It was previously swallowed by mirrorsFor's
+// mirror named "Time" that must not exist. It was previously swallowed by collectMirrors's
 // silent skip; now that an unresolvable name is an error, the exclusion has to be
 // stated rather than relied upon.
 func referencedObjects(rt reflect.Type) []string {
@@ -541,7 +541,7 @@ func referencedObjects(rt reflect.Type) []string {
 			t = t.Elem()
 		}
 		if t.Kind() == reflect.Struct && t != reflect.TypeFor[time.Time]() {
-			out = append(out, buzzNameFor(t))
+			out = append(out, buzzName(t))
 		}
 	}
 	return out

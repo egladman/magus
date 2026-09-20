@@ -173,7 +173,7 @@ func (o Observed) covering(declared string, paths []string) bool {
 }
 
 // VerifyGates checks a holder's result against the job it was given: every changed path
-// inside the declared lanes, outside the deny list and in the diff magus observed, no
+// inside the declared write paths, outside the deny list and in the diff magus observed, no
 // descendant still live, descendants the store carries, and a recorded passing run behind
 // the primary check and every explicit completion gate.
 //

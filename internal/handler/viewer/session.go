@@ -42,14 +42,14 @@ func unrecordedParts() []*viewerv1.Unrecorded {
 // GetSessionActivity serves the loaded events of one session that led up to its last write
 // of the requested path.
 func (s *Service) GetSessionActivity(_ context.Context, req *connect.Request[viewerv1.GetSessionActivityRequest]) (*connect.Response[viewerv1.SessionActivity], error) {
-	out, err := s.sessionActivityFor(req.Peer().Addr, req.Msg.GetSession(), req.Msg.GetPath())
+	out, err := s.loadSessionActivity(req.Peer().Addr, req.Msg.GetSession(), req.Msg.GetPath())
 	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(out), nil
 }
 
-func (s *Service) sessionActivityFor(peer, session, path string) (*viewerv1.SessionActivity, error) {
+func (s *Service) loadSessionActivity(peer, session, path string) (*viewerv1.SessionActivity, error) {
 	// The rest of this service rides the share surface. A session's record does not: the diff
 	// routes it annotates are loopback only, and so is this.
 	if !loopbackPeer(peer) {

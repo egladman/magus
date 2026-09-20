@@ -363,8 +363,8 @@ func (s JobState) Terminal() bool {
 //
 // EXITED IS LIVE, which reads oddly next to Terminal and is the safe direction. A holder
 // that filed its result still holds the lease on its checkout, and a verification that
-// rejects sends it back to the same lanes; dropping the job out of live here would leave
-// every write after `job exit` graded by nothing at all.
+// rejects sends it back to the same write paths; dropping the job out of live here would
+// leave every write after `job exit` graded by nothing at all.
 func (s JobState) Live() bool {
 	return s == StateDeclared || s == StateRunning || s == StateExited
 }
@@ -416,33 +416,34 @@ func ValidJobID(id string) bool {
 // its rewrite; the version is what tells such a reader to stop instead of proceeding.
 // TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
 // golden list, so a field added without a bump fails a test instead of failing a store.
-const JobSchemaVersion = 8
+const JobSchemaVersion = 9
 
-// JobLaneProof is what the fork could prove about a job's write lane against the other
+// JobWriteProof is what the fork could prove about a job's write paths against the other
 // live jobs bound to the SAME CHECKOUT at the moment it was declared.
 //
-// Recorded rather than enforced, with one exception (a lane covering a workspace-load
+// Recorded rather than enforced, with one exception (write paths covering a workspace-load
 // file, which is refused outright). Two workers overlapping is a call only the
 // orchestrator can make: it may have sequenced them, or split one file deliberately. What
 // nobody could do before is READ that call back afterwards, so a plan full of overlapping
-// lanes and a plan whose lanes were checked looked identical.
-type JobLaneProof string
+// write paths and a plan whose write paths were checked looked identical.
+type JobWriteProof string
 
 const (
-	// LaneProofAlone is a fork made in a checkout no other live job with write paths was
+	// WriteProofAlone is a fork made in a checkout no other live job with write paths was
 	// bound to. There was nothing to be disjoint FROM, which is not the same claim as
 	// disjoint and is why it is its own value.
-	LaneProofAlone JobLaneProof = "alone"
-	// LaneProofDisjoint is a lane that intersects no other bound job's lane here.
-	LaneProofDisjoint JobLaneProof = "disjoint"
-	// LaneProofOverlapping is a lane that intersects one. The fork stands; the row says so.
-	LaneProofOverlapping JobLaneProof = "overlapping"
+	WriteProofAlone JobWriteProof = "alone"
+	// WriteProofDisjoint is a job whose write paths intersect no other bound job's here.
+	WriteProofDisjoint JobWriteProof = "disjoint"
+	// WriteProofOverlapping is one whose write paths intersect another's. The fork stands;
+	// the row says so.
+	WriteProofOverlapping JobWriteProof = "overlapping"
 )
 
-// JobLaneProofs is the closed set, for the reason JobStates is one: the published schema
+// JobWriteProofs is the closed set, for the reason JobStates is one: the published schema
 // and every reader that renders a row quote it.
-func JobLaneProofs() []JobLaneProof {
-	return []JobLaneProof{LaneProofAlone, LaneProofDisjoint, LaneProofOverlapping}
+func JobWriteProofs() []JobWriteProof {
+	return []JobWriteProof{WriteProofAlone, WriteProofDisjoint, WriteProofOverlapping}
 }
 
 // JobActor identifies the session that wrote a row: the same pair the trail records
@@ -582,7 +583,7 @@ type Job struct {
 	// read-only lease BY DESIGN (see ReadOnly), which is why neither is required.
 	WritePaths []string `json:"write_paths,omitempty" yaml:"write_paths,omitempty"`
 	DenyPaths  []string `json:"deny_paths,omitempty" yaml:"deny_paths,omitempty"`
-	// ReadPaths is the declared READ lane: the paths whose projects this lease may read,
+	// ReadPaths is what this lease may READ: the paths whose projects it may read,
 	// widened to those projects' own dependencies when the guard resolves it. Empty
 	// means WritePaths stands in, because a worker leased to edit a project is a
 	// worker that was pointed at that project.
@@ -592,7 +593,7 @@ type Job struct {
 	// to WRITE it, and one list cannot say both. It is also the only way to widen the
 	// boundary, which is deliberate. An environment variable that switched the rule
 	// off would be set once, in a wrapper, by the first worker it inconvenienced, and
-	// nothing afterwards would say the lane had stopped being checked.
+	// nothing afterwards would say the boundary had stopped being checked.
 	ReadPaths []string `json:"read_paths,omitempty" yaml:"read_paths,omitempty"`
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
@@ -639,11 +640,17 @@ type Job struct {
 	// afterwards, so the lease on the other side (the one whose file moved) was the one
 	// party never told.
 	Unattributed []JobUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
-	// LaneProof is what the fork could prove about this job's lane against the other live
-	// jobs bound to the checkout it was declared in. Store-computed and output-only like
-	// Releases: it is a fact about the plan at one instant, and a caller that could assert
-	// it could assert the proof it stands for. See [JobLaneProof].
-	LaneProof JobLaneProof `json:"lane_proof,omitempty" yaml:"lane_proof,omitempty"`
+	// WriteProof is what the fork could prove about this job's write paths against the
+	// other live jobs bound to the checkout it was declared in. Store-computed and
+	// output-only like Releases: it is a fact about the plan at one instant, and a caller
+	// that could assert it could assert the proof it stands for. See [JobWriteProof].
+	//
+	// Written as `lane_proof` through schema 8. A schema-8 row decodes with this UNSET
+	// rather than through a legacy fold: unlike the Declaration fields, which a person
+	// authors and would lose work by, this one is store-computed, informational, and
+	// already renders as "-" when empty. Carrying a second key for it would add a decode
+	// path with no reader to justify it. JobSchemaVersion is 9 for exactly this.
+	WriteProof JobWriteProof `json:"write_proof,omitempty" yaml:"write_proof,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
 	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
 	// what the orchestrator handed out; this is what the worker found. Two fields rather
@@ -734,11 +741,11 @@ type Declaration struct {
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
-	// WritePaths is the declared write lane, empty on a read-only row by design.
+	// WritePaths is what this lease may write, empty on a read-only row by design.
 	WritePaths []string `json:"write_paths,omitempty"`
-	// DenyPaths are the paths inside that lane this lease may not write.
+	// DenyPaths are the paths inside those this lease may not write.
 	DenyPaths []string `json:"deny_paths,omitempty"`
-	// ReadPaths is the declared READ lane, widened to those projects' dependencies by the
+	// ReadPaths is what it may READ, widened to those projects' dependencies by the
 	// guard. Empty means write_paths stands in.
 	ReadPaths []string `json:"read_paths,omitempty"`
 	// DependsOn names the lease ids that must land before this one.
@@ -752,7 +759,7 @@ type Declaration struct {
 	// compat(until: no client or stored ledger still sends owned_paths/focus/
 	// forbidden_paths/tier; observe: grep the leases-*.json archives and the trail for the
 	// old keys): the decoder is strict, so an old client's row would be refused as an
-	// unknown member rather than understood. A row naming both spellings of one lane is
+	// unknown member rather than understood. A row naming both spellings of one field is
 	// refused, since nothing here can say which one its author meant.
 	LegacyWritePaths []string `json:"owned_paths,omitempty"`
 	// LegacyDenyPaths is the pre-rename spelling of deny_paths. compat: see LegacyWritePaths.
@@ -785,12 +792,12 @@ type Declaration struct {
 	Timeout string `json:"timeout,omitempty"`
 }
 
-// FoldLegacyLanes moves a lane declared under its old name onto the field that carries it,
-// refusing a row that names one lane twice. Exported for job.DecodeDeclaration, the one
-// caller outside this package: it runs between the JSON decode and Validate.
+// FoldLegacyNames moves a field declared under its old name onto the one that carries it,
+// refusing a row that names the same field twice. Exported for job.DecodeDeclaration, the
+// one caller outside this package: it runs between the JSON decode and Validate.
 //
 // compat: see the legacy fields on [Declaration].
-func (r *Declaration) FoldLegacyLanes() error {
+func (r *Declaration) FoldLegacyNames() error {
 	var err error
 	fold := func(name string, into *[]string, from []string) {
 		switch {
@@ -1174,7 +1181,7 @@ type JobBlock struct {
 // ask this before treating a row as an owner.
 //
 // A dependency no row declares blocks too, as it refuses the dependent's pass in
-// verification: a dropped row must not hand its lane to a waiter by vanishing.
+// verification: a dropped row must not hand its write paths to a waiter by vanishing.
 func JobBlockedOn(rows []Job, row Job) (JobBlock, bool) {
 	for _, dep := range row.DependsOn {
 		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == dep })

@@ -76,7 +76,7 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus job <fork|exec|exit|wait|run> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
-	fmt.Fprintln(os.Stderr, "the grant one holder has on it: its write and read lanes, plus the one check it runs.")
+	fmt.Fprintln(os.Stderr, "the grant one holder has on it: the paths it may write and read, plus the one check it runs.")
 	fmt.Fprintln(os.Stderr, "A job is not a run: `magus run` executes a target with no job involved, while a job's")
 	fmt.Fprintln(os.Stderr, "check and the daemon's maintenance each cause runs.")
 	fmt.Fprintln(os.Stderr, "Kept per repository, so every worktree and clone reads one set of jobs.")
@@ -168,10 +168,10 @@ func lsJobs(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count, what")
-			fmt.Fprintln(os.Stderr, "its fork could prove about its lane (LANES) and its check, followed by every")
+			fmt.Fprintln(os.Stderr, "its fork could prove about its write paths (PROOF) and its check, followed by every")
 			fmt.Fprintln(os.Stderr, "pair that claims the same path.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "LANES is what the checkout looked like when the job was forked: alone (nothing")
+			fmt.Fprintln(os.Stderr, "PROOF is what the checkout looked like when the job was forked: alone (nothing")
 			fmt.Fprintln(os.Stderr, "else live was bound there), disjoint, or overlapping.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -224,7 +224,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "JOB\tHOLDER\tSTATE\tMODEL\tPATHS\tLANES\tCHECK")
+	fmt.Fprintln(w, "JOB\tHOLDER\tSTATE\tMODEL\tPATHS\tPROOF\tCHECK")
 	marks := map[string][]string{}
 	for word, ids := range map[string][]string{"overdue": report.Overdue, "orphan": report.Orphans, "stale": report.Stale} {
 		for _, id := range ids {
@@ -240,7 +240,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
 			string(row.lease.Holder.OrSession()), state, orDash(row.lease.Model),
-			len(row.lease.WritePaths), orDash(string(row.lease.LaneProof)), orDash(row.lease.Validation))
+			len(row.lease.WritePaths), orDash(string(row.lease.WriteProof)), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()
 
@@ -319,7 +319,7 @@ func jobTreeOrder(leases []types.Job) []jobTreeLine {
 }
 
 // describeJob is `magus describe job`: one job's terms, which is what a holder reads on
-// arrival. It prints the criteria, the lanes, the check, the model, the checkpoint, the
+// arrival. It prints the criteria, the write paths, the check, the model, the checkpoint, the
 // dependencies, what the workspace itself puts out of reach, and the graph's blast radius
 // for each write path, and it prints no procedure: taking the job is `magus job exec`'s
 // work to DO, not a paragraph for somebody to follow by hand.
@@ -331,7 +331,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe job <job> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus describe job <job> --gates")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Print one job's terms: its criteria, lanes, check and dependencies, the paths this")
+			fmt.Fprintln(os.Stderr, "Print one job's terms: its criteria, write paths, check and dependencies, the paths this")
 			fmt.Fprintln(os.Stderr, "workspace puts out of reach, and the graph's blast radius for each write path.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It renders context and never a status: magus assembles what it holds and you")
@@ -420,7 +420,7 @@ func checkoutBaseToken(ctx context.Context, root string) (string, error) {
 
 // listFlag accumulates one repeatable, comma-separated flag, on the same rule --skip
 // follows (cmd/magus/run.go): an empty segment is refused rather than dropped, so a
-// trailing comma cannot silently shrink a lease's lane.
+// trailing comma cannot silently shrink a lease's write paths.
 //
 // Not named for paths: --depends-on holds job ids and the gate flags hold symbols, and a
 // type called pathList holding neither is a name that has to be read past.
@@ -516,7 +516,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&declared.parent, "parent", "", "The job this one is forked from")
 		fs.StringVar(&declared.checkpoint, "checkpoint", "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 		fs.Var(&declared.writePaths, "write-paths", "A path this job may write; repeatable or comma-separated")
-		fs.Var(&declared.denyPaths, "deny-paths", "A path inside the lane this job may not write; repeatable or comma-separated")
+		fs.Var(&declared.denyPaths, "deny-paths", "A path this job may not write, carved out of its write paths; repeatable or comma-separated")
 		fs.Var(&declared.readPaths, "read-paths", "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)")
 		fs.Var(&declared.dependsOn, "depends-on", "A job this one waits on; repeatable or comma-separated")
 		fs.StringVar(&declared.check, "check", "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
@@ -538,7 +538,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "check it runs. It replaces any job with the same id.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A session holding a lease may only fork a CHILD of its own job, inside its own")
-			fmt.Fprintln(os.Stderr, "paths; widening a lane is the forking session's.")
+			fmt.Fprintln(os.Stderr, "paths; widening a boundary is the forking session's.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "There is no --state: this declares a NEW job, and one nobody has taken is")
 			fmt.Fprintln(os.Stderr, string(types.StateDeclared)+". A holder moves its own job with `"+hint.JobExec.String()+"` and `"+hint.JobExit.String()+"`.")
@@ -592,7 +592,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseSharedCheckout(store, plan, row.ID, candidate); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	proof := job.LaneProofFor(store, plan, row.ID, candidate)
+	proof := store.WriteProof(plan, row.ID, candidate)
 	// A writing job is verified against the diff since its checkpoint, so one forked without
 	// a checkpoint could never pass. The fork records this checkout's state instead; where it
 	// cannot be read (no VCS here) the row stays without one and wait says why it cannot verify.
@@ -604,7 +604,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	declare := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
 	stored, err := store.Update(ctx, row.ID, func(u *types.Job) {
 		declare(u)
-		u.LaneProof = proof
+		u.WriteProof = proof
 	})
 	if err != nil {
 		return err
@@ -652,14 +652,14 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "       magus job exec --vacate")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Take the lease on a job here. Every lease-scoped guard and sandbox rule then")
-			fmt.Fprintln(os.Stderr, "reads that job's lanes in this checkout, and the base this tree is on is")
+			fmt.Fprintln(os.Stderr, "reads that job's write paths in this checkout, and the base this tree is on is")
 			fmt.Fprintln(os.Stderr, "recorded beside the checkpoint the job was handed, with the divergence between")
 			fmt.Fprintln(os.Stderr, "them as a fact rather than a refusal.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no job, it prints the one this checkout holds.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--session names the session taking it, so several sessions sharing one checkout")
-			fmt.Fprintln(os.Stderr, "each hold their own lease and each gets its own lane graded. Pass the id this")
+			fmt.Fprintln(os.Stderr, "each hold their own lease and each gets its own boundary graded. Pass the id this")
 			fmt.Fprintln(os.Stderr, "agent host reports to its hooks, or the binding is the whole checkout's.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--vacate gives that binding up instead of taking one, so the checkout can exec a")
@@ -760,7 +760,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 // the same escape denyLeaseScopedRebind already closes for rebinding outright. Once a
 // holder has exited, there is no more of ITS OWN work left to protect against: exited
 // counts as live elsewhere (types.JobState.Live) so a rejected wait can send work back
-// to the same lanes, but nobody is required to ever run that wait, and a checkout stuck
+// to the same write paths, but nobody is required to ever run that wait, and a checkout stuck
 // on a lease nobody will collect is exactly the bug this flag exists to fix. A row the
 // store cannot find or read is treated the same permissive way: nothing here declares a
 // boundary left to protect, the same fail-open reading the guard gives an unreadable
@@ -891,7 +891,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 //
 // THE ENFORCEMENT POINT. Everything else about a job is a declaration: the store records,
 // the guard grades writes as they happen, and verification used to be the forking agent
-// reading a paragraph. A result that ran a filtered subset, wrote outside its lanes, or
+// reading a paragraph. A result that ran a filtered subset, wrote outside its write paths, or
 // cited a run from somewhere else reads exactly like one that did the work, and this is
 // where that stops being true.
 //
@@ -988,7 +988,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 // jobWatch follows one job's feed in this terminal, one line per event, until interrupted.
 //
 // THE POINT IS THAT IT ASKS THE HOLDER NOTHING. The three sources are the guard's trail,
-// the job's recorded runs, and the filesystem under the job's declared write lane, and none
+// the job's recorded runs, and the filesystem under the job's declared write paths, and none
 // of them needs the worker to cooperate or even to notice. Messaging a worker to ask how it
 // is going costs it the turn it was in the middle of.
 //
@@ -1006,7 +1006,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Follow what a job's holder is doing, one line per event, until interrupted.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Three sources, merged in time order: files changed under the job's declared write")
-			fmt.Fprintln(os.Stderr, "lane, tool calls the guard observed under its lease, and the runs magus recorded")
+			fmt.Fprintln(os.Stderr, "paths, tool calls the guard observed under its lease, and the runs magus recorded")
 			fmt.Fprintln(os.Stderr, "against it. None of them asks the holder anything, so watching costs it nothing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "`"+hint.DescribeJob.With("<job>", "--gates")+"` grades what it has finished; this shows what it is doing.")
@@ -1041,7 +1041,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 	fmt.Fprintf(out, "watching %s in %s; interrupt to stop\n", id, root)
 
 	// The job plan is re-read per batch rather than captured: a holder releases paths as it
-	// goes, and a lane frozen here would keep attributing a file it gave up.
+	// goes, and a boundary frozen here would keep attributing a file it gave up.
 	plan := func() []types.Job {
 		live, lerr := store.List()
 		if lerr != nil {
@@ -1290,7 +1290,7 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 // path early lets a waiter start against it.
 //
 // An ANCESTOR claims nothing against its descendant either: a child is forked inside its
-// parent's lane, so listing the parent's paths would put the child's own lane out of reach.
+// parent's boundary, so listing the parent's paths would put the child's own out of reach.
 func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
 	ancestors := types.JobAncestors(leases, row.ID)
 	var out []job.TermsBoundary

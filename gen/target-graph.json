@@ -152,6 +152,64 @@
           "name": "man-generate",
           "declared": "man_generate",
           "doc": "Renders the roff man pages into manpage/ (repo root).",
+          "dependencies": [
+            "spells-generate",
+            "bindings-generate",
+            "langservice-generate",
+            "mcp-tools-generate",
+            "config-generate",
+            "mocks-generate"
+          ],
+          "chain": [
+            {
+              "target": "spells-generate"
+            },
+            {
+              "target": "bindings-generate"
+            },
+            {
+              "target": "langservice-generate"
+            },
+            {
+              "target": "mcp-tools-generate"
+            },
+            {
+              "target": "config-generate"
+            },
+            {
+              "target": "mocks-generate"
+            }
+          ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "cmd/magus-manpage/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "types/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "go.mod"
+            },
+            {
+              "project": ".",
+              "glob": "go.sum"
+            },
+            {
+              "project": ".",
+              "glob": "go.work"
+            },
+            {
+              "project": ".",
+              "glob": "go.work.sum"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -1108,6 +1166,9 @@
             },
             {
               "glob": "coverage.hand.out"
+            },
+            {
+              "glob": "coverage.cmd.out"
             }
           ],
           "exec_overrides": [

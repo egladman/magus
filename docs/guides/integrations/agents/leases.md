@@ -27,7 +27,7 @@ deciding is the model's.
 Two nouns, and the difference decides how everything below reads. A **job** is
 the unit of delegated work: one row, with a goal, a checkpoint, the paths it may
 write, and the one check it runs. A **lease** is the grant a holder takes on a
-job: the write and read lanes that job declared, enforced in the checkout that
+job: the write and read paths that job declared, enforced in the checkout that
 took it. A job is the thing; a lease is permission over it.
 
 How to split the work is not on this page. That is the
@@ -120,7 +120,7 @@ A row carries `id` and optionally `parent` (the job this one was forked from),
 `read_only`. The
 store adds `schema_version`, the actor that recorded the row, `created`,
 `updated`, `releases`, `unattributed` (paths this job owns that somebody
-outside it wrote, noticed by the guard), and `lane_proof`, all output-only: a
+outside it wrote, noticed by the guard), and `write_proof`, all output-only: a
 timestamp a client sent would be a fact about that client's clock.
 
 There is no `--state` on `fork`. It declares a NEW job, and one nobody has taken
@@ -135,7 +135,7 @@ Five properties are worth stating plainly.
 record the base it landed on, SHRINK its own `write_paths` (which is how it
 releases a path), end its own job, and fork a child of itself inside its own
 paths. Every other write is refused, by name and with the remedy: widening a
-lane, changing the plan's shape, and verifying a result are the forking
+boundary, changing the plan's shape, and verifying a result are the forking
 session's. The rule lives in the store rather than in a guard pattern because
 the CLI, the `magus_job` MCP tool and `magus\job` all reach the same file and
 only one of them is a command a pattern can read. A session holding no lease,
@@ -163,17 +163,17 @@ project's `magusfile.buzz` or `magusfiles/*.buzz`, its `magus.yaml`, and the
 workspace-local spell sources those magusfiles import - while another live job
 with write paths is already bound to the same checkout. The refusal names the
 file and the job that holds the checkout, and the fix it names is a worktree
-rather than a narrower lane. Half-saved, one of those files stops the workspace
+rather than a narrower boundary. Half-saved, one of those files stops the workspace
 loading for EVERY worker in the checkout at once: they lose `magus run`, `magus
 ls` and their own tests, over an edit none of them made and none of them can
 see. The same three doors are covered, since `magus job fork`, `magus_job` and
 `magus\job.put` share one declaration path.
 
-Nothing else about a shared checkout is refused. Two lanes that merely overlap
-are the orchestrator's call - it may have sequenced them deliberately - so the
-fork RECORDS what it could prove instead, in `lane_proof`: `alone` when no other
-live job with write paths was bound to the checkout, else `disjoint` or
-`overlapping`. `magus ls jobs` prints it in the LANES column, so a plan read
+Nothing else about a shared checkout is refused. Two sets of write paths that
+merely overlap are the orchestrator's call - it may have sequenced them
+deliberately - so the fork RECORDS what it could prove instead, in `write_proof`:
+`alone` when no other live job with write paths was bound to the checkout, else
+`disjoint` or `overlapping`. `magus ls jobs` prints it per row, so a plan read
 later says which forks were checked and which were not.
 
 **A declared boundary is enforced elsewhere.** Beyond the row ownership above,
@@ -285,7 +285,7 @@ checkout holds.
 **A lease binds per SESSION, not per checkout.** `--session` names the session
 taking it, as the agent host names the conversation to its own hooks, and the
 binding is that session's. So several workers sharing one checkout each hold
-their own lease, each has its own lane graded, and each is denied outside it.
+their own lease, each has its own write paths graded, and each is denied outside them.
 Without it the binding is the whole checkout's, which is what every binding was
 before: a session that reports none, and a session nobody bound, both read the
 checkout-wide marker, so a worktree bound by hand still grades the sessions
@@ -356,10 +356,10 @@ A denial for another job's path also says how long ago that job was last
 updated and names `magus job exit <id>`, which releases a job nobody holds any
 more. A job past its deadline owns nothing against other jobs.
 
-The read row is the write lane read the other way. `write_paths` stands in when
+The read row is the write paths read the other way. `write_paths` stands in when
 `read_paths` is empty, because a holder leased to edit a project was pointed at
-that project, and the lane it opens is those projects plus what they declare
-`depends_on` (see [the guard's focus rule](guard.md#focus-the-read-lane)). Set
+that project, and the boundary it opens is those projects plus what they declare
+`depends_on` (see [the guard's focus rule](guard.md#focus-the-read-boundary)). Set
 `read_paths` when a holder must READ something it must not WRITE: widening
 `write_paths` to open a read is how two holders end up owning one file. Without
 a lease taken on the checkout the same rule only advises, which is the opt-in: a

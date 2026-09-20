@@ -85,7 +85,7 @@ func TestFocusContains(t *testing.T) {
 		{"README.md", true, "a file at depth zero describes the workspace"},
 		{"magusfile.buzz", true, "the workspace declaration every project resolves through"},
 		{"harnesses/example.json", true, "a root-owned file remains in the root project's focus without a special host convention"},
-		{"vendor/x/y.go", true, "only the root catches it, so no lane it could be outside of"},
+		{"vendor/x/y.go", true, "only the root catches it, so no boundary it could be outside of"},
 	} {
 		assert.Equal(t, tc.want, f.Contains(tc.path), "%s: %s", tc.path, tc.why)
 	}
@@ -118,7 +118,7 @@ func TestFocusForPathsSeedsFromDeclarations(t *testing.T) {
 func TestFocusForPathsWithNothingItCanAttribute(t *testing.T) {
 	w := focusWorkspace{root: "/ws", projects: map[string]*types.Project{"app": {Path: "app"}}}
 	_, ok := FocusForPaths(w, []string{"docs/guide.md", "../outside"})
-	assert.False(t, ok, "no project owns either path, so there is no lane to compute")
+	assert.False(t, ok, "no project owns either path, so there is no boundary to compute")
 }
 
 func TestFocusOwnerPrefersTheInnermostProject(t *testing.T) {

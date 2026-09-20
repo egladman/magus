@@ -136,7 +136,7 @@ cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
 # The binding is dropped here, not left for the cases below: every path case in this
-# fixture workspace would otherwise be graded against a lane nobody declared for it, and
+# fixture workspace would otherwise be graded against write paths nobody declared for it, and
 # the lease rules answer before the rule each of those cases is about.
 rm notes-ws/.magus/lease
 

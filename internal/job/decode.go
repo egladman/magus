@@ -18,12 +18,12 @@ import (
 //go:embed gen/job.schema.json
 var DeclarationSchema string
 
-// foldStoredLanes reads the four lanes out of a ledger file a previous magus wrote and
-// puts them on the rows raw was decoded into, which carry only the current spelling.
+// foldStoredNames reads the four renamed fields out of a ledger file a previous magus wrote
+// and puts them on the rows raw was decoded into, which carry only the current spelling.
 //
 // compat: see the legacy fields on [Declaration]. Without it a plan written before the rename
 // comes back with every boundary empty, and the next put stores that as the truth.
-func foldStoredLanes(raw []byte, rows []types.Job) error {
+func foldStoredNames(raw []byte, rows []types.Job) error {
 	var stored struct {
 		Jobs []struct {
 			WritePaths []string `json:"owned_paths"`
@@ -111,7 +111,7 @@ func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 	if err := json.UnmarshalStrict(raw, &row); err != nil {
 		return types.Declaration{}, fmt.Errorf("job: the input is not a version %d job: %w", types.JobSchemaVersion, err)
 	}
-	if err := row.FoldLegacyLanes(); err != nil {
+	if err := row.FoldLegacyNames(); err != nil {
 		return types.Declaration{}, err
 	}
 	return row, row.Validate()

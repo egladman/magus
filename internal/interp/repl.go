@@ -297,7 +297,7 @@ type replFooter struct {
 }
 
 func newReplFooter(out io.Writer) *replFooter {
-	return &replFooter{lease: tty.ZoneFor(out).Acquire(stickyFooterRows)}
+	return &replFooter{lease: tty.ZoneOf(out).Acquire(stickyFooterRows)}
 }
 
 // paint redraws the footer. It needs no cursor bookkeeping: Region painting is

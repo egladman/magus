@@ -53,7 +53,7 @@ cache directory:
 
 Only what was actually served is recorded, and what is served depends on who is
 asking. The entries are filtered for the acting lease's role first: a lease that
-owns paths is never offered a write whose lane magus cannot check, and a
+owns paths is never offered a write whose boundary magus cannot check, and a
 read-only lease is offered no write at all. An unbound session, a person or an
 orchestrator, gets the full set.
 

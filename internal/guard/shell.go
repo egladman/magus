@@ -585,6 +585,10 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 			return toolMatch{}, false
 		}
 	}
+	// Read once: every rendering that reaches the comparison below has already been
+	// checked to name this same program, so the invocation reads the same way for all of
+	// them. Computed inside the loops it cost a scan per spell, per operation, per charm.
+	have := afterGlobalFlags(c.Name, c.Args)
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
 			for _, charms := range [][]string{nil, {"rw"}} {
@@ -592,8 +596,8 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 				if err != nil || !ok || program == "" || filepath.Base(program) != c.Name {
 					continue
 				}
-				prefix := commandPrefix(args)
-				if len(prefix) > 0 && (len(c.Args) < len(prefix) || !slices.Equal(c.Args[:len(prefix)], prefix)) {
+				prefix := commandPrefix(program, args)
+				if len(prefix) > 0 && (len(have) < len(prefix) || !slices.Equal(have[:len(prefix)], prefix)) {
 					continue
 				}
 				return toolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0}, true
@@ -606,12 +610,25 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 // commandPrefix extracts the semantic subcommand from an operation's rendered argv,
 // preserving compound verbs (`go mod tidy`, `go tool govulncheck`). It is empty when the
 // rendering names no subcommand, which rawToolMatch reads as a single-purpose program.
-func commandPrefix(args []string) []string {
+//
+// It consumes a valued global flag's OPERAND as well as its name: leaving the operand in
+// place makes it read as the subcommand, and a nil answer here claims the program has NO
+// subcommands, which covers every spelling of it.
+//
+// An unknown flag is SKIPPED here and ends the read on the invocation side. The asymmetry
+// is the point: this argv is magus's own rendering, where a misread costs a rule that
+// matches nothing, while there it would invent a deny.
+func commandPrefix(program string, args []string) []string {
+	valued := valuedGlobalFlags[filepath.Base(program)]
 	first := 0
 	for first < len(args) && strings.HasPrefix(args[first], "-") {
+		if valued[args[first]] {
+			first++
+		}
 		first++
 	}
-	if first == len(args) || !subcommandWord(args[first]) {
+	// >=, not ==: an argv ending on a valued flag (["-C"]) advances past the end.
+	if first >= len(args) || !subcommandWord(args[first]) {
 		return nil
 	}
 	prefix := []string{args[first]}
@@ -619,6 +636,61 @@ func commandPrefix(args []string) []string {
 		prefix = append(prefix, args[first+1])
 	}
 	return prefix
+}
+
+// valuedGlobalFlags names, per program, the flags that precede a subcommand and take a
+// SEPARATE operand. Per program because the word after one is otherwise indistinguishable
+// from the subcommand, and reading it wrong invents a deny rather than missing one.
+//
+// `npm -w <pkg> test` and its siblings still walk past their denies. The gap is left open
+// deliberately: a wrong entry here is worse than a missing one.
+var valuedGlobalFlags = map[string]map[string]bool{
+	"go": {"-C": true},
+}
+
+// afterGlobalFlags drops the options a tool takes BEFORE its subcommand, so a rule matches
+// the command rather than one spelling of it: `go -C <dir> test ./...` is `go test ./...`.
+// It answers nil when it cannot tell.
+//
+// An UNKNOWN flag ends the read, because skipping it cannot distinguish a lone flag from
+// one whose operand follows: `npx --package nx some-bin` would present `nx` as the
+// subcommand and earn a deny nobody invoked. Missing a deny beats inventing one.
+//
+// A `--flag=value` carries its operand, so nothing follows it, but the value still has to
+// be READ: `-C=../sibling` otherwise spells its way around the escape check.
+func afterGlobalFlags(program string, args []string) []string {
+	valued := valuedGlobalFlags[filepath.Base(program)]
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
+			return args[i:]
+		}
+		if name, value, joined := strings.Cut(arg, "="); joined {
+			if valued[name] && escapesWorkspace(value) {
+				return nil
+			}
+			continue
+		}
+		if !valued[arg] {
+			return nil
+		}
+		// The operand of a valued flag, and the one case where reading it decides more
+		// than where to resume: a directory outside this workspace means the invocation
+		// is pointed at another tree, which no target here can run for the caller.
+		if i+1 >= len(args) || escapesWorkspace(args[i+1]) {
+			return nil
+		}
+		i++
+	}
+	return nil
+}
+
+// escapesWorkspace reports a path that names something outside the workspace. Textual: it
+// touches no filesystem. Cleaned first because a raw prefix test reads `./..` and
+// `a/../..` as in-tree.
+func escapesWorkspace(path string) bool {
+	clean := filepath.Clean(path)
+	return filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator))
 }
 
 // subcommandWord reports an argv word that names a subcommand rather than a path or a
@@ -1034,7 +1106,7 @@ func denySharedStash(verb string) ShellVerdict {
 // one: in the reason and, for the same reason as above, in the rule.
 func denyWholeTree(op string) ShellVerdict {
 	return ShellVerdict{
-		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use " + scratchCheckoutFor(op) + ".\n" +
+		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use " + scratchCheckout(op) + ".\n" +
 			"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill.",
 		Rule: denyRule{Name: denyRuleWholeTree, Arg: op},
 	}
@@ -1047,7 +1119,7 @@ func denyWholeTree(op string) ShellVerdict {
 //
 // Only git gets a verb, because only git has one for this. Naming `hg share` would point
 // at an extension that may not be enabled; a clone is what always works.
-func scratchCheckoutFor(op string) string {
+func scratchCheckout(op string) string {
 	if strings.HasPrefix(op, "git ") {
 		return "a throwaway `git worktree add`"
 	}
@@ -1387,7 +1459,7 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		return ShellVerdict{Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}
 	case rawToolDeny:
 		match, _ := rawToolMatch(deps, rawToolCmd)
-		reason := runGuardContextFor(match)
+		reason := runGuardAdvice(match)
 		// `go mod tidy` is both a covered spell op and a dependency re-resolution.
 		// The deny answers first, so it is the only text the reader gets, and
 		// routing into magus without naming the charm that makes the write legal
@@ -1483,7 +1555,7 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 // a workspace calls its targets whatever it likes, so a literal `magus run test`
 // would be this repository's vocabulary asserted over someone else's. The op IS
 // named, since it resolved from the spell catalog rather than from a convention.
-func runGuardContextFor(match toolMatch) string {
+func runGuardAdvice(match toolMatch) string {
 	return fmt.Sprintf("Run it through magus: `"+hint.Run.With("<target>"+charmSuffix(match), "<project>")+"`; `"+hint.DescribeTargets.With("-o", "name")+"` lists this workspace's targets.\n"+
 		"Tool flags go after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n%s",
 		match.spell, match.operation, runGuardContext)

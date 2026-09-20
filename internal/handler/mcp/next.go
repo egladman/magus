@@ -28,8 +28,8 @@ type nextFilter struct {
 // The journal is per checkout, so the entries land beside the ones a CLI run in the
 // same tree writes. That is the scope the guard reads it at.
 func (f nextFilter) served(next []hint.Next) []hint.Next {
-	role, lane := f.role()
-	served := hint.OnPath(hint.ServableTo(role, lane, next))
+	role, writePaths := f.role()
+	served := hint.OnPath(hint.ServableTo(role, writePaths, next))
 	hint.AppendServedNext(f.cacheDir, served)
 	return served
 }
@@ -47,7 +47,7 @@ func (f nextFilter) role() (hint.Role, []string) {
 	if err != nil {
 		return hint.RoleWorker, nil
 	}
-	return hint.RoleFor(rows, id)
+	return hint.LeaseRole(rows, id)
 }
 
 // dataWithNext is the reply payload for a record-shaped tool: v with one additive

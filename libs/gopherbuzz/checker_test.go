@@ -798,7 +798,7 @@ func TestConformance_FiberYieldTypeNeedNotBeOptional(t *testing.T) {
 	for _, annot := range []string{"int", "int?", "void", "[str]", "Point"} {
 		t.Run(annot, func(t *testing.T) {
 			src := `object Point { x: int = 0 }
-fun g() > void *> ` + annot + ` { _ = yield ` + yieldOperandFor(annot) + `; }
+fun g() > void *> ` + annot + ` { _ = yield ` + yieldOperand(annot) + `; }
 final f = &g();
 final __r = resume f;`
 			_, err := ParseEmbedded(src)
@@ -807,9 +807,9 @@ final __r = resume f;`
 	}
 }
 
-// yieldOperandFor returns a value of the given yield-type annotation, so each case
+// yieldOperand returns a value of the given yield-type annotation, so each case
 // in the test above yields something its own signature admits.
-func yieldOperandFor(annot string) string {
+func yieldOperand(annot string) string {
 	switch annot {
 	case "[str]":
 		return `["a"]`

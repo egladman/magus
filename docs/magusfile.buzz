@@ -253,7 +253,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         "concepts/review.md",
         // pruneContentPageCopies removes only byte-identical numeric collisions
         // next to pages it just regenerated. Those copies are still source files
-        // until removed, so name that narrow mutation lane explicitly.
+        // until removed, so name that narrow mutation boundary explicitly.
         "reference/config *.md", "changelog *.md");
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});

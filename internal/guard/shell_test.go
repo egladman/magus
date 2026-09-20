@@ -192,6 +192,21 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// both which rule fired and what it judged, the property every wrapper row
 		// below exists to prove.
 		{command: "go test ./...", rule: rawTool(`go test ./...`)},
+		// The tool moved, not the subcommand: same module, same effect, and it ran
+		// while the line above was denied.
+		{command: "go -C libs/gopherbuzz test ./...", rule: rawTool(`go -C libs/gopherbuzz test ./...`)},
+		{command: "go -C . test ./types", rule: rawTool(`go -C . test ./types`)},
+		// A global flag does not invent a deny for a subcommand nothing renders.
+		{command: "go -C libs/gopherbuzz env GOMODCACHE"},
+		// Another tree is not this workspace's to funnel. The target the deny would
+		// name runs THIS module's tests, so pointing the caller at it answers a
+		// question they did not ask.
+		{command: "go -C /elsewhere/repo test ./..."},
+		{command: "go -C ../sibling test ./..."},
+		// An unknown flag before the subcommand ends the read rather than guessing
+		// whether the word after it is an operand or the verb. Denying `nx build`
+		// here would name an operation the caller never invoked.
+		{command: "npx --package nx some-other-bin"},
 		{command: "npm test"},
 		{command: "npx prettier --check ."},
 		{command: "pytest tests/"},
@@ -1639,5 +1654,43 @@ func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 		`while true; do ./magus run lint .; sleep 60; done`,
 	} {
 		assert.NotEqual(t, denyRuleBusyWait, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
+// The two global-flag scanners read the same argv, so their ONE intended difference is
+// pinned as a decision rather than left as an accident. They diverge on an unknown flag
+// and nowhere else: the rendered side skips it, because a misread there costs a rule that
+// matches nothing, and the invocation side stops, because the same misread invents a deny
+// against a caller.
+//
+// The cases below are the shapes that are easy to get wrong rather than the ones that are
+// easy to write: an argv ENDING on a valued flag (which advances the scan past the end and
+// panicked an earlier draft of commandPrefix), a joined spelling of that flag, and the
+// dot-relative escape a raw prefix test reads as in-tree.
+func TestGlobalFlagScannersAgreeExceptOnUnknownFlags(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		args   []string
+		prefix []string // commandPrefix: the rendered side
+		after  []string // afterGlobalFlags: the invocation side
+	}{
+		{"a bare subcommand", []string{"test", "./..."}, []string{"test"}, []string{"test", "./..."}},
+		{"a valued flag and its operand", []string{"-C", "libs/x", "test"}, []string{"test"}, []string{"test"}},
+		{"a joined valued flag", []string{"-C=libs/x", "test"}, []string{"test"}, []string{"test"}},
+		{"a compound verb", []string{"mod", "tidy"}, []string{"mod", "tidy"}, []string{"mod", "tidy"}},
+		{"nothing but a valued flag", []string{"-C"}, nil, nil},
+		{"a valued flag with nothing after it", []string{"-x", "-C"}, nil, nil},
+		{"an escaping operand", []string{"-C", "../sibling", "test"}, []string{"test"}, nil},
+		{"an escaping operand spelled with a dot", []string{"-C", "./..", "test"}, []string{"test"}, nil},
+		{"an escaping operand spelled joined", []string{"-C=../sibling", "test"}, []string{"test"}, nil},
+		{"an absolute operand", []string{"-C", "/elsewhere", "test"}, []string{"test"}, nil},
+		// The intended divergence.
+		{"an unknown flag", []string{"--unknown", "test"}, []string{"test"}, nil},
+		{"an unknown flag with an operand", []string{"--pkg", "nx", "some-bin"}, []string{"nx"}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.prefix, commandPrefix("go", tc.args), "commandPrefix (rendered side)")
+			assert.Equal(t, tc.after, afterGlobalFlags("go", tc.args), "afterGlobalFlags (invocation side)")
+		})
 	}
 }

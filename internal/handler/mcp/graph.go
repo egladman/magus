@@ -41,14 +41,14 @@ type answerFn func(matched bool) types.KnowledgeAnswer
 // pagedRefs/pagedQuery testable against a hand-built graph with no workspace behind them.
 type gapProbe func() ([]types.KnowledgeSymbolGap, bool)
 
-// coverageFor reports what a lookup could consult, for knowledge.Answer to judge. The gap
+// coverage reports what a lookup could consult, for knowledge.Answer to judge. The gap
 // probe is skipped when the lazy layer could not have held the answer, which is the same
 // gate the CLI applies.
 //
 // These tools used to reach their own verdict, and it disagreed with the CLI's on the same
 // graph: MCP set symbols-not-loaded on any unseeded query, CLI first asked whether the
 // layer was relevant. Neither derives one now: both observe and call knowledge.Answer.
-func coverageFor(input string, seeded bool, probe gapProbe) knowledge.Coverage {
+func coverage(input string, seeded bool, probe gapProbe) knowledge.Coverage {
 	cov := knowledge.Coverage{Seeded: seeded}
 	if knowledge.CouldMatchLazyLayer(input) {
 		cov.Gaps, cov.Probed = probe()
@@ -102,7 +102,7 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 	}
 	probe := func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) }
 	resp, err := pagedQuery(g, terms, budget, limit, cursor, func(matched bool) types.KnowledgeAnswer {
-		return knowledge.Answer(terms, matched, coverageFor(terms, seedsLazyLayer, probe))
+		return knowledge.Answer(terms, matched, coverage(terms, seedsLazyLayer, probe))
 	})
 	if err != nil {
 		return spells.InvokeResponse{}, err
@@ -157,10 +157,10 @@ func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, prob
 			Definition:    types.KnowledgeRefsDefinition,
 			SchemaVersion: types.KnowledgeSchemaVersion,
 			Symbol:        symbol,
-			Answer:        knowledge.Answer(symbol, false, coverageFor(symbol, true, probe)),
+			Answer:        knowledge.Answer(symbol, false, coverage(symbol, true, probe)),
 		}}, nil
 	}
-	out.Answer = knowledge.Answer(symbol, len(out.Refs) > 0, coverageFor(symbol, true, probe))
+	out.Answer = knowledge.Answer(symbol, len(out.Refs) > 0, coverage(symbol, true, probe))
 	if limit <= 0 && cursor == "" {
 		return paginatedRefs{KnowledgeRefsOutput: out}, nil
 	}
@@ -265,7 +265,7 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 		// scope, but only say so when the query could have named one. `kind=author` with
 		// a typo has nothing to do with the symbol layer, and an absent verdict there is a
 		// fact worth asserting, which is why this is not hardcoded.
-		ans := knowledge.Answer(node, false, coverageFor(node, false,
+		ans := knowledge.Answer(node, false, coverage(node, false,
 			func() ([]types.KnowledgeSymbolGap, bool) { return t.graph.SymbolGaps(ctx) }))
 		if ans.Verdict == types.VerdictUnknown {
 			return spells.InvokeResponse{Text: render.MissText(node, ans)}, nil

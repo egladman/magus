@@ -13,7 +13,7 @@
 // of those facts, the usual sign a boundary sits in the wrong place. What stays here is
 // what IS magus's: which types cross (boundaryTypes), which named-string types are
 // registered enums (boundaryEnums), and what each is called on the far side
-// (buzzNameFor), handed over as the Namer and EnumType.
+// (buzzName), handed over as the Namer and EnumType.
 
 package main
 
@@ -61,9 +61,9 @@ func runTypes(args []string) error {
 // as TargetRun, and emitting the Go name would reference an object nothing declares.
 func mirrorOptions() buzzgen.Options {
 	opts := buzzgen.DefaultOptions()
-	opts.Namer = buzzNameFor
+	opts.Namer = buzzName
 	opts.EnumType = func(t reflect.Type) (name, zero string, ok bool) {
-		e, ok := buzzEnumFor(t)
+		e, ok := buzzEnum(t)
 		if !ok {
 			return "", "", false
 		}
@@ -126,7 +126,7 @@ func enumsUsedBy(rt reflect.Type) []boundaryEnum {
 		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
 			continue
 		}
-		e, ok := buzzEnumFor(f.Type)
+		e, ok := buzzEnum(f.Type)
 		if !ok || seen[e.Name] {
 			continue
 		}

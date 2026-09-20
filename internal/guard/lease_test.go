@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -403,10 +404,10 @@ func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 		"an unbound caller is the orchestrator or the person, and they are who writes rows")
 }
 
-// TestJobToolRebindLetsALaneBeGivenBack pins the one fork a bound caller may make:
+// TestJobToolRebindLetsAWritePathBeGivenBack pins the one fork a bound caller may make:
 // giving a declaration back. The direction is what the guard judges; whether a particular
 // shrink is legitimate belongs to the store.
-func TestJobToolRebindLetsALaneBeGivenBack(t *testing.T) {
+func TestJobToolRebindLetsAWritePathBeGivenBack(t *testing.T) {
 	wide := narrowLease()
 	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _ := fleetFixture(t, wide)
@@ -429,7 +430,7 @@ func TestJobToolRebindLetsALaneBeGivenBack(t *testing.T) {
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** checkpoint=deadbeef"),
-		"the checkpoint is the base this lease's work is graded against, and giving a lane back is not cover for moving it")
+		"the checkpoint is the base this lease's work is graded against, and giving a path back is not cover for moving it")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
@@ -529,9 +530,9 @@ func TestDenyLeaseScopedRebindLetsAHolderFinishItsBootstrap(t *testing.T) {
 	}
 }
 
-// laneFleet is the plan the lane rule is graded against: the acting worker, and a sibling
-// whose tree every write below aims at.
-func laneFleet() []types.Job {
+// writePathFleet is the plan the write-path rule is graded against: the acting worker, and
+// a sibling whose tree every write below aims at.
+func writePathFleet() []types.Job {
 	return []types.Job{
 		{
 			ID:         "lease-a",
@@ -551,15 +552,21 @@ func laneFleet() []types.Job {
 	}
 }
 
-// TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm pins the gap this rule closed: the
-// lane was enforced only where a host reported a path, so every spelling below reached a
-// sibling's tree unjudged while the identical editor write was refused.
+// TestDenyWriteOutsideLeaseCatchesEveryWriterForm pins the gap this rule closed: the
+// boundary was enforced only where a host reported a path, so every spelling below reached
+// a sibling's tree unjudged while the identical editor write was refused.
 //
 // Each row asserts BOTH surfaces and that they refuse in the SAME words. A rule that lands
 // on one surface and not the other is exactly how the gap happened, and a reason that
 // drifts between them teaches two different lessons for one mistake.
-func TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm(t *testing.T) {
-	ctx, root := fleetFixture(t, laneFleet()...)
+func TestDenyWriteOutsideLeaseCatchesEveryWriterForm(t *testing.T) {
+	ctx, root := fleetFixture(t, writePathFleet()...)
+
+	// Whether withoutLeaseAge blanked anything at all. Not every row renders an age (a
+	// path the acting lease's own row DENIES names no owner), but if no row does, the
+	// normalizer has silently become the identity function and this table has quietly
+	// reverted to the clock-flaky comparison it was written to replace.
+	normalized := false
 
 	for _, tc := range []struct {
 		command string
@@ -592,7 +599,7 @@ func TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm(t *testing.T) {
 		{"eval 'echo x > internal/ledger/store.go'", "internal/ledger/store.go"},
 		{"sudo sh -c 'echo x >| internal/ledger/store.go'", "internal/ledger/store.go"},
 
-		// A path the acting lease's OWN row denies, which is the other half of a lane.
+		// A path the acting lease's OWN row denies, which is the other half of a boundary.
 		{"echo x > cmd/magus/gen/cli_flags.go", "cmd/magus/gen/cli_flags.go"},
 
 		// An interpreter fed by a heredoc, which reached a sibling's tree unjudged: the
@@ -600,27 +607,44 @@ func TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm(t *testing.T) {
 		{"python3 - <<'PY'\nopen('internal/ledger/store.go','w').write(out)\nPY", "internal/ledger/store.go"},
 		{"python3 -c \"open('internal/ledger/store.go','w').write(out)\"", "internal/ledger/store.go"},
 	} {
-		onCommand := denyLeaseScopedLaneWrite(ctx, Dependencies{}, "lease-b", tc.command)
+		onCommand := denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", tc.command)
 		require.NotEmpty(t, onCommand,
-			"the COMMAND surface passed %q, which writes outside the acting lease's lane.\n"+
+			"the COMMAND surface passed %q, which writes outside the acting lease's write paths.\n"+
 				"A boundary enforced only where the host reports a PATH is one a shell line walks straight through, and that is the gap this table exists to catch. If you taught a rule a new writer spelling, teach writeTargetCandidates about it too.",
 			tc.command)
 
 		onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, tc.path))
 		require.Equal(t, "deny", onPath.Decision,
 			"the PATH surface passed %s, so this row is no longer testing two surfaces against one another", tc.path)
-		assert.Equal(t, onPath.Reason, onCommand,
+		normalized = normalized || leaseAge.MatchString(onPath.Reason)
+		assert.Equal(t, withoutLeaseAge(onPath.Reason), withoutLeaseAge(onCommand),
 			"the two surfaces refused %q in DIFFERENT words.\n"+
 				"It is one mistake however it is spelled, so it gets one explanation. The command surface is meant to call gradeLeasedWrite, the path surface's own grader; a difference here means something re-decided the verdict instead of reusing it, and the two will drift from now on.",
 			tc.command)
 	}
+
+	assert.True(t, normalized,
+		"withoutLeaseAge blanked nothing across the whole table, so it is no longer normalizing the figure it exists for.\n"+
+			"Either the refusal stopped naming the owner's age, or it names it in wording leaseAge no longer matches. Update the pattern; leaving it is how this table starts failing on the clock instead of on the wording.")
 }
 
-// TestDenyLeaseScopedLaneWriteStaysQuiet covers the silences. The rule is a seatbelt for
-// harnesses that opt in, so every case where nothing declared the write to be out of lane
-// has to pass: a guard that refuses reads is one agents learn to route around.
-func TestDenyLeaseScopedLaneWriteStaysQuiet(t *testing.T) {
-	ctx, _ := fleetFixture(t, laneFleet()...)
+// leaseAge matches the owner's age in a refusal, which is read from the clock as the
+// message is built. The unit stays outside the capture, so two surfaces that render the
+// same elapsed time differently (0s against 0ms, 90s against 1m30s) still differ.
+var leaseAge = regexp.MustCompile(`was last updated \d+s ago`)
+
+// withoutLeaseAge blanks that figure. The two surfaces render their refusal at different
+// moments, so an age that ticks over between them is a difference in the clock, not in
+// the wording the comparison is about.
+func withoutLeaseAge(reason string) string {
+	return leaseAge.ReplaceAllString(reason, "was last updated <n>s ago")
+}
+
+// TestDenyWriteOutsideLeaseStaysQuiet covers the silences. The rule is a seatbelt for
+// harnesses that opt in, so every case where nothing declared the write to be out of
+// bounds has to pass: a guard that refuses reads is one agents learn to route around.
+func TestDenyWriteOutsideLeaseStaysQuiet(t *testing.T) {
+	ctx, _ := fleetFixture(t, writePathFleet()...)
 
 	for _, command := range []string{
 		// Reads of the very file the writes above are refused for.
@@ -645,27 +669,27 @@ func TestDenyLeaseScopedLaneWriteStaysQuiet(t *testing.T) {
 		"./magus session lease lease-b",
 		"./magus query output out123",
 
-		// Inside the acting lease's own lane.
+		// Inside the acting lease's own write paths.
 		"echo x > cmd/magus/diff.go",
 
 		// A word nobody declared is not a path. Without this the reader allowlist would
-		// refuse an ordinary echo for writing outside the lane.
+		// refuse an ordinary echo for writing outside the boundary.
 		"echo hi",
 		"printf 'done'",
 	} {
-		assert.Empty(t, denyLeaseScopedLaneWrite(ctx, Dependencies{}, "lease-b", command), "%q", command)
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", command), "%q", command)
 	}
 
 	t.Run("no lease", func(t *testing.T) {
-		assert.Empty(t, denyLeaseScopedLaneWrite(ctx, Dependencies{}, "", "echo x > internal/ledger/store.go"))
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "", "echo x > internal/ledger/store.go"))
 	})
 
 	t.Run("a lease with no row", func(t *testing.T) {
-		assert.Empty(t, denyLeaseScopedLaneWrite(ctx, Dependencies{}, "harness/absent", "echo x > internal/ledger/store.go"))
+		assert.Empty(t, denyWriteOutsideLease(ctx, Dependencies{}, "harness/absent", "echo x > internal/ledger/store.go"))
 	})
 
 	t.Run("no trail location", func(t *testing.T) {
 		nowhere := context.WithValue(t.Context(), locationKey{}, location{})
-		assert.Empty(t, denyLeaseScopedLaneWrite(nowhere, Dependencies{}, "lease-b", "echo x > internal/ledger/store.go"))
+		assert.Empty(t, denyWriteOutsideLease(nowhere, Dependencies{}, "lease-b", "echo x > internal/ledger/store.go"))
 	})
 }

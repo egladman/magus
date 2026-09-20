@@ -34,14 +34,14 @@ import (
 // goes first.
 var proseFirst = map[types.RelationID]bool{types.RelationAnnotates: true}
 
-// phraseFor returns the natural-language verb for a relation in the given direction,
+// phrase returns the natural-language verb for a relation in the given direction,
 // read from the relation registry.
 //
 // An UNDECLARED relation still renders, as its own name with a "-> "/"<- " marker so
 // the direction survives. That is deliberate: a graph on disk can carry an edge this
 // binary's vocabulary does not know (an older store, or a shard a newer magus wrote),
 // and a reader meeting it should see the edge, not a blank.
-func phraseFor(relation types.RelationID, active bool) string {
+func phrase(relation types.RelationID, active bool) string {
 	if d, ok := types.KnowledgeRelation(relation); ok {
 		return d.Label(active)
 	}
@@ -148,7 +148,7 @@ func relationGroups(out types.KnowledgeExplainOutput) []relationGroup {
 		groups := make([]relationGroup, 0, len(order))
 		for _, rel := range order {
 			ids := byRel[rel]
-			header := phraseFor(rel, active)
+			header := phrase(rel, active)
 			if len(ids) > 1 {
 				header = fmt.Sprintf("%s (%d)", header, len(ids))
 			}
@@ -216,13 +216,13 @@ func PathText(out types.KnowledgePathOutput) string {
 	}
 	w := 0
 	for _, s := range out.Steps {
-		if p := phraseFor(s.Relation, s.Forward); len(p) > w {
+		if p := phrase(s.Relation, s.Forward); len(p) > w {
 			w = len(p)
 		}
 	}
 	fmt.Fprintf(&b, "\n%s\n", out.From)
 	for _, s := range out.Steps {
-		fmt.Fprintf(&b, "  %-*s  %s\n", w, phraseFor(s.Relation, s.Forward), s.To)
+		fmt.Fprintf(&b, "  %-*s  %s\n", w, phrase(s.Relation, s.Forward), s.To)
 	}
 	return b.String()
 }

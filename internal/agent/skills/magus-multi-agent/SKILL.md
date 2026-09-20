@@ -285,7 +285,7 @@ Two jobs may run together only when:
 - Dependency and temporal-affinity evidence does not indicate that they should
   move together.
 
-ONE WORKTREE PER WORKER wherever a lane touches workspace configuration - any
+ONE WORKTREE PER WORKER wherever a write path touches workspace configuration - any
 project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 Those are the files magus READS to load the workspace, so a half-saved one is
 not a conflict between two workers: it stops the workspace loading for everybody
@@ -295,16 +295,16 @@ shared a checkout, one saved the root magusfile mid-edit, and all three were
 stopped for the duration by a file only one of them had ever opened{{end}}.
 `{{cmd "job fork"}}` refuses such a job outright while another live job with
 write paths is bound to the same checkout, naming the file and the holder. A
-separate worktree is the answer, not a narrower lane: the file has one owner, so
+separate worktree is the answer, not a narrower boundary: the file has one owner, so
 the only way both jobs can be right is for one of them to be somewhere else.
 
-Fork records what it could prove in `lane_proof` - `alone`, `disjoint` or
+Fork records what it could prove in `write_proof` - `alone`, `disjoint` or
 `overlapping` - and `magus ls jobs` prints it. An overlap is recorded rather than
 refused, because sequencing two jobs onto one path is a call only you can make;
 what the row settles is whether anybody checked.
 
 Spawning into a checkout that already holds a live job carries the same
-reminder from the guard, once per session, with the union of the lanes to
+reminder from the guard, once per session, with the union of the write paths to
 classify. Answer it by running the call above or by handing the new worker its
 own worktree - a proof or a worktree, not a judgment that it looks fine.
 
@@ -361,7 +361,7 @@ mis-scoped worker can say so instead of widening silently.
 Taking a lease narrows what a worker may write in the store, never what it may see. Its
 own row accepts four writes: recording the base it landed on, shrinking its own
 write_paths (how it releases a path), ending itself in fail or no_return, and
-forking a child inside its own lane. Everything else, including any other field
+forking a child inside its own write paths. Everything else, including any other field
 on its own row and any write to a row that is not its own or its child, is the
 orchestrator's alone{{if .Full}}, and the store refuses the rest before a worker
 gets far enough to try it a second way: the refusal names the actor directly -
@@ -376,8 +376,8 @@ silently lies when the recorded base is not the real one{{end}}. A worker's firs
 required act is `magus job exec <its id>`, which takes the lease in that checkout
 and records the base it landed on. Where the host names its session, the worker
 passes `--session <that id>` and the lease is the SESSION's rather than the
-checkout's, so workers sharing a tree each hold one and each has its own lane
-graded{{if .Full}}; without it the binding is the whole checkout's, the second
+checkout's, so workers sharing a tree each hold one and each has its own write
+paths graded{{if .Full}}; without it the binding is the whole checkout's, the second
 worker's is refused as a rebind, and every worker after the first runs
 unattributed, which looks exactly like a guarded session and denies nothing{{end}}.
 Pass the same id the host reports to its guard hook, or the two halves bind and
@@ -399,13 +399,13 @@ generic "expect drift" line{{if .Full}}, which only primes the worker to dismiss
 anomalies: the specific fact is what keeps unexplained tree state from costing
 an investigation or a helpful revert of something correct{{end}}.
 
-Write paths are the WRITE lane. The guard reads them as a READ lane too, so a
+Write paths are the WRITE boundary. The guard reads them as a READ boundary too, so a
 worker leased to `apps/web` is advised off `apps/admin` and denied it outright
 once `magus job exec <its id>` takes the lease in its checkout.{{if .Full}} The
-read lane is its projects plus what they declare `depends_on`, so a shared library
+read boundary is its projects plus what they declare `depends_on`, so a shared library
 it legitimately builds on stays open.{{end}} When a worker must READ something it
 must not WRITE, put that path in the row's `read_paths` instead of widening
-`write_paths`: one list cannot say both, and widening the write lane to open a
+`write_paths`: one list cannot say both, and widening the write paths to open a
 read is how two workers end up owning one file. `read_paths` is the only widening
 there is; nothing in the environment turns the rule off.
 
@@ -461,11 +461,11 @@ acted on into a collision nobody sees until integration{{end}}. Step 1 of Integr
 and verify checks the same boundary against the checkpoint, and that is the half
 that does not depend on a worker cooperating.
 
-A bound lease is denied one class of write regardless of its lane: the host's own
+A bound lease is denied one class of write regardless of its write paths: the host's own
 guard wiring - `.claude/settings.json` and its hooks, `.cursor/hooks.json`,
 `.codex/hooks.json`, `.opencode/plugins/`, and each host's equivalent{{if .Full}}.
 Those files switch the guard on for the host's next session start, so an edit
-inside them is never a lane question. An unbound session gets a once-per-session
+inside them is never a write-path question. An unbound session gets a once-per-session
 advisory instead, because rewiring the host is ordinarily the orchestrator's or a
 person's job{{end}}.
 
@@ -595,11 +595,11 @@ worker{{end}}.
 | to watch it happen | `{{cmd "job watch"}} <job>` |
 | to know whether it is finished | `{{cmd "describe job"}} <job> --gates` |
 
-`{{cmd "job watch"}}` merges files changed under the job's write lane, the tool
+`{{cmd "job watch"}}` merges files changed under the job's write paths, the tool
 calls the guard saw under its lease, and the runs recorded against it, one line
-each until you interrupt it. A file is attributed by LANE and by nothing the
-worker says{{if .Full}}: the lanes are proven disjoint when the job forks, so the
-path alone names the holder. Where two live lanes do cover one path the line says
+each until you interrupt it. A file is attributed by WRITE PATH and by nothing the
+worker says{{if .Full}}: the write paths are proven disjoint when the job forks, so the
+path alone names the holder. Where two live jobs do cover one path the line says
 `contested`, names both, and attributes it to neither - there is nothing in a path
 to break that tie with, and naming one would tell you a file moved under a worker
 that never touched it{{else}}, so the worker cannot make it quiet{{end}}.

@@ -106,9 +106,22 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		}
 		shards[i] = types.Shard{ID: s.ID, ProjectPaths: paths}
 	}
+	// Both are asked of the concrete forecaster rather than carried out of ci.Build: the
+	// Forecaster interface returns an assignment and nothing about how it was reached, so
+	// a plan built from real history and one built from fallbacks are the same value.
+	assignments := make([][]*types.Project, len(plan.Shards))
+	for i, s := range plan.Shards {
+		assignments[i] = s.Projects
+	}
+	var overBudget []string
+	for _, i := range f.OverBudget(assignments) {
+		overBudget = append(overBudget, plan.Shards[i].ID)
+	}
 	return types.ShardPlan{
 		Shards:      shards,
 		Source:      source,
 		MaxParallel: maxParallel,
+		Sufficient:  f.SufficientShards(projects),
+		OverBudget:  overBudget,
 	}, nil
 }

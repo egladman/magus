@@ -191,7 +191,7 @@ func wireFeedEvent(e jobstore.FeedEvent) *activityv1.ActivityEvent {
 		out.Kind = activityv1.Kind_KIND_FILE_CHANGE
 		out.Contested = e.Contested
 		if out.Preview == "" {
-			out.Preview = e.Lane
+			out.Preview = e.WritePath
 		}
 	case jobstore.FeedRun:
 		out.Kind = activityv1.Kind_KIND_RUN

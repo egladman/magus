@@ -227,7 +227,7 @@ var modeArgv = map[string][][]string{
 }
 
 // argvsFor turns a documented command name into the invocations that reach its flags.
-func argvsFor(name string) [][]string {
+func probeArgvs(name string) [][]string {
 	if modes, ok := modeArgv[name]; ok {
 		return modes
 	}
@@ -265,14 +265,14 @@ func flagProbes(cmd cli.Command) []flagProbe {
 		if !cmd.HasFlags() {
 			return nil
 		}
-		return []flagProbe{{name: cmd.Name, argvs: argvsFor(cmd.Name), buildFlags: cmd.BindFlags}}
+		return []flagProbe{{name: cmd.Name, argvs: probeArgvs(cmd.Name), buildFlags: cmd.BindFlags}}
 	}
 	var out []flagProbe
 	for _, child := range cmd.Children {
 		if !child.HasFlags() {
 			continue
 		}
-		out = append(out, flagProbe{name: cmd.Name + " " + child.Name, argvs: argvsFor(cmd.Name + " " + child.Name), buildFlags: child.BindFlags})
+		out = append(out, flagProbe{name: cmd.Name + " " + child.Name, argvs: probeArgvs(cmd.Name + " " + child.Name), buildFlags: child.BindFlags})
 	}
 	return out
 }

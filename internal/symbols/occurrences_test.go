@@ -23,7 +23,7 @@ func occAt(line, col, n int) *scip.Occurrence {
 	return &scip.Occurrence{Symbol: monikerV1, TypedRange: r.AsTypedRange()}
 }
 
-func readerFor(files map[string]string) func(string) ([]byte, error) {
+func fileReader(files map[string]string) func(string) ([]byte, error) {
 	return func(p string) ([]byte, error) {
 		data, ok := files[p]
 		if !ok {
@@ -127,7 +127,7 @@ func TestVerifyConfirmsRangesAgainstTheTree(t *testing.T) {
 			{Line: 2, Column: 1, EndLine: 2, EndColumn: 4},
 		},
 	}}
-	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, readerFor(map[string]string{"a.go": "func Bar() {}\nBar()\n"})))
+	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(map[string]string{"a.go": "func Bar() {}\nBar()\n"})))
 	got := files
 
 	for _, occ := range got[0].Occurrences {
@@ -146,7 +146,7 @@ func TestVerifyRejectsAStaleIndex(t *testing.T) {
 		Occurrences: []types.SymbolOccurrence{{Line: 1, Column: 6, EndLine: 1, EndColumn: 9}},
 	}}
 	// The declaration picked up a receiver, shifting every column on the line.
-	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, readerFor(map[string]string{"a.go": "func (r T) Bar() {}\n"})))
+	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(map[string]string{"a.go": "func (r T) Bar() {}\n"})))
 	got := files
 
 	occ := got[0].Occurrences[0]
@@ -169,7 +169,7 @@ func TestVerifyReportsUnreadableSites(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			files := []types.SymbolOccurrenceFile{{File: "a.go", Occurrences: []types.SymbolOccurrence{tc.occ}}}
-			require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, readerFor(tc.files)))
+			require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(tc.files)))
 			got := files
 			assert.Equal(t, types.SymbolOccurrenceUnreadable, got[0].Occurrences[0].Status)
 		})
@@ -186,7 +186,7 @@ func TestVerifyRejectsAMultiLineRange(t *testing.T) {
 		File:        "a.go",
 		Occurrences: []types.SymbolOccurrence{{Line: 1, Column: 1, EndLine: 2, EndColumn: 2}},
 	}}
-	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, readerFor(map[string]string{"a.go": "Bar\nBar\n"})))
+	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(map[string]string{"a.go": "Bar\nBar\n"})))
 	got := files
 	assert.Equal(t, types.SymbolOccurrenceMismatch, got[0].Occurrences[0].Status)
 	assert.Equal(t, "Bar\nB", got[0].Occurrences[0].Text)
@@ -201,7 +201,7 @@ func TestVerifyWithNoNamesVerifiesNothing(t *testing.T) {
 		File:        "a.go",
 		Occurrences: []types.SymbolOccurrence{{Line: 1, Column: 1, EndLine: 1, EndColumn: 4}},
 	}}
-	require.NoError(t, VerifyOccurrences(t.Context(), files, nil, readerFor(map[string]string{"a.go": "Bar\n"})))
+	require.NoError(t, VerifyOccurrences(t.Context(), files, nil, fileReader(map[string]string{"a.go": "Bar\n"})))
 	got := files
 	assert.Equal(t, types.SymbolOccurrenceMismatch, got[0].Occurrences[0].Status)
 }
@@ -236,7 +236,7 @@ func TestVerifyMarksAFileStaleOnAnyBadSite(t *testing.T) {
 			{Line: 2, Column: 1, EndLine: 2, EndColumn: 4}, // does not
 		},
 	}}
-	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, readerFor(map[string]string{"a.go": "Bar\nQux\n"})))
+	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(map[string]string{"a.go": "Bar\nQux\n"})))
 	got := files
 
 	assert.Equal(t, types.SymbolOccurrenceVerified, got[0].Occurrences[0].Status)
@@ -252,7 +252,7 @@ func TestVerifyLeavesAGoodFileUnmarked(t *testing.T) {
 		File:        "a.go",
 		Occurrences: []types.SymbolOccurrence{{Line: 1, Column: 1, EndLine: 1, EndColumn: 4}},
 	}}
-	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, readerFor(map[string]string{"a.go": "Bar\n"})))
+	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(map[string]string{"a.go": "Bar\n"})))
 	got := files
 	assert.False(t, got[0].Stale)
 }
@@ -280,7 +280,7 @@ func TestParseOccurrencesKeepsBothSpellingsOfAPackage(t *testing.T) {
 	require.Equal(t, []string{"assert", "github.com/stretchr/testify/assert"}, names,
 		"identifier first (what a rename targets), import path second")
 
-	require.NoError(t, VerifyOccurrences(t.Context(), files, names, readerFor(map[string]string{
+	require.NoError(t, VerifyOccurrences(t.Context(), files, names, fileReader(map[string]string{
 		"a_test.go": "import \"github.com/stretchr/testify/assert\"\n\nfunc f() {\n assert.Equal(t, 1, 1)\n}\n",
 	})))
 	got := files
@@ -298,7 +298,7 @@ func TestVerifyRejectsAnUnrelatedSpelling(t *testing.T) {
 		File:        "a.go",
 		Occurrences: []types.SymbolOccurrence{{Line: 1, Column: 1, EndLine: 1, EndColumn: 4}},
 	}}
-	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar", "example.com/Bar"}, readerFor(map[string]string{"a.go": "Qux\n"})))
+	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar", "example.com/Bar"}, fileReader(map[string]string{"a.go": "Qux\n"})))
 	got := files
 	assert.Equal(t, types.SymbolOccurrenceMismatch, got[0].Occurrences[0].Status)
 }

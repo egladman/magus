@@ -207,7 +207,7 @@ func TestPlanOutputsCoverWorkflowKeys(t *testing.T) {
 func TestPlanOutputsStaySingleLineAndReportInheritance(t *testing.T) {
 	t.Parallel()
 
-	out := planOutput{Count: 1, MaxParallel: 1, Matrix: []planShard{{Shard: "1", Projects: ". docs"}}}
+	out := planOutput{Count: 1, MaxParallel: 1, Matrix: []planShard{{Shard: "1", Projects: ". docs", Label: ". docs"}}}
 	got, err := planOutputs(out)
 	require.NoError(t, err)
 
@@ -218,7 +218,7 @@ func TestPlanOutputsStaySingleLineAndReportInheritance(t *testing.T) {
 		assert.NotContains(t, o.Value, "\n", "output %q spans lines", o.Name)
 		byName[o.Name] = o.Value
 	}
-	assert.JSONEq(t, `{"include":[{"shard":"1","projects":". docs"}]}`, byName["matrix"])
+	assert.JSONEq(t, `{"include":[{"shard":"1","projects":". docs","label":". docs"}]}`, byName["matrix"])
 	assert.Equal(t, "false", byName["inherit"])
 
 	out.Inherit = &planInherit{Run: "42", Commit: "abc123", Summary: "## Verdict inherited\n"}
@@ -367,4 +367,16 @@ func TestRunOutputCarriesUndeclaredSeedsAsAField(t *testing.T) {
 	b, err = json.Marshal(runOutput{Target: "ci"})
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), "undeclared_seeds")
+}
+
+// TestShardLabelElidesWithoutTouchingTheProjectList pins the split between the two
+// fields: a provider passes Projects to `magus run ci`, so an elision there would run
+// the wrong work, while Label is only ever read by a person scanning a job list.
+func TestShardLabelElidesWithoutTouchingTheProjectList(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "no projects", shardLabel(nil))
+	assert.Equal(t, ". docs", shardLabel([]string{".", "docs"}))
+	assert.Equal(t, ". docs proto", shardLabel([]string{".", "docs", "proto"}))
+	assert.Equal(t, ". docs proto +2", shardLabel([]string{".", "docs", "proto", "console", "libs/textsearch"}))
 }

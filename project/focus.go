@@ -31,7 +31,7 @@ import (
 // focus set equal to the workspace and the whole rule inert.
 var SharedRoots []string
 
-// Focus is the read lane a session stands in: the project holding its working
+// Focus is the boundary a session may read within: the project holding its working
 // directory (or the projects a lease was leased), everything those projects
 // depend on transitively, and SharedRoots.
 //
@@ -73,7 +73,7 @@ func FocusAt(w types.WorkspaceReader, dir string) (Focus, bool) {
 }
 
 // FocusForPaths computes the focus of the projects that own paths, which is how a
-// lease's declared boundary becomes a read lane. Entries may be globs: the literal
+// lease's declared boundary becomes what it may read. Entries may be globs: the literal
 // prefix is what names a project, since a wildcard cannot.
 func FocusForPaths(w types.WorkspaceReader, paths []string) (Focus, bool) {
 	f := Focus{owners: ownerPaths(w)}
@@ -97,7 +97,7 @@ func FocusForPaths(w types.WorkspaceReader, paths []string) (Focus, bool) {
 // Contains reports whether a workspace-relative path is inside the focus.
 //
 // A path no project owns returns TRUE, which is not a gap: nothing declares it, so
-// there is no project whose lane it could be outside of, and an advisory fired on a
+// there is no project whose boundary it could be outside of, and an advisory fired on a
 // path magus cannot attribute is one fired on a guess. The root project counts as
 // nobody here: it catches by containment whatever no subproject declares, so a
 // root-owned path is the workspace's own, not a sibling's.

@@ -36,7 +36,7 @@ func durationHistoryWith(t *testing.T, project string, runs map[string]time.Dura
 // next slow machine fails a run that was correct.
 func TestTimeoutDeclarationsReportsACrowdedCeiling(t *testing.T) {
 	path := durationHistoryWith(t, ".", map[string]time.Duration{"magusfile/security": 13 * time.Minute})
-	got := runnerFor(path).checkTimeoutDeclarations([]*types.Project{
+	got := newRunner(path).checkTimeoutDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"security": {Timeout: "15m"}}),
 	})
 
@@ -50,7 +50,7 @@ func TestTimeoutDeclarationsReportsACrowdedCeiling(t *testing.T) {
 // stopped doing the job it was written for.
 func TestTimeoutDeclarationsReportsALooseCeiling(t *testing.T) {
 	path := durationHistoryWith(t, ".", map[string]time.Duration{"magusfile/security": 5 * time.Second})
-	got := runnerFor(path).checkTimeoutDeclarations([]*types.Project{
+	got := newRunner(path).checkTimeoutDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"security": {Timeout: "12h"}}),
 	})
 
@@ -75,7 +75,7 @@ func TestTimeoutDeclarationsStaysQuiet(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := durationHistoryWith(t, ".", map[string]time.Duration{"magusfile/gate": tc.longest})
-			got := runnerFor(path).checkTimeoutDeclarations([]*types.Project{
+			got := newRunner(path).checkTimeoutDeclarations([]*types.Project{
 				projectWith(".", map[string]types.Target{"gate": {Timeout: tc.declared}}),
 			})
 			assert.Equal(t, types.DoctorOK, got.Status)
@@ -88,7 +88,7 @@ func TestTimeoutDeclarationsStaysQuiet(t *testing.T) {
 // honest and no finding to make, however long it has run.
 func TestTimeoutDeclarationsIgnoresUndeclaredTargets(t *testing.T) {
 	path := durationHistoryWith(t, ".", map[string]time.Duration{"go/go-test": 15 * time.Minute})
-	got := runnerFor(path).checkTimeoutDeclarations([]*types.Project{
+	got := newRunner(path).checkTimeoutDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"go-test": {}}),
 	})
 
@@ -103,7 +103,7 @@ func TestTimeoutDeclarationsTakesTheLongestRunAcrossSpells(t *testing.T) {
 		"go/test":        30 * time.Second,
 		"magusfile/test": 9 * time.Minute,
 	})
-	got := runnerFor(path).checkTimeoutDeclarations([]*types.Project{
+	got := newRunner(path).checkTimeoutDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {Timeout: "10m"}}),
 	})
 
@@ -114,7 +114,7 @@ func TestTimeoutDeclarationsTakesTheLongestRunAcrossSpells(t *testing.T) {
 // A declared target that has never run draws silence rather than a guess. Nothing was
 // measured, so nothing can be said about the declaration.
 func TestTimeoutDeclarationsSaysNothingWithoutAMeasurement(t *testing.T) {
-	got := runnerFor(filepath.Join(t.TempDir(), "absent.json")).
+	got := newRunner(filepath.Join(t.TempDir(), "absent.json")).
 		checkTimeoutDeclarations([]*types.Project{
 			projectWith(".", map[string]types.Target{"security": {Timeout: "15m"}}),
 		})

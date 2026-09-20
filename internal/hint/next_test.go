@@ -196,7 +196,7 @@ func TestNextSourcePath(t *testing.T) {
 	assert.Empty(t, sourcePath("libs/gopherbuzz"))
 }
 
-// The role is read off the row, and a worker's lane comes back with it so the filter
+// The role is read off the row, and a worker's write paths come back with it so the filter
 // can place a write.
 func TestRoleForGradesTheActingRow(t *testing.T) {
 	rows := []types.Job{
@@ -205,9 +205,9 @@ func TestRoleForGradesTheActingRow(t *testing.T) {
 		{ID: "harness/watcher"},
 	}
 	for _, tc := range []struct {
-		id   string
-		role Role
-		lane []string
+		id    string
+		role  Role
+		paths []string
 	}{
 		{"", RoleUnbound, nil},
 		{"harness/worker", RoleWorker, []string{"internal/hint/**"}},
@@ -215,35 +215,35 @@ func TestRoleForGradesTheActingRow(t *testing.T) {
 		{"harness/watcher", RoleReviewer, nil},
 		{"harness/gone", RoleWorker, nil},
 	} {
-		role, lane := RoleFor(rows, tc.id)
+		role, paths := LeaseRole(rows, tc.id)
 		assert.Equal(t, tc.role, role, "id %q", tc.id)
-		assert.Equal(t, tc.lane, lane, "id %q", tc.id)
+		assert.Equal(t, tc.paths, paths, "id %q", tc.id)
 	}
 }
 
 // Every template, graded per role. A reviewer is handed no write at all; a worker
 // keeps the regeneration of its own project and loses everybody else's.
-func TestServableToDropsWritesOutsideTheLane(t *testing.T) {
+func TestServableToDropsWritesOutsideTheWritePaths(t *testing.T) {
 	all := []Next{
 		breadcrumb("query-explain", Explain, "why", "spell:go"),
 		breadcrumb("file-impact", Affected, "why", "--impact"),
 		breadcrumb("file-regenerate", Run, "why", "generate:rw", "docs"),
 	}
 	for _, tc := range []struct {
-		name string
-		role Role
-		lane []string
-		want []string
+		name  string
+		role  Role
+		paths []string
+		want  []string
 	}{
 		{"unbound", RoleUnbound, nil, []string{"query-explain", "file-impact", "file-regenerate"}},
 		{"unset", "", nil, []string{"query-explain", "file-impact", "file-regenerate"}},
-		{"worker in its lane", RoleWorker, []string{"docs/**"}, []string{"query-explain", "file-impact", "file-regenerate"}},
-		{"worker out of its lane", RoleWorker, []string{"internal/hint/**"}, []string{"query-explain", "file-impact"}},
-		{"worker with no lane", RoleWorker, nil, []string{"query-explain", "file-impact"}},
+		{"worker inside its write paths", RoleWorker, []string{"docs/**"}, []string{"query-explain", "file-impact", "file-regenerate"}},
+		{"worker outside its write paths", RoleWorker, []string{"internal/hint/**"}, []string{"query-explain", "file-impact"}},
+		{"worker with no write paths", RoleWorker, nil, []string{"query-explain", "file-impact"}},
 		{"reviewer owning the path anyway", RoleReviewer, []string{"docs/**"}, []string{"query-explain", "file-impact"}},
 	} {
 		var ids []string
-		for _, n := range ServableTo(tc.role, tc.lane, all) {
+		for _, n := range ServableTo(tc.role, tc.paths, all) {
 			ids = append(ids, n.ID)
 		}
 		assert.Equal(t, tc.want, ids, tc.name)

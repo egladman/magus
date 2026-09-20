@@ -333,7 +333,7 @@ func TestVerifyReadsARootDeclarationAsTheWholeTree(t *testing.T) {
 	assert.False(t, verifyClaim(row, passingResult(), passingRun, nil).Verified, "a blank declaration claims nothing")
 }
 
-// The deny list is read at acceptance too: a path can be inside the owned lane and still
+// The deny list is read at acceptance too: a path can be inside the owned write paths and still
 // be one the row was told to leave alone.
 func TestVerifyRejectsADeniedPath(t *testing.T) {
 	t.Parallel()
