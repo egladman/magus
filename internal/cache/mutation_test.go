@@ -136,3 +136,73 @@ func TestFingerprintSourcesSeesWritesBetweenCalls(t *testing.T) {
 
 	assert.NotEqual(t, before["test/pkg/main.go"], after["test/pkg/main.go"])
 }
+
+// An entry is not recorded when a hashed input moved while the step ran, because the key
+// names a tree that no longer exists. The run itself stays green: the work succeeded, and
+// what is unsafe is only filing it under this key.
+//
+// The moved file is one a project DECLARES AS AN OUTPUT, which is the case that was silent.
+// MGS4007 deliberately ignores those so it never accuses a target of writing a generated
+// file, and that exemption was reused as the store gate, so a peer rewriting a generated
+// file inside this step's hash window was claimed, ignored, and stored anyway: the old key
+// mapped to output built from the new bytes, and on a shared remote every other machine
+// got it.
+//
+// Proven by putting the tree BACK to what it was hashed at and running again. If the entry
+// had been recorded, that second run would hit.
+func TestRunDoesNotRecordAnEntryWhoseInputsMovedWhileItRan(t *testing.T) {
+	root, c := openCache(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
+	src := filepath.Join(root, "pkg", "enum.go")
+	const hashedAt = "package pkg // the bytes the key was computed from\n"
+	require.NoError(t, os.WriteFile(src, []byte(hashedAt), 0o644))
+
+	step := Step{
+		ProjectPath:   ".",
+		WorkspaceRoot: root,
+		Target:        "build",
+		Sources:       []string{"pkg/*.go"},
+		// Claimed as a declared output, which is what silenced the old check.
+		OwnedOutputs: []string{"pkg/*.go"},
+	}
+
+	runs := 0
+	body := func(context.Context) error {
+		runs++
+		// A peer rewriting a generated file this step already hashed.
+		return os.WriteFile(src, []byte("package pkg // rewritten by somebody else\n"), 0o644)
+	}
+
+	_, err := c.Run(t.Context(), step, body)
+	require.NoError(t, err, "the run must stay green: the step's own work succeeded")
+	require.Equal(t, 1, runs)
+
+	// Back to the bytes the key was computed from. A recorded entry would answer here.
+	require.NoError(t, os.WriteFile(src, []byte(hashedAt), 0o644))
+	_, err = c.Run(t.Context(), step, body)
+	require.NoError(t, err)
+	assert.Equal(t, 2, runs,
+		"the second run replayed an entry recorded under a key whose inputs had already moved")
+}
+
+// The predicate itself, isolated from Run's wiring.
+func TestKeyStillDescribesInputsSeesAClaimedOutputMove(t *testing.T) {
+	root, c := openCache(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
+	src := filepath.Join(root, "pkg", "enum.go")
+	require.NoError(t, os.WriteFile(src, []byte("package pkg // one\n"), 0o644))
+
+	// Declared as an output, which is what the blame check exempts and the store gate
+	// must not. Not under gen/, which the source walk prunes.
+	s := Step{ProjectPath: ".", WorkspaceRoot: root, Target: "build",
+		Sources: []string{"pkg/*.go"}, OwnedOutputs: []string{"pkg/*.go"}}
+
+	before, err := c.fingerprintSources(t.Context(), &s)
+	require.NoError(t, err)
+	require.NotEmpty(t, before, "the fingerprint saw no sources, so nothing below proves anything")
+
+	require.NoError(t, os.WriteFile(src, []byte("package pkg // two, rewritten by a peer\n"), 0o644))
+	moved, fresh := c.keyStillDescribesInputs(t.Context(), &s, before)
+	assert.False(t, fresh, "a hashed input moved and the key was still called fresh")
+	assert.Equal(t, []string{"pkg/enum.go"}, moved)
+}

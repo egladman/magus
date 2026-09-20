@@ -60,6 +60,24 @@ func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []str
 	return out
 }
 
+// movedInputs names every hashed input that changed while the step ran, whoever changed
+// it. Unlike [mutatedSources] it exempts only ctx.modifiesExistingFiles, because it answers
+// a different question: not "did this target misbehave" but "does this key still describe
+// the tree it was computed from".
+//
+// The two must not share an exemption. mutatedSources ignores anything a project declares
+// as an output so MGS4007 does not accuse a target of writing a generated file, and that
+// exemption was load-bearing for BLAME and catastrophic for STORAGE: run.go fills
+// OwnedOutputs with every project's outputs, so a peer rewriting a generated file inside
+// this step's hash window was claimed, ignored, and the entry stored under a key computed
+// from the bytes that file used to hold.
+//
+// An in-place update is exempt because the key is computed from the pre-edit bytes on
+// purpose: that is what ctx.modifiesExistingFiles declares.
+func movedInputs(before, after sourceFingerprint, updates []string) []string {
+	return mutatedSources(before, after, updates, nil)
+}
+
 // checkSourceMutation reports MGS4007 when a target rewrote its own declared sources
 // without declaring them via ctx.modifiesExistingFiles. Callers invoke it only after
 // fn succeeded, so it never stacks on top of a target's own failure.
@@ -83,6 +101,32 @@ func (c *Cache) checkSourceMutation(ctx context.Context, s *Step, before sourceF
 	return types.DiagnosticErrorf(types.UndeclaredSourceModified,
 		"%s:%s modified %s it declared as sources; declare them with ctx.modifiesExistingFiles(...) or stop writing them: %s",
 		s.ProjectPath, s.Target, pluralFiles(len(changed)), joinCapped(changed, 5))
+}
+
+// keyStillDescribesInputs reports whether this step's hashed inputs are unchanged, and
+// names what moved when they are not. A false answer means the entry about to be written
+// would be filed under a key describing a tree that no longer exists.
+//
+// It REFUSES THE ENTRY, never the run. The step's work succeeded and its output is good;
+// what is unsafe is recording that output under this key, where a later run whose tree
+// really does hash to it would replay bytes built from different sources. Failing the run
+// instead would turn a benign interleaving into a red build, and would punish the target
+// that was READ rather than the one that wrote.
+//
+// Returns true when the fingerprint cannot be taken. A tree magus cannot stat twice is not
+// evidence of anything, and the alternative is to stop caching whenever a stat races.
+func (c *Cache) keyStillDescribesInputs(ctx context.Context, s *Step, before sourceFingerprint) ([]string, bool) {
+	if before == nil {
+		return nil, true
+	}
+	after, err := c.fingerprintSources(ctx, s)
+	if err != nil {
+		c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+			fmt.Sprintf("key staleness check skipped for %s: %v", s.ProjectPath, err)))
+		return nil, true
+	}
+	moved := movedInputs(before, after, s.Updates)
+	return moved, len(moved) == 0
 }
 
 func pluralFiles(n int) string {

@@ -59,7 +59,7 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 	}
 	// Carry the target's return value onto the entry so a hit can replay it; absent
 	// for a void target, which is nearly all of them.
-	if v, ok := types.ReturnFor(ctx, s.ProjectPath, s.Target); ok {
+	if v, ok := types.RecordedReturn(ctx, s.ProjectPath, s.Target); ok {
 		// Stored verbatim on purpose: a HIT replays this value, so masking it here would
 		// make the second run differ from the first. The remote copy is redacted at
 		// export instead (see exportArtifact).
