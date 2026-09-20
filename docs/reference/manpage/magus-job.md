@@ -16,7 +16,7 @@ Fork a job, take it, return it with its result, and verify that result
 ## Description
 
 Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
-is the grant one holder has on it: its write and read lanes, plus the one check
+is the grant one holder has on it: its write and read paths, plus the one check
 it runs. A job is not a run: \`magus run\` executes a target with no job involved,
 while a job's check and the daemon's maintenance each cause runs.
 
@@ -25,7 +25,7 @@ is a person's, and they reach the same store and the same rules. One author per
 JOB is the property that matters, and the store enforces it: a session holding a
 lease may record the base it landed on, shrink its own write paths, end its own
 job in fail or no_return, and fork a child of itself inside its own paths.
-Everything else, widening a lane and verifying a job included, is refused by name.
+Everything else, widening a boundary and verifying a job included, is refused by name.
 
 Jobs are kept per repository rather than per checkout, so a session forking in one
 worktree and a holder working in another see the same set.
@@ -89,7 +89,7 @@ them and magus describe job prints one job's terms.
 : What this job is for and what done means, as prose; the machine-checkable half is the completion gates (--check and every --gate-\* flag)
 
 **--deny-paths** *string*
-: A path inside the lane this job may not write; repeatable or comma-separated
+: A path inside the write paths this job may not write; repeatable or comma-separated
 
 **--depends-on** *string*
 : A job this one waits on; repeatable or comma-separated
