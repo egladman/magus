@@ -284,24 +284,29 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 		env = append(env, "HOST_RESPONSE={{.decision}}", "HOST_ADVISE_BRANCH=")
 	}
 	cmd.Env = env
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
+	// The two streams answer different questions, so they are kept apart. Whether
+	// the command ran at all is evidence from either one. The DECISION comes from
+	// stdout, because that is the stream a host parses: a bootstrap shim naming the
+	// binary it redirected to writes on stderr, and grading that as part of the
+	// answer reported a guard that was denying correctly as uncovered.
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	runErr := cmd.Run()
-	combined := out.String()
+	combined := stdout.String() + stderr.String()
 
 	if line, ok := firstLineContaining(combined, guardUnavailableNotice); ok {
 		return HarnessUnprobed, line
 	}
-	trimmed := strings.TrimSpace(combined)
-	if runErr != nil && trimmed == "" {
-		return HarnessUncovered, "the wired command failed to run: " + runErr.Error()
-	}
-	if trimmed == "" {
+	if strings.TrimSpace(combined) == "" {
+		if runErr != nil {
+			return HarnessUncovered, "the wired command failed to run: " + runErr.Error()
+		}
 		return HarnessUncovered, "the wired command produced no output for a synthetic event expected to render a verdict"
 	}
-	if len(wantDecisions) > 0 && !slices.Contains(wantDecisions, trimmed) {
-		return HarnessUncovered, fmt.Sprintf("the wired command answered %q, not the %q a working guard would render for this event", trimmed, wantDecisions[0])
+	decision := strings.TrimSpace(stdout.String())
+	if len(wantDecisions) > 0 && !slices.Contains(wantDecisions, decision) {
+		return HarnessUncovered, fmt.Sprintf("the wired command answered %q, not the %q a working guard would render for this event", decision, wantDecisions[0])
 	}
 	return HarnessVerified, ""
 }
