@@ -251,6 +251,14 @@ run_agent() {
 # JSON and comma-terminated; empty for a fixture task.
 write_meta() {
     local out=$1
+    # The agent CLI build, from the file the agent wrote beside its transcript.
+    # null rather than a guess when no agent ran (a control) or when the swapped-in
+    # RUNNER_AGENT does not report one: the cost basis depends on which build
+    # produced the transcript, so an invented value would be worse than none.
+    local agent_cli=null
+    if [[ -s $out/agent-cli.txt ]]; then
+        agent_cli="\"$(json_escape "$(head -n 1 "$out/agent-cli.txt")")\""
+    fi
     cat >"$out/meta.json" <<EOF
 {
   "run_id": "$(json_escape "$2")",
@@ -263,6 +271,7 @@ write_meta() {
   "budget_usd": $9,
   "magus_binary": "$(json_escape "${10}")",
   "magus_version": "$(json_escape "${11}")",
+  "agent_cli": $agent_cli,
   "fixture_sha": "$(json_escape "${12}")",
   "started": "${13}",
   "ended": "${14}",

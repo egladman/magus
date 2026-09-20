@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6430,
-  "edge_count": 11497,
+  "node_count": 6446,
+  "edge_count": 11533,
   "relations": [
     {
       "id": "annotates",
@@ -1267,7 +1267,7 @@
       "label": "benchmarks",
       "source": "benchmarks",
       "attrs": {
-        "dir_files": "165",
+        "dir_files": "164",
         "dir_languages": "buzz,markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-set,md#agent-harness-effectiveness-benchmark,md#analysis,md#answer,md#answer-format,md#arms,md#behavior-change,md#benchmark-analysis,md#budget-caps,md#catch-me-up-o"
       }
     },
@@ -1539,7 +1539,7 @@
       "label": "docs/benchmarks",
       "source": "docs/benchmarks",
       "attrs": {
-        "dir_files": "46",
+        "dir_files": "45",
         "dir_languages": "markdown,md#caveats,md#controls,md#correctness-against-median-tokens,md#dollars,md#environment,md#file-reads,md#fixture-go-n50,md#harness-effectiveness-benchmark,md#headline-cost-of-pass,md#magus-benchmarks,md#paired-deltas-full-minus-rampant,md#pass1-and-"
       }
     },
@@ -9502,22 +9502,12 @@
       }
     },
     {
-      "id": "docsection:benchmarks/BENCHMARKS.md#s7-one-upstream-lib-changed",
+      "id": "docsection:benchmarks/BENCHMARKS.md#tool-versions-observed",
       "kind": "docsection",
-      "label": "S7: One upstream lib changed",
-      "source": "benchmarks/BENCHMARKS.md#s7-one-upstream-lib-changed",
+      "label": "Tool versions (observed)",
+      "source": "benchmarks/BENCHMARKS.md#tool-versions-observed",
       "attrs": {
-        "anchor": "s7-one-upstream-lib-changed",
-        "level": "3"
-      }
-    },
-    {
-      "id": "docsection:benchmarks/BENCHMARKS.md#tool-versions",
-      "kind": "docsection",
-      "label": "Tool versions",
-      "source": "benchmarks/BENCHMARKS.md#tool-versions",
-      "attrs": {
-        "anchor": "tool-versions",
+        "anchor": "tool-versions-observed",
         "level": "3"
       }
     },
@@ -11812,22 +11802,12 @@
       }
     },
     {
-      "id": "docsection:docs/benchmarks/build-tools.md#s7-one-upstream-lib-changed",
+      "id": "docsection:docs/benchmarks/build-tools.md#tool-versions-observed",
       "kind": "docsection",
-      "label": "S7: One upstream lib changed",
-      "source": "docs/benchmarks/build-tools.md#s7-one-upstream-lib-changed",
+      "label": "Tool versions (observed)",
+      "source": "docs/benchmarks/build-tools.md#tool-versions-observed",
       "attrs": {
-        "anchor": "s7-one-upstream-lib-changed",
-        "level": "3"
-      }
-    },
-    {
-      "id": "docsection:docs/benchmarks/build-tools.md#tool-versions",
-      "kind": "docsection",
-      "label": "Tool versions",
-      "source": "docs/benchmarks/build-tools.md#tool-versions",
-      "attrs": {
-        "anchor": "tool-versions",
+        "anchor": "tool-versions-observed",
         "level": "3"
       }
     },
@@ -43373,6 +43353,15 @@
       }
     },
     {
+      "id": "file:libs/pricing/magusfile.buzz",
+      "kind": "file",
+      "label": "libs/pricing/magusfile.buzz",
+      "source": "libs/pricing/magusfile.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:libs/testlayout/magusfile.buzz",
       "kind": "file",
       "label": "libs/testlayout/magusfile.buzz",
@@ -50405,6 +50394,84 @@
       "source": "libs/gopherbuzz/std/testing.buzz:60"
     },
     {
+      "id": "function:libs/pricing/magusfile.buzz:build",
+      "kind": "function",
+      "label": "build",
+      "source": "libs/pricing/magusfile.buzz:89",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/pricing/magusfile.buzz:ci",
+      "kind": "function",
+      "label": "ci",
+      "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
+      "source": "libs/pricing/magusfile.buzz:101",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/pricing/magusfile.buzz:format",
+      "kind": "function",
+      "label": "format",
+      "doc": "No go-mod-tidy, unlike the sibling libraries: this package has no go.mod, so tidy here would rewrite the ROOT module's from a descendant project, which is the cross-project write magus rejects as MGS3001.",
+      "source": "libs/pricing/magusfile.buzz:77",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/pricing/magusfile.buzz:generate",
+      "kind": "function",
+      "label": "generate",
+      "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.",
+      "source": "libs/pricing/magusfile.buzz:52",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/pricing/magusfile.buzz:index_generate",
+      "kind": "function",
+      "label": "index_generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/pricing/magusfile.buzz:58",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/pricing/magusfile.buzz:lint",
+      "kind": "function",
+      "label": "lint",
+      "doc": "go-vet only. golangci-lint runs over the whole root module from the root project, which already reaches this package, so a second custom-linter build here would buy nothing.",
+      "source": "libs/pricing/magusfile.buzz:88",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/pricing/magusfile.buzz:preflight",
+      "kind": "function",
+      "label": "preflight",
+      "source": "libs/pricing/magusfile.buzz:49",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/pricing/magusfile.buzz:test",
+      "kind": "function",
+      "label": "test",
+      "doc": "No coverage profile, unlike the sibling libraries: those are separate modules whose statements the root suite never enters. This package is part of the root module, so the root's `go test ./...` already records it in coverage.out and a second profile would be the same blocks counted from a second run.",
+      "source": "libs/pricing/magusfile.buzz:95",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:libs/testlayout/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
@@ -50562,7 +50629,7 @@
       "kind": "function",
       "label": "agent_bench_report",
       "doc": "Turns a results tree into the benchmark report: build benchreport, then extract one metrics record per run, analyze the paired deltas, render report.md. `-- --results <dir>` names a tree under benchmarks/agent other than results/; `-- --synthetic` generates the pipeline's own control, a synthetic tree, and reports on that instead. Reads run artifacts that change under it, so it never replays from cache. The analysis tests are ordinary Go tests in the root module, so `test` covers them and there is no separa",
-      "source": "magusfile.buzz:3140",
+      "source": "magusfile.buzz:3149",
       "attrs": {
         "exported": "true"
       }
@@ -50572,7 +50639,7 @@
       "kind": "function",
       "label": "agent_bench_run",
       "doc": "Runs a benchmark manifest with a login the launching shell never held. The long-lived token `claude setup-token` mints is read through the workspace's secret provider under the reference below, handed to run.sh as the one environment variable the runner's scrub keeps, and redacted from everything magus captures. It never touches argv, which the run log records, and it never has to be exported by the person, or the agent, typing this command: `MAGUS_SECRET_PROVIDER=system-keychain magus run agent-bench-run .",
-      "source": "magusfile.buzz:3259",
+      "source": "magusfile.buzz:3270",
       "attrs": {
         "exported": "true"
       }
@@ -50592,7 +50659,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:2930",
+      "source": "magusfile.buzz:2936",
       "attrs": {
         "exported": "true"
       }
@@ -50622,7 +50689,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine, and holds their merged line coverage above a floor. Each -t invocation emits an LCOV fragment for the entry file only; imports are measured when THEY are the -t subject. The fragments and the merged figure are throwaways under coverage/buzz/ (gitignored); coverage-render publishes the badge.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on P",
-      "source": "magusfile.buzz:2805",
+      "source": "magusfile.buzz:2811",
       "attrs": {
         "exported": "true"
       }
@@ -50649,7 +50716,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:3086",
+      "source": "magusfile.buzz:3095",
       "attrs": {
         "exported": "true"
       }
@@ -50659,7 +50726,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.  Transport only: the plan names its own outputs and renders its own summary, so porting this to another provider is a rewrite of the two file formats and nothing else.",
-      "source": "magusfile.buzz:3311",
+      "source": "magusfile.buzz:3322",
       "attrs": {
         "exported": "true"
       }
@@ -50676,7 +50743,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:3107",
+      "source": "magusfile.buzz:3116",
       "attrs": {
         "exported": "true"
       }
@@ -50686,7 +50753,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:3289",
+      "source": "magusfile.buzz:3300",
       "attrs": {
         "exported": "true"
       }
@@ -50706,21 +50773,21 @@
       "kind": "function",
       "label": "coverage_blocks_ran",
       "doc": "coverage_blocks_ran unions one platform's module profiles into \"block -> did it run\". A block absent from every profile was never compiled there, which is not the same answer as compiled-and-never-entered.",
-      "source": "magusfile.buzz:2708"
+      "source": "magusfile.buzz:2714"
     },
     {
       "id": "function:magusfile.buzz:coverage_percent",
       "kind": "function",
       "label": "coverage_percent",
       "doc": "coverage_percent is THIS machine's figure over THIS module, and the 70% floor in `test` gates on it. Per-platform by design: the floor guards against a regression in the suite that just ran, so it has to answer for the tree that suite compiled. The published badge is the whole-tree figure and belongs to coverage_render.",
-      "source": "magusfile.buzz:2701"
+      "source": "magusfile.buzz:2707"
     },
     {
       "id": "function:magusfile.buzz:coverage_render",
       "kind": "function",
       "label": "coverage_render",
       "doc": "Renders the three language coverage badges into the assembled site, gen/site/assets/. The CD site job runs it after deploy-generate on every push to main, so the figures are measured once, on one pinned toolchain, and published rather than committed. A committed badge measured on one machine cannot be gated consistently: Go coverage legitimately differs by platform, and Node's line coverage moves with its patch version.  NOT named *-generate, deliberately: `generate` composes ctx.glob(\"*-generate\"), so that",
-      "source": "magusfile.buzz:2730",
+      "source": "magusfile.buzz:2736",
       "attrs": {
         "exported": "true"
       }
@@ -50737,7 +50804,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:3438",
+      "source": "magusfile.buzz:3449",
       "attrs": {
         "exported": "true"
       }
@@ -50774,7 +50841,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than prettier because it needs no Node in the format path, and rather than biome because biome does not read Markdown at all. Every project with Markdown carries its own dprint.json and runs the op itself; see this project's for what a root-started run covers.",
-      "source": "magusfile.buzz:3062",
+      "source": "magusfile.buzz:3071",
       "attrs": {
         "exported": "true"
       }
@@ -50910,7 +50977,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint USED to go through the go spell's op so the spell's version probe (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which code passes while every cache entry replays the old verdict.",
-      "source": "magusfile.buzz:2991",
+      "source": "magusfile.buzz:2997",
       "attrs": {
         "exported": "true"
       }
@@ -50920,7 +50987,7 @@
       "kind": "function",
       "label": "lint_build",
       "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
-      "source": "magusfile.buzz:2951",
+      "source": "magusfile.buzz:2957",
       "attrs": {
         "exported": "true"
       }
@@ -50981,14 +51048,14 @@
       "kind": "function",
       "label": "merge_profiles",
       "doc": "merge_profiles concatenates two Go coverage profiles. Both carry a `mode:` header line and the same mode (atomic), so the second file's body appends under the first's header; `go tool cover` refuses a profile with two headers.  The headers are CHECKED rather than assumed, because every way this goes wrong produces a plausible number instead of an error. A missing file leaves a body under a blank first line; two different modes splice count semantics under an atomic header; and the `cd` charm on go-test appe",
-      "source": "magusfile.buzz:2682"
+      "source": "magusfile.buzz:2688"
     },
     {
       "id": "function:magusfile.buzz:missing_input",
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:3399"
+      "source": "magusfile.buzz:3410"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -51047,7 +51114,7 @@
       "kind": "function",
       "label": "publish_report",
       "doc": "publish_report commits a rendered report at benchmarks/agent/reports/<date>/<provider>/<model>.md with the environment stamped after its title, the way BENCHMARKS.md carries its own: a number on the docs site has to trace to a date, a build and a machine. The provider is given, because a model id does not carry it; the model is the one the runs used, so a tree that mixes models is refused rather than filed under one of them. The docs project mirrors every file under that directory into a page.",
-      "source": "magusfile.buzz:3202"
+      "source": "magusfile.buzz:3213"
     },
     {
       "id": "function:magusfile.buzz:publish_variant",
@@ -51061,7 +51128,7 @@
       "kind": "function",
       "label": "raced_packages",
       "doc": "raced_packages is every package of this module except the one `test` runs separately. `go list` rather than a hand-kept list, so a package added tomorrow is raced without anyone remembering this, and `./...` stays the single statement of scope.",
-      "source": "magusfile.buzz:2654"
+      "source": "magusfile.buzz:2660"
     },
     {
       "id": "function:magusfile.buzz:read_module_license",
@@ -51075,7 +51142,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:3361"
+      "source": "magusfile.buzz:3372"
     },
     {
       "id": "function:magusfile.buzz:refuse_overwrite",
@@ -51149,7 +51216,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:3373"
+      "source": "magusfile.buzz:3384"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -51178,7 +51245,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:3485",
+      "source": "magusfile.buzz:3496",
       "attrs": {
         "exported": "true"
       }
@@ -51208,7 +51275,7 @@
       "kind": "function",
       "label": "swegrade_build",
       "doc": "Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from. Built on the host from the root module so it shares the workspace's JSON codec and its tests, rather than as a throwaway module inside a grader image; the binary is gitignored under benchmarks/agent/bin, undeclared like ./magus for the same reason.",
-      "source": "magusfile.buzz:3243",
+      "source": "magusfile.buzz:3254",
       "attrs": {
         "exported": "true"
       }
@@ -51275,7 +51342,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:3481",
+      "source": "magusfile.buzz:3492",
       "attrs": {
         "exported": "true"
       }
@@ -60099,6 +60166,16 @@
       }
     },
     {
+      "id": "project:libs/pricing",
+      "kind": "project",
+      "label": "libs/pricing",
+      "source": "libs/pricing",
+      "attrs": {
+        "engine": "buzz",
+        "target_count": "8"
+      }
+    },
+    {
       "id": "project:libs/testlayout",
       "kind": "project",
       "label": "libs/testlayout",
@@ -60129,11 +60206,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:3107:TODO",
+      "id": "rationale:magusfile.buzz:3116:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:3107"
+      "source": "magusfile.buzz:3116"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -61426,6 +61503,85 @@
       "label": "test",
       "doc": "README.md's \"Contributing gotchas\" claims value changes are checked against all three build tags (default + buzz_safe in CI, buzz_unsafe by hand) - the second exec is what makes that true; before it, nothing here ever built or ran a single test under -tags buzz_safe.",
       "source": "libs/gopherbuzz",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/pricing:build",
+      "kind": "target",
+      "label": "build",
+      "source": "libs/pricing",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/pricing:ci",
+      "kind": "target",
+      "label": "ci",
+      "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
+      "source": "libs/pricing",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/pricing:format",
+      "kind": "target",
+      "label": "format",
+      "doc": "No go-mod-tidy, unlike the sibling libraries: this package has no go.mod, so tidy here would rewrite the ROOT module's from a descendant project, which is the cross-project write magus rejects as MGS3001.",
+      "source": "libs/pricing",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/pricing:generate",
+      "kind": "target",
+      "label": "generate",
+      "doc": "Regenerates MAGUS.md and fails on drift.",
+      "source": "libs/pricing",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/pricing:index-generate",
+      "kind": "target",
+      "label": "index-generate",
+      "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+      "source": "libs/pricing",
+      "attrs": {
+        "declared_as": "index_generate",
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/pricing:lint",
+      "kind": "target",
+      "label": "lint",
+      "doc": "go-vet only.",
+      "source": "libs/pricing",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/pricing:preflight",
+      "kind": "target",
+      "label": "preflight",
+      "source": "libs/pricing",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/pricing:test",
+      "kind": "target",
+      "label": "test",
+      "doc": "No coverage profile, unlike the sibling libraries: those are separate modules whose statements the root suite never enters.",
+      "source": "libs/pricing",
       "attrs": {
         "engine": "buzz"
       }
@@ -99824,7 +99980,7 @@
     },
     {
       "source": "docsection:benchmarks/BENCHMARKS.md#environment",
-      "target": "docsection:benchmarks/BENCHMARKS.md#tool-versions",
+      "target": "docsection:benchmarks/BENCHMARKS.md#tool-versions-observed",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -99873,14 +100029,6 @@
     {
       "source": "docsection:benchmarks/BENCHMARKS.md#fixture-go-n50",
       "target": "docsection:benchmarks/BENCHMARKS.md#s6-one-leaf-file-changed",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "benchmarks/BENCHMARKS.md"
-    },
-    {
-      "source": "docsection:benchmarks/BENCHMARKS.md#fixture-go-n50",
-      "target": "docsection:benchmarks/BENCHMARKS.md#s7-one-upstream-lib-changed",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -101408,7 +101556,7 @@
     },
     {
       "source": "docsection:docs/benchmarks/build-tools.md#environment",
-      "target": "docsection:docs/benchmarks/build-tools.md#tool-versions",
+      "target": "docsection:docs/benchmarks/build-tools.md#tool-versions-observed",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -101457,14 +101605,6 @@
     {
       "source": "docsection:docs/benchmarks/build-tools.md#fixture-go-n50",
       "target": "docsection:docs/benchmarks/build-tools.md#s6-one-leaf-file-changed",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/benchmarks/build-tools.md"
-    },
-    {
-      "source": "docsection:docs/benchmarks/build-tools.md#fixture-go-n50",
-      "target": "docsection:docs/benchmarks/build-tools.md#s7-one-upstream-lib-changed",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -131447,6 +131587,94 @@
       "provenance": "libs/gopherbuzz/std/testing.buzz"
     },
     {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "function:libs/pricing/magusfile.buzz:build",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "function:libs/pricing/magusfile.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "function:libs/pricing/magusfile.buzz:format",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "function:libs/pricing/magusfile.buzz:generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "function:libs/pricing/magusfile.buzz:index_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "function:libs/pricing/magusfile.buzz:lint",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "function:libs/pricing/magusfile.buzz:preflight",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "function:libs/pricing/magusfile.buzz:test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/pricing/magusfile.buzz",
+      "target": "import:magus/spell/go",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
       "source": "file:libs/testlayout/magusfile.buzz",
       "target": "function:libs/testlayout/magusfile.buzz:build",
       "relation": "contains",
@@ -148000,6 +148228,78 @@
       "provenance": "libs/gopherbuzz"
     },
     {
+      "source": "project:libs/pricing",
+      "target": "file:libs/pricing/magusfile.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing/magusfile.buzz"
+    },
+    {
+      "source": "project:libs/pricing",
+      "target": "target:libs/pricing:build",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "project:libs/pricing",
+      "target": "target:libs/pricing:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "project:libs/pricing",
+      "target": "target:libs/pricing:format",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "project:libs/pricing",
+      "target": "target:libs/pricing:generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "project:libs/pricing",
+      "target": "target:libs/pricing:index-generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "project:libs/pricing",
+      "target": "target:libs/pricing:lint",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "project:libs/pricing",
+      "target": "target:libs/pricing:preflight",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "project:libs/pricing",
+      "target": "target:libs/pricing:test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
       "source": "project:libs/testlayout",
       "target": "doc:libs/testlayout/readme.md",
       "relation": "contains",
@@ -148208,12 +148508,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:3107:TODO",
+      "source": "rationale:magusfile.buzz:3116:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:3107"
+      "provenance": "magusfile.buzz:3116"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -151896,6 +152196,14 @@
     },
     {
       "source": "target:docs:index-generate",
+      "target": "file:libs/pricing/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:index-generate",
       "target": "file:libs/testlayout/magusfile.buzz",
       "relation": "consumes",
       "confidence": "extracted",
@@ -153101,6 +153409,142 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "target:libs/pricing:build",
+      "target": "op:go:go-build",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:build",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:build",
+      "target": "target:libs/pricing:format",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:ci",
+      "target": "target:libs/pricing:build",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:ci",
+      "target": "target:libs/pricing:lint",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:ci",
+      "target": "target:libs/pricing:test",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:format",
+      "target": "op:go:go-fmt",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:format",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:format",
+      "target": "target:libs/pricing:generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:generate",
+      "target": "target:libs/pricing:index-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:generate",
+      "target": "target:libs/pricing:preflight",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:lint",
+      "target": "op:go:go-vet",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:lint",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:lint",
+      "target": "target:libs/pricing:format",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:test",
+      "target": "op:go:go-test",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:test",
+      "target": "spell:go",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
+    },
+    {
+      "source": "target:libs/pricing:test",
+      "target": "target:libs/pricing:format",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/pricing"
     },
     {
       "source": "target:libs/testlayout:build",

@@ -69,8 +69,9 @@ type ControlRun struct {
 
 // ScoredRun is one agent run measured from its artifacts. Success is nil when
 // no check ran and GuardEvents is nil when no trail was captured; neither is a
-// zero. Dollars is the host's billed cost when the transcript recorded one and
-// the priced table total otherwise. Control is always nil: every row carries
+// zero. Dollars is the token totals priced from the checked-in table, always;
+// ReportedCostUSD is the host's own estimate, recorded for comparison and never
+// substituted for it. Control is always nil: every row carries
 // the key so a reader tells the two record kinds apart by it.
 type ScoredRun struct {
 	RunID                string              `json:"run_id"`

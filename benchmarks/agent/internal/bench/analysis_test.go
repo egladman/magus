@@ -12,15 +12,16 @@ import (
 
 	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/pricing"
 )
 
-func loadTestPricing(t *testing.T) PriceTable {
+func loadTestPricing(t *testing.T) pricing.Table {
 	t.Helper()
-	pricing, err := LoadPricing(filepath.Join("..", "..", "pricing.json"))
+	table, err := pricing.Default()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return pricing
+	return table
 }
 
 // fixtureRecords builds the synthetic tree in a temp dir and extracts it,
@@ -310,15 +311,21 @@ func TestBenchTranscriptDefects(t *testing.T) {
 			t.Errorf("tokens = %+v; input and cache still come from the turns", r.Tokens)
 		}
 	})
-	t.Run("billed cost beats the table when the host recorded one", func(t *testing.T) {
+	// The host's total_cost_usd is its own client-side estimate, priced from a
+	// table compiled into its binary that has no entry for these models. It is
+	// recorded for comparison and never substituted for the list-price total.
+	t.Run("the table prices the run even when the host reported a cost", func(t *testing.T) {
 		d := newDefectRun(t)
 		usage := map[string]any{"input_tokens": 1000, "output_tokens": 100}
 		d.writeTranscript(initRec,
 			map[string]any{"type": "assistant", "message": map[string]any{"id": "m1", "usage": usage, "content": []any{}}},
 			map[string]any{"type": "result", "subtype": "success", "total_cost_usd": 0.05, "usage": usage})
 		r := d.mustScore()
-		if r.Dollars != 0.05 || r.TableDollarsUSD <= 0 || r.TableDollarsUSD == 0.05 {
+		if r.Dollars != r.TableDollarsUSD || r.TableDollarsUSD <= 0 || r.Dollars == 0.05 {
 			t.Errorf("dollars=%v table=%v", r.Dollars, r.TableDollarsUSD)
+		}
+		if r.ReportedCostUSD == nil || *r.ReportedCostUSD != 0.05 {
+			t.Errorf("reported_cost_usd = %v; the host's estimate is still recorded", r.ReportedCostUSD)
 		}
 	})
 	t.Run("transcript with no assistant records", func(t *testing.T) {
@@ -335,7 +342,11 @@ func TestBenchTranscriptDefects(t *testing.T) {
 		d := newDefectRun(t)
 		d.writeSingleTurn("claude-opus-5-20260301", map[string]any{"input_tokens": 1_000_000, "output_tokens": 0})
 		r := d.mustScore()
-		if want := loadTestPricing(t)["claude-opus-5"].Input; !almost(r.Dollars, want, 7) {
+		rates, err := loadTestPricing(t).Lookup("claude-opus-5")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := rates.Input; !almost(r.Dollars, want, 7) {
 			t.Errorf("dollars = %v, want %v", r.Dollars, want)
 		}
 	})

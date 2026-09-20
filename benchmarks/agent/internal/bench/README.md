@@ -19,8 +19,10 @@ calls the Python dropped and pads its tables the way dprint does.
 ## Invocations
 
 Every command takes one positional argument and `-o` for the file it writes.
-`extract` reads `pricing.json` from `benchmarks/agent/` relative to
-the working directory unless `-p` names another table.
+`extract` prices a run from the table compiled in from
+[libs/pricing](../../../../libs/pricing/pricing.json), so no working directory
+or forgotten flag can change a published figure. `-p` names another table, for
+re-pricing an old results tree against the prices that were current when it ran.
 
 ```sh
 magus run go::go-build . -- -o /tmp/benchreport ./benchmarks/agent/cmd/benchreport
@@ -49,15 +51,16 @@ same metrics.jsonl and seed produce byte-identical analysis.json.
 
 One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
 
-| File                     | Read for                                                                                                                                     |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `meta.json`              | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason, control |
-| `transcript.jsonl`       | tokens, dollars, turns, tool calls, file reads, tool-result bytes                                                                            |
-| `final.diff`             | invariant violations                                                                                                                         |
-| `check.exit`             | success                                                                                                                                      |
-| `timing.json`            | wall_ms, time_to_first_edit_ms, time_to_done_ms                                                                                              |
-| `activity/events.jsonl`  | guard events (optional)                                                                                                                      |
-| `check.txt`, `probe.txt` | kept for the human, not parsed                                                                                                               |
+| File                     | Read for                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `meta.json`              | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, agent_cli, fixture_sha, started, ended, exit_reason, control |
+| `transcript.jsonl`       | tokens, dollars, turns, tool calls, file reads, tool-result bytes                                                                                       |
+| `final.diff`             | invariant violations                                                                                                                                    |
+| `check.exit`             | success                                                                                                                                                 |
+| `timing.json`            | wall_ms, time_to_first_edit_ms, time_to_done_ms                                                                                                         |
+| `activity/events.jsonl`  | guard events (optional)                                                                                                                                 |
+| `agent-cli.txt`          | the agent CLI build, folded into `meta.json` as `agent_cli`; null when no agent ran                                                                     |
+| `check.txt`, `probe.txt` | kept for the human, not parsed                                                                                                                          |
 
 ## Metric definitions
 
@@ -66,13 +69,17 @@ One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
   `cache_write` (`cache_creation_input_tokens`, or the 5m/1h breakdown under
   `cache_creation` when the transcript reports one). `total_billed` is the sum
   of all four; it is a token count, not a price.
-- **dollars** - the host's own bill, `total_cost_usd` from the transcript's
-  `result` record (kept as `reported_cost_usd`), when it recorded a positive one.
-  `table_dollars_usd` is the per-model token totals priced from `pricing.json`
-  (USD per million tokens, read from the published pricing page on the date
-  recorded in that file); it is the fallback for a transcript that ends without
-  a result record, and the report says how far it sits from the bill. A model
-  missing from the table still stops extraction rather than being guessed at.
+- **dollars** - the per-model token totals priced from
+  [libs/pricing](../../../../libs/pricing/pricing.json) (USD per million tokens,
+  read from the published pricing page on the date recorded in that file), which
+  is also reported as `table_dollars_usd`. The host's own `total_cost_usd`, from
+  the transcript's `result` record, is kept beside it as `reported_cost_usd` and
+  never substituted for it: that number is a client-side estimate priced from a
+  table compiled into the host CLI, and a model its table lacks is silently
+  charged at a default model's rates. The report says how far the two sit apart,
+  because a ratio that stays constant across a changing token mix is that
+  fallback rather than a token miscount. A model missing from this table stops
+  extraction rather than being guessed at.
   When a transcript reports only the flat cache-write counter, those tokens are
   priced at the 5-minute rate and the record carries
   `cache_write_ttl_assumed: true`, which the report surfaces as a caveat: the

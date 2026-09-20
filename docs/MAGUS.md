@@ -48,7 +48,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                          |
 | target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `test`                                                                                 |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                                  |
-| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                             |
+| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                             |
 | tool       | built in | `magus query kind=tool`       | `go`, `pnpm`, `buf`                                                                                                         |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
 | module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
@@ -73,6 +73,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
 | libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| libs/pricing                    |       8 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
 | libs/testlayout                 |       8 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `preflight`, `test`                              |
 | proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |

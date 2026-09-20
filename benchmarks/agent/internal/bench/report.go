@@ -253,11 +253,11 @@ func caveatLines(a *Analysis) []string {
 		lines = append(lines, fmt.Sprintf("More than one model appears across runs (%s); the arm is no longer the only variable.", strings.Join(a.Models, ", ")))
 	}
 	if ratio := quality.TableToBilledRatioMedian; ratio != nil && !(0.9 <= *ratio && *ratio <= 1.1) {
-		lines = append(lines, fmt.Sprintf("Dollars are the host's billed cost; the pricing table would have said %sx that, so the table is wrong for this model and only backs runs with no result record.",
+		lines = append(lines, fmt.Sprintf("Dollars are priced from the table at list price; the host's self-reported estimate disagrees by %sx. The likely cause is the host CLI's unknown-model fallback, which prices an id its compiled-in table lacks at a default model's rates; a ratio near 0.67 or 1.67 is that signature, since it is the Sonnet-to-Opus list-price ratio and not a token miscount.",
 			strconv.FormatFloat(*ratio, 'f', 2, 64)))
 	}
 	if n := len(quality.RunsWithoutBilledCost); n > 0 {
-		lines = append(lines, fmt.Sprintf("No billed cost for %d run(s); their dollars come from the pricing table.", n))
+		lines = append(lines, fmt.Sprintf("No self-reported cost for %d run(s); the table prices every run either way.", n))
 	}
 	var unverified []string
 	for _, task := range a.Tasks {

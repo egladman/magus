@@ -132,7 +132,7 @@ magus\project({
     //   - LICENSE, read only by release-build, which is skip_cache: declaring it would
     //     invalidate build/test/lint to key nothing.
     //   - The benchmark corpora under benchmarks/ (fixtures, task meta.json, manifests,
-    //     pricing.json, the swebench set). Their consumers are agent-bench-run and
+    //     the swebench set). Their consumers are agent-bench-run and
     //     agent-bench-report, both skip_cache, so the LICENSE argument holds for all of
     //     them at once. The one exception is declared above: the bench package's own
     //     testdata, which `go test ./...` reads.
@@ -2599,6 +2599,12 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "benchmarks/agent/internal/bench/testdata/*",
                    "internal/registry/registry-keys.json",
                    "internal/selfupdate/release-keys.json");
+    // libs/pricing is a PROJECT, so the globs above stop at its directory, but it is
+    // also a package of THIS module: `go test ./...` compiles and runs it, and the
+    // benchmark's own tests price a run through it. Undeclared, a price edit leaves
+    // this key unmoved and the suite replays a pass computed against the old table.
+    // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
+    ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
     // types/kind_palette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
@@ -2997,7 +3003,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go",
-                   "libs/commentdash/**/*.go");
+                   "libs/commentdash/**/*.go",
+                   // A project, so the tree globs below stop at its directory, but also a
+                   // package of this module that golangci-lint and go vet both compile.
+                   "libs/pricing/**/*.go", "libs/pricing/pricing.json");
     // The tree this target analyzes, restated for the reason the same block on `test`
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this
@@ -3178,8 +3187,10 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
         steps.append(["makefixture", fs\join(agent, "results-synthetic"), "-model", "claude-opus-5"]);
         results = "results-synthetic/results";
     }
-    steps.append(["extract", fs\join(agent, results), "-o", fs\join(agent, "metrics.jsonl"),
-                  "-p", fs\join(agent, "pricing.json")]);
+    // No -p: the price table is compiled into the binary from libs/pricing, so a
+    // published dollar figure cannot depend on the working directory a report ran
+    // from. The flag stays for re-pricing an old results tree against an old table.
+    steps.append(["extract", fs\join(agent, results), "-o", fs\join(agent, "metrics.jsonl")]);
     steps.append(["analyze", fs\join(agent, "metrics.jsonl"), "-o", fs\join(agent, "analysis.json"),
                   "--seed", "20260902"]);
     steps.append(["report", fs\join(agent, "analysis.json"), "-o", fs\join(agent, "report.md")]);

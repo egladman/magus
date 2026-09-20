@@ -1,0 +1,117 @@
+{
+  "_source": "https://platform.claude.com/docs/en/about-claude/pricing.md",
+  "_fetched_on": "2026-09-20",
+  "_units": "USD per million tokens, first-party Claude API list prices",
+  "_no_pricing_api": "There is no first-party JSON pricing endpoint. The machine-readable source is the docs Markdown named in _source; GET /v1/models returns ids, context windows and capabilities but no prices. The only programmatic source of ACTUAL billed USD is the Admin API cost report (GET /v1/organizations/cost_report), which needs an Admin API key, is daily granularity only, groups by workspace or description, and returns decimal strings in cents. It therefore cannot attribute spend to a single benchmark run unless that run gets a workspace of its own.",
+  "_rates_note": "cache_write_5m is 1.25x base input and cache_write_1h is 2x, on every model. cache_read is 0.1x base input everywhere except Fable 5.1 and Mythos 5.1, which are 0.025x. A dated model id (claude-opus-5-20260301) is priced as its alias (claude-opus-5); a model absent under either name is an extraction error, never a guess.",
+  "_modes_note": "fast_input/fast_output replace the base pair under fast mode and keep the model's own cache multipliers, so a fast cache read is 0.1x the fast input rate. geo_multipliers scales every token category and is published for Claude 4.6 and later only. batch_multiplier is the Batch API discount and applies to input and output, the two categories the source states it for.",
+  "batch_multiplier": 0.5,
+  "web_search_usd_per_thousand": 10.0,
+  "models": {
+    "claude-fable-5-1": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_write_5m": 12.5,
+      "cache_write_1h": 20.0,
+      "cache_read": 0.25,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-mythos-5-1": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_write_5m": 12.5,
+      "cache_write_1h": 20.0,
+      "cache_read": 0.25,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-fable-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_write_5m": 12.5,
+      "cache_write_1h": 20.0,
+      "cache_read": 1.0,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-mythos-5": {
+      "input": 10.0,
+      "output": 50.0,
+      "cache_write_5m": 12.5,
+      "cache_write_1h": 20.0,
+      "cache_read": 1.0,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-opus-5": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0,
+      "cache_read": 0.5,
+      "fast_input": 10.0,
+      "fast_output": 50.0,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-opus-4-8": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0,
+      "cache_read": 0.5,
+      "fast_input": 10.0,
+      "fast_output": 50.0,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-opus-4-7": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0,
+      "cache_read": 0.5,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-opus-4-6": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0,
+      "cache_read": 0.5,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-opus-4-5": {
+      "input": 5.0,
+      "output": 25.0,
+      "cache_write_5m": 6.25,
+      "cache_write_1h": 10.0,
+      "cache_read": 0.5
+    },
+    "claude-sonnet-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cache_write_5m": 2.5,
+      "cache_write_1h": 4.0,
+      "cache_read": 0.2,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-sonnet-4-6": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_write_5m": 3.75,
+      "cache_write_1h": 6.0,
+      "cache_read": 0.3,
+      "geo_multipliers": {"us": 1.1}
+    },
+    "claude-sonnet-4-5": {
+      "input": 3.0,
+      "output": 15.0,
+      "cache_write_5m": 3.75,
+      "cache_write_1h": 6.0,
+      "cache_read": 0.3
+    },
+    "claude-haiku-4-5": {
+      "input": 1.0,
+      "output": 5.0,
+      "cache_write_5m": 1.25,
+      "cache_write_1h": 2.0,
+      "cache_read": 0.1
+    }
+  }
+}

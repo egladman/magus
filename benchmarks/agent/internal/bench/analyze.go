@@ -528,9 +528,13 @@ func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQualit
 			}
 		}
 	}
-	// How far the pricing table sits from what the host billed, over the runs
-	// that carry both. A constant ratio far from 1 is a table error; the report
-	// says so rather than letting a floor pass for a bill.
+	// How far the table sits from what the host reported, over the runs that
+	// carry both. This ratio is the detector, and reading it the other way round
+	// is what cost the 2026-09-10 pilot its cost basis: a ratio CONSTANT across
+	// a changing token mix can only come from a proportional rate vector, so it
+	// is a HOST error. Only a ratio that MOVES with the mix could be a table
+	// error, since a wrong rate on one category shows up as a different multiple
+	// on every run.
 	var ratios []pycompat.Number
 	for _, run := range runs {
 		if run.ReportedCostUSD != nil && *run.ReportedCostUSD != 0 {

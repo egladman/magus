@@ -109,5 +109,5 @@ pass@1 is capability; pass^k (all k reps succeed) is reliability.
 - No activity trail for 1 run(s) (full-task-a-r3-20260909T120000Z); their guard_events are null, not zero.
 - Cache-write TTL was not reported for 11 run(s) (full-task-a-r1-20260909T120000Z, full-task-a-r2-20260909T120000Z, full-task-a-r3-20260909T120000Z, full-task-b-r2-20260909T120000Z, full-task-b-r3-20260909T120000Z, rampant-task-a-r1-20260909T120000Z, rampant-task-a-r2-20260909T120000Z, rampant-task-a-r3-20260909T120000Z, rampant-task-b-r1-20260909T120000Z, rampant-task-b-r2-20260909T120000Z, rampant-task-b-r3-20260909T120000Z); those writes are priced at the 5-minute rate, so their dollars are a floor.
 - Invariant violation (test file deleted) in rampant-task-a-r1-20260909T120000Z.
-- No billed cost for 12 run(s); their dollars come from the pricing table.
+- No self-reported cost for 12 run(s); the table prices every run either way.
 - Checks not shown to discriminate for task-a, task-b (see Controls); pass rates there are not evidence.
