@@ -58,6 +58,13 @@ const (
 	advisoryPushGate        denyRuleName = "push-gate"
 	advisoryRevertClassify  denyRuleName = "revert-classify"
 	advisoryCheckpointState denyRuleName = "checkpoint-state"
+	// advisoryChainedRun names an advisory that was firing anonymously. Unnamed, it was
+	// outside every count magus keeps, so the rule this repo applies to its own advice
+	// (next.go: uptake is a query, and advice nobody takes gets deleted) could not reach
+	// it. MEASURED 2026-09-20: it fired three times in one session on the same shape and
+	// was ignored all three, which is a fact worth being able to READ rather than
+	// reconstruct from a transcript.
+	advisoryChainedRun denyRuleName = "chained-run"
 )
 
 // advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session

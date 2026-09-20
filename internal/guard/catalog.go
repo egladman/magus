@@ -184,6 +184,11 @@ var denyRuleDocs = []RuleDoc{
 // whole set rather than the half that happens to apply to them today.
 var advisoryDocs = []RuleDoc{
 	{Name: string(advisoryCheckpointState), Decision: "advise", Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
+	{Name: string(advisoryChainedRun), Decision: "advise",
+		Catches: "several magus runs chained on one line, where the dependency graph would have run them",
+		Why: "Targets compose through ctx.needs, so the last one usually pulls the rest in order and each extra invocation reloads the workspace. " +
+			"It ADVISES rather than refuses because two genuinely independent targets on one line are real work, and only the graph knows which case this is. " +
+			"The exception worth knowing: `affected ci` does not regenerate. Where the gate strips the workspace's default charms, its composed `generate` is a drift gate, so `affected generate:rw` comes first as its own invocation."},
 	{Name: string(advisoryCodeSearch), Decision: "advise",
 		Catches: "a repo-wide text search that the symbol graph may answer better",
 		Why: "A text match misses the generated, indirect and cross-language references the graph knows about, so the two agree only when the pattern is a real symbol. " +
@@ -273,6 +278,7 @@ var advisoryKinds = []hint.MarkerKind{
 // these have one.
 var advisoryRuleNames = []denyRuleName{
 	advisoryPushGate, advisoryRevertClassify, advisoryCheckpointState,
+	advisoryChainedRun,
 }
 
 // advisoryNames is every advisory's name, held or not: the set the catalog must cover.
