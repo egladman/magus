@@ -73,7 +73,7 @@ func TestFramesTellTheStory(t *testing.T) {
 	for _, want := range []struct{ what, text string }{
 		{"cold run does all the work", "0 cached, 5 ran"},
 		{"warm run does none of it", "5 cached, 0 ran"},
-		{"affected narrows to what changed", "2 cached, 1 ran"},
+		{"affected narrows to what changed", "0 cached, 2 ran"},
 		{"the affected set is computed, not fallen back to", "git diff vs origin/main"},
 	} {
 		if !strings.Contains(capture, want.text) {
@@ -111,9 +111,10 @@ func TestFinalFrameShowsTheNarrowing(t *testing.T) {
 	last := frames[len(frames)-1]
 	for _, want := range []string{
 		"$ magus affected ci",       // the command, so the frame is self-explaining
-		"libs/authkit",              // the narrowed set
+		"libs/authkit",              // the edited project
+		"apps/admin",                // the one that depends on it, which is the narrowing
 		"git diff vs origin/main",   // computed, not fallen back to
-		"2 cached, 1 ran, 0 failed", // the payoff
+		"0 cached, 2 ran, 0 failed", // the payoff
 	} {
 		if last.FindRow(want) == 0 {
 			t.Errorf("the final frame does not show %q; it has scrolled off the "+

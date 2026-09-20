@@ -55,7 +55,7 @@ Which looks like this: a cold run does the work, the same command again replays
 every result from cache, and after one file changes only the project that file
 reaches runs at all.
 
-![A terminal recording: magus ls lists the projects, magus run ci reports 0 cached and 4 ran, the same command again reports 4 cached and 0 ran, then one edited file makes magus affected ci report 4 cached and 1 ran](../../assets/gen/core-loop.svg)
+![A terminal recording: magus ls lists five projects, magus run ci reports 0 cached and 5 ran, the same command again reports 5 cached and 0 ran having replayed every result from cache, then one edited file narrows magus affected ci to two projects, the edited library and the app that imports it, reporting 0 cached and 2 ran](../../assets/gen/core-loop.svg)
 
 Deeper: [Targets](../concepts/targets.md), [Workspace](../concepts/workspace.md),
 [Spells](../concepts/spells.md), [Cache](../concepts/cache.md).

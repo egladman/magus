@@ -26,7 +26,7 @@ magus informs; it never decides. It hands you everything it knows about your rep
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="./assets/gen/core-loop-light.svg">
-    <img alt="Terminal recording: magus ls lists five projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 5 ran', the same command run again reports '5 cached, 0 ran' having replayed every result from cache, and finally one file is edited and magus affected ci narrows to three projects - the edited one and the project depending on it - reporting '2 cached, 1 ran'." src="./assets/gen/core-loop.svg" width="820">
+    <img alt="Terminal recording: magus ls lists five projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 5 ran', the same command run again reports '5 cached, 0 ran' having replayed every result from cache, and finally one file is edited and magus affected ci narrows to two projects, the edited library and the app that imports it, reporting '0 cached, 2 ran'." src="./assets/gen/core-loop.svg" width="820">
   </picture>
 </p>
 
