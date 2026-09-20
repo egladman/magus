@@ -757,7 +757,7 @@ func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
 		if s.Exclusive {
 			// What a ctx.needs dispatch does: hand a child the step's context and wait.
 			// The child asks for a lease of its own and must be handed the ancestor's.
-			child, release, err := acquireRunIsolation(WithoutSlotHeld(ctx), false, "child")
+			child, release, err := acquireRunIsolation(WithoutSlotHeld(ctx), false)
 			require.NoError(t, err)
 			require.Same(t, admissionFrom(ctx).isolation, admissionFrom(child).isolation,
 				"the child took a lease of its own instead of running inside the region")

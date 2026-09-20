@@ -338,12 +338,7 @@ const (
 	//
 	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
 	// command is valid again the moment the later gate finishes.
-	GateSuperseded DiagnosticCode = "MGS3014"
-	// MGS3015 was RunIsolationWedged, retired 2026-09-19. It guessed at a wait cycle from a
-	// grace with nothing moving, and it guessed from an aliased record: the lease it read
-	// pointed at whichever descendant was admitted last. It could not fire for a leaf step
-	// and fired on healthy composite ones. See internal/cache/isolation.go. The code is not
-	// reused: a retired number that comes back means two different things in one search.
+	GateSuperseded            DiagnosticCode = "MGS3014"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -425,6 +420,15 @@ const (
 	// approve on the reader's behalf. Not knowing is not permission.
 	ReviewAuthorshipUnknown DiagnosticCode = "MGS1103"
 )
+
+// MGS3015 was RunIsolationWedged, retired 2026-09-19 and deliberately absent above. It
+// refused a run when every holder of the isolation gate looked stalled, and it read that
+// from a record the gate did not own: a composite step's lease pointed at whichever
+// descendant was admitted last. It could not fire for a simple step and did fire for
+// healthy composite ones. See internal/cache/isolation.go.
+//
+// The number is not reused. A retired code that comes back means two different things in
+// one search of a log archive.
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
 // in sync with the const block above; it is the enumeration source for tooling

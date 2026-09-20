@@ -122,8 +122,7 @@ func isolationFrom(ctx context.Context) *runIsolation {
 }
 
 // acquireRunIsolation admits one step to the invocation's isolation gate and returns the
-// context it runs under plus the release for what it took. label names the step in a
-// refusal.
+// context it runs under plus the release for what it took.
 //
 // A context that already carries a lease inherits it: nothing is taken, the release is a
 // no-op, and an exclusive request under a shared ancestor is answered by the ancestor's
@@ -132,13 +131,13 @@ func isolationFrom(ctx context.Context) *runIsolation {
 //
 // The wait is cancellable, so a sibling's failure or a Ctrl-C reaches a parked step, and
 // it returns that cause unchanged.
-func acquireRunIsolation(ctx context.Context, exclusive bool, label string) (context.Context, func(), error) {
+func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, func(), error) {
 	ctx = WithRunScope(ctx)
 	if lease := admissionFrom(ctx).isolation; lease != nil {
 		return ctx, func() {}, nil
 	}
 	isolation := isolationFrom(ctx)
-	lease, release, err := isolation.acquire(ctx, exclusive, label)
+	lease, release, err := isolation.acquire(ctx, exclusive)
 	if err != nil {
 		return ctx, func() {}, err
 	}
@@ -147,7 +146,7 @@ func acquireRunIsolation(ctx context.Context, exclusive bool, label string) (con
 	return held.on(ctx), release, nil
 }
 
-func (r *runIsolation) acquire(ctx context.Context, exclusive bool, label string) (*runIsolationLease, func(), error) {
+func (r *runIsolation) acquire(ctx context.Context, exclusive bool) (*runIsolationLease, func(), error) {
 	weight := int64(1)
 	if exclusive {
 		weight = isolationSeats

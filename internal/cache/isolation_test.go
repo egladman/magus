@@ -77,14 +77,14 @@ func TestRunIsolationSharedChildAdmittedBehindAQueuedExclusiveRequest(t *testing
 	scope := WithRunScope(context.Background())
 	isolation := isolationFrom(scope)
 
-	parent, releaseParent, err := acquireRunIsolation(scope, false, "parent run")
+	parent, releaseParent, err := acquireRunIsolation(scope, false)
 	require.NoError(t, err)
 
 	queued := make(chan struct{})
 	go func() {
 		// Never satisfiable while the parent holds a seat, which is the point: it only
 		// has to be QUEUED for the child behind it to be parked.
-		_, release, err := acquireRunIsolation(scope, true, "exclusive peer")
+		_, release, err := acquireRunIsolation(scope, true)
 		if err == nil {
 			release()
 		}
@@ -94,7 +94,7 @@ func TestRunIsolationSharedChildAdmittedBehindAQueuedExclusiveRequest(t *testing
 
 	childDone := make(chan error, 1)
 	go func() {
-		_, release, err := acquireRunIsolation(parent, false, "needs child")
+		_, release, err := acquireRunIsolation(parent, false)
 		if err == nil {
 			release()
 		}
@@ -130,7 +130,7 @@ func TestRunIsolationNestedRequestsInheritTheAncestorLease(t *testing.T) {
 			scope := WithRunScope(context.Background())
 			isolation := isolationFrom(scope)
 
-			ancestor, releaseAncestor, err := acquireRunIsolation(scope, tc.ancestorExclusive, "ancestor")
+			ancestor, releaseAncestor, err := acquireRunIsolation(scope, tc.ancestorExclusive)
 			require.NoError(t, err)
 			defer releaseAncestor()
 			wantSeats := int64(1)
@@ -139,7 +139,7 @@ func TestRunIsolationNestedRequestsInheritTheAncestorLease(t *testing.T) {
 			}
 			require.Equal(t, wantSeats, heldSeats(t, isolation), "the ancestor's own acquisition")
 
-			child, releaseChild, err := acquireRunIsolation(ancestor, tc.childExclusive, "child")
+			child, releaseChild, err := acquireRunIsolation(ancestor, tc.childExclusive)
 			require.NoError(t, err)
 			assert.Equal(t, wantSeats, heldSeats(t, isolation), "the child took a seat of its own")
 			assert.Same(t, admissionFrom(ancestor).isolation, admissionFrom(child).isolation,
@@ -284,7 +284,7 @@ func heldSeats(t *testing.T, r *runIsolation) int64 {
 	}
 	return -1
 }
-//
+
 // This is load-bearing in a way the sibling inheritance test is not. With the wedge verdict
 // deleted, inheritance is the ONLY thing preventing the 2026-09-11 shape: a needs child
 // asking for the exclusive side while its own parent holds the shared one. If
@@ -296,7 +296,7 @@ func TestRunIsolationNeedsChildInheritsUnderAFanOut(t *testing.T) {
 	scope := WithRunScope(context.Background())
 	isolation := isolationFrom(scope)
 
-	parent, releaseParent, err := acquireRunIsolation(scope, false, "parent")
+	parent, releaseParent, err := acquireRunIsolation(scope, false)
 	require.NoError(t, err)
 	defer releaseParent()
 	// Really taken from the limiter, because Yield hands back exactly what the context
@@ -314,7 +314,7 @@ func TestRunIsolationNeedsChildInheritsUnderAFanOut(t *testing.T) {
 		// Mid-fan-out, with the parent's slots handed back: the shape that used to be
 		// refused, and the one a dispatched member really runs in.
 		member := SharedStepContext(parent)
-		child, releaseChild, err := acquireRunIsolation(member, true, "member")
+		child, releaseChild, err := acquireRunIsolation(member, true)
 		require.NoError(t, err, "an exclusive member queued instead of inheriting")
 		defer releaseChild()
 		assert.Equal(t, int64(1), heldSeats(t, isolation), "the member took a seat of its own")

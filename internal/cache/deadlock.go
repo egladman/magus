@@ -149,7 +149,6 @@ func (h *slotHold) done() {
 	h.w.evaluateLocked()
 }
 
-
 // block marks the hold as waiting on what until the returned func runs. Nested waits
 // restore the outer one, so a mark is never lost by a deeper wait finishing first.
 func (h *slotHold) block(what string) func() {

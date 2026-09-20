@@ -1072,7 +1072,7 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
 	defer releaseMachine()
-	ctx, releaseIsolation, err := acquireRunIsolation(ctx, s.Exclusive, stepLabel(s))
+	ctx, releaseIsolation, err := acquireRunIsolation(ctx, s.Exclusive)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
@@ -1224,7 +1224,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				return fail(machineErr)
 			}
 			defer releaseMachine()
-			stepCtx, releaseIsolation, isoErr := acquireRunIsolation(machineCtx, s.Exclusive, stepLabel(s))
+			stepCtx, releaseIsolation, isoErr := acquireRunIsolation(machineCtx, s.Exclusive)
 			if isoErr != nil {
 				// The gate refuses nothing of its own any more, so every error here is
 				// the batch unwinding around this step: a peer's failure or a Ctrl-C,

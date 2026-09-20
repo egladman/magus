@@ -1669,10 +1669,10 @@ func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 // dot-relative escape a raw prefix test reads as in-tree.
 func TestGlobalFlagScannersAgreeExceptOnUnknownFlags(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		args    []string
-		prefix  []string // commandPrefix: the rendered side
-		after   []string // afterGlobalFlags: the invocation side
+		name   string
+		args   []string
+		prefix []string // commandPrefix: the rendered side
+		after  []string // afterGlobalFlags: the invocation side
 	}{
 		{"a bare subcommand", []string{"test", "./..."}, []string{"test"}, []string{"test", "./..."}},
 		{"a valued flag and its operand", []string{"-C", "libs/x", "test"}, []string{"test"}, []string{"test"}},

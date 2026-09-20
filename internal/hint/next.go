@@ -206,7 +206,7 @@ const (
 	RoleReviewer Role = "reviewer"
 )
 
-// RoleFor grades the acting lease id against the rows, and returns the write paths that
+// LeaseRole grades the acting lease id against the rows, and returns the write paths that
 // id may write in. No id is unbound, a read-only row or one owning no path is a
 // reviewer, anything else a worker.
 //
