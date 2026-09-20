@@ -1456,8 +1456,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         // types.ClassifyDrift (types/vcs.go): this is the identical condition
         // (generated output drifted) diagnosed from the whole tree instead of one
         // target's declarations, and the two producers must name it identically.
-        throw "MGS4006: generate: regeneration changed generated files; re-run "
-            + "`magus run generate:rw .` and commit" + detail + drift\secondCause;
+        // The remedy is COMMIT, not regenerate: the siblings above already ran and wrote,
+        // and the charm only decides whether this target returns or compares. Telling a
+        // reader to re-run sends them to redo work that is already in their tree, which
+        // is what the previous wording did. `affected generate:rw` is named for the case
+        // it does not cover: drift in ANOTHER project, which this gate cannot write.
+        throw "MGS4006: generate: regeneration changed generated files, and they are "
+            + "already written in this tree; review and commit them. Drift in another "
+            + "project needs `magus affected generate:rw` first" + detail + drift\secondCause;
     }
 }
 
