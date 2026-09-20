@@ -49,14 +49,15 @@ env:
   # Unset this variable and the cache is simply not wired: no error, no remote hits.
   # Setting it is what turns on both the cache and its verification, together.
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
-  # Decides the shard count outright: it is min(this, affected projects), and the forecaster
-  # contributes nothing. Unset means 8, so there is no "no cap". It lives here rather than in
-  # magus.yaml because it sizes a runner pool, and a local plan spawns no runners.
+  # -1 is unlimited, bounded by the affected project count. Nothing here picks a number:
+  # `magus affected ci --plan` warns when fewer shards would finish just as fast and names
+  # the count to cap at, so that decision gets made against a measurement instead of in
+  # this file. Unset would mean 8, which is a number nobody measured either.
   #
-  # No timing asks for more than 2. It is 6 to keep packs thin, because the packer only
-  # creates a depends_on edge when it puts both projects on one runner, which is what built
-  # the 21m chain. Fixing the packer is the real answer; the extra runners are the stopgap.
-  MAGUS_CI_MAX_SHARDS: '6'
+  # Capping is also what creates memory risk, because co-location is what puts two peaks on
+  # one runner. It lives here rather than in magus.yaml because it sizes a runner pool, and
+  # a local plan spawns no runners.
+  MAGUS_CI_MAX_SHARDS: '-1'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you
   # are sitting at and wrong in a log nobody reads until it goes red: a green run
