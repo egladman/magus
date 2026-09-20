@@ -250,35 +250,52 @@ func (h *History) PredictDuration(project, target string, tags []string) time.Du
 // HitCount/MissCount stay unfed for the same shape of reason: a cache hit executes no
 // target, so no outcome exists. hitRate stays 0 and no hit discount applies, which
 // over-predicts: the safe direction for a shard planner.
+// targetHistories returns every Stats a project recorded for target.
+//
+// The history keys a target as "<spell>/<target>", stamped with the spell that ran it,
+// while a plan names the bare target a magusfile declares, so an exact lookup finds
+// nothing and every caller reads the fallback instead. An exact key still wins; otherwise
+// every key whose trailing segment is target matches, because a target two spells serve
+// runs both. Sorted, so a fold over the result is deterministic. internal/doctor's drift
+// checks resolve the same way.
+func targetHistories(targets map[string]Stats, target string) []Stats {
+	if s, ok := targets[target]; ok {
+		return []Stats{s}
+	}
+	var keys []string
+	for key := range targets {
+		if i := strings.LastIndex(key, "/"); i >= 0 && key[i+1:] == target {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	out := make([]Stats, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, targets[k])
+	}
+	return out
+}
+
 func (h *History) resolvePrediction(project, target string, tags []string) (p75 int64, hitCount, missCount int, hitRate float64) {
 	if targets, ok := h.Projects[project]; ok {
-		if s, ok := targets[target]; ok {
-			// Tier 1: most-specific subdir bucket (sorted for determinism).
-			if len(tags) > 0 && len(s.Buckets) > 0 {
-				subdirTags := make([]string, 0, len(tags))
-				for _, t := range tags {
-					if strings.HasPrefix(t, "direct.") {
-						subdirTags = append(subdirTags, t)
-					}
-				}
-				slices.Sort(subdirTags)
-				for _, t := range subdirTags {
-					if b, ok := s.Buckets[t]; ok && b.Samples >= 3 && b.P75Ms > 0 {
-						return b.P75Ms, b.HitCount, b.MissCount, b.HitRate
-					}
-				}
-				// Tier 2: generic direct/transitive bucket.
-				for _, t := range tags {
-					if t == "direct" || t == "transitive" {
-						if b, ok := s.Buckets[t]; ok && b.Samples >= 3 && b.P75Ms > 0 {
-							return b.P75Ms, b.HitCount, b.MissCount, b.HitRate
-						}
-					}
+		found := targetHistories(targets, target)
+		// Two spells serving one target run one after the other, so their predictions
+		// add. The hit discount is dropped in that case rather than averaged: it applies
+		// per spell, and over-predicting is the safe direction for a shard planner.
+		if len(found) > 1 {
+			var total int64
+			for _, s := range found {
+				if ms, _, _, _, ok := predictOne(s, tags); ok {
+					total += ms
 				}
 			}
-			// Tier 3: project-wide p75.
-			if s.Samples >= 3 && s.P75Ms > 0 {
-				return s.P75Ms, s.HitCount, s.MissCount, s.HitRate
+			if total > 0 {
+				return total, 0, 0, 0
+			}
+		}
+		for _, s := range found {
+			if ms, hit, miss, rate, ok := predictOne(s, tags); ok {
+				return ms, hit, miss, rate
 			}
 		}
 	}
@@ -286,6 +303,39 @@ func (h *History) resolvePrediction(project, target string, tags []string) (p75 
 		return h.WorkspaceFallbackMs, 0, 0, 0
 	}
 	return DefaultDurationMs, 0, 0, 0
+}
+
+// predictOne walks one Stats' tiers, most specific first, and reports whether any of them
+// had enough samples to answer.
+func predictOne(s Stats, tags []string) (p75 int64, hitCount, missCount int, hitRate float64, ok bool) {
+	// Tier 1: most-specific subdir bucket (sorted for determinism).
+	if len(tags) > 0 && len(s.Buckets) > 0 {
+		subdirTags := make([]string, 0, len(tags))
+		for _, t := range tags {
+			if strings.HasPrefix(t, "direct.") {
+				subdirTags = append(subdirTags, t)
+			}
+		}
+		slices.Sort(subdirTags)
+		for _, t := range subdirTags {
+			if b, ok := s.Buckets[t]; ok && b.Samples >= 3 && b.P75Ms > 0 {
+				return b.P75Ms, b.HitCount, b.MissCount, b.HitRate, true
+			}
+		}
+		// Tier 2: generic direct/transitive bucket.
+		for _, t := range tags {
+			if t == "direct" || t == "transitive" {
+				if b, ok := s.Buckets[t]; ok && b.Samples >= 3 && b.P75Ms > 0 {
+					return b.P75Ms, b.HitCount, b.MissCount, b.HitRate, true
+				}
+			}
+		}
+	}
+	// Tier 3: project-wide p75.
+	if s.Samples >= 3 && s.P75Ms > 0 {
+		return s.P75Ms, s.HitCount, s.MissCount, s.HitRate, true
+	}
+	return 0, 0, 0, 0, false
 }
 
 // effectiveConstants returns Constants with built-in defaults applied.
@@ -695,14 +745,13 @@ func (h *History) PredictPeakRSS(project, target string) (int64, bool) {
 	if !ok {
 		return 0, false
 	}
-	s, ok := targets[target]
-	if !ok {
-		return 0, false
-	}
 	var max int64
-	for _, o := range s.RecentOutcomes {
-		if o.MaxRSSBytes > max {
-			max = o.MaxRSSBytes
+	// Across every spell serving this target, because they share the runner.
+	for _, s := range targetHistories(targets, target) {
+		for _, o := range s.RecentOutcomes {
+			if o.MaxRSSBytes > max {
+				max = o.MaxRSSBytes
+			}
 		}
 	}
 	return max, max > 0
