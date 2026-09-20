@@ -111,8 +111,8 @@ the isolation gate.
 **Stage 0, and the prerequisite for the rest: `Step.Exclusive` is split into the two things
 it conflates and then deleted.**
 
-It was introduced for GREEDY targets, ones that will use the whole machine. None of its ten
-current users is greedy. Every one gates on the working tree: six `generate` targets and
+It was introduced for GREEDY targets, ones that will use the whole machine. None of the ten
+targets that declare it is greedy. Every one gates on the working tree: six `generate` targets and
 `console:build` drift-check via `git status`, `release` mutates go.mod and creates tags,
 `release-index` pushes a branch. That is mutual exclusion on one shared mutable resource,
 which is a different thing from greed, and both are different from "exclude every batch peer",
@@ -122,7 +122,7 @@ which is what it was implemented as.
   which is also what the machine budget arbitrates on. Nothing to build.
 - **A quiet tree is a named region**, not a target flag: `ctx.exclusive("worktree", fn)`, a
   keyed mutual exclusion acquired in canonical order when a region names more than one.
-- The ten users wrap **only their measurement**, the hash-before against hash-after
+- The ten wrap **only their measurement**, the hash-before against hash-after
   comparison, not their generator chain. The root magusfile already wrote this diagnosis and
   did not act on it: "narrowing the exclusive region to the measurement is the fix, and it is
   not this line."
@@ -209,8 +209,8 @@ stages 2 and 3.
 
 **Good.** The deadlock class recursion creates becomes impossible rather than detected, for
 both the slot pool and the slot x cache-lock shape. Stage 3 removes the isolation gate,
-MGS3013 and the marking discipline they read. `magus status` gains a meaning an operator
-asked for: "executing", rather than a seat held by a body that is waiting.
+MGS3013 and the marking discipline they read. `magus status` means "executing" again, rather
+than a seat held by a body that is waiting.
 
 **Bad, and named rather than discovered later.**
 
@@ -247,8 +247,6 @@ exact detection: a short optimistic wait, then a wait-for graph reduction, no gr
 that, and the cycle named in the refusal. Pair it with stage 1 regardless.
 
 ## Corrections to this document's first draft
-
-Recorded because a reader may have seen the draft.
 
 - It claimed the CI shard forecaster arbitrates declared `memory_mb`. It does not: it packs
   on measured peak RSS from run history and reads no declaration.
