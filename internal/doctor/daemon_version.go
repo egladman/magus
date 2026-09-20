@@ -13,7 +13,7 @@ import (
 // IT FAILS RATHER THAN ADVISES, on the rule this repository states for every
 // misconfiguration: the value is not honored. A daemon of another vintage decodes every
 // record with a struct that does not know this build's fields, drops what it does not
-// know, and writes the whole file back; two live job rows lost their lanes that way on
+// know, and writes the whole file back; two live job rows lost their write paths that way on
 // 2026-09-11, silently, while both sides looked healthy.
 //
 // The predicate carries no judgment: two version strings match or they do not. For a

@@ -299,10 +299,10 @@ func TestMouseTrackingDropsHoverOverSSH(t *testing.T) {
 	// unaffected.
 	t.Setenv("SSH_TTY", "")
 	t.Setenv("SSH_CONNECTION", "")
-	assert.Equal(t, mouseTrackAny, mouseTrackFor())
+	assert.Equal(t, mouseTrackAny, mouseTrack())
 
 	t.Setenv("SSH_TTY", "/dev/pts/3")
-	assert.Equal(t, mouseTrackClick, mouseTrackFor(), "ssh gets clicks without hover")
+	assert.Equal(t, mouseTrackClick, mouseTrack(), "ssh gets clicks without hover")
 }
 
 func TestMouseTrackingOffDisablesBothModes(t *testing.T) {

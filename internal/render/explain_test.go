@@ -77,11 +77,11 @@ func TestPathText(t *testing.T) {
 	assert.Contains(t, none, "(no path)")
 }
 
-// TestPhraseForFallback: an unknown relation still conveys direction rather than
+// TestPhraseFallback: an unknown relation still conveys direction rather than
 // dropping it.
-func TestPhraseForFallback(t *testing.T) {
-	assert.Equal(t, "uses", phraseFor(types.RelationUses, true))
-	assert.Equal(t, "used by", phraseFor(types.RelationUses, false))
-	assert.True(t, strings.Contains(phraseFor("mystery", true), "mystery"))
-	assert.True(t, strings.Contains(phraseFor("mystery", false), "mystery"))
+func TestPhraseFallback(t *testing.T) {
+	assert.Equal(t, "uses", phrase(types.RelationUses, true))
+	assert.Equal(t, "used by", phrase(types.RelationUses, false))
+	assert.True(t, strings.Contains(phrase("mystery", true), "mystery"))
+	assert.True(t, strings.Contains(phrase("mystery", false), "mystery"))
 }

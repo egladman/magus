@@ -581,7 +581,7 @@ func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 
 	// The file watcher's half: nothing here asked the worker anything, and the path alone
 	// named it.
-	files <- job.FeedEvent{Ts: 20, Kind: job.FeedFile, Job: "pwa/job-watch", Lane: "internal/trail", Action: "internal/trail/trail.go", Outcome: trail.OutcomeOK}
+	files <- job.FeedEvent{Ts: 20, Kind: job.FeedFile, Job: "pwa/job-watch", WritePath: "internal/trail", Action: "internal/trail/trail.go", Outcome: trail.OutcomeOK}
 	require.True(t, stream.Receive())
 	assert.Equal(t, activityv1.Kind_KIND_FILE_CHANGE, stream.Msg().GetKind())
 	assert.Equal(t, "internal/trail/trail.go", stream.Msg().GetAction())

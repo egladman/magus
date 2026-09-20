@@ -68,17 +68,17 @@ func TestBoundaryRegistryLookups(t *testing.T) {
 
 	// The registry key, not the Go name: types.HTTPResponse mirrors as HttpResponse,
 	// and emitting the Go name would reference an object nothing declares.
-	assert.Equal(t, "HttpResponse", buzzNameFor(reflect.TypeFor[types.HTTPResponse]()))
+	assert.Equal(t, "HttpResponse", buzzName(reflect.TypeFor[types.HTTPResponse]()))
 	// An unregistered type falls back to its own name, which an anonymous struct
 	// does not have.
-	assert.Equal(t, "", buzzNameFor(reflect.TypeFor[struct{}]()))
+	assert.Equal(t, "", buzzName(reflect.TypeFor[struct{}]()))
 
-	e, ok := buzzEnumFor(reflect.TypeFor[types.TermStyle]())
+	e, ok := buzzEnum(reflect.TypeFor[types.TermStyle]())
 	require.True(t, ok)
 	assert.Equal(t, "TermStyle", e.Name)
 	require.NotEmpty(t, e.Cases)
 
-	_, ok = buzzEnumFor(reflect.TypeFor[string]())
+	_, ok = buzzEnum(reflect.TypeFor[string]())
 	assert.False(t, ok)
 }
 

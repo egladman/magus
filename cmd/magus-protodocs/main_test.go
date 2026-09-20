@@ -535,7 +535,7 @@ func TestExampleJSONIsAShallowSkeleton(t *testing.T) {
 	assert.Equal(t, "{}", a.exampleJSON("magus.nowhere.v1.Unknown"))
 }
 
-func TestPlaceholderFor(t *testing.T) {
+func TestFieldPlaceholder(t *testing.T) {
 	for _, tc := range []struct {
 		what string
 		f    field
@@ -551,7 +551,7 @@ func TestPlaceholderFor(t *testing.T) {
 		{"an enum names a value", field{RefIsEnum: true, EnumFallback: "X"}, `"X"`},
 		{"an enum with nothing to name", field{RefIsEnum: true}, `""`},
 	} {
-		assert.Equal(t, tc.want, placeholderFor(tc.f), tc.what)
+		assert.Equal(t, tc.want, tc.f.placeholder(), tc.what)
 	}
 }
 
@@ -613,18 +613,18 @@ func TestTypeLinkPicksTheRightTarget(t *testing.T) {
 		"a type this run never saw has no page to link to")
 }
 
-func TestPageForAndPackageOf(t *testing.T) {
+func TestPageAndPackageOf(t *testing.T) {
 	a := fixtureAPI(t)
 
-	path, ok := a.pageFor("magus.token.v1")
+	path, ok := a.page("magus.token.v1")
 	assert.True(t, ok)
 	assert.Equal(t, "token/v1/token", path, "a package with a service lives on that service's page")
 
-	path, ok = a.pageFor("magus.query.v1")
+	path, ok = a.page("magus.query.v1")
 	assert.True(t, ok)
 	assert.Equal(t, "query/v1/query", path, "a package with no service gets a standalone page")
 
-	_, ok = a.pageFor("google.protobuf")
+	_, ok = a.page("google.protobuf")
 	assert.False(t, ok)
 
 	assert.Equal(t, "magus.token.v1", a.packageOf("magus.token.v1.Token"))

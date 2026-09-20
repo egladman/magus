@@ -158,7 +158,7 @@ magus\project({
         "Dockerfile.static",    // image-build's static multi-arch variant
         // The console screenshot driver is a checked-in developer tool beside the
         // shell runner. The bash spell claims the runner; this exact Node source
-        // keeps the companion out of the unclaimed lane too.
+        // keeps the companion out of the unclaimed set too.
         "hack/screenshot.mjs",
         // Any checked-in JSON hook configuration is executable harness wiring,
         // not editor metadata. The descriptor selects which one applies; this
@@ -185,7 +185,7 @@ magus\project({
         "testdata/hosts/**/*.json",
         // Hand-authored fixtures the tests beside them read, which the go spell's
         // *.go and *.txtar globs do not reach. Same gap as the schemas above, and the
-        // same cost: a line added to hint's command corpus moved the class counts
+        // same cost: a line added to hint's command fixtures moved the class counts
         // TestCommandDistribution asserts exactly, while the test that pins them
         // replayed.
         //

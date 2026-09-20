@@ -1095,10 +1095,10 @@ func driverArgsMatch(registered, wanted string) bool {
 // free of subprocesses; the cost lands only on the rare path that was going to rewrite
 // anyway, where being right is worth one exec.
 func driverUsable(ctx context.Context, registered string) bool {
-	return driverUsableFor(ctx, registered, gitDriverArgs)
+	return driverServes(ctx, registered, gitDriverArgs)
 }
 
-func driverUsableFor(ctx context.Context, registered, wanted string) bool {
+func driverServes(ctx context.Context, registered, wanted string) bool {
 	if driverArgsMatch(registered, wanted) {
 		return true
 	}

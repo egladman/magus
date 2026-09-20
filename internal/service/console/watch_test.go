@@ -14,9 +14,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// A change under a job's declared write lane is attributed to that job with nothing asked
-// of the worker: the filesystem reported the path, and the lane named the holder.
-func TestJobFeedAttributesAChangeToTheLaneThatCoversIt(t *testing.T) {
+// A change under a job's declared write paths is attributed to that job with nothing asked
+// of the worker: the filesystem reported the path, and the declaration named the holder.
+func TestJobFeedAttributesAChangeToTheWritePathThatCoversIt(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "internal", "trail"), 0o755))
 
@@ -46,7 +46,7 @@ func TestJobFeedAttributesAChangeToTheLaneThatCoversIt(t *testing.T) {
 				continue // the watcher may report the directory alongside the file
 			}
 			require.Equal(t, "pwa/job-watch", e.Job)
-			require.Equal(t, "internal/trail", e.Lane, "the reader is told WHICH declaration answered")
+			require.Equal(t, "internal/trail", e.WritePath, "the reader is told WHICH declaration answered")
 			return
 		case <-retick.C:
 			rewrite()
@@ -183,7 +183,7 @@ func TestJobFeedServesInvalidationAndSubscribersFromTheSameBatch(t *testing.T) {
 }
 
 // A path outside the root is not attributed to anything here. It is skipped rather than
-// reported unattributed: a lane is declared repo-relative, so no declaration in this plan
+// reported unattributed: a write path is declared repo-relative, so no declaration in this plan
 // could honestly cover a file from another tree.
 func TestJobFeedSkipsPathsOutsideTheRoot(t *testing.T) {
 	f := &JobFeed{

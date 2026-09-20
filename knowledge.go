@@ -224,7 +224,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 		Immutable: cacheImmutable(cfg),
 		Refresh:   refresh,
 		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
-		Remote:    remoteShardsFor(ws),
+		Remote:    remoteShards(ws),
 	}, in, log)
 }
 
@@ -482,7 +482,7 @@ func symbolStore(ws types.Inspector, root string, cfg config.Config, log *slog.L
 	if log == nil {
 		log = slog.Default()
 	}
-	return knowledge.NewStore(resolveCacheDir(root, cfg), cacheImmutable(cfg), int64(cfg.Knowledge.MaxSizeMB)*1024*1024, remoteShardsFor(ws), log)
+	return knowledge.NewStore(resolveCacheDir(root, cfg), cacheImmutable(cfg), int64(cfg.Knowledge.MaxSizeMB)*1024*1024, remoteShards(ws), log)
 }
 
 // MergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
@@ -1239,11 +1239,11 @@ func (c shardChain) PutShard(ctx context.Context, key string, r io.Reader) error
 	return c[0].PutShard(ctx, key, r)
 }
 
-// remoteShardsFor returns the shard backing for a workspace: the build cache's remote
+// remoteShards returns the shard backing for a workspace: the build cache's remote
 // backend when ws is a cache-backed *Magus, then whatever UsePublishedShards installed.
 // nil means local-only, which is what an Inspect-constructed *Magus with no published ref
 // gets, because it has no cache either.
-func remoteShardsFor(ws types.Inspector) knowledge.RemoteShards {
+func remoteShards(ws types.Inspector) knowledge.RemoteShards {
 	m, ok := ws.(*Magus)
 	if !ok {
 		return nil

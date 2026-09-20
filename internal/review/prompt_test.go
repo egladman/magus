@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func promptFor(t *testing.T, rev types.Diff, overlap []types.BranchChange) string {
+func renderPrompt(t *testing.T, rev types.Diff, overlap []types.BranchChange) string {
 	t.Helper()
 	return Prompt(PromptInput{
 		Changeset: rev,
@@ -24,7 +24,7 @@ func promptFor(t *testing.T, rev types.Diff, overlap []types.BranchChange) strin
 // thing this was built to prevent, and it would be a silent regression, since the output would
 // still look like a perfectly good prompt.
 func TestPromptAsksForFindingsNotProse(t *testing.T) {
-	out := promptFor(t, types.Diff{Base: "main"}, nil)
+	out := renderPrompt(t, types.Diff{Base: "main"}, nil)
 
 	assert.Contains(t, out, "I will write the actual review comments myself")
 	assert.Contains(t, out, "Do not draft review prose")
@@ -35,7 +35,7 @@ func TestPromptAsksForFindingsNotProse(t *testing.T) {
 // lengths. Restating any of it here would be a second definition free to drift from the installed
 // one, and it would spend the reader's context on what their tools already loaded.
 func TestPromptNamesSkillsRatherThanRestatingThem(t *testing.T) {
-	out := promptFor(t, types.Diff{Base: "main"}, nil)
+	out := renderPrompt(t, types.Diff{Base: "main"}, nil)
 
 	assert.Contains(t, out, skillQuery.String())
 	assert.Contains(t, out, skillArchitecture.String())
@@ -50,7 +50,7 @@ func TestPromptNamesSkillsRatherThanRestatingThem(t *testing.T) {
 // wrong for every reader using a different host. The repo-wide convention test enforces this over
 // Go source; this states it about the rendered output, which is what actually reaches a reader.
 func TestPromptNamesNoAgentHost(t *testing.T) {
-	out := promptFor(t, types.Diff{Base: "main"}, nil)
+	out := renderPrompt(t, types.Diff{Base: "main"}, nil)
 
 	for _, host := range []string{"CLAUDE.md", "AGENTS.md", "Claude", "Cursor", "Copilot"} {
 		assert.NotContains(t, out, host)
@@ -68,7 +68,7 @@ func TestPromptReportsOnlyTheOverlappingPaths(t *testing.T) {
 		{Ref: "origin/elsewhere", Paths: []string{"nothing-of-mine.go"}},
 	}
 
-	out := promptFor(t, rev, overlap)
+	out := renderPrompt(t, rev, overlap)
 
 	assert.Contains(t, out, "origin/other")
 	assert.NotContains(t, out, "unrelated.go", "a path outside this changeset is not the reader's problem")
@@ -81,7 +81,7 @@ func TestPromptReportsOnlyTheOverlappingPaths(t *testing.T) {
 func TestPromptOmitsSectionsWithNothingInThem(t *testing.T) {
 	rev := types.Diff{Base: "main", Files: []types.DiffFile{{Path: "a.go"}}}
 
-	out := promptFor(t, rev, []types.BranchChange{{Ref: "origin/other", Paths: []string{"b.go"}}})
+	out := renderPrompt(t, rev, []types.BranchChange{{Ref: "origin/other", Paths: []string{"b.go"}}})
 
 	assert.NotContains(t, out, "Other branches changing")
 	assert.NotContains(t, out, "could not measure", "a changeset with no caveats has no caveats section")
@@ -93,7 +93,7 @@ func TestPromptOmitsSectionsWithNothingInThem(t *testing.T) {
 func TestPromptCarriesWhatCouldNotBeMeasured(t *testing.T) {
 	rev := types.Diff{Base: "main", Notes: []string{"no symbol index loaded"}}
 
-	out := promptFor(t, rev, nil)
+	out := renderPrompt(t, rev, nil)
 
 	assert.Contains(t, out, "no symbol index loaded")
 	assert.Contains(t, out, "Do not read any of these as evidence that there is nothing there")
@@ -108,7 +108,7 @@ func TestPromptSaysHowMuchItLeftOut(t *testing.T) {
 		rev.Files = append(rev.Files, types.DiffFile{Path: "f", Role: "source"})
 	}
 
-	out := promptFor(t, rev, nil)
+	out := renderPrompt(t, rev, nil)
 
 	assert.Contains(t, out, "and 7 more")
 }
@@ -118,7 +118,7 @@ func TestPromptSaysHowMuchItLeftOut(t *testing.T) {
 func TestPromptOmitsUnmeasuredCoverage(t *testing.T) {
 	rev := types.Diff{Base: "main", Files: []types.DiffFile{{Path: "a.go", Role: "source"}}}
 
-	out := promptFor(t, rev, nil)
+	out := renderPrompt(t, rev, nil)
 
 	assert.NotContains(t, out, "0% covered")
 }

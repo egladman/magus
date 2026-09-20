@@ -236,7 +236,7 @@ func TestVerdictMatchesTheCLIDiagnostics(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := verdict(tc.bounds, tc.version)
 			assert.Equal(t, tc.want, got)
-			assert.Equal(t, tc.code, diagnosticFor(got))
+			assert.Equal(t, tc.code, diagnosticCode(got))
 		})
 	}
 }

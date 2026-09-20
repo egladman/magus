@@ -38,17 +38,17 @@ func Answer(input string, matched bool, cov Coverage) types.KnowledgeAnswer {
 		// never in scope.
 		return types.ClassifyAnswer(matched, "", nil)
 	}
-	ans := types.ClassifyAnswer(matched, reasonFor(matched, cov), cov.Gaps)
+	ans := types.ClassifyAnswer(matched, unknownReason(matched, cov), cov.Gaps)
 	// Data, not a verdict input: staleness rides every answer, found or empty, so a
 	// structured consumer reads the same caveat the text arm prints under the rows.
 	ans.StaleIndexes = cov.Stale
 	return ans
 }
 
-// reasonFor picks the one reason that explains the coverage, most fundamental first: a
+// unknownReason picks the one reason that explains the coverage, most fundamental first: a
 // probe that did not run says nothing about a layer that was never loaded, and a layer that
 // was never loaded says nothing about how old it is.
-func reasonFor(matched bool, cov Coverage) types.KnowledgeUnknownReason {
+func unknownReason(matched bool, cov Coverage) types.KnowledgeUnknownReason {
 	switch {
 	case !cov.Probed:
 		return types.ReasonCoverageUnknown

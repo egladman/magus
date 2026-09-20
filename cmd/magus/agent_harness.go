@@ -59,9 +59,9 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 	if err != nil {
 		return fmt.Errorf("magus agent harness install: %w", err)
 	}
-	harnessProblemsFor(ctx, root)
+	reportHarnessProblems(ctx, root)
 	for _, harnessID := range ids {
-		skills, err := agent.HarnessSkillsFor(ctx, root, harnessID)
+		skills, err := agent.LoadHarnessSkills(ctx, root, harnessID)
 		if err != nil {
 			return fmt.Errorf("magus agent harness install: %w", err)
 		}
@@ -127,11 +127,11 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 	return nil
 }
 
-// harnessProblemsFor reports every descriptor that disqualified itself, by name
-// and with its reason. Printed on every harness subcommand, not only where it
-// changes a verdict: a descriptor magus skipped is a misconfiguration, and a
-// skip nobody prints looks exactly like a host nobody installed.
-func harnessProblemsFor(ctx context.Context, root string) []agent.HarnessProblem {
+// reportHarnessProblems prints every descriptor that disqualified itself, by name and
+// with its reason, and returns them. Printed on every harness subcommand, not only where
+// it changes a verdict: a descriptor magus skipped is a misconfiguration, and a skip
+// nobody prints looks exactly like a host nobody installed.
+func reportHarnessProblems(ctx context.Context, root string) []agent.HarnessProblem {
 	problems, err := agent.HarnessProblems(ctx, root)
 	if err != nil {
 		slog.ErrorContext(ctx, "agent harness: harness descriptors could not be read", slog.String("error", err.Error()))
@@ -189,7 +189,7 @@ func runHarnessChange(ctx context.Context, rootOverride string, args []string, v
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
-	harnessProblemsFor(ctx, root)
+	reportHarnessProblems(ctx, root)
 	for _, harnessID := range ids {
 		update, err := change(ctx, root, harnessID)
 		if err != nil {
@@ -224,7 +224,7 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 	var firstFail error
 	// A descriptor that disqualified itself is a coverage gap on this machine, and
 	// verify is the surface whose exit code says so.
-	if problems := harnessProblemsFor(ctx, root); len(problems) > 0 {
+	if problems := reportHarnessProblems(ctx, root); len(problems) > 0 {
 		firstFail = fmt.Errorf("magus agent harness verify: %d harness descriptor(s) disqualified themselves; the first is %s", len(problems), problems[0])
 	}
 	for _, harnessID := range ids {

@@ -334,17 +334,17 @@ func upstreamRejects(t *testing.T, path, root string) (rejected bool) {
 	return sess.Exec(ctx, string(src)) != nil
 }
 
-// TestUpstreamFuzzCorpusDoesNotPanic runs upstream's fuzz corpus through the front end
+// TestUpstreamFuzzInputsDoNotPanic runs upstream's fuzz inputs through the front end
 // and requires that none of it panics. A compile error is the expected outcome for
 // malformed input; a panic is a crash, and in the unsafe build a panic is the polite
 // version of what a bad assumption does.
 //
-// The corpus is upstream's checked-in AFL output -- real programs with a byte corrupted,
+// The inputs are upstream's checked-in AFL output -- real programs with a byte corrupted,
 // named by the mutation that produced them. SCOPE: this covers parse, check and compile
 // only, deliberately not execution. Executing arbitrary fuzzed source invites a
 // non-terminating loop, and the front end is where malformed input is supposed to be
-// caught. The README states the same limit rather than implying the corpus is run.
-func TestUpstreamFuzzCorpusDoesNotPanic(t *testing.T) {
+// caught. The README states the same limit rather than implying they are run.
+func TestUpstreamFuzzInputsDoNotPanic(t *testing.T) {
 	dir, ok := upstreamCheckoutDir()
 	if !ok {
 		t.Skip("no upstream buzz checkout found: set GOPHERBUZZ_UPSTREAM_DIR or check one out to ~/Repos/buzz (github.com/buzz-language/buzz) to run this test")

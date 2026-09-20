@@ -120,7 +120,7 @@ const (
 	dsrCursor = "\x1b[6n"
 )
 
-// mouseTrackFor picks how much of the mouse to ask for.
+// mouseTrack picks how much of the mouse to ask for.
 //
 // Over ssh it drops to 1000, press and release only. Hover reports an event for
 // every cell the pointer crosses, and on a link with any latency that is a
@@ -131,7 +131,7 @@ const (
 //
 // Same signal the hyperlink gate reads, and for a related reason: ssh is where
 // assumptions about the terminal being local stop holding.
-func mouseTrackFor() string {
+func mouseTrack() string {
 	if os.Getenv("SSH_TTY") != "" || os.Getenv("SSH_CONNECTION") != "" {
 		return mouseTrackClick
 	}
@@ -216,7 +216,7 @@ func OpenInput(in *os.File, out io.Writer, p Probe) (*Input, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := io.WriteString(out, mouseTrackFor()); err != nil {
+	if _, err := io.WriteString(out, mouseTrack()); err != nil {
 		// Leaving the terminal raw because tracking failed would hand the user
 		// back a shell with no echo, which looks like a hang.
 		_ = restore()

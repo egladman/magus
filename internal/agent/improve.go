@@ -73,7 +73,7 @@ func Improve(ctx context.Context, opts ImproveOptions) (ImproveReport, error) {
 		if !opts.IncludeAll && !item.NeedsReview() {
 			continue
 		}
-		report.Candidates = append(report.Candidates, improvementCandidateFor(item))
+		report.Candidates = append(report.Candidates, improvementCandidate(item))
 	}
 	if opts.Root != "" {
 		ctx = ContextWithWiredHarnesses(ctx, opts.WiredHarnesses)
@@ -93,7 +93,7 @@ func Improve(ctx context.Context, opts ImproveOptions) (ImproveReport, error) {
 	return report, nil
 }
 
-func improvementCandidateFor(feedback trail.GuardFeedback) ImprovementCandidate {
+func improvementCandidate(feedback trail.GuardFeedback) ImprovementCandidate {
 	candidate := ImprovementCandidate{
 		GuardFeedback: feedback,
 		Destination:   destinationDiscard,

@@ -323,7 +323,7 @@ Job for how the two relate.
 
 ### Lease
 
-The grant a holder takes on a job: the write and read lanes that job declared,
+The grant a holder takes on a job: the write and read paths that job declared,
 enforced in the checkout that took it with `magus job exec`. A job is the piece
 of work; a lease is permission over it.
 

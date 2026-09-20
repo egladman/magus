@@ -33,7 +33,7 @@ func TestGoIdent(t *testing.T) {
 	}
 }
 
-// TestGoIdentCollapsesCaseOnlyFlags pins the collision constsFor's panic exists to
+// TestGoIdentCollapsesCaseOnlyFlags pins the collision renderConsts's panic exists to
 // catch: -c and -C are two flags that reduce to one identifier fragment.
 func TestGoIdentCollapsesCaseOnlyFlags(t *testing.T) {
 	assert.Equal(t, goIdent("c"), goIdent("C"))
@@ -148,10 +148,10 @@ func TestFlagsForMode(t *testing.T) {
 	assert.Empty(t, flagsForMode(flags, "bisect"))
 }
 
-func TestDocFor(t *testing.T) {
+func TestFlagDoc(t *testing.T) {
 	flags := []cli.Flag{{Name: "watch", Kind: cli.FlagBool, Doc: "Watch it"}}
-	assert.Equal(t, "Watch it", docFor(flags, "watch"))
-	assert.Equal(t, "", docFor(flags, "absent"))
+	assert.Equal(t, "Watch it", flagDoc(flags, "watch"))
+	assert.Equal(t, "", flagDoc(flags, "absent"))
 }
 
 func TestGoTypeAndBindMethodCoverEveryBoundKind(t *testing.T) {
@@ -206,9 +206,9 @@ func TestFlagDefaultLiteral(t *testing.T) {
 	assert.Panics(t, func() { flagDefaultLiteral(cli.Flag{Kind: cli.FlagCustom}) })
 }
 
-func TestConstsFor(t *testing.T) {
+func TestRenderConsts(t *testing.T) {
 	seen := map[string]string{}
-	got := constsFor("demo", []cli.Flag{
+	got := renderConsts("demo", []cli.Flag{
 		{Name: "watch", Kind: cli.FlagBool},
 		{Name: "no-cache", Kind: cli.FlagBool},
 	}, seen)
@@ -220,17 +220,17 @@ func TestConstsFor(t *testing.T) {
 
 	// A command visited twice must not emit the constant twice: the second run is a
 	// duplicate declaration, not a collision.
-	again := constsFor("demo", []cli.Flag{{Name: "watch", Kind: cli.FlagBool}}, seen)
+	again := renderConsts("demo", []cli.Flag{{Name: "watch", Kind: cli.FlagBool}}, seen)
 	assert.Empty(t, again)
 }
 
-// TestConstsForRefusesTwoFlagsUnderOneName is the collision goIdent's case-folding
+// TestRenderConstsRefusesTwoFlagsUnderOneName is the collision goIdent's case-folding
 // makes reachable: -c and -C are different flags and one constant.
-func TestConstsForRefusesTwoFlagsUnderOneName(t *testing.T) {
+func TestRenderConstsRefusesTwoFlagsUnderOneName(t *testing.T) {
 	assert.PanicsWithValue(t,
 		`cliflags: FlagDemoC would name both "c" and "C"`,
 		func() {
-			constsFor("demo", []cli.Flag{
+			renderConsts("demo", []cli.Flag{
 				{Name: "c", Kind: cli.FlagBool},
 				{Name: "C", Kind: cli.FlagBool},
 			}, map[string]string{})
@@ -324,7 +324,7 @@ func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 }
 
 // A binder that silently omits a command's custom flags is how a later cleanup replaces a
-// hand-binding with it and produces a command that cannot declare a lane, compiling.
+// hand-binding with it and produces a command that cannot declare write paths, compiling.
 func TestWriteBinderNamesTheFlagsItCannotCarry(t *testing.T) {
 	var b bytes.Buffer
 	writeBinder(&b, "demo", "demo", []cli.Flag{

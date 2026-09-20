@@ -37,16 +37,16 @@ func symbolCoverage(ctx context.Context, root, input string, seeded bool) knowle
 	if !knowledge.CouldMatchLazyLayer(input) {
 		return cov
 	}
-	cov.Gaps, cov.Probed = symbolGapsFor(ctx, root)
+	cov.Gaps, cov.Probed = symbolGaps(ctx, root)
 	cov.Stale = staleIndexProjects(ctx, root)
 	return cov
 }
 
-// symbolGapsFor lists the projects whose declared symbol index magus could not read, and
+// symbolGaps lists the projects whose declared symbol index magus could not read, and
 // reports whether the probe ran. A probe that could not run must not come back as an
 // empty gap list: that reads as verified coverage and would assert the very fact it
 // failed to establish.
-func symbolGapsFor(ctx context.Context, root string) ([]types.KnowledgeSymbolGap, bool) {
+func symbolGaps(ctx context.Context, root string) ([]types.KnowledgeSymbolGap, bool) {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return nil, false

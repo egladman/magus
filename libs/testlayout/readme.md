@@ -47,7 +47,7 @@ from counting it rather than from taste. Counts are occurrences in `$GOROOT/src`
 | --------------------------------------------------------- | ---- | ----------------------------------------------- |
 | `example_test.go`, `*_example_test.go`                    | 105  | godoc renders examples from it                  |
 | `export_test.go`, `*_export_test.go`                      | 52   | exports internals to an external test package   |
-| `fuzz_test.go`, `*_fuzz_test.go`                          | 15   | seed corpus kept separate                       |
+| `fuzz_test.go`, `*_fuzz_test.go`                          | 15   | seed files kept separate                       |
 | `bench_test.go`, `benchmark_test.go` and their `*_` forms | 15   | benchmarks kept out of the unit test file       |
 | `main_test.go`                                            | 6    | the `TestMain` entry point                      |
 | `all_test.go`                                             | 5    | package-wide suite                              |

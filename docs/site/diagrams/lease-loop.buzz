@@ -59,7 +59,7 @@ export fun leaseLoopDiagram() > Diagram {
                   role = "focal", x = 376, y = 272, w = 280, h = 72 },
         ],
         // The ring runs clockwise and closes on the left at x=16, in the frame gutter: the
-        // return leg has to pass the whole left column, and every other lane there is spent
+        // return leg has to pass the whole left column, and every other track there is spent
         // on the Plan surface the human reads.
         edges = [
             Edge{ src = "cp", dst = "part" },

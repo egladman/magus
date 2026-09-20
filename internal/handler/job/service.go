@@ -247,7 +247,7 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 
 // delegatedJob maps a stored row to the wire Job: what an orchestrator DECLARED about work
 // it handed out. It carries no description or target size, which are a catalog job's; a
-// delegated job's equivalents are its criteria and the lanes it was given.
+// delegated job's equivalents are its criteria and the paths it was given.
 //
 // Running is left unset rather than derived from the state. Nothing here watched the
 // worker, and a row still reading `running` after its holder died would be the stored

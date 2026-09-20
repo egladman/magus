@@ -109,7 +109,7 @@ func (r *Registry) Acquire(ctx context.Context, key string, s spells.Service) (H
 		return e.handle, e.startErr
 	}
 	// This goroutine owns the start for a fresh entry.
-	e := &entry{ready: make(chan struct{}), idle: r.idleFor(s), refs: 1, svc: s, startedAt: time.Now()}
+	e := &entry{ready: make(chan struct{}), idle: r.idleWindow(s), refs: 1, svc: s, startedAt: time.Now()}
 	r.entries[key] = e
 	r.mu.Unlock()
 
@@ -322,9 +322,9 @@ func commandString(c spells.Command) string {
 	return c.Bin + " " + strings.Join(c.Args, " ")
 }
 
-// idleFor resolves a service's idle window: its own Service.Idle override when it
+// idleWindow resolves a service's idle window: its own Service.Idle override when it
 // parses to a positive duration, else the Registry default.
-func (r *Registry) idleFor(s spells.Service) time.Duration {
+func (r *Registry) idleWindow(s spells.Service) time.Duration {
 	if s.Idle != "" {
 		if d, err := time.ParseDuration(s.Idle); err == nil && d > 0 {
 			return d

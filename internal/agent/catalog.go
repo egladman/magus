@@ -135,11 +135,11 @@ import (
 // ahead of the published-site index it used to open with. Measured over 1,907
 // session transcripts: the section query ran 11 times ever while agents read a
 // markdown file under docs/ 964 times, and this skill is what routed them there.
-// 64: magus-multi-agent says owned_paths is read as a READ lane too, and that a
+// 64: magus-multi-agent says owned_paths opens reads too, and that a
 // worker needing to read what it must not write gets a `focus` on its row rather
 // than a wider owned_paths. Measured over 204 session transcripts: reads left the
 // units the session actually wrote to about a fifth of the time, and widening the
-// write lane to open a read is the move that puts two workers on one file.
+// write paths to open a read is the move that puts two workers on one file.
 // 65: magus-multi-agent renders the worker prompt with `magus ledger brief` and grades
 // the report with `magus ledger accept` instead of demanding four facts in prose, and
 // carries a coalescing rule: partition by write set, then merge what the write sets
@@ -152,7 +152,7 @@ import (
 // stored attempt behind the report's output ref, since the report carries no
 // `passed` field for a worker to assert. A bound worker's own write door is four
 // things: register its base, shrink its own owned_paths, end its own row, or
-// declare a child inside its own lane; everything else belongs to the unbound
+// declare a child inside its own boundary; everything else belongs to the unbound
 // orchestrator, and the skill says so plainly instead of pointing a worker at the
 // magus_ledger tool as a way to widen. It also teaches the guard facts the lease
 // runtime gained alongside this: guard wiring is denied under any bound lease, a
@@ -163,7 +163,7 @@ import (
 // delegating, which is the skill's own vocabulary, and states `magus ledger accept`'s
 // refusal as cmd/magus/ledger.go enforces it: any checkout bound to a lease is refused,
 // not only one bound to the row being graded.
-// 69: magus-multi-agent names a lease's lanes write_paths, read_paths and deny_paths and
+// 69: magus-multi-agent names a lease's boundary write_paths, read_paths and deny_paths and
 // its model `model`, which is what every magus surface now spells them; the old names are
 // accepted on input for one release and nowhere emitted.
 // 70: magus-workspace-rules makes the recurring guard-feedback loop actionable:
@@ -195,17 +195,17 @@ import (
 // exist: `present` for new names, `absent` for a predictable second copy, `unreferenced`
 // for a replaced helper. It also drops the fan-out and depth caps: a job tree grows as wide
 // and as deep as its partition supports, bounded only by the magus.yaml `jobs:` limits, and
-// teaches `--timeout`, the real-edit check at wait, and releasing a stale job's lane.
-// 84: magus-multi-agent gives each worker its own worktree wherever a lane touches
+// teaches `--timeout`, the real-edit check at wait, and releasing a stale job's paths.
+// 84: magus-multi-agent gives each worker its own worktree wherever a write path touches
 // workspace configuration, which `magus job fork` now refuses outright while another live
 // job holds the checkout. It also teaches `magus job exec --session`, since a lease binds
 // per session rather than per checkout, and the once-per-session spawn advisory that
-// reports the union of the lanes already held here.
+// reports the union of the write paths already held here.
 // 85: magus-multi-agent makes "how is it going" a READ. Asking a worker costs it the turn
 // it was in and answers with its account of itself; the console link, `magus job watch` and
 // `magus describe job --gates` answer from the filesystem, the guard's trail and recorded
 // evidence, none of which the worker can make quiet. It also states what a contested path
-// means, since a file two live lanes cover is attributed to neither.
+// means, since a file two live leases cover is attributed to neither.
 // 86: magus-buzz-write and magus-buzz-review teach `magus buzz --check`, which
 // type-checks without running. Review had no way to PROVE a strict-mode finding and
 // said to read for it; running a file whose job is a side effect was never a check of

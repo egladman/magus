@@ -437,7 +437,7 @@ func objectName(goType reflect.Type) string {
 // at generate time with "declares Object X but its Impl returns Y", naming neither the
 // switch nor the fix. The registry already carries the mapping, so read it there.
 func buzzObjectName(t reflect.Type) string {
-	return buzzNameFor(t)
+	return buzzName(t)
 }
 
 // checkObjectDecls verifies every method's declared Ret.Object against the Impl's

@@ -134,7 +134,7 @@ type endpointKey struct {
 	prefix     string
 }
 
-func keyFor(invocation string, g types.SecretGrant) endpointKey {
+func newEndpointKey(invocation string, g types.SecretGrant) endpointKey {
 	return endpointKey{invocation: invocation, ref: g.Ref, host: g.Host, header: g.Header, prefix: g.Prefix}
 }
 
@@ -178,7 +178,7 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (strin
 	if invocation == "" {
 		return "", fmt.Errorf("secret grant %q: an endpoint belongs to a run, and this call is outside one - open it inside a target body rather than at the magusfile's top level, where it would outlive every run that could use it", g.Ref)
 	}
-	key := keyFor(invocation, g)
+	key := newEndpointKey(invocation, g)
 
 	r.endpointMu.Lock()
 	defer r.endpointMu.Unlock()
@@ -236,7 +236,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 	r.registerRedactable(tok)
 
 	proxy := &httputil.ReverseProxy{
-		Rewrite:      r.rewriteFor(g, tok),
+		Rewrite:      r.rewrite(g, tok),
 		ErrorHandler: endpointErrorHandler(g),
 		// Without this, ReverseProxy logs transport errors through the process-global
 		// log package straight to stderr, outside NewRedactingHandler and outside the
@@ -304,10 +304,10 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 // move.
 type grantValueKey struct{}
 
-// rewriteFor builds the ReverseProxy rewrite: retarget the request at the granted
+// rewrite builds the ReverseProxy rewrite: retarget the request at the granted
 // host over TLS, strip the token segment, attach the credential, and drop the headers
 // a caller could use to interfere with any of that.
-func (r *Resolver) rewriteFor(g types.SecretGrant, tok string) func(*httputil.ProxyRequest) {
+func (r *Resolver) rewrite(g types.SecretGrant, tok string) func(*httputil.ProxyRequest) {
 	return func(pr *httputil.ProxyRequest) {
 		pr.Out.URL.Scheme = "https"
 		pr.Out.URL.Host = g.Host
@@ -402,7 +402,7 @@ func (r *Resolver) endpointHandler(runCtx context.Context, g types.SecretGrant, 
 			http.Error(w, "magus secret endpoint: could not resolve the granted credential; see the magus log", http.StatusBadGateway)
 			return
 		}
-		// Reveal where the credential crosses into the outbound header; see rewriteFor.
+		// Reveal where the credential crosses into the outbound header; see rewrite.
 		proxy.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), grantValueKey{}, g.Prefix+v.Reveal())))
 	})
 }

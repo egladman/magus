@@ -52,14 +52,24 @@ env:
   # A CEILING, not a target: the forecaster picks the count, and may raise it to
   # split a shard predicted to exceed the runner's memory. Shard count is not runner
   # spend, but it is runner *concurrency*, so it is raised on measurement rather than
-  # taste. At 2, the shard holding the root project ran 21m against the other's 2m.
-  # Measured since: the skew is the root project's own tests, not one project's step
-  # blocking another's, whose longest observed wait is a minute. Root is simply the
-  # biggest unit the planner has to place, and a third shard is where it lands alone.
+  # taste. MEASURED, from the 21m31s shard's own log rather than from memory: libs/gopherbuzz
+  # 439s, cmd/magus 195s, the root package 67s, and the shard ran as a CHAIN, not a pack.
+  # Root sat waiting 7m49s for gopherbuzz's whole ci, and docs then waited on root.
   #
-  # That 21m PREDATES the two-run test split in this same change, which takes roughly
-  # 170s off a root test run. The ceiling stands on the shape of the skew rather than on
-  # its size, and the size is due a re-measure once the split has a few runs behind it.
+  # So the skew was never root's own tests, and two earlier versions of this comment said it
+  # was. The 439s was a test loop that ran to 64-bit overflow, since bounded, and that one
+  # fix is worth more than every other change around it.
+  #
+  # A third shard does not follow from any of that. The bound is max(longest unit, total/N),
+  # and on the 3-shard run that followed, shards 1 and 2 summed to 4m9s against shard 0's
+  # 10m34s: two shards give the identical makespan, and the third cost a runner while
+  # co-locating commentdash with root for 1m15s of pure wait. Left at 3 because the packer
+  # is edge-blind (a depends_on edge only exists when the packer puts both projects on one
+  # runner, so a wider pack makes the 21m chain less likely by accident), and that is a
+  # reason to fix the packer, not a reason this number is right.
+  #
+  # Do not re-derive any of this from a comment. Take per-package and per-target timings off
+  # a green run.
   MAGUS_CI_MAX_SHARDS: '3'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you

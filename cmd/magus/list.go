@@ -68,7 +68,7 @@ func ls(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus ls                     every project in the workspace")
 			fmt.Fprintln(os.Stderr, "  magus ls targets             what the cwd project can run")
 			fmt.Fprintln(os.Stderr, "  magus ls targets libs/foo    what libs/foo can run")
-			fmt.Fprintln(os.Stderr, "  magus ls jobs                every job, with its state and lanes")
+			fmt.Fprintln(os.Stderr, "  magus ls jobs                every job, with its state and write paths")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()

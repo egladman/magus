@@ -196,7 +196,7 @@ func NextForFailure(project, target, ref string) []Next {
 // [RoleFor].
 //
 // It exists so the obligation sits where the breadcrumb is MINTED: serving a worker a
-// write outside its lane and relying on the guard to refuse it afterwards teaches the
+// write outside its write paths and relying on the guard to refuse it afterwards teaches the
 // reader that the tool's own advice does not apply to them.
 type Role string
 
@@ -206,16 +206,16 @@ const (
 	RoleReviewer Role = "reviewer"
 )
 
-// RoleFor grades the acting lease id against the rows, and returns the lane that id
-// may write in. No id is unbound, a read-only row or one owning no path is a
+// RoleFor grades the acting lease id against the rows, and returns the write paths that
+// id may write in. No id is unbound, a read-only row or one owning no path is a
 // reviewer, anything else a worker.
 //
 // Derived rather than stored. The row already says what a lease may write, and a
 // second field saying the same thing is a field that can disagree with it. A bound id
-// whose row is gone still grades as a worker with no lane: something claimed a lane,
-// and serving the full unbound set on the strength of a missing row is the wrong way
-// to be wrong.
-func RoleFor(rows []types.Job, id string) (Role, []string) {
+// whose row is gone still grades as a worker with no write paths: something claimed a
+// boundary, and serving the full unbound set on the strength of a missing row is the
+// wrong way to be wrong.
+func LeaseRole(rows []types.Job, id string) (Role, []string) {
 	if id == "" {
 		return RoleUnbound, nil
 	}
@@ -232,19 +232,19 @@ func RoleFor(rows []types.Job, id string) (Role, []string) {
 }
 
 // ServableTo drops the breadcrumbs role may not be served: every write for a
-// reviewer, and for a worker every write that does not land inside lane. Unbound
+// reviewer, and for a worker every write that does not land inside writePaths. Unbound
 // keeps the lot.
 //
 // Dropped, never rewritten. A template narrowed to fit a role would be a command
 // nobody wrote, and the cap is applied afterwards so a filtered list still fills up
 // to nextCap from what survives.
-func ServableTo(role Role, lane []string, next []Next) []Next {
+func ServableTo(role Role, writePaths []string, next []Next) []Next {
 	if role == "" || role == RoleUnbound {
 		return capNext(next)
 	}
 	kept := make([]Next, 0, len(next))
 	for _, n := range next {
-		if mutatesTree(n.Argv) && (role != RoleWorker || !withinLane(lane, n.Argv)) {
+		if mutatesTree(n.Argv) && (role != RoleWorker || !withinWritePaths(writePaths, n.Argv)) {
 			continue
 		}
 		kept = append(kept, n)
@@ -322,15 +322,15 @@ func longestCommand(args []string) (Command, bool) {
 	return best, len(best.tokens) > 0
 }
 
-// withinLane reports whether every project a write names sits inside lane, so a
-// worker keeps the regeneration of its own project and loses everybody else's.
-func withinLane(lane []string, argv []string) bool {
+// withinWritePaths reports whether every project a write names sits inside writePaths, so
+// a worker keeps the regeneration of its own project and loses everybody else's.
+func withinWritePaths(writePaths []string, argv []string) bool {
 	projects := writeProjects(argv)
-	if len(lane) == 0 || len(projects) == 0 {
+	if len(writePaths) == 0 || len(projects) == 0 {
 		return false
 	}
 	for _, p := range projects {
-		if !laneCovers(lane, p) {
+		if !writePathsCover(writePaths, p) {
 			return false
 		}
 	}
@@ -339,7 +339,7 @@ func withinLane(lane []string, argv []string) bool {
 
 // writeProjects names the project operands of a write, or nothing when the command
 // takes none. Nothing is the conservative answer: a write that names no project
-// touches whatever the workspace resolves, which is wider than any lane.
+// touches whatever the workspace resolves, which is wider than any declared boundary.
 func writeProjects(argv []string) []string {
 	if len(argv) < 4 || argv[1] != Run.Head() {
 		return nil
@@ -354,12 +354,12 @@ func writeProjects(argv []string) []string {
 	return projects
 }
 
-// laneCovers reports whether one of lane's declared globs covers project. An entry
+// writePathsCover reports whether one of the declared globs covers project. An entry
 // naming the whole tree by naming nothing is skipped, the way the guard's own
 // declaration match skips it: it would put the lease on every path in the plan.
-func laneCovers(lane []string, project string) bool {
+func writePathsCover(writePaths []string, project string) bool {
 	rel := path.Clean(strings.TrimSpace(project))
-	for _, raw := range lane {
+	for _, raw := range writePaths {
 		decl := path.Clean(strings.TrimSpace(raw))
 		if decl == "." || decl == "/" {
 			continue

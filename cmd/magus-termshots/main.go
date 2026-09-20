@@ -141,7 +141,7 @@ func lockWaiting(t screen.Theme) (string, error) {
 // throughout.
 func failurePrompt(t screen.Theme) (string, error) {
 	s := screen.New(cols, rows)
-	h := cache.NewPrettyHandlerFor(s, slog.LevelInfo, tty.FixedProbe(cols, rows), demoClock())
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.FixedProbe(cols, rows), demoClock())
 
 	fmt.Fprint(s, "$ magus affected ci\n")
 	fmt.Fprint(s, "[pass] build std (cached, 0.0s)\n")

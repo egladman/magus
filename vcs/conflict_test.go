@@ -370,7 +370,7 @@ func TestDriverUsableOnAnOlderBinarysSpelling(t *testing.T) {
 	newerRegistration := deaf + " vcs merge-driver %O %A %B %L %P"
 	assert.False(t, driverArgsMatch(newerRegistration, olderWanted),
 		"the newer registration is not the older binary's own spelling")
-	assert.False(t, driverUsableFor(t.Context(), newerRegistration, olderWanted),
+	assert.False(t, driverServes(t.Context(), newerRegistration, olderWanted),
 		"an older binary must rewrite a verb it cannot dispatch, not keep it")
 
 	assert.True(t, driverArgsMatch(deaf+" merge-driver %O %A %B %L %P", olderWanted),

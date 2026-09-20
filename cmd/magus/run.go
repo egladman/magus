@@ -575,7 +575,7 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 // target across the selection. When some projects serve it and others don't, the ones
 // that don't are dropped with a warning: the tolerant multi-project behavior.
 func filterServedTargets(ctx context.Context, m *magus.Magus, targets []types.Target, targetName string) ([]types.Target, error) {
-	return applyTargetFilter(targets, targetName, buildDefinesTarget(ctx, m), func(path string) string { return projectLabelFor(m, path) })
+	return applyTargetFilter(targets, targetName, buildDefinesTarget(ctx, m), func(path string) string { return projectLabel(m, path) })
 }
 
 // applyTargetFilter is the pure policy behind filterServedTargets: partition targets by
@@ -643,8 +643,8 @@ func buildDefinesTarget(ctx context.Context, m *magus.Magus) func(path, target s
 	return func(path, target string) bool { return byProject[path][target] }
 }
 
-// projectLabelFor renders a project's human name (never a bare ".") from its path.
-func projectLabelFor(m *magus.Magus, path string) string {
+// projectLabel renders a project's human name (never a bare ".") from its path.
+func projectLabel(m *magus.Magus, path string) string {
 	if p := m.Get(path); p != nil {
 		return types.ProjectLabel(p.Path, p.Dir)
 	}

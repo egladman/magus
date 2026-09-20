@@ -38,7 +38,7 @@ func projectWith(path string, policies map[string]types.Target) *types.Project {
 	return &types.Project{Path: path, Name: path, TargetPolicies: policies}
 }
 
-func runnerFor(historyPath string) *runner {
+func newRunner(historyPath string) *runner {
 	return &runner{opts: options{cfg: config.Config{HistoryPath: historyPath}}}
 }
 
@@ -46,7 +46,7 @@ func runnerFor(historyPath string) *runner {
 // has outgrown, and nothing else would ever say so.
 func TestMemoryDeclarationsReportsUnderDeclaration(t *testing.T) {
 	path := historyWith(t, ".", map[string]int64{"go/test": 9000 * mb})
-	got := runnerFor(path).checkMemoryDeclarations([]*types.Project{
+	got := newRunner(path).checkMemoryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {MemoryMB: 2048}}),
 	})
 
@@ -61,7 +61,7 @@ func TestMemoryDeclarationsReportsUnderDeclaration(t *testing.T) {
 // death, and the over-declared arm told its author to lower it.
 func TestMemoryDeclarationsNeverReportsOverDeclaration(t *testing.T) {
 	path := historyWith(t, ".", map[string]int64{"go/test": 3980 * mb})
-	got := runnerFor(path).checkMemoryDeclarations([]*types.Project{
+	got := newRunner(path).checkMemoryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {MemoryMB: 10240}}),
 	})
 
@@ -73,7 +73,7 @@ func TestMemoryDeclarationsNeverReportsOverDeclaration(t *testing.T) {
 // its peers, which is exactly the blind spot machine-wide admission cannot cover.
 func TestMemoryDeclarationsReportsAHeavyUndeclaredTarget(t *testing.T) {
 	path := historyWith(t, "console", map[string]int64{"typescript/test": 5312 * mb})
-	got := runnerFor(path).checkMemoryDeclarations([]*types.Project{
+	got := newRunner(path).checkMemoryDeclarations([]*types.Project{
 		projectWith("console", nil),
 	})
 
@@ -100,7 +100,7 @@ func TestMemoryDeclarationsStaysQuiet(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := historyWith(t, ".", map[string]int64{"go/test": tc.peak})
-			got := runnerFor(path).checkMemoryDeclarations([]*types.Project{
+			got := newRunner(path).checkMemoryDeclarations([]*types.Project{
 				projectWith(".", map[string]types.Target{"test": {MemoryMB: tc.declared}}),
 			})
 			assert.Equal(t, types.DoctorOK, got.Status)
@@ -116,7 +116,7 @@ func TestMemoryDeclarationsTakesTheLargestPeakAcrossSpells(t *testing.T) {
 		"go/test":        1000 * mb,
 		"magusfile/test": 9000 * mb,
 	})
-	got := runnerFor(path).checkMemoryDeclarations([]*types.Project{
+	got := newRunner(path).checkMemoryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {MemoryMB: 2048}}),
 	})
 
@@ -127,7 +127,7 @@ func TestMemoryDeclarationsTakesTheLargestPeakAcrossSpells(t *testing.T) {
 // A fresh clone has no history, and "everything agrees" would claim a comparison
 // that never happened.
 func TestMemoryDeclarationsSaysWhenNothingHasRun(t *testing.T) {
-	got := runnerFor(filepath.Join(t.TempDir(), "absent.json")).
+	got := newRunner(filepath.Join(t.TempDir(), "absent.json")).
 		checkMemoryDeclarations([]*types.Project{projectWith(".", nil)})
 
 	assert.Equal(t, types.DoctorOK, got.Status)

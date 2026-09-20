@@ -1971,7 +1971,7 @@ func TestJITMatchesInterpreterRandomized(t *testing.T) {
 			"what depths() accepts, so this test is no longer differential", engaged, cases)
 }
 
-// FuzzJITMatchesInterpreter is the same property with the corpus supplied by the
+// FuzzJITMatchesInterpreter is the same property with the inputs supplied by the
 // fuzzer rather than a generator, so it reaches shapes randJITProgram cannot spell.
 // Most inputs fail to parse or compile and are skipped; that is expected and cheap.
 // Run: go test ./ -run FuzzJITMatchesInterpreter -fuzz FuzzJIT -fuzztime 60s
@@ -2000,7 +2000,7 @@ func FuzzJITMatchesInterpreter(f *testing.F) {
 		// forever (`while (i < 20) { i== i + 1; }` — a comparison where the seed had
 		// an assignment), and with an unbounded context the FIRST run wedges the
 		// whole process: not a JIT finding, just a hang, and go-fuzz reports it as
-		// "terminated unexpectedly while minimizing" and writes a corpus entry that
+		// "terminated unexpectedly while minimizing" and writes a seed file that
 		// then hangs plain `go test` too. Both engines poll cancellation on a back
 		// edge (the JIT's is the cancel-check exit), so a deadline is honored on
 		// either path and the same limit applies to both sides of the comparison.

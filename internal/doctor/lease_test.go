@@ -77,7 +77,7 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 // TestActingLeasePrefersTheMarkerOverTheEnvironment pins the precedence the check above
 // reports on. The marker is written into a checkout by `job exec`; the environment member
 // is a claim the worker makes about itself, and letting the claim win meant a worker
-// bound to one job could be graded against another's lanes by exporting its id.
+// bound to one job could be graded against another's write paths by exporting its id.
 func TestActingLeasePrefersTheMarkerOverTheEnvironment(t *testing.T) {
 	cacheDir, _, _ := tmpLedger(t)
 	require.NoError(t, job.BindLease(cacheDir, "adj/marker"))

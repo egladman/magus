@@ -250,10 +250,10 @@ func FreeFFI(addr uintptr) error {
 	return nil
 }
 
-// slotFor returns the [offset, offset+size) window of the alloc block at addr,
+// allocSlot returns the [offset, offset+size) window of the alloc block at addr,
 // erroring if addr is not a live allocation or the window is out of bounds. This
 // is the bounds check that keeps read*/write* from straying outside memory we own.
-func slotFor(addr uintptr, offset, size int) ([]byte, error) {
+func allocSlot(addr uintptr, offset, size int) ([]byte, error) {
 	if offset < 0 {
 		return nil, fmt.Errorf("buzz: ffi: negative offset %d", offset)
 	}
@@ -277,7 +277,7 @@ func WriteScalar(addr uintptr, offset int, ctype string, i int64, f float64, isF
 	if !ok {
 		return fmt.Errorf("buzz: ffi: unknown C type %q", ctype)
 	}
-	slot, err := slotFor(addr, offset, size)
+	slot, err := allocSlot(addr, offset, size)
 	if err != nil {
 		return err
 	}
@@ -304,7 +304,7 @@ func ReadScalar(addr uintptr, offset int, ctype string) (i int64, f float64, isF
 	if !ok {
 		return 0, 0, false, fmt.Errorf("buzz: ffi: unknown C type %q", ctype)
 	}
-	slot, err := slotFor(addr, offset, size)
+	slot, err := allocSlot(addr, offset, size)
 	if err != nil {
 		return 0, 0, false, err
 	}

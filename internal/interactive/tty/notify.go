@@ -188,11 +188,11 @@ func StderrNotifier() *Notifier {
 	return stderrNotifierVal
 }
 
-// NotifierFor returns the notification band for w: the process-wide
+// NotifierOf returns the notification band for w: the process-wide
 // [StderrNotifier] when w IS standard error, and a fresh unshared one
-// otherwise. It is the [ZoneFor] of notifications and makes the same identity
+// otherwise. It is the [ZoneOf] of notifications and makes the same identity
 // check for the same reason.
-func NotifierFor(w io.Writer) *Notifier {
+func NotifierOf(w io.Writer) *Notifier {
 	if w == os.Stderr {
 		return StderrNotifier()
 	}

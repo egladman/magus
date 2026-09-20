@@ -773,7 +773,7 @@ func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, 
 	return result, nil
 }
 
-func HarnessSkillsFor(ctx context.Context, root, id string) (HarnessSkills, error) {
+func LoadHarnessSkills(ctx context.Context, root, id string) (HarnessSkills, error) {
 	if err := ctx.Err(); err != nil {
 		return HarnessSkills{}, err
 	}

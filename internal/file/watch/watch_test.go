@@ -19,7 +19,7 @@ import (
 // load. Re-firing recovers it once the watch goes live. The ticker interval sits ABOVE the
 // tests' debounce window on purpose: re-triggering faster than the debounce would keep
 // resetting the timer and starve the flush, so a batch would never emit.
-func awaitEventFor(t *testing.T, w *Watcher, wantPath string, trigger func()) {
+func awaitEvent(t *testing.T, w *Watcher, wantPath string, trigger func()) {
 	t.Helper()
 	const retickInterval = 200 * time.Millisecond // > the 50ms debounce used by these tests
 	deadline := time.After(5 * time.Second)
@@ -59,7 +59,7 @@ func TestWatcherDetectsFileWrite(t *testing.T) {
 
 	// Re-write until the watcher reports it: a single write can drop in the gap between
 	// Add() returning and the OS watch becoming hot. See awaitEventFor.
-	awaitEventFor(t, w, f.Name(), func() {
+	awaitEvent(t, w, f.Name(), func() {
 		require.NoError(t, os.WriteFile(f.Name(), []byte("hello"), 0o644))
 	})
 }
@@ -128,7 +128,7 @@ func TestWatcherDetectsNewSubdir(t *testing.T) {
 	// A newly-created directory's watch is registered asynchronously (the loop walks it off
 	// the hot path), so the first write to a file inside it can drop before the watch on
 	// `sub` is live. Re-write until it surfaces. See awaitEventFor.
-	awaitEventFor(t, w, newFile, func() {
+	awaitEvent(t, w, newFile, func() {
 		require.NoError(t, os.WriteFile(newFile, []byte("package newpkg"), 0o644))
 	})
 }

@@ -188,7 +188,7 @@ func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	assert.Contains(t, string(body), `"beforeShell"`)
 	assert.NotContains(t, string(body), `"hooks": [`)
 
-	// cursor-hook.sh's reply dialect is self-contained (see probeEventFor), so the
+	// cursor-hook.sh's reply dialect is self-contained (see probeEvent), so the
 	// probe only checks that it answers something; magus-checkpoint.sh renders no
 	// verdict at all and is never probed.
 	writeStubGuardScript(t, root, "cursor-hook.sh", "ok")

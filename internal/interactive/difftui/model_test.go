@@ -112,15 +112,15 @@ func TestFoldRecomputesTheVisibleRows(t *testing.T) {
 	m := New(Input{Files: testFiles()})
 
 	assert.Equal(t, 1, countKind(m, RowFold), "a generated file folds to one line")
-	assert.Zero(t, hunkRowsFor(m, 2), "a folded file shows no hunks")
+	assert.Zero(t, hunkRows(m, 2), "a folded file shows no hunks")
 
 	m.toggleGenerated()
 	assert.Zero(t, countKind(m, RowFold))
-	assert.Equal(t, 1, hunkRowsFor(m, 2), "unfolding shows the generated file's hunks")
+	assert.Equal(t, 1, hunkRows(m, 2), "unfolding shows the generated file's hunks")
 
 	// The hunks of the OTHER files are untouched by the fold, which is what says the toggle
 	// is scoped to declared outputs rather than to everything below the cursor.
-	assert.Equal(t, 2, hunkRowsFor(m, 0))
+	assert.Equal(t, 2, hunkRows(m, 0))
 }
 
 func TestFoldingRetreatsACursorItWouldStrand(t *testing.T) {
@@ -148,21 +148,21 @@ func TestViewedTogglesOnHunksOnly(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, ViewedChange{Digest: "da0", On: true}, change)
 	assert.True(t, m.Viewed("da0"))
-	assert.Contains(t, rowTextFor(m, RowHunk, 0), "[x]")
-	assert.Contains(t, rowTextFor(m, RowFile, 0), "2 hunks, 1 read")
+	assert.Contains(t, fileRowText(m, RowHunk, 0), "[x]")
+	assert.Contains(t, fileRowText(m, RowFile, 0), "2 hunks, 1 read")
 
 	change, ok = m.toggleViewed()
 	require.True(t, ok)
 	assert.False(t, change.On, "the second press unmarks it")
 	assert.False(t, m.Viewed("da0"))
-	assert.Contains(t, rowTextFor(m, RowHunk, 0), "[ ]")
+	assert.Contains(t, fileRowText(m, RowHunk, 0), "[ ]")
 }
 
 func TestViewedAdoptsThePersistedSet(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles(), Viewed: []string{"da1"}})
 	assert.True(t, m.Viewed("da1"), "a mark made in another client is already read here")
-	assert.Contains(t, rowTextFor(m, RowFile, 0), "2 hunks, 1 read")
+	assert.Contains(t, fileRowText(m, RowFile, 0), "2 hunks, 1 read")
 }
 
 func TestOverviewEntersAndReturns(t *testing.T) {
@@ -266,10 +266,10 @@ func TestCommentsAndPendingSuggestionsSitUnderTheirHunk(t *testing.T) {
 func TestLinkDecoratesOnlyTheFileHeading(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles(), Link: func(p string) string { return "<" + p + ">" }})
-	assert.Contains(t, rowTextFor(m, RowFile, 0), "<a.go>")
+	assert.Contains(t, fileRowText(m, RowFile, 0), "<a.go>")
 	assert.Contains(t, m.overviewRows()[0].Rendered, "<a.go>")
 	assert.Equal(t, "a.go", m.overviewRows()[0].Path, "the decoration is in Rendered and nowhere else")
-	assert.NotContains(t, rowTextFor(m, RowHunk, 0), "<")
+	assert.NotContains(t, fileRowText(m, RowHunk, 0), "<")
 }
 
 func TestFrameIsExactlyAsTallAsItClaims(t *testing.T) {
@@ -501,8 +501,8 @@ func countKind(m *Model, kind RowKind) int {
 	return n
 }
 
-// hunkRowsFor is how many hunk headings file i is showing.
-func hunkRowsFor(m *Model, file int) int {
+// hunkRows is how many hunk headings file i is showing.
+func hunkRows(m *Model, file int) int {
 	n := 0
 	for _, r := range m.Rows() {
 		if r.Kind == RowHunk && r.File == file {
@@ -512,8 +512,8 @@ func hunkRowsFor(m *Model, file int) int {
 	return n
 }
 
-// rowTextFor returns the first row of a kind belonging to file i.
-func rowTextFor(m *Model, kind RowKind, file int) string {
+// fileRowText returns the first row of a kind belonging to file i.
+func fileRowText(m *Model, kind RowKind, file int) string {
 	for _, r := range m.Rows() {
 		if r.Kind == kind && r.File == file {
 			return r.Text

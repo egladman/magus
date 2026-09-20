@@ -312,8 +312,8 @@ type enumCase struct {
 	Value string
 }
 
-// buzzEnumFor returns the enum a Go type mirrors as, if any.
-func buzzEnumFor(rt reflect.Type) (boundaryEnum, bool) {
+// buzzEnum returns the enum a Go type mirrors as, if any.
+func buzzEnum(rt reflect.Type) (boundaryEnum, bool) {
 	for _, e := range boundaryEnums {
 		if e.Type == rt {
 			return e, true
@@ -328,12 +328,12 @@ type boundaryType struct {
 	RuntimeObject bool
 }
 
-// buzzNameFor returns the BUZZ name a Go type mirrors as, which is the registry key
+// buzzName returns the BUZZ name a Go type mirrors as, which is the registry key
 // and not always the Go type's own name: types.ProjectsOutput is `Projects`,
 // types.StatusTargetRun is `TargetRun`. A struct-valued field must reference the Buzz
 // name, so the registry is what resolves it, falling back to the Go name only for a
 // type no entry claims, which the caller then reports as undeclared.
-func buzzNameFor(rt reflect.Type) string {
+func buzzName(rt reflect.Type) string {
 	for _, entry := range boundaryTypes {
 		if entry.Type == rt {
 			return entry.Name

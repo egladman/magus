@@ -887,7 +887,7 @@ func TestHookCmdRoutesAnAgentSurfaceWrite(t *testing.T) {
 // the resolved cache location, so the table it belongs in is the one that runs hookCmd.
 //
 // The rows run UNBOUND, which is the contract: this is the guard's own evidence rather
-// than a lane, so an orchestrator and a person in their own checkout are refused too.
+// than a boundary, so an orchestrator and a person in their own checkout are refused too.
 func TestHookCmdJudgesTheCacheDirOnBothSurfaces(t *testing.T) {
 	for name, tc := range map[string]struct {
 		input string
@@ -934,16 +934,16 @@ func TestHookCmdJudgesTheCacheDirOnBothSurfaces(t *testing.T) {
 	}
 }
 
-// TestHookCmdDeniesTheCacheDirAheadOfTheLaneItSitsIn is the rank the rule was written for:
-// a worker handed a lane that covers the dir must read what the dir IS, not a verdict
-// about whose lane it is.
-func TestHookCmdDeniesTheCacheDirAheadOfTheLaneItSitsIn(t *testing.T) {
+// TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn is the rank the rule was written for:
+// a worker handed write paths that cover the dir must read what the dir IS, not a verdict
+// about whose boundary it is.
+func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
 	lease.WritePaths = []string{"**"}
-	// Unregistered, so the lane rule has a denial of its own to be outranked BY. A lane
-	// that covers the path and says nothing leaves the rank unobserved.
+	// Unregistered, so the write-path rule has a denial of its own to be outranked BY. A
+	// boundary that covers the path and says nothing leaves the rank unobserved.
 	lease.Registered = 0
 	ctx, _, _ := fleetFixture(t, lease)
 
@@ -954,7 +954,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheLaneItSitsIn(t *testing.T) {
 	assert.Contains(t, out.String(), "magus cache dir")
 	assert.Contains(t, out.String(), "magus is the only writer of it")
 	assert.NotContains(t, out.String(), "registered the base it landed on",
-		"the lane rules must not answer for this path")
+		"the write-path rules must not answer for this path")
 }
 
 // The wiring, end to end through the hook: a write that reaches a verdict leaves the
@@ -1056,7 +1056,7 @@ func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
 		"exec elsewhere":        {`{"op":"exec","id":"harness/other"}`, "deny\n"},
 		"exec its own base":     {`{"op":"exec","id":"` + wide.ID + `","reported_base":"abc123"}`, "pass\n"},
 		"listing the plan":      {`{"op":"list"}`, "pass\n"},
-		"giving a lane back":    {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"]}`, "pass\n"},
+		"giving paths back":     {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"]}`, "pass\n"},
 		// The rewrite the rendered line used to drop on the floor: judged only on the keys
 		// the renderer carried, a shrink beside a forged checkpoint read as a plain shrink.
 		"forging its own base":   {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
@@ -1192,7 +1192,7 @@ func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, out.String(), "magus cache dir")
 	assert.NotContains(t, out.String(), "is not declared",
-		"the cache dir is what the write is about; whose lane it is comes second")
+		"the cache dir is what the write is about; whose boundary it is comes second")
 }
 
 // TestHookCmdDeniesTheGateThroughTheMCPDoor is the hole the tool-name decode closes: the
@@ -1268,7 +1268,7 @@ func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 
 // TestHookCmdDeniesAWiringWriteUnderALease proves the WIRING, the way the gate rule's own
 // test does: a rule nothing calls never fires however well it is tested. It also pins the
-// rank, since the lease ledger speaks first on this surface and a lane that happens to
+// rank, since the lease ledger speaks first on this surface and a boundary that happens to
 // contain the file must not clear it.
 func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 	global = globalFlags{}

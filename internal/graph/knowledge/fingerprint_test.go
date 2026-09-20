@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// shardFor builds a one-node one-edge shard, so a test can vary a single field and
+// newShard builds a one-node one-edge shard, so a test can vary a single field and
 // assert the fingerprint moved because of that field and nothing else.
-func shardFor(n types.KnowledgeNode, e types.KnowledgeEdge) Shard {
+func newShard(n types.KnowledgeNode, e types.KnowledgeEdge) Shard {
 	return Shard{Nodes: []types.KnowledgeNode{n}, Edges: []types.KnowledgeEdge{e}}
 }
 
@@ -32,8 +32,8 @@ func baseEdge() types.KnowledgeEdge {
 // If it did not, Build would rewrite every shard on every command and the
 // fingerprint would be pure cost.
 func TestShardFingerprintStable(t *testing.T) {
-	a := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
-	b := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
+	a := fingerprintShardContent(newShard(baseNode(), baseEdge()))
+	b := fingerprintShardContent(newShard(baseNode(), baseEdge()))
 	assert.Equal(t, a, b, "identical content must fingerprint identically")
 	assert.Len(t, a, 64, "hex-encoded SHA256")
 }
@@ -58,7 +58,7 @@ func TestShardFingerprintIgnoresInputOrder(t *testing.T) {
 // Every field is exercised individually rather than in one mutated blob, so a
 // failure names which field stopped counting.
 func TestShardFingerprintChangesPerField(t *testing.T) {
-	base := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
+	base := fingerprintShardContent(newShard(baseNode(), baseEdge()))
 
 	nodeMutations := map[string]func(*types.KnowledgeNode){
 		"ID":          func(n *types.KnowledgeNode) { n.ID = "target:.:other" },
@@ -74,7 +74,7 @@ func TestShardFingerprintChangesPerField(t *testing.T) {
 		t.Run("node "+name, func(t *testing.T) {
 			n := baseNode()
 			mutate(&n)
-			got := fingerprintShardContent(shardFor(n, baseEdge()))
+			got := fingerprintShardContent(newShard(n, baseEdge()))
 			assert.NotEqual(t, base, got, "a changed node %s must change the fingerprint", name)
 		})
 	}
@@ -91,7 +91,7 @@ func TestShardFingerprintChangesPerField(t *testing.T) {
 		t.Run("edge "+name, func(t *testing.T) {
 			e := baseEdge()
 			mutate(&e)
-			got := fingerprintShardContent(shardFor(baseNode(), e))
+			got := fingerprintShardContent(newShard(baseNode(), e))
 			assert.NotEqual(t, base, got, "a changed edge %s must change the fingerprint", name)
 		})
 	}

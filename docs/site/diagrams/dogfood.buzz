@@ -9,7 +9,7 @@
 // purpose is sometimes the correct outcome.
 //
 // An earlier version of this diagram drew the build as a three-node cycle. That was true
-// and useless: it showed the bootstrap without showing why there are two lanes.
+// and useless: it showed the bootstrap without showing why there are two tracks.
 namespace dogfood;
 
 import "../libs/diagram/diagram" as _;

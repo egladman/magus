@@ -246,10 +246,10 @@ Then `magus agent harness apply` (no `--id`) writes every wired host's fragments
   the touched-project set, and the served-next journal whose entries
   pre-authorize commands, plus the activity trail, the run logs, the outputs and
   the locks. An agent that edits any of it rewrites the evidence it is graded by,
-  and no later verdict says so, which is why this one is not scoped to a lane:
-  what it protects is whether a lane was checked at all. It ranks above the
+  and no later verdict says so, which is why this one is not scoped to a boundary:
+  what it protects is whether a boundary was checked at all. It ranks above the
   lease rules, so a worker whose `write_paths` happen to cover the directory
-  reads what the directory IS rather than a verdict about whose lane it is. The
+  reads what the directory IS rather than a verdict about whose it is. The
   path surface catches an editor tool's write; the command surface catches a
   redirect (`>`, `>>`, `tee`) and the coreutils that take a path as an operand
   (`rm`, `mv`, `cp`, `mkdir`, `touch`, `truncate`, `chmod`, `sed -i`). The reason
@@ -273,7 +273,7 @@ Then `magus agent harness apply` (no `--id`) writes every wired host's fragments
   Over MCP the operations divide the same way. A write naming a row other than
   the one this checkout holds is refused, and so is a write to the holder's own
   row, with one exception: dropping declarations the row already carries, which
-  is how a holder releases a path, passes through to the store. Giving a lane
+  is how a holder releases a path, passes through to the store. Giving a path
   back cannot widen a role, and whether a particular shrink is legitimate is the
   store's judgment rather than the guard's. Recording the base a lease landed on
   passes, because it is a procedure the write surface demands. Reading is
@@ -355,7 +355,7 @@ outside the command line, and speak only into the silence the rules above leave:
   thing under the answer, which is the half that works on every host with
   nothing wired; this one arrives a call earlier.
 
-## Focus: the read lane
+## Focus: the read boundary
 
 A command that READS a path outside the project a session is working in draws a
 focus advisory. The focus of a session is the project holding its working
@@ -368,7 +368,7 @@ outward to what it could break, and focus runs the other one, from where you
 stand back to what you legitimately need.
 
 It is the read half of a boundary whose write half is a job's `write_paths`,
-and the two catch different failures. A write outside your lane collides with
+and the two catch different failures. A write outside your write paths collides with
 another agent, and the diff eventually shows it. A read outside it collides with
 nothing and leaves no trace: it spends tokens on a tree nobody asked about, and
 it carries a sibling's practices and code quality into work that never chose
@@ -380,7 +380,7 @@ and says nothing about anything else: a rule that fired on an interpreter or a
 build tool would be guessing at what the program does with its arguments. A
 pattern is not a path, so `grep`'s first operand is skipped; an operand that
 resolves outside the workspace is a different rule's business; a path no project
-owns has no lane it could be outside of.
+owns has no boundary it could be outside of.
 
 It ADVISES by default and DENIES only under a lease this checkout holds
 (`magus job exec <id>`), because a hard read boundary needs somebody to have
@@ -389,7 +389,7 @@ falls back to `write_paths`, since a worker leased to edit a project was pointed
 at that project. Widening is that field and nothing else. There is no
 environment variable that turns the rule off, because a variable would be set
 once, in a wrapper, by the first worker it inconvenienced, and nothing afterwards
-would say the lane had stopped being checked.
+would say the boundary had stopped being checked.
 
 `magus describe file <path>` answers the same question before a read rather than
 after one: each entry carries `focus: out` when it falls outside, and the report
@@ -462,15 +462,15 @@ scopes nothing. Four cases the rule cannot decide that way advise instead:
   staying silent until the merge finds it.
 
 Every one of those denials names the ACTOR who can move the boundary, and it is
-never the reader: "your orchestrator can widen this lane; you cannot. Report it as
+never the reader: "your orchestrator can widen these write paths; you cannot. Report it as
 an unresolved risk and stop." The texts they replace ended by naming the
 `magus_job` tool, meaning "ask the orchestrator", and two independent readers
 took it as permission and widened their own row with it.
 
-A fourth rule DENIES and is not about the lane at all: a write to a harness
+A fourth rule DENIES and is not about the boundary at all: a write to a harness
 descriptor's own guard wiring. The descriptor declares the configuration path
 that switches its guard on for the host's next session, so a bound lease cannot
-edit that path regardless of what the lane says. An unbound session gets a
+edit that path regardless of what its write paths say. An unbound session gets a
 once-per-session advisory instead, because rewiring a host is exactly what an
 orchestrator or a person does, and what they are owed is the sentence saying
 which descriptor owns the file. The failure is silent either way, since a

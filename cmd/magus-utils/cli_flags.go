@@ -48,7 +48,7 @@ func runCLIFlags(args []string) error {
 	var lines []string
 	for _, c := range cli.All {
 		walkCommands(c.Name, c, func(path string, cmd cli.Command) {
-			lines = append(lines, constsFor(path, cmd.Flags, seen)...)
+			lines = append(lines, renderConsts(path, cmd.Flags, seen)...)
 		})
 	}
 	slices.Sort(lines)
@@ -142,7 +142,7 @@ func writeBinder(b *bytes.Buffer, command, constCommand string, flags []cli.Flag
 	}
 	// A custom-valued flag is declared for the docs and bound by the command
 	// itself; emitting a field and a second fs.Var for it would panic at parse
-	// time with "flag redefined". Its name constant still comes out, via constsFor.
+	// time with "flag redefined". Its name constant still comes out, via renderConsts.
 	bindable := make([]cli.Flag, 0, len(flags))
 	var custom []string
 	for _, f := range flags {
@@ -197,7 +197,7 @@ func writeBinder(b *bytes.Buffer, command, constCommand string, flags []cli.Flag
 		}
 		for _, name := range g.names {
 			fmt.Fprintf(b, "\tfs.%sVar(&f.%s, %s, %s, %q)\n",
-				bindMethod(g.primary.Kind), g.field, "Flag"+goIdent(constCommand)+goIdent(name), def, docFor(flags, name))
+				bindMethod(g.primary.Kind), g.field, "Flag"+goIdent(constCommand)+goIdent(name), def, flagDoc(flags, name))
 		}
 	}
 	b.WriteString("\treturn &f\n}\n")
@@ -285,8 +285,8 @@ func groupAliases(command string, flags []cli.Flag) []aliasGroup {
 	return groups
 }
 
-// docFor returns the help text declared for one flag name.
-func docFor(flags []cli.Flag, name string) string {
+// flagDoc returns the help text declared for one flag name.
+func flagDoc(flags []cli.Flag, name string) string {
 	for _, f := range flags {
 		if f.Name == name {
 			return f.Doc
@@ -350,9 +350,9 @@ func flagDefaultLiteral(f cli.Flag) string {
 	panic("cliflags: unknown flag kind " + string(f.Kind))
 }
 
-// constsFor renders one command's flags, skipping a name it has already emitted so
+// renderConsts renders one command's flags, skipping a name it has already emitted so
 // a command listed twice cannot produce a duplicate declaration.
-func constsFor(command string, flags []cli.Flag, seen map[string]string) []string {
+func renderConsts(command string, flags []cli.Flag, seen map[string]string) []string {
 	var out []string
 	for _, f := range flags {
 		name := "Flag" + goIdent(command) + goIdent(f.Name)
@@ -395,7 +395,7 @@ var initialisms = map[string]string{
 // initialism lookup those cannot know.
 //
 // lo.Capitalize lowercases the rest of each word, so the one-character flags -c and
-// -C collapse to the same fragment; constsFor's panic catches that at generate time
+// -C collapse to the same fragment; renderConsts's panic catches that at generate time
 // rather than emitting one constant for two flags.
 func goIdent(s string) string {
 	var b strings.Builder

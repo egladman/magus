@@ -104,24 +104,24 @@ func TestServedJournalsEveryEntry(t *testing.T) {
 	assert.NotZero(t, entry.AtMs)
 }
 
-// A worker keeps a write inside its own lane and loses the rest; a reviewer is served
+// A worker keeps a write inside its own write paths and loses the rest; a reviewer is served
 // no write at all. The regeneration is the one template that writes today.
 func TestServedFiltersWritesByRole(t *testing.T) {
 	regen := hint.Next{ID: "file-regenerate", Run: "magus run generate:rw docs", Argv: []string{"magus", "run", "generate:rw", "docs"}}
 	full := append(append([]hint.Next{}, nextFixture...), regen)
 
 	for _, tc := range []struct {
-		name string
-		role hint.Role
-		lane []string
-		want []string
+		name       string
+		role       hint.Role
+		writePaths []string
+		want       []string
 	}{
 		{"unbound", hint.RoleUnbound, nil, []string{"query-explain", "query-path", "file-regenerate"}},
-		{"worker in its lane", hint.RoleWorker, []string{"docs/**"}, []string{"query-explain", "query-path", "file-regenerate"}},
-		{"worker out of its lane", hint.RoleWorker, []string{"cmd/magus/**"}, []string{"query-explain", "query-path"}},
+		{"worker inside its write paths", hint.RoleWorker, []string{"docs/**"}, []string{"query-explain", "query-path", "file-regenerate"}},
+		{"worker outside its write paths", hint.RoleWorker, []string{"cmd/magus/**"}, []string{"query-explain", "query-path"}},
 		{"reviewer", hint.RoleReviewer, nil, []string{"query-explain", "query-path"}},
 	} {
-		n := nextGate{gate: hint.NewGate(t.TempDir(), ""), role: tc.role, lane: tc.lane}
+		n := nextGate{gate: hint.NewGate(t.TempDir(), ""), role: tc.role, writePaths: tc.writePaths}
 		var ids []string
 		for _, entry := range n.served(full) {
 			ids = append(ids, entry.ID)

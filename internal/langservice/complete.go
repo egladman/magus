@@ -192,7 +192,7 @@ func wordCompletions(src, before string) []Completion {
 	// The file's own top-level declarations first (most relevant), then imported
 	// module names, then builtins and keywords.
 	for _, s := range scanSymbols(src) {
-		add(s.Name, completionKindFor(s.Kind), s.Sig, "")
+		add(s.Name, completionKind(s.Kind), s.Sig, "")
 	}
 	for _, imp := range scanImports(src) {
 		if m, ok := lookupModule(moduleBase(imp.Path)); ok {
@@ -211,7 +211,7 @@ func wordCompletions(src, before string) []Completion {
 	return out
 }
 
-func completionKindFor(k symbolKind) CompletionKind {
+func completionKind(k symbolKind) CompletionKind {
 	switch k {
 	case symFunction:
 		return KindFunction

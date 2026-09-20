@@ -38,7 +38,7 @@ func failedRetries(n int) []forecast.Outcome {
 // spent a second run every time and changed no verdict.
 func TestRetryDeclarationsReportsRetriesThatRescueNothing(t *testing.T) {
 	path := retryHistoryWith(t, ".", "go/test", failedRetries(4))
-	got := runnerFor(path).checkRetryDeclarations([]*types.Project{
+	got := newRunner(path).checkRetryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{
 			"test": {RetryOnVolatile: true, RetryOnVolatileReason: "the suite shares a port with the dev server"},
 		}),
@@ -56,7 +56,7 @@ func TestRetryDeclarationsReportsRetriesThatRescueNothing(t *testing.T) {
 func TestRetryDeclarationsIsQuietWhenARetryRescuedARun(t *testing.T) {
 	outcomes := append(failedRetries(4), forecast.Outcome{Result: forecast.OutcomeVolatile, Attempts: 2})
 	path := retryHistoryWith(t, ".", "go/test", outcomes)
-	got := runnerFor(path).checkRetryDeclarations([]*types.Project{
+	got := newRunner(path).checkRetryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
@@ -67,7 +67,7 @@ func TestRetryDeclarationsIsQuietWhenARetryRescuedARun(t *testing.T) {
 // Below the sample floor a run of bad luck would read as a verdict.
 func TestRetryDeclarationsWaitsForEnoughRetries(t *testing.T) {
 	path := retryHistoryWith(t, ".", "go/test", failedRetries(judgeableRetries-1))
-	got := runnerFor(path).checkRetryDeclarations([]*types.Project{
+	got := newRunner(path).checkRetryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
@@ -84,7 +84,7 @@ func TestRetryDeclarationsIgnoresFailuresThatWereNeverRetried(t *testing.T) {
 		{Result: forecast.OutcomeFail, Attempts: 1},
 		{Result: forecast.OutcomeFail, Attempts: 1},
 	})
-	got := runnerFor(path).checkRetryDeclarations([]*types.Project{
+	got := newRunner(path).checkRetryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
@@ -95,7 +95,7 @@ func TestRetryDeclarationsIgnoresFailuresThatWereNeverRetried(t *testing.T) {
 // An undeclared target is never retried, so there is nothing to keep honest.
 func TestRetryDeclarationsIsQuietWithoutADeclaration(t *testing.T) {
 	path := retryHistoryWith(t, ".", "go/test", failedRetries(4))
-	got := runnerFor(path).checkRetryDeclarations([]*types.Project{
+	got := newRunner(path).checkRetryDeclarations([]*types.Project{
 		projectWith(".", map[string]types.Target{"test": {}}),
 	})
 

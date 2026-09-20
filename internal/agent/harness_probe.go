@@ -138,14 +138,14 @@ func supportsHostResponseOverride(command string) bool {
 	return namesTemplate(command, "magus-command") || namesTemplate(command, "magus-path")
 }
 
-// probeEventFor picks the synthetic event a command's own script expects, and
+// probeEvent picks the synthetic event a command's own script expects, and
 // (for a script the probe can steer with HOST_RESPONSE) the exact decision that
 // event must produce. A command matching neither shipped shared template is
 // judged only for "it runs and answers something" (wantDecisions is nil), because
 // the probe has no way to know a third-party or self-contained script's reply
 // dialect. Matched on shipped script basenames, the same convention invokesMagus
 // already uses: a filename is a shipped artifact, not a host.
-func probeEventFor(command string) (event string, wantDecisions []string) {
+func probeEvent(command string) (event string, wantDecisions []string) {
 	switch {
 	case namesTemplate(command, "magus-command"):
 		return probeDenyCommandEvent, []string{"deny"}
@@ -265,7 +265,7 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
-	event, wantDecisions := probeEventFor(command)
+	event, wantDecisions := probeEvent(command)
 	cmd := exec.CommandContext(probeCtx, "sh", "-c", command)
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader(event)

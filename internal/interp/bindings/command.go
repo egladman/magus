@@ -166,7 +166,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 		// are deliberately NOT consulted: a capturing op streams through these same tees
 		// (run.Exec buffers on top of the writers rather than instead of them), so reading
 		// the result too would only add a duplicate and an unbounded copy of the whole log.
-		if advice := adviceFor(tgt.Hints, outTail.String(), errTail.String()); advice != "" {
+		if advice := hintAdvice(tgt.Hints, outTail.String(), errTail.String()); advice != "" {
 			// Through the run's own stderr writer, not os.Stderr. That writer is the tap
 			// that mirrors into the persisted log and the output ref, so advice printed
 			// around it is invisible to exactly the reader it is for: someone reading a
@@ -256,14 +256,14 @@ func resolveRunnerRefs(opName, bin string, args []string, refs map[string]string
 // classify one exit code is the wrong trade, so this keeps the tail and forgets the rest.
 const hintTailBytes = 8 << 10
 
-// adviceFor returns the Advise of the first declared hint whose Contains appears in any of
+// hintAdvice returns the Advise of the first declared hint whose Contains appears in any of
 // sources, or "" when none matches. Declaration order is the precedence, so a spell author
 // orders specific before general and reads the outcome off the file rather than guessing at
 // a scoring rule.
 //
 // Sources are matched INDEPENDENTLY rather than joined: a Contains spanning the seam of two
 // separate streams would fire on text that appeared in neither of them.
-func adviceFor(hints []spells.Hint, sources ...string) string {
+func hintAdvice(hints []spells.Hint, sources ...string) string {
 	for _, h := range hints {
 		// An empty Contains matches every string, so it would advise on every failure of
 		// this command. decodeCommand rejects that, which covers every spell-authored
