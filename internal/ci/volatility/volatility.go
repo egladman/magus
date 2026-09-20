@@ -276,11 +276,12 @@ func (rt *Runtime) stats(projectPath, target string) forecast.Stats {
 	if rt.history.Projects == nil {
 		return forecast.Stats{}
 	}
-	targets, ok := rt.history.Projects[projectPath]
-	if !ok {
-		return forecast.Stats{}
-	}
-	return targets[target]
+	// Folded, because this is read with BOTH key shapes: Record and its readers here pass
+	// "<spell>/<target>", while `magus affected --bisect` asks by the bare target name a
+	// person types. An exact key still answers alone, so the qualified callers are
+	// unchanged.
+	s, _ := rt.history.FoldTargetHistories(projectPath, target)
+	return s
 }
 
 // Stats returns the recorded Stats for (projectPath, target), or the zero Stats when unknown.

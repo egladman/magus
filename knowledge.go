@@ -276,7 +276,13 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 	}
 	var out []types.KnowledgeTiming
 	for project, targets := range h.Projects {
-		for target, st := range targets {
+		// Keyed "<spell>/<target>" here and by the bare target in the graph, so emitting
+		// the raw key minted a node id nothing matched and every timing attr was dropped.
+		for _, target := range bareTargetNames(targets) {
+			st, ok := h.FoldTargetHistories(project, target)
+			if !ok {
+				continue
+			}
 			out = append(out, types.KnowledgeTiming{
 				Project:        project,
 				Target:         target,
@@ -1329,4 +1335,24 @@ func (m *Magus) KnowledgeGraphWithSymbolsForRef(ctx context.Context, ref string)
 // pays the cache-first rebuild per command (equally fresh, just not warm).
 func (m *Magus) WatchKnowledgeGraph(ctx context.Context) (func(), error) {
 	return m.warmKnowledgeGraph().watch(ctx, m.Root())
+}
+
+// bareTargetNames lists the target names behind a project's history keys, deduplicated
+// and sorted. The history keys a target as "<spell>/<target>"; everything outside that
+// package names the bare target a magusfile declares.
+func bareTargetNames(targets map[string]forecast.Stats) []string {
+	seen := make(map[string]bool, len(targets))
+	for key := range targets {
+		name := key
+		if i := strings.LastIndex(key, "/"); i >= 0 {
+			name = key[i+1:]
+		}
+		seen[name] = true
+	}
+	out := make([]string, 0, len(seen))
+	for name := range seen {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
 }

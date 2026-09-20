@@ -756,3 +756,46 @@ func (h *History) PredictPeakRSS(project, target string) (int64, bool) {
 	}
 	return max, max > 0
 }
+
+// FoldTargetHistories combines every spell history a project recorded for target into
+// one, and reports whether any existed.
+//
+// Callers outside this package name the bare target a magusfile declares, while the
+// history is keyed "<spell>/<target>", so a map index finds nothing. A project bound to
+// several spells runs each implementation, which is why this ADDS rather than picking:
+// durations and counters sum, outcomes concatenate newest last, and a failure in any of
+// them failed the target. Buckets are dropped: they are per spell, and a folded row has
+// no bucket set that would mean anything.
+func (h *History) FoldTargetHistories(project, target string) (Stats, bool) {
+	targets, ok := h.Projects[project]
+	if !ok {
+		return Stats{}, false
+	}
+	found := targetHistories(targets, target)
+	if len(found) == 0 {
+		return Stats{}, false
+	}
+	out := found[0]
+	out.Buckets = nil
+	for _, s := range found[1:] {
+		out.P75Ms += s.P75Ms
+		out.Samples += s.Samples
+		out.HitCount += s.HitCount
+		out.MissCount += s.MissCount
+		out.PassCount += s.PassCount
+		out.FailCount += s.FailCount
+		out.VolatileCount += s.VolatileCount
+		if s.LastUpdated.After(out.LastUpdated) {
+			out.LastUpdated = s.LastUpdated
+		}
+		out.RecentOutcomes = append(append([]Outcome{}, out.RecentOutcomes...), s.RecentOutcomes...)
+	}
+	if n := out.HitCount + out.MissCount; n > 0 {
+		out.HitRate = float64(out.HitCount) / float64(n)
+	}
+	slices.SortStableFunc(out.RecentOutcomes, func(a, b Outcome) int { return a.At.Compare(b.At) })
+	if len(out.RecentOutcomes) > OutcomeWindow {
+		out.RecentOutcomes = out.RecentOutcomes[len(out.RecentOutcomes)-OutcomeWindow:]
+	}
+	return out, true
+}
