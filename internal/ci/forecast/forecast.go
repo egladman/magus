@@ -225,3 +225,57 @@ func lpt(projects []*types.Project, durations []int64, nShards int) [][]*types.P
 
 	return shards
 }
+
+// SufficientShards is the smallest shard count that reaches the best makespan this
+// forecast can predict, or 0 when nothing is predictable.
+//
+// Makespan is at least max(longest project, total work / n), so once n reaches
+// ceil(total/longest) the longest single project is the bound and another runner lowers
+// nothing while still paying its own setup. Advice, not a cap: the caller decides whether
+// to spend the runners anyway, and fitMemory may still want more of them.
+func (f Forecaster) SufficientShards(projects []*types.Project) int {
+	var total, longest int64
+	for _, p := range projects {
+		ms := f.History.PredictDuration(p.Path, f.Target, f.TagsByProject[p.Path]).Milliseconds()
+		total += ms
+		if ms > longest {
+			longest = ms
+		}
+	}
+	if total <= 0 || longest <= 0 {
+		return 0
+	}
+	n := int((total + longest - 1) / longest)
+	if n > len(projects) {
+		return len(projects)
+	}
+	return n
+}
+
+// OverBudget names the shards whose predicted peak memory exceeds one runner's budget,
+// by index. Empty when every shard fits, or when the budget is unknown.
+//
+// Asked AFTER packing rather than inside it, because fitMemory can only answer while it
+// still has runners to add: at the shard cap its loop returns the plan it has, and
+// whether that plan actually fits is the one thing nobody was told. A runner that
+// exceeds its memory does not run slower, it disappears, and the job reports "cancelled"
+// with no diagnostics, so this is the only warning a reader can get before it happens.
+func (f Forecaster) OverBudget(shards [][]*types.Project) []int {
+	budget := f.memoryBudget()
+	if budget <= 0 {
+		return nil
+	}
+	var out []int
+	for i, shard := range shards {
+		var total int64
+		for _, p := range shard {
+			if b, ok := f.History.PredictPeakRSS(p.Path, f.Target); ok {
+				total += b
+			}
+		}
+		if total > budget {
+			out = append(out, i)
+		}
+	}
+	return out
+}

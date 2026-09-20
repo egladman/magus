@@ -741,6 +741,18 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		slog.Int("shards", len(plan.Shards)),
 		slog.String("source", plan.Source),
 		slog.String("forecast", globalCfg.HistoryPath))
+	// Advice, once, where a person reads it. Both facts are about runner spend and
+	// runner death, neither of which the shard table shows.
+	if n := plan.Sufficient; n > 0 && n < len(plan.Shards) {
+		slog.WarnContext(ctx, fmt.Sprintf(
+			"%d shard(s) planned, but %d finish just as fast: the longest single project is the bound, and the rest each pay a runner's setup. Cap it with --ci-max-shards=%d (MAGUS_CI_MAX_SHARDS) if the runners are worth more than the wall clock",
+			len(plan.Shards), n, n))
+	}
+	if len(plan.OverBudget) > 0 {
+		slog.WarnContext(ctx, fmt.Sprintf(
+			"shard(s) %s are predicted to exceed one runner's memory; a runner that runs out does not fail, it vanishes and reports \"cancelled\". Raise the shard cap so they can be split",
+			strings.Join(plan.OverBudget, ", ")))
+	}
 
 	out := planOutput{
 		Count:       len(plan.Shards),
