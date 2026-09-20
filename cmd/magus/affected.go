@@ -274,7 +274,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 
 	// MGS1028 where it is paid for: --impact and --explain report the same condition
 	// forensically, and this is the invocation that buys the rerun.
-	undeclaredOnly := undeclaredOnlySeeds(affectedSet)
+	undeclaredOnly := trackedUndeclaredSeeds(ctx, m.Root(), m.VCSOptions(), undeclaredOnlySeeds(affectedSet))
 
 	// Same check as `magus run ci`: a redundant gate refuses under load and
 	// advises when the machine is idle. See prepareGateRedundancy.
@@ -906,6 +906,65 @@ func undeclaredOnlySeeds(res *types.AffectedResult) map[string][]string {
 	for seed, undeclared := range res.UndeclaredBySeed {
 		if len(undeclared) > 0 && len(undeclared) == len(res.FilesBySeed[seed]) {
 			out[seed] = undeclared
+		}
+	}
+	return out
+}
+
+// trackedUndeclaredSeeds narrows undeclaredOnly to files the VCS TRACKS, dropping any
+// seed left with none.
+//
+// The same rule, for the same reason, as the standing twin of this diagnostic in
+// internal/doctor/checks.go (checkUndeclaredSeedingFiles): an untracked file that seeds
+// a rerun is a missing ignore rule, not a missing declaration, and a fresh clone must
+// not read differently from a working one. Without it the run named its OWN leavings
+// back at the reader. A workspace whose .gitignore does not cover the cache directory
+// got 45 lock files under .magus/locks/, written by the very run that then advised
+// declaring them, alongside the binary that run had just linked: advice nobody can act
+// on, in the one hint a -s gate still prints.
+//
+// A backend that cannot answer reports NOTHING rather than guessing, the way the doctor
+// twin skips the question. Stricter than the drift gate's "leave the set alone" in
+// run.go, and deliberately: this is advice, so silence costs one unsaid hint while a
+// guess costs the reader's trust in every hint after it.
+func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOptions, undeclaredOnly map[string][]string) map[string][]string {
+	if len(undeclaredOnly) == 0 {
+		return undeclaredOnly
+	}
+	res, err := vcs.Resolve(ctx, root, "", opts)
+	if err != nil || res.VCS == nil {
+		return nil
+	}
+	reporter, ok := res.VCS.(types.TrackedFileReporter)
+	if !ok {
+		return nil
+	}
+	// One pathspec for every seed's files: TrackedFiles is a subprocess per call, and a
+	// changeset spanning a dozen projects would otherwise fork a dozen times to answer
+	// one hint.
+	var ask []string
+	for _, files := range undeclaredOnly {
+		ask = append(ask, files...)
+	}
+	slices.Sort(ask)
+	known, err := reporter.TrackedFiles(ctx, root, slices.Compact(ask))
+	if err != nil {
+		return nil
+	}
+	tracked := make(map[string]bool, len(known))
+	for _, p := range known {
+		tracked[filepath.ToSlash(p)] = true
+	}
+	out := map[string][]string{}
+	for seed, files := range undeclaredOnly {
+		var kept []string
+		for _, f := range files {
+			if tracked[f] {
+				kept = append(kept, f)
+			}
+		}
+		if len(kept) > 0 {
+			out[seed] = kept
 		}
 	}
 	return out

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -294,6 +295,58 @@ func TestUndeclaredOnlySeedsKeepsWhatContainmentAloneSelected(t *testing.T) {
 			assert.Equal(t, tt.want, undeclaredOnlySeeds(tt.res))
 		})
 	}
+}
+
+// TestTrackedUndeclaredSeedsDropsWhatTheRunItselfWrote pins both halves of MGS1028's
+// filter. The run that emits it has usually just written into the workspace, and in a
+// workspace whose ignore rules miss the cache directory those writes come back as
+// "changed files nothing declares": magus advising you to declare its own lock files
+// and the binary it had just linked. Neither is a forgotten declaration.
+//
+// The other half matters more: a committed source file nobody declared is exactly what
+// this diagnostic exists for, and a filter that swallowed it would leave the code in
+// place doing nothing.
+func TestTrackedUndeclaredSeedsDropsWhatTheRunItselfWrote(t *testing.T) {
+	dir := initGitRepo(t)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "LICENSE"), []byte("x"), 0o644))
+	runGit(t, dir, "add", "LICENSE")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	// What the run leaves behind: its own cache directory and a linked binary, both
+	// untracked because nothing ignores them here.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".magus", "locks", "h"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".magus", "locks", "h", "lock"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "admin"), []byte("elf"), 0o755))
+
+	ctx := context.Background()
+	got := trackedUndeclaredSeeds(ctx, dir, types.VCSOptions{}, map[string][]string{
+		".":     {"LICENSE", ".magus/locks/h/lock"},
+		"admin": {"admin"},
+	})
+	assert.Equal(t, map[string][]string{".": {"LICENSE"}}, got,
+		"the committed file still reports; the seed left with only the run's own leavings goes away")
+
+	assert.Empty(t, trackedUndeclaredSeeds(ctx, dir, types.VCSOptions{}, map[string][]string{
+		".": {".magus/locks/h/lock", "admin"},
+	}))
+
+	// Nothing undeclared reaches the VCS at all, and the empty map survives so the
+	// callers that range over it keep their shape.
+	assert.Equal(t, map[string][]string{}, trackedUndeclaredSeeds(ctx, dir, types.VCSOptions{}, map[string][]string{}))
+}
+
+// TestTrackedUndeclaredSeedsGoesQuietWithoutAVCS: a backend that cannot say what it
+// tracks makes this unanswerable, and the doctor twin skips the question rather than
+// guessing. Guessing here would name build products as forgotten declarations, which is
+// the defect this filter exists to fix.
+func TestTrackedUndeclaredSeedsGoesQuietWithoutAVCS(t *testing.T) {
+	t.Parallel()
+
+	off := false
+	got := trackedUndeclaredSeeds(context.Background(), t.TempDir(),
+		types.VCSOptions{Enabled: &off}, map[string][]string{".": {"LICENSE"}})
+	assert.Nil(t, got)
 }
 
 // TestNoteUndeclaredSeedCostReachesASilentRun pins the CHANNEL, not the wording. The run
