@@ -16,8 +16,8 @@ import (
 // Every marker in here is an INPUT to the verdicts the agent is graded by, so an agent
 // that edits them rewrites its own evidence, and nothing in a later verdict says it
 // happened. The rule therefore holds for every role, unbound sessions included: the lease
-// rules protect a lane somebody handed out, this one protects the thing that decides
-// whether any lane was checked at all.
+// rules protect a boundary somebody handed out, this one protects the thing that decides
+// whether any boundary was checked at all.
 //
 // Reads are untouched, and internal/guard/parse.go's reader list is what separates them.
 // That list is where the rule fires wrongly, in two shapes worth knowing before reading a
@@ -102,8 +102,8 @@ func cacheDirDenial(what string) string {
 // denyCacheDirPath is the path surface: the reason a file write into the cache dir is
 // refused, or "" for every other path.
 //
-// Ranked above the lease rules in Judge, so a bound worker whose lane happens to cover
-// the dir reads this rather than a lane verdict about the same path.
+// Ranked above the lease rules in Judge, so a bound worker whose write paths happen to
+// cover the dir reads this rather than a boundary verdict about the same path.
 func denyCacheDirPath(location location, writePath string) string {
 	if !namesWorkspaceCacheDir(location, writePath) {
 		return ""

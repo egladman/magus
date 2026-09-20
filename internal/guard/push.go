@@ -243,8 +243,8 @@ const askUnrendered = "This hook predates approval prompts, so it cannot ask the
 // makes with the person. magus cannot tell a deliberate push from an oversight, so the
 // host's own approval prompt decides. A marker the agent types is not consent.
 //
-// A bound session is a worker. Approving its push would publish from a lane that does not
-// own the branch, so nobody is asked.
+// A bound session is a worker. Approving its push would publish from a boundary that does
+// not own the branch, so nobody is asked.
 func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, reason string) {
 	var state string
 	switch cover {

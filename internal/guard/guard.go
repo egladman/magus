@@ -349,8 +349,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		spoken := false
 		// The checkout's own cache dir speaks before the job store, and it is the only rule
 		// that does. Every lease-scoped verdict below is computed from files in there, so
-		// a worker whose lane happens to cover the dir must not be told it owns the lane:
-		// what it is editing is whether the lane was checked.
+		// a worker whose write paths happen to cover the dir must not be told it owns the
+		// dir: what it is editing is whether the boundary was checked.
 		if reason := denyCacheDirPath(location, input); reason != "" {
 			verdict.Decision, verdict.Reason = "deny", reason
 		}
@@ -490,7 +490,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
-		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedLaneWrite} {
+		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyWriteOutsideLease} {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}

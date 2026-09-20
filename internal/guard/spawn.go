@@ -41,13 +41,13 @@ func denySpawnWithoutBrief(markers hint.Gate, observesSkillLoads bool, workspace
 }
 
 // adviseSharedCheckoutSpawn is the context a spawn carries when this checkout is ALREADY
-// somebody's: the ids live here, the proof the new worker's lane does not collide with
-// them, and the one move that makes the proof unnecessary.
+// somebody's: the ids live here, the proof the new worker's write paths do not collide
+// with them, and the one move that makes the proof unnecessary.
 //
 // It advises and never denies, for the reason every spawn rule here does: the prompt is
 // prose magus cannot read, so it cannot know whether the child is a second writer or a
 // read-only reviewer, and a deny on a guess is a deny agents learn to route around. What
-// it CAN say is that the checkout is shared and that nothing has checked the lanes, which
+// it CAN say is that the checkout is shared and that nothing has checked the write paths, which
 // is exactly the fact three workers sharing this tree never had in front of them.
 //
 // Fires once per session: the orchestrator handing out a wave is told at the first spawn,
@@ -74,15 +74,15 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 		return ""
 	}
 	ids := make([]string, 0, len(held))
-	lane := map[string]bool{}
+	declared := map[string]bool{}
 	for _, row := range held {
 		ids = append(ids, row.ID)
 		for _, p := range row.WritePaths {
-			lane[p] = true
+			declared[p] = true
 		}
 	}
-	union := make([]string, 0, len(lane))
-	for p := range lane {
+	union := make([]string, 0, len(declared))
+	for p := range declared {
 		union = append(union, p)
 	}
 	slices.Sort(union)
@@ -90,11 +90,11 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 		fmt.Sprintf("This checkout already holds %s, still live and writing %s."+
 			" Two workers in one checkout share every file in it, and the pair nobody survives is a magusfile,"+
 			" magus.yaml or spell source: half-saved, it stops the workspace loading for everybody here at once."+
-			"\n  Prove the lanes disjoint before you hand the work out: `%s`"+
+			"\n  Prove the write paths disjoint before you hand the work out: `%s`"+
 			"\n  Or skip the proof by giving the new worker its own worktree, which is the answer whenever the"+
-			" lanes touch workspace configuration.",
+			" write paths touch workspace configuration.",
 			strings.Join(ids, ", "), strings.Join(union, " "),
-			hint.DescribeFile.With(append(union, "<the new lane>")...)),
-		fmt.Sprintf("this checkout still holds %s: prove the lanes disjoint with `%s`, or give the new worker its own worktree",
-			strings.Join(ids, ", "), hint.DescribeFile.With("<the union of the lanes>")))
+			hint.DescribeFile.With(append(union, "<the new write paths>")...)),
+		fmt.Sprintf("this checkout still holds %s: prove the write paths disjoint with `%s`, or give the new worker its own worktree",
+			strings.Join(ids, ", "), hint.DescribeFile.With("<the union of the write paths>")))
 }

@@ -17,7 +17,7 @@ import (
 // that notices when a read left it.
 //
 // Focus is a READ boundary, where the job store's write_paths is a WRITE one,
-// and the two catch different failures. A write outside your lane collides with
+// and the two catch different failures. A write outside your write paths collides with
 // another agent, which the diff eventually reveals. A read outside it never
 // collides with anything and leaves no trace: it spends tokens on a tree nobody
 // asked about, and it carries a sibling's practices and code quality into work
@@ -93,7 +93,7 @@ type focusGrade struct {
 //
 // Silent on every uncertainty, the same contract every other guard rule keeps: no
 // workspace, no project holding the cwd, a command that does not parse, an operand
-// that resolves outside the workspace. A path magus cannot attribute has no lane it
+// that resolves outside the workspace. A path magus cannot attribute has no boundary it
 // could be outside of, and an advisory fired on a guess is one readers learn to skip.
 func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command string) focusGrade {
 	if strings.TrimSpace(command) == "" {
@@ -147,7 +147,7 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 		owner := focus.Owner(rel)
 		if leaseID != "" {
 			return focusGrade{Decision: "deny", Rel: rel, Reason: fmt.Sprintf(
-				"magus workspace: read inside the focus lease %s was given (%s). "+leaseActorClause("widen this lane")+"\n"+
+				"magus workspace: read inside the focus lease %s was given (%s). "+leaseActorClause("widen this focus")+"\n"+
 					"%s belongs to project %s, which is outside that focus: %s, plus what each declares depends_on. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
 				leaseID, strings.Join(focus.Seeds, ", "), rel, owner, strings.Join(focus.Projects, ", "))}
 		}
@@ -186,7 +186,7 @@ func focusForLease(ctx context.Context, ws types.WorkspaceReader, location locat
 	}
 	declared := me.ReadPaths
 	if len(declared) == 0 {
-		// The write lane doubles as the read lane when nothing widened it: a worker
+		// The write paths double as the read boundary when nothing widened it: a worker
 		// leased to edit a project is a worker that was pointed at that project.
 		declared = me.WritePaths
 	}

@@ -582,9 +582,9 @@ func magusSubcommandWords(args []string) []string {
 //   - `op=exec` on the caller's OWN job records the base it landed on. That is the
 //     holder's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
 //     and denying it here would leave a holder unable to write anywhere at all.
-//   - `op=put` on the caller's own job that only SHRINKS its write paths gives the lane
+//   - `op=put` on the caller's own job that only SHRINKS its write paths gives ground
 //     back. It passes to the store, which owns whether a given shrink is legitimate; the
-//     guard's job is the direction, and giving up a lane cannot widen a role.
+//     guard's job is the direction, and giving up a path cannot widen a role.
 //   - a read (`op=list`, and the default) is not a write.
 //
 // Shrinking is verbatim membership, not glob containment: every declaration in the call
@@ -827,10 +827,10 @@ func vcsMutation(c hint.Invocation) string {
 	return ""
 }
 
-// denyLeaseScopedLaneWrite refuses a shell line that writes outside the acting lease's
-// lane, in the words the path surface would have used for the same file.
+// denyWriteOutsideLease refuses a shell line that writes outside the acting lease's
+// write paths, in the words the path surface would have used for the same file.
 //
-// The lane used to be enforced only where a host reported a PATH, so a bound worker that
+// The boundary used to be enforced only where a host reported a PATH, so a bound worker that
 // redirected, tee'd, sed -i'd or cp'd into a sibling's tree was passed while the identical
 // editor-tool write was denied.
 //
@@ -841,8 +841,8 @@ func vcsMutation(c hint.Invocation) string {
 // Only a candidate some live lease DECLARED is graded. The extraction offers every word a
 // non-reader command was pointed at, which is the safe direction for a boundary as
 // specific as the cache dir but not for one as ordinary as a path: grading every word
-// would refuse `echo hi` for writing outside the lane.
-func denyLeaseScopedLaneWrite(ctx context.Context, deps Dependencies, actingLease, command string) string {
+// would refuse `echo hi` for writing outside the boundary.
+func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
 		return ""
 	}
@@ -870,7 +870,7 @@ func denyLeaseScopedLaneWrite(ctx context.Context, deps Dependencies, actingLeas
 	return ""
 }
 
-// declaredPath reports whether any live lease named rel in a boundary, as a lane it owns
+// declaredPath reports whether any live lease named rel in a boundary, as a path it owns
 // or a path it was refused. A word no plan mentions is not treated as a path at all.
 func declaredPath(live []types.Job, rel string) bool {
 	for _, u := range live {

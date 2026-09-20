@@ -118,7 +118,7 @@ func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 	assert.Contains(t, got.Reason, "read inside the focus lease lease-a was given (app)")
 	// The actor, not the tool: naming the tool reads as permission, and two personas
 	// widened their own row on it.
-	assert.Contains(t, got.Reason, "Your orchestrator can widen this lane; you cannot.")
+	assert.Contains(t, got.Reason, "Your orchestrator can widen this focus; you cannot.")
 	assert.NotContains(t, got.Reason, hint.ToolJob.String())
 	assert.Contains(t, got.Reason, "not inventing a rule")
 	assert.Empty(t, got.Context, "a deny carries its reason, never a context the host would inject alongside it")
@@ -128,7 +128,7 @@ func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 }
 
 func TestFocusVerdictWideningIsWhatTheLeaseDeclares(t *testing.T) {
-	// The write lane alone denies the read...
+	// The write paths alone deny the read...
 	narrow, ok := project.FocusForPaths(newFocusFixture(), []string{"app/**"})
 	require.True(t, ok)
 	assert.Equal(t, "deny", focusVerdict(narrow, "lease-a", "/ws", "/ws", []string{"libs/ui/theme.css"}).Decision)

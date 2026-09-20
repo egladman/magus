@@ -135,7 +135,7 @@ func TestServedNextIsOneJournalPerCheckout(t *testing.T) {
 // pre-authorized, so a template the guard would refuse is a template that must not ship.
 // The obligation the tests below carry is the upstream half of that bargain.
 //
-// Graded PER ROLE, not once. A command is fine unbound and refused under a worker's lane
+// Graded PER ROLE, not once. A command is fine unbound and refused under a worker's write paths
 // (a `:rw` regeneration is the case the personas found), and grading only the unbound case
 // is how that ships. A failure here names the template and the role, which is the signal
 // that `next` has to be computed for the acting role rather than filtered afterwards.
@@ -216,7 +216,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		lease string
 	}{
 		{"unbound", ""},
-		{"worker with a narrow lane", worker.ID},
+		{"worker with narrow write paths", worker.ID},
 		{"reviewer", reviewer.ID},
 	} {
 		for id, run := range templates {

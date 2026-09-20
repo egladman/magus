@@ -631,7 +631,10 @@ func commandPrefix(program string, args []string) []string {
 		}
 		first++
 	}
-	if first == len(args) || !subcommandWord(args[first]) {
+	// >=, not ==: a valued flag consumes the word after it, so an argv ENDING on one
+	// (["-C"], or ["-x", "-C"]) advances past the end, and equality would let the index
+	// below run off it. afterGlobalFlags states the same bound as i+1 >= len(args).
+	if first >= len(args) || !subcommandWord(args[first]) {
 		return nil
 	}
 	prefix := []string{args[first]}
@@ -666,7 +669,9 @@ var valuedGlobalFlags = map[string]map[string]bool{
 // refuses only what it can prove would rather miss that deny than invent this one, and
 // missing it is what happened before this function existed at all.
 //
-// A `--flag=value` needs no such care: it carries its operand, so nothing can follow it.
+// A `--flag=value` carries its operand, so nothing can follow it; but the operand still
+// has to be READ when the flag is one that points the tool at a tree, or `-C=../sibling`
+// walks through the escape check below by spelling itself differently.
 func afterGlobalFlags(program string, args []string) []string {
 	valued := valuedGlobalFlags[filepath.Base(program)]
 	for i := 0; i < len(args); i++ {
@@ -674,7 +679,10 @@ func afterGlobalFlags(program string, args []string) []string {
 		if !strings.HasPrefix(arg, "-") {
 			return args[i:]
 		}
-		if strings.Contains(arg, "=") {
+		if name, value, joined := strings.Cut(arg, "="); joined {
+			if valued[name] && escapesWorkspace(value) {
+				return nil
+			}
 			continue
 		}
 		if !valued[arg] {
@@ -691,11 +699,15 @@ func afterGlobalFlags(program string, args []string) []string {
 	return nil
 }
 
-// escapesWorkspace reports a path that names something outside the workspace. Absolute or
-// dot-dot only: this is a textual read of one argv word, and anything subtler would be a
-// claim about a filesystem the guard has not looked at.
+// escapesWorkspace reports a path that names something outside the workspace.
+//
+// Cleaned first, which is still a purely textual read and touches no filesystem: a raw
+// prefix test called `./..` and `a/../..` in-tree, so the deny they earned pointed the
+// caller at a target that builds a different module. That is the exact misdirection the
+// check exists to prevent, so the cheap spelling was not the safe one.
 func escapesWorkspace(path string) bool {
-	return filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../")
+	clean := filepath.Clean(path)
+	return filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator))
 }
 
 // subcommandWord reports an argv word that names a subcommand rather than a path or a
@@ -1111,7 +1123,7 @@ func denySharedStash(verb string) ShellVerdict {
 // one: in the reason and, for the same reason as above, in the rule.
 func denyWholeTree(op string) ShellVerdict {
 	return ShellVerdict{
-		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use " + scratchCheckoutFor(op) + ".\n" +
+		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use " + scratchCheckout(op) + ".\n" +
 			"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill.",
 		Rule: denyRule{Name: denyRuleWholeTree, Arg: op},
 	}
@@ -1124,7 +1136,7 @@ func denyWholeTree(op string) ShellVerdict {
 //
 // Only git gets a verb, because only git has one for this. Naming `hg share` would point
 // at an extension that may not be enabled; a clone is what always works.
-func scratchCheckoutFor(op string) string {
+func scratchCheckout(op string) string {
 	if strings.HasPrefix(op, "git ") {
 		return "a throwaway `git worktree add`"
 	}
@@ -1464,7 +1476,7 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		return ShellVerdict{Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}
 	case rawToolDeny:
 		match, _ := rawToolMatch(deps, rawToolCmd)
-		reason := runGuardContextFor(match)
+		reason := runGuardAdvice(match)
 		// `go mod tidy` is both a covered spell op and a dependency re-resolution.
 		// The deny answers first, so it is the only text the reader gets, and
 		// routing into magus without naming the charm that makes the write legal
@@ -1560,7 +1572,7 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 // a workspace calls its targets whatever it likes, so a literal `magus run test`
 // would be this repository's vocabulary asserted over someone else's. The op IS
 // named, since it resolved from the spell catalog rather than from a convention.
-func runGuardContextFor(match toolMatch) string {
+func runGuardAdvice(match toolMatch) string {
 	return fmt.Sprintf("Run it through magus: `"+hint.Run.With("<target>"+charmSuffix(match), "<project>")+"`; `"+hint.DescribeTargets.With("-o", "name")+"` lists this workspace's targets.\n"+
 		"Tool flags go after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n%s",
 		match.spell, match.operation, runGuardContext)

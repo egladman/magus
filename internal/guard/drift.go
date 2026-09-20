@@ -187,8 +187,8 @@ func touchedProjects(g hint.Gate) []string {
 }
 
 // leaseCoversWrite reports whether the acting lease's declared write paths cover this
-// write. A lease that declares none covers nothing: an orchestrator that named no lane
-// drew no boundary this rule could defer to.
+// write. A lease that declares none covers nothing: an orchestrator that named no write
+// path drew no boundary this rule could defer to.
 func leaseCoversWrite(ctx context.Context, actingLease string, location location, writePath string) bool {
 	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
 		return false
