@@ -554,7 +554,7 @@ std&#92;print(yaml);</code></pre>
       <a class="landing-card" href="development/">
         <span class="landing-card-mark" aria-hidden="true">03</span>
         <span class="landing-card-title">Look inside it</span>
-        <span class="landing-card-body">Why magus exists, how it is put together, and how to build and test the repository. Where to start if you want to change something.</span>
+        <span class="landing-card-body">Who magus is for, how it is put together, and how to build and test the repository. Where to start if you want to change something.</span>
       </a>
     </div>
     <p class="landing-humans-body">Already working with an agent? <a href="guides/agents/">Pointing an agent at it</a> covers the structured output, the installed skills and the graph queries it can use, and what it deliberately does not get.</p>

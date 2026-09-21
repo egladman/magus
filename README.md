@@ -9,7 +9,7 @@
 
 <!-- The coverage badges are measured and rendered by `magus run coverage-render .` in the CD site job on every push to main, and published with the docs site. Nothing commits them. -->
 
-<a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="https://eli.gladman.cc/magus/assets/go-coverage.svg"> <img alt="Buzz coverage" src="https://eli.gladman.cc/magus/assets/buzz-coverage.svg"> <img alt="TypeScript coverage" src="https://eli.gladman.cc/magus/assets/typescript-coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
+<a href="https://github.com/egladman/magus/actions/workflows/ci.yaml?query=branch%3Amain"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg?branch=main"></a> <a href="https://github.com/egladman/magus/actions/workflows/cd.yaml?query=branch%3Amain"><img alt="CD" src="https://github.com/egladman/magus/actions/workflows/cd.yaml/badge.svg?branch=main"></a> <img alt="Go coverage" src="https://eli.gladman.cc/magus/assets/go-coverage.svg"> <img alt="Buzz coverage" src="https://eli.gladman.cc/magus/assets/buzz-coverage.svg"> <img alt="TypeScript coverage" src="https://eli.gladman.cc/magus/assets/typescript-coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
 A fast, cross-platform task orchestrator for polyglot monorepos. One binary, no second toolchain to install. Targets are programs, not YAML.
 
@@ -32,48 +32,19 @@ magus informs; it never decides. It hands you everything it knows about your rep
 
 <p align="center"><em>One command, three runs: cold, fully cached, then narrowed to what a change reached.</em></p>
 
-## Why magus exists
-
-magus is the tool you type all day: build, test, lint, and ask the repo a
-question. Two things make that hurt. What the commands cost you in time, and
-what they need you to already know.
-
-Time compounds. A few wasted seconds a run, one flaky target, a teammate's
-botched merge that starts failing on your checkout, and you are babysitting the
-build instead of shipping. Tooling this central earns its place by being fast
-and staying out of the way.
-
-Knowledge is the harder half. Monorepos outgrow the people and the tools reading
-them, so humans grep, agents grep faster and guess more confidently, and both
-drown in generated files and dependency chains nobody holds in their head. A
-build tool already has to know the repo precisely: every project, every target's
-inputs and outputs, and what a diff reaches. magus hands that back as answers
-rather than leaving everyone to rediscover it.
-
-So every verb answers a question deterministically, from declared sources.
-Nothing decides for you, plans for you, or injects itself into your workflow.
-Query the [knowledge graph](docs/concepts/knowledge.md) instead of grepping, run
-[targets](docs/concepts/targets.md) instead of raw tools, and let
-`magus affected ci` prove what a change touched. For agents, see
-[Agents](docs/guides/integrations/agents.md).
-
-The longer argument is in
-[I think our tools are the problem](https://eli.gladman.cc/magus/blog/2026/08/18/i-think-our-tools-are-the-problem/).
-
 ## Who this is for
 
-Repos that run more than one language, CI that reruns work your change never
-reached, and builds whose author has moved on. One project works too: caching
-and the knowledge graph key off a target's own declared inputs either way, and
-only the affected set has nothing to narrow until you split out a second
-project.
+Repos with more than one language, or CI that reruns work a change never
+reached. One project works too.
 
-The tradeoff: you declare what a target reads and writes, and magus stops when a
-run disagrees with the declaration. That costs a few lines in a magusfile and
-buys a build you can debug without knowing how the tool works inside. It also
-means your package manager's install is a step of the build, so a stale
-`node_modules` fails at the install, where the message makes sense, instead of
-four steps later.
+The tradeoff: you declare what each target reads and writes, and magus stops
+when a run disagrees. A few lines in a magusfile buy a build you can debug
+without knowing how magus works inside.
+
+More: [the knowledge graph](docs/concepts/knowledge.md),
+[targets](docs/concepts/targets.md), [agents](docs/guides/integrations/agents.md),
+and the longer argument in
+[I think our tools are the problem](https://eli.gladman.cc/magus/blog/2026/08/18/i-think-our-tools-are-the-problem/).
 
 ## How it works
 

@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6477,
-  "edge_count": 11581,
+  "node_count": 6476,
+  "edge_count": 11580,
   "relations": [
     {
       "id": "annotates",
@@ -9430,16 +9430,6 @@
       "source": "README.md#who-this-is-for",
       "attrs": {
         "anchor": "who-this-is-for",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:README.md#why-magus-exists",
-      "kind": "docsection",
-      "label": "Why magus exists",
-      "source": "README.md#why-magus-exists",
-      "attrs": {
-        "anchor": "why-magus-exists",
         "level": "2"
       }
     },
@@ -100419,14 +100409,6 @@
     {
       "source": "docsection:README.md#magus",
       "target": "docsection:README.md#who-this-is-for",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "docsection:README.md#magus",
-      "target": "docsection:README.md#why-magus-exists",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
