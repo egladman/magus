@@ -1,15 +1,19 @@
 package oci
 
 import (
+	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -35,9 +39,9 @@ func TestPullAnonymouslyFromGHCR(t *testing.T) {
 	// No credentials are set on the client on purpose: an unauthenticated reader is the
 	// only case that matters for a published graph, and it is the case a token-less
 	// client gets 401 on.
-	tok, err := c.token(t.Context(), ref, "pull")
+	auth, err := c.authorize(t.Context(), ref, "pull")
 	require.NoError(t, err, "ghcr.io must issue an anonymous pull token for a public repository")
-	assert.NotEmpty(t, tok)
+	assert.True(t, strings.HasPrefix(auth, "Bearer "), auth)
 }
 
 // TestParseReference pins the shapes, including the two this deliberately refuses: a
@@ -88,6 +92,22 @@ type fakeRegistry struct {
 	mu    sync.Mutex
 	blobs map[string][]byte
 	tags  map[string][]byte
+	// uploads counts blob upload sessions started.
+	uploads int
+	// tokenAuth records the Authorization header of each token request.
+	tokenAuth []string
+	// pings counts unauthenticated /v2/ requests.
+	pings int
+	// realm, when set, replaces the challenge's own /token realm; basicOnly answers
+	// with a Basic challenge instead of a Bearer one.
+	realm     string
+	basicOnly bool
+	// manifestAuth records the Authorization header of each manifest request.
+	manifestAuth []string
+	// pageSize, when set, paginates tags/list through a relative Link header.
+	pageSize int
+	// link, when set, replaces the Link header tags/list would send.
+	link string
 }
 
 func newFakeRegistry(t *testing.T) *fakeRegistry {
@@ -109,7 +129,19 @@ func (r *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	p := req.URL.Path
 	last := p[strings.LastIndex(p, "/")+1:]
 	switch {
+	case p == "/v2/":
+		r.pings++
+		realm := "https://" + req.Host + "/token"
+		if r.realm != "" {
+			realm = r.realm
+		}
+		w.Header().Set("WWW-Authenticate", `Bearer realm="`+realm+`",service="`+req.Host+`"`)
+		if r.basicOnly {
+			w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
+		}
+		w.WriteHeader(http.StatusUnauthorized)
 	case p == "/token":
+		r.tokenAuth = append(r.tokenAuth, req.Header.Get("Authorization"))
 		_, _ = w.Write([]byte(`{"token":"fake"}`))
 	case strings.HasPrefix(p, "/upload/"):
 		body, _ := io.ReadAll(req.Body)
@@ -117,8 +149,11 @@ func (r *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	// Before the /blobs/ case, which its path also matches.
 	case strings.HasSuffix(p, "/blobs/uploads/"):
+		r.uploads++
 		w.Header().Set("Location", "/upload/1")
 		w.WriteHeader(http.StatusAccepted)
+	case strings.HasSuffix(p, "/tags/list"):
+		r.serveTags(w, req)
 	case strings.Contains(p, "/blobs/"):
 		b, ok := r.blobs[last]
 		if !ok {
@@ -130,6 +165,7 @@ func (r *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
 		}
 		_, _ = w.Write(b)
 	case strings.Contains(p, "/manifests/"):
+		r.manifestAuth = append(r.manifestAuth, req.Header.Get("Authorization"))
 		if req.Method == http.MethodPut {
 			body, _ := io.ReadAll(req.Body)
 			r.tags[last] = body
@@ -149,7 +185,36 @@ func (r *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// serveTags answers tags/list in lexical order, after ?last= and at most pageSize per
+// page, the way the distribution spec paginates.
+func (r *fakeRegistry) serveTags(w http.ResponseWriter, req *http.Request) {
+	var all []string
+	for name := range r.tags {
+		if !strings.Contains(name, ":") {
+			all = append(all, name)
+		}
+	}
+	slices.Sort(all)
+	if last := req.URL.Query().Get("last"); last != "" {
+		all = all[slices.Index(all, last)+1:]
+	}
+	page := all
+	if r.pageSize > 0 && len(all) > r.pageSize {
+		page = all[:r.pageSize]
+		w.Header().Set("Link", fmt.Sprintf(`<%s?n=%d&last=%s>; rel="next"`, req.URL.Path, r.pageSize, page[len(page)-1]))
+	}
+	if r.link != "" {
+		w.Header().Set("Link", r.link)
+	}
+	body, _ := json.Marshal(map[string]any{"name": "team/graph", "tags": page})
+	_, _ = w.Write(body)
+}
+
 const testArtifactType = "application/vnd.magus.test.v1+json"
+
+func testContent(layers ...Layer) Content {
+	return Content{ArtifactType: testArtifactType, Layers: layers}
+}
 
 // TestPushAndFetchLayersByTitle is the whole point of the multi-layer shape: a reader
 // names one layer and gets that layer's bytes, without reading the others.
@@ -160,10 +225,10 @@ func TestPushAndFetchLayersByTitle(t *testing.T) {
 
 	index := []byte(`{"schema_version":1}`)
 	shard := []byte(`{"name":"docs","nodes":[]}`)
-	pushed, err := c.Push(t.Context(), ref, testArtifactType,
+	pushed, err := c.Push(t.Context(), ref, testContent(
 		Layer{Name: "manifest.json", MediaType: "application/json", Payload: index},
 		Layer{Name: "fp-docs", MediaType: "application/json", Payload: shard},
-	)
+	))
 	require.NoError(t, err)
 
 	art, err := c.Artifact(t.Context(), ref, testArtifactType)
@@ -193,8 +258,8 @@ func TestArtifactRefusesAWrongArtifactType(t *testing.T) {
 	reg := newFakeRegistry(t)
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
-	_, err := c.Push(t.Context(), ref, testArtifactType,
-		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)})
+	_, err := c.Push(t.Context(), ref, testContent(
+		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
 	require.NoError(t, err)
 
 	_, err = c.Artifact(t.Context(), ref, "application/vnd.someone-else.v1+json")
@@ -209,8 +274,8 @@ func TestBlobRefusesContentTheManifestDoesNotDescribe(t *testing.T) {
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
 	payload := []byte(`{"nodes":[]}`)
-	_, err := c.Push(t.Context(), ref, testArtifactType,
-		Layer{Name: "shard", MediaType: "application/json", Payload: payload})
+	_, err := c.Push(t.Context(), ref, testContent(
+		Layer{Name: "shard", MediaType: "application/json", Payload: payload}))
 	require.NoError(t, err)
 
 	art, err := c.Artifact(t.Context(), ref, testArtifactType)
@@ -239,7 +304,7 @@ func TestBlobRefusesContentTheManifestDoesNotDescribe(t *testing.T) {
 // not a valid artifact, and the failure it causes surfaces on the puller's machine.
 func TestPushRefusesAnEmptyArtifact(t *testing.T) {
 	reg := newFakeRegistry(t)
-	_, err := reg.client().Push(t.Context(), reg.ref("team/graph", "latest"), testArtifactType)
+	_, err := reg.client().Push(t.Context(), reg.ref("team/graph", "latest"), testContent())
 	assert.Error(t, err)
 }
 
@@ -249,8 +314,8 @@ func TestPinnedPullRefusesAnotherManifest(t *testing.T) {
 	reg := newFakeRegistry(t)
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
-	pushed, err := c.Push(t.Context(), ref, testArtifactType,
-		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)})
+	pushed, err := c.Push(t.Context(), ref, testContent(
+		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
 	require.NoError(t, err)
 
 	reg.mu.Lock()
@@ -284,7 +349,210 @@ func TestPushRefusesADigestReference(t *testing.T) {
 	reg := newFakeRegistry(t)
 	ref := reg.ref("team/graph", "latest")
 	ref.Digest = digest.FromBytes([]byte("m"))
-	_, err := reg.client().Push(t.Context(), ref, testArtifactType,
-		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)})
+	_, err := reg.client().Push(t.Context(), ref, testContent(
+		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
 	assert.ErrorContains(t, err, "name a tag and no digest")
+}
+
+func TestParseRepository(t *testing.T) {
+	ref, err := ParseRepository("localhost:5000/team/spells/x")
+	require.NoError(t, err)
+	assert.Equal(t, Reference{Registry: "localhost:5000", Repository: "team/spells/x"}, ref)
+
+	for _, bad := range []string{
+		"ghcr.io/team/x:v1",
+		"ghcr.io/team/x@" + digest.FromBytes([]byte("m")).String(),
+		"team/x",
+	} {
+		_, err := ParseRepository(bad)
+		assert.Error(t, err, "%q must not parse as a repository", bad)
+	}
+}
+
+// One upload per blob however many tags a push writes: each extra tag is a manifest PUT
+// of the same bytes, so every tag serves the digest Push returned.
+func TestPushWritesEveryTagFromOneUpload(t *testing.T) {
+	reg := newFakeRegistry(t)
+	c := reg.client()
+	content := testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{"a":1}`)})
+
+	pushed, err := c.Push(t.Context(), reg.ref("team/graph", "v1"), content, "latest", "v1", "stable")
+	require.NoError(t, err)
+	raw, want, err := content.Manifest()
+	require.NoError(t, err)
+	assert.Equal(t, want, pushed, "Push returns the digest Manifest computes offline")
+
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	assert.Equal(t, 2, reg.uploads, "the config blob and the one layer, once each")
+	assert.Equal(t, map[string][]byte{"v1": raw, "latest": raw, "stable": raw, pushed.String(): raw}, reg.tags)
+}
+
+func TestPushValidatesEveryTagBeforeUploading(t *testing.T) {
+	reg := newFakeRegistry(t)
+	_, err := reg.client().Push(t.Context(), reg.ref("team/graph", "v1"),
+		testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}), "not/a/tag")
+	require.ErrorContains(t, err, `tag "not/a/tag"`)
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	assert.Equal(t, 0, reg.uploads)
+	assert.Empty(t, reg.tags)
+}
+
+// Annotations land in the manifest itself, and key order cannot move the digest.
+func TestContentManifestCarriesAnnotations(t *testing.T) {
+	layer := Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}
+	a := Content{ArtifactType: testArtifactType, Layers: []Layer{layer},
+		Annotations: map[string]string{ocispec.AnnotationRevision: "abc", ocispec.AnnotationCreated: "2026-01-02T03:04:05Z"}}
+	b := a
+	b.Annotations = map[string]string{ocispec.AnnotationCreated: "2026-01-02T03:04:05Z", ocispec.AnnotationRevision: "abc"}
+
+	rawA, dA, err := a.Manifest()
+	require.NoError(t, err)
+	_, dB, err := b.Manifest()
+	require.NoError(t, err)
+	assert.Equal(t, dA, dB)
+
+	var m ocispec.Manifest
+	require.NoError(t, json.Unmarshal(rawA, &m))
+	assert.Equal(t, a.Annotations, m.Annotations)
+
+	_, _, err = Content{ArtifactType: testArtifactType}.Manifest()
+	assert.ErrorContains(t, err, "no layers")
+}
+
+func TestTagsFollowsLinkPagination(t *testing.T) {
+	reg := newFakeRegistry(t)
+	c := reg.client()
+	_, err := c.Push(t.Context(), reg.ref("team/graph", "v1"),
+		testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}), "v2", "v3", "latest", "v4")
+	require.NoError(t, err)
+	reg.mu.Lock()
+	reg.pageSize = 2
+	reg.mu.Unlock()
+
+	tags, err := c.Tags(t.Context(), reg.ref("team/graph", ""))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"latest", "v1", "v2", "v3", "v4"}, tags)
+}
+
+// The next page is fetched with this repository's bearer token, so a Link naming
+// another host would hand the token to it.
+func TestTagsRefusesACrossOriginNextPage(t *testing.T) {
+	reg := newFakeRegistry(t)
+	c := reg.client()
+	reg.mu.Lock()
+	reg.link = `<https://elsewhere.example/v2/team/graph/tags/list?last=v1>; rel="next"`
+	reg.mu.Unlock()
+	_, err := c.Tags(t.Context(), reg.ref("team/graph", ""))
+	require.ErrorContains(t, err, "another origin")
+}
+
+// Credentials reach the token endpoint on a pull as well as a push, and an anonymous
+// client sends none. One client asks once per scope: the Tags call reuses the pull token.
+func TestTokenCarriesCredentialsOnPull(t *testing.T) {
+	reg := newFakeRegistry(t)
+	_, err := reg.client().Push(t.Context(), reg.ref("team/graph", "v1"),
+		testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
+	require.NoError(t, err)
+
+	authed := reg.client()
+	authed.Username, authed.Password = "bot", "s3cret-token"
+	_, err = authed.Artifact(t.Context(), reg.ref("team/graph", "v1"), testArtifactType)
+	require.NoError(t, err)
+	_, err = authed.Tags(t.Context(), reg.ref("team/graph", ""))
+	require.NoError(t, err)
+
+	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("bot:s3cret-token"))
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	assert.Equal(t, []string{"", basic}, reg.tokenAuth)
+	assert.Equal(t, 2, reg.pings, "one challenge per client")
+}
+
+func TestParseChallenge(t *testing.T) {
+	scheme, params := parseChallenge(`Bearer realm="https://auth.example/token?a=1,b=2",service="reg.example", scope="repository:team/x:pull,push",note="say \"hi\""`)
+	assert.Equal(t, "Bearer", scheme)
+	assert.Equal(t, map[string]string{
+		"realm":   "https://auth.example/token?a=1,b=2",
+		"service": "reg.example",
+		"scope":   "repository:team/x:pull,push",
+		"note":    `say "hi"`,
+	}, params)
+
+	scheme, params = parseChallenge(`Basic realm=registry`)
+	assert.Equal(t, "Basic", scheme)
+	assert.Equal(t, map[string]string{"realm": "registry"}, params)
+}
+
+// The realm is wherever the challenge says, on another host here, and each token is
+// scoped to the repository and the actions of the call that needed it.
+func TestAuthorizeFollowsARealmOnAnotherHost(t *testing.T) {
+	var mu sync.Mutex
+	var asked []string
+	auth := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if req.URL.Path != "/auth/issue" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		q := req.URL.Query()
+		asked = append(asked, q.Get("service")+" "+q.Get("scope"))
+		_, _ = fmt.Fprintf(w, `{"access_token":"tok-%s"}`, q.Get("scope"))
+	}))
+	t.Cleanup(auth.Close)
+	reg := newFakeRegistry(t)
+	reg.mu.Lock()
+	reg.realm = auth.URL + "/auth/issue"
+	reg.mu.Unlock()
+	c := reg.client()
+
+	ref := reg.ref("team/x", "v1")
+	_, err := c.Push(t.Context(), ref, testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
+	require.NoError(t, err)
+	for range 2 {
+		_, err = c.Artifact(t.Context(), ref, testArtifactType)
+		require.NoError(t, err)
+	}
+
+	host := reg.ref("", "").Registry
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{host + " repository:team/x:push,pull", host + " repository:team/x:pull"}, asked,
+		"one token per scope; the second pull reuses the first")
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	assert.Equal(t, []string{
+		"Bearer tok-repository:team/x:push,pull",
+		"Bearer tok-repository:team/x:pull",
+		"Bearer tok-repository:team/x:pull",
+	}, reg.manifestAuth)
+	assert.Empty(t, reg.tokenAuth, "the registry's own /token is never asked")
+}
+
+// A registry that answers /v2/ with only a Basic challenge gets the credentials on
+// every request and no token exchange; without credentials it is refused up front.
+func TestAuthorizeAnswersABasicChallenge(t *testing.T) {
+	reg := newFakeRegistry(t)
+	reg.mu.Lock()
+	reg.basicOnly = true
+	reg.mu.Unlock()
+	c := reg.client()
+	c.Username, c.Password = "bot", "s3cret-token"
+
+	ref := reg.ref("team/x", "v1")
+	_, err := c.Push(t.Context(), ref, testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
+	require.NoError(t, err)
+	_, err = c.Artifact(t.Context(), ref, testArtifactType)
+	require.NoError(t, err)
+
+	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("bot:s3cret-token"))
+	reg.mu.Lock()
+	assert.Equal(t, []string{basic, basic}, reg.manifestAuth)
+	assert.Empty(t, reg.tokenAuth)
+	reg.mu.Unlock()
+
+	_, err = reg.client().Artifact(t.Context(), ref, testArtifactType)
+	require.ErrorContains(t, err, "asks for Basic credentials")
 }

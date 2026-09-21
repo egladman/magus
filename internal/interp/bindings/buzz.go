@@ -9,7 +9,6 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
-	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -101,7 +100,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		if v, ok := resolveProjectImport(ctx, importPath, ext); ok {
 			return v, true
 		}
-		if remotespell.IsRef(importPath) {
+		if spells.IsRemoteImport(importPath) {
 			return resolveRemoteSpellImport(ctx, importPath)
 		}
 		return resolveLocalSpellImport(ctx, importPath)

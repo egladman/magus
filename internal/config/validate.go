@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"reflect"
 	"slices"
 	"strings"
@@ -50,6 +51,18 @@ func newValidator() *validator.Validate {
 	_ = v.RegisterValidation("mcp_address", func(fl validator.FieldLevel) bool {
 		_, err := netip.ParseAddrPort(fl.Field().String())
 		return err == nil
+	})
+
+	// registry_host is a bare, lowercase host[:port], the form an OCI reference names
+	// and the only form a lookup matches. A scheme, path or userinfo would match no
+	// reference, so the credential would silently never be sent.
+	_ = v.RegisterValidation("registry_host", func(fl validator.FieldLevel) bool {
+		s := fl.Field().String()
+		if s != strings.ToLower(s) || strings.ContainsAny(s, "/@?#* \t\r\n") {
+			return false
+		}
+		u, err := url.Parse("//" + s)
+		return err == nil && u.Host == s
 	})
 
 	return v
@@ -115,6 +128,10 @@ func humanReason(f FieldFailure) string {
 		return fmt.Sprintf("must be a unix:// URL (got %q)", f.Value)
 	case "mcp_address":
 		return fmt.Sprintf("must be a valid host:port, e.g. 127.0.0.1:7391 (got %q)", f.Value)
+	case "registry_host":
+		return fmt.Sprintf("must be a bare lowercase registry host[:port], e.g. ghcr.io (got %q)", f.Value)
+	case "unique":
+		return fmt.Sprintf("each entry needs a distinct %s", strings.ToLower(f.Param))
 	default:
 		if f.Param != "" {
 			return fmt.Sprintf("failed %s=%s (got %q)", f.Tag, f.Param, f.Value)

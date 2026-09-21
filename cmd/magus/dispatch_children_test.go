@@ -158,6 +158,7 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 		}},
 		{"self", []string{"self"}, "self.go", "selfCmd", nil},
 		{"vcs", []string{"vcs"}, "vcs.go", "vcsCmd", nil},
+		{"spell", []string{"spell"}, "spell.go", "spellCmd", nil},
 		{"agent", []string{"agent"}, "agent.go", "agentCmd", nil},
 		{"memory", []string{"memory"}, "memory.go", "memoryCmd", []string{
 			"list", // renamed to ls in v0.4.0

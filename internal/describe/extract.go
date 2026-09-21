@@ -25,9 +25,9 @@ import (
 	"slices"
 	"strings"
 
-	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -814,7 +814,7 @@ func spellHandle(s *ast.ImportStmt) (string, bool) {
 			return s.Alias, true
 		}
 		return lastPathSegment(s.Path), true
-	case (strings.HasPrefix(s.Path, "spells/") || remotespell.IsRef(s.Path)) && s.Alias != "" && s.Alias != "_":
+	case (strings.HasPrefix(s.Path, "spells/") || spells.IsRemoteImport(s.Path)) && s.Alias != "" && s.Alias != "_":
 		return s.Alias, true
 	}
 	return "", false

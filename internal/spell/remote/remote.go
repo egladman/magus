@@ -5,8 +5,8 @@
 //
 // It is the one resolver every spell consumer reaches: a magusfile import, the handle
 // magus\harness.provider receives, and a remote cache backend selector. The artifact
-// is one uncompressed tar layer of the spell directory, written by Pack, so publishing
-// the same files twice yields the same digest.
+// is one uncompressed tar layer of the spell directory's tracked files, written by
+// Pack, so publishing the same commit twice yields the same digest.
 package remote
 
 import (
@@ -20,11 +20,14 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/opencontainers/go-digest"
@@ -33,11 +36,9 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
-
-// Scheme prefixes a remote spell import.
-const Scheme = "oci://"
 
 const (
 	// artifactType is what a spell artifact's manifest says it is. A pull refuses any
@@ -60,17 +61,10 @@ type Ref struct {
 	OCI    oci.Reference // Digest is always set
 }
 
-// IsRef reports whether importPath is a remote spell import. It does not validate:
-// Parse does, so a malformed reference reaches a coded error instead of the file
-// search.
-func IsRef(importPath string) bool {
-	return strings.HasPrefix(importPath, Scheme)
-}
-
 // Parse validates a remote spell import. A reference with no manifest digest is
 // MGS1041: a tag can move, so it pins nothing.
 func Parse(importPath string) (Ref, error) {
-	rest := strings.TrimPrefix(importPath, Scheme)
+	rest := strings.TrimPrefix(importPath, spells.RemotePrefix)
 	if !strings.Contains(rest, "@") {
 		return Ref{}, types.DiagnosticErrorf(types.RemoteSpellUnpinned,
 			"remote spell %q names no manifest digest: a tag can move, so pin it with @sha256:<digest>", importPath)
@@ -83,10 +77,14 @@ func Parse(importPath string) (Ref, error) {
 }
 
 // Options configures Resolve. The zero value uses the user cache and
-// http.DefaultClient.
+// http.DefaultClient, and pulls anonymously.
 type Options struct {
 	CacheRoot string
 	Client    *http.Client
+	// Username and Password authenticate a pull from a private repository; see
+	// oci.Client.
+	Username string
+	Password string
 }
 
 // EntryPath parses importPath, resolves it into the user cache, and returns the
@@ -103,11 +101,17 @@ func EntryPath(ctx context.Context, importPath string) (string, error) {
 	return filepath.Join(dir, entryFile), nil
 }
 
+// verified holds the cache slots this process has already verified, keyed by slot
+// path, which is the digest under its cache root. The pre-load check and the import
+// that binds the spell then verify once between them.
+var verified sync.Map
+
 // Resolve returns a local directory holding ref's verified spell, pulling it only
-// when no cached copy verifies. The cache is keyed by manifest digest, and every call
-// re-verifies the cached manifest, layer and extracted files before trusting them, so
-// a hand-edited cache is replaced rather than run. A registry that serves bytes other
-// than the pinned ones is MGS1042. With MAGUS_OFFLINE set, only the cache is read.
+// when no cached copy verifies. The cache is keyed by manifest digest, and each
+// process re-verifies a cached manifest, layer and extracted files once before
+// trusting them, so a hand-edited cache is replaced rather than run. A registry that
+// serves bytes other than the pinned ones is MGS1042. With MAGUS_OFFLINE set, only
+// the cache is read, and a cached copy that does not verify is MGS1042 too.
 // Safe for concurrent use: a pull lands in a temporary directory renamed into place,
 // and a verified entry is never removed.
 func Resolve(ctx context.Context, ref Ref, opts Options) (string, error) {
@@ -121,6 +125,19 @@ func Resolve(ctx context.Context, ref Ref, opts Options) (string, error) {
 	}
 	slot := filepath.Join(root, ref.OCI.Digest.Algorithm().String()+"-"+ref.OCI.Digest.Encoded())
 	src := filepath.Join(slot, "src")
+	if _, ok := verified.Load(slot); ok {
+		return src, nil
+	}
+	src, err := resolveSlot(ctx, ref, opts, root, slot)
+	if err != nil {
+		return "", err
+	}
+	verified.Store(slot, struct{}{})
+	return src, nil
+}
+
+func resolveSlot(ctx context.Context, ref Ref, opts Options, root, slot string) (string, error) {
+	src := filepath.Join(slot, "src")
 	verr := verifySlot(slot, ref.OCI.Digest)
 	if verr == nil {
 		return src, nil
@@ -129,7 +146,8 @@ func Resolve(ctx context.Context, ref Ref, opts Options) (string, error) {
 	stale := statErr == nil
 	if offline() {
 		if stale {
-			return "", fmt.Errorf("remote spell %s: cached copy does not verify and MAGUS_OFFLINE is set: %w", ref.Import, verr)
+			return "", types.WrapDiagnostic(types.RemoteSpellDigestMismatch, verr,
+				"remote spell %s: the cached copy does not match the pin and MAGUS_OFFLINE forbids a fresh pull: %v", ref.Import, verr)
 		}
 		return "", fmt.Errorf("remote spell %s is not cached and MAGUS_OFFLINE is set", ref.Import)
 	}
@@ -144,7 +162,7 @@ func Resolve(ctx context.Context, ref Ref, opts Options) (string, error) {
 		return "", fmt.Errorf("remote spell %s: %w", ref.Import, err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	if err := pull(ctx, opts.Client, ref, tmp); err != nil {
+	if err := pull(ctx, opts.client(), ref, tmp); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, slot); err == nil {
@@ -171,10 +189,9 @@ func Resolve(ctx context.Context, ref Ref, opts Options) (string, error) {
 }
 
 // pull fetches ref into dir as manifest.json, spell.tar and the extracted src/.
-func pull(ctx context.Context, client *http.Client, ref Ref, dir string) error {
+func pull(ctx context.Context, c *oci.Client, ref Ref, dir string) error {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	c := &oci.Client{HTTP: client}
 	art, err := c.Artifact(ctx, ref.OCI, artifactType)
 	if err != nil {
 		return pullError(ref, err)
@@ -265,39 +282,53 @@ func sortSums(s []fileSum) []fileSum {
 	return s
 }
 
-// walkDir calls fn with the slash path and contents of each regular file under dir.
-// Anything else is an error: a spell holds source files, and a symlink could point
-// anywhere.
-func walkDir(dir string, fn func(name string, body []byte) error) error {
-	return filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+// dirFiles lists every file under dir. Anything but a regular file is an error: the
+// cache holds only what extract wrote.
+func dirFiles(dir string) ([]fileSum, error) {
+	names, err := dirEntries(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]fileSum, 0, len(names))
+	for _, name := range names {
+		body, err := readRegular(dir, name)
 		if err != nil {
+			return nil, err
+		}
+		out = append(out, fileSum{path: name, sum: sha256.Sum256(body)})
+	}
+	return sortSums(out), nil
+}
+
+// dirEntries lists the slash paths of every non-directory entry under dir.
+func dirEntries(dir string) ([]string, error) {
+	var names []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
 			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !d.Type().IsRegular() {
-			return fmt.Errorf("%s is not a regular file", p)
 		}
 		rel, err := filepath.Rel(dir, p)
 		if err != nil {
 			return err
 		}
-		body, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		return fn(filepath.ToSlash(rel), body)
-	})
-}
-
-func dirFiles(dir string) ([]fileSum, error) {
-	var out []fileSum
-	err := walkDir(dir, func(name string, body []byte) error {
-		out = append(out, fileSum{path: name, sum: sha256.Sum256(body)})
+		names = append(names, filepath.ToSlash(rel))
 		return nil
 	})
-	return sortSums(out), err
+	return names, err
+}
+
+// readRegular reads dir/name, refusing anything but a regular file: a spell holds
+// source files, and a symlink could point anywhere.
+func readRegular(dir, name string) ([]byte, error) {
+	p := filepath.Join(dir, filepath.FromSlash(name))
+	info, err := os.Lstat(p)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", p)
+	}
+	return os.ReadFile(p)
 }
 
 func tarFiles(layer []byte) ([]fileSum, error) {
@@ -361,41 +392,52 @@ func extract(layer []byte, dst string) error {
 	})
 }
 
-// Pack writes dir as a spell layer: its regular files sorted by path, each with fixed
-// mode, owner and time, so the same files always pack to the same bytes and the
-// published manifest digest is reproducible. dir must hold spell.buzz.
-func Pack(dir string) ([]byte, error) {
-	type file struct {
-		name string
-		body []byte
-	}
-	var files []file
-	if err := walkDir(dir, func(name string, body []byte) error {
-		files = append(files, file{name, body})
-		return nil
-	}); err != nil {
+// Pack writes dir as a spell layer: the files under it that vcs tracks, sorted by
+// path, each with fixed mode, owner and time. An untracked or ignored file never
+// reaches the layer, so the digest is a function of what the repository holds and
+// is the same on every checkout. dir must hold a tracked spell.buzz, and a tracked
+// entry that is not a regular file is an error.
+func Pack(ctx context.Context, dir string, vcs types.TrackedFileReporter) ([]byte, error) {
+	candidates, err := dirEntries(dir)
+	if err != nil {
 		return nil, err
 	}
-	if !slices.ContainsFunc(files, func(f file) bool { return f.name == entryFile }) {
-		return nil, fmt.Errorf("%s holds no %s", dir, entryFile)
+	var tracked []string
+	if len(candidates) > 0 {
+		reported, err := vcs.TrackedFiles(ctx, dir, candidates)
+		if err != nil {
+			return nil, fmt.Errorf("pack %s: list tracked files: %w", dir, err)
+		}
+		// A backend may read a path as a pattern; keep only the entries asked about.
+		tracked = slices.DeleteFunc(slices.Clone(reported), func(p string) bool {
+			return !slices.Contains(candidates, p)
+		})
 	}
-	slices.SortFunc(files, func(a, b file) int { return strings.Compare(a.name, b.name) })
+	slices.Sort(tracked)
+	tracked = slices.Compact(tracked)
+	if !slices.Contains(tracked, entryFile) {
+		return nil, fmt.Errorf("%s holds no tracked %s", dir, entryFile)
+	}
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	for _, f := range files {
+	for _, name := range tracked {
+		body, err := readRegular(dir, name)
+		if err != nil {
+			return nil, fmt.Errorf("pack: %w", err)
+		}
 		hdr := &tar.Header{
 			Typeflag: tar.TypeReg,
-			Name:     f.name,
+			Name:     name,
 			Mode:     0o644,
-			Size:     int64(len(f.body)),
+			Size:     int64(len(body)),
 			ModTime:  time.Unix(0, 0),
 			Format:   tar.FormatUSTAR,
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
-			return nil, fmt.Errorf("pack %s: %w", f.name, err)
+			return nil, fmt.Errorf("pack %s: %w", name, err)
 		}
-		if _, err := tw.Write(f.body); err != nil {
-			return nil, fmt.Errorf("pack %s: %w", f.name, err)
+		if _, err := tw.Write(body); err != nil {
+			return nil, fmt.Errorf("pack %s: %w", name, err)
 		}
 	}
 	if err := tw.Close(); err != nil {
@@ -407,14 +449,145 @@ func Pack(dir string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Publish packs dir and pushes it to dest, returning the manifest digest a pinned
-// import names.
-func Publish(ctx context.Context, c *oci.Client, dest oci.Reference, dir string) (digest.Digest, error) {
-	layer, err := Pack(dir)
-	if err != nil {
-		return "", err
+// Provenance is what a spell artifact records about its origin, as the OCI standard
+// manifest annotations. A zero field is omitted rather than written empty.
+type Provenance struct {
+	Title    string    // org.opencontainers.image.title
+	Source   string    // org.opencontainers.image.source
+	Revision string    // org.opencontainers.image.revision
+	Created  time.Time // org.opencontainers.image.created, written as RFC 3339 UTC
+}
+
+// Annotations renders p as manifest annotations.
+func (p Provenance) Annotations() map[string]string {
+	out := map[string]string{}
+	for k, v := range map[string]string{
+		ocispec.AnnotationTitle:    p.Title,
+		ocispec.AnnotationSource:   p.Source,
+		ocispec.AnnotationRevision: p.Revision,
+	} {
+		if v != "" {
+			out[k] = v
+		}
 	}
-	return c.Push(ctx, dest, artifactType, oci.Layer{Name: layerTitle, MediaType: layerMediaType, Payload: layer})
+	if !p.Created.IsZero() {
+		out[ocispec.AnnotationCreated] = p.Created.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+// commitFinder is the one VCS call ReadProvenance needs.
+type commitFinder interface {
+	FindCommit(ctx context.Context, dir, rev string) (types.Commit, error)
+}
+
+// ReadProvenance describes the checked-out revision holding dir. Created is that
+// revision's COMMIT time, never the wall clock, so building one commit twice produces
+// one digest; SOURCE_DATE_EPOCH, when set, overrides it the way reproducible-builds
+// tooling expects. Source is the default remote as a browsable https URL with any
+// userinfo dropped, empty when the backend reports none. Title is dir's base name.
+func ReadProvenance(ctx context.Context, vcs commitFinder, dir string) (Provenance, error) {
+	c, err := vcs.FindCommit(ctx, dir, "")
+	if err != nil {
+		return Provenance{}, fmt.Errorf("read revision of %s: %w", dir, err)
+	}
+	p := Provenance{Title: filepath.Base(dir), Revision: c.ID, Created: c.Date}
+	if raw, ok := os.LookupEnv("SOURCE_DATE_EPOCH"); ok {
+		secs, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return Provenance{}, fmt.Errorf("SOURCE_DATE_EPOCH %q is not a count of seconds: %w", raw, err)
+		}
+		p.Created = time.Unix(secs, 0)
+	}
+	if r, ok := vcs.(types.RemoteReporter); ok {
+		if remote, err := r.RemoteURL(ctx, dir); err == nil {
+			p.Source = SourceURL(remote)
+		}
+	}
+	return p, nil
+}
+
+// SourceURL turns a VCS remote into the https URL org.opencontainers.image.source
+// expects: scp-style ssh ("git@host:owner/repo.git") and ssh:// become https, userinfo
+// is dropped so a token embedded in a clone URL never reaches a public manifest, and a
+// trailing .git is trimmed. A remote it cannot read returns "".
+func SourceURL(remote string) string {
+	remote = strings.TrimSpace(remote)
+	if !strings.Contains(remote, "://") {
+		// scp-like syntax: [user@]host:path, with no scheme.
+		hostPart, path, ok := strings.Cut(remote, ":")
+		if !ok || strings.Contains(hostPart, "/") {
+			return ""
+		}
+		if _, host, ok := strings.Cut(hostPart, "@"); ok {
+			hostPart = host
+		}
+		remote = "https://" + hostPart + "/" + strings.TrimPrefix(path, "/")
+	}
+	u, err := url.Parse(remote)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	host := u.Host // userinfo is u.User, so it is already gone
+	switch u.Scheme {
+	case "https", "http":
+	case "ssh", "git":
+		// An ssh or git port says nothing about where the web UI listens.
+		host = u.Hostname()
+	default:
+		return ""
+	}
+	return (&url.URL{Scheme: "https", Host: host, Path: strings.TrimSuffix(u.Path, ".git")}).String()
+}
+
+// Build packs dir into the artifact a push uploads, with prov as its manifest
+// annotations. The digest of its Manifest is the one a push of the same commit prints,
+// on any machine, so CI can compare a local build against a published pin.
+func Build(ctx context.Context, dir string, tracked types.TrackedFileReporter, prov Provenance) (oci.Content, error) {
+	layer, err := Pack(ctx, dir, tracked)
+	if err != nil {
+		return oci.Content{}, err
+	}
+	return oci.Content{
+		ArtifactType: artifactType,
+		Annotations:  prov.Annotations(),
+		Layers:       []oci.Layer{{Name: layerTitle, MediaType: layerMediaType, Payload: layer}},
+	}, nil
+}
+
+// Pin resolves ref to the manifest digest it names now, checking the artifact type. A
+// ref that already carries a digest is verified against it and returned as is.
+func Pin(ctx context.Context, c *oci.Client, ref oci.Reference) (oci.Reference, error) {
+	art, err := c.Artifact(ctx, ref, artifactType)
+	if err != nil {
+		return oci.Reference{}, err
+	}
+	pinned := ref
+	if pinned.Digest == "" {
+		pinned.Digest = digest.FromBytes(art.Raw)
+	}
+	return pinned, nil
+}
+
+// Unpack copies the spell Resolve cached at src into dst, which must not exist or be
+// empty. It re-extracts the verified layer rather than copying src, so dst holds
+// exactly what the artifact carries.
+func Unpack(src, dst string) error {
+	if entries, err := os.ReadDir(dst); err == nil && len(entries) > 0 {
+		return fmt.Errorf("unpack into %s: directory is not empty", dst)
+	}
+	layer, err := os.ReadFile(filepath.Join(filepath.Dir(src), layerTitle))
+	if err != nil {
+		return fmt.Errorf("unpack into %s: %w", dst, err)
+	}
+	if err := extract(layer, dst); err != nil {
+		return fmt.Errorf("unpack into %s: %w", dst, err)
+	}
+	return nil
+}
+
+func (o Options) client() *oci.Client {
+	return &oci.Client{HTTP: o.Client, Username: o.Username, Password: o.Password}
 }
 
 // offline matches internal/registry: MAGUS_OFFLINE set to anything but 0 or false.

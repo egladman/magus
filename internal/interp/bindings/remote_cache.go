@@ -186,7 +186,7 @@ func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.Re
 // wires the backend by calling magus.cache.remote(<spell handle>), which records the
 // spell's name.
 func resolveBackendSpell(ctx context.Context, selector string) (spells.Driver, error) {
-	if remotespell.IsRef(selector) {
+	if spells.IsRemoteImport(selector) {
 		entry, err := remotespell.EntryPath(ctx, selector)
 		if err != nil {
 			return nil, err

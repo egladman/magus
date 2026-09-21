@@ -68,7 +68,9 @@ wire the guard hook. Both are on your host's page.
 | [Any other host](agents/any-host.md) | wherever it reads them        | a collaborator-owned harness descriptor or small adapter |
 
 What you wire is yours. Prefer a harness spell selected from the root magusfile
-(`import "spells/harness/..." as host` then `magus\harness.provider(host)`).
+(a pinned `import "oci://ghcr.io/egladman/magus/spells/<id>@sha256:<digest>" as host`
+then `magus\harness.provider(host)`; [Remote spells](../../reference/remote-spells.md)
+explains the pin).
 Wire several providers when you bounce between hosts; each call appends.
 
 To adapt a Buzz harness **without modifying Magus source**, copy the shipped

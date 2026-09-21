@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/spells"
 )
 
 // loadSkipDirs are the directory names the walk never descends. Every one of them holds
@@ -164,7 +164,7 @@ func importedSpellSources(root, src string) []string {
 // worker can save: a built-in spell is compiled into the binary, a project import names
 // another magusfile, and a host module is Go. A remote spell lives in the user cache.
 func localSpellImport(p string) bool {
-	if p == "" || strings.HasPrefix(p, "./") || strings.HasPrefix(p, "../") || path.IsAbs(p) || remotespell.IsRef(p) {
+	if p == "" || strings.HasPrefix(p, "./") || strings.HasPrefix(p, "../") || path.IsAbs(p) || spells.IsRemoteImport(p) {
 		return false
 	}
 	for _, reserved := range []string{"magus/", "project/", "std/"} {

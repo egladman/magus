@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
+  loads offline once cached; MGS1041 refuses a tag alone, MGS1042 mismatched bytes.
+  `magus spell build|push|pull|ls` build a reproducible digest, push under several tags,
+  verify a pull and list tags. Registry credentials are secret references under
+  `spells.registries`.
 - **`magus job fork` declares a job from the terminal.** Flags cover one row
   (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
   `--stdin` takes a full record and `--schema` prints its contract.

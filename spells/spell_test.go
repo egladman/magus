@@ -223,3 +223,10 @@ func TestSpellServiceTargets(t *testing.T) {
 	// An empty WithServiceTargets is a no-op: it leaves the map nil.
 	assert.False(t, NewSpell("go", WithServiceTargets()).IsServiceTarget("build"))
 }
+
+func TestIsRemoteImport(t *testing.T) {
+	assert.True(t, IsRemoteImport("oci://ghcr.io/o/r/spells/x@sha256:abc"), "the resolver, not this check, rejects a bad digest")
+	assert.False(t, IsRemoteImport("spells/harness/cursor"))
+	assert.False(t, IsRemoteImport("https://example.com/x"))
+	assert.False(t, IsRemoteImport("magus/spell/go"))
+}

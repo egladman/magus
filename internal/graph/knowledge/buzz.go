@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -98,7 +98,7 @@ func assembleBuzz(root string) Shard {
 					// A dangling workspace-relative import is an extraction ambiguity
 					// (MGS7001); a compiled-in module (magus/*, buzz stdlib) or a remote
 					// spell is expected to be unresolvable and stays untagged.
-					if !isBuiltinImport(d.Path) && !remotespell.IsRef(d.Path) {
+					if !isBuiltinImport(d.Path) && !spells.IsRemoteImport(d.Path) {
 						n.Attrs = map[string]string{attrDiagnostic: string(types.UnresolvableBuzzImport)}
 					}
 					s.Nodes = append(s.Nodes, n)

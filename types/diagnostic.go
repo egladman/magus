@@ -245,8 +245,9 @@ const (
 	// RemoteSpellUnpinned is an oci:// spell import with no manifest digest. A tag can be
 	// moved, so the bytes a workspace runs could change under an unchanged magusfile.
 	RemoteSpellUnpinned DiagnosticCode = "MGS1041"
-	// RemoteSpellDigestMismatch is a registry serving a manifest or layer for a pinned
-	// spell whose bytes do not hash to the pin. Nothing is cached and nothing loads.
+	// RemoteSpellDigestMismatch is a pinned spell whose bytes do not hash to the pin:
+	// served that way by a registry, or found that way in the cache while MAGUS_OFFLINE
+	// forbids a fresh pull. Nothing loads.
 	RemoteSpellDigestMismatch DiagnosticCode = "MGS1042"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes

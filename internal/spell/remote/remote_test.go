@@ -3,22 +3,27 @@ package remote
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,6 +36,9 @@ type registry struct {
 	blobs     map[string][]byte
 	manifests map[string][]byte
 	pulls     int
+	// user and pass, when set, make the token endpoint refuse any other credential,
+	// the way a private repository does.
+	user, pass string
 }
 
 func newRegistry(t *testing.T) *registry {
@@ -47,7 +55,14 @@ func (r *registry) serve(w http.ResponseWriter, req *http.Request) {
 	p := req.URL.Path
 	last := p[strings.LastIndex(p, "/")+1:]
 	switch {
+	case p == "/v2/":
+		w.Header().Set("WWW-Authenticate", `Bearer realm="https://`+req.Host+`/token",service="`+req.Host+`"`)
+		w.WriteHeader(http.StatusUnauthorized)
 	case p == "/token":
+		if u, pw, _ := req.BasicAuth(); r.user != "" && (u != r.user || pw != r.pass) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		_, _ = w.Write([]byte(`{"token":"fake"}`))
 	case strings.HasPrefix(p, "/upload/"):
 		body, _ := io.ReadAll(req.Body)
@@ -104,33 +119,68 @@ func spellDir(t *testing.T) string {
 	return dir
 }
 
+// allTracked reports every path it is asked about as tracked.
+type allTracked struct{}
+
+func (allTracked) TrackedFiles(_ context.Context, _ string, paths []string) ([]string, error) {
+	return paths, nil
+}
+
+// trackedOnly reports the paths it holds, the way a backend answers for an index.
+type trackedOnly []string
+
+func (t trackedOnly) TrackedFiles(_ context.Context, _ string, paths []string) ([]string, error) {
+	var out []string
+	for _, p := range paths {
+		if slices.Contains(t, p) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
 // publish pushes a spell directory and returns the pinned import for it.
 func publish(t *testing.T, reg *registry, dir string) string {
 	t.Helper()
 	dest := oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: "v1"}
-	d, err := Publish(t.Context(), &oci.Client{HTTP: reg.srv.Client()}, dest, dir)
+	content, err := Build(t.Context(), dir, allTracked{}, Provenance{Title: "x"})
 	require.NoError(t, err)
-	return Scheme + reg.host() + "/team/spells/x@" + d.String()
+	c := &oci.Client{HTTP: reg.srv.Client(), Username: reg.user, Password: reg.pass}
+	d, err := c.Push(t.Context(), dest, content)
+	require.NoError(t, err)
+	return spells.RemotePrefix + reg.host() + "/team/spells/x@" + d.String()
 }
+
+// fixedCommit answers every FindCommit with one commit, the way a checkout at a fixed
+// revision does.
+type fixedCommit types.Commit
+
+func (c fixedCommit) FindCommit(context.Context, string, string) (types.Commit, error) {
+	return types.Commit(c), nil
+}
+
+// withRemote adds a default remote to fixedCommit.
+type withRemote struct {
+	fixedCommit
+	remote string
+}
+
+func (w withRemote) RemoteURL(context.Context, string) (string, error) { return w.remote, nil }
 
 func TestParse(t *testing.T) {
 	t.Parallel()
 	d := digest.FromBytes([]byte("m"))
-	raw := Scheme + "ghcr.io/egladman/magus/spells/cursor@" + d.String()
+	raw := spells.RemotePrefix + "ghcr.io/egladman/magus/spells/cursor@" + d.String()
 	got, err := Parse(raw)
 	require.NoError(t, err)
 	assert.Equal(t, Ref{Import: raw, OCI: oci.Reference{Registry: "ghcr.io", Repository: "egladman/magus/spells/cursor", Digest: d}}, got)
 
-	_, err = Parse(Scheme + "ghcr.io/egladman/magus/spells/cursor:latest")
+	_, err = Parse(spells.RemotePrefix + "ghcr.io/egladman/magus/spells/cursor:latest")
 	require.ErrorIs(t, err, types.RemoteSpellUnpinned, "a tag alone pins nothing")
 
-	_, err = Parse(Scheme + "ghcr.io/egladman/magus/spells/cursor@sha256:abc")
+	_, err = Parse(spells.RemotePrefix + "ghcr.io/egladman/magus/spells/cursor@sha256:abc")
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, types.RemoteSpellUnpinned, "a malformed digest is a typo, not a missing pin")
-
-	assert.True(t, IsRef(raw))
-	assert.False(t, IsRef("spells/harness/cursor"))
-	assert.False(t, IsRef("https://example.com/x"))
 }
 
 func TestPackIsDeterministic(t *testing.T) {
@@ -139,9 +189,9 @@ func TestPackIsDeterministic(t *testing.T) {
 	old := time.Unix(1_000_000, 0)
 	require.NoError(t, os.Chtimes(filepath.Join(b, entryFile), old, old))
 	require.NoError(t, os.Chmod(filepath.Join(b, "lib", "util.buzz"), 0o600))
-	pa, err := Pack(a)
+	pa, err := Pack(t.Context(), a, allTracked{})
 	require.NoError(t, err)
-	pb, err := Pack(b)
+	pb, err := Pack(t.Context(), b, allTracked{})
 	require.NoError(t, err)
 	assert.Equal(t, pa, pb, "mtime and mode do not reach the layer")
 
@@ -157,13 +207,32 @@ func TestPackIsDeterministic(t *testing.T) {
 func TestPackRefuses(t *testing.T) {
 	t.Parallel()
 	empty := t.TempDir()
-	_, err := Pack(empty)
-	require.ErrorContains(t, err, "holds no spell.buzz")
+	_, err := Pack(t.Context(), empty, allTracked{})
+	require.ErrorContains(t, err, "holds no tracked spell.buzz")
+
+	_, err = Pack(t.Context(), spellDir(t), trackedOnly{"lib/util.buzz"})
+	require.ErrorContains(t, err, "holds no tracked spell.buzz", "an untracked entry file is absent")
 
 	linked := spellDir(t)
 	require.NoError(t, os.Symlink(entryFile, filepath.Join(linked, "alias")))
-	_, err = Pack(linked)
+	_, err = Pack(t.Context(), linked, allTracked{})
 	require.ErrorContains(t, err, "is not a regular file")
+}
+
+// Only tracked files reach the layer, so an untracked dotfile on one machine does not
+// change the digest a publish from another machine prints.
+func TestPackSkipsUntrackedFiles(t *testing.T) {
+	t.Parallel()
+	tracked := trackedOnly{entryFile, "lib/util.buzz"}
+	clean, err := Pack(t.Context(), spellDir(t), tracked)
+	require.NoError(t, err)
+
+	dirty := spellDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dirty, ".DS_Store"), []byte("finder"), 0o644))
+	require.NoError(t, os.Symlink(entryFile, filepath.Join(dirty, "untracked-link")))
+	got, err := Pack(t.Context(), dirty, tracked)
+	require.NoError(t, err)
+	assert.Equal(t, clean, got)
 }
 
 func TestResolvePullsOnceThenServesOffline(t *testing.T) {
@@ -186,20 +255,23 @@ func TestResolvePullsOnceThenServesOffline(t *testing.T) {
 
 	reg.srv.Close()
 	t.Setenv("MAGUS_OFFLINE", "1")
+	verified.Clear()
 	again, err := Resolve(t.Context(), ref, opts)
 	require.NoError(t, err)
 	assert.Equal(t, dir, again)
 	assert.Equal(t, 1, reg.pullCount(), "a verified cache entry needs no registry")
 
-	// A cached copy that no longer verifies is an error offline, never a silent pass.
+	// A cached copy that no longer verifies is a coded error offline, never a silent
+	// pass. Clearing the memo stands in for a fresh process.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, entryFile), []byte("tampered\n"), 0o644))
+	verified.Clear()
 	_, err = Resolve(t.Context(), ref, opts)
-	require.ErrorContains(t, err, "cached copy does not verify and MAGUS_OFFLINE is set")
+	require.ErrorIs(t, err, types.RemoteSpellDigestMismatch)
 }
 
 func TestResolveOfflineWithoutCacheFails(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "1")
-	ref, err := Parse(Scheme + "ghcr.io/team/spells/x@" + digest.FromBytes([]byte("m")).String())
+	ref, err := Parse(spells.RemotePrefix + "ghcr.io/team/spells/x@" + digest.FromBytes([]byte("m")).String())
 	require.NoError(t, err)
 	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir()})
 	require.ErrorContains(t, err, "is not cached and MAGUS_OFFLINE is set")
@@ -226,7 +298,7 @@ func TestResolveRefusesATamperedLayer(t *testing.T) {
 	src := spellDir(t)
 	ref, err := Parse(publish(t, reg, src))
 	require.NoError(t, err)
-	layer, err := Pack(src)
+	layer, err := Pack(t.Context(), src, allTracked{})
 	require.NoError(t, err)
 	tampered := append([]byte{}, layer...)
 	tampered[0] ^= 0xff
@@ -248,6 +320,12 @@ func TestResolveReplacesATamperedCache(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, entryFile), []byte("tampered\n"), 0o644))
 	again, err := Resolve(t.Context(), ref, opts)
+	require.NoError(t, err)
+	assert.Equal(t, dir, again)
+	assert.Equal(t, 1, reg.pullCount(), "one process verifies a digest once")
+
+	verified.Clear()
+	again, err = Resolve(t.Context(), ref, opts)
 	require.NoError(t, err)
 	assert.Equal(t, dir, again)
 	assert.Equal(t, 2, reg.pullCount(), "an entry that fails verification is pulled again")
@@ -294,11 +372,122 @@ func TestWalkTarRefusesAmbiguousEntries(t *testing.T) {
 func TestResolveRefusesAnotherArtifactType(t *testing.T) {
 	reg := newRegistry(t)
 	dest := oci.Reference{Registry: reg.host(), Repository: "team/graph", Tag: "v1"}
-	d, err := (&oci.Client{HTTP: reg.srv.Client()}).Push(t.Context(), dest, "application/vnd.someone-else.v1",
-		oci.Layer{Name: layerTitle, MediaType: layerMediaType, Payload: []byte("x")})
+	d, err := (&oci.Client{HTTP: reg.srv.Client()}).Push(t.Context(), dest, oci.Content{
+		ArtifactType: "application/vnd.someone-else.v1",
+		Layers:       []oci.Layer{{Name: layerTitle, MediaType: layerMediaType, Payload: []byte("x")}},
+	})
 	require.NoError(t, err)
-	ref, err := Parse(Scheme + reg.host() + "/team/graph@" + d.String())
+	ref, err := Parse(spells.RemotePrefix + reg.host() + "/team/graph@" + d.String())
 	require.NoError(t, err)
 	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
 	require.ErrorContains(t, err, "carries artifactType")
+}
+
+// Two builds of one commit, from checkouts whose files differ in mtime and mode and
+// at different wall-clock moments, produce one manifest digest: created is the commit
+// time, not the time of the build.
+func TestBuildOfOneCommitHasOneDigest(t *testing.T) {
+	commit := withRemote{
+		fixedCommit: fixedCommit{ID: "0123abcd", Date: time.Date(2026, 9, 1, 12, 30, 0, 0, time.FixedZone("EDT", -4*3600))},
+		remote:      "git@github.com:owner/repo.git",
+	}
+	build := func(dir string) ([]byte, digest.Digest) {
+		prov, err := ReadProvenance(t.Context(), commit, dir)
+		require.NoError(t, err)
+		content, err := Build(t.Context(), dir, allTracked{}, prov)
+		require.NoError(t, err)
+		raw, d, err := content.Manifest()
+		require.NoError(t, err)
+		return raw, d
+	}
+	parent := t.TempDir()
+	a, b := filepath.Join(parent, "a", "cursor"), filepath.Join(parent, "b", "cursor")
+	for _, dir := range []string{a, b} {
+		require.NoError(t, os.CopyFS(dir, os.DirFS(spellDir(t))))
+	}
+	old := time.Unix(1_000_000, 0)
+	require.NoError(t, os.Chtimes(filepath.Join(b, entryFile), old, old))
+
+	rawA, dA := build(a)
+	_, dB := build(b)
+	assert.Equal(t, dA, dB)
+
+	var m ocispec.Manifest
+	require.NoError(t, json.Unmarshal(rawA, &m))
+	assert.Equal(t, map[string]string{
+		ocispec.AnnotationTitle:    "cursor",
+		ocispec.AnnotationSource:   "https://github.com/owner/repo",
+		ocispec.AnnotationRevision: "0123abcd",
+		ocispec.AnnotationCreated:  "2026-09-01T16:30:00Z",
+	}, m.Annotations)
+}
+
+func TestReadProvenanceHonorsSourceDateEpoch(t *testing.T) {
+	t.Setenv("SOURCE_DATE_EPOCH", "1700000000")
+	prov, err := ReadProvenance(t.Context(), fixedCommit{ID: "abc", Date: time.Unix(1, 0)}, "/src/spells/x")
+	require.NoError(t, err)
+	assert.Equal(t, Provenance{Title: "x", Revision: "abc", Created: time.Unix(1_700_000_000, 0)}, prov,
+		"no remote capability means no source annotation")
+
+	t.Setenv("SOURCE_DATE_EPOCH", "yesterday")
+	_, err = ReadProvenance(t.Context(), fixedCommit{ID: "abc"}, "/src/spells/x")
+	require.ErrorContains(t, err, "SOURCE_DATE_EPOCH")
+}
+
+func TestSourceURL(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{
+		"git@github.com:owner/repo.git":                  "https://github.com/owner/repo",
+		"ssh://git@github.com/owner/repo.git":            "https://github.com/owner/repo",
+		"https://github.com/owner/repo":                  "https://github.com/owner/repo",
+		"https://x-access-token:ghs_abc@github.com/o/r":  "https://github.com/o/r",
+		"https://gitlab.example:8443/group/sub/proj.git": "https://gitlab.example:8443/group/sub/proj",
+		"ssh://git@gitlab.example:2222/group/proj.git":   "https://gitlab.example/group/proj",
+		"/srv/git/repo.git":                              "",
+		"file:///srv/git/repo.git":                       "",
+		"":                                               "",
+	} {
+		assert.Equal(t, want, SourceURL(in), in)
+	}
+}
+
+// A tag resolves to the digest the push printed, and pull-to-directory writes exactly
+// the published files.
+func TestPinAndUnpackATag(t *testing.T) {
+	reg := newRegistry(t)
+	src := spellDir(t)
+	ref, err := Parse(publish(t, reg, src))
+	require.NoError(t, err)
+	c := &oci.Client{HTTP: reg.srv.Client()}
+
+	pinned, err := Pin(t.Context(), c, oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: "v1"})
+	require.NoError(t, err)
+	assert.Equal(t, oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: "v1", Digest: ref.OCI.Digest}, pinned)
+
+	cached, err := Resolve(t.Context(), Ref{Import: pinned.String(), OCI: pinned}, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
+	require.NoError(t, err)
+	dst := filepath.Join(t.TempDir(), "out")
+	require.NoError(t, Unpack(cached, dst))
+	want, err := dirFiles(src)
+	require.NoError(t, err)
+	got, err := dirFiles(dst)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+
+	require.ErrorContains(t, Unpack(cached, dst), "not empty")
+}
+
+func TestResolveAuthenticatesAPrivatePull(t *testing.T) {
+	reg := newRegistry(t)
+	reg.mu.Lock()
+	reg.user, reg.pass = "bot", "s3cret-token"
+	reg.mu.Unlock()
+	ref, err := Parse(publish(t, reg, spellDir(t)))
+	require.NoError(t, err)
+
+	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
+	require.ErrorContains(t, err, "401", "an anonymous pull of a private repository is refused")
+
+	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client(), Username: "bot", Password: "s3cret-token"})
+	require.NoError(t, err)
 }

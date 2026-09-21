@@ -18,6 +18,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -337,7 +338,7 @@ func spellImportNames(src string) []string {
 // resolver that later binds each one only reads a verified cache entry. A parse error
 // yields nil: Exec re-parses and reports it with position.
 func checkRemoteSpellImports(ctx context.Context, src string) error {
-	if !strings.Contains(src, `"`+remotespell.Scheme) {
+	if !strings.Contains(src, `"`+spells.RemotePrefix) {
 		return nil
 	}
 	prog, err := buzz.ParseEmbedded(src)
@@ -346,7 +347,7 @@ func checkRemoteSpellImports(ctx context.Context, src string) error {
 	}
 	for _, stmt := range prog.Stmts {
 		imp, ok := stmt.(*ast.ImportStmt)
-		if !ok || !remotespell.IsRef(imp.Path) {
+		if !ok || !spells.IsRemoteImport(imp.Path) {
 			continue
 		}
 		if imp.Alias == "" || imp.Alias == "_" {
