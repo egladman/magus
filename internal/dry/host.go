@@ -556,6 +556,17 @@ func buildCtx(tr *Tracer) vm.Value {
 	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
 	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))
 	c.MapSet("observes", fn("ctx.observes", retNull))
+	// Inert, like the file declarations above: a dry run holds nothing, and driving
+	// the resource fiber would run its acquire and release halves for real, which is
+	// exactly what a dry run promises not to do.
+	//
+	// TODO: a ctx.needs(...) written INSIDE a ctx.uses body is not traced from here.
+	// Whether that matters depends on describe.Extract, which reads declarations
+	// statically and walks both arms of a branch; if it does not descend into a
+	// closure argument, a region would hide graph edges. Settle before ctx.uses is
+	// used anywhere real. Sitting next to needs makes it MORE acute, not less: the
+	// pairing invites exactly the composition that goes untraced.
+	c.MapSet("uses", fn("ctx.uses", retNull))
 	return c
 }
 
