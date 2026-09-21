@@ -1363,7 +1363,7 @@ fun publish_graph(ctx: magus\Context) > void !> any {
         magus\cmd("graph", args: ["push", "--ref", reg.repository + ":" + tag, "--username", user],
             opts: {"stdin": token});
     }
-    magus\log.info("graph-generate: published " + reg.repository + " as " + std\toString(tags.len()) + " tag(s)");
+    magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
 }
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local

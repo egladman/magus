@@ -85,6 +85,18 @@ var ToolBoundKeys = []string{
 // engine and the dry-run host perform.
 func ProjectOptionKeys() []string { return optionKeys(ProjectOptions) }
 
+// RemovedOptions are keys magus.project once accepted and no longer does, each with what
+// to do instead. It covers both vocabularies, since a removed name means the same thing
+// in either.
+//
+// A removed key is an ERROR, where an unrecognized one is ignored. An unrecognized key may
+// come from a newer magus, so the advice is to upgrade; a removed key comes from an OLDER
+// one, and telling someone already on the newest magus to upgrade sends them in a circle
+// while the value they declared is silently not honored.
+var RemovedOptions = map[string]string{
+	"exclusive": "removed in v0.5.0 with no replacement; slots and memory_mb are the only concurrency dials, so delete the key",
+}
+
 // TargetPolicyKeys returns just the key names of TargetPolicyOptions, for the same
 // check one level down.
 func TargetPolicyKeys() []string { return optionKeys(TargetPolicyOptions) }

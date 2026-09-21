@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
@@ -35,7 +36,7 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	src := string(data)
 	spec, err := extractDescriptorWithModules(ctx, src, filepath.Dir(path))
 	if err != nil {
-		return spells.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
+		return spells.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, hint.ExplainImplicitMagus(err))
 	}
 	sp := spells.NewSpell(spec.Name,
 		spells.WithSources(spec.Needs...),

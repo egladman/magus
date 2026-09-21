@@ -468,7 +468,7 @@ func TestRunCut_HappyPath(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "SHA256SUMS"), []byte("abc123  "+tarName+"\n"), 0o644))
 
 	// Build a temp CHANGELOG.md with an Unreleased section.
-	changelogContent := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- brand new feature\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"
+	changelogContent := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **Brand new feature.**\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"
 	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
 	require.NoError(t, os.WriteFile(changelogPath, []byte(changelogContent), 0o644))
 
@@ -499,9 +499,9 @@ func TestRunCut_HappyPath(t *testing.T) {
 		Version: "v0.2.0",
 		Date:    got.Date, // date is time.Now()-derived; just check it is populated
 		Notes: ReleaseNotes{
-			Added: []string{"brand new feature"},
+			Added: []string{"**Brand new feature.**"},
 		},
-		Body: "### Added\n\n- brand new feature",
+		Body: "### Added\n\n- **Brand new feature.**",
 		Artifacts: []ReleaseArtifact{
 			{
 				Name:     "SHA256SUMS",
@@ -530,7 +530,7 @@ func TestCutThenGenerateChangelogDoesNotDuplicate(t *testing.T) {
 
 	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
 	require.NoError(t, os.WriteFile(changelogPath,
-		[]byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- brand new feature\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"), 0o644))
+		[]byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **Brand new feature.**\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"), 0o644))
 
 	relDir := t.TempDir()
 	writeManifestFile(t, relDir, ReleaseManifest{Version: "v0.1.0", Date: "2026-07-05", Body: "Old."})
@@ -541,7 +541,7 @@ func TestCutThenGenerateChangelogDoesNotDuplicate(t *testing.T) {
 
 	got, err := os.ReadFile(changelogPath)
 	require.NoError(t, err)
-	require.Equal(t, 1, strings.Count(string(got), "- brand new feature"), "the entry belongs to v0.2.0 alone:\n%s", got)
+	require.Equal(t, 1, strings.Count(string(got), "- **Brand new feature.**"), "the entry belongs to v0.2.0 alone:\n%s", got)
 	require.Contains(t, string(got), "## [Unreleased]\n\n## [v0.2.0]", "Unreleased is emptied, not removed")
 }
 
@@ -556,7 +556,7 @@ func TestRunCut_ImmutabilityGuard(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, tarball), []byte(payload), 0o644))
 		changelogPath = filepath.Join(t.TempDir(), "CHANGELOG.md")
 		require.NoError(t, os.WriteFile(changelogPath,
-			[]byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- x\n"), 0o644))
+			[]byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **X.**\n"), 0o644))
 		return artifactsDir, changelogPath, t.TempDir()
 	}
 	cut := func(artifactsDir, changelogPath, outDir string) error {
@@ -614,7 +614,7 @@ func TestRunCut_FailedChangelogClearIsRetryable(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
 
 	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- x\n"), 0o444))
+	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **X.**\n"), 0o444))
 
 	outDir := t.TempDir()
 	args := []string{"-version", "v0.2.0", "-artifacts", artifactsDir, "-changelog", changelogPath, "-out", outDir}
@@ -637,7 +637,7 @@ func TestRunCut_NoArtifactsGuard(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "README.txt"), []byte("ignore me"), 0o644))
 
 	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- x\n"), 0o644))
+	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **X.**\n"), 0o644))
 
 	err := runCut([]string{
 		"-version", "v0.2.0",
@@ -743,4 +743,49 @@ func TestPlatformFromNameReadsBothVariantSpellings(t *testing.T) {
 			t.Errorf("platformFromName(%q) = %q, want %q", tc.name, got, tc.want)
 		}
 	}
+}
+
+// The repository's own [Unreleased] section is what `cut` turns into the next release's
+// notes, so it is held to the formula on every change rather than discovered wrong at
+// release time.
+func TestUnreleasedChangelogFollowsTheFormat(t *testing.T) {
+	body, err := readUnreleasedSection(filepath.Join("..", "..", "CHANGELOG.md"))
+	require.NoError(t, err)
+	assert.Empty(t, lintUnreleased(body), "fix CHANGELOG.md [Unreleased]; the format is in lintUnreleased's doc comment")
+}
+
+func TestLintUnreleased(t *testing.T) {
+	long := strings.Repeat("word ", changelogEntryWordCap)
+	cases := []struct {
+		name string
+		body string
+		want []string // substrings, one per expected problem
+	}{
+		{"conforming", "### Added\n\n- **A thing.** It does\n  more.\n\n### Fixed\n\n- **Another.**\n", nil},
+		{"empty", "\n", nil},
+		{"every section in order", "### Added\n- **a.**\n### Changed\n- **b.**\n### Deprecated\n- **c.**\n### Removed\n- **d.**\n### Fixed\n- **e.**\n### Security\n- **f.**\n", nil},
+		{"unknown section", "### Fix\n- **a.**\n", []string{`"Fix" is not a Keep a Changelog section`}},
+		{"out of order", "### Fixed\n- **a.**\n### Added\n- **b.**\n", []string{`"Added" is out of order`}},
+		{"repeated", "### Added\n- **a.**\n### Added\n- **b.**\n", []string{`"Added" is out of order or repeated`}},
+		{"entry before a section", "- **a.**\n", []string{"sits under a section heading"}},
+		{"no bold headline", "### Added\n- plain text.\n", []string{"opens with a **bold headline**"}},
+		{"no period", "### Added\n- **a** trailing\n", []string{"ends with a period"}},
+		{"over the cap", "### Added\n- **a.** " + long + "end.\n", []string{"the cap is"}},
+		{"stray line", "### Added\n- **a.**\nstray\n", []string{"not a heading, an entry"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := lintUnreleased(tc.body)
+			require.Len(t, got, len(tc.want), "problems: %v", got)
+			for i, w := range tc.want {
+				assert.Contains(t, got[i], w)
+			}
+		})
+	}
+}
+
+// A section the parser cannot place used to vanish from the structured notes.
+func TestNotesKeepDeprecatedAndSecurity(t *testing.T) {
+	notes := notesFromBodyString("### Deprecated\n- **old.**\n### Security\n- **patched.**")
+	assert.Equal(t, ReleaseNotes{Deprecated: []string{"**old.**"}, Security: []string{"**patched.**"}}, notes)
 }

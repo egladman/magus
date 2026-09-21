@@ -227,6 +227,17 @@ const (
 	// declare a VersionKey that extracts the version alone, which keeps a genuine tool
 	// upgrade keying everything while the feed keys only its drivers.
 	ObservationKeyedAsVersion DiagnosticCode = "MGS1037"
+	// RemovedOption is a magus.project key that an older magus accepted and this one
+	// removed. It is fatal where an unrecognized key is only ignored: an unrecognized key
+	// may come from a NEWER magus, so ignoring it with upgrade advice is right, but a
+	// removed key comes from an older one, and that advice sends someone already on the
+	// newest binary in a circle while the value they declared goes unhonored.
+	RemovedOption DiagnosticCode = "MGS1038"
+	// MagusNotImported is a magusfile, spell or script calling magus\ without importing
+	// it. magus was bound into every program implicitly until v0.5.0 made it an ordinary
+	// host module, so a file written for an older magus fails with a bare
+	// `undefined: magus` that says nothing about the one-line fix.
+	MagusNotImported DiagnosticCode = "MGS1039"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -460,7 +471,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
-	FootprintDropsOpGlobs, ObservationKeyedAsVersion,
+	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

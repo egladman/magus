@@ -2,8 +2,11 @@ package hint
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/egladman/magus/types"
 )
 
 // CheckKeys splits the keys of a schema map into a typo, which is fatal, and keys this
@@ -13,12 +16,18 @@ import (
 // load, and that takes out `magus run go-build` too, so the workspace cannot build the
 // binary that would understand the key.
 //
+// A key in removed is fatal too, with its reason: it came from an older magus, so the
+// upgrade advice an unrecognized key gets would be wrong.
+//
 // ignored is only the keys preceding the typo, and MapKeys is insertion-ordered, so a
 // caller reports what it dropped above the key it refuses.
-func CheckKeys(present, known []string, where string) (ignored []string, err error) {
+func CheckKeys(present, known []string, removed map[string]string, where string) (ignored []string, err error) {
 	for _, k := range present {
 		if slices.Contains(known, k) {
 			continue
+		}
+		if why, ok := removed[k]; ok {
+			return ignored, types.DiagnosticErrorf(types.RemovedOption, "%s: option %q was %s", where, k, why)
 		}
 		if sug := Nearest(k, known); sug != "" {
 			return ignored, fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
@@ -61,4 +70,25 @@ func RejectUnknownKeys(present, known []string, where string) error {
 func IgnoredKeyAdvice() string {
 	return "nothing known is close to it, so this magus probably predates it; upgrade with `" +
 		SelfUpdate.String() + "`, or delete the key if the workspace does not need it"
+}
+
+// undefinedMagus matches the checker's error for a program that calls magus\ without
+// importing it.
+var undefinedMagus = regexp.MustCompile(`undefined: magus\b`)
+
+// ExplainImplicitMagus turns a load failure caused by calling magus\ without importing it
+// into MGS1039, which names the one-line fix. Any other error comes back unchanged.
+//
+// magus was bound into every program implicitly until v0.5.0, so a file written for an
+// older magus fails with a bare `undefined: magus` that reads like a typo rather than a
+// migration.
+func ExplainImplicitMagus(err error) error {
+	if err == nil || !undefinedMagus.MatchString(err.Error()) {
+		return err
+	}
+	// The first line only: the checker's error carries its own `see:` line, which would
+	// otherwise land between the position and the fix.
+	first, _, _ := strings.Cut(err.Error(), "\n")
+	return types.DiagnosticErrorf(types.MagusNotImported,
+		"%s: add `import \"magus\";` to the file; magus is an imported module since v0.5.0", first)
 }
