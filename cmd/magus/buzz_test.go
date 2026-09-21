@@ -306,13 +306,13 @@ func TestBuzzCmd_OutsideAWorkspace(t *testing.T) {
 	// buzzCmd's flag parse rebuilds the default logger on whatever os.Stderr is then,
 	// which is the only reason captureStderr sees the warning. The text handler writes
 	// synchronously; the pretty one owns a terminal region.
-	prevLog, prevFormat := slog.Default(), globalCfg.Log.Format
+	prevLog, prevFormat, prevLevel := slog.Default(), globalCfg.Log.Format, globalCfg.Log.Level
 	prevQuiet, prevSilent := global.quiet, global.silent
-	globalCfg.Log.Format = "text"
+	globalCfg.Log.Format, globalCfg.Log.Level = "text", "info"
 	global.quiet, global.silent = false, false
 	t.Cleanup(func() {
 		slog.SetDefault(prevLog)
-		globalCfg.Log.Format = prevFormat
+		globalCfg.Log.Format, globalCfg.Log.Level = prevFormat, prevLevel
 		global.quiet, global.silent = prevQuiet, prevSilent
 	})
 	noWorkspace := errors.New("no magus workspace found")

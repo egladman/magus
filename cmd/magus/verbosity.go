@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus/internal/cache"
@@ -112,7 +113,9 @@ func levelName(lvl slog.Level) string {
 	if lvl == config.LevelTrace {
 		return "trace"
 	}
-	return lvl.String()
+	// Lowercase, the spelling log.level accepts: this value is written back into the
+	// config and validated with it, and slog spells its own levels in capitals.
+	return strings.ToLower(lvl.String())
 }
 
 // displayHandler is the pretty handler currently installed as the process-wide
@@ -177,7 +180,8 @@ func restoreTerminal() {
 	_ = tty.ResetMouseTracking(os.Stderr, tty.SystemProbe)
 }
 
-// applyDisplay configures the process-global slog logger and writes the resolved level back to globalCfg.
+// applyDisplay writes the -v/-q/-s flags into globalCfg.Log when given, then installs
+// the process-global slog logger at the level globalCfg.Log names.
 func applyDisplay() {
 	// Release the previous handler's region before installing a replacement,
 	// so a second call does not strand the first one's scroll margins.
@@ -192,10 +196,13 @@ func applyDisplay() {
 
 	// --silent implies --quiet's suppression; the extra behavior rides on Log.Silent.
 	quiet := global.quiet || global.silent
-	lvl := effectiveLevel(global.verbose, quiet)
 	addSource := !quiet && global.verbose >= 3
 
-	globalCfg.Log.Level = levelName(lvl)
+	// Only a flag overrides log.level; with none given, yaml, env and --log-level stand.
+	if quiet || global.verbose > 0 {
+		globalCfg.Log.Level = levelName(effectiveLevel(global.verbose, quiet))
+	}
+	lvl := globalCfg.Log.SlogLevel()
 	if global.silent {
 		s := true
 		globalCfg.Log.Silent = &s

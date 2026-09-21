@@ -151,6 +151,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **`--root` from another directory no longer loads that directory's modules.** A
   magusfile's imports resolve against its project, then the workspace root.
+- **Config values given as flags are validated.** `--log-level bogus` ran with a value the
+  same setting in `magus.yaml` or the environment is refused for.
+- **`log.level` is honored.** It was overwritten at startup by the level `-v` and `-q`
+  imply, so `log.level: debug` in `magus.yaml`, `MAGUS_LOG_LEVEL` and `--log-level` left the
+  process at `info`. A verbosity flag still wins when given.
 - **A vulnerability database release no longer invalidates every Go target's cache.** The
   database date keys only targets that run govulncheck.
 - **Replaying a fully cached run is fast again.** Tool probes run concurrently and skip

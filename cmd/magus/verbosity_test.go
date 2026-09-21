@@ -94,9 +94,31 @@ func TestEffectiveLevelQuietWinsOverVerbose(t *testing.T) {
 	assert.Equal(t, config.LevelTrace, effectiveLevel(3, false))
 }
 
-func TestLevelNameNamesTraceItself(t *testing.T) {
+// levelName writes back into log.level, so it spells levels the way that setting's
+// validator accepts them.
+func TestLevelNameSpellsTheConfigVocabulary(t *testing.T) {
 	assert.Equal(t, "trace", levelName(config.LevelTrace))
-	assert.Equal(t, "DEBUG", levelName(slog.LevelDebug))
-	assert.Equal(t, "INFO", levelName(slog.LevelInfo))
-	assert.Equal(t, "ERROR", levelName(slog.LevelError))
+	assert.Equal(t, "debug", levelName(slog.LevelDebug))
+	assert.Equal(t, "info", levelName(slog.LevelInfo))
+	assert.Equal(t, "error", levelName(slog.LevelError))
+}
+
+// log.level from yaml, env or --log-level governs the process logger; only a verbosity
+// flag overrides it.
+func TestApplyDisplayHonorsConfiguredLevel(t *testing.T) {
+	savedCfg, savedGlobal, savedLogger := globalCfg, global, slog.Default()
+	t.Cleanup(func() {
+		globalCfg, global = savedCfg, savedGlobal
+		slog.SetDefault(savedLogger)
+	})
+
+	globalCfg, global = config.Config{Log: config.Log{Level: "debug", Format: "text"}}, globalFlags{}
+	applyDisplay()
+	assert.Equal(t, "debug", globalCfg.Log.Level)
+	assert.True(t, slog.Default().Enabled(context.Background(), slog.LevelDebug))
+
+	global.quiet = true
+	applyDisplay()
+	assert.Equal(t, "error", globalCfg.Log.Level)
+	assert.False(t, slog.Default().Enabled(context.Background(), slog.LevelWarn))
 }
