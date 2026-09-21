@@ -258,7 +258,9 @@ func (m *Magus) load(ctx context.Context) error {
 	ctx = types.WithWorkspace(ctx, m)
 	customTargets, err := preloadMagusfiles(ctx, m)
 	if err != nil {
-		return err
+		// Apply and the policy check would judge a registry the failed magusfiles
+		// never populated. The shadow ward reads only the tree, so it still reports.
+		return errors.Join(err, m.spellShadows())
 	}
 	// Workspace providers run HERE, in the one window where both facts they need are
 	// true: the magusfiles have been evaluated (so magus\workspace.provider has named
@@ -293,16 +295,24 @@ func (m *Magus) load(ctx context.Context) error {
 		return err
 	}
 	m.autobindMagusfileSpell()
-	// Shadow ward: a nested spells/<name> that a root-wins ancestor already defines
-	// is dead code (its import always resolves to the ancestor). Block it unless the
-	// author acknowledged the shadow in magus.yaml, so the footgun is visible without
-	// removing the escape hatch for a deliberate override.
-	if diags, err := ward.SpellShadows(m.ws.Root, m.shadowAcknowledged); err != nil {
+	return m.spellShadows()
+}
+
+// spellShadows is the shadow ward: a nested spells/<name> that a root-wins ancestor
+// already defines is dead code (its import always resolves to the ancestor). Block it
+// unless the author acknowledged the shadow in magus.yaml, so the footgun is visible
+// without removing the escape hatch for a deliberate override. Every shadow is
+// reported, so fixing one does not uncover the next.
+func (m *Magus) spellShadows() error {
+	diags, err := ward.SpellShadows(m.ws.Root, m.shadowAcknowledged)
+	if err != nil {
 		return err
-	} else if len(diags) > 0 {
-		return diags[0]
 	}
-	return nil
+	errs := make([]error, len(diags))
+	for i, d := range diags {
+		errs[i] = d
+	}
+	return errors.Join(errs...)
 }
 
 // shadowAcknowledged reports whether a spell-import shadow is deliberately allowed
@@ -394,6 +404,9 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 // populate m.wsReg, and returns each project's custom (export fun) target names,
 // keyed by project path — used afterward by validateTargetPolicies to confirm a
 // project's per-target policy table names only targets that actually exist.
+//
+// A failing magusfile does not stop the rest: the error joins every failure, so one
+// load names all of them instead of one per fix.
 func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, error) {
 	customTargets := make(map[string][]string)
 	if !interp.Available() {
@@ -403,24 +416,30 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
 	ctx = secret.ContextWithResolver(ctx, m.resolver)
+	var errs []error
 	for _, p := range m.All() {
 		srcs, err := interp.FindAll(p.Dir)
 		if err != nil {
 			if errors.Is(err, interp.ErrNoMagusfile) {
 				continue
 			}
-			return nil, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err)
+			errs = append(errs, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err))
+			continue
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {
-				return nil, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err)
+				errs = append(errs, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err))
+				continue
 			}
 			for _, t := range targets {
 				customTargets[p.Path] = append(customTargets[p.Path], t.Key)
 			}
 		}
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
 	}
 	return customTargets, nil
 }
