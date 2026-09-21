@@ -1,5 +1,5 @@
-// Package repoid answers which repository a checkout belongs to, and renders that
-// answer as the directory name the per-repository state stores key on.
+// This file answers which repository a checkout belongs to, and renders that answer as
+// the directory name the per-repository state stores key on.
 //
 // It exists because "the repository" had two definitions and both were the checkout
 // path: internal/memory and internal/sessions each carried a copy of the rule, which
@@ -14,21 +14,25 @@
 // Identity is the default remote, which is the only name two clones of one
 // repository share.
 //
-// The remote is read out of .git/config rather than asked of a VCS driver, and the
-// reason is not that types.RemoteReporter is awkward to reach from a Dir() function,
-// though it is. It is that identity has to be ONE deterministic function every caller
-// shares, including callers on the run path that must never fail a build or spawn a
-// process to find out where state lives. A driver where one resolves and a file read
-// where one does not is two identity rules, and two identity rules is precisely the
-// split this package exists to close.
+// The remote comes from ConfiguredRemote, which reads each backend's own config file and
+// never spawns one. Identity resolves several times per command on the guard's write
+// path, so it must be cheap, and it must be ONE rule every caller shares: a driver where
+// one backend resolves and a file read where another does not is two rules, which is the
+// split this exists to close.
 //
-// The cost of that choice, stated rather than hidden: this is git-only. An hg or jj
-// checkout has no .git/config, so it identifies as Path(root) and its clones do not
-// share a store, even though types.VCSCheckpoint will happily name their backend.
-package repoid
+// Anything it cannot reduce falls back to the checkout path, which is what the stores
+// keyed on before remotes did. Falling back SPLITS two clones, which is visible as a
+// store that looks empty; a wrong reduction would MERGE two repositories, which nothing
+// here can recover from.
+//
+// It lives in this package rather than beside the stores that call it because identity
+// is a VCS question answered from VCS config, and the one time it lived elsewhere it
+// carried its own copy of the backend claim order and of gitLinkedDir, both of which
+// drifted from the originals here.
+
+package vcs
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -79,7 +83,7 @@ func LegacyDir(base, kind, root string) string {
 // Closing that needs a recorded identity history, which is more machinery than the case
 // has earned so far.
 func identity(root string) string {
-	if u := remoteURL(gitCommonDir(root)); u != "" {
+	if u := ConfiguredRemote(root); u != "" {
 		if id := remoteIdentity(u); id != "" {
 			return id
 		}
@@ -94,7 +98,7 @@ func identity(root string) string {
 // rule's blind spot for a worktree of a bare repository. A "fix" here changes the key an
 // existing store is filed under, which does not repair that store, it hides it.
 func pathIdentity(root string) string {
-	gitdir, ok := linkedGitDir(root)
+	gitdir, ok := gitLinkedDir(root)
 	if !ok {
 		return root
 	}
@@ -140,13 +144,13 @@ func Adopt(legacy, dir string) error {
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
-		return fmt.Errorf("repoid: prepare %s: %w", dir, err)
+		return fmt.Errorf("repo: prepare %s: %w", dir, err)
 	}
 	// A concurrent adopter that got there first leaves dir present, which is the same
 	// outcome as the guard above and not a failure. Asked as "is it there now" rather
 	// than by matching the rename's error, which differs per platform.
 	if err := os.Rename(legacy, dir); err != nil && !present(dir) {
-		return fmt.Errorf("repoid: adopt %s into %s: %w", legacy, dir, err)
+		return fmt.Errorf("repo: adopt %s into %s: %w", legacy, dir, err)
 	}
 	return nil
 }
@@ -160,141 +164,6 @@ func Adopt(legacy, dir string) error {
 func present(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil || !errors.Is(err, fs.ErrNotExist)
-}
-
-// linkedGitDir reports the gitdir a .git FILE points at. A plain checkout's .git is a
-// directory, which reads as absent here.
-func linkedGitDir(root string) (string, bool) {
-	b, err := os.ReadFile(filepath.Join(root, ".git"))
-	if err != nil {
-		return "", false
-	}
-	gitdir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
-	if gitdir == "" {
-		return "", false
-	}
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(root, gitdir)
-	}
-	return gitdir, true
-}
-
-// gitCommonDir returns the directory holding the repository's shared config. A linked
-// worktree's own gitdir carries no config with remotes in it.
-//
-// git writes the answer: every linked worktree's gitdir holds a commondir file naming
-// the shared directory. Reading it beats matching "/.git/worktrees/" in the path, which
-// Path must keep doing for compatibility but which misses a worktree of a BARE
-// repository, where the gitdir is <repo>.git/worktrees/<n> and there is no ".git"
-// segment to find.
-func gitCommonDir(root string) string {
-	gitdir, ok := linkedGitDir(root)
-	if !ok {
-		return filepath.Join(root, ".git")
-	}
-	b, err := os.ReadFile(filepath.Join(gitdir, "commondir"))
-	if err != nil {
-		return filepath.Clean(gitdir)
-	}
-	common := strings.TrimSpace(string(b))
-	if !filepath.IsAbs(common) {
-		common = filepath.Join(gitdir, common)
-	}
-	return filepath.Clean(common)
-}
-
-// remoteURL returns the fetch URL of the repository's default remote: origin where it
-// exists, otherwise the first remote by name so two clones that named their one remote
-// alike still agree. Returns "" when the config is unreadable or declares no remote.
-func remoteURL(commonDir string) string {
-	f, err := os.Open(filepath.Join(commonDir, "config"))
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-
-	urls := map[string]string{}
-	remote := ""
-	s := bufio.NewScanner(f)
-	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
-		if strings.HasPrefix(line, "[") {
-			remote = remoteSectionName(line)
-			continue
-		}
-		if remote == "" {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		// Keys are case-insensitive, values are not. Matching the key
-		// case-sensitively while the section header above is folded made `URL =` read
-		// as a repository with no remote at all, which lands on the path key and
-		// splits the store: the failure this package exists to close, arriving
-		// quietly.
-		if !ok || !strings.EqualFold(strings.TrimSpace(k), "url") {
-			continue
-		}
-		// git's fetch path takes url[0], so a section repeating the key keeps the
-		// first.
-		if _, seen := urls[remote]; !seen {
-			urls[remote] = configValue(v)
-		}
-	}
-	// A config line past the scanner's 64 KiB budget, or an unreadable file mid-read,
-	// ends the loop with a partial map. Returning what was parsed would make identity
-	// depend on how much of the file was read, which is a store that moves for no
-	// reason a reader can see.
-	if s.Err() != nil {
-		return ""
-	}
-	if u, ok := urls["origin"]; ok {
-		return u
-	}
-	// The first remote by name, so two clones that named their one remote alike still
-	// agree. Scanned rather than sorted: the answer is one minimum, not an ordering.
-	first, name := "", ""
-	for n, u := range urls {
-		if name == "" || n < name {
-			first, name = u, n
-		}
-	}
-	return first
-}
-
-// remoteSectionName returns the remote a `[remote "name"]` header declares, or "" for
-// any other section. Subsection names are quoted and case-sensitive, unlike the section
-// name itself.
-func remoteSectionName(line string) string {
-	// To the closing bracket, not to the end: git accepts a trailing comment, and
-	// trimming a suffix that is not there leaves the comment inside the remote's name,
-	// where it misses the origin lookup and silently promotes a different remote.
-	end := strings.LastIndex(line, "]")
-	if end < 0 {
-		return ""
-	}
-	body := strings.TrimSpace(strings.TrimPrefix(line[:end], "["))
-	head, rest, ok := strings.Cut(body, " ")
-	if !ok || !strings.EqualFold(head, "remote") {
-		return ""
-	}
-	return strings.Trim(strings.TrimSpace(rest), `"`)
-}
-
-// configValue reads one git-config value: an inline comment is not part of it, and a
-// quoted value is quoted precisely so its surrounding whitespace survives.
-//
-// Neither is exotic. `url = https://host/o/r.git # main` normalizes to an identity
-// carrying " # main", which shares a store with nothing, and the trailing .git no
-// longer trims because it is no longer trailing.
-func configValue(v string) string {
-	if i := strings.IndexAny(v, "#;"); i >= 0 {
-		v = v[:i]
-	}
-	v = strings.TrimSpace(v)
-	if len(v) >= 2 && strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
-		return v[1 : len(v)-1]
-	}
-	return v
 }
 
 // remoteIdentity reduces a remote URL to what two spellings of one repository share:

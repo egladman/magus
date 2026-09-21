@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/repoid"
+	"github.com/egladman/magus/vcs"
 )
 
 // Reading the loaded-transcript half of the store back for ONE path.
@@ -82,7 +82,7 @@ func ReadPathContact(dir, path string) PathContact {
 		// Lstat for an absolute path, and this loop runs once per record in the store:
 		// paying that walk for every event to serve one `magus explain` would put a
 		// filesystem traversal per historical event on an interactive command.
-		if ev.Text != path && repoid.CheckoutRelative(ev.Text) != path {
+		if ev.Text != path && vcs.CheckoutRelative(ev.Text) != path {
 			continue
 		}
 		switch ev.Kind {

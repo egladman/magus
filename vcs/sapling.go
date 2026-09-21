@@ -379,6 +379,19 @@ func (v saplingVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
 	return out, nil
 }
 
+// ConfiguredRemote implements types.RemoteConfigReporter by reading `[paths] default`
+// out of .sl/config, which is where `sl paths default` above reads it from.
+//
+// Narrower than that command for the reason hg's is: Sapling layers user and system
+// config over the repository's own file, and a per-user path cannot be what two clones
+// of one repository share.
+func (v saplingVCS) ConfiguredRemote(dir string) (string, error) {
+	if u := configSectionValue(slConfigPath(dir), "paths", "default"); u != "" {
+		return u, nil
+	}
+	return "", types.ErrVCSUnsupported
+}
+
 // DefaultRef implements types.DefaultRefReporter. Sapling names its primary lines of
 // development in remotenames.selectivepulldefault ("main,master" out of the box) and
 // exposes them as remote bookmarks ("remote/main"). The first entry that actually resolves

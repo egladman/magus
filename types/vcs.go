@@ -358,6 +358,22 @@ type RemoteReporter interface {
 	RemoteURL(ctx context.Context, dir string) (string, error)
 }
 
+// RemoteConfigReporter is an optional capability (sibling of RemoteReporter) that reads
+// the default remote out of the backend's own config file, without running the backend.
+//
+// The missing context.Context is the contract: a method that may not start a process has
+// no deadline to honor. It exists for repository identity, which resolves several times
+// per command on the guard's write path where a subprocess is not affordable.
+//
+// ErrVCSUnsupported means unknown, not absent. Callers fall back to the checkout path,
+// which splits two clones into two stores and is visible; a wrong answer would merge two
+// repositories, which is not.
+type RemoteConfigReporter interface {
+	// ConfiguredRemote returns the default remote URL recorded in the config of the
+	// repository containing dir, or "" with ErrVCSUnsupported.
+	ConfiguredRemote(dir string) (string, error)
+}
+
 // DefaultRefReporter is an optional capability (sibling of RemoteReporter) for
 // VCSDriver implementations that can report the repository's default branch, e.g.
 // "main", independent of whatever branch is currently checked out. Committed

@@ -31,8 +31,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // ErrNoID reports a lease with no id. The id is what Update upserts on, so a row without
@@ -95,7 +95,7 @@ type Location struct {
 	// nothing is written there any more. Empty skips the adoption.
 	CacheDir string
 	// Root is the checkout this Store was opened from. It answers two questions: which
-	// REPOSITORY owns the rows (through repoid, which folds every worktree and clone of
+	// REPOSITORY owns the rows (through vcs.StateDir, which folds every worktree and clone of
 	// one repo onto a single directory), and what a row's paths are relative to when a
 	// release is digested (see Update). A Store built with an empty root still records
 	// releases; it just cannot say what was in them.
@@ -148,7 +148,7 @@ func jobsPath(loc Location) (string, error) {
 			return "", fmt.Errorf("job: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
 		}
 	}
-	dir, err := repoid.StateDir(base, "jobs", loc.Root)
+	dir, err := vcs.StateDir(base, "jobs", loc.Root)
 	if err != nil {
 		return "", fmt.Errorf("job: %w", err)
 	}
@@ -156,7 +156,7 @@ func jobsPath(loc Location) (string, error) {
 	// with `find ~ -path '*/.magus/cache/ledger' -maxdepth 6` returning nothing):
 	// carries forward the rows an older magus kept per checkout.
 	if loc.CacheDir != "" {
-		if err := repoid.Adopt(filepath.Join(loc.CacheDir, "ledger"), dir); err != nil {
+		if err := vcs.Adopt(filepath.Join(loc.CacheDir, "ledger"), dir); err != nil {
 			return "", fmt.Errorf("job: %w", err)
 		}
 	}
@@ -177,7 +177,7 @@ const (
 // adoptLedgerPlan copies a pre-rename plan into the job store, once, when the job store
 // has none of its own.
 //
-// A COPY rather than a move, which is the whole reason this is not repoid.Adopt: binaries
+// A COPY rather than a move, which is the whole reason this is not vcs.Adopt: binaries
 // of the previous vintage are still reading leases.json from other checkouts of this
 // repository, and taking the file out from under them empties their plan mid-session. The
 // cost is that rows written to the old file after this runs are not seen here, which is

@@ -1,4 +1,4 @@
-package repoid
+package vcs
 
 import (
 	"os"
@@ -21,6 +21,40 @@ func clone(t *testing.T, dir, url string) string {
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(git, "config"), []byte(body), 0o644))
 	return dir
+}
+
+// hgClone writes a plain hg checkout at dir whose default path is url.
+func hgClone(t *testing.T, dir, url string) string {
+	t.Helper()
+	hg := filepath.Join(dir, ".hg")
+	require.NoError(t, os.MkdirAll(hg, 0o755))
+	body := "[ui]\nusername = someone\n"
+	if url != "" {
+		body += "[paths]\ndefault = " + url + "\n"
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(hg, "hgrc"), []byte(body), 0o644))
+	return dir
+}
+
+// slClone writes a plain Sapling checkout at dir whose default path is url.
+func slClone(t *testing.T, dir, url string) string {
+	t.Helper()
+	sl := filepath.Join(dir, ".sl")
+	require.NoError(t, os.MkdirAll(sl, 0o755))
+	body := "[ui]\nusername = someone\n"
+	if url != "" {
+		body += "[paths]\ndefault = " + url + "\n"
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(sl, "config"), []byte(body), 0o644))
+	return dir
+}
+
+// jjColocated writes what `jj git init --colocate` leaves: a .jj beside a git checkout
+// whose remotes are the ones jj uses.
+func jjColocated(t *testing.T, dir, url string) string {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".jj", "repo"), 0o755))
+	return clone(t, dir, url)
 }
 
 // worktree writes a linked worktree of the repository whose shared git directory is
@@ -107,6 +141,75 @@ func TestIdentityPrefersOriginThenFirstByName(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(onlyGit, "config"),
 		[]byte("[remote \"zeta\"]\n\turl = git@example.com:a/b.git\n[remote \"alpha\"]\n\turl = git@example.com:c/d.git\n"), 0o644))
 	assert.Equal(t, "example.com/c/d", identity(only), "no origin: first remote by name")
+}
+
+// The parity claim, one case per backend: a checkout identifies by its recorded remote
+// rather than by where it sits, whichever tool wrote that remote. Before this, only git
+// folded, so two hg clones of one repository kept two stores and neither could read what
+// the other recorded.
+func TestIdentityFoldsClonesUnderEveryBackend(t *testing.T) {
+	const url = "https://example.com/acme/widget"
+	for _, tc := range []struct {
+		name  string
+		write func(t *testing.T, dir, url string) string
+	}{
+		{"git", clone},
+		{"hg", hgClone},
+		{"sapling", slClone},
+		{"jj colocated", jjColocated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := tc.write(t, t.TempDir(), url)
+			b := tc.write(t, t.TempDir(), url)
+			require.NotEqual(t, a, b, "the premise: two checkouts at different paths")
+
+			got := identity(a)
+			assert.Equal(t, "example.com/acme/widget", got, "the remote is what identifies it")
+			assert.Equal(t, got, identity(b), "two clones, one identity")
+		})
+	}
+}
+
+// Without a remote every backend must land on the checkout path, which splits the two
+// and is visible, rather than on some shared constant that would merge them.
+func TestIdentityFallsBackToPathUnderEveryBackend(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		write func(t *testing.T, dir, url string) string
+	}{
+		{"git", clone},
+		{"hg", hgClone},
+		{"sapling", slClone},
+		{"jj colocated", jjColocated},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := tc.write(t, t.TempDir(), "")
+			b := tc.write(t, t.TempDir(), "")
+			assert.Equal(t, a, identity(a), "no remote: the checkout path is the identity")
+			assert.NotEqual(t, identity(a), identity(b), "two unrelated checkouts must not share a store")
+		})
+	}
+}
+
+// A jj workspace that is NOT colocated keeps its store inside .jj, a layout nothing here
+// describes. It must fall back to the path rather than guess at a git directory: a guess
+// that resolved to the wrong repository would merge two stores, which is unrecoverable.
+func TestIdentityFallsBackForANonColocatedJJWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".jj", "repo", "store"), 0o755))
+
+	assert.Equal(t, dir, identity(dir))
+}
+
+// A tree carrying both .hg and .git identifies by hg, because hg is what drives it
+// everywhere else in magus (vcs.builtin probes .jj, .hg, .sl before .git). Two orderings
+// would key a store on one backend while the rest of magus used the other.
+func TestIdentityFollowsTheDriverClaimOrder(t *testing.T) {
+	dir := t.TempDir()
+	hgClone(t, dir, "https://example.com/acme/from-hg")
+	clone(t, dir, "https://example.com/acme/from-git")
+
+	assert.Equal(t, "example.com/acme/from-hg", identity(dir))
 }
 
 func TestRemoteIdentity(t *testing.T) {
