@@ -52,3 +52,13 @@ func (s *Session) ResumeFiber(ctx context.Context, fiber vmpackage.Value) (vmpac
 func (s *Session) ResolveFiber(ctx context.Context, fiber vmpackage.Value) (vmpackage.Value, error) {
 	return s.builtinResolve(ctx, []vmpackage.Value{fiber})
 }
+
+// NewFiber builds a suspended fiber over fn, ready for ResumeFiber. It is CallValue's
+// shape for a body the host intends to DRIVE rather than run to completion: same fresh
+// VM per invocation, same argument convention.
+//
+// Nothing runs until the first resume, so a caller can arm its finalizer before any of
+// the body has executed.
+func (s *Session) NewFiber(ctx context.Context, fn vmpackage.Value, args []vmpackage.Value) (vmpackage.Value, error) {
+	return vmpackage.NewVM(ctx).NewFiber(fn, args)
+}
