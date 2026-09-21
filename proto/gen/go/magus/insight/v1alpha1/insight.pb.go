@@ -234,9 +234,9 @@ func (x *HotspotOutput) GetFiles() []*FileHotspot {
 }
 
 // ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency-graph node
-// the hotspots lens reuses, which is why it carries graph shape (children, spell_name,
-// exclusive) alongside the churn fields - the same message serves a reader that wants to draw
-// the dependency edges under the heat. It is NOT magus.graph.v1alpha1.Node: that one is a
+// the hotspots lens reuses, which is why it carries graph shape (children, spell_name)
+// alongside the churn fields: the same message serves a reader that wants to draw the
+// dependency edges under the heat. It is NOT magus.graph.v1alpha1.Node: that one is a
 // knowledge-graph node (id/kind/relation), this one is a project in the build graph.
 //
 // churn, authors and last_commit_time are the heatmap overlay and are absent on a plain dependency
@@ -248,7 +248,6 @@ type ProjectNode struct {
 	SpellName      string                 `protobuf:"bytes,3,opt,name=spell_name,json=spellName,proto3" json:"spell_name,omitempty"`
 	Children       []string               `protobuf:"bytes,4,rep,name=children,proto3" json:"children,omitempty"`
 	Dir            string                 `protobuf:"bytes,5,opt,name=dir,proto3" json:"dir,omitempty"`
-	Exclusive      bool                   `protobuf:"varint,6,opt,name=exclusive,proto3" json:"exclusive,omitempty"`
 	BlastRadius    int32                  `protobuf:"varint,7,opt,name=blast_radius,json=blastRadius,proto3" json:"blast_radius,omitempty"`
 	DurationMs     int64                  `protobuf:"varint,8,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
 	Churn          int32                  `protobuf:"varint,9,opt,name=churn,proto3" json:"churn,omitempty"`      // recent commits touching the project
@@ -321,13 +320,6 @@ func (x *ProjectNode) GetDir() string {
 		return x.Dir
 	}
 	return ""
-}
-
-func (x *ProjectNode) GetExclusive() bool {
-	if x != nil {
-		return x.Exclusive
-	}
-	return false
 }
 
 func (x *ProjectNode) GetBlastRadius() int32 {
@@ -1143,22 +1135,21 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\acommits\x18\x02 \x01(\x05R\acommits\x12\x14\n" +
 	"\x05since\x18\x03 \x01(\tR\x05since\x129\n" +
 	"\x05nodes\x18\x04 \x03(\v2#.magus.insight.v1alpha1.ProjectNodeR\x05nodes\x129\n" +
-	"\x05files\x18\x05 \x03(\v2#.magus.insight.v1alpha1.FileHotspotR\x05files\"\xda\x02\n" +
+	"\x05files\x18\x05 \x03(\v2#.magus.insight.v1alpha1.FileHotspotR\x05files\"\xcd\x02\n" +
 	"\vProjectNode\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
 	"spell_name\x18\x03 \x01(\tR\tspellName\x12\x1a\n" +
 	"\bchildren\x18\x04 \x03(\tR\bchildren\x12\x10\n" +
-	"\x03dir\x18\x05 \x01(\tR\x03dir\x12\x1c\n" +
-	"\texclusive\x18\x06 \x01(\bR\texclusive\x12!\n" +
+	"\x03dir\x18\x05 \x01(\tR\x03dir\x12!\n" +
 	"\fblast_radius\x18\a \x01(\x05R\vblastRadius\x12\x1f\n" +
 	"\vduration_ms\x18\b \x01(\x03R\n" +
 	"durationMs\x12\x14\n" +
 	"\x05churn\x18\t \x01(\x05R\x05churn\x12\x18\n" +
 	"\aauthors\x18\n" +
 	" \x01(\x05R\aauthors\x12D\n" +
-	"\x10last_commit_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0elastCommitTime\"\xe7\x01\n" +
+	"\x10last_commit_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0elastCommitTimeJ\x04\b\x06\x10\aR\texclusive\"\xe7\x01\n" +
 	"\vFileHotspot\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acommits\x18\x02 \x01(\x05R\acommits\x12\x1e\n" +

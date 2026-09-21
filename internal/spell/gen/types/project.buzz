@@ -12,5 +12,4 @@ export object Project {
     depends_on: [str] = [],
     sources: [str] = [],
     outputs: [str] = [],
-    exclusive: bool = false,
 }

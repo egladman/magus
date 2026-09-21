@@ -23,8 +23,6 @@ type admission struct {
 	// machineClaim says a claim on the machine budget is held, so anything admitted
 	// beneath this step takes none of its own.
 	machineClaim bool
-	// isolation is the run-isolation lease, nil outside an admitted step.
-	isolation *runIsolationLease
 	// hold is this step's record in the limiter's slot watch, nil outside an admitted
 	// step. It is what a blocking wait marks itself on, so a slot held by a step that
 	// cannot proceed is distinguishable from one doing work.

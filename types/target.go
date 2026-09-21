@@ -100,7 +100,7 @@ func ValidateCharmName(name string) error {
 //   - As a work-unit it carries identity: Path/Name/Charms/Files describe which
 //     project x target to run and against which changed files.
 //   - As a policy bag it carries per-target execution policy
-//     (SkipCache/Exclusive/Drift/RetryOnVolatile). When used purely as policy
+//     (SkipCache/Drift/RetryOnVolatile). When used purely as policy
 //     (Project.TargetPolicies values, EvaluatedTargetEntry.Policy) only the policy
 //     fields are meaningful; the identity fields are unset/ignored.
 type Target struct {
@@ -142,8 +142,7 @@ type Target struct {
 	// were once workarounds for a snapshot error that no longer exists, and a bare
 	// bool gave no way to tell them from the real ones.
 	SkipCacheReason string `json:"skip_cache_reason,omitempty" buzz:"skip_cache_reason"`
-	Exclusive       bool   `json:"exclusive,omitempty"` // run alone: no other target runs concurrently
-	Slots           int    `json:"slots,omitempty"`     // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
+	Slots           int    `json:"slots,omitempty"` // concurrency slots to hold while running (0 or 1 = one slot); throttles parallel work around a resource-heavy target. Clamped to the run's total slot budget.
 	// MemoryMB is the peak resident memory this target needs, in megabytes; 0 means
 	// undeclared. It is a portable way to spell Slots: an author knows a race-enabled
 	// test suite wants 8GB, but nobody can say how many slots that is on a machine

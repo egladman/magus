@@ -850,7 +850,6 @@ func projectEntry(p *types.Project, root string) types.ProjectEntry {
 		Sources:   p.Sources,
 		Outputs:   p.Outputs,
 		DependsOn: p.DependsOn,
-		Exclusive: p.Exclusive,
 		Manifests: manifestNames(manifests),
 		Lockfiles: projectLockfiles(manifests, p.Dir, root),
 	}
@@ -1099,7 +1098,6 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 			DependsOn: p.DependsOn,
 			Charms:    charms,
 			Spells:    spellEntries,
-			Exclusive: p.Exclusive,
 		}
 		if pol, ok := p.TargetPolicies[et.Name]; ok {
 			entry.Policy = &pol

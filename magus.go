@@ -1642,11 +1642,10 @@ func magusfileOverride(p *types.Project, resolved []*spells.Spell, target string
 	return -1
 }
 
-// forEachSpell runs fn against every spell on p. Spells run in parallel unless
-// p.Exclusive is set; all run to completion so one failure does not mask others.
-// When the context carries a [cache.Limiter] and the caller holds a slot, the
-// parallel branch yields the slot and each spell acquires its own, keeping total
-// concurrent spells bounded by the workspace concurrency cap.
+// forEachSpell runs fn against every spell on p. Spells run in parallel, and all run to
+// completion so one failure does not mask others. When the context carries a
+// [cache.Limiter] and the caller holds a slot, the fan-out yields the slot and each spell
+// acquires its own, keeping total concurrent spells bounded by the workspace cap.
 func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(context.Context, *spells.Spell) error) error {
 	resolved := p.ResolvedSpells
 	if len(resolved) == 0 {
@@ -1670,19 +1669,6 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 		}
 		return nil
 	}
-	if p.Exclusive {
-		var failed []types.SpellFailure
-		for _, s := range resolved {
-			if err := fn(ctx, s); err != nil {
-				failed = append(failed, types.SpellFailure{Spell: s.Name(), Err: err})
-			}
-		}
-		if len(failed) == 0 {
-			return nil
-		}
-		return spellErr(p, target, failed...)
-	}
-
 	lim := cache.LimiterFromContext(ctx)
 	slotHeld := lim != nil && cache.SlotHeld(ctx)
 	bounded := lim != nil

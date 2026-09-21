@@ -360,10 +360,10 @@ func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {
 func TestParseBuzzProjectOpts_AFutureKeyDoesNotDiscardItsNeighbors(t *testing.T) {
 	pol := vm.NewMap()
 	pol.MapSet("quantum_flux", vm.StrValue("9m"))
-	pol.MapSet("exclusive", vm.BoolValue(true))
+	pol.MapSet("slots", vm.IntValue(2))
 	opts, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
 	require.NoError(t, err)
-	assert.NotEmpty(t, opts, "the exclusive policy beside the unknown key still lands")
+	assert.NotEmpty(t, opts, "the slots policy beside the unknown key still lands")
 }
 
 // includePolicy builds `{"cache": {"include": {axis: {"enabled": on}}}}`.

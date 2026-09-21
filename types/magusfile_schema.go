@@ -30,7 +30,6 @@ var ProjectOptions = []ProjectOption{
 	{Key: "depends_on"},
 	{Key: "outputs"},
 	{Key: "sources"},
-	{Key: "exclusive"},
 	{Key: "spells"},
 	{Key: "watch_ignore"},
 	{Key: "targets"},
@@ -56,7 +55,6 @@ var ProjectOptions = []ProjectOption{
 // `timeout` deadlocking a workspace whose binary predated it.
 var TargetPolicyOptions = []ProjectOption{
 	{Key: "skip_cache"},
-	{Key: "exclusive"},
 	{Key: "slots"},
 	{Key: "memory_mb"},
 	{Key: "cache"},
@@ -105,9 +103,9 @@ func ProjectOptionSince(key string) (string, bool) { return optionSince(ProjectO
 
 // TargetPolicySince is ProjectOptionSince for a per-target policy key.
 //
-// Separate from ProjectOptionSince rather than one merged lookup: `exclusive` is a
-// member of BOTH vocabularies, so a single table keyed by name could only answer for
-// one of them.
+// Separate from ProjectOptionSince rather than one merged lookup: the two vocabularies
+// are free to spell one name differently, and a single table keyed by name could only
+// answer for one of them. `exclusive` was such a name until it was deleted outright.
 func TargetPolicySince(key string) (string, bool) { return optionSince(TargetPolicyOptions, key) }
 
 func optionSince(opts []ProjectOption, key string) (string, bool) {

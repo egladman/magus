@@ -9,7 +9,6 @@ type Node struct {
 	SpellName   string   `json:"spell_name,omitempty" yaml:"spell_name,omitempty"`
 	Children    []string `json:"children" yaml:"children"`
 	Dir         string   `json:"dir,omitempty" yaml:"dir,omitempty"`
-	Exclusive   bool     `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
 	BlastRadius int      `json:"blast_radius,omitempty" yaml:"blast_radius,omitempty"`
 	DurationMs  int64    `json:"duration_ms,omitempty" yaml:"duration_ms,omitempty"`
 	// Churn, Authors, and LastCommit are populated by the churn heatmap and omitted

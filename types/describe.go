@@ -512,7 +512,6 @@ type ProjectEntry struct {
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty" buzz:"dependsOn"`
-	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
 	// Manifests lists this project's spells' version-manifest candidates
 	// (spells.Spell.Manifests), filtered to the ones that actually exist in Dir and
 	// kept in declared order, so element 0, when present, is "the" manifest under
@@ -586,7 +585,7 @@ const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved 
 	"output globs that feed the cache key, the chain of targets it composes in " +
 	"invocation order, the spells that will fire (with " +
 	"target-specific sources), " +
-	"and any behavioral policy (CheckClean, TrackVolatile, Exclusive)."
+	"and any behavioral policy (CheckClean, TrackVolatile)."
 
 // EvaluatedSpell is one spell's contribution to an evaluated target.
 type EvaluatedSpell struct {
@@ -628,8 +627,7 @@ type EvaluatedTarget struct {
 	DependsOn []string         `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string         `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpell `json:"spells,omitempty"     yaml:"spells,omitempty"`
-	Policy    *Target          `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/Drift/RetryOnVolatile)
-	Exclusive bool             `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
+	Policy    *Target          `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Drift/RetryOnVolatile)
 }
 
 // EvaluatedProject is the fully-resolved view of a project: every ProjectEntry
@@ -669,7 +667,6 @@ func (p EvaluatedProject) BuzzObject() BuzzObject {
 		"sources":   p.Sources,
 		"outputs":   p.Outputs,
 		"dependsOn": p.DependsOn,
-		"exclusive": p.Exclusive,
 		"manifests": p.Manifests,
 	}
 	spells := make([]any, len(p.ResolvedSpells))
@@ -683,7 +680,6 @@ func (p EvaluatedProject) BuzzObject() BuzzObject {
 	for name, t := range p.TargetPolicies {
 		policies[name] = map[string]any{
 			"skipCache": t.SkipCache,
-			"exclusive": t.Exclusive,
 			"slots":     t.Slots,
 			"memory_mb": t.MemoryMB,
 			"timeout":   t.Timeout,

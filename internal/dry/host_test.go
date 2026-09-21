@@ -254,27 +254,25 @@ func TestTraceProject_slotsBelowOne(t *testing.T) {
 	assert.Contains(t, g.Diag.Msg, "slots must be >= 1")
 }
 
-// TestTraceProject_exclusiveTargetAndBools flattens the exclusive per-target
-// policy plus the top-level exclusive/depends_on/sources fields into the project.
-func TestTraceProject_exclusiveTargetAndBools(t *testing.T) {
+// TestTraceProject_targetPolicyAndLists flattens a per-target policy plus the top-level
+// depends_on/sources/outputs fields into the project.
+func TestTraceProject_targetPolicyAndLists(t *testing.T) {
 	const src = `import "magus";
 magus.project({
-    "exclusive": true,
     "depends_on": ["../lib"],
     "sources": ["src/**"],
     "outputs": "bin/app",
-    "targets": {"deploy": {"exclusive": true}},
+    "targets": {"deploy": {"skip_cache": "publishes per invocation"}},
 });
 export fun deploy(ctx: magus\Context, args: [str]) > void {}`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
 	p := g.Projects[0]
-	assert.True(t, p.Exclusive)
 	assert.Equal(t, []string{"../lib"}, p.DependsOn)
 	assert.Equal(t, []string{"src/**"}, p.Sources)
 	assert.Equal(t, []string{"bin/app"}, p.Outputs, "a bare str outputs coerces to a one-element list")
-	assert.Equal(t, []string{"deploy"}, p.ExclusiveTargets)
+	assert.Equal(t, []string{"deploy"}, p.NoCache)
 }
 
 // TestTraceProject_malformedCall: a non-map, non-str argument is a no-op config

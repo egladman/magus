@@ -94,7 +94,6 @@ func nodeToProto(n types.Node) *insightv1.ProjectNode {
 		SpellName:   n.SpellName,
 		Children:    n.Children,
 		Dir:         n.Dir,
-		Exclusive:   n.Exclusive,
 		BlastRadius: int32(n.BlastRadius),
 		DurationMs:  n.DurationMs,
 		Churn:       int32(n.Churn),

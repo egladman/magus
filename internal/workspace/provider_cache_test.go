@@ -127,7 +127,6 @@ func TestProviderCacheRoundTripsEveryField(t *testing.T) {
 		DependsOn: []string{"libs/shared"},
 		Sources:   []string{"**/*.ts"},
 		Outputs:   []string{"dist/**"},
-		Exclusive: true,
 	}
 	calls := 0
 	withRunner(t, func(context.Context, string, string) ([]spells.ProvidedProject, error) {

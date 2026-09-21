@@ -74,9 +74,10 @@ magus\project({
     // to it.
     "outputs": ["gen/**"],
     "targets": {
-        // build rebuilds the committed gen/ and gates on drift, so it must run every time (skip_cache)
-        // and alone (exclusive) so a peer mutating gen/ cannot trip its git-status check.
-        "build": {"skip_cache": "rebuilds gen/ and gates on drift; a replay would skip the git-status check", "exclusive": true},
+        // build rebuilds the committed gen/ and gates on drift, so it must run every time.
+        // Its own vcs\isDirty check is inert (see build below); skip_cache is what keeps
+        // the rebuild honest.
+        "build": {"skip_cache": "rebuilds gen/ and gates on drift; a replay would skip the check"},
         // The advisory database is the input that matters here and it lives on the
         // registry, not in this tree. A hit would replay a clean bill of health from
         // before the advisory that now applies to a lockfile nobody touched.

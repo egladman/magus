@@ -133,7 +133,6 @@ func ComposeGraph(ws types.WorkspaceRepository, opts ...ComposeOption) types.Gra
 			SpellName: p.Spell,
 			Children:  kids,
 			Dir:       p.Dir,
-			Exclusive: p.Exclusive,
 		}
 		if blastRadius != nil {
 			node.BlastRadius = blastRadius[p.Path]

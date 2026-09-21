@@ -70,7 +70,6 @@ func TestDecodeProvidedProject(t *testing.T) {
 			"depends_on": []any{"libs/shared"},
 			"sources":    []any{"**/*.ts"},
 			"outputs":    []any{"dist/**"},
-			"exclusive":  true,
 		})
 		require.NoError(t, err)
 
@@ -81,15 +80,14 @@ func TestDecodeProvidedProject(t *testing.T) {
 			DependsOn: []string{"libs/shared"},
 			Sources:   []string{"**/*.ts"},
 			Outputs:   []string{"dist/**"},
-			Exclusive: true,
 		}, pp)
 	})
 
 	t.Run("a null field reads as absent, like every other field", func(t *testing.T) {
 		// One record must not have two null policies: nil is "not declared" for the
-		// string, list and bool fields alike.
+		// string and list fields alike.
 		pp, err := decodeProvidedProject("nx", 0, map[string]any{
-			"path": "libs/foo", "name": nil, "spells": nil, "exclusive": nil,
+			"path": "libs/foo", "name": nil, "spells": nil, "sources": nil,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, spells.ProvidedProject{Path: "libs/foo"}, pp)
@@ -100,7 +98,7 @@ func TestDecodeProvidedProject(t *testing.T) {
 		// zero values rather than absent keys.
 		pp, err := decodeProvidedProject("nx", 0, map[string]any{
 			"path": "libs/foo", "name": "", "spells": []any{},
-			"depends_on": []any{}, "sources": []any{}, "outputs": []any{}, "exclusive": false,
+			"depends_on": []any{}, "sources": []any{}, "outputs": []any{},
 		})
 		require.NoError(t, err)
 		assert.Equal(t, spells.ProvidedProject{Path: "libs/foo"}, pp)
@@ -125,7 +123,6 @@ func TestDecodeProvidedProject(t *testing.T) {
 		{"path of the wrong type", map[string]any{"path": 7}, `field "path" is int, want str`},
 		{"list field of the wrong type", map[string]any{"path": "libs/foo", "sources": "glob"}, `field "sources" is string, want [str]`},
 		{"list element of the wrong type", map[string]any{"path": "libs/foo", "sources": []any{"ok", 7}}, `field "sources"[1] is int, want str`},
-		{"exclusive of the wrong type", map[string]any{"path": "libs/foo", "exclusive": "yes"}, `field "exclusive" is string, want bool`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := decodeProvidedProject("nx", 3, tc.item)
@@ -152,7 +149,7 @@ func TestRunWorkspaceProviderUnregisteredSpell(t *testing.T) {
 func TestDecodeCoversEveryProvidedProjectField(t *testing.T) {
 	decoded := map[string]bool{
 		fieldPath: true, fieldName: true, fieldSpells: true, fieldDependsOn: true,
-		fieldSources: true, fieldOutputs: true, fieldExclusive: true,
+		fieldSources: true, fieldOutputs: true,
 	}
 	rt := reflect.TypeFor[spells.ProvidedProject]()
 	for i := range rt.NumField() {

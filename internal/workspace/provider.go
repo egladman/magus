@@ -145,9 +145,6 @@ func projectOptions(pp spells.ProvidedProject) []ProjectOption {
 	for _, name := range pp.Spells {
 		opts = append(opts, WithRegisteredSpell(name))
 	}
-	if pp.Exclusive {
-		opts = append(opts, WithExclusive())
-	}
 	return opts
 }
 

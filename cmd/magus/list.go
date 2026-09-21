@@ -30,7 +30,6 @@ type listProject struct {
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
 }
 
 type listOutput struct {
@@ -128,7 +127,6 @@ func lsProjects(ctx context.Context, root string) error {
 			Sources:   p.Sources,
 			Outputs:   p.Outputs,
 			DependsOn: p.DependsOn,
-			Exclusive: p.Exclusive,
 		})
 	}
 

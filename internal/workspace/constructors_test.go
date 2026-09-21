@@ -39,13 +39,6 @@ func TestWithSourcesRejectsAWorkspaceEscape(t *testing.T) {
 	assert.Empty(t, p.Sources, "a rejected declaration stores nothing")
 }
 
-func TestWithExclusive(t *testing.T) {
-	p := &types.Project{Path: "."}
-	opt := WithExclusive()
-	require.NoError(t, opt(p))
-	assert.True(t, p.Exclusive)
-}
-
 func TestWithWatchIgnore_ValidGlob(t *testing.T) {
 	p := &types.Project{Path: "."}
 	opt := WithWatchIgnore(IgnoreGlob("**/testdata/**"))

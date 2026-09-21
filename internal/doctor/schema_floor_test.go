@@ -31,18 +31,17 @@ func TestUsedSchemaKeysDetectsGatedTargetPolicy(t *testing.T) {
 		TargetPolicies: map[string]types.Target{
 			"ci":       {Timeout: "45m"},
 			"test":     {RetryOnVolatile: true},
-			"lint":     {Exclusive: true},
 			"generate": {SkipCache: true},
 		},
 	}}
 	assert.Equal(t,
 		[]string{"targets[].retry_on_volatile", "targets[].timeout"},
 		labels(usedSchemaKeys(projects)),
-		"exclusive and skip_cache predate floors, so they need no coverage")
+		"skip_cache predates floors, so it needs no coverage")
 }
 
-// A qualified label is what tells the two `exclusive` keys apart, and it is how a reader
-// finds the declaration the floor is being demanded for.
+// A qualified label is what tells a target policy from the project option of the same
+// name, and it is how a reader finds the declaration the floor is being demanded for.
 func TestUsedSchemaKeysQualifiesTargetPolicyLabels(t *testing.T) {
 	projects := []*types.Project{{Path: ".", TargetPolicies: map[string]types.Target{"ci": {Timeout: "45m"}}}}
 	require.Len(t, usedSchemaKeys(projects), 1)

@@ -143,8 +143,8 @@ one when the question is about the other's granularity.
 
 **`types.Target` is dual-role.** As a work-unit, `Path`/`Name`/`Charms`/`Files`
 identify which `path:target` to run. As a policy bag (`Project.TargetPolicies`
-values, `EvaluatedTarget.Policy`), only `SkipCache`/`Exclusive`/`Slots`/
-`Drift`/`RetryOnVolatile` are meaningful - the other 6 of its 11 fields
+values, `EvaluatedTarget.Policy`), only `SkipCache`/`Slots`/
+`Drift`/`RetryOnVolatile` are meaningful - the other 6 of its 10 fields
 sit unset and must be ignored (see `types/target.go:95-101` for the type's own
 disclaimer). A function that receives a `types.Target` needs to know which
 role it is playing before reading any field.

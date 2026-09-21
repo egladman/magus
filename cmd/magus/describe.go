@@ -1101,9 +1101,6 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			if len(p.DependsOn) > 0 {
 				fmt.Printf("  depends_on: %v\n", p.DependsOn)
 			}
-			if p.Exclusive {
-				fmt.Printf("  exclusive: true\n")
-			}
 			for _, s := range p.ResolvedSpells {
 				fmt.Printf("  spell: %s\n", s.Name)
 			}
@@ -1126,9 +1123,6 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				}
 				if pol.SkipCache {
 					fmt.Printf("  skip_cache")
-				}
-				if pol.Exclusive {
-					fmt.Printf("  exclusive")
 				}
 				if pol.Slots > 0 {
 					fmt.Printf("  slots=%d", pol.Slots)
@@ -1187,9 +1181,6 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		}
 		if len(p.DependsOn) > 0 {
 			fmt.Printf("  depends_on: %v\n", p.DependsOn)
-		}
-		if p.Exclusive {
-			fmt.Printf("  exclusive: true\n")
 		}
 		fmt.Println()
 	}
@@ -1269,9 +1260,6 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		if len(e.Charms) > 0 {
 			fmt.Printf("  charms:  %v\n", e.Charms)
 		}
-		if e.Exclusive {
-			fmt.Printf("  exclusive: true\n")
-		}
 		for _, s := range e.Spells {
 			fmt.Printf("  spell: %s", s.Name)
 			if len(s.TargetSources) > 0 {
@@ -1342,9 +1330,6 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			}
 			if e.Policy.SkipCache {
 				fmt.Printf("  skip_cache")
-			}
-			if e.Policy.Exclusive {
-				fmt.Printf("  exclusive")
 			}
 			if e.Policy.Slots > 0 {
 				fmt.Printf("  slots=%d", e.Policy.Slots)

@@ -61,20 +61,22 @@ message HotspotOutput {
 }
 
 // ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency-graph node
-// the hotspots lens reuses, which is why it carries graph shape (children, spell_name,
-// exclusive) alongside the churn fields - the same message serves a reader that wants to draw
-// the dependency edges under the heat. It is NOT magus.graph.v1alpha1.Node: that one is a
+// the hotspots lens reuses, which is why it carries graph shape (children, spell_name)
+// alongside the churn fields: the same message serves a reader that wants to draw the
+// dependency edges under the heat. It is NOT magus.graph.v1alpha1.Node: that one is a
 // knowledge-graph node (id/kind/relation), this one is a project in the build graph.
 //
 // churn, authors and last_commit_time are the heatmap overlay and are absent on a plain dependency
 // graph; blast_radius and duration_ms come from the graph itself.
 message ProjectNode {
+  reserved 6;
+  reserved "exclusive";
+
   string path = 1;  // the stable machine key
   string name = 2;  // the declared display name, empty when the project never set one
   string spell_name = 3;
   repeated string children = 4;
   string dir = 5;
-  bool exclusive = 6;
   int32 blast_radius = 7;
   int64 duration_ms = 8;
   int32 churn = 9;    // recent commits touching the project
