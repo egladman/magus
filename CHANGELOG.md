@@ -136,6 +136,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **The agent surface stops promising a checkpoint restore.** A checkpoint records a
   digest, not the patch; magus-vcs-hygiene covers recovering work.
 - **"Handoff journal" is renamed to memory** across the command, docs and manpage.
+- **A repeated guard deny is one line and a ref.** The first deny from a rule in a session
+  carries the full reason, `nothing ran (N commands)` on a multi-command line, and the
+  rule's page. Later ones name the rule and cite `magus query output grd<hex>`, counted by
+  `magus session hints` as `deny-verdict`.
+- **`magus query output` reads trail payloads.** `grd` (guard verdicts) and `mcp` refs
+  resolve beside `out` run outputs.
 
 ### Removed
 

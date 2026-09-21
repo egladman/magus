@@ -192,6 +192,14 @@ func NextForFailure(project, target, ref string) []Next {
 	return capNext(next)
 }
 
+// NextForDenial breadcrumbs a repeated guard deny: the full verdict the short form stands
+// in for. Its id is what `magus session hints` counts.
+func NextForDenial(ref string) Next {
+	return breadcrumb("deny-verdict", QueryOutput,
+		"the ref holds this deny's full verdict, which a repeat within a session shortens to one line.",
+		ref)
+}
+
 // Role is who a result is being served to, read off the acting lease's row by
 // [RoleFor].
 //

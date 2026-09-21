@@ -233,10 +233,11 @@ func TestHookCmd(t *testing.T) {
 	assert.True(t, strings.HasPrefix(run("git commit -m x"), "advise [stage-classify]: "))
 	assert.True(t, strings.HasPrefix(run("git stash"), "deny [whole-tree]: "))
 
+	// A repeat in the same session, so the structured form carries the short reason.
 	got := run("git stash", "-o", "json")
 	assert.Contains(t, got, `"decision": "deny"`)
 	assert.Contains(t, got, `"schema_version": 1`)
-	assert.Contains(t, got, "magus-vcs-hygiene")
+	assert.Contains(t, got, `"reason": "denied again [whole-tree]: `)
 
 	// A template renders a host dialect; pass renders empty, deny fills it.
 	tpl := `template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}`
@@ -837,23 +838,52 @@ func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
 	})
 }
 
-// TestHookCmdRepeatsEveryDenial is the exemption, and it is the more important half. A
-// refusal explains itself every time it refuses: it is the one verdict the caller cannot
-// see past, and a second identical `git stash` blocked with no reason is a dead end.
-func TestHookCmdRepeatsEveryDenial(t *testing.T) {
+// TestHookCmdShortensARepeatedDenial pins both forms of a deny. A refusal explains itself
+// every time, since a second `git stash` blocked with no reason is a dead end, but only the
+// first firing in a session spends the full text: the repeat is one line, the ref that
+// holds the full verdict, and the rule's page, and the ref must resolve to that verdict.
+func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	base, root := t.TempDir(), t.TempDir()
 	ctx := guard.WithLocation(t.Context(), base, root, "")
-	run := func() string {
+	run := func(command, session string) string {
 		var out strings.Builder
 		global = globalFlags{}
-		err := shellStdin(ctx, strings.NewReader("git stash"), &out, []string{"--session", "session-1"})
+		err := shellStdin(ctx, strings.NewReader(command), &out, []string{"--session", session})
 		var silent errSilent
 		require.ErrorAs(t, err, &silent)
 		require.Equal(t, guardDenyExitCode, silent.exitCode)
 		return out.String()
 	}
-	assert.Equal(t, run(), run(), "a denial repeats its reason verbatim, however many times it fires")
+	const see = "\nsee: https://eli.gladman.cc/magus/reference/rules/whole-tree/"
+
+	first := run("git stash", "session-1")
+	assert.Contains(t, first, see)
+	assert.NotContains(t, first, "denied again")
+
+	repeat := run("echo hi && git stash", "session-1")
+	lines := strings.Split(strings.TrimSpace(repeat), "\n")
+	require.GreaterOrEqual(t, len(lines), 4, "repeat: %q", repeat)
+	doc, ok := guard.Rule("whole-tree")
+	require.True(t, ok)
+	assert.Equal(t, "deny [whole-tree]: denied again [whole-tree]: "+doc.Catches, lines[0])
+	assert.Equal(t, "nothing ran (2 commands)", lines[1], "the repeat still says how much of the line was refused")
+	ref := regexp.MustCompile(`^full verdict: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[2])
+	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[2])
+	assert.Equal(t, strings.TrimPrefix(see, "\n"), lines[3])
+
+	stored, err := trail.ReadBlob(base, ref[1])
+	require.NoError(t, err)
+	assert.True(t, strings.HasSuffix(string(stored), "\nnothing ran (2 commands)"+see),
+		"the stored verdict is the full form of THIS command, got %q", stored)
+	assert.NotContains(t, string(stored), "denied again")
+
+	served := hint.ReadServedNext(base)
+	require.NotEmpty(t, served)
+	assert.Equal(t, "deny-verdict", served[len(served)-1].ID, "the ref line is counted as a hint")
+
+	assert.NotContains(t, run("git stash", "session-2"), "denied again", "a fresh session hears the rule in full")
 }
 
 // TestHookCmdRoutesAnAgentSurfaceWrite pins the WIRING, not the rule: a rule that is

@@ -583,6 +583,16 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(kind)
 	}
+	// Worded after every arm has spoken, so whichever rule refused is the one held to a
+	// full explanation per session. An ask is never shortened: it waits on a person.
+	verdictRef := ""
+	if verdict.Decision == "deny" && verdict.Rule != "" && !req.Observe {
+		note := ""
+		if tool == hookToolCommand {
+			note = nothingRanNote(input, effectiveDialect(deps.ShellDialect))
+		}
+		verdict.Reason, verdictRef = shapeDeny(ctx, markers, verdict.Rule, verdict.Reason, note)
+	}
 	// Said last and on EVERY surface: a stale binary's verdicts are all suspect, not
 	// just the ones that matched a rule.
 	//
@@ -593,7 +603,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	//
 	// It is the loudest of the repeated advisories and so the one held to once per
 	// session, EXCEPT on a deny, where it is appended every time and spends no firing.
-	// A denial explains itself in full whenever it refuses, and this is the sentence that
+	// A denial explains itself whenever it refuses, and this is the sentence that
 	// says the refusal may be coming from rules the caller has already changed.
 	if notice := staleGuardNotice(); notice != "" && !req.Observe {
 		// An ask blocks until the person answers, so it is explained like a deny and never
@@ -620,7 +630,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, record)
+	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, record)
 	return verdict
 }
 
@@ -943,7 +953,7 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 // preauth is the `next` template that had already served this command, and it is recorded
 // because a clearance nobody counts is a clearance nobody can audit: uptake per template is
 // the number that decides whether a breadcrumb is reworded or deleted.
-func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth string, verdict Verdict) {
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef string, verdict Verdict) {
 	if input == "" || location.cacheDir == "" {
 		return
 	}
@@ -961,6 +971,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Reason:          verdict.Reason,
 		Context:         verdict.Context,
 		Rule:            verdict.Rule,
+		VerdictRef:      verdictRef,
 	}
 	if tool == hookToolCommand {
 		command.Command = input

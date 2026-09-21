@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 6492,
-  "edge_count": 11610,
+  "edge_count": 11612,
   "relations": [
     {
       "id": "annotates",
@@ -71776,6 +71776,14 @@
     },
     {
       "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS1040",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS3001",
       "relation": "documents",
       "confidence": "inferred",
@@ -71881,6 +71889,14 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS6001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS6002",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,

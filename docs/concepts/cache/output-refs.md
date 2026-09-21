@@ -92,6 +92,14 @@ refactor` always searches the graph.
 Refs prefix-match like a git short hash: type as few characters as are unique, and
 an ambiguous prefix lists the candidates.
 
+The same verb reads the other stores in the shared ref namespace. A ref with a
+different prefix names a payload the activity trail kept: `grd<hex>` is a guard
+deny in full (the ref a repeated deny cites), `mcp<hex>` an MCP request or
+response. It prints the stored bytes, or `{ref, output}` under `-o json` and
+`-o yaml`. The run flags (`--attempts`, `--identity`, `--publish`, `--open`) are
+refused there, since no run stands behind the payload, and the full ref is
+required.
+
 ## Refs are portable: same inputs, same ref
 
 The ref is a truncation of the step's [cache key](../cache.md), which is computed

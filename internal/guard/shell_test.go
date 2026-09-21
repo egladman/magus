@@ -123,8 +123,8 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// one command that earned it. The reason text was always right about the construct
 		// and always silent about the blast radius, and a reader who fixes the named
 		// command and assumes the rest ran is the failure this closes.
-		{command: "echo hi && git stash", rule: wholeTree("git stash"), denySays: "NOTHING on this line ran"},
-		{command: "git stash", rule: wholeTree("git stash"), denyOmits: "NOTHING on this line ran"},
+		{command: "echo hi && git stash", rule: wholeTree("git stash"), denySays: "\nnothing ran (2 commands)"},
+		{command: "git stash", rule: wholeTree("git stash"), denyOmits: "nothing ran"},
 
 		// Every OTHER backend magus drives, which had no rules at all until 2026-09-08.
 		// The guard doc justified that by saying jj "snapshots the working copy and keeps
