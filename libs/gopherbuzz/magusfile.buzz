@@ -109,7 +109,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // The line this replaced said the go ops declare their own globs. They do not: the go
     // spell contributes them project-wide (mgs_listRequiredGlobs takes no target), so the
     // replacement above dropped **/*.go and go.mod out of this key and go-fmt replayed on
-    // a pure-Go edit. See the same block in libs/commentdash.
+    // a pure-Go edit. See the same block in libs/coldread.
     //
     // The markdown glob mirrors this project's dprint.json `includes` (./**/*.md); keep
     // the two in step.

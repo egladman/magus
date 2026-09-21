@@ -28,6 +28,11 @@ development/projects/gopherbuzz/
 development/libs-testsprawl/
 development/projects/libs-testsprawl/
 
+# libs/commentdash became libs/coldread when the linter grew past its one em-dash
+# rule to judge what a comment says. Retired rather than aliased, like testsprawl:
+# the project page is derived from the directory name.
+development/libs-commentdash/
+
 # retired when libs/diag was renamed libs/diagnostics. Retired rather than
 # redirected, matching the development/gopherbuzz precedent above: a project page
 # under /development/ is derived from the project's directory name, so the old

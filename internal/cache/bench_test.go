@@ -94,7 +94,6 @@ func BenchmarkCacheHit(b *testing.B) {
 	fn := buildFn(root, outRel)
 	ctx := context.Background()
 
-	// Warm the cache.
 	warm := openBenchCache(b, cdir, true)
 	if _, err := warm.Run(ctx, step, fn); err != nil {
 		b.Fatalf("warm run: %v", err)

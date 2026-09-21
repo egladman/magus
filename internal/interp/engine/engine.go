@@ -75,7 +75,8 @@ func NumberValue(n float64) Value { return numVal(n) }
 // BoolValue wraps b as a boolean Value.
 func BoolValue(b bool) Value { return boolVal(b) }
 
-// NilValue is the nil Value.
+// NilValue is Buzz null: IsNil reports true, AsBool false, and every other As
+// accessor reports no value.
 var NilValue Value = nilVal{}
 
 type strVal string

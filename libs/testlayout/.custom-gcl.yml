@@ -23,7 +23,7 @@ plugins:
   - module: github.com/egladman/magus/libs/testlayout
     import: github.com/egladman/magus/libs/testlayout/plugin
     path: .
-  # commentdash reports a comment spelling an em-dash with a spaced hyphen.
-  - module: github.com/egladman/magus/libs/commentdash
-    import: github.com/egladman/magus/libs/commentdash/plugin
-    path: ../commentdash
+  # coldread reports a comment that tells a cold reader nothing the code does not.
+  - module: github.com/egladman/magus/libs/coldread
+    import: github.com/egladman/magus/libs/coldread/plugin
+    path: ../coldread

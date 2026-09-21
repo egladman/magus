@@ -1,12 +1,24 @@
-// Package commentdash defines an analyzer that reports a Go comment using a
-// spaced hyphen where prose wants an em-dash.
+// Package coldread defines an analyzer for Go comments written for a cold
+// reader: a comment should tell someone opening the file in six months what the
+// code cannot. Each check reports a shape that fails that test mechanically and
+// with few false positives. Whether a comment explains WHY is semantic and out
+// of reach; these are the shapes a machine can prove.
 //
-// The fix is always a colon, a semicolon, or parentheses. The rule exists
-// because the aside reads as an em-dash to a human, and a repo that bans the
-// em-dash in prose has banned this too; nothing in the Go toolchain objects, so
-// only a reviewer ever catches it.
+// The checks, each named in its diagnostic and disabled by name:
 //
-// Three shapes carry a spaced hyphen that is NOT prose punctuation, and each is
+//   - aside: a spaced hyphen spelling an em-dash, which this repo bans in prose
+//   - restate: a one-line comment whose every word already names the next line
+//   - steps: "step 1" narration, or numbered comments sequencing a function body
+//   - history: a phrase that narrates the change rather than the code
+//   - docstub: a declaration doc comment that only repeats the symbol's name
+//   - commentedcode: a comment that parses as Go statements
+//
+// No check but aside ever reports a line opening with TODO, FIXME, BUG,
+// compat(until:, compat:, or Deprecated:. Those markers carry meaning tooling
+// and review read, and a gate red because a note exists does not do the work.
+//
+// For aside, the fix is always a colon, a semicolon, or parentheses. Three
+// shapes carry a spaced hyphen that is NOT prose punctuation, and each is
 // exempt: a doc-list bullet, which gofmt itself formats that way and would fight
 // a linter over; an indented preformatted block, which is where command examples
 // live; and a span inside backticks, which is a literal. The exemptions are
@@ -20,35 +32,57 @@
 //
 // The analyzer depends on no linter runner. The golangci-lint plugin lives in
 // the plugin subpackage.
-package commentdash
+package coldread
 
 import (
 	"fmt"
 	"go/ast"
 	"go/token"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
 )
 
-const doc = `check that a comment does not use a spaced hyphen as an em-dash aside
+const doc = `check that a comment tells a cold reader something the code cannot
 
-A comment reading "the run is cached - so nothing executes" spells an em-dash
-with a hyphen. Write a colon, a semicolon, or parentheses instead.
+aside: "the run is cached - so nothing executes" spells an em-dash with a
+hyphen. Write a colon, a semicolon, or parentheses instead. Exempt: a doc-list
+bullet, an indented preformatted block, a span inside backticks, and a hyphen
+with a digit on each side.
 
-Exempt: a doc-list bullet, since gofmt formats list items that way; an indented
-preformatted block, where command examples live; a span inside backticks; and a
-hyphen with a digit on each side, which is arithmetic or a range rather than
-punctuation.`
+restate: a one-line comment whose every word already appears in the next line.
+steps: "step 1" narration, or numbered comments sequencing a function body.
+history: "used to", "previously" and kin narrate the change, not the code.
+docstub: "Foo is a Foo", "NewFoo creates a new Foo", "Foo ...".
+commentedcode: a comment that parses as Go statements.
+
+A line opening with TODO, FIXME, BUG, compat(until:, compat:, or Deprecated: is
+never reported by a check other than aside.`
+
+// Check names one check. The name prefixes its diagnostics, is their Category,
+// and is what [Options.Disable] lists.
+type Check string
+
+const (
+	CheckAside         Check = "aside"
+	CheckRestate       Check = "restate"
+	CheckSteps         Check = "steps"
+	CheckHistory       Check = "history"
+	CheckDocstub       Check = "docstub"
+	CheckCommentedCode Check = "commentedcode"
+)
+
+var checks = []Check{CheckAside, CheckRestate, CheckSteps, CheckHistory, CheckDocstub, CheckCommentedCode}
 
 // asideMessage names the fix rather than the sin, for the reason testlayout's
 // external-package message does: the wrong thing compiles, passes, and reads
 // fine to everyone except the person who set the rule.
-const asideMessage = `comment uses " - " as an em-dash aside; write a colon, a semicolon, or parentheses instead. ` +
+const asideMessage = `aside: comment uses " - " as an em-dash aside; write a colon, a semicolon, or parentheses instead. ` +
 	"A spaced hyphen that belongs to a literal goes in backticks or an indented block, both of which are exempt."
 
-const wrappedMessage = `comment line ends in " -", carrying an em-dash aside onto the next line; ` +
+const wrappedMessage = `aside: comment line ends in " -", carrying an em-dash aside onto the next line; ` +
 	"write a colon, a semicolon, or parentheses instead and rewrap the paragraph."
 
 // Options configures the analyzer returned by [New]. The json tags are
@@ -65,37 +99,52 @@ type Options struct {
 	// because the fix rewraps a paragraph rather than editing one line, so it is
 	// worth sweeping separately. See readme.md for what it adds.
 	Wrapped bool `json:"wrapped"`
+
+	// Disable names checks that do not run. Every check runs by default.
+	Disable []Check `json:"disable"`
 }
 
-// New returns an analyzer configured by opts, erroring on a malformed Allow glob.
+// New returns an analyzer configured by opts, erroring on a malformed Allow glob
+// or a Disable entry that names no check.
 //
 // Checked here rather than at the point of use, which runs once per file: a
 // config typo would lint clean until it reached a file holding an aside, then
-// fail from somewhere unrelated to the mistake.
+// fail from somewhere unrelated to the mistake. A misspelled check name would
+// never fail at all, and the check it meant to silence would keep running.
 func New(opts Options) (*analysis.Analyzer, error) {
 	for _, pattern := range opts.Allow {
 		if _, err := filepath.Match(pattern, "probe"); err != nil {
-			return nil, fmt.Errorf("commentdash: allow pattern %q: %w", pattern, err)
+			return nil, fmt.Errorf("coldread: allow pattern %q: %w", pattern, err)
+		}
+	}
+
+	for _, c := range opts.Disable {
+		if !slices.Contains(checks, c) {
+			return nil, fmt.Errorf("coldread: disable names unknown check %q; known checks are %s", c, checks)
 		}
 	}
 
 	return newAnalyzer(opts), nil
 }
 
-// Analyzer is the analyzer with no exempt globs and the wrapped half off. It
-// takes its configuration at construction, so this one runs with the defaults;
-// use [New] to change them.
+// Analyzer runs every check, with no exempt globs and the wrapped half of aside
+// off. It takes its configuration at construction, so this one runs with the
+// defaults; use [New] to change them.
 var Analyzer = newAnalyzer(Options{})
 
 func newAnalyzer(opts Options) *analysis.Analyzer {
-	l := linter{allow: opts.Allow, wrapped: opts.Wrapped}
+	l := linter{allow: opts.Allow, wrapped: opts.Wrapped, enabled: map[Check]bool{}}
+	for _, c := range checks {
+		l.enabled[c] = !slices.Contains(opts.Disable, c)
+	}
 
-	return &analysis.Analyzer{Name: "commentdash", Doc: doc, Run: l.run}
+	return &analysis.Analyzer{Name: "coldread", Doc: doc, Run: l.run}
 }
 
 type linter struct {
 	allow   []string
 	wrapped bool
+	enabled map[Check]bool
 }
 
 func (l linter) run(pass *analysis.Pass) (any, error) {
@@ -112,9 +161,13 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 			continue
 		}
 
-		for _, group := range f.Comments {
-			l.checkGroup(pass, group)
+		if l.enabled[CheckAside] {
+			for _, group := range f.Comments {
+				l.checkGroup(pass, group)
+			}
 		}
+
+		l.checkIntent(pass, f, tf)
 	}
 
 	return nil, nil
@@ -137,8 +190,31 @@ func (l linter) exempted(name string) bool {
 // keeps the finding count comparable to a grep over the same tree, which is how
 // the exemptions in readme.md were measured.
 func (l linter) checkGroup(pass *analysis.Pass, group *ast.CommentGroup) {
+	for _, ln := range proseLines(group) {
+		// Scanning starts past the marker so the bullet's own hyphen is exempt while
+		// a second one later in the item is still reported.
+		at, message := l.scan(ln.text, ln.start)
+		if at < 0 {
+			continue
+		}
+
+		pass.Report(analysis.Diagnostic{Pos: ln.pos + token.Pos(at), Category: string(CheckAside), Message: message})
+	}
+}
+
+// proseLine is a line go/doc/comment would render as prose, with start the offset
+// past its indent and any list marker.
+type proseLine struct {
+	line
+	start int
+}
+
+// proseLines returns the non-blank lines of group that are not preformatted.
+func proseLines(group *ast.CommentGroup) []proseLine {
 	lines := groupLines(group)
 	unindent(lines)
+
+	var out []proseLine
 
 	inList := false
 
@@ -164,15 +240,10 @@ func (l linter) checkGroup(pass *analysis.Pass, group *ast.CommentGroup) {
 			inList = false
 		}
 
-		// Scanning starts past the marker so the bullet's own hyphen is exempt while
-		// a second one later in the item is still reported.
-		at, message := l.scan(ln.text, indent+marker)
-		if at < 0 {
-			continue
-		}
-
-		pass.Report(analysis.Diagnostic{Pos: ln.pos + token.Pos(at), Message: message})
+		out = append(out, proseLine{line: ln, start: indent + marker})
 	}
+
+	return out
 }
 
 // scan returns the byte offset of the first offending hyphen in text at or after
@@ -182,16 +253,16 @@ func (l linter) scan(text string, start int) (int, string) {
 		return -1, ""
 	}
 
-	scan := blankBackticks(text)
+	masked := blankBackticks(text)
 
-	for i := start; i < len(scan); {
-		j := strings.Index(scan[i:], " - ")
+	for i := start; i < len(masked); {
+		j := strings.Index(masked[i:], " - ")
 		if j < 0 {
 			break
 		}
 
 		at := i + j + 1
-		if !numeric(scan, at) {
+		if !numeric(masked, at) {
 			return at, asideMessage
 		}
 
@@ -202,7 +273,7 @@ func (l linter) scan(text string, start int) (int, string) {
 		return -1, ""
 	}
 
-	trimmed := strings.TrimRight(scan, " \t")
+	trimmed := strings.TrimRight(masked, " \t")
 	if len(trimmed) < start+2 || trimmed[len(trimmed)-1] != '-' {
 		return -1, ""
 	}
