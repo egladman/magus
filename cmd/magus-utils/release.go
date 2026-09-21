@@ -46,10 +46,88 @@ type ReleaseManifest struct {
 
 // ReleaseNotes holds the Keep-a-Changelog sections.
 type ReleaseNotes struct {
-	Added   []string `yaml:"added,omitempty"   json:"added,omitempty"`
-	Changed []string `yaml:"changed,omitempty" json:"changed,omitempty"`
-	Fixed   []string `yaml:"fixed,omitempty"   json:"fixed,omitempty"`
-	Removed []string `yaml:"removed,omitempty" json:"removed,omitempty"`
+	Added      []string `yaml:"added,omitempty"      json:"added,omitempty"`
+	Changed    []string `yaml:"changed,omitempty"    json:"changed,omitempty"`
+	Deprecated []string `yaml:"deprecated,omitempty" json:"deprecated,omitempty"`
+	Removed    []string `yaml:"removed,omitempty"    json:"removed,omitempty"`
+	Fixed      []string `yaml:"fixed,omitempty"      json:"fixed,omitempty"`
+	Security   []string `yaml:"security,omitempty"   json:"security,omitempty"`
+}
+
+// changelogSections is Keep a Changelog 1.1.0's section set, in the order it lists them.
+var changelogSections = []string{"Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"}
+
+// changelogEntryWordCap bounds one entry. An entry states the change and why a reader
+// cares; the reasoning behind it belongs in the diff, the PR or an ADR.
+const changelogEntryWordCap = 60
+
+// lintUnreleased reports every way an Unreleased body departs from the changelog formula,
+// one line per violation, empty when it conforms.
+//
+// The formula is Keep a Changelog plus this repo's entry shape: sections from
+// changelogSections, in that order, each once; every entry a `- **headline**` sentence
+// that ends in a period, continued on lines indented two spaces, within
+// changelogEntryWordCap words. It is enforced rather than described because notesFromBody
+// DROPS what it cannot place: an unknown heading or a stray line vanished from the
+// release notes without a word.
+func lintUnreleased(body string) []string {
+	var problems []string
+	last := -1
+	inSection := false
+	var entry strings.Builder
+	entryLine := 0
+	finish := func() {
+		if entryLine == 0 {
+			return
+		}
+		text := strings.TrimSpace(entry.String())
+		if !strings.HasPrefix(text, "**") || strings.Count(text, "**") < 2 {
+			problems = append(problems, fmt.Sprintf("line %d: an entry opens with a **bold headline**", entryLine))
+		}
+		// A headline-only entry closes its sentence inside the bold.
+		if !strings.HasSuffix(text, ".") && !strings.HasSuffix(text, ".**") {
+			problems = append(problems, fmt.Sprintf("line %d: an entry ends with a period", entryLine))
+		}
+		if n := len(strings.Fields(text)); n > changelogEntryWordCap {
+			problems = append(problems, fmt.Sprintf("line %d: entry is %d words; the cap is %d", entryLine, n, changelogEntryWordCap))
+		}
+		entry.Reset()
+		entryLine = 0
+	}
+	for i, line := range strings.Split(body, "\n") {
+		n := i + 1
+		switch {
+		case strings.TrimSpace(line) == "":
+			finish()
+		case strings.HasPrefix(line, "### "):
+			finish()
+			inSection = true
+			name := strings.TrimSpace(line[4:])
+			idx := slices.Index(changelogSections, name)
+			switch {
+			case idx < 0:
+				problems = append(problems, fmt.Sprintf("line %d: %q is not a Keep a Changelog section (%s)", n, name, strings.Join(changelogSections, ", ")))
+			case idx <= last:
+				problems = append(problems, fmt.Sprintf("line %d: %q is out of order or repeated; the order is %s", n, name, strings.Join(changelogSections, ", ")))
+			default:
+				last = idx
+			}
+		case strings.HasPrefix(line, "- "):
+			finish()
+			if !inSection {
+				problems = append(problems, fmt.Sprintf("line %d: an entry sits under a section heading", n))
+			}
+			entryLine = n
+			entry.WriteString(strings.TrimPrefix(line, "- "))
+		case strings.HasPrefix(line, "  ") && entryLine > 0:
+			entry.WriteString(" " + strings.TrimSpace(line))
+		default:
+			finish()
+			problems = append(problems, fmt.Sprintf("line %d: not a heading, an entry, or an entry's two-space continuation", n))
+		}
+	}
+	finish()
+	return problems
 }
 
 // ReleaseArtifact is one downloadable asset with its integrity data.
@@ -249,6 +327,10 @@ func runCut(args []string) error {
 		return fmt.Errorf("CHANGELOG.md has no [Unreleased] section with content, and %s does not exist. "+
 			"An earlier run consumed the notes without leaving the manifest behind; recover them from that "+
 			"run's checkout or from git history, restore [Unreleased], and cut again", outPath)
+	}
+	if problems := lintUnreleased(body); len(problems) > 0 {
+		return fmt.Errorf("CHANGELOG.md [Unreleased] does not follow the changelog format, so cutting it would drop or garble release notes:\n  %s",
+			strings.Join(problems, "\n  "))
 	}
 
 	m := ReleaseManifest{
@@ -722,10 +804,14 @@ func notesFromBodyString(body string) ReleaseNotes {
 			notes.Added = append(notes.Added, items...)
 		case "changed":
 			notes.Changed = append(notes.Changed, items...)
-		case "fixed":
-			notes.Fixed = append(notes.Fixed, items...)
+		case "deprecated":
+			notes.Deprecated = append(notes.Deprecated, items...)
 		case "removed":
 			notes.Removed = append(notes.Removed, items...)
+		case "fixed":
+			notes.Fixed = append(notes.Fixed, items...)
+		case "security":
+			notes.Security = append(notes.Security, items...)
 		}
 		items = nil
 	}

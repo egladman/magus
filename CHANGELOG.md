@@ -8,692 +8,162 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **MGS1037: a tool's observation keyed as its version.** `magus doctor` refuses a spell
-  that declares one command as both a tool's version probe and its observation probe with
-  no `key` to narrow the version. The two reach different targets: a version keys every
-  target in a project that binds the spell, while an observation keys only the targets
-  that drive the tool, so a value moving on the feed's clock invalidated targets that never
-  run it. Either drop the version probe or declare a `key` that extracts the version alone.
-- **MGS1038: a removed `magus.project` option.** A key an older magus accepted and this one
-  removed now stops the load, naming the key and what to do. An unrecognized key is still
-  only ignored, since it may come from a newer magus; a removed one comes from an older
-  one, and the upgrade advice the ignore path gives would send you in a circle.
+- **`magus job fork` declares a job from the terminal.** Flags cover one row
+  (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
+  `--stdin` takes a full record and `--schema` prints its contract.
+- **Job rows and results carry `schema_version`.** An unknown version is rejected by name
+  rather than field by field. Rows record `registered_by`.
+- **MGS4008: an unschedulable composed step is refused before it runs.** Two targets in one
+  step, one writing what the other reads with no `ctx.needs` path between them, fail at
+  derivation. `magus doctor` checks every composed target.
+- **MGS3013: a slot pool that cannot free a slot is refused within seconds.** The refusal
+  names every holder and what it waits on.
+- **MGS3014: a newer gate supersedes an older one on the same tree.** The earlier `ci` run
+  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs still wait.
+- **Tools declare `observe` probes; ops declare external effects.** An observation keys
+  only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
+  `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
+  observation nor `skip_cache`. The docker spell gains `trivy-image`.
+- **MGS1037: a tool's observation keyed as its version.** `magus doctor` refuses one command
+  declared as both version and observation probe without a narrowing `key`.
+- **MGS1038: a removed `magus.project` option stops the load.** It names the key and the
+  fix. An unrecognized key is still only ignored.
+- **URLs in comments and docs become graph edges.** A URL resolves to a local page,
+  heading or file where it can, otherwise to a `link` node (`kind=link`). Nothing is
+  fetched. Knowledge-graph schema v14.
+- **The guard advises on reads outside the session's focus.** Focus is the working
+  project, its dependencies and nested projects. Under a bound lease it denies, and the job
+  row's `read_paths` grants reads without writes. `magus describe file` reports `focus`.
+- **Every host delivers `advise` verdicts; three rehydrate after compaction.** Codex
+  receives advisories and wires `SessionStart` on `compact`, Cursor's write guard moves to
+  `preToolUse`, and OpenCode joins advisories by `callID`. Guard template v12: re-copy
+  installed copies.
+- **Shipped hook configs are validated against each host's schema.** Schemas are vendored
+  under `testdata/hosts/` with provenance in `SOURCES.md`; `HOST_SCHEMAS_MODE=verify`
+  re-fetches them.
+- **MGS1028 surfaces where it costs.** The run that reruns an undeclared seeding file names
+  it before starting (`undeclared_seeds` in `-o json`), and an undeclared build input rings
+  the console's notification center.
+- **`magus session --brief` restores a session's state after history loss.** Branch,
+  unpushed commits, classified dirty tree, live leases and last failing targets, also as
+  `-o json`. The `magus-rehydrate.sh` template wires it to session start.
+- **The doc-section advisory carries the reader's own query** instead of a `<terms>`
+  placeholder.
+- **A target whose inputs have not moved since it failed says so before rerunning.**
+  Nothing is skipped (`hint_id: unchanged-failure`).
+- **A text filter over a backgrounded run's capture is denied like a pipe over magus.**
+  Use `-o jsonl --tee <file>` for a capture a tool may consume.
+- **A lease's declared boundary is enforced.** The guard denies writes outside
+  `write_paths` or inside `deny_paths`, any write by a `read_only` row, and `ci` when
+  `check` names a narrower target.
+- **Results carry structured `next` suggestions.** `query`, `explain`, `describe file`,
+  affected listings and failing results carry up to three `{id, command, argv, why}`
+  entries, filtered by the acting lease's role and journaled per session.
+- **A write that opens an unrelated unit of work draws an advisory** pointing at the
+  magus-multi-agent skill.
+- **`magus session ls` and `--brief` show each provider's published prompt-cache window.**
+- **`magus describe job` derives a holder's terms; `magus job wait` grades the result.**
+  Terms add reached projects, output globs, sibling holds and hidden coupling. `wait`
+  checks paths, descendants and a passing run of the row's `check`; `magus job exit
+  --schema` prints the result contract.
+- **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
+- **`magus doctor` reports whether a bound lease is enforced** (`bound-lease`).
+- **`magus session hints` reports uptake per suggestion id.**
+- **Claude Code MCP tool calls reach the guard.** A `mcp__magus__.*` `PreToolUse` entry
+  forwards the call envelope. No rule judges MCP calls yet.
+- **A `flags` host module and `magus buzz --check`.** `flags\parse` returns
+  `{values, positionals, unknown}`. `--check` parses and type-checks without running; add
+  `--embedded` for magusfile code.
+- **The cache refuses an entry whose hashed inputs moved while the target ran.** The run
+  stays green; only the entry is skipped, locally and remotely.
 
-- **A person declares a job from the terminal: `magus job fork`.** The verb takes the
-  one-row case as flags (`--criteria`, `--parent`, `--write-paths`, `--deny-paths`,
-  `--read-paths`, `--check`, `--model`, `--read-only`) or a whole record on `--stdin`, and
-  `--schema` prints what that record must satisfy. It reverses a documented decision that
-  kept writing off the CLI on the ground that the job store has a single author: one author
-  per ROW is the true version of that rule, the store now enforces it, and what the old
-  rule actually bought was a capability agents had and people did not. Both channels reach
-  one store and one set of rules.
-- **A job row and a holder's result carry a `schema_version`, and a version magus does not
-  know is rejected by name.** Strict decoding plus a closed field set had exactly one
-  compatible direction: a harness a release ahead would have had its work rejected field by
-  field, with nothing in the message saying why. The version is read before anything else,
-  so the answer is "this magus accepts version 9" rather than "unknown member", and every
-  change to the field set bumps it, an added optional field included: two live rows once
-  lost five fields to an older binary because an addition did not. Rows record
-  `registered_by`, the session and host that declared them.
+### Changed
 
-- **A run that cannot be scheduled is refused before it starts, and a pool that cannot free
-  a slot is refused within seconds.** Two targets inside one composed step, one declaring it
-  writes files the other declares it reads, with no `ctx.needs` path between them, is a plan
-  no order can express: the reader either reads bytes the writer had not produced yet or
-  waits for the writer while holding the seat the writer needs. magus now refuses that plan
-  at derivation time, naming the reader, the writer, the globs that overlap, and both fixes
-  (MGS4008), and `magus doctor` asks the same question of every composed target in every
-  project, so the answer arrives when the magusfile is being edited rather than twenty
-  minutes into a gate. Only explicit declarations count on either side: a project baseline
-  is an over-approximation, and a refusal may not rest on a guess. Nor on a pattern: the
-  refusal stands on a file in the tree both globs match, and on one project, since a pair
-  split across two is advice rather than a refusal. A later `ctx.needs` call in the
-  composer's body counts as ordering everything an earlier call ran, and everything under
-  a later call's members with it; each chain step records which call named it. A cited
-  URL whose path names a file the VCS ignores is an upstream link, never a source: the
-  built binary at the root had been turning the docs site's own URL into a file node on
-  one machine and a link node on another. The same
-  record makes a chain's memory claim honest: the members of one call run together, so
-  their declarations now add, and the claim is the largest call rather than the largest
-  member. Where the wedge is
-  reached anyway, the concurrency pool now knows who holds its slots and what each holder is
-  waiting on, and refuses the wait once every slot is held by a step that is itself waiting,
-  naming every holder (MGS3013). Waiting for the per-key cache lock and waiting for an
-  upstream target both report themselves and beat the invocation heartbeat, so a legitimate
-  long wait is no longer a stall to the watchdog and an aborted run reads as one target
-  waiting on another. Behind the incident: a gate held every project lock for fifteen
-  minutes with nothing running, because a badge target read every Go file its siblings were
-  still writing.
-- **A newer gate no longer queues behind an older one on the same tree.** When
-  `magus affected ci` or `magus run ci` contends for a project lock held by an earlier gate
-  on the same workspace root, the earlier run stops with MGS3014 and the later one takes
-  the lock, usually within a second. The earlier verdict would have described a tree that
-  has since changed, so waiting for it bought a stale answer at the price of the machine.
-  The ordering is decided by the tree and never by the caller: one resolved root, both
-  invocations the whole `ci` target, later start wins, and there is no priority to set. A
-  sibling worktree is a different tree and still waits; a `run build` behind a `run test`
-  still waits; a lock held by one of the run's own ancestors is still MGS3007. The earlier
-  run cancels through the same path the stall watchdog uses, so its targets stop and its
-  locks and budget come back rather than timing out, and it exits 75 (`EX_TEMPFAIL`) so a
-  caller can tell a yielded gate from a failed one. The later run prints one line naming
-  what it superseded, on the stream `-s` does not bound. A holder that does not answer
-  inside thirty seconds is waited on exactly as before.
-- **A spell can now tell magus which copy of the world its tool is reading, and a doctor
-  check asks when it should.** A `Tool` may declare an `observe` command beside its version
-  probe; magus runs it at key time and folds the output into the cache key as an `obs:`
-  line, the same input class `ctx.observes` states by hand. The pair matters because the
-  two answers move on different clocks: trivy ships a release every few weeks and its
-  vulnerability database is built every six hours, so keying only the version replays
-  yesterday's CVEs against today's image. Unlike a version probe it is scoped to the
-  targets whose ops actually drive that binary, so a value that changes every six hours
-  does not cost an unrelated build its cache. Alongside it, an op declares its relation to
-  the world outside the tree: `reads-external` for a verdict that comes from a live feed,
-  `mutates-external` for a push, a signature or a deploy. `magus doctor` fails a
-  cacheable target composing one that has neither an observation probe nor `skip_cache`
-  (MGS1033). Reaching the network is not the test: `go mod tidy` declares nothing, because
-  `go.sum` pins what comes back. The docker spell gains a `trivy-image` op that scans
-  offline by default (`--skip-db-update`) and refreshes under the update charm, and this
-  repository's own `image-scan` drops `skip_cache` on the strength of it.
-- **A URL in a comment is now a link the graph can follow.** Every http(s) URL in a Go or
-  Buzz comment, every absolute markdown link on a page, and the source a generated page
-  names in its `generated_from` frontmatter becomes an edge from the file or page that
-  wrote it. A URL naming a page this workspace holds resolves to that page or heading; a
-  forge URL naming a path it holds resolves to that file or directory; everything else
-  becomes a `link` node keyed by the normalized URL, so `kind=link` is the set of external
-  documents the tree depends on and `magus explain` on one lists every file citing it. A
-  page that cites a source path now documents it, which `magus graph stats` reads as file
-  doc coverage, and a page code points at ranks above prose nothing cites. Only text a
-  lexer called a comment is read, so a URL in a string literal is out of reach; a citation
-  must clear a closed scheme set, carry no credentials, sit under a length cap and name a
-  plausible public host; and nothing is ever fetched. Knowledge-graph schema v12; v13 and
-  v14 follow it, adding `namespace`, then `signature` and `body_digest`, to symbol nodes,
-  so the schema this release ships is v14.
-- **A read that leaves the project you are working in now says so.** The agent guard
-  computes a session's focus from the project graph: the project holding the working
-  directory, everything it declares `depends_on` transitively, the projects nested inside
-  it, and the files at the workspace root plus `.claude/skills` that every project resolves
-  through. A `cat`, `sed`, `grep`, `rg` or `find` pointed outside that set draws one
-  advisory naming what owns the path, held to one firing per path and one full explanation
-  per session. It denies instead when a lease is bound to the checkout with `magus job
-  exec`, where the boundary is one an orchestrator declared: a `read_paths` field on the
-  job row names the paths a worker may READ, falling back to `write_paths`, so a worker
-  that needs to read a shared library no longer has to be handed the right to write it.
-  There is no environment variable that switches the rule off. `magus describe file`
-  carries the same answer as a `focus` field per path, and names the focus it judged
-  against. Measured over 204 session transcripts in this repository: reads landed outside
-  the units a session actually wrote to about a fifth of the time, and 17,353 reads left
-  the workspace root altogether.
-- **Every documented host now delivers an `advise` verdict to the model, and three of the
-  four hand a compacted session its checkout back.** The guard rules were always identical
-  across hosts; what differed was how much of a verdict survived the trip, and two hosts
-  were dropping the explaining half entirely. Codex was sent no advisory at all, on a
-  reading of its hook contract that OpenAI's current reference contradicts: the response
-  keys it rejects are `continue`, `stopReason` and `suppressOutput`, and `additionalContext`
-  is supported, so the shipped `codex-hooks.json` no longer sets `GUARD_NO_ADVISE=1` and
-  also wires `SessionStart` with matcher `compact` for the post-compaction brief. Cursor's
-  write guard moved from `afterFileEdit`, which fires once the file has changed, to
-  `preToolUse`, which blocks it, and its advisories now ride
-  `postToolUse.additional_context` instead of stderr prose; its script also records a
-  checkpoint on `sessionEnd` and captures a lease on `subagentStart`, which its payload
-  carries as `task`. The OpenCode plugin appends an advisory to the tool result that
-  produced it, joined by `callID`, pushes the brief into `experimental.session.compacting`,
-  and records a checkpoint on the `session.idle` bus event. `magus-rehydrate.sh` gained
-  `REHYDRATE_FORMAT=json`, which wraps its text in the `hookSpecificOutput` envelope a host
-  that parses a session-start hook's stdout as a reply needs, escaped in the template so
-  the file still needs no `jq`. Guard template version 12: re-copy your installed copies.
-  Cursor's post-compaction gap is named rather than approximated, because its `preCompact`
-  returns a message for the person only, and the guide now carries a table of every job magus
-  does through a host event, with the event that carries it or the reason nothing does.
-- **The hook configs magus ships are graded against the agent hosts' own schemas.** Claude
-  Code's `.claude/settings.json`, the `codex-hooks.json` wiring, and every hooks block the
-  Claude Code, Codex and Cursor guide pages embed now validate against a schema vendored
-  under `testdata/hosts/`: SchemaStore's for Claude Code settings and Codex hooks, and
-  OpenAI's own generated one for a Codex `PreToolUse` reply. The JSON the shipped guard
-  templates print is rendered from the template bodies in those files and graded the same
-  way, so a host renaming a field surfaces as a failing test rather than as a hook that
-  quietly stopped judging. Deliberately wrong event names are asserted to fail, because a
-  schema that only ever sees valid input cannot be told from an empty one. Claude Code and
-  Cursor publish nothing for hook stdout and Cursor nothing for `.cursor/hooks.json`, so
-  those three schemas are transcribed by hand from the reference pages and the
-  `@anthropic-ai/claude-agent-sdk` types and are recorded as ours, not theirs, in
-  `testdata/hosts/SOURCES.md` beside each file's URL, read date and digest. OpenCode
-  has no hook config to check; its plugin is type-checked against `@opencode-ai/plugin`
-  already. `HOST_SCHEMAS_MODE=verify magus buzz tools/host-schemas.buzz` re-fetches and
-  reports what moved upstream. No test reaches the network.
-- **A rule set nothing declares reaches the console's notification center.** A run's scope
-  event now carries the projects it selected on changed files no project declares
-  (MGS1028), split into the ones that read as build inputs and the rest. An undeclared
-  linter config, lockfile or toolchain pin rings the bell, because it keys no cache and a
-  verdict recorded under the rules it replaced can still replay; anything else records
-  silently in the history tier. Both link to the review surface filtered to unclaimed files.
-- **A session that lost its history can be handed this checkout back.** `magus session
-  --brief` prints where the work stands, read off the disk on the call: branch and
-  revision, commits not yet on the base ref, the dirty tree split into sources,
-  generated outputs and unclaimed paths by the classifier `magus describe file` uses,
-  the live leases with the command that binds each one, the last recorded run's failing
-  targets with the ref that holds their output, whether any host hook config in this
-  checkout invokes magus, and which instruction files and skill directories the rules
-  live in. It restates no rule and remembers nothing. `-o json` carries the same record.
-  A host that replaces a long session's history with a summary can wire the new
-  `magus-rehydrate.sh` template to its session-start event and give the model state
-  instead of a retelling.
-- **The doc-section route arrives with the reader's own terms in it.** The advisory on a
-  markdown search now leads with the query hint composes for that exact search, and repeats
-  it in the same concrete form, instead of a command still carrying a `<terms>` placeholder;
-  a plain read, which has no pattern to query with, keeps the placeholder wording. A graph
-  search that matched a doc page but no section carries a `query-doc-sections` breadcrumb to
-  the page's headings, and the docs-lookup skill names the section query as the in-workspace
-  route ahead of the published-site index. Measured over 1,907 session transcripts: the
-  advisory fired 1,420 times and `magus query kind=docsection` ran 11 times ever, against
-  9,237 prose greps and 964 reads of a markdown file under `docs/`.
-- **A target whose inputs have not moved since it failed says so before it runs again.** A
-  failure is not a cache entry, but its descriptor is still stored under the step's cache
-  key, so a miss can check whether this exact tree has already been seen to fail. When it
-  has, the run prints one line naming the recorded ref, the error it ended with, and the
-  `magus query output` that reads it. Nothing is replayed and nothing is skipped: the
-  target executes exactly as before, and the line is context rather than a verdict. It
-  fires once per cache key, so an edit that moves the inputs speaks again; `-s` keeps it
-  and `MAGUS_HINTS_ENABLED=false` (or `hints.enabled: false`) drops it. The result record
-  carries `"hint_id": "unchanged-failure"` in `-o jsonl`, a stable id to count instead of
-  the wording.
-- **A text filter over a backgrounded run's capture is denied like a pipe over magus
-  itself.** The file a host writes a detached command's console output to, and a persisted
-  `.magus/logs/<hex>.log`, are magus output one step removed, so `grep -n cause: <capture> |
-  head -8` was cutting the `output:` and `inspect:` lines that read the rest of the failure
-  while nothing on the line looked like magus. A range print counts as a filter; reading the
-  file whole does not, and backgrounding the run as `-o jsonl --tee <file>` makes the capture
-  a contract that `jq` may consume.
-- **The run that pays for an undeclared seeding file says so before it spends.** MGS1028
-  fired only on `magus affected --impact` and `--explain`, the two commands that report on
-  a changeset without running anything; the `magus affected <target>` run that reruns those
-  targets said nothing. It now names each project a changed file no project declares put in
-  the set on its own, with the files and the one-line fix, before the first target starts.
-  Nothing is skipped and nothing is refused: the run proceeds exactly as before, `-s` keeps
-  the line, and `MAGUS_HINTS_ENABLED=false` (or `hints.enabled: false`) drops it. `-o json`
-  carries the same set as `undeclared_seeds` and `-o jsonl` as one `run.diagnostic` event
-  per project, so a consumer counts the code instead of matching the wording. A `ci` gate
-  records the set on its gate result too, next to the projects it covered, so a branch's
-  accumulated debt is countable rather than only visible in the run that printed it.
-- **A lease's declared boundary is enforced, not merely recorded.** Under a lease with a
-  live job row, the agent guard now denies a write outside every entry in that row's
-  `write_paths`, a write inside its `deny_paths`, any write at all by a `read_only` row,
-  and a command running the `ci` gate when the row's `check` names something narrower. Each
-  denial names the lease, the path or command, and the row field that decided it, so a
-  reader can repair the row. An empty `write_paths` on a row that is not `read_only`, an
-  empty `check`, a caller naming no lease, and a lease with no live row are all
-  unaffected: an absent declaration
-  is a boundary nobody wrote rather than one of size zero, and the guard stays a seatbelt
-  for a harness that opted in.
-- **Every result that has a next step names it, as a field rather than as prose.**
-  `magus query`, `magus explain`, `magus describe file`, the affected listing and a failing
-  target's result event now carry up to three `next` entries: a stable id, a complete
-  command with the real ids already filled in, and one sentence of why. Text mode prints
-  the commands under a `next:` label and `-o json` carries them beside the record, so a
-  person and a tool meet the same suggestion. The reason fires once per session through
-  the marker store the guard advisories already keep, and the command prints every time;
-  `-s` keeps the commands and drops the reasons. A result with nothing to suggest carries
-  no field at all, never an empty list, so absence stays countable, and the line a failing
-  run prints is unchanged. It replaces prose that was measured not working: over 21 days
-  the printed `magus query output <ref>` line after a failing run was followed 21% of the
-  time, the same rate as no hint at all, while re-running the same failing target won 84%.
-  Each id exists so a suggestion nobody takes is deleted from the data rather than
-  reworded.
-- **A write that opens a second unit of work now draws an advisory.** When an agent's write
-  lands in a project that neither depends on, nor is depended on by, any project the session
-  has already written to, the guard names both sides and suggests handing the new project to
-  its own subagent or session, pointing at the magus-multi-agent skill, which partitions work
-  by write set, and at the `magus path` that says whether the two connect at all. The fact it
-  reports is a graph fact read in both directions, so a project the session's work already
-  reaches stays quiet, and it advises rather than denies because nobody declared this
-  boundary: a write inside the paths a lease owns is in scope by declaration and is skipped
-  outright. A project joins the session's set the first time it is written whatever the
-  verdict, so the advisory speaks once per unrelated project rather than once per write.
-- **`magus session ls` and `magus session --brief` clock the published prompt-cache windows.**
-  Both now print how long it has been since a tool call last ran past the guard in this
-  checkout, and when each provider's published window closes for it: Anthropic's 5 minute
-  default and 1 hour opt-in, OpenAI's in-memory retention of 5 minutes to 1 hour and extended
-  retention of 30 minutes to 24 hours, each refreshed whenever the cache is hit, and Google
-  Gemini, which publishes a caller-set TTL for explicit caches and no window at all for
-  implicit ones, so the row says so instead of showing a clock. Every provider is listed
-  because which one a host called, and which window it bought, are invisible from this side,
-  and a range is shown as a range because that is what the provider claims. Nothing is ever
-  reported as expired: magus sees hook timestamps, never the provider's cache, so the brief
-  says only that a resume past a closed window re-pays the prompt. `-o json` carries the same
-  answer as a `prompt_cache` field.
-- **`magus describe job` derives a holder's terms from the workspace, and `magus job wait`
-  grades what the holder returns.** Those terms used to carry only what the row's author
-  remembered to write down. They now add the projects the write paths reach, the declared
-  output globs that land inside them, the paths a sibling job is holding, the build inputs
-  and workspace configuration that have a single owner, and the projects that change
-  alongside the leased ones without declaring a dependency, which is a warning about hidden
-  coupling rather than a path the holder is refused. A section with nothing in it is
-  dropped, so `ci` cannot leak into a holder's terms: rendering a row whose check is the
-  gate, or a target that chains to one, is refused outright, because the gate runs once in
-  the forking session's tree after every job lands. `magus job wait <job>` reads the result
-  the holder filed and checks what is mechanical: every changed path inside the declared
-  write paths and outside the denied ones, a change set that is not empty unless the job is
-  read-only, the descendants the store carries, and a recorded PASSING run of that job's own
-  check. A row that verifies is recorded `pass`; a rejection names every rule that failed
-  and exits non-zero, so a shell step in an integration sequence can branch on it.
-  `magus job exit --schema` prints the JSON schema a result must satisfy, which a host can
-  hand a worker as its response format. Whether the work is good stays the forking
-  session's reading.
-- **The magus-multi-agent skill carries a coalescing rule and the typed brief and report.**
-  Disjoint write sets license parallelism without requiring it, and every worker pays a fixed
-  context load before it reads a line of the diff, so the skill now says to partition by
-  write set and then merge what the write sets allow: a depends-on chain is one worker in
-  sequence, small disjoint units inside one project merge, a spawn is warranted only when
-  more than one independent unit survives that merge, and idle root time is filled from the
-  merged pool rather than by cutting a unit finer. It renders a worker prompt with
-  `magus describe job` instead of typing one, so two renders of a row are byte-identical,
-  and grades the answer with `magus job wait` before reading it, replacing the four facts it
-  used to demand in prose. The skill version moves with it, grading every installed tree
-  stale, so a reinstall restamps it.
-- **`magus doctor` says whether a checkout's bound lease is actually being enforced.** An
-  unknown id, a terminal row (`pass`, `fail`, `no_return`), and a live row with no
-  registered base all render as an ordinary advisory in the guard's own verdict,
-  indistinguishable from a session these rules genuinely bind. The **bound-lease** check
-  reads the same row the guard would and reports which of those this checkout is in: no
-  lease bound, a marker that disagrees with the id the environment claims, bound to an id
-  nothing declares, bound to a row that is not live, bound to a live row with no registered
-  base, or live and enforcing.
-- **`magus session hints` reports how often magus's own suggestions are taken.** Every
-  `next` breadcrumb a result carries is served with a stable id, and a call that serves one
-  is journaled beside the guard's advisory markers; `magus session load` joins that journal
-  onto the loaded transcript and stamps each call with the ids its result served and the
-  ids its own command took up. The report counts served, followed, rejected and
-  reflex-repeated servings per id, against the sessions this repository has loaded, and
-  names the uptake floor below which a hint is spending context on advice nobody takes. It
-  reports and changes nothing; which hints to keep is a decision for a person.
-- **Claude Code's MCP tool calls reach the guard.** A fourth `PreToolUse` entry, matching
-  `mcp__magus__.*` and wired with `HOST_EVENT_RAW=1`, forwards the whole call envelope
-  instead of extracting `tool_input.command`, since an MCP call carries a tool name and a
-  params object rather than a shell command. The channel is transport-complete and
-  rule-empty today: every call passes, because no rule yet judges an MCP tool name, not
-  because the wiring is silent. The next rule this surface grows reaches the model with no
-  new host wiring.
-- **A `flags` host module, and `magus buzz --check` to type-check a script without running
-  it.** `flags\parse(argv, switches, valued)` returns `{values, positionals, unknown}`:
-  a switch records `"true"`, a valued flag takes the next word or an `=value` suffix,
-  everything past `--` is a positional, and an argument nothing declared comes back in
-  `unknown` rather than guessed at. It errors on a valued flag given no value.
-  `magus buzz --check <file>...` parses and type-checks the named files and runs nothing,
-  which is the only check a script whose whole point is a side effect can be given; add
-  `--embedded` for a file written for the magusfile engine, since parsing is upstream-strict
-  by default.
-- **The cache refuses an entry whose hashed inputs moved while the target ran.** After the
-  step succeeds, magus re-fingerprints by content the sources it hashed; a file that changed
-  and that no declared update or output glob claims means the key names a tree that no
-  longer exists, so the entry is skipped rather than filed, locally and on the shared
-  remote. The run keeps its result and stays green, because the work succeeded and only
-  recording it under that key is unsafe, and failing would punish the target that was read
-  rather than the one that wrote. A fingerprint magus cannot take twice is evidence of
-  nothing and records as before. Without it a peer rewriting a generated file inside that
-  window produced an entry mapping the OLD key to output built from the NEW bytes, and the
-  push handed it to every other machine; a failing stat was the lucky outcome.
+- **Breaking: the `relock` charm is renamed `update`, with no alias.** A target spelling
+  `relock` fails as an undeclared charm; rename the suffix. `ci` strips `update` as it
+  stripped `relock`, and `rw` does not include it.
+- **Breaking: `magus` must be imported.** A magusfile, spell or script calling `magus\`
+  needs `import "magus";`; without it the load fails with MGS1039, which names the fix.
+- **Breaking: an unknown key in `magus.yaml` fails the load.** Each is reported as
+  `file:line` with the nearest known key; a second YAML document in a file is rejected.
+- **Breaking: `magus job wait` grades evidence.** The result's `passed` field is removed;
+  the outcome is read from the run behind `output_ref`, which must be a run of the row's
+  `check`. Exit 2 means magus could not answer, 1 means rejected.
+- **Breaking: a holder's rendered terms carry commands.** `footer` is replaced by
+  `bootstrap`, a list of `{run, why}`, and the rules and skills blocks are gone.
+- **Breaking: `--skill-form` takes `both`, `short` or `full`.** Skills stamp
+  `skill-variant: short`, and a body brackets short wording with `{{if .Short}}`.
+- **Breaking for SDK implementers: `VCSDriver.Preserve` is required.** Every backend
+  captures and restores the working copy, untracked files included.
+- **Breaking for SDK callers: `RenderedSkills` takes a form, not a variant.** The
+  `*ForForm` methods are gone.
+- **A declared `timeout` bounds the target's own time.** A body parks while its
+  `ctx.needs` dependencies run and gets a fresh deadline per stretch of its own work.
+- **The job store refuses a write to another holder's row.** A leased session may record
+  its base, shrink its own `write_paths`, end its own row, and fork inside its paths.
+  `clear` archives what it drops.
+- **The guard denies every channel a bound lease could use to rewrite its row** (`magus
+  job exec <other>`, `job wait`, `job fork`, `op=clear`). Reads and `--schema` pass.
+- **Writes to host guard wiring are denied under a bound lease.** Every verdict names the
+  lease it was graded under; an unknown lease id is a deny.
+- **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
+  --watch`.
+- **The guard denies watching a CI run** (`gh run watch`, `--watch`). Batch-poll instead.
+- **The guard routes unbounded source dumps to `magus refs`.**
+- **A deny on a multi-command line says nothing on it ran.**
+- **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
+  wired with `magus\harness.provider`. Adapt one by forking it and changing the import
+  path. JSON under `harnesses/` remains the unwired fallback.
+- **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
+  runs it anyway.
+- **A failing `magus doctor` no longer cancels CI shards.** The final gate carries its
+  verdict and reports every verdict it holds.
+- **The Go coverage badge spans every platform.** The denominator is enumerated from
+  source; the numerator unions committed per-platform records refreshed with `magus run
+  coverage-badge:rw .`. The 70% floor stays per-platform.
+- **One coverage badge per language.** TypeScript merges the console and
+  libs/textsearch.
+- **The PR advice comment leads with files no project claims.**
+- **MAGUS.md is formatted with the repo's other Markdown.**
+- **The MCP tool catalog is generated from the `std.Magus` descriptor.**
+- **Upstream-wait messages back off** (15s, 30s, 1m, 2m, …) and name both targets.
+- **An ambiguous output ref prints a count and three examples.**
+- **Cursor hook schemas come from Cursor's own validator.**
+- **The agent surface stops promising a checkpoint restore.** A checkpoint records a
+  digest, not the patch; magus-vcs-hygiene covers recovering work.
+- **"Handoff journal" is renamed to memory** across the command, docs and manpage.
+
+### Removed
+
+- **Breaking: the `exclusive` target and project option, with no replacement.** A
+  magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
+  the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
+- **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
+  keeps `Magus.TailLog`.
 
 ### Fixed
 
 - **A vulnerability database release no longer invalidates every Go target's cache.** The
-  go spell declared `govulncheck -version` as the tool's version probe, and that output
-  ends with the database's publication date, so each database release changed the key of
-  every build, test and lint entry in every Go project. The date now keys only the targets
-  that run govulncheck. MGS1037 refuses a spell that declares the same shape again.
-- **Replaying a fully cached run is fast again.** Tool versions were probed one project at
-  a time, and observation probes ran before anything knew whether a target would drive the
-  tool, so a run that replayed every target still paid for a probe per tool per project.
-  Probes now run concurrently and skip a tool no selected target drives. Cache keys are
-  unchanged, so nothing re-runs because of it.
-- **Two clones of an hg, jj or Sapling repository now share one state store.** Identity
-  was read only from git's config, so every other backend fell back to the checkout path
-  and each clone kept its own memory, sessions and job rows, none of which could read the
-  others. Each backend's default remote is now read from its own config file, without
-  running the tool. A jj workspace is covered when it is colocated with git.
-- **Waiting for an upstream target no longer tells the stall watchdog the run is healthy.**
-  A step parked on a dependency in the same run used to beat the invocation heartbeat, so
-  a batch where every goroutine was parked in that wait read as fine. A step that is moving
-  now beats for itself, and a batch that is only waiting is visible as stalled; a wedge
-  reached through the slot pool is still named holder by holder (MGS3013), and a hang that
-  escapes it is aborted by the stall watchdog (MGS3012).
-- **A committed coverage record is no longer refused because the commit it names is not an
-  ancestor of the checkout.** Every record is measured on a branch, and a squash merge
-  rewrites that branch's commits, so the rule turned the badge red on every checkout of
-  main the moment a record landed through a pull request. The record's commit is kept as
-  provenance only. What keeps a record honest is the per-file digest beside it: a file
-  whose source differs from the tree is credited nothing, so a record from anywhere can
-  lower the figure and never raise it.
-- **One target's declared timeout no longer becomes the timeout of the work its siblings
-  share.** A target reached through `ctx.needs` runs once and is awaited by every target
-  that needs it, so whichever caller arrived first supplied the context the work ran under.
-  When that caller declared a timeout, its ceiling silently governed a step other callers
-  also depended on: in this repository `security` declares fifteen minutes and reaches
-  `generate`, so an expiry there killed the whole codegen chain and took `lint`, `build`
-  and `test` down with it under a deadline none of them had asked for. A shared step now
-  runs under the invocation's own cancellation, which Ctrl-C, a failing batch and the stall
-  watchdog all still reach; a declared timeout continues to bound the target that declared
-  it. The stall abort (MGS3012) also lists what was still admitted when it fired, so the
-  next report says whether the work beneath the last step was moving instead of only naming
-  the step.
-- **A release whose publish step fails can be finished without rewriting the tag.** Cutting
-  the manifest is idempotent: a second cut of a version whose manifest already names exactly
-  the artifacts on disk reports what is there and leaves it untouched, instead of refusing
-  because the manifest exists and the changelog it consumed is now empty. Different bytes
-  under a shipped tag still fail, naming every digest that moved, and a manifest that will
-  not parse is still refused rather than overwritten. The `Release index` workflow also takes
-  a tag, cutting from the assets the release ALREADY published so the digests describe what
-  people can download rather than a rebuild, and verifying them against the published
-  SHA256SUMS before hashing anything into a manifest.
-- **Both jobs that publish the release index install the Node toolchain.** `release-index`
-  regenerates the docs, and that regeneration execs pnpm, which neither job had: the cut
-  rewrites CHANGELOG.md and docs/changelog.md derives from it. v0.4.3 built and signed six
-  binaries and then died there, and the manual workflow that exists to recover a failed
-  publish had the same gap, so it could not.
-- **Generated output no longer depends on how the binary was built.** `internal/json` was a
-  build-tag shim whose two arms disagreed: v1 escapes the three HTML-significant characters
-  to their `\u00XX` form and v2 writes them as typed. magus now requires
-  `GOEXPERIMENT=jsonv2` and a build without it stops at a constant naming the variable. The
-  bootstrap build in `setup-magus` sets it itself rather than reading whatever the calling
-  workflow exported, which is how one release published 336 lines of a generated file in the
-  other spelling.
-- **A failed remote-cache exchange says which step failed.** The GitHub Actions cache spell
-  returned a bare `false` for five different failures, so magus could only report `did not
-  store artifact`; a read that the service rejected was indistinguishable from a cache miss.
-  Each step now names itself and its status.
-- `magus doctor` reports an unregistered merge driver from an explicit boolean rather than an
-  empty command string.
-
-### Changed
-
-- **A declared `timeout` bounds the target's own time, not the time it waits on what it
-  composes.** A ceiling used to run while a target body waited in `ctx.needs`, so a target
-  could exceed its timeout having done almost none of its own work, and four targets once
-  reported an identical 15m52s timeout that one upstream stall had caused, each naming
-  itself. A body now parks while its dependencies run and gets a fresh deadline for each
-  stretch of its own execution. Nesting is unchanged: a composed target's ceiling is a
-  second, tighter deadline inside its parent's, and whichever expires first cancels.
-- **Guard advises unbounded source dumps toward SCIP/`magus refs`.** `cat`/`head`/`less`
-  of source extensions (and Cursor `Read` without a limit, restated as `cat` on
-  `postToolUse`) get the same once-per-session advisory family as code-search; a
-  Read that already carries `limit` is restated as `sed -n` and stays quiet.
-- **Guard denies process-table polling** (`pgrep`/`pidof`/`ps`). Agents waiting
-  on a magus run must use `magus status --watch` instead of inventing a second
-  waiter. Doctor `checkpoint-wiring` follows named `.sh` hook scripts so Cursor's
-  embedded `session checkpoint` counts. MCP `magus_job` documents
-  `completion_gates` on fork (same contract as CLI `--stdin` and `magus\job.put`).
-  Skill v75.
-
-
-- **Claude Code and OpenCode harnesses are Buzz spells**
-  (`spells/harness/claude-code`, `spells/harness/opencode`), wired with Cursor
-  and Codex (skill v73). OpenCode stays skills-only; its guard remains the
-  TypeScript plugin. JSON under `harnesses/` remains the unwired fallback.
-
-- **Codex harness is a Buzz spell** (`spells/harness/codex`), wired beside Cursor
-  with `magus\harness.provider` (skill v72 example). Same import-path ownership
-  switch as Cursor; `harnesses/codex.json` remains the unwired fallback.
-
-- **Document adapting a Buzz harness by changing the magusfile import path** (skill
-  v71). Fork the shipped spell into the workspace, point `import "..."` at that
-  path, keep `magus\harness.provider`, edit Buzz, then `magus agent harness apply`.
-  No Magus source edits. The magus-workspace-rules skill and the agents/guard docs
-  spell the loop; JSON `improve --apply` remains for descriptor hosts.
-
-- **`magus job wait` grades evidence, not what the result claims.** The `passed` field is
-  GONE from the result schema: the outcome is read from the stored run behind the
-  `output_ref`, and that ref must resolve to a run of the row's own `check` (compared as
-  project, target and spell filter, so spelling does not decide it). An empty change set
-  on a row that is not `read_only` is rejected, unknown members are rejected, and a session
-  bound to a lease cannot grade any row, its own included. The result is filed only through
-  `magus job exit --stdin`, and the two failing statuses now separate: 2 for magus unable to
-  answer, 1 for a result that was read and rejected. Behind it: on 2026-09-11 a result with
-  no changed paths, an output ref from an unrelated codegen run, `passed: true`, and two
-  invented fields was accepted and recorded `pass`.
-- **The job store refuses a write to somebody else's row, and binding is one-way.** A
-  session acting under a lease may record the base it landed on, shrink its own write
-  paths (which is how it releases one), end its own row in `fail` or `no_return`, and
-  fork a child of itself inside its own paths. Widening a boundary, rewriting the plan,
-  clearing the book and verifying a row are refused by name, with the remedy and the actor
-  in the text. The rule lives in the store, so the CLI, the `magus_job` tool and
-  `magus\job` all carry it; the guard's own denial text used to read as an invitation to
-  widen write paths with the tool, and nothing checked who was running it.
-  `magus job exec` on a checkout already bound to a different job is refused for the
-  same reason, and `clear` now archives the rows it drops to a timestamped file beside the
-  store instead of forgetting them.
-- **A holder's rendered terms carry commands, not rules.** The rules and skills blocks are
-  gone, along with the workspace footer template that held them
-  (`docs/guides/integrations/agents/brief.md.tmpl`); the record's `footer` string is
-  replaced by `bootstrap`, a list of `{run, why}`. Measured over six workers: a brief that
-  said in so many words never to stash did not stop two attempts, and the guard's denial
-  did. What the guard can say at the moment a command meets it does not need saying twice.
-- **An ambiguous output ref names the count and three examples.** It listed every candidate
-  on one line, which was 57 ids in the case that prompted this.
-- **The Cursor hook schemas come from Cursor's own validator.** Cursor publishes no schema for
-  `.cursor/hooks.json`, but its shipped hooks bundle validates the file and every event's stdout
-  before a hook fires, so the vendored Cursor schemas are now transcribed from that code (read
-  out of the cursor-agent CLI package and the desktop app, digests in the provenance table)
-  rather than from the docs page, which types `matcher` as an object where the validator
-  requires a string. The gating reply and the advisory reply are graded against the event that
-  reads each, so a renamed field costs a test rather than a silently dropped verdict. The
-  OpenCode plugin type-check moves to the current `@opencode-ai/plugin` release.
-- **The Go coverage badge now spans every platform, and is refreshed locally rather than by
-  CI.** The figure used to be whatever the CI runner compiled, which made it a property of
-  that machine: 119 non-test files sit behind build constraints, and macOS and Linux read
-  67.6% and 66.9% for one commit. It is now split. The denominator is enumerated from
-  source, by instrumenting each Go file in each module on its own with `go tool cover`,
-  which parses without a build context and so reports a Windows-only file's blocks on a
-  Mac; those blocks stay in the denominator at zero until something runs them. The
-  numerator is the union of committed per-platform records under `coverage/`, one small
-  JSON per GOOS/GOARCH carrying a digest and a bitset per file, the commit measured and
-  when. `magus run coverage-badge:rw .` refreshes the record for the platform it runs on,
-  from the suites that just ran; a platform's record is raised by running the refresh
-  there, never by a CI matrix or a container. CI no longer measures anything to judge the
-  badge; it re-derives it from the tree and the records, which is a pure function, so the
-  `gha`-only arm is gone. A record measured against source that has since changed is
-  reported and credited nothing, so an unrefreshed platform can only pull the figure down.
-  The 70% floor in `test` is unchanged and stays per-platform on purpose.
-- **One coverage badge per language.** The README carries a Go badge and a TypeScript badge,
-  and the TypeScript figure spans every TypeScript project with a suite (the console and
-  libs/textsearch), merged line by line from their lcov reports by the console's test target
-  and rendered at console/coverage.svg, which the docs site now copies beside the libs badges.
-  The per-project textsearch badge under assets/ is gone. CI's fail-fast generate gate no
-  longer skips the docs project: its generate step refreshes committed content only, so the
-  deferral it was written for no longer exists.
-- **The `relock` charm is now `update`.** One charm, one meaning: move a pinned copy of
-  upstream state forward to what upstream serves today. Re-resolving a lockfile and
-  refreshing a scanner's vulnerability database are the same grant, so they share a name,
-  and `relock` could not be stretched over a database that locks nothing. `ci` strips it
-  exactly as it stripped `relock`, and it is still deliberately not part of `rw`, which
-  covers output reproducible from a clean checkout. `relock` remains accepted everywhere
-  `update` is for one release, resolving to it wherever a charm name is read, and magus
-  prints the new spelling the first time a run uses the old one.
-- **The PR advice comment leads with the files no project claims.** The section is ranked
-  first rather than posted in the order its step ran, and it now names what an undeclared
-  file costs: the containing project reruns on every touch while the cache key stays put,
-  and a file that really is an input replays a verdict computed under the rules it just
-  changed. The fix is a snippet naming the file, the deliberately undeclared case still
-  reads as correct, and MGS1028 carries the argument in full.
-- **MAGUS.md is formatted with the rest of the repo's Markdown instead of excluded from it.**
-  One renderer now writes every generated Markdown table, padding each column to its widest
-  cell the way dprint does, so the routing index, the Buzz stdlib and spell references, the
-  config reference, the daemon API pages and the benchmark report all come out of the
-  generator in the formatter's own shape. CHANGELOG.md stays excluded: its generated block
-  and the prose around it still disagree.
-- **The MCP tool catalog is generated from the `std.Magus` descriptor.** It was the one
-  agent-facing surface with no generator behind it: 22 hand-written descriptors and ~22 KB
-  of prose beside a descriptor that already generates the Buzz bindings, the checker
-  declarations and the reference docs. Declaring an `MCPTool` on the module is now what
-  adds a tool, the existing drift gate covers the output, and a tool naming a member the
-  descriptor does not declare fails at init. `magus_tail_log` is gone with it: it was a
-  second door onto the bytes `magus_output` already returns, keyed by project rather than
-  by ref, and the duplication was on record since the 2026-08-25 post that found it. The
-  SDK keeps the project-scoped route as `Magus.TailLog`; on the CLI the ref every run
-  prints is the route, as it always was. `magus\review.provider` gains a
-  declaration too, so it has a checker signature and a doc page like every other member;
-  a new test fails on any magus member bound at run time that the descriptor does not
-  declare, which is how that one went missing.
-
-- **A redundant ci gate is refused whether or not the machine is busy.** MGS3010 used to
-  require a saturated admission pool as well, which made it unreachable in the case it was
-  written for: the load reading comes from the daemon, ordinary commands run without a
-  persistent one, so an idle machine always printed the advisory and ran the duplicate
-  anyway. Measured across one session, that advisory fired seven times and about 17 minutes
-  of wall clock went to gates whose verdict was already on record. Redundancy alone defers
-  now, `--no-redundancy-check` still runs it here, and a nested magus still only advises
-  because it counts its own ancestors' claims as load. Nothing about what counts as
-  redundant changed: a green gate for this branch, plus a delta in which every path is
-  generated output, prose or a comment-only edit.
-- **Every backend can preserve the working copy, in its own idiom, without costing state.**
-  `VCSDriver.Preserve` captures uncommitted work, tracked changes and untracked files
-  alike, and returns a handle that resolves it back: git builds a commit through a temporary
-  index and anchors it under a private refs/magus ref namespace, Mercurial shelves with
-  the keep flag, Sapling commits and unwinds, and Jujutsu already snapshotted so it mints
-  nothing. It is on the required interface because no caller has a sensible degraded
-  path: "could not preserve" is not something to shrug at the way a missing remote URL is.
-  The guarantee is identical everywhere and the parity test enforces it: after Preserve,
-  every file is byte-identical and the backend still reports the same paths as modified
-  and unknown. Storing costs working-copy state on the Mercurial family, where unknown
-  files come back added and deleted files come back scheduled for removal, so that state is
-  read first and put back, which is the half a by-hand check misses.
-- **A denied command says how much of the line it refused.** A deny kills the whole shell
-  invocation while the reason discusses only the construct that earned it, so a line that
-  chained an edit ahead of a denied command read as a partial refusal: fix the named
-  command, assume the rest ran. They did not. A deny on a multi-command line now says
-  nothing in it ran and how many other commands went with it.
-
-- **The agent surface says how to get back to a recorded state, and stops promising a
-  restore that cannot exist.** A checkpoint records a revision and a DIGEST of the
-  uncommitted patch; the patch text is hashed and discarded, so it can confirm whether a
-  tree is the same one and can never give the work back. Nothing said so, and four
-  places implied otherwise, and one told an agent to "materialize the files you touch from
-  the checkpoint", which is impossible. magus-vcs-hygiene now covers it: commit before
-  parking, find the revision with `magus session` and `git reflog`, inspect it out of
-  place with a detached worktree, and restore per file rather than reaching for the
-  whole-tree commands the guard denies.
-
-- **`magus doctor` can see the checkpoint hook template again.** The list of shipped
-  template basenames a config is searched for still named `magus-pause.sh` after that
-  file was renamed to `magus-checkpoint.sh`, and nothing pinned the list. Since the search
-  only matches names on it, the one check written to catch a silently stale hook could not
-  match the only name a config ever carries: a wired host graded healthy while running a
-  script that called a subcommand magus no longer has. Template revision 11 so an
-  unreplaced copy reports itself.
-
-- **The two skill forms answer to one word each: SHORT and FULL.** The shorter end used to
-  have three names, `simple` in the code and in an installed file's `skill-variant:` stamp,
-  `concise` on `--skill-form`, `short` on the website, so a reader could pass
-  `--skill-form=concise`, get a file stamped `simple`, and read a page about the short form.
-  `--skill-form` now takes `both` (the default), `short`, or `full`; the stamp records
-  `short`; and a skill body brackets its shorter wording with `{{if .Short}}`. Nothing
-  answers to the old spellings, and skill version 53 grades every installed tree stale so a
-  reinstall restamps it.
-- **"Handoff journal" is gone from the memory command and the docs.** `magus memory`
-  manages a per-repository MEMORY: that is what the command is called, what the MCP tool
-  is called, and now what its help text, manpage, and every page describing it call the
-  thing it stores. The skill was renamed a release ago and these surfaces were missed.
-- **`RenderedSkills` and the paths that draw from it take a form, not a variant.** A form may
-  name two bodies (`both` writes each skill short plus a full twin) and a variant names one,
-  so the enumerators that plan, archive and write an install now take the form the caller
-  chose. That retires the parallel `*ForForm` methods, whose Variant-taking twins silently
-  added twins for one value and not the other.
-
-- **Watching a CI run is refused.** `gh run watch`, and the `--watch` forms of
-  `gh run view` and `gh pr checks`, now deny and name the one board query that answers
-  every open pull request at once. Watching costs a wake-up per completion and buys
-  nothing: green changes nothing, because the human merges. Reading a result that already
-  exists is untouched.
-- **An unknown key in `magus.yaml` fails the load and names the file it is in.** It used to
-  be a warning that left the command at exit 0, and `-q`/`--quiet` and `-s`/`--silent`
-  dropped it entirely, so a setting magus would never honor looked exactly like one it had
-  applied. Every tier decodes the same way now, user-global, workspace and cwd alike, which
-  means a user-global config carrying a stale key stops every magus command on that machine
-  until the key is moved or removed. That is the point: the alternative is a machine running
-  under settings its owner believes are in force. A second YAML document in one file is
-  rejected for the same reason, since the decoder reads the first and would drop the rest
-  without a word, while an empty or comment-only file still declares nothing and loads. The
-  old warning referred readers to `magus config validate`, which does not exist; `magus
-  doctor` is the check that grades the config files a workspace resolves. The error reads
-  as `magus.yaml:10: unknown key "enabledd"; did you mean "enabled"?`, one line per key,
-  with the nearest known key at that level offered by the same distance rule magusfile
-  options use, and it is printed plain on stderr rather than through the structured log,
-  which had been escaping every quote and newline into one line.
-- **A wait for an upstream target names both parties in a sentence and repeats less often the
-  longer it runs.** The line was structured fields printed every fifteen seconds, so several
-  readers waiting out one long writer each repeated it at every beat. It now reads as one
-  sentence naming the waiting target and the target it waits for, spelled the way the lines
-  around it spell a step, and it prints at 15s, 30s, 1m, 2m, 4m and so on with the elapsed
-  time; a wait for the per-key cache lock reads the same way. The stall watchdog still hears
-  every beat, so a legitimate long wait is still not a stall and an aborted run still reads
-  as one target waiting on another.
-- **A served `next` breadcrumb is filtered for who it is served to, carries an exec-ready
-  argv, and is journaled.** The role comes from the acting lease's row: unbound (a person or
-  the orchestrator) keeps every entry, a read-only or path-less row is a reviewer and keeps
-  none of the writes, anything else is a worker and keeps only what `next` can prove
-  read-only from the command alone (a bare `run`, a `:rw` charm, a non-dry `affected`, and a
-  VCS mutation all judge as writes). A dropped entry is dropped, never rewritten, so a
-  worker is never handed a narrowed command nobody wrote. Each entry now also carries
-  `argv`, the same command unquoted, so a caller execs it without a shell to parse; text
-  mode prints the command on its own line with the reason indented under it, so a reader
-  copying the line gets the parenthetical with it, and the reason fires once per session
-  while the command prints every time. A hint spells the binary the way this process was
-  actually invoked: `magus` through PATH, `./magus` for a checkout's own binary, an
-  absolute workspace path collapsed to `./magus`. A binary renamed to something else
-  (a docs example's `magus-bin`) keeps the canonical `magus` spelling rather than rendering
-  a command nobody could run. `next` now rides MCP graph and affected replies the same way
-  it rides the CLI, filtered the same way, so uptake per id is not a fact about which door
-  the reader came through. What was served is journaled per session beside the guard's
-  advisory markers, which is what `magus session hints` reads.
-- **A bound lease cannot rewrite its own row, or read a row it has no boundary for, through
-  any channel.** The CLI, the `magus_job` MCP tool and `magus\job` all reach one store and
-  one rule (see the job entries above); the guard now denies the COMMANDS that would reach
-  it before they even run: `magus job exec <other-job>`, `magus job wait`, `magus job fork`,
-  `op=clear`, and any `op=fork` or `op=exec` naming a row other than the caller's own. An
-  `op=fork` on the caller's own row is denied too, with one exception: one that only drops
-  entries from its own `write_paths` passes through, since giving a path back cannot widen a
-  role and the store already judges whether a particular shrink is legitimate; `op=exec` on
-  the caller's own row passes, since recording the base a lease landed on is a procedure the
-  write surface demands. Reading is untouched (`op=list`, `magus job exec` with no operand,
-  `magus ls jobs`), and so is `--schema` or `--help` on any of them, because a holder must
-  be able to read the rubric it is graded against. Every denial names the actor who can move
-  the boundary instead of pointing at the tool a worker might mistake for permission.
-- **A write to the host's own guard wiring is denied under any bound lease, and every guard
-  verdict now carries the lease it was graded under.** `.claude/settings.json` and its
-  hooks, `.cursor/hooks.json`, `.codex/hooks.json` and `.opencode/plugins/` decide whether
-  the guard runs at all from the host's next session start, so an edit there is refused
-  regardless of the write paths, even ones that happen to contain the file; an unbound session gets
-  a once-per-session advisory instead. `lease` on the verdict names the row a write was
-  graded against: an id the job store does not declare is now a deny rather than a silent
-  pass-through, and an id naming a terminal row (`pass`, `fail`, `no_return`) prints one
-  notice per session that its rules are inert. A `next` breadcrumb magus itself served is
-  pre-authorized for the exact command it names, so no advisory fires and the role-scoped
-  rules stand down, though the workspace-wide denies (a raw language tool, a pipe or
-  redirect of magus's own output, a whole-tree VCS op, a relocated checkout) never yield to
-  it.
-- **A failing `magus doctor` no longer costs CI the shard results.** The plan job carries
-  doctor's verdict to the final gate instead of failing there, so the run still goes red and
-  goes red with the tests in hand. Doctor asks about workspace configuration, and by that
-  point the shard matrix is already proof the workspace loads and the graph resolves; four
-  runs in a row reported a guard-wiring problem, said nothing whatever about the tests, and
-  the work merged with them unrun. The hard failures beside it still stop the run before a
-  shard starts: uncommitted generated output and a non-deterministic generator both mean the
-  tree under test is not the tree in the commit. The gate also reports every verdict it
-  holds before exiting rather than the first, since exiting at the first one turned one fix
-  into four rounds, each revealing exactly one more problem.
-
-### Removed
-
-- **The `exclusive` target and project option is gone, with no replacement.** It was
-  meant for a target that uses the whole machine, and measured across every declaration it
-  never did: most protected nothing (a comment claimed a `git status` check the target
-  never made), and where the engine honored it, it serialized every other gate member
-  behind one target until the stall watchdog took the run. A magusfile that still sets it
-  now fails to load with MGS1038, which names the key; delete it. `slots` and `memory_mb` are the
-  concurrency dials, and a target that must not run beside a peer needs its own job in CI.
-  The run-isolation gate that implemented it is deleted with it, so the deadlock that gate
-  could reach cannot happen. docs/decisions/0001 records the reasoning.
-- **The `relock` charm alias is gone; `update` is the only spelling.** `relock` was the
-  charm's name while `go mod tidy` was the only op claiming it, and it was kept resolving
-  to `update` for one release with a hint on every use. A target that still spells it
-  `relock` now fails as an undeclared charm; rename the suffix to `update`.
+  database date keys only targets that run govulncheck.
+- **Replaying a fully cached run is fast again.** Tool probes run concurrently and skip
+  tools no selected target drives. Cache keys are unchanged.
+- **Clones of an hg, jj or Sapling repository share one state store.** Identity is read
+  from each backend's config without running it. jj is covered when colocated with git.
+- **A step waiting on an upstream target no longer masks a stall.** Only a moving step
+  beats the heartbeat; MGS3013 and MGS3012 still catch a wedge.
+- **A coverage record is no longer refused after a squash merge.** Its commit is
+  provenance only; per-file digests keep it honest.
+- **A shared step no longer inherits one caller's timeout.** It runs under the
+  invocation's cancellation. MGS3012 lists what was still admitted.
+- **A failed release publish can be finished without re-tagging.** Re-cutting a matching
+  manifest is idempotent, and `release-index` cuts from the published assets, verified
+  against SHA256SUMS.
+- **Both release-index jobs install Node.** v0.4.3's publish died regenerating docs.
+- **Generated output no longer depends on the build.** magus requires
+  `GOEXPERIMENT=jsonv2` and refuses to build without it.
+- **A failed remote-cache exchange names the step that failed.**
+- **`magus doctor` sees the checkpoint hook template again** (template revision 11).
+- **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
 
 ## [v0.4.3] - 2026-09-06
 
