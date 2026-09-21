@@ -29,11 +29,7 @@ func buzzRepl(ctx context.Context, workDir string, noAutoload bool) error {
 		}
 	}
 
-	autoloadDir := cwd
-	if noAutoload {
-		autoloadDir = ""
-	}
-	sess, err := interp.NewBuzzReplSession(ctx, autoloadDir)
+	sess, err := interp.NewBuzzReplSession(ctx, cwd, !noAutoload)
 	if err != nil {
 		return fmt.Errorf("buzz repl: %w", err)
 	}
