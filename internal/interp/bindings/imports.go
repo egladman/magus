@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -146,6 +148,25 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (vm.Value, 
 		}
 	}
 	return vm.Null, false
+}
+
+// resolveRemoteSpellImport binds a spell imported by URL. It always claims the
+// import, binding null on failure, because returning false would hand the URL to
+// the cwd-first file search, where a crafted local path could answer it. For a
+// magusfile import, interp's pre-exec check has already resolved the reference and
+// reported any failure with its code, so a failure here is only logged.
+func resolveRemoteSpellImport(ctx context.Context, importPath string) (vm.Value, bool) {
+	entry, err := remotespell.EntryPath(ctx, importPath)
+	if err != nil {
+		slog.ErrorContext(ctx, "remote spell import", "err", err)
+		return vm.Null, true
+	}
+	m, ok := loadLocalSpell(ctx, entry)
+	if !ok {
+		slog.ErrorContext(ctx, "remote spell import is not a spell", "import", importPath)
+		return vm.Null, true
+	}
+	return spellHandleFromMeta(m), true
 }
 
 // spellSearchLevels returns the directories a path-style spell import is searched

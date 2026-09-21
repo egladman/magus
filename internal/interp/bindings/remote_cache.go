@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 )
@@ -179,11 +180,19 @@ func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.Re
 	return nil
 }
 
-// resolveBackendSpell turns a backend selector into a driver: a .buzz path is
-// loaded (and registered) as a spell with handler op support; any other value
-// is a spell name looked up in the registry. The magusfile wires the backend by
-// calling magus.cache.remote(<spell handle>), which records the spell's name.
+// resolveBackendSpell turns a backend selector into a driver: a .buzz path or a
+// pinned oci:// reference is loaded (and registered) as a spell with handler op
+// support; any other value is a spell name looked up in the registry. The magusfile
+// wires the backend by calling magus.cache.remote(<spell handle>), which records the
+// spell's name.
 func resolveBackendSpell(ctx context.Context, selector string) (spells.Driver, error) {
+	if remotespell.IsRef(selector) {
+		entry, err := remotespell.EntryPath(ctx, selector)
+		if err != nil {
+			return nil, err
+		}
+		return loadSpellFile(ctx, entry)
+	}
 	if strings.HasSuffix(selector, ".buzz") {
 		return loadSpellFile(ctx, selector)
 	}
