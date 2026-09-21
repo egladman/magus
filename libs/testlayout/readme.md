@@ -98,11 +98,11 @@ and `golangci-lint custom` reads that file from its working directory:
 cd libs/testlayout && golangci-lint custom
 ```
 
-`destination: ../..` writes `./custom-gcl` at the workspace root, which reads
+`destination: ../../.magus` writes `.magus/custom-gcl`, which reads
 `.golangci.yml` exactly as the stock binary does. `magus run lint` does both steps.
 
 Once `testlayout` appears in `.golangci.yml` the stock binary can no longer read
-it, so every lint entry point has to move to `./custom-gcl`.
+it, so every lint entry point has to move to `.magus/custom-gcl`.
 
 One binary carries every in-repo plugin, so a second linter is another entry in
 `plugins:` rather than a second config file.

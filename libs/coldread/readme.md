@@ -176,7 +176,7 @@ build a binary carrying this one. The declaration lives in
 cd libs/testlayout && golangci-lint custom
 ```
 
-`destination: ../..` writes `./custom-gcl` at the workspace root. `magus run lint`
+`destination: ../../.magus` writes `.magus/custom-gcl`. `magus run lint`
 does both steps.
 
 ## Standalone use

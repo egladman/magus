@@ -63,8 +63,7 @@ magus\project({
                 // src/console/diff/gen/demo.ts. Undeclared, editing the patch left the
                 // key where it was, so the generator replayed and the committed TS kept
                 // the old changeset.
-                "src/console/diff/demo.patch",
-                "../gen/knowledge-graph.json", "../gen/target-graph.json"],
+                "src/console/diff/demo.patch"],
     // gen/** alone: the esbuild bundle, which this project actually produces. src/gen/** lands
     // here too, but proto writes it (see proto/buf.gen.yaml) and declares it there against this
     // project. Claiming it here as well is MGS4002 - two projects declaring one path cannot be
@@ -193,6 +192,13 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     // clean, which is why this gate has never fired. It is inert, and the comment above
     // claiming gen/ is committed is wrong - left as-is here rather than changed blind.
     final clean_before = vcs\isDirty(["gen"]) == false;
+    // The explorer's data is graph_generate's declared output, needed above. Copied
+    // here rather than by package.json so the dependency lives where magus sees it,
+    // and before the build because stamp-build.mjs hashes every precached file.
+    fs\mkdirAll(fs\join("gen", "graph"));
+    foreach (name in ["knowledge-graph.json", "target-graph.json"]) {
+        fs\copyFile(fs\join("..", "gen", name), fs\join("gen", "graph", name));
+    }
     proc\exec("pnpm", ["run", "build"], ".", {});
     if (ctx.hasCharm("rw")) {
         return;

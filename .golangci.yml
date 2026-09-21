@@ -96,7 +96,7 @@ linters:
     # library on 34% of its test files, where this one costs it 1.2%. The reasoning
     # and the stdlib measurements are in libs/testlayout/readme.md.
     #
-    # This linter only exists in ./custom-gcl. The stock golangci-lint on PATH
+    # This linter only exists in .magus/custom-gcl. The stock golangci-lint on PATH
     # cannot read this config while the line below is present - it exits with
     # `plugin("testlayout") not found`. That is the price of golangci-lint having
     # no runtime plugin loading, and it is why `magus run lint` builds the binary.
@@ -302,7 +302,7 @@ linters:
       # and the std API table compiled into the linter, so it calls all 25 symbols
       # go1.27-only.
       #
-      # It appeared when lint moved to ./custom-gcl and nowhere else. The released
+      # It appeared when lint moved to .magus/custom-gcl and nowhere else. The released
       # binary aqua pins was built with go1.26.2 and its table says nothing here;
       # `golangci-lint custom` compiles with whichever go leads PATH (1.26.5) and
       # carries a newer one. Same linter version, same config, opposite verdict -

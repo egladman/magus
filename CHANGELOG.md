@@ -88,6 +88,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
+  and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
+  and fails when the build does. The graph JSON is no longer committed.
 - **Breaking: `magus status -o json` nests concurrency.** `config.concurrency` is an object
   of `configured`, `profile` and `effective`; `config.concurrency_effective` is gone.
 - **Breaking: the `relock` charm is renamed `update`, with no alias.** A run spelling

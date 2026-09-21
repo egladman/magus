@@ -1,7 +1,7 @@
 # Build configuration for a golangci-lint binary carrying this repo's own linters.
 # `golangci-lint custom` reads this from its working directory and takes no config
-# flag, so the build runs HERE and writes the binary to the workspace root, where
-# .golangci.yml and the lint target expect ./custom-gcl.
+# flag, so the build runs HERE and writes the binary to .magus/, where
+# .golangci.yml and the lint target expect .magus/custom-gcl.
 #
 # One binary carries every in-repo plugin, so a second linter is another entry in
 # the list below rather than a second file.
@@ -12,8 +12,8 @@
 # which linters and settings keys exist.
 version: v2.12.2
 
-# Relative to this directory: the workspace root.
-destination: ../..
+# Relative to this directory: the workspace root's .magus/ cache dir.
+destination: ../../.magus
 
 plugins:
   # testlayout reports a test file whose name narrows a source file's name.

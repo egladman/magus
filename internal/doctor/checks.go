@@ -203,40 +203,32 @@ func (r *runner) checkSymlinks() types.DoctorCheck {
 	return checkSymlinks(r.ws.Root())
 }
 
+const graphBoundsCheck = "graph-bounds"
+
 func (r *runner) checkGraphBounds() types.DoctorCheck {
-	return checkGraphBounds(r.ws.Root())
+	if r.opts.graphNodes == nil {
+		return types.DoctorCheck{Name: graphBoundsCheck, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "no knowledge graph supplied; skipped"}
+	}
+	nodes, err := r.opts.graphNodes(r.runCtx())
+	if err != nil {
+		return types.DoctorCheck{Name: graphBoundsCheck, Status: types.DoctorFail, Message: fmt.Sprintf("could not build the knowledge graph: %v", err)}
+	}
+	return checkGraphBounds(nodes)
 }
 
-// checkGraphBounds fails when the committed knowledge graph holds a node naming a
-// location outside the workspace (the sibling of checkSymlinks, for the artifact the
-// workspace publishes rather than the filesystem).
+// checkGraphBounds fails when the knowledge graph holds a node naming a location
+// outside the workspace (the sibling of checkSymlinks, for the artifact the workspace
+// publishes rather than the filesystem).
 //
-// The graph is committed, rendered into the docs site and shared through the remote
-// cache, so one machine's absolute path reaches all three. internal/symbols guards
-// ingest; this notices if a future extractor gets around it, which is why it reads the
-// merged artifact and keys on the node ID: several kinds carry their path only there.
+// The graph is rendered into the docs site and shared through the remote cache, so one
+// machine's absolute path reaches both. internal/symbols guards ingest; this notices if
+// a future extractor gets around it, which is why it reads the merged graph and keys
+// on the node ID: several kinds carry their path only there.
 //
 // Import nodes are exempt: their ID is the specifier the source literally wrote.
-func checkGraphBounds(root string) types.DoctorCheck {
-	const name = "graph-bounds"
-	path := filepath.Join(root, "gen", "knowledge-graph.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no committed knowledge graph to check"}
-	}
-	var g struct {
-		Nodes []struct {
-			ID     string `json:"id"`
-			Kind   string `json:"kind"`
-			Label  string `json:"label"`
-			Source string `json:"source"`
-		} `json:"nodes"`
-	}
-	if err := json.Unmarshal(data, &g); err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: fmt.Sprintf("could not read the committed knowledge graph: %v", err)}
-	}
+func checkGraphBounds(nodes []types.KnowledgeNode) types.DoctorCheck {
 	var escaping []string
-	for _, n := range g.Nodes {
+	for _, n := range nodes {
 		if n.Kind == types.KindImport {
 			continue
 		}
@@ -245,13 +237,13 @@ func checkGraphBounds(root string) types.DoctorCheck {
 		}
 	}
 	if len(escaping) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: fmt.Sprintf("%d graph node(s); none name a path outside the workspace", len(g.Nodes))}
+		return types.DoctorCheck{Name: graphBoundsCheck, Status: types.DoctorOK, Message: fmt.Sprintf("%d graph node(s); none name a path outside the workspace", len(nodes))}
 	}
 	slices.Sort(escaping)
 	return types.DoctorCheck{
-		Name:    name,
+		Name:    graphBoundsCheck,
 		Status:  types.DoctorFail,
-		Message: fmt.Sprintf("%d graph node(s) name a location outside the workspace; the graph is committed and shared, so they leak a local machine's layout", len(escaping)),
+		Message: fmt.Sprintf("%d graph node(s) name a location outside the workspace; the graph is rendered into the docs site and shared through the remote cache, so they leak a local machine's layout", len(escaping)),
 		Details: escaping,
 	}
 }
