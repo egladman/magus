@@ -135,7 +135,10 @@ type Request struct {
 	// Lease is the job row this call acts as; empty falls back to the bound marker.
 	Lease string
 	// The attribution the caller knows about itself. No verdict reads any of it.
-	Host       string
+	Host string
+	// Transport is the form of the installed hook that called, such as sh or buzz, as
+	// that form declares it. Two forms wired into one session are two callers.
+	Transport  string
 	Session    string
 	Transcript string
 	Event      string
@@ -190,7 +193,7 @@ type Verdict struct {
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	input := req.Input
 	hasInput := input != ""
-	who := hookAttribution{Host: req.Host, Session: req.Session, Transcript: req.Transcript, Event: req.Event}
+	who := hookAttribution{Host: req.Host, Transport: req.Transport, Session: req.Session, Transcript: req.Transcript, Event: req.Event}
 	isPath := req.IsPath
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
@@ -212,7 +215,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if env.LoadedSkill != "" {
 			// Recorded, never judged. The gate is built here rather than reusing the one
 			// below because this arm returns before it: same cacheDir, same session.
-			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.Session), env.LoadedSkill)
+			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.sessionKey()), env.LoadedSkill)
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		if env.NothingToJudge {
@@ -237,8 +240,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			// multi-agent brief was read before work was handed out. That reads a marker
 			// file and no prose, which is what lets it live on this path.
 			spawnLocation := hookLocation(ctx, deps)
-			spawnGate := hint.NewGate(spawnLocation.cacheDir, who.Session)
-			if reason := denySpawnWithoutBrief(spawnGate, req.ObservesSkillLoads, spawnLocation.workspace); reason != "" {
+			if reason := denySpawnWithoutBrief(hint.NewGate(spawnLocation.cacheDir, who.sessionKey()), req.ObservesSkillLoads, spawnLocation.workspace); reason != "" {
 				appendHookSpawn(ctx, deps, env, who)
 				return Verdict{
 					SchemaVersion: agent.GuardSchemaVersion,
@@ -251,7 +253,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			// The second session-state question, asked the same way and for the same reason:
 			// whether this checkout is already somebody's. It reads the markers and the plan,
 			// never the prompt, so it lives on this path beside the brief rule.
-			if note := adviseSharedCheckoutSpawn(withJobStoreRows(ctx, spawnLocation), spawnGate, spawnLocation); note != "" {
+			if note := adviseSharedCheckoutSpawn(withJobStoreRows(ctx, spawnLocation), hint.NewGate(spawnLocation.cacheDir, who.callerKey()), spawnLocation); note != "" {
 				return Verdict{
 					SchemaVersion: agent.GuardSchemaVersion,
 					Decision:      "advise",
@@ -278,7 +280,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// marker, which is what every binding was before this.
 		actingLease = job.Checkout{CacheDir: location.cacheDir, Session: who.Session}.ActingLease()
 	}
-	markers := hint.NewGate(location.cacheDir, who.Session)
+	markers := hint.NewGate(location.cacheDir, who.callerKey())
+	facts := hint.NewGate(location.cacheDir, who.sessionKey())
 	tool := hookToolCommand
 	switch {
 	case req.Observe:
@@ -340,7 +343,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Graded ahead of the rules, though it speaks near the end of them: the project
 		// this write lands in is recorded whatever verdict they reach, so it cannot be
 		// resolved inside a rung that a louder rule skips.
-		drift := gradeScopeDrift(ctx, deps, markers, actingLease, input)
+		drift := gradeScopeDrift(ctx, deps, facts, actingLease, input)
 		// spoken reports that a rule MATCHED, which is not the same as a rule that
 		// produced text. A once-per-session advisory that already fired this session
 		// matched and stayed quiet, and the rules below it must not step into the silence
@@ -378,7 +381,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// reason: the two above answer whether this agent may touch the file at all, and
 		// there is nothing to learn before a write that is refused anyway.
 		if verdict.Decision != "deny" {
-			if reason := denyBuzzWriteWithoutSkill(markers, req.ObservesSkillLoads, location.workspace, input); reason != "" {
+			if reason := denyBuzzWriteWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				verdict.Decision, verdict.Reason = "deny", reason
 				verdict.Rule = string(denyBuzzUnbriefed)
 			}
@@ -468,7 +471,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Outside Evaluate for the same reason the two rules above are: it reads session
 		// state (which skills have loaded) rather than the line alone, and Evaluate's
 		// verdict is a pure function of what was handed in.
-		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(markers, req.ObservesSkillLoads, location.workspace, input, shellD)); {
+		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input, shellD)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
@@ -882,9 +885,43 @@ type hookRequest struct {
 // inside the judged text because the guard's verdict must never depend on it.
 type hookAttribution struct {
 	Host       string
+	Transport  string
 	Session    string
 	Transcript string
 	Event      string
+}
+
+// callerKeyEscaper keeps the key's delimiter out of every part. '%' is escaped too, so a
+// part that already holds "%2F" cannot collide with one that held "/".
+var callerKeyEscaper = strings.NewReplacer("%", "%25", "/", "%2F")
+
+// sessionKey keys FACTS about a session, what a rule reads as "did this happen": a skill
+// load, the projects written. `<host>/<session>`, each part escaped, because two hosts may
+// present the same id. The transport is left out so a session wiring some surfaces as sh
+// and others as Buzz sees one set of facts. Empty without a session, so hint.Gate falls
+// back to its anonymous window rather than keying every unattributed caller together.
+func (who hookAttribution) sessionKey() string { return SessionKey(who.Host, who.Session) }
+
+// SessionKey is the marker key the guard files a session's facts under, for a reader
+// outside the package: `<host>/<session>` with each part escaped, or "" without a session.
+func SessionKey(host, session string) string {
+	session = strings.TrimSpace(session)
+	if session == "" {
+		return ""
+	}
+	return callerKeyEscaper.Replace(host) + "/" + callerKeyEscaper.Replace(session)
+}
+
+// callerKey keys TEXT a caller has already rendered, a fire-once notice or a deny's full
+// reason: `<host>/<transport>/<session>`. The sh and Buzz forms of one hook are two
+// readers of their own replies, so each is told a rule in full once. Empty without a
+// session, like sessionKey.
+func (who hookAttribution) callerKey() string {
+	session := strings.TrimSpace(who.Session)
+	if session == "" {
+		return ""
+	}
+	return callerKeyEscaper.Replace(who.Host) + "/" + callerKeyEscaper.Replace(who.Transport) + "/" + callerKeyEscaper.Replace(session)
 }
 
 type location struct {

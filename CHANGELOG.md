@@ -140,6 +140,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   carries the full reason, `nothing ran (N commands)` on a multi-command line, and the
   rule's page. Later ones name the rule and cite `magus query output grd<hex>`, counted by
   `magus session hints` as `deny-verdict`.
+- **Per-session guard state is keyed per host.** Facts a rule reads, such as skill loads
+  and projects written, key on `<host>/<session>`; fire-once notices and deny explanations
+  key on `<host>/<transport>/<session>`, each part escaped. `magus shell --transport` names
+  the hook form; the shipped sh and Buzz command and path hooks pass `sh` and `buzz`.
 - **`magus query output` reads trail payloads.** `grd` (guard verdicts) and `mcp` refs
   resolve beside `out` run outputs.
 

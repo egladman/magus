@@ -170,6 +170,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Observe:    sf.Observe,
 		Lease:      sf.Lease,
 		Host:       sf.AgentName,
+		Transport:  sf.Transport,
 		Session:    sessionOrTerminal(sf.Session),
 		Transcript: sf.Transcript,
 		Event:      sf.Event,

@@ -319,7 +319,7 @@ fun main(args: [str]) > void {
     // The retry tests status AND emptiness together, for the same reason as the command
     // template now that this surface can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
-    final attributed = mut ["--agent-name", agentName, "--session", session, "--transcript", transcript];
+    final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {

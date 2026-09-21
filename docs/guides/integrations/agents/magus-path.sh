@@ -161,7 +161,7 @@ guard() {
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --transport sh --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

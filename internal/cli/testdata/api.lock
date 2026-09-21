@@ -194,6 +194,7 @@ flag shell/path
 flag shell/renders-ask
 flag shell/session
 flag shell/transcript
+flag shell/transport
 flag status/W
 flag status/c
 flag status/compact

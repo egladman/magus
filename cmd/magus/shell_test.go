@@ -1007,9 +1007,9 @@ func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
 	global = globalFlags{}
 	var out strings.Builder
 	require.NoError(t, shellStdin(ctx, strings.NewReader(filepath.Join(ws.Root(), "drift-fixture.txt")),
-		&out, []string{"--path", "--session", "session-1"}))
+		&out, []string{"--path", "--session", "session-1", "--agent-name", "claude-code"}))
 
-	assert.Equal(t, []string{"."}, touchedProjects(hint.NewGate(base, "session-1")),
+	assert.Equal(t, []string{"."}, touchedProjects(hint.NewGate(base, guard.SessionKey("claude-code", "session-1"))),
 		"a workspace-root file belongs to the root project, whatever else this workspace declares")
 }
 

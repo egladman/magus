@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 6492,
-  "edge_count": 11612,
+  "edge_count": 11614,
   "relations": [
     {
       "id": "annotates",
@@ -70328,6 +70328,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "spell:buzz",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "spell:github-actions",
       "relation": "documents",
       "confidence": "inferred",
@@ -72169,6 +72177,14 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "spell:buf",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "spell:buzz",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
