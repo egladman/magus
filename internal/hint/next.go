@@ -490,6 +490,43 @@ func sourcePath(source string) string {
 	return source
 }
 
+// NextForSlotWait breadcrumbs args (a command's arguments, binary excluded) re-run
+// under the named concurrency profile. A --concurrency-profile the caller already
+// passed is dropped, since the later of two flags wins and would undo this one.
+// Arguments after "--" belong to spells and are kept verbatim.
+//
+// profile is a string because cache imports this package.
+func NextForSlotWait(profile string, args []string) Next {
+	const flagName = "concurrency-profile"
+	rerun := []string{"--" + flagName, profile}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			rerun = append(rerun, args[i:]...)
+			break
+		}
+		if strings.HasPrefix(a, "-") {
+			name, _, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+			if name == flagName {
+				if !hasValue {
+					i++
+				}
+				continue
+			}
+		}
+		rerun = append(rerun, a)
+	}
+	quoted := make([]string, len(rerun))
+	for i, a := range rerun {
+		quoted[i] = matcherArg(a)
+	}
+	return Next{
+		ID:   "concurrency-profile",
+		Run:  BinaryName() + " " + strings.Join(quoted, " "),
+		Argv: append([]string{BinaryName()}, rerun...),
+	}
+}
+
 // Render writes the two-line `next:` block: the command on its own line, and the
 // reason indented under it. why decides what a caller shows on the second line, since
 // the CLI silences a Why it has already fired and -s drops it outright.

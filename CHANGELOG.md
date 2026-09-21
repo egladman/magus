@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the cores), `balanced` (`min(cores, 8)`, the default) or `aggressive` (every core), also as
   `--concurrency-profile` and `MAGUS_CONCURRENCY_PROFILE`. An explicit `concurrency`
   overrides it.
+- **A run held back by its width suggests `concurrency_profile: aggressive`.** It fires
+  once per session, only after 15s or more queued for slots with cores idle. It stays
+  silent under an explicit `concurrency`, an already aggressive profile, or a wait on the
+  machine budget. Uptake is counted by `magus session hints` as `concurrency-profile`.
 - **MGS1037: a tool's observation keyed as its version.** `magus doctor` refuses one command
   declared as both version and observation probe without a narrowing `key`.
 - **MGS1038: a removed `magus.project` option stops the load.** It names the key and the

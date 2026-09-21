@@ -388,6 +388,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
+	emitConcurrencyNudge(os.Stderr, m, os.Args[1:])
 
 	if chained {
 		return runChain(ctx, m, opts, target, targets, chain, readReturns(target))

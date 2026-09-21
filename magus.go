@@ -77,8 +77,9 @@ type Magus struct {
 	// out-of-date binary can state about itself. See explainStale.
 	version string
 
-	limOnce sync.Once
-	lim     *cache.Limiter
+	limOnce   sync.Once
+	lim       *cache.Limiter
+	slotWaits cache.SlotWaitMeter
 
 	buzzPoolOnce sync.Once
 	buzzPoolReg  *buzz.PoolRegistry
@@ -656,6 +657,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		},
 		func(delta int) {
 			m.tel.RecordPoolWaiting(ctx, int64(delta))
+			m.slotWaits.Add(delta)
 		},
 	)
 	return m, nil
