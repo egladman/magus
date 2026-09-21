@@ -290,6 +290,52 @@
           ]
         },
         {
+          "name": "pr-title",
+          "declared": "pr_title",
+          "doc": "Fails a pull request title that is not a conventional commit subject.",
+          "charms": [
+            "gha"
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "pr-changelog",
+          "declared": "pr_changelog",
+          "doc": "Fails a pull request that changes shipped code without adding a bullet to CHANGELOG.md's [Unreleased] section.",
+          "charms": [
+            "gha"
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "git-hooks-install",
+          "declared": "git_hooks_install",
+          "doc": "Installs a shim in git's hooks directory for every tools/git-hooks/<hook>.buzz, so the hooks are reviewed and versioned like any other source.",
+          "spells": [
+            {
+              "spell": "githooks",
+              "ops": [
+                "install"
+              ]
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "git-hooks-remove",
+          "declared": "git_hooks_remove",
+          "doc": "Deletes the shims git_hooks_install wrote, and no hook anything else wrote.",
+          "spells": [
+            {
+              "spell": "githooks",
+              "ops": [
+                "remove"
+              ]
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
           "name": "types-generate",
           "declared": "types_generate",
           "doc": "Regenerates everything derived from the boundary registry: the enum helpers (Values/Valid/String for each boundaryEnum), the runtime boundary list, and the Go-to-Buzz encoders.",

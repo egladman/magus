@@ -1,0 +1,259 @@
+// Version-controlled git hooks written in Buzz. A workspace keeps one <hook>.buzz per
+// hook in a directory it names, and install writes a sh shim for each into the directory
+// git runs hooks from. The shim runs the checkout's own copy with `magus buzz -s`, so the
+// hook stays under review like any other source and a linked worktree runs its version.
+//
+//   import "spells/git/hooks" as githooks;
+//
+//   export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {
+//       githooks\install(ctx, dir: "tools/git-hooks");
+//   }
+//
+// A module beside a future git spell rather than a spell: a spell op is one forked
+// command, and installing has to read, compare and refuse. Workspace-local because it
+// imports host modules, which a spell compiled into the binary cannot.
+//
+// Both entry points check without the rw charm, raising with what they would change, and
+// change it with rw. `magus run --dry-run` forks and writes nothing.
+import "fs";
+import "magus";
+import "std";
+import "vcs";
+
+// githooks(5). A file named for anything else is a typo git would never run.
+fun hookNames() > [str] {
+    return [
+        "applypatch-msg", "pre-applypatch", "post-applypatch", "pre-commit", "pre-merge-commit",
+        "prepare-commit-msg", "commit-msg", "post-commit", "pre-rebase", "post-checkout",
+        "post-merge", "pre-push", "pre-receive", "update", "proc-receive", "post-receive",
+        "post-update", "reference-transaction", "push-to-checkout", "pre-auto-gc",
+        "post-rewrite", "sendemail-validate", "fsmonitor-watchman", "p4-changelist",
+        "p4-prepare-changelist", "p4-post-changelist", "p4-pre-submit", "post-index-change",
+    ];
+}
+
+// Opens the second line of every shim. Ownership is this line and nothing else, so a
+// hook a person wrote is never replaced or removed.
+fun marker() > str {
+    return "# magus-managed git hook: ";
+}
+
+enum Change { install, replace, remove }
+
+object Step {
+    hook: str = "",
+    path: str = "",
+    body: str = "",
+    change: Change = Change.install,
+}
+
+// Where git reads hooks, and the calling project's directory relative to the top level.
+object Layout {
+    hooksDir: str = "",
+    prefix: str = "",
+}
+
+// scriptOf returns the script a shim runs, or null when body is not a shim install wrote.
+export fun scriptOf(body: str) > str? {
+    final lines = body.split("\n");
+    if (lines.len() < 2 or !lines[1].startsWith(marker())) { return null; }
+    return lines[1].sub(marker().len());
+}
+
+// shim renders the hook git runs. script and include are relative to the git top level,
+// include "" for the top level itself; both resolve at run time, so the shim names no
+// checkout and a hooks directory shared by linked worktrees serves each one.
+//
+// It exits 0 when the script or magus is missing. A branch that predates the script has
+// nothing to run, and a hook that blocks every commit because a tool is absent costs more
+// than the check it skips; the missing magus is reported so the skip is not silent.
+export fun shim(hook: str, script: str, include: str) > str {
+    var root = "$top";
+    if (include != "") { root = "$top/{include}"; }
+    return "#!/bin/sh\n"
+        + marker() + script + "\n"
+        + "# Edit {script}, not this file; spells/git/hooks.buzz rewrites and removes it.\n"
+        + "top=$(git rev-parse --show-toplevel) || exit 0\n"
+        + "script=\"$top/{script}\"\n"
+        + "[ -f \"$script\" ] || exit 0\n"
+        + "if ! command -v magus >/dev/null 2>&1; then\n"
+        + "\techo \"{hook}: magus is not on PATH, so $script did not run\" >&2\n"
+        + "\texit 0\n"
+        + "fi\n"
+        + "BUZZ_INCLUDE_PATH=\"{root}\" exec magus buzz -s \"$script\" -- \"$@\"\n";
+}
+
+// hooksIn lists the hooks dir declares, one per <hook>.buzz file.
+export fun hooksIn(dir: str) > [str] !> any {
+    if (!fs\isDir(dir)) { throw "git hooks: {dir} is not a directory"; }
+    var hooks = mut [<str>];
+    foreach (entry in fs\listDir(dir)) {
+        if (!entry.endsWith(".buzz")) { continue; }
+        final hook = entry.sub(0, len: entry.len() - ".buzz".len());
+        if (hookNames().indexOf(hook) == null) {
+            throw "git hooks: {dir}/{entry}: `{hook}` is not a git hook name (see githooks(5))";
+        }
+        hooks.append(hook);
+    }
+    if (hooks.len() == 0) { throw "git hooks: {dir} holds no <hook>.buzz file"; }
+    return hooks;
+}
+
+// scriptDir joins the calling project's prefix to dir, refusing a dir that could name
+// a script outside the checkout.
+fun scriptDir(at: Layout, dir: str) > str !> any {
+    if (dir == "" or dir.startsWith("/") or dir.startsWith("..") or dir.indexOf("/..") != null) {
+        throw "git hooks: dir must be a path inside the project, got `{dir}`";
+    }
+    var clean = dir;
+    if (clean.endsWith("/")) { clean = clean.sub(0, len: clean.len() - 1); }
+    return at.prefix + clean;
+}
+
+// --git-path rather than .git/hooks: it follows core.hooksPath and a linked worktree's
+// common directory. Absolute, so the path does not depend on where the target runs.
+fun layout() > Layout !> any {
+    final backend = vcs\name();
+    if (backend != "git") {
+        throw "git hooks: only git runs git hooks, and this checkout's VCS is `{backend}`";
+    }
+    final revParse = vcs\cmd(["rev-parse", "--path-format=absolute", "--git-path", "hooks", "--show-prefix"],
+        opts: {"quiet": true}).stdout;
+    final lines = revParse.split("\n");
+    var prefix = "";
+    if (lines.len() > 1) { prefix = lines[1]; }
+    return Layout{hooksDir = lines[0], prefix = prefix};
+}
+
+fun installSteps(at: Layout, dir: str) > [Step] !> any {
+    final base = scriptDir(at, dir: dir);
+    var include = at.prefix;
+    if (include.endsWith("/")) { include = include.sub(0, len: include.len() - 1); }
+    var steps = mut [<Step>];
+    foreach (hook in hooksIn(dir)) {
+        final script = "{base}/{hook}.buzz";
+        final path = "{at.hooksDir}/{hook}";
+        final want = shim(hook, script: script, include: include);
+        if (!fs\exists(path)) {
+            steps.append(Step{hook = hook, path = path, body = want, change = Change.install});
+            continue;
+        }
+        final have = fs\readFile(path);
+        if (scriptOf(have) == null) {
+            throw "git hooks: {path} exists and magus did not write it; delete it, or call {script} from it";
+        }
+        if (have != want) {
+            steps.append(Step{hook = hook, path = path, body = want, change = Change.replace});
+        }
+    }
+    return steps;
+}
+
+// removeSteps finds shims by their marker rather than by listing dir, so a shim whose
+// script was deleted or renamed is still found and removed.
+fun removeSteps(at: Layout, dir: str) > [Step] !> any {
+    final base = scriptDir(at, dir: dir) + "/";
+    var steps = mut [<Step>];
+    foreach (hook in fs\listDir(at.hooksDir)) {
+        final path = "{at.hooksDir}/{hook}";
+        if (!fs\isFile(path)) { continue; }
+        final script = scriptOf(fs\readFile(path));
+        if ((script ?? "").startsWith(base)) {
+            steps.append(Step{hook = hook, path = path, change = Change.remove});
+        }
+    }
+    return steps;
+}
+
+fun summary(steps: [Step]) > str {
+    var lines = mut [<str>];
+    foreach (step in steps) {
+        var verb = "install";
+        if (step.change == Change.replace) { verb = "replace"; }
+        if (step.change == Change.remove) { verb = "remove"; }
+        lines.append("{verb} {step.path}");
+    }
+    return lines.join("\n  ");
+}
+
+// The shim is written beside its destination and renamed into place with the exec bit
+// already set, so git never finds the hook present but not runnable.
+fun apply(ctx: magus\Context, steps: [Step]) > void !> any {
+    if (steps.len() == 0) {
+        magus\log.info("git hooks: nothing to change");
+        return;
+    }
+    if (!ctx.hasCharm("rw")) {
+        throw "git hooks: {steps.len()} change(s) pending; rerun with the rw charm to make them:\n  "
+            + summary(steps);
+    }
+    foreach (step in steps) {
+        if (step.change == Change.remove) {
+            fs\remove(step.path);
+            continue;
+        }
+        fs\mkdirAll(fs\dirname(step.path));
+        final tmp = step.path + ".magus-tmp";
+        fs\writeFile(tmp, content: step.body);
+        fs\chmod(tmp, mode: 0b111_101_101);
+        fs\rename(tmp, dst: step.path);
+    }
+    magus\log.info("git hooks:\n  " + summary(steps));
+}
+
+// A dry run forks nothing, so rev-parse prints nothing and git's hooks directory is
+// unknown; report the declared hooks instead of planning against a guessed path.
+fun reportedDryRun(at: Layout, dir: str) > bool !> any {
+    if (at.hooksDir != "") { return false; }
+    final hooks = hooksIn(dir).join(", ");
+    magus\log.info("git hooks: dry run; would reconcile {hooks} from {dir}");
+    return true;
+}
+
+// install writes a shim for every <hook>.buzz in dir, relative to the calling project,
+// into the directory git runs hooks from: core.hooksPath when set, else the common
+// directory's hooks/, which linked worktrees share. It raises before writing anything
+// when dir names no git hook or a hook exists that install did not write.
+export fun install(ctx: magus\Context, dir: str) > void !> any {
+    final at = layout();
+    if (reportedDryRun(at, dir: dir)) { return; }
+    apply(ctx, steps: installSteps(at, dir: dir));
+}
+
+// remove deletes every shim install wrote for a script under dir, and nothing else.
+export fun remove(ctx: magus\Context, dir: str) > void !> any {
+    final at = layout();
+    if (reportedDryRun(at, dir: dir)) { return; }
+    apply(ctx, steps: removeSteps(at, dir: dir));
+}
+
+test "a shim names its script on the marker line" {
+    final body = shim("commit-msg", script: "tools/git-hooks/commit-msg.buzz", include: "");
+    std\assert(scriptOf(body) == "tools/git-hooks/commit-msg.buzz", message: "marker round trip");
+    std\assert(scriptOf("#!/bin/sh\necho mine\n") == null, message: "a person's hook is not ours");
+    std\assert(scriptOf("") == null, message: "an empty hook is not ours");
+}
+
+test "the shim runs the checkout's copy with the project as the include path" {
+    final want = "#!/bin/sh\n"
+        + "# magus-managed git hook: sub/hooks/pre-push.buzz\n"
+        + "# Edit sub/hooks/pre-push.buzz, not this file; spells/git/hooks.buzz rewrites and removes it.\n"
+        + "top=$(git rev-parse --show-toplevel) || exit 0\n"
+        + "script=\"$top/sub/hooks/pre-push.buzz\"\n"
+        + "[ -f \"$script\" ] || exit 0\n"
+        + "if ! command -v magus >/dev/null 2>&1; then\n"
+        + "\techo \"pre-push: magus is not on PATH, so $script did not run\" >&2\n"
+        + "\texit 0\n"
+        + "fi\n"
+        + "BUZZ_INCLUDE_PATH=\"$top/sub\" exec magus buzz -s \"$script\" -- \"$@\"\n";
+    std\assert(shim("pre-push", script: "sub/hooks/pre-push.buzz", include: "sub") == want, message: "whole shim");
+}
+
+test "a dir must stay inside the project" {
+    final at = Layout{hooksDir = "/repo/.git/hooks", prefix = "sub/"};
+    std\assert(scriptDir(at, dir: "tools/git-hooks/") == "sub/tools/git-hooks", message: "prefix joined, slash trimmed");
+    foreach (bad in ["", "/etc", "../up", "a/../../up"]) {
+        final got = scriptDir(at, dir: bad) catch "refused";
+        std\assert(got == "refused", message: "refuses `{bad}`");
+    }
+}

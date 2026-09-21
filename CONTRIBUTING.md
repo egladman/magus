@@ -474,6 +474,30 @@ The **numerator** is what the CD job's Linux run entered, across every Go module
 A file only another platform compiles stays in the denominator at zero, so the published
 figure can only understate coverage, never overstate it.
 
+## Pull requests
+
+Pull requests are squash merged, so the title becomes the commit subject main
+records. `.github/workflows/pr.yaml` checks two things about every pull request:
+
+- **The title is a conventional commit subject**: `<type>(<scope>): <description>`,
+  with the scope and a `!` optional. The types are `build`, `chore`, `ci`, `docs`,
+  `feat`, `fix`, `perf`, `refactor`, `revert` and `test`. The description keeps
+  the lowercase imperative this repository writes, with no trailing period, in 100
+  bytes at most. `feat(git): install version-controlled buzz hooks` passes;
+  `Add git hooks.` does not. Check one with `magus run pr-title . -- "<title>"`.
+- **A change users can notice adds a `CHANGELOG.md` entry** under
+  `[Unreleased]`. Docs, tests, workflows, repository tooling and plans do not need
+  one; `tools/changelog.buzz` lists what is exempt. When a change needs none
+  anyway, a maintainer labels the pull request `no-changelog`. Check a branch
+  with `magus run pr-changelog .`.
+
+Your branch's own commits are squashed away, so they keep the lowercase
+imperative style with no prefix. `magus run git-hooks-install .` installs this
+repository's git hooks from `tools/git-hooks/`; its `commit-msg` hook applies the
+title rule only to commits made directly on `main`. `magus run git-hooks-remove .`
+takes them out again. To add a hook, see
+[Your own hooks, in Buzz](https://eli.gladman.cc/magus/guides/integrations/git/#your-own-hooks-in-buzz).
+
 ## Workflow targets, not inline shell
 
 The GitHub Actions workflow files are intentionally thin. Every meaningful

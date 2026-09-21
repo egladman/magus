@@ -1,0 +1,64 @@
+name: PR
+
+# Checks the pull request itself rather than the code in it: the title, and whether a
+# shipped change carries a changelog entry. Its own workflow rather than a ci.yaml job
+# because it must rerun when the title or labels change, and ci.yaml rerunning its whole
+# shard matrix on a title edit would buy nothing.
+#
+# Both rules live in the root magusfile (pr-title, pr-changelog) and run by hand the same
+# way; this file only supplies the event.
+
+on:
+  pull_request:
+    branches: [main]
+    # edited reruns on a title change; labeled and unlabeled on the no-changelog waiver.
+    # A fresh event rather than a rerun, because a rerun replays the old payload.
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # PR-controlled mise.toml must not execute config hooks or plugins.
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+
+jobs:
+  hygiene:
+    name: pr hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Full history, blobs on demand: pr-changelog diffs against origin/main and reads
+      # the base CHANGELOG.md from it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+
+      # The magus this commit defines, for the reason ci.yaml's plan job gives.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # Squash merges make the title the subject main records.
+      - name: Title is a conventional commit subject
+        run: magus run pr-title:gha .
+
+      # Runs even when the title failed, so one push reports both.
+      - name: Shipped changes carry a changelog entry
+        if: ${{ !cancelled() }}
+        run: magus run pr-changelog:gha .

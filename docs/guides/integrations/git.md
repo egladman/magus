@@ -16,7 +16,9 @@ magus writes three things into a repository, and no more:
 - the refresh hooks below, when the daemon starts.
 
 All three are managed sections or single config keys. Nothing rewrites your history,
-your branches, or a hook body you wrote yourself.
+your branches, or a hook body you wrote yourself. Hooks your workspace writes in Buzz
+are a fourth thing, installed only when you ask; see
+[Your own hooks, in Buzz](#your-own-hooks-in-buzz).
 
 ## Hooks hand off work, never do work
 
@@ -108,6 +110,74 @@ everything. See [the gate is a commit hook, so it is not a gate](../../concepts/
 The difference is the feedback loop: CI rejects the same commit ten minutes later on a
 pull request you then have to push again; the notice catches it while it is still the
 commit in front of you.
+
+## Your own hooks, in Buzz
+
+The rule above binds the hooks magus installs for itself. A hook your workspace writes is
+your policy, and whether it blocks is your call. What magus adds is a way to keep it under
+version control, written in the same language as your magusfile, instead of a script in
+`.git/hooks` that nobody reviews and no clone receives.
+
+`spells/git/hooks.buzz` in the magus repository is a workspace-local Buzz module; copy it
+into your workspace's `spells/git/`. It takes a directory of `<hook>.buzz` files, one per
+[git hook](https://git-scm.com/docs/githooks), and installs a short sh shim for each into
+the directory git runs hooks from. That is `core.hooksPath` when it is set, and otherwise
+the common directory's `hooks/`, which linked worktrees share. The shim runs the
+checkout's own copy with `magus buzz -s <file> -- <git's arguments>`, so each worktree
+runs its own version of the hook, and a non-zero exit from `main` blocks the git operation.
+
+Wire it to two targets:
+
+```buzz
+import "spells/git/hooks" as githooks;
+
+export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {
+    githooks\install(ctx, dir: "tools/git-hooks");
+}
+
+export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
+    githooks\remove(ctx, dir: "tools/git-hooks");
+}
+```
+
+Then write the hook, a Buzz file whose `main` takes git's arguments:
+
+```buzz
+import "fs";
+import "os";
+
+fun main(args: [str]) > void !> any {
+    if (fs\readFile(args[0]).trim() == "") { os\exit(1); }
+}
+```
+
+Save it as `tools/git-hooks/commit-msg.buzz` and run `magus run git-hooks-install:rw .`.
+Adding another hook later is the same two steps: the file, then the target.
+
+Both targets follow the [`rw` charm](../../concepts/charms.md#the-rw-charm): without it they
+report what they would change and fail, and with it they change it. `--dry-run` writes
+nothing. The rules they enforce:
+
+- A file named for no git hook is an error, not a hook git would silently never run.
+- An existing hook install did not write is an error. Delete it, or call your Buzz file
+  from it.
+- `remove` deletes only shims install wrote, found by the marker on their second line,
+  including a shim whose Buzz file you have since deleted.
+- The shim exits 0 with a notice when magus is not on `PATH`, and silently when the
+  checked-out branch has no copy of the Buzz file.
+- The shim sets `BUZZ_INCLUDE_PATH` to the project directory, so a hook imports workspace
+  Buzz by its project-relative path.
+
+The magus repository's own
+[`commit-msg.buzz`](https://github.com/egladman/magus/blob/main/tools/git-hooks/commit-msg.buzz)
+is the worked example: it refuses a commit made directly on the base branch whose subject
+is not a conventional commit, by the rule CI applies to pull request titles.
+
+Two limits worth knowing. A hook runs only where someone installed it and did not pass
+`--no-verify`, so anything that must hold belongs in CI as well. And `magus server start`
+writes managed sections into `post-checkout`, `post-merge`, `post-rewrite`, `post-commit`
+and `pre-push`; install refuses those files as hooks it did not write, so a Buzz hook for
+one of those names needs the daemon's section removed first.
 
 ## The merge driver, and what it cannot do
 

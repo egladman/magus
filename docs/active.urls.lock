@@ -159,6 +159,7 @@ development/libs-diagnostics/
 development/libs-diagram/
 development/libs-gopherbuzz/
 development/libs-orphanator/
+development/libs-pricing/
 development/libs-testlayout/
 development/libs-testsprawl/
 development/libs-textsearch/
@@ -382,6 +383,7 @@ reference/codes/capability/MGS1102/
 reference/codes/capability/MGS1103/
 reference/codes/charms/
 reference/codes/charms/MGS6001/
+reference/codes/charms/MGS6002/
 reference/codes/knowledge/
 reference/codes/knowledge/MGS7001/
 reference/codes/knowledge/MGS7002/
@@ -422,6 +424,10 @@ reference/codes/magusfile/MGS1033/
 reference/codes/magusfile/MGS1034/
 reference/codes/magusfile/MGS1035/
 reference/codes/magusfile/MGS1036/
+reference/codes/magusfile/MGS1037/
+reference/codes/magusfile/MGS1038/
+reference/codes/magusfile/MGS1039/
+reference/codes/magusfile/MGS1040/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -523,6 +529,7 @@ reference/rules/buzz-unbriefed/
 reference/rules/cache-dir-write/
 reference/rules/capture-filter/
 reference/rules/cd/
+reference/rules/chained-run/
 reference/rules/checkpoint-state/
 reference/rules/ci-watch/
 reference/rules/code-search/
@@ -745,6 +752,7 @@ tags/http/
 tags/image/
 tags/impact/
 tags/import/
+tags/imports/
 tags/inferred/
 tags/inputs/
 tags/install/
@@ -803,6 +811,7 @@ tags/node/
 tags/notes/
 tags/notifications/
 tags/nx/
+tags/observations/
 tags/oci/
 tags/onboarding/
 tags/opencode/
@@ -858,6 +867,7 @@ tags/run/
 tags/runaway/
 tags/rust/
 tags/sandbox/
+tags/scanners/
 tags/scheduler/
 tags/secret-provider/
 tags/secrets/
@@ -911,6 +921,7 @@ tags/vcs/
 tags/verify/
 tags/version/
 tags/versioning/
+tags/versions/
 tags/vitest/
 tags/volatility/
 tags/ward/

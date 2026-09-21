@@ -1,0 +1,64 @@
+// commit-msg git hook: refuses a commit on the base branch whose subject is not a
+// conventional commit, by the rule the pr-title target applies to pull request titles.
+//
+// This directory is the worked example of adding your own hook: a Buzz file named for the
+// git hook (pre-commit.buzz, pre-push.buzz, ...) with a main that receives git's
+// arguments, then `magus run git-hooks-install .`. spells/git/hooks.buzz writes the shim
+// that runs it; a non-zero exit blocks the git operation, and `--no-verify` skips it.
+// The shim sets BUZZ_INCLUDE_PATH to the workspace root, which is how the import of
+// tools/conventional below resolves.
+//
+// Only the base branch is checked. Pull requests are squash merged, so a branch's own
+// subjects never reach main and keep the lowercase imperative style; a commit made on the
+// base branch lands as written, so it answers to the title rule.
+import "fs";
+import "io";
+import "os";
+import "vcs";
+import "tools/conventional" as conventional;
+
+// git writes these subjects itself, or an autosquash rebase rewrites them away.
+fun exempt(subject: str) > bool {
+    foreach (prefix in ["Merge ", "fixup! ", "squash! ", "amend! "]) {
+        if (subject.startsWith(prefix)) { return true; }
+    }
+    return false;
+}
+
+// git runs commit-msg before it strips comment lines, so they are skipped here.
+fun subjectOf(message: str) > str {
+    foreach (line in message.split("\n")) {
+        if (line.startsWith("#") or line.trim() == "") { continue; }
+        return line.trim();
+    }
+    return "";
+}
+
+// vcs\base is remote-qualified ("origin/main"); vcs\ref is the bare branch.
+fun baseBranch() > str {
+    final base = vcs\base();
+    final slash = base.indexOf("/");
+    if (slash != null) { return base.sub(slash + 1); }
+    return base;
+}
+
+// vcs\ref raises on an unborn branch, and a repository's first commit is on one.
+fun currentBranch() > str !> any {
+    return vcs\ref() catch vcs\cmd(["symbolic-ref", "--quiet", "--short", "HEAD"],
+        opts: {"quiet": true, "allow_failure": true}).stdout.trim();
+}
+
+fun main(args: [str]) > void !> any {
+    if (args.len() != 1) {
+        throw "commit-msg: want the message file git passes, got {args.len()} argument(s)";
+    }
+    final branch = baseBranch();
+    if (currentBranch() != branch) { return; }
+    final subject = subjectOf(fs\readFile(args[0]));
+    if (subject == "" or exempt(subject)) { return; }
+    final problem = conventional\problem(subject);
+    if (problem == "") { return; }
+    io\stderr.write("commit-msg: commits on {branch} land as written, so the subject must be a "
+        + "conventional commit, as pull request titles are.\n  \"{subject}\": {problem}\n") catch void;
+    os\exit(1);
+}
