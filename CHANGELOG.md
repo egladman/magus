@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **MGS1037: a tool's observation keyed as its version.** `magus doctor` refuses a spell
+  that declares one command as both a tool's version probe and its observation probe with
+  no `key` to narrow the version. The two reach different targets: a version keys every
+  target in a project that binds the spell, while an observation keys only the targets
+  that drive the tool, so a value moving on the feed's clock invalidated targets that never
+  run it. Either drop the version probe or declare a `key` that extracts the version alone.
+- **MGS1038: a removed `magus.project` option.** A key an older magus accepted and this one
+  removed now stops the load, naming the key and what to do. An unrecognized key is still
+  only ignored, since it may come from a newer magus; a removed one comes from an older
+  one, and the upgrade advice the ignore path gives would send you in a circle.
+
 - **A person declares a job from the terminal: `magus job fork`.** The verb takes the
   one-row case as flags (`--criteria`, `--parent`, `--write-paths`, `--deny-paths`,
   `--read-paths`, `--check`, `--model`, `--read-only`) or a whole record on `--stdin`, and
@@ -323,29 +334,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **A target dispatched through `ctx.needs` no longer waits for the run-isolation gate its
-  own ancestor holds.** One invocation shares that gate: an `exclusive` step takes all of
-  it, every other step takes a seat. Work admitted beneath a step now inherits whatever
-  lease that step holds instead of asking for one of its own, in both directions: an
-  exclusive request under a shared ancestor included, which is the case that wedged. A
-  composed target's skip-cache gate reached it first: dispatched from inside a step holding
-  the shared side, it asked for the exclusive side, waited for a release that could only
-  come once it returned, and parked every later shared request behind it. The run then held
-  every project lock with no step executing, no child process alive and `magus status`
-  reporting nothing running, twice on the same tree for nineteen and twenty-one minutes.
-  What inheriting gives up is nothing the policy promised: `exclusive` excludes BATCH peers,
-  and the ancestor's admission already excludes every one of them. A verdict that refused
-  the gate once every holder looked stalled was built for the residual case and then DELETED
-  before it ever shipped: it read holder state off a record the gate does not own, so it
-  could not fire for a simple step and did fire for healthy composite ones. Its code is
-  retired and the number is not reused. The shape it watched for is prevented rather than
-  detected now; a wedge reached through the slot pool is still named holder by holder
-  (MGS3013), and a hang that escapes both is still aborted by the stall watchdog (MGS3012).
-  The gate wait is cancellable, so
-  Ctrl-C, a failing sibling and the stall watchdog all reach a parked step. Waiting for an
-  upstream target in the same run no longer beats the invocation heartbeat, because a step
-  that is moving beats for itself and a batch where every goroutine is parked in that wait
-  was telling the watchdog it was fine.
+- **A vulnerability database release no longer invalidates every Go target's cache.** The
+  go spell declared `govulncheck -version` as the tool's version probe, and that output
+  ends with the database's publication date, so each database release changed the key of
+  every build, test and lint entry in every Go project. The date now keys only the targets
+  that run govulncheck. MGS1037 refuses a spell that declares the same shape again.
+- **Replaying a fully cached run is fast again.** Tool versions were probed one project at
+  a time, and observation probes ran before anything knew whether a target would drive the
+  tool, so a run that replayed every target still paid for a probe per tool per project.
+  Probes now run concurrently and skip a tool no selected target drives. Cache keys are
+  unchanged, so nothing re-runs because of it.
+- **Two clones of an hg, jj or Sapling repository now share one state store.** Identity
+  was read only from git's config, so every other backend fell back to the checkout path
+  and each clone kept its own memory, sessions and job rows, none of which could read the
+  others. Each backend's default remote is now read from its own config file, without
+  running the tool. A jj workspace is covered when it is colocated with git.
+- **Waiting for an upstream target no longer tells the stall watchdog the run is healthy.**
+  A step parked on a dependency in the same run used to beat the invocation heartbeat, so
+  a batch where every goroutine was parked in that wait read as fine. A step that is moving
+  now beats for itself, and a batch that is only waiting is visible as stalled; a wedge
+  reached through the slot pool is still named holder by holder (MGS3013), and a hang that
+  escapes it is aborted by the stall watchdog (MGS3012).
 - **A committed coverage record is no longer refused because the commit it names is not an
   ancestor of the checkout.** Every record is measured on a branch, and a squash merge
   rewrites that branch's commits, so the rule turned the badge red on every checkout of
@@ -395,6 +404,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A declared `timeout` bounds the target's own time, not the time it waits on what it
+  composes.** A ceiling used to run while a target body waited in `ctx.needs`, so a target
+  could exceed its timeout having done almost none of its own work, and four targets once
+  reported an identical 15m52s timeout that one upstream stall had caused, each naming
+  itself. A body now parks while its dependencies run and gets a fresh deadline for each
+  stretch of its own execution. Nesting is unchanged: a composed target's ceiling is a
+  second, tighter deadline inside its parent's, and whichever expires first cancels.
 - **Guard advises unbounded source dumps toward SCIP/`magus refs`.** `cat`/`head`/`less`
   of source extensions (and Cursor `Read` without a limit, restated as `cat` on
   `postToolUse`) get the same once-per-session advisory family as code-search; a
@@ -526,16 +542,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   because it counts its own ancestors' claims as load. Nothing about what counts as
   redundant changed: a green gate for this branch, plus a delta in which every path is
   generated output, prose or a comment-only edit.
-- **An exclusive target is exclusive while it fans out.** A step declared `exclusive`
-  released its isolation lock so its `ctx.needs` children could be admitted, which for a
-  body that is only `ctx.needs` meant it was shareable for nearly its whole life: this
-  repo's own `generate` is exclusive and its body is a fan-out over every `*-generate`
-  sibling, so the drift gate ran alongside everything it exists to be isolated from. It
-  now keeps the lock and its children run inside the region, taking no lease of their own,
-  which is also why they cannot deadlock behind it. A child that declares `exclusive`
-  itself is subsumed rather than nested, matching what the policy already promises: it
-  excludes batch peers, and a dynamically dispatched child has no batch.
-
 - **Every backend can preserve the working copy, in its own idiom, without costing state.**
   `VCSDriver.Preserve` captures uncommitted work, tracked changes and untracked files
   alike, and returns a handle that resolves it back: git builds a commit through a temporary
@@ -675,6 +681,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **The `exclusive` target and project option is gone, with no replacement.** It was
+  meant for a target that uses the whole machine, and measured across every declaration it
+  never did: most protected nothing (a comment claimed a `git status` check the target
+  never made), and where the engine honored it, it serialized every other gate member
+  behind one target until the stall watchdog took the run. A magusfile that still sets it
+  now fails to load with MGS1038, which names the key; delete it. `slots` and `memory_mb` are the
+  concurrency dials, and a target that must not run beside a peer needs its own job in CI.
+  The run-isolation gate that implemented it is deleted with it, so the deadlock that gate
+  could reach cannot happen. docs/decisions/0001 records the reasoning.
 - **The `relock` charm alias is gone; `update` is the only spelling.** `relock` was the
   charm's name while `go mod tidy` was the only op claiming it, and it was kept resolving
   to `update` for one release with a hint on every use. A target that still spells it
