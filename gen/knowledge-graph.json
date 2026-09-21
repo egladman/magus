@@ -48738,7 +48738,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "The conventional anchor. Kept to lint here so the plan stays short.",
-      "source": "docs/tour/05-slots.buzz:53",
+      "source": "docs/tour/05-slots.buzz:54",
       "attrs": {
         "exported": "true"
       }
@@ -48748,7 +48748,7 @@
       "kind": "function",
       "label": "go_lint",
       "doc": "A cheap check. It stays at the default of one slot; several like it run at once.",
-      "source": "docs/tour/05-slots.buzz:37",
+      "source": "docs/tour/05-slots.buzz:38",
       "attrs": {
         "exported": "true"
       }
@@ -48758,7 +48758,7 @@
       "kind": "function",
       "label": "js_lint",
       "doc": "The greedy one: reserve 4 slots AND tell eslint to actually use 4 threads.",
-      "source": "docs/tour/05-slots.buzz:42",
+      "source": "docs/tour/05-slots.buzz:43",
       "attrs": {
         "exported": "true"
       }
@@ -48768,7 +48768,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint fans out to both. The scheduler runs the 1-slot check alongside other small work, but quiets the queue around js-lint's 4-slot reservation.",
-      "source": "docs/tour/05-slots.buzz:48",
+      "source": "docs/tour/05-slots.buzz:49",
       "attrs": {
         "exported": "true"
       }
@@ -48778,7 +48778,7 @@
       "kind": "function",
       "label": "release",
       "doc": "A stand-in release, so `graph` shows the exclusive policy in context.",
-      "source": "docs/tour/05-slots.buzz:58",
+      "source": "docs/tour/05-slots.buzz:59",
       "attrs": {
         "exported": "true"
       }

@@ -111,21 +111,36 @@ the isolation gate.
 **Stage 0, and the prerequisite for the rest: `Step.Exclusive` is split into the two things
 it conflates and then deleted.**
 
-It was introduced for GREEDY targets, ones that will use the whole machine. None of the ten
-targets that declare it is greedy. Every one gates on the working tree: six `generate` targets and
-`console:build` drift-check via `git status`, `release` mutates go.mod and creates tags,
-`release-index` pushes a branch. That is mutual exclusion on one shared mutable resource,
-which is a different thing from greed, and both are different from "exclude every batch peer",
-which is what it was implemented as.
+It was introduced for GREEDY targets, ones that will use the whole machine. None of the
+eleven targets that declare it is greedy. What they are was MEASURED rather than assumed,
+and the answer is worse than "they all gate on the tree":
+
+- **Two measure anything.** `proto:generate` and `docs:generate` call `drift\hashes` and
+  `vcs\dirtyDiff`. These are the only declarations whose region contains a comparison.
+- **Two mutate shared state.** `release` mutates go.mod and creates tags; `release-index`
+  pushes a branch. Real mutual exclusion, on a resource, for a reason that is not drift.
+- **One is inert and says so.** `console:build` calls `vcs\isDirty` on a gitignored path.
+  Its own comment: "this gate has never fired. It is inert."
+- **Six protect nothing.** The `libs/*` generate targets declare
+  `"drift-gates MAGUS.md via git status"` and make no such call. Five reach neither drift
+  nor vcs at all; `libs/gopherbuzz` reaches `vcs\commit` and `vcs\tags`, which is its
+  changelog, not a gate. The engine's own declared-output drift check is what gates these,
+  and it needs no flag.
+
+So the flag is mutual exclusion on a shared mutable resource in four cases, nothing in
+seven, and greed in none. All three are different from "exclude every batch peer", which is
+what it was implemented as.
 
 - **Greed is a weight**, and already has one: `slotsForPolicy` derives slots from `memory_mb`,
   which is also what the machine budget arbitrates on. Nothing to build.
-- **A quiet tree is a named region**, not a target flag: `ctx.exclusive("worktree", fn)`, a
-  keyed mutual exclusion acquired in canonical order when a region names more than one.
-- The ten wrap **only their measurement**, the hash-before against hash-after
-  comparison, not their generator chain. The root magusfile already wrote this diagnosis and
-  did not act on it: "narrowing the exclusive region to the measurement is the fix, and it is
-  not this line."
+- **There is no replacement.** The first draft prescribed a named region,
+  `ctx.exclusive("worktree", fn)`. It is not being built. A free-form lock name is a second
+  vocabulary for callers to invent and misspell; a path-keyed one fails because glob overlap
+  is not transitive; an engine-derived one cannot be built at all, because inference here may
+  schedule and may never refuse. Stage 0 is a DELETE.
+- The four that exclude for a reason wrap **only their measurement or mutation**, not their
+  generator chain. The root magusfile already wrote this diagnosis and did not act on it:
+  "narrowing the exclusive region to the measurement is the fix, and it is not this line."
 
 Folding exclusivity into "acquire every slot at a leaf" would have been wrong here: it
 changes those targets from "this body runs alone" to "each subprocess runs alone with peers
@@ -253,8 +268,13 @@ that, and the cycle named in the refusal. Pair it with stage 1 regardless.
 - It claimed the decision would charge memory per leaf. It would not: the machine claim is
   taken outside `admit` and is untouched by any stage here. The revisit condition built on
   that premise could never have fired.
-- It said two release targets use `Exclusive`. Ten do, and most are composites.
+- It said two release targets use `Exclusive`. Eleven targets do, and most are composites.
 - It called MGS3013's predicate Holt reduction without qualification. It is sound only over
   registered holds and is blind to five raw acquisition sites.
 - It said magus is the only system in the table holding its bound across a nested wait. make
   does too, by design.
+- It said every `Exclusive` declaration gates on the working tree, with six `generate`
+  targets and `console:build` drift-checking via `git status`. Measured: seven of the eleven
+  reach no drift or vcs call, `console:build`'s gate is documented as inert, and two measure
+  anything at all. Stage 0's census is rewritten above, and its prescribed replacement
+  region is withdrawn: the stage is a delete.
