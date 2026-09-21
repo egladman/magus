@@ -159,7 +159,7 @@ func graphPush(ctx context.Context, root string, args []string) error {
 
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
-	if err := client.Push(ctx, dest, graphArtifactType, layers...); err != nil {
+	if _, err := client.Push(ctx, dest, graphArtifactType, layers...); err != nil {
 		return fmt.Errorf("graph push: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "pushed %s (%d shards, %d bytes)\n", dest, len(layers)-1, size)

@@ -81,7 +81,7 @@ func TestEmptyConfigPayloadMatchesTheSpecDescriptor(t *testing.T) {
 }
 
 // fakeRegistry is enough of the v2 API to push and pull: a token endpoint, the two-step
-// blob upload, and tag-addressed manifests. It serves TLS because the client addresses
+// blob upload, and tag- or digest-addressed manifests. It serves TLS because the client addresses
 // every registry as https, and httptest's own client trusts its certificate.
 type fakeRegistry struct {
 	srv   *httptest.Server
@@ -133,6 +133,8 @@ func (r *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodPut {
 			body, _ := io.ReadAll(req.Body)
 			r.tags[last] = body
+			// A registry also serves a manifest by its digest.
+			r.tags[digest.FromBytes(body).String()] = body
 			w.WriteHeader(http.StatusCreated)
 			return
 		}
@@ -158,12 +160,20 @@ func TestPushAndFetchLayersByTitle(t *testing.T) {
 
 	index := []byte(`{"schema_version":1}`)
 	shard := []byte(`{"name":"docs","nodes":[]}`)
-	require.NoError(t, c.Push(t.Context(), ref, testArtifactType,
+	pushed, err := c.Push(t.Context(), ref, testArtifactType,
 		Layer{Name: "manifest.json", MediaType: "application/json", Payload: index},
 		Layer{Name: "fp-docs", MediaType: "application/json", Payload: shard},
-	))
+	)
+	require.NoError(t, err)
 
 	art, err := c.Artifact(t.Context(), ref, testArtifactType)
+	require.NoError(t, err)
+	assert.Equal(t, pushed, digest.FromBytes(art.Raw), "Push returns the digest of the manifest a pull reads")
+
+	// The same manifest, addressed by the digest Push returned.
+	pinned := ref
+	pinned.Tag, pinned.Digest = "", pushed
+	art, err = c.Artifact(t.Context(), pinned, testArtifactType)
 	require.NoError(t, err)
 	require.Len(t, art.Manifest.Layers, 2)
 	assert.Equal(t, "manifest.json", art.Manifest.Layers[0].Annotations[ocispec.AnnotationTitle],
@@ -183,10 +193,11 @@ func TestArtifactRefusesAWrongArtifactType(t *testing.T) {
 	reg := newFakeRegistry(t)
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
-	require.NoError(t, c.Push(t.Context(), ref, testArtifactType,
-		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
+	_, err := c.Push(t.Context(), ref, testArtifactType,
+		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)})
+	require.NoError(t, err)
 
-	_, err := c.Artifact(t.Context(), ref, "application/vnd.someone-else.v1+json")
+	_, err = c.Artifact(t.Context(), ref, "application/vnd.someone-else.v1+json")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), testArtifactType)
 }
@@ -198,8 +209,9 @@ func TestBlobRefusesContentTheManifestDoesNotDescribe(t *testing.T) {
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
 	payload := []byte(`{"nodes":[]}`)
-	require.NoError(t, c.Push(t.Context(), ref, testArtifactType,
-		Layer{Name: "shard", MediaType: "application/json", Payload: payload}))
+	_, err := c.Push(t.Context(), ref, testArtifactType,
+		Layer{Name: "shard", MediaType: "application/json", Payload: payload})
+	require.NoError(t, err)
 
 	art, err := c.Artifact(t.Context(), ref, testArtifactType)
 	require.NoError(t, err)
@@ -227,6 +239,52 @@ func TestBlobRefusesContentTheManifestDoesNotDescribe(t *testing.T) {
 // not a valid artifact, and the failure it causes surfaces on the puller's machine.
 func TestPushRefusesAnEmptyArtifact(t *testing.T) {
 	reg := newFakeRegistry(t)
-	err := reg.client().Push(t.Context(), reg.ref("team/graph", "latest"), testArtifactType)
+	_, err := reg.client().Push(t.Context(), reg.ref("team/graph", "latest"), testArtifactType)
 	assert.Error(t, err)
+}
+
+// TestPinnedPullRefusesAnotherManifest pins the check that makes a digest reference mean
+// something: the registry answering with a different manifest is refused before decode.
+func TestPinnedPullRefusesAnotherManifest(t *testing.T) {
+	reg := newFakeRegistry(t)
+	c := reg.client()
+	ref := reg.ref("team/graph", "latest")
+	pushed, err := c.Push(t.Context(), ref, testArtifactType,
+		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)})
+	require.NoError(t, err)
+
+	reg.mu.Lock()
+	reg.tags[pushed.String()] = []byte(`{"schemaVersion":2}`)
+	reg.mu.Unlock()
+	pinned := ref
+	pinned.Tag, pinned.Digest = "", pushed
+	_, err = c.Artifact(t.Context(), pinned, "")
+	require.ErrorIs(t, err, ErrManifestDigest)
+}
+
+func TestParseReferenceDigest(t *testing.T) {
+	d := digest.FromBytes([]byte("m"))
+	ref, err := ParseReference("ghcr.io/egladman/magus/spells/cursor@" + d.String())
+	require.NoError(t, err)
+	assert.Equal(t, Reference{Registry: "ghcr.io", Repository: "egladman/magus/spells/cursor", Digest: d}, ref)
+	assert.Equal(t, "ghcr.io/egladman/magus/spells/cursor@"+d.String(), ref.String())
+
+	both, err := ParseReference("localhost:5000/team/spell:v1@" + d.String())
+	require.NoError(t, err)
+	assert.Equal(t, Reference{Registry: "localhost:5000", Repository: "team/spell", Tag: "v1", Digest: d}, both)
+
+	_, err = ParseReference("ghcr.io/team/spell@sha256:abc")
+	assert.Error(t, err, "a truncated digest names nothing")
+
+	_, err = ParseReference("ghcr.io/team/spell:@" + d.String())
+	assert.Error(t, err, "an empty tag is a typo, not an absent one")
+}
+
+func TestPushRefusesADigestReference(t *testing.T) {
+	reg := newFakeRegistry(t)
+	ref := reg.ref("team/graph", "latest")
+	ref.Digest = digest.FromBytes([]byte("m"))
+	_, err := reg.client().Push(t.Context(), ref, testArtifactType,
+		Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)})
+	assert.ErrorContains(t, err, "name a tag and no digest")
 }
