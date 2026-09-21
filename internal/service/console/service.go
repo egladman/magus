@@ -178,10 +178,13 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 		Build:          s.statusBase.Build,
 		ObservingSince: s.startedAt,
 		Config: types.StatusConfig{
-			DefaultCharms:        s.config.DefaultCharms,
-			Concurrency:          s.config.Concurrency,
-			ConcurrencyEffective: cache.ResolveConcurrency(s.config.Concurrency, s.config.ConcurrencyProfile),
-			Sandbox:              s.config.Sandbox.Enabled,
+			DefaultCharms: s.config.DefaultCharms,
+			Concurrency: types.StatusConcurrency{
+				Configured: s.config.Concurrency,
+				Profile:    s.config.ConcurrencyProfile,
+				Effective:  cache.ResolveConcurrency(s.config.Concurrency, s.config.ConcurrencyProfile),
+			},
+			Sandbox: s.config.Sandbox.Enabled,
 		},
 	}
 	addr, err := s.resolveStatusAddr(ctx)

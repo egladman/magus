@@ -48,7 +48,7 @@ func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statu
 		Status: statusSnapshotToProto(report, s.build),
 		Config: &statusv1.Config{
 			DefaultCharms: report.Config.DefaultCharms,
-			Concurrency:   int32(report.Config.Concurrency),
+			Concurrency:   int32(report.Config.Concurrency.Configured),
 			Sandbox:       report.Config.Sandbox,
 		},
 	}

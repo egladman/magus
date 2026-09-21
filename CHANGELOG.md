@@ -83,6 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: `magus status -o json` nests concurrency.** `config.concurrency` is an object
+  of `configured`, `profile` and `effective`; `config.concurrency_effective` is gone.
 - **Breaking: the `relock` charm is renamed `update`, with no alias.** A target spelling
   `relock` fails as an undeclared charm; rename the suffix. `ci` strips `update` as it
   stripped `relock`, and `rw` does not include it.
