@@ -1,5 +1,5 @@
 // title: Slots: taming a greedy target
-// desc: A target starts with one slot; reserve more so a parallel tool cannot starve the rest.
+// desc: A target starts with one slot; reserve more so a parallel tool cannot starve the rest, in cores or in megabytes.
 // doc: concepts/operations|Operations
 //
 // Slots: keeping a greedy target from eating the machine. magus runs targets in
@@ -26,11 +26,18 @@ magus\project({
     "spells": [go, typescript],
     "targets": {
         // js-lint reserves LINT_SLOTS; while it holds them, the cheap checks wait
-        // rather than pile on. Slots are the ONLY concurrency dial a target has:
-        // there is no flag for "run me alone", because a target that must not run
-        // beside a peer is saying something about a shared resource, and a magusfile
-        // has no way to name one. docs/decisions/0001 records why that was deleted.
+        // rather than pile on. Slots and memory_mb are the ONLY concurrency dials a
+        // target has: there is no flag for "run me alone", because a target that must
+        // not run beside a peer is saying something about a shared resource, and a
+        // magusfile has no way to name one. docs/decisions/0001 records that deletion.
         "js-lint": {"slots": LINT_SLOTS},
+        // memory_mb is the PORTABLE spelling of the same reservation, and the one to
+        // reach for when the number you actually know is megabytes rather than cores.
+        // A race-enabled Go suite needs about 6GB wherever it runs; how many slots
+        // that is depends on the machine, so declaring 4 here throttles peers on a
+        // 16GB laptop and barely registers on a 64GB runner. magus derives the slot
+        // count per host. Declare ONE of the two, not both.
+        "integration-test": {"memory_mb": 6000},
         "release": {"skip_cache": "creates tags, an order-sensitive side effect"},
     },
 });
@@ -45,6 +52,12 @@ export fun js_lint(ctx: magus\Context, args: [str]) > void {
     typescript["eslint"](ctx, {"args": ["--concurrency=" + LINT_SLOTS]});
 }
 
+// The memory-declared one. Nothing here says "4 slots"; the 6000 above does, in
+// the unit a `go test -race` run is actually measured in.
+export fun integration_test(ctx: magus\Context, args: [str]) > void {
+    go["go-test"](ctx, {"args": ["-race"]});
+}
+
 // lint fans out to both. The scheduler runs the 1-slot check alongside other
 // small work, but quiets the queue around js-lint's 4-slot reservation.
 export fun lint(ctx: magus\Context, args: [str]) > void {
@@ -53,10 +66,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 // The conventional anchor. Kept to lint here so the plan stays short.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint);
+    ctx.needs(lint, integration_test);
 }
 
-// A stand-in release, so `graph` shows the exclusive policy in context.
+// A stand-in release, so `graph` shows a skip_cache policy in context.
 export fun release(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ci);
 }

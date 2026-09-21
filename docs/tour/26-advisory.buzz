@@ -1,0 +1,71 @@
+// title: Advisory: a check that reports without failing the gate
+// desc: Some checks are right to run and wrong to block on. Advisory says so out loud, with a reason, instead of the usual workaround of deleting the check.
+// doc: concepts/targets/ci|CI
+//
+// `advisory` keeps a target's failure from failing the composite that reached it
+// through `ctx.needs`. The composite reports the failure and carries on. Running the
+// target BY NAME still fails, so the check is never quietly disabled, only demoted
+// where it was composed.
+//
+// It takes a reason string and will not accept a bare `true`. That is deliberate: the
+// question a future reader asks is not "is this advisory" but "why does a failure here
+// not mean the change is wrong", and a flag cannot answer it. The reason is the whole
+// value of the policy.
+//
+// The shape to look for: a check whose failure is real, but is not evidence about the
+// diff in front of you. A vulnerability database that published an advisory overnight,
+// a link checker that reaches the network, a benchmark comparing against a branch that
+// moved. Each of these is worth knowing and none of them is the author's fault, and the
+// usual response to a gate like that is to delete the check, which loses the signal
+// permanently.
+//
+// What advisory is NOT: a way to land a broken test. If a failure means the change is
+// wrong, it belongs in the gate. Reach for this exactly when the failing thing is
+// outside the change, and say which thing in the reason.
+
+import "magus";
+import "magus/spell/go";
+
+magus\project({
+    "name": "tour-advisory",
+    "spells": [go],
+    "targets": {
+        // The database moves without anyone here touching a file, so a red run tells
+        // you to look, not that this branch broke something. The reason names the
+        // input that moved, which is what makes it reviewable later.
+        "vuln-scan": {
+            "advisory": "scans against a database that publishes overnight, so a failure often describes a dependency nobody here changed",
+            "skip_cache": "the advisory database is the input that matters and it lives off this machine",
+        },
+
+        // Reaches the network, so it fails for reasons that have nothing to do with
+        // the diff: a third-party site down for ten minutes is not a docs bug.
+        "link-check": {"advisory": "resolves third-party URLs, so an unrelated outage reads as a docs failure"},
+
+        // NOT advisory, and the contrast is the point. A unit test failing IS evidence
+        // about this change. Demoting it would be the workaround this policy exists to
+        // make unnecessary.
+    },
+});
+
+// The real gate. Nothing about it is advisory.
+export fun unit(ctx: magus\Context, args: [str]) > void {
+    go["go-test"](ctx);
+}
+
+// Advisory. A red here shows up in the run's report and `ci` still passes.
+export fun vuln_scan(ctx: magus\Context, args: [str]) > void {
+    go["govulncheck"](ctx);
+}
+
+// Advisory for a different reason: the failure is someone else's server.
+export fun link_check(ctx: magus\Context, args: [str]) > void {
+    magus\log.info("would resolve every external URL in docs/");
+}
+
+// ci composes all three. A vuln-scan failure is REPORTED here and does not fail the
+// gate; a unit failure does. Run `magus run vuln-scan` directly and it fails properly,
+// which is how you check on it deliberately rather than discovering it in a gate.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(unit, vuln_scan, link_check);
+}
