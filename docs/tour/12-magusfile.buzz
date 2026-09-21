@@ -43,7 +43,7 @@ magus\project({
     "outputs": ["gen/**", "bin/**"],
     "targets": {
         "js-lint": {"slots": LINT_SLOTS},
-        "release": {"exclusive": true},
+        "release": {"skip_cache": "creates tags, an order-sensitive side effect"},
     },
 });
 

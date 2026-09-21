@@ -128,7 +128,6 @@ const (
 	fieldDependsOn = "depends_on"
 	fieldSources   = "sources"
 	fieldOutputs   = "outputs"
-	fieldExclusive = "exclusive"
 )
 
 // decodeProvidedProject turns one returned Project record into the typed wire form.
@@ -168,15 +167,6 @@ func decodeProvidedProject(spellName string, index int, item any) (spells.Provid
 			return spells.ProvidedProject{}, err
 		}
 		*field.dst = vals
-	}
-	// nil reads as absent here exactly as it does in strField and strListField: one
-	// record must not have two null policies.
-	if v, present := m[fieldExclusive]; present && v != nil {
-		b, ok := v.(bool)
-		if !ok {
-			return spells.ProvidedProject{}, fmt.Errorf("%s: field %q is %T, want bool", where, fieldExclusive, v)
-		}
-		pp.Exclusive = b
 	}
 	return pp, nil
 }

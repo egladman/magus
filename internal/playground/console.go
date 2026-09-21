@@ -285,11 +285,7 @@ func (s *Console) graph() []Line {
 		line += muted("depends_on", p.DependsOn)
 		line += muted("outputs", p.Outputs)
 		line += muted("no-cache", p.NoCache)
-		line += muted("exclusive", p.ExclusiveTargets)
 		line += muted("slots", p.Slots)
-		if p.Exclusive {
-			line += ` <span class="muted">exclusive</span>`
-		}
 		out = append(out, Line{HTML: line})
 	}
 	out = append(out, Line{HTML: "targets:", Class: "muted"})

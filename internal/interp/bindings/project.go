@@ -163,11 +163,6 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			opts = append(opts, workspace.WithName(name))
 		}
 	}
-	if ev, ok := v.MapGet("exclusive"); ok {
-		if ev.Bool() {
-			opts = append(opts, workspace.WithExclusive())
-		}
-	}
 	// A reason, not a flag. `"no_language": true` would silence doctor's language-coverage
 	// check anonymously; requiring prose means the next reader learns why this project has
 	// no toolchain spell instead of finding a switch someone flipped.
@@ -340,8 +335,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		}
 	}
 	// targets maps a target name to a per-target policy table: skip_cache=true opts
-	// the target out of the cache; exclusive=true runs it alone against the batch;
-	// slots=N holds N concurrency slots while the target runs.
+	// the target out of the cache; slots=N holds N concurrency slots while it runs.
 	if tv, ok := v.MapGet("targets"); ok && tv.IsMap() {
 		for _, name := range tv.MapKeys() {
 			pv, ok := tv.MapGet(name)
@@ -406,9 +400,6 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 							"If a failure should stop the gate, leave the policy off; running this target by name fails either way", name)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.Advisory(reason)))
-			}
-			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
-				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))
 			}
 			// drift says what happens when this target's declared output moves under a
 			// read-only run. Absent means the default, which already gates a target that

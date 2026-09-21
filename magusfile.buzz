@@ -214,23 +214,12 @@ magus\project({
         // No ctx.writesFiles for gen/site: declared output globs are what EnsureMergeDriver
         // writes into .gitattributes, and an ignored path can never conflict.
         "deploy-generate": {"skip_cache": "assembles a gitignored deploy tree that is never snapshotted"},
-        // NOT exclusive, and it never actually was. The engine released an exclusive
-        // step's lease for the whole of its ctx.needs fan-out, and this target's body IS
-        // that fan-out, so the flag bought nothing for as long as it has been here. Once
-        // the engine started honouring it (see cache.runIsolation), the cost arrived
-        // without the benefit: every other ci member reaches generate, so all of them
-        // serialized behind its entire codegen chain with nothing of their own to report,
-        // the built-in 15m stall window ran out, and the watchdog took the invocation.
-        // Measured: lint, build, test and security ran 15m52s apiece in one gate;
-        // security alone finishes in 14s. Not a ceiling of their own: security is the
-        // only one of the four that declares a timeout, and this workspace sets no
-        // target_timeout.
-        //
-        // What the drift check actually needs isolation for is its hash-before against
-        // hash-after comparison, not for running the generators. Declaring it over the
-        // whole target asks for far more than that and is what made it unaffordable. The
-        // comparison is racy without it, which it has been all along; narrowing the
-        // exclusive region to the measurement is the fix, and it is not this line.
+        // The drift check's hash-before against hash-after comparison is racy with a peer
+        // writing the same tree, and has been all along. The fix is narrowing the measured
+        // region, which no target policy can express: a flag over the WHOLE target asks
+        // for isolation across the entire codegen chain, and when the engine last honoured
+        // one here, lint, build, test and security each ran 15m52s in one gate waiting on
+        // it, against 14s for security alone. docs/decisions/0001 deleted the flag.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
         // Both render the WHOLE graph, but only the magusfiles are keyable inputs, so any
         // other change leaves the key unmoved and a hit reverts the committed file.
@@ -263,13 +252,12 @@ magus\project({
         // per invocation.
         "release-build": {"skip_cache": "a release must never replay a cached artifact; each invocation produces the bytes that ship"},
         "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
-        // exclusive: under cd it switches branches and commits, so nothing else should
-        // be touching the tree while it runs.
-        "release-index": {"skip_cache": "signs the index per invocation and, with cd, pushes a branch; a replay would publish nothing", "exclusive": true},
-        // Mutates go.mod and creates VCS tags (with the cd charm) - a real,
-        // order-sensitive side effect, never a cache replay. exclusive: nothing
-        // else should be touching go.mod or the tag namespace while it runs.
-        "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
+        // Under cd it switches branches and commits. Its own workflow job is what keeps
+        // anything else off the tree; no target policy ever did.
+        "release-index": {"skip_cache": "signs the index per invocation and, with cd, pushes a branch; a replay would publish nothing"},
+        // Mutates go.mod and creates VCS tags (with the cd charm): a real,
+        // order-sensitive side effect, never a cache replay.
+        "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect"},
         // No skip_cache: a hit restores the coverage profiles, which is all a hit
         // should do.
         // memory_mb measured, not guessed: on a 16GB CI runner this target took
@@ -1394,7 +1382,7 @@ export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("volatility: {r.volatility.targets.len()} target(s) with recorded run history");
 }
 
-// Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).
+// Regenerates every *-generate sibling, then gates on drift (scoped to cwd).
 // Drift = a path whose bytes the generators changed, measured by hashing before and
 // after rather than by asking whether the tree is clean, so the gate works on a dirty
 // tree. An uncommitted-but-current generated file still passes: its bytes do not move.
@@ -1449,8 +1437,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         // Two causes land here and they have different owners: output that was never
         // regenerated, and a generator that does not emit the same bytes twice. Only a
         // second regeneration separates them, which is what --race=replay does, so the
-        // message routes there rather than reimplementing it (and a nested `generate`
-        // would contend for this target's own exclusive lock).
+        // message routes there rather than reimplementing it.
         //
         // MGS4006, the same code the engine's declared-output path names via
         // types.ClassifyDrift (types/vcs.go): this is the identical condition

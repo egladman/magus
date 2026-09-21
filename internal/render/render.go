@@ -324,9 +324,6 @@ func projectGraphIR(out types.GraphOutput) renderGraph {
 				label += "<br/>~" + FormatDuration(time.Duration(n.DurationMs)*time.Millisecond)
 			}
 			shape := shapeBox
-			if n.Exclusive {
-				shape = shapeHexagon
-			}
 			classes := []string{group}
 			if rootSet[n.Path] {
 				classes = append(classes, "root")

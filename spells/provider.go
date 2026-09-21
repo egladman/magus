@@ -72,8 +72,6 @@ type ProvidedProject struct {
 	// project-relative spelling and cannot be declared here.
 	Sources []string `json:"sources"`
 	Outputs []string `json:"outputs"`
-	// Exclusive marks the project as must-not-run-alongside-peers in a batch.
-	Exclusive bool `json:"exclusive"`
 }
 
 // Secret is what a provider spell's resolve_secret op returns: one resolved credential.

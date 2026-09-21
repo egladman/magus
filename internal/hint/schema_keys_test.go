@@ -10,7 +10,7 @@ import (
 func TestCheckKeysErrorsOnATypoAndIgnoresAKeyFromTheFuture(t *testing.T) {
 	t.Parallel()
 
-	known := []string{"skip_cache", "exclusive", "slots"}
+	known := []string{"skip_cache", "memory_mb", "slots"}
 
 	t.Run("a near miss is a typo and stops the load", func(t *testing.T) {
 		t.Parallel()
@@ -18,7 +18,7 @@ func TestCheckKeysErrorsOnATypoAndIgnoresAKeyFromTheFuture(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorContains(t, err, `unknown option "skipcache"`)
 		assert.ErrorContains(t, err, `did you mean "skip_cache"`)
-		assert.ErrorContains(t, err, "known options: exclusive, skip_cache, slots",
+		assert.ErrorContains(t, err, "known options: memory_mb, skip_cache, slots",
 			"the message enumerates the vocabulary in a stable order")
 		assert.Empty(t, ignored)
 	})
@@ -36,14 +36,14 @@ func TestCheckKeysErrorsOnATypoAndIgnoresAKeyFromTheFuture(t *testing.T) {
 
 	t.Run("recognized keys produce neither", func(t *testing.T) {
 		t.Parallel()
-		ignored, err := CheckKeys([]string{"slots", "exclusive"}, known, "magus.project")
+		ignored, err := CheckKeys([]string{"slots", "memory_mb"}, known, "magus.project")
 		require.NoError(t, err)
 		assert.Empty(t, ignored)
 	})
 
 	t.Run("keys already ignored come back with the typo that stopped the walk", func(t *testing.T) {
 		t.Parallel()
-		ignored, err := CheckKeys([]string{"quantum_flux", "exclusiv"}, known, "magus.project")
+		ignored, err := CheckKeys([]string{"quantum_flux", "slot"}, known, "magus.project")
 		require.Error(t, err)
 		assert.Equal(t, []string{"quantum_flux"}, ignored,
 			"a caller must be able to report what it dropped before what it refused")

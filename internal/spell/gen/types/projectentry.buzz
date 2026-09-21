@@ -15,7 +15,6 @@ export object ProjectEntry {
     sources: [str] = [],
     outputs: [str] = [],
     dependsOn: [str] = [],
-    exclusive: bool = false,
     manifests: [str] = [],
     lockfiles: [str] = [],
 }

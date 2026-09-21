@@ -638,9 +638,6 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 		if v, ok := opts.MapGet("sources"); ok {
 			p.Sources = valToStrings(v)
 		}
-		if v, ok := opts.MapGet("exclusive"); ok {
-			p.Exclusive = v.Bool()
-		}
 		if v, ok := opts.MapGet("spells"); ok && v.IsList() {
 			for _, item := range v.ListItems() {
 				if item.IsMap() {
@@ -698,9 +695,6 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 								"If you only want a fresh run, use `--no-cache` instead; if the target simply produces no files, it caches correctly with no policy at all", rawName)
 					}
 					p.NoCache = append(p.NoCache, name)
-				}
-				if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
-					p.ExclusiveTargets = append(p.ExclusiveTargets, name)
 				}
 				if sv, ok := pv.MapGet("slots"); ok {
 					if !sv.IsInt() {

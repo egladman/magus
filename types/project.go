@@ -174,7 +174,6 @@ type Project struct {
 	Sources   []string   // doublestar globs relative to Dir for the cache key
 	Outputs   []string   // doublestar globs snapshotted into and replayed from cache
 	DependsOn []string
-	Exclusive bool
 	// NoLanguage is the reason a project binds no toolchain spell ON PURPOSE, from
 	// magus.project's "no_language" key. A spell-less project is legal and common, so
 	// doctor's language-coverage check cannot tell an intentional one (a polyglot

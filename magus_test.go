@@ -959,7 +959,6 @@ func TestForEachSpell_MagusfileShadowsSpellOp(t *testing.T) {
 	p := &types.Project{
 		Path:             ".",
 		MagusfileTargets: []string{"go-build"},
-		Exclusive:        true, // deterministic order for the assertion
 	}
 	p.ResolvedSpells = []*spells.Spell{
 		newSpell("go", "go-build"),

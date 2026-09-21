@@ -169,20 +169,6 @@ func TestWithSpellUnknownTool(t *testing.T) {
 	assert.ErrorIs(t, err, types.ErrSpellNotRegistered, "Inspect: expected error for unknown tool")
 }
 
-// TestWithExclusiveOption verifies that WithExclusive() sets p.Exclusive.
-func TestWithExclusiveOption(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.buzz")
-
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithExclusive())
-
-	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
-	require.NoError(t, err, "Open")
-	p := ws.Get(".")
-	require.NotNil(t, p, "project . not found")
-	assert.True(t, p.Exclusive, "Exclusive = false, want true")
-}
-
 // TestApplyIdempotent verifies that calling Inspect twice with the same registry
 // does not double-accumulate Deps. Each Open gets a fresh *Workspace, so the
 // registry applies cleanly regardless of how many times Inspect is called.

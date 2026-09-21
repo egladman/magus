@@ -90,11 +90,6 @@ func WithName(name string) ProjectOption {
 	return func(p *types.Project) error { p.Name = name; return nil }
 }
 
-// WithExclusive marks a project as must-not-run-alongside-peers in a RunAll batch.
-func WithExclusive() ProjectOption {
-	return func(p *types.Project) error { p.Exclusive = true; return nil }
-}
-
 // WithNoLanguage records why a project binds no toolchain spell deliberately.
 func WithNoLanguage(reason string) ProjectOption {
 	return func(p *types.Project) error { p.NoLanguage = reason; return nil }
@@ -302,12 +297,6 @@ func SkipCache(reason string) TargetOption {
 // SkipCache's is.
 func Advisory(reason string) TargetOption {
 	return func(t *types.Target) { t.Advisory = true; t.AdvisoryReason = reason }
-}
-
-// Exclusive returns a TargetOption that runs the target alone — no other target
-// runs concurrently while it does.
-func Exclusive() TargetOption {
-	return func(t *types.Target) { t.Exclusive = true }
 }
 
 // Slots returns a TargetOption that makes the target hold n concurrency slots

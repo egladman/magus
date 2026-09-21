@@ -23,22 +23,16 @@ import "vcs";
 magus\project({
     "spells": [buf],
     "outputs": ["gen/**"],
-    "targets": {
-        // exclusive like the other two drift gates in this repo, so a concurrent run cannot
-        // move the trees this one is measuring between its before and after hashes.
-        //
-        // NOT skip_cache, which is where this deliberately parts from root generate and
-        // libs/textsearch test. Those gates fork local tools; this one calls a REMOTE buf
-        // plugin twice, and buf.gen.yaml records that this project was split out precisely
-        // to keep that off unrelated edits - a day of doc edits once exhausted the BSR rate
-        // limit. Keeping the cache costs coverage: a HIT skips the body, so the gate arms
-        // only when a declared input moves. That still covers the case that actually bites,
-        // a .proto edit whose regenerated client was never committed, and it leaves the
-        // KNOWN GAP below exactly where it already sat - a plugin bump moves no declared
-        // input, so nothing reruns and nothing is compared. The fix for that is the version
-        // probe described there, not paying the BSR on every run.
-        "generate": {"exclusive": true},
-    },
+    // generate declares NO skip_cache, which is where it deliberately parts from root
+    // generate and libs/textsearch test. Those gates fork local tools; this one calls a
+    // REMOTE buf plugin twice, and buf.gen.yaml records that this project was split out
+    // precisely to keep that off unrelated edits: a day of doc edits once exhausted the
+    // BSR rate limit. Keeping the cache costs coverage, since a HIT skips the body, so the
+    // gate arms only when a declared input moves. That still covers the case that actually
+    // bites, a .proto edit whose regenerated client was never committed, and it leaves the
+    // KNOWN GAP below exactly where it already sat: a plugin bump moves no declared input,
+    // so nothing reruns and nothing is compared. The fix for that is the version probe
+    // described there, not paying the BSR on every run.
 });
 
 // Self-contained project targets, so `magus affected ci` gates the contract when the

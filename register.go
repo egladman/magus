@@ -107,9 +107,6 @@ func WithDependsOn(paths ...string) ProjectOption { return workspace.WithDepends
 // WithOutputs declares the project-relative file globs this project produces.
 func WithOutputs(paths ...string) ProjectOption { return workspace.WithOutputs(paths...) }
 
-// WithExclusive marks a project as must-not-run-alongside-peers (also serializes multi-spell fan-out).
-func WithExclusive() ProjectOption { return workspace.WithExclusive() }
-
 // WithWatchIgnore appends patterns to the project's watch ignore list; malformed patterns error at Open.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return workspace.WithWatchIgnore(patterns...)
@@ -131,9 +128,6 @@ func Drift(policy types.DriftPolicy, reason string) TargetOption {
 	return workspace.Drift(policy, reason)
 }
 
-// Exclusive runs the target alone — no other target runs concurrently while it does.
-func Exclusive() TargetOption { return workspace.Exclusive() }
-
 // Advisory keeps this target's failure from failing a composite that reaches it through
 // ctx.needs; the composite reports the failure and carries on, and running the target by
 // name still fails. reason states why a failure here does not mean the change is wrong.
@@ -154,7 +148,7 @@ func WithTarget(name string, opts ...TargetOption) ProjectOption {
 	return workspace.WithTarget(name, opts...)
 }
 
-// WithSpell registers a built-in spell by name; multiple calls fan out in parallel (sequential with WithExclusive).
+// WithSpell registers a built-in spell by name; multiple calls fan out in parallel.
 func WithSpell(name string, opts ...BindingOption) ProjectOption {
 	return func(p *types.Project) error {
 		if name == "" {

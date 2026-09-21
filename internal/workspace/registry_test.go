@@ -86,11 +86,11 @@ func TestApply_AppliesRegisteredOptions(t *testing.T) {
 	w := newFakeWorkspace("/repo", p)
 
 	r := NewWorkspaceRegistry()
-	r.RegisterProject("api", WithOutputs("dist/**"), WithExclusive())
+	r.RegisterProject("api", WithOutputs("dist/**"), WithName("API"))
 
 	require.NoError(t, r.Apply(w))
 	assert.Equal(t, []string{"dist/**"}, p.Outputs)
-	assert.True(t, p.Exclusive)
+	assert.Equal(t, "API", p.Name)
 }
 
 func TestApply_UnknownProjectErrorsWithHint(t *testing.T) {
@@ -100,7 +100,7 @@ func TestApply_UnknownProjectErrorsWithHint(t *testing.T) {
 	)
 
 	r := NewWorkspaceRegistry()
-	r.RegisterProject("frontend", WithExclusive())
+	r.RegisterProject("frontend", WithOutputs("dist/**"))
 
 	err := r.Apply(w)
 	require.Error(t, err)

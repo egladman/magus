@@ -200,24 +200,6 @@ func TestWriteGraphMermaid_RootHighlight(t *testing.T) {
 	assert.Contains(t, got, "api", "expected root class assignment for api")
 }
 
-func TestWriteGraphMermaid_Exclusive(t *testing.T) {
-	t.Parallel()
-	out := types.GraphOutput{
-		Direction: "downstream",
-		Nodes: []types.Node{
-			{Path: "api", SpellName: "go", Exclusive: true, Children: []string{"util"}},
-			{Path: "util", SpellName: "go", Exclusive: false, Children: []string{}},
-		},
-	}
-	var b strings.Builder
-	require.NoError(t, WriteGraphMermaid(&b, out))
-	got := b.String()
-	// Exclusive node uses hexagon syntax {{...}}
-	assert.Contains(t, got, `{{"api"}}`, "expected hexagon shape for exclusive node")
-	// Non-exclusive node uses rectangle [...]
-	assert.Contains(t, got, `["util"]`, "expected rectangle shape for non-exclusive node")
-}
-
 func TestWriteGraphMermaid_ClickHandler(t *testing.T) {
 	t.Parallel()
 	out := types.GraphOutput{

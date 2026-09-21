@@ -192,7 +192,6 @@ type Step struct {
 	IncludeArch bool
 	NoCache     bool // when true, always run fn; never replay or snapshot (long-running targets)
 	SkipReplay  bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Exclusive   bool // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
 	Slots       int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
 	// including every target it composes, carried alongside the slot count Slots
@@ -1072,11 +1071,6 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
 	defer releaseMachine()
-	ctx, releaseIsolation, err := acquireRunIsolation(ctx, s.Exclusive)
-	if err != nil {
-		return Result{ProjectPath: s.ProjectPath}, err
-	}
-	defer releaseIsolation()
 	ctx, slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
@@ -1098,7 +1092,6 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 // dependents). Every goroutine launches immediately and blocks on deps without
 // holding a slot, so the pool never deadlocks and g.Wait() always drains cleanly.
 func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Context, Step) error, opts ...RunOption) ([]Result, error) {
-	ctx = WithRunScope(ctx)
 	rc := &runCtx{}
 	for _, o := range opts {
 		o(rc)
@@ -1210,9 +1203,9 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := barrier.waitForDeps(gctx, s); err != nil {
 				return fail(err)
 			}
-			// The machine budget comes before the isolation lease and the slot, so a step
-			// queues for it holding nothing a peer needs in order to finish; claimMachine
-			// carries the interleaving that ordering answers.
+			// The machine budget comes before the slot, so a step queues for it holding
+			// nothing a peer needs in order to finish; claimMachine carries the
+			// interleaving that ordering answers.
 			machineCtx, releaseMachine, machineErr := c.claimMachine(gctx, s, stepSlots(s, lim))
 			if machineErr != nil {
 				// A machine refusal is an independent finding: nothing upstream failed and
@@ -1224,18 +1217,10 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				return fail(machineErr)
 			}
 			defer releaseMachine()
-			stepCtx, releaseIsolation, isoErr := acquireRunIsolation(machineCtx, s.Exclusive)
-			if isoErr != nil {
-				// The gate refuses nothing of its own any more, so every error here is
-				// the batch unwinding around this step: a peer's failure or a Ctrl-C,
-				// both of which are consequences rather than findings.
-				return fail(isoErr)
-			}
-			defer releaseIsolation()
-			// A gate that was free hands the seat over without consulting the context, so
-			// a sibling that failed while this step queued for the machine budget is only
-			// observed here. lim.Acquire below would catch it too, except on an unlimited
-			// limiter, where it returns nil without consulting ctx.
+			// claimMachine hands a free budget over without consulting the context, so a
+			// sibling that failed while this step queued for it is only observed here.
+			// lim.Acquire below would catch it too, except on an unlimited limiter, where
+			// it returns nil without consulting ctx.
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}
@@ -1243,7 +1228,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// swallows regardless. A deadlocked pool is the exception: nothing upstream
 			// failed and the batch was not cancelled, so it is an independent finding and
 			// has to count as one, or a run that did nothing reports success.
-			stepCtx, slots, release, admitErr := c.admit(stepCtx, s, lim)
+			stepCtx, slots, release, admitErr := c.admit(machineCtx, s, lim)
 			if admitErr != nil {
 				ran = errors.Is(admitErr, types.BuildSlotsDeadlocked) && gctx.Err() == nil
 				return fail(admitErr)
@@ -1252,7 +1237,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if slog.Default().Enabled(gctx, levelTrace) {
 				slog.LogAttrs(gctx, levelTrace, "schedule.run",
 					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
-					slog.Bool("exclusive", s.Exclusive), slog.Int("slots", slots))
+					slog.Int("slots", slots))
 			}
 
 			// Fold upstream keys into Deps for transitive cache-key propagation.

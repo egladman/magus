@@ -650,7 +650,7 @@
         },
         {
           "name": "generate",
-          "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
+          "doc": "Regenerates every *-generate sibling, then gates on drift (scoped to cwd).",
           "dependencies": [
             "bindings-generate",
             "changelog-generate",

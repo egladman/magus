@@ -15,7 +15,6 @@ export object Target {
     declaredCharms: [str] = [],
     skip_cache: bool = false,
     skip_cache_reason: str = "",
-    exclusive: bool = false,
     slots: int = 0,
     memory_mb: int = 0,
     timeout: str = "",

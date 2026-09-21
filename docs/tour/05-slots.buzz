@@ -26,11 +26,12 @@ magus\project({
     "spells": [go, typescript],
     "targets": {
         // js-lint reserves LINT_SLOTS; while it holds them, the cheap checks wait
-        // rather than pile on. release declares `exclusive` for a different reason,
-        // and it is not a bigger slot count: it mutates go.mod and creates tags, so
-        // a peer writing the tree partway through would corrupt the result.
+        // rather than pile on. Slots are the ONLY concurrency dial a target has:
+        // there is no flag for "run me alone", because a target that must not run
+        // beside a peer is saying something about a shared resource, and a magusfile
+        // has no way to name one. docs/decisions/0001 records why that was deleted.
         "js-lint": {"slots": LINT_SLOTS},
-        "release": {"exclusive": true},
+        "release": {"skip_cache": "creates tags, an order-sensitive side effect"},
     },
 });
 

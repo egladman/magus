@@ -64,11 +64,6 @@ func TestShardSkillsDeriveFromWhatTheShardDoes(t *testing.T) {
 	assert.Equal(t, []string{"magus-run-full", "magus-vcs-hygiene-full"}, skills,
 		"a shard that writes declared outputs leaves generated files behind, which is magus-vcs-hygiene's whole subject")
 	assert.Len(t, why, 3)
-
-	// Exclusivity is not a skill, but it IS something an orchestrator must not miss: it
-	// says this shard cannot be handed out beside another.
-	_, why = shardSkills(shardDetail{Exclusive: true})
-	assert.Contains(t, strings.Join(why, "\n"), "exclusive")
 }
 
 // TestJoinProjectGlobRootsTheCollisionSurface: two briefings are compared for overlap, so

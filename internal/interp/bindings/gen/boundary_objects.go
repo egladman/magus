@@ -144,7 +144,6 @@ func ObjectProjectEntry(v types.ProjectEntry) vm.Value {
 		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
 	}
 	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
-	out.MapSet("exclusive", vm.BoolValue(v.Exclusive))
 	itemsManifests := make([]vm.Value, len(v.Manifests))
 	for indexManifests := range v.Manifests {
 		itemsManifests[indexManifests] = vm.StrValue(v.Manifests[indexManifests])
@@ -393,7 +392,6 @@ func ObjectNode(v types.Node) vm.Value {
 	}
 	out.MapSet("children", vm.ListValue(itemsChildren))
 	out.MapSet("dir", vm.StrValue(v.Dir))
-	out.MapSet("exclusive", vm.BoolValue(v.Exclusive))
 	out.MapSet("blastRadius", vm.IntValue(int64(v.BlastRadius)))
 	out.MapSet("durationMs", vm.IntValue(int64(v.DurationMs)))
 	out.MapSet("churn", vm.IntValue(int64(v.Churn)))

@@ -594,8 +594,6 @@ type shardDetail struct {
 	// together exactly when these do not overlap, and magus is the only party that knows
 	// them: whoever splits the work up otherwise hands out units and hopes.
 	Writes []string `json:"writes,omitempty"`
-	// Exclusive marks a shard holding a project that refuses to run beside anything.
-	Exclusive bool `json:"exclusive,omitempty"`
 	// Agents is the only agent-specific part, kept in its own object so the rest reads as
 	// what it is: ordinary plan metadata a person wants too.
 	Agents *shardAgents `json:"agents,omitempty"`
@@ -1441,7 +1439,6 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 				b.Writes = appendUnique(b.Writes, joinProjectGlob(path, g))
 			}
 			b.Writes = appendUnique(b.Writes, writesByProject[path]...)
-			b.Exclusive = b.Exclusive || p.Exclusive
 		}
 		skills, why := shardSkills(b)
 		b.Agents = &shardAgents{Skills: skills, Why: why}
@@ -1468,9 +1465,6 @@ func shardSkills(b shardDetail) (skills, why []string) {
 		why = append(why, "magus-vcs-hygiene: this shard declares outputs, so its run leaves generated files that must be classified before they are committed or reverted")
 	}
 	why = append(why, "variant: each skill is named as its always-full twin, because the reader of this record is not the session that chose the install")
-	if b.Exclusive {
-		why = append(why, "exclusive: a project here refuses to run beside anything, so this shard must not be handed out concurrently with another")
-	}
 	return skills, why
 }
 
