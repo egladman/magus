@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -717,90 +715,4 @@ func TestMagusNamespacesAreBound(t *testing.T) {
 		}
 	}
 	assert.NotZero(t, checked, "no namespace methods checked; this test would pass vacuously")
-}
-
-// usesMagusfile is a magusfile whose target defines its OWN scoped resource as a
-// fiber and runs a body inside it. trace.txt records the order the three halves ran
-// in, which is the only thing these tests read.
-//
-// The resource is author-written Buzz, not a magus binding: that openness is the
-// reason ctx.uses takes a fiber instead of a name.
-//
-// `_ = yield 1` rather than a bare `yield`: yield is an EXPRESSION in Buzz, so the
-// suspension point carries a value and the fiber is annotated `*> int` for it.
-const usesMagusfile = `import "magus";
-import "fs";
-
-fun note(what: str) > void !> any {
-    var seen = "";
-    if (fs\exists("trace.txt")) { seen = fs\readFile("trace.txt"); }
-    fs\writeFile("trace.txt", seen + what + " ");
-}
-
-fun guarded() > void *> int !> any {
-    note("acquire");
-    _ = yield 1;
-    note("release");
-}
-
-export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.uses(&guarded(), fun() > void !> any {
-        note("body");
-    });
-}
-
-export fun failing(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.uses(&guarded(), fun() > void !> any {
-        note("body");
-        throw "the body failed";
-    });
-}
-`
-
-func runUsesTarget(t *testing.T, target string) (trace string, err error) {
-	t.Helper()
-	dir := t.TempDir()
-	t.Chdir(dir)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(usesMagusfile), 0o644))
-
-	_, err = interp.RunDir(context.Background(), dir, target, nil)
-	raw, readErr := os.ReadFile(filepath.Join(dir, "trace.txt"))
-	if readErr != nil {
-		return "", err
-	}
-	return string(raw), err
-}
-
-// The ordinary path: acquire, body, release, in that order.
-func TestCtxUsesRunsTheBodyInsideTheResource(t *testing.T) {
-	trace, err := runUsesTarget(t, "build")
-	require.NoError(t, err)
-	assert.Equal(t, "acquire body release ", trace)
-}
-
-// The path Buzz cannot express on its own. A throwing body must still run the
-// resource's release half, and the body's own error must survive it: a finalizer
-// that swallowed the failure would turn a red target green.
-func TestCtxUsesReleasesTheResourceWhenTheBodyThrows(t *testing.T) {
-	trace, err := runUsesTarget(t, "failing")
-	require.Error(t, err, "the body's failure must reach the caller")
-	assert.Contains(t, err.Error(), "the body failed")
-	assert.Equal(t, "acquire body release ", trace, "the release half did not run on the throw path")
-}
-
-// A plain call is not a resource: without a fiber there is no suspended half to
-// resume after the body, so magus refuses rather than silently running nothing.
-func TestCtxUsesRefusesANonFiberResource(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	src := `import "magus";
-fun plain() > void {}
-export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.uses(plain, fun() > void {});
-}
-`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
-	_, err := interp.RunDir(context.Background(), dir, "build", nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "must be a fiber")
 }

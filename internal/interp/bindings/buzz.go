@@ -61,7 +61,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// graph, so the declaration surface lives only on the context. The value is stashed
 	// under a session-global name execBuzzSrc fetches to prepend at dispatch; it closes
 	// over the same targets/exports/ext so ctx.needs dispatches deps through the pool.
-	sess.SetGlobal(interp.TargetContextGlobal, buildTargetContext(sess, obs, targets, exports, ext))
+	sess.SetGlobal(interp.TargetContextGlobal, buildTargetContext(obs, targets, exports, ext))
 
 	// The host utilities are reached under the same bare names as Buzz's own stdlib:
 	// `import "os"`, `import "fs"`, `import "http"`, `import "vcs"`, ... A magusfile
