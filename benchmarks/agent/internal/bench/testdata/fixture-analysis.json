@@ -1,4 +1,5 @@
 {
+  "platform": "fixture",
   "seed": 20260902,
   "bootstrap_iters": 10000,
   "min_relative_delta": 0.1,

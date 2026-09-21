@@ -264,11 +264,19 @@ func Report(a *Analysis) string {
 	if models == "" {
 		models = "unrecorded"
 	}
+	platform := a.Platform
+	if platform == "" {
+		platform = "unrecorded"
+	}
 	head := []string{
 		"# Harness-effectiveness benchmark",
 		"",
 		fmt.Sprintf("%d runs, %d task(s), arms %s, model(s) %s, bootstrap seed %d.",
 			a.Runs, len(a.Tasks), strings.Join(a.Arms, " and "), models, a.Seed),
+		"",
+		// Named because the last bits of an interpolated quartile depend on it;
+		// see Analysis.Platform.
+		fmt.Sprintf("Computed on %s.", platform),
 		"",
 	}
 	// Every section ends with an empty line, so the join already closes the file

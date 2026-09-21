@@ -640,9 +640,12 @@ func mustAnalyze(t *testing.T, records []RunRecord, seed int64) *Analysis {
 // It does NOT cover the resampler. MEASURED 2026-09-20: replacing the RNG
 // outright moved no bound in these fixtures, because every paired delta here is
 // constant across reps, and resampling identical values returns that value
-// whatever the draw order. What it does catch is summation order (the four
-// last-bit dollar figures moved) and the serialized shape. A draw-sequence
-// regression needs a fixture whose deltas vary.
+// whatever the draw order. A draw-sequence regression needs a fixture whose
+// deltas vary.
+//
+// analysis.json is compared to a tolerance rather than byte for byte, because
+// its floats carry platform-dependent last bits; metrics.jsonl and report.md
+// are exact.
 func TestBenchPipelineMatchesPinnedOutput(t *testing.T) {
 	_, _, records := fixtureRecords(t)
 	metrics, err := RecordsJSONL(records)
@@ -659,12 +662,91 @@ func TestBenchPipelineMatchesPinnedOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := mustAnalyze(t, loaded, 20260902)
+	// The real platform is whatever regenerated the fixture, so pinning its
+	// bytes would fail everywhere else. Its EFFECT is what the pin has to
+	// tolerate, which assertSameNumbers does.
+	a.Platform = "fixture"
 	raw, err := a.JSON()
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertSameBytes(t, "analysis.json", raw)
+	assertSameNumbers(t, "analysis.json", raw)
+	// The report rounds to a fixed number of digits, so it is byte-stable
+	// across platforms even where analysis.json is not.
 	assertSameBytes(t, "report.md", []byte(Report(a)))
+}
+
+// assertSameNumbers is assertSameBytes for a document whose floats carry
+// platform-dependent last bits: same shape, same keys, every number equal to
+// within a relative 1e-12. An exact byte pin here would be red on any machine
+// but the one that wrote it (see Analysis.Platform).
+func assertSameNumbers(t *testing.T, name string, got []byte) {
+	t.Helper()
+	file := filepath.Join("testdata", "fixture-"+name)
+	if os.Getenv("UPDATE_BENCH_FIXTURES") != "" {
+		if err := os.WriteFile(file, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("rewrote %s", file)
+		return
+	}
+	want, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotDoc, wantDoc any
+	if err := json.Unmarshal(got, &gotDoc); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(want, &wantDoc); err != nil {
+		t.Fatal(err)
+	}
+	compareJSON(t, name, gotDoc, wantDoc)
+}
+
+func compareJSON(t *testing.T, path string, got, want any) {
+	t.Helper()
+	switch w := want.(type) {
+	case map[string]any:
+		g, ok := got.(map[string]any)
+		if !ok {
+			t.Fatalf("%s: got %T, want object", path, got)
+		}
+		for k := range w {
+			if _, ok := g[k]; !ok {
+				t.Fatalf("%s/%s: missing from the analysis", path, k)
+			}
+		}
+		for k := range g {
+			if _, ok := w[k]; !ok {
+				t.Fatalf("%s/%s: absent from the pinned output", path, k)
+			}
+			compareJSON(t, path+"/"+k, g[k], w[k])
+		}
+	case []any:
+		g, ok := got.([]any)
+		if !ok {
+			t.Fatalf("%s: got %T, want array", path, got)
+		}
+		if len(g) != len(w) {
+			t.Fatalf("%s: length %d, pinned %d", path, len(g), len(w))
+		}
+		for i := range w {
+			compareJSON(t, fmt.Sprintf("%s[%d]", path, i), g[i], w[i])
+		}
+	case float64:
+		g, ok := got.(float64)
+		if !ok {
+			t.Fatalf("%s: got %T, want number", path, got)
+		}
+		if !almost(g, w, 12) && (w == 0 || math.Abs(g-w)/math.Abs(w) > 1e-12) {
+			t.Fatalf("%s: %v, pinned %v", path, g, w)
+		}
+	default:
+		if got != want {
+			t.Fatalf("%s: %v, pinned %v", path, got, want)
+		}
+	}
 }
 
 // UPDATE_BENCH_FIXTURES rewrites the pinned bytes instead of comparing against

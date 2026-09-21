@@ -2,6 +2,8 @@
 
 12 runs, 2 task(s), arms full and rampant, model(s) claude-opus-5, bootstrap seed 20260902.
 
+Computed on fixture.
+
 ## Controls
 
 Whether each task's check can tell a solution from its absence: the golden control applies the known solution and must pass, the null control touches nothing and must fail. A pass rate below is only worth reading where both hold.

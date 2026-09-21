@@ -209,6 +209,15 @@ type DataQuality struct {
 // Analysis is analysis.json. Cells are keyed arm/task; Paired is keyed
 // metric, then task.
 type Analysis struct {
+	// Platform is the OS, architecture and toolchain the statistics were
+	// computed on, as GOOS/GOARCH/go-version.
+	//
+	// Load-bearing, not provenance decoration: quartile interpolation is
+	// `a*b + c*d`, which arm64 contracts into an FMA and amd64 does not, so two
+	// machines can report the same figure to different last bits. A number is
+	// only reproducible against the platform that produced it, so every report
+	// names it.
+	Platform         string                            `json:"platform"`
 	Seed             int64                             `json:"seed"`
 	BootstrapIters   int64                             `json:"bootstrap_iters"`
 	MinRelativeDelta float64                           `json:"min_relative_delta"`

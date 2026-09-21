@@ -10,6 +10,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"reflect"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -211,6 +212,11 @@ func quartiles(sorted []float64) [2]*float64 {
 	var out [2]*float64
 	for k, i := range []int64{1, 3} {
 		j, delta := (i*m)/4, (i*m)%4
+		// `a*b + c*d`, which the compiler may contract into an FMA: arm64 does,
+		// amd64 does not, so this quartile's last bits depend on the machine
+		// (MEASURED 2026-09-20: 0.217875 against 0.21787500000000004). That is
+		// accepted rather than fought, which is why Analysis records Platform
+		// and every report names it.
 		q := (sorted[j]*float64(4-delta) + sorted[j+1]*float64(delta)) / 4
 		out[k] = &q
 	}
@@ -669,6 +675,7 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 		summaries[arm] = armSummary(armRuns)
 	}
 	return &Analysis{
+		Platform:         runtime.GOOS + "/" + runtime.GOARCH + "/" + runtime.Version(),
 		Seed:             seed,
 		BootstrapIters:   bootstrapIters,
 		MinRelativeDelta: minRelativeDelta,
