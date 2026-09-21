@@ -107,7 +107,7 @@ func TestJudge(t *testing.T) {
 
 // TestCheckCompat_LoadsTheTaggedTree runs the whole path against a real tag: the
 // working tree has moved on and loads cleanly, so every finding must come from the
-// archived revision, and both broken projects must be reported.
+// archived revision, and both broken projects and the broken spell must be reported.
 func TestCheckCompat_LoadsTheTaggedTree(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	repo := t.TempDir()
@@ -115,6 +115,13 @@ func TestCheckCompat_LoadsTheTaggedTree(t *testing.T) {
 	write(t, repo, "magus.yaml", "")
 	write(t, repo, "a/magusfile.buzz", broken)
 	write(t, repo, "b/magusfile.buzz", broken)
+	// Nothing imports this spell, so only the spell walk can find it.
+	write(t, repo, "spells/fixture/spell.buzz", `export fun mgs_getName() > str { return "fixture"; }
+
+fun unused() > void { magus.project({}); }
+`)
+	// A plain library is not a spell, and not a failure.
+	write(t, repo, "spells/lib/spell.buzz", "export fun helper() > int { return 1; }\n")
 	git(t, repo, "init", "-q")
 	git(t, repo, "add", ".")
 	git(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
@@ -127,7 +134,7 @@ func TestCheckCompat_LoadsTheTaggedTree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, CompatReport{
 		Base:  "v1.0.0",
-		Codes: []diagnostics.Code{types.MagusNotImported, types.MagusNotImported},
+		Codes: []diagnostics.Code{types.MagusNotImported, types.MagusNotImported, types.MagusNotImported},
 	}, got)
 }
 

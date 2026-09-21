@@ -16,11 +16,11 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/libs/diagnostics"
 
-	// Without the interpreter no magusfile is evaluated, and a tree that loads
-	// nothing reports zero breakage.
-	_ "github.com/egladman/magus/internal/interp/bindings"
+	// Without the engine no magusfile is evaluated, and a tree that loads nothing
+	// reports zero breakage.
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 )
 
@@ -75,6 +75,9 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	}
 
 	report := CompatReport{Base: baseTag}
+	if err := checkSpells(ctx, tree, &report); err != nil {
+		return CompatReport{}, err
+	}
 	cfg, err := config.LoadFile(filepath.Join(tree, "magus.yaml"), false)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		report.add(err)
@@ -90,6 +93,25 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	}
 	report.add(err)
 	return report.sorted(), nil
+}
+
+// checkSpells compiles every spells/**/spell.buzz in tree. The workspace load
+// logs a broken spell and skips it, so without this a spell only counts when a
+// magusfile's import of it fails, and then under the importer's code.
+func checkSpells(ctx context.Context, tree string, report *CompatReport) error {
+	return filepath.WalkDir(tree, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Name() != "spell.buzz" {
+			return err
+		}
+		rel, err := filepath.Rel(tree, path)
+		if err != nil {
+			return err
+		}
+		if slices.Contains(strings.Split(filepath.ToSlash(rel), "/"), "spells") {
+			report.add(bindings.CheckSpellFile(ctx, path))
+		}
+		return nil
+	})
 }
 
 // Judge refuses a bump the report does not allow. A patch must load cleanly. A minor
