@@ -68,8 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`magus session ls` and `--brief` show each provider's published prompt-cache window.**
 - **`magus describe job` derives a holder's terms; `magus job wait` grades the result.**
   Terms add reached projects, output globs, sibling holds and hidden coupling. `wait`
-  checks paths, descendants and a passing run of the row's `check`; `magus job exit
-  --schema` prints the result contract.
+  checks paths, descendants and a passing run of the row's `check`, exiting 1 on a
+  rejection and 2 when it cannot answer; `magus job exit --schema` prints the result
+  contract.
 - **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
 - **`magus doctor` reports whether a bound lease is enforced** (`bound-lease`).
 - **`magus session hints` reports uptake per suggestion id.**
@@ -85,16 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Breaking: `magus status -o json` nests concurrency.** `config.concurrency` is an object
   of `configured`, `profile` and `effective`; `config.concurrency_effective` is gone.
-- **Breaking: the `relock` charm is renamed `update`, with no alias.** A target spelling
-  `relock` fails as an undeclared charm; rename the suffix. `ci` strips `update` as it
-  stripped `relock`, and `rw` does not include it.
+- **Breaking: the `relock` charm is renamed `update`, with no alias.** A run spelling
+  `relock` fails with MGS6002, which names `update`; rename the suffix. `ci` strips
+  `update` as it stripped `relock`, and `rw` does not include it.
 - **Breaking: `magus` must be imported.** A magusfile, spell or script calling `magus\`
   needs `import "magus";`; without it the load fails with MGS1039, which names the fix.
-- **Breaking: an unknown key in `magus.yaml` fails the load.** Each is reported as
+- **Breaking: an unknown key in `magus.yaml` fails the load.** MGS1040 reports each as
   `file:line` with the nearest known key; a second YAML document in a file is rejected.
-- **Breaking: `magus job wait` grades evidence.** The result's `passed` field is removed;
-  the outcome is read from the run behind `output_ref`, which must be a run of the row's
-  `check`. Exit 2 means magus could not answer, 1 means rejected.
 - **Breaking: a holder's rendered terms carry commands.** `footer` is replaced by
   `bootstrap`, a list of `{run, why}`, and the rules and skills blocks are gone.
 - **Breaking: `--skill-form` takes `both`, `short` or `full`.** Skills stamp

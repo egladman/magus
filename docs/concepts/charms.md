@@ -112,7 +112,8 @@ identical: may this run replace what it pinned of the outside world?
 
 That is why the charm is `update` rather than the `relock` it was named while `go mod
 tidy` was the only op claiming it. `relock` was accepted as an alias for one release and
-is gone; a target that still spells it that way now fails as an undeclared charm.
+is gone; a run that still spells it that way fails with
+[MGS6002](../reference/codes/charms/MGS6002.md), which names `update`.
 
 ### They stack
 

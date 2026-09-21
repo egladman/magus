@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6481,
-  "edge_count": 11586,
+  "node_count": 6492,
+  "edge_count": 11610,
   "relations": [
     {
       "id": "annotates",
@@ -810,6 +810,14 @@
       }
     },
     {
+      "id": "diagnostic:MGS1040",
+      "kind": "diagnostic",
+      "label": "MGS1040",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1040/"
+      }
+    },
+    {
       "id": "diagnostic:MGS1101",
       "kind": "diagnostic",
       "label": "MGS1101",
@@ -1135,6 +1143,14 @@
       "label": "MGS6001",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/charms/MGS6001/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS6002",
+      "kind": "diagnostic",
+      "label": "MGS6002",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/charms/MGS6002/"
       }
     },
     {
@@ -1753,7 +1769,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1940",
+        "dir_files": "1949",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -2023,7 +2039,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "560",
+        "dir_files": "569",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -2053,8 +2069,8 @@
       "label": "docs/reference/codes/charms",
       "source": "docs/reference/codes/charms",
       "attrs": {
-        "dir_files": "9",
-        "dir_languages": "markdown,md#charm-diagnostics,md#codes,md#mgs6001-charm-patch-does-not-apply-to-the-command,md#resolution,md#see-also,md#what-this-is-not,md#why"
+        "dir_files": "13",
+        "dir_languages": "markdown,md#charm-diagnostics,md#codes,md#mgs6001-charm-patch-does-not-apply-to-the-command,md#mgs6002-a-charm-is-spelled-by-its-retired-name,md#resolution,md#see-also,md#what-this-is-not,md#what-to-do,md#why"
       }
     },
     {
@@ -2073,7 +2089,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "237",
+        "dir_files": "242",
         "dir_languages": "markdown,md#an-endpoint-carries-this-in-a-sharper-form,md#cause,md#codes,md#confirming-the-fix,md#detection,md#exact-paths-only,md#example,md#exclusive,md#fix,md#fixing-it,md#keeping-the-name,md#magusfile-authoring-diagnostics,md#members-that-declare-into-"
       }
     },
@@ -5400,6 +5416,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/codes/charms/MGS6002.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/charms/MGS6002.md",
+      "source": "docs/reference/codes/charms/MGS6002.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS6002,charms,relock,update,upgrade,renamed",
+        "title": "MGS6002: a charm is spelled by its retired name"
+      }
+    },
+    {
       "id": "doc:docs/reference/codes/charms/README.md",
       "kind": "doc",
       "label": "docs/reference/codes/charms/README.md",
@@ -5913,6 +5941,18 @@
         "section": "reference",
         "tags": "MGS1039,magusfile,spells,imports,upgrade,buzz",
         "title": "MGS1039: magus is called without being imported"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1040.md",
+      "source": "docs/reference/codes/magusfile/MGS1040.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1040,magus.yaml,config,upgrade,unknown key,typo",
+        "title": "MGS1040: magus.yaml has a key this magus does not know"
       }
     },
     {
@@ -28904,6 +28944,36 @@
       }
     },
     {
+      "id": "docsection:docs/reference/codes/charms/MGS6002.md#mgs6002-a-charm-is-spelled-by-its-retired-name",
+      "kind": "docsection",
+      "label": "MGS6002: a charm is spelled by its retired name",
+      "source": "docs/reference/codes/charms/MGS6002.md#mgs6002-a-charm-is-spelled-by-its-retired-name",
+      "attrs": {
+        "anchor": "mgs6002-a-charm-is-spelled-by-its-retired-name",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/charms/MGS6002.md#what-to-do",
+      "kind": "docsection",
+      "label": "What to do",
+      "source": "docs/reference/codes/charms/MGS6002.md#what-to-do",
+      "attrs": {
+        "anchor": "what-to-do",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/charms/MGS6002.md#why",
+      "kind": "docsection",
+      "label": "Why",
+      "source": "docs/reference/codes/charms/MGS6002.md#why",
+      "attrs": {
+        "anchor": "why",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/reference/codes/charms/README.md#charm-diagnostics",
       "kind": "docsection",
       "label": "Charm diagnostics",
@@ -30948,6 +31018,46 @@
       "kind": "docsection",
       "label": "Why",
       "source": "docs/reference/codes/magusfile/MGS1039.md#why",
+      "attrs": {
+        "anchor": "why",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1040.md#mgs1040-magusyaml-has-a-key-this-magus-does-not-know",
+      "kind": "docsection",
+      "label": "MGS1040: magus.yaml has a key this magus does not know",
+      "source": "docs/reference/codes/magusfile/MGS1040.md#mgs1040-magusyaml-has-a-key-this-magus-does-not-know",
+      "attrs": {
+        "anchor": "mgs1040-magusyaml-has-a-key-this-magus-does-not-know",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1040.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/codes/magusfile/MGS1040.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1040.md#what-to-do",
+      "kind": "docsection",
+      "label": "What to do",
+      "source": "docs/reference/codes/magusfile/MGS1040.md#what-to-do",
+      "attrs": {
+        "anchor": "what-to-do",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1040.md#why",
+      "kind": "docsection",
+      "label": "Why",
+      "source": "docs/reference/codes/magusfile/MGS1040.md#why",
       "attrs": {
         "anchor": "why",
         "level": "2"
@@ -64754,6 +64864,14 @@
     },
     {
       "source": "dir:docs/reference/codes/charms",
+      "target": "doc:docs/reference/codes/charms/MGS6002.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/charms/MGS6002.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/charms",
       "target": "doc:docs/reference/codes/charms/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -65095,6 +65213,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1039.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
@@ -69802,6 +69928,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1040",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS3001",
       "relation": "documents",
       "confidence": "inferred",
@@ -69907,6 +70041,14 @@
     {
       "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS6001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS6002",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -72522,6 +72664,14 @@
     },
     {
       "source": "doc:docs/concepts/charms.md",
+      "target": "diagnostic:MGS6002",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/charms.md"
+    },
+    {
+      "source": "doc:docs/concepts/charms.md",
       "target": "doc:docs/concepts/operations.md",
       "relation": "references",
       "confidence": "extracted",
@@ -72555,6 +72705,14 @@
     {
       "source": "doc:docs/concepts/charms.md",
       "target": "doc:docs/reference/codes/charms/MGS6001.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/charms.md"
+    },
+    {
+      "source": "doc:docs/concepts/charms.md",
+      "target": "doc:docs/reference/codes/charms/MGS6002.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -81553,8 +81711,40 @@
       "provenance": "docs/reference/codes/charms/MGS6001.md"
     },
     {
+      "source": "doc:docs/reference/codes/charms/MGS6002.md",
+      "target": "diagnostic:MGS6002",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/charms/MGS6002.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/charms/MGS6002.md",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/charms/MGS6002.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/charms/MGS6002.md",
+      "target": "docsection:docs/reference/codes/charms/MGS6002.md#mgs6002-a-charm-is-spelled-by-its-retired-name",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/charms/MGS6002.md"
+    },
+    {
       "source": "doc:docs/reference/codes/charms/README.md",
       "target": "diagnostic:MGS6001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/charms/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/charms/README.md",
+      "target": "diagnostic:MGS6002",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -81571,6 +81761,14 @@
     {
       "source": "doc:docs/reference/codes/charms/README.md",
       "target": "doc:docs/reference/codes/charms/MGS6001.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/charms/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/charms/README.md",
+      "target": "doc:docs/reference/codes/charms/MGS6002.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -83647,6 +83845,70 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1039.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "target": "diagnostic:MGS1021",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "target": "diagnostic:MGS1038",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "target": "diagnostic:MGS1040",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1021.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1038.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "target": "doc:docs/reference/config.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1040.md",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1040.md#mgs1040-magusyaml-has-a-key-this-magus-does-not-know",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -114657,6 +114919,22 @@
       "provenance": "docs/reference/codes/charms/MGS6001.md"
     },
     {
+      "source": "docsection:docs/reference/codes/charms/MGS6002.md#mgs6002-a-charm-is-spelled-by-its-retired-name",
+      "target": "docsection:docs/reference/codes/charms/MGS6002.md#what-to-do",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/charms/MGS6002.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/charms/MGS6002.md#mgs6002-a-charm-is-spelled-by-its-retired-name",
+      "target": "docsection:docs/reference/codes/charms/MGS6002.md#why",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/charms/MGS6002.md"
+    },
+    {
       "source": "docsection:docs/reference/codes/charms/README.md#charm-diagnostics",
       "target": "docsection:docs/reference/codes/charms/README.md#codes",
       "relation": "contains",
@@ -115951,6 +116229,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1039.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1040.md#mgs1040-magusyaml-has-a-key-this-magus-does-not-know",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1040.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1040.md#mgs1040-magusyaml-has-a-key-this-magus-does-not-know",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1040.md#what-to-do",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1040.md#mgs1040-magusyaml-has-a-key-this-magus-does-not-know",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1040.md#why",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1040.md"
     },
     {
       "source": "docsection:docs/reference/codes/magusfile/README.md#magusfile-authoring-diagnostics",

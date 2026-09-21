@@ -102,3 +102,19 @@ func TestWithCharmsCanonicalizesOnStore(t *testing.T) {
 	assert.True(t, HasCharm(ctx, "UPDATE"), "and to the spelling the caller used")
 	assert.Equal(t, []string{CharmUpdate}, CharmsFromContext(ctx), "the stored set is canonical")
 }
+
+// relock became update with no alias, so the old spelling has to stop a run by code
+// rather than match nothing and run without the grant.
+func TestRenamedCharmError(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"relock", "RELOCK"} {
+		err := RenamedCharmError(name)
+		require.ErrorIs(t, err, CharmRenamed, name)
+		var d *DiagnosticError
+		require.ErrorAs(t, err, &d)
+		assert.Equal(t, CharmRenamed, d.Code)
+	}
+	for _, name := range []string{CharmUpdate, CharmReadWrite, "rellock"} {
+		assert.NoError(t, RenamedCharmError(name), name)
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/types"
 )
 
 // Filename is the canonical config file name magus searches for.
@@ -322,7 +323,7 @@ func unknownKeyError(path string, data []byte, err error) error {
 		}
 		lines = append(lines, msg)
 	}
-	return errors.New(strings.Join(lines, "\n"))
+	return types.DiagnosticErrorf(types.UnknownConfigKey, "%s", strings.Join(lines, "\n"))
 }
 
 // knownKeysIn returns the document keys accepted by the struct type yaml.v3 named

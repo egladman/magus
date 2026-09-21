@@ -389,6 +389,20 @@ func undeclaredCharms(active []string, declared map[string]struct{}) []string {
 	return out
 }
 
+// checkUndeclaredCharms is the soft typo guard: it warns for an active charm no selected
+// target declares, since a function target may still read one. A retired built-in name is
+// the exception and fails the run, because nothing answers to it and the grant it asked
+// for would silently not happen.
+func checkUndeclaredCharms(ctx context.Context, active []string, declared map[string]struct{}) error {
+	for _, c := range undeclaredCharms(active, declared) {
+		if err := types.RenamedCharmError(c); err != nil {
+			return err
+		}
+		slog.WarnContext(ctx, "magus: charm not declared by any selected target (typo? a function target may still read it)", "charm", c)
+	}
+	return nil
+}
+
 // targetProjects resolves targets to projects via workspace lookup.
 func (m *Magus) targetProjects(targets []types.Target) []*types.Project {
 	out := make([]*types.Project, 0, len(targets))
@@ -1497,10 +1511,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	settle := m.prepareOrderSettle(order)
 
-	// Soft typo guard: warn for an active charm no selected target declares. A
-	// function target may read an undeclared charm, hence a warning, not an error.
-	for _, c := range undeclaredCharms(charmKey, declaredCharms) {
-		slog.WarnContext(ctx, "magus: charm not declared by any selected target (typo? a function target may still read it)", "charm", c)
+	if err := checkUndeclaredCharms(ctx, charmKey, declaredCharms); err != nil {
+		return err
 	}
 
 	// MGS5001: warn when this run brings up services that look like near-duplicate

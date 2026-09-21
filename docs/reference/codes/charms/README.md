@@ -17,3 +17,4 @@ is visible before a run.
 ## Codes
 
 - [MGS6001](MGS6001.md): a charm's patch is well-formed but does not apply to the target's command.
+- [MGS6002](MGS6002.md): a run spells a built-in charm by its retired name, such as `relock` for `update`.

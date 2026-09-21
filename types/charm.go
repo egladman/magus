@@ -56,6 +56,28 @@ const CharmUpdate = "update"
 // already in canonical (normalized) form.
 var reservedCharms = []string{CharmReadWrite, CharmCD, CharmGHA, CharmUpdate}
 
+// renamedCharms maps a retired built-in charm name to the name that replaced it. Keys
+// are canonical (normalized) form.
+//
+// compat(until: no supported workspace spells a charm relock): observe with a search for
+// `:relock` in magusfiles and `default_charms`; then drop this, RenamedCharmError and its
+// call in checkUndeclaredCharms, keeping the MGS6002 page.
+var renamedCharms = map[string]string{
+	"relock": CharmUpdate,
+}
+
+// RenamedCharmError returns a CharmRenamed error when name is a retired built-in charm,
+// and nil otherwise. Callers ask only about a charm no selected target declares: a
+// target may still declare a charm of its own under a retired name.
+func RenamedCharmError(name string) error {
+	to, ok := renamedCharms[NormalizeCharm(name)]
+	if !ok {
+		return nil
+	}
+	return DiagnosticErrorf(CharmRenamed,
+		"charm %q was renamed %q in v0.5.0 and nothing answers to the old name; spell it `:%s`", name, to, to)
+}
+
 // ReservedCharms returns magus's built-in charm names as a fresh slice.
 func ReservedCharms() []string { return slices.Clone(reservedCharms) }
 
