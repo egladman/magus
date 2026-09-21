@@ -314,6 +314,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Concurrency = n
 		}
 	}
+	if v := getenv("MAGUS_CONCURRENCY_PROFILE"); v != "" {
+		cfg.ConcurrencyProfile = v
+	}
 	if v := getenv("MAGUS_MAX_FAILURES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.MaxFailures = n

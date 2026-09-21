@@ -794,7 +794,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	default:
 		concurrency := cfg.Concurrency
 		if concurrency <= 0 {
-			concurrency = cache.DefaultConcurrency()
+			concurrency = cache.ConfiguredConcurrency(cfg.ConcurrencyProfile)
 		}
 		// THE site that governs: this limiter is injected into the workspace and wins over
 		// m.cfg.Concurrency via limOnce, so a cap applied only in Magus.limiter never runs.
@@ -1117,7 +1117,7 @@ var daemonTrailBase string
 func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
 	n := cfg.Concurrency
 	if n <= 0 {
-		n = cache.DefaultConcurrency()
+		n = cache.ConfiguredConcurrency(cfg.ConcurrencyProfile)
 	}
 	lim := cache.NewLimiter(n)
 	// The machine budget. One daemon per user means one of these per machine, which is

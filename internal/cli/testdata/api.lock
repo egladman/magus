@@ -10,6 +10,7 @@ config ci.max_shards
 config ci.record_runs
 config ci.runner_pool_budget
 config concurrency
+config concurrency_profile
 config console.enabled
 config daemon.address
 config daemon.enabled

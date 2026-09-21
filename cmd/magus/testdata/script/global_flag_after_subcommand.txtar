@@ -15,7 +15,7 @@
 
 # Baseline: nothing set, so the built-in default is reported rather than a number.
 exec magus config view
-stdout 'concurrency: \(default'
+stdout 'concurrency: \(from concurrency_profile'
 
 # Before the subcommand - this position always worked.
 exec magus --concurrency 3 config view
@@ -31,7 +31,7 @@ stdout 'concurrency: 6'
 
 # A flag past `--` belongs to whatever is being forwarded to, not to magus.
 exec magus config view -- --concurrency 7
-stdout 'concurrency: \(default'
+stdout 'concurrency: \(from concurrency_profile'
 
 -- magus.yaml --
 {}

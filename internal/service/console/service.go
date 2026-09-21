@@ -180,7 +180,7 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 		Config: types.StatusConfig{
 			DefaultCharms:        s.config.DefaultCharms,
 			Concurrency:          s.config.Concurrency,
-			ConcurrencyEffective: cache.ResolveConcurrency(s.config.Concurrency),
+			ConcurrencyEffective: cache.ResolveConcurrency(s.config.Concurrency, s.config.ConcurrencyProfile),
 			Sandbox:              s.config.Sandbox.Enabled,
 		},
 	}

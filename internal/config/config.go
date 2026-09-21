@@ -30,8 +30,11 @@ type Config struct {
 	Diff       Diff       `json:"diff" yaml:"diff"`
 	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
 
-	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
+	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Overrides concurrency_profile when set.
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
+
+	// ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores, 8), the default) or aggressive (every core).
+	ConcurrencyProfile string `json:"concurrency_profile" yaml:"concurrency_profile" validate:"omitempty,oneof=conservative balanced aggressive"`
 
 	// MaxFailures bounds how many projects may fail before a run stops starting
 	// more. Zero, the default, is unlimited: a batch runs everything it can and

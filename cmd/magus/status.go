@@ -360,7 +360,7 @@ func buildConfigStatus(c config.Config) types.StatusConfig {
 	return types.StatusConfig{
 		DefaultCharms:        c.DefaultCharms,
 		Concurrency:          c.Concurrency,
-		ConcurrencyEffective: cache.ResolveConcurrency(c.Concurrency),
+		ConcurrencyEffective: cache.ResolveConcurrency(c.Concurrency, c.ConcurrencyProfile),
 		Sandbox:              c.Sandbox.Enabled,
 	}
 }

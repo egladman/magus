@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
   `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
   observation nor `skip_cache`. The docker spell gains `trivy-image`.
+- **`concurrency_profile` sets build width relative to the machine.** `conservative` (half
+  the cores), `balanced` (`min(cores, 8)`, the default) or `aggressive` (every core), also as
+  `--concurrency-profile` and `MAGUS_CONCURRENCY_PROFILE`. An explicit `concurrency`
+  overrides it.
 - **MGS1037: a tool's observation keyed as its version.** `magus doctor` refuses one command
   declared as both version and observation probe without a narrowing `key`.
 - **MGS1038: a removed `magus.project` option stops the load.** It names the key and the

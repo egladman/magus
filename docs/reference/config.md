@@ -58,15 +58,16 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## general
 
-| Config key       | Environment variable   | Flag                  | Type                               |
-| ---------------- | ---------------------- | --------------------- | ---------------------------------- |
-| `concurrency`    | `MAGUS_CONCURRENCY`    | `-j`, `--concurrency` | int                                |
-| `default_charms` | `MAGUS_DEFAULT_CHARMS` | _(env only)_          | list _(comma-separated, env only)_ |
-| `dry_run`        | `MAGUS_DRY_RUN`        | `-u`, `--dry-run`     | bool                               |
-| `history_path`   | `MAGUS_HISTORY_PATH`   | `--history-path`      | string                             |
-| `max_failures`   | `MAGUS_MAX_FAILURES`   | `--max-failures`      | int                                |
-| `stall_timeout`  | `MAGUS_STALL_TIMEOUT`  | `--stall-timeout`     | duration                           |
-| `target_timeout` | `MAGUS_TARGET_TIMEOUT` | `--target-timeout`    | duration                           |
+| Config key            | Environment variable        | Flag                    | Type                               |
+| --------------------- | --------------------------- | ----------------------- | ---------------------------------- |
+| `concurrency`         | `MAGUS_CONCURRENCY`         | `-j`, `--concurrency`   | int                                |
+| `concurrency_profile` | `MAGUS_CONCURRENCY_PROFILE` | `--concurrency-profile` | string                             |
+| `default_charms`      | `MAGUS_DEFAULT_CHARMS`      | _(env only)_            | list _(comma-separated, env only)_ |
+| `dry_run`             | `MAGUS_DRY_RUN`             | `-u`, `--dry-run`       | bool                               |
+| `history_path`        | `MAGUS_HISTORY_PATH`        | `--history-path`        | string                             |
+| `max_failures`        | `MAGUS_MAX_FAILURES`        | `--max-failures`        | int                                |
+| `stall_timeout`       | `MAGUS_STALL_TIMEOUT`       | `--stall-timeout`       | duration                           |
+| `target_timeout`      | `MAGUS_TARGET_TIMEOUT`      | `--target-timeout`      | duration                           |
 
 ## hints
 
