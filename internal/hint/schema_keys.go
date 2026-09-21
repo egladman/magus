@@ -2,6 +2,7 @@ package hint
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -69,4 +70,25 @@ func RejectUnknownKeys(present, known []string, where string) error {
 func IgnoredKeyAdvice() string {
 	return "nothing known is close to it, so this magus probably predates it; upgrade with `" +
 		SelfUpdate.String() + "`, or delete the key if the workspace does not need it"
+}
+
+// undefinedMagus matches the checker's error for a program that calls magus\ without
+// importing it.
+var undefinedMagus = regexp.MustCompile(`undefined: magus\b`)
+
+// ExplainImplicitMagus turns a load failure caused by calling magus\ without importing it
+// into MGS1039, which names the one-line fix. Any other error comes back unchanged.
+//
+// magus was bound into every program implicitly until v0.5.0, so a file written for an
+// older magus fails with a bare `undefined: magus` that reads like a typo rather than a
+// migration.
+func ExplainImplicitMagus(err error) error {
+	if err == nil || !undefinedMagus.MatchString(err.Error()) {
+		return err
+	}
+	// The first line only: the checker's error carries its own `see:` line, which would
+	// otherwise land between the position and the fix.
+	first, _, _ := strings.Cut(err.Error(), "\n")
+	return types.DiagnosticErrorf(types.MagusNotImported,
+		"%s: add `import \"magus\";` to the file; magus is an imported module since v0.5.0", first)
 }

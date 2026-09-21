@@ -1,6 +1,7 @@
 package hint
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,4 +68,19 @@ func TestCheckKeysErrorsOnATypoAndIgnoresAKeyFromTheFuture(t *testing.T) {
 func TestIgnoredKeyAdviceNamesTheUpgradeCommand(t *testing.T) {
 	t.Parallel()
 	assert.Contains(t, IgnoredKeyAdvice(), SelfUpdate.String())
+}
+
+// A file written for a magus that bound `magus` implicitly fails with a bare
+// `undefined: magus`; the rewrite names the fix, and leaves every other error alone.
+func TestExplainImplicitMagus(t *testing.T) {
+	t.Parallel()
+	bare := errors.New("[BZZ1001] buzz: line 1:1: undefined: magus\n  see: https://example.invalid/BZZ1001")
+	got := ExplainImplicitMagus(bare)
+	require.ErrorIs(t, got, types.MagusNotImported)
+	assert.ErrorContains(t, got, "line 1:1: undefined: magus: add `import \"magus\";`")
+	assert.NotContains(t, got.Error(), "example.invalid", "the checker's own see: line is dropped")
+
+	other := errors.New("undefined: magusfile")
+	assert.Same(t, other, ExplainImplicitMagus(other), "a longer identifier is not the module")
+	assert.NoError(t, ExplainImplicitMagus(nil))
 }

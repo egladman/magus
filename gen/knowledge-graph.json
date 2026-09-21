@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6476,
-  "edge_count": 11580,
+  "node_count": 6481,
+  "edge_count": 11586,
   "relations": [
     {
       "id": "annotates",
@@ -799,6 +799,14 @@
       "label": "MGS1038",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1038/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1039",
+      "kind": "diagnostic",
+      "label": "MGS1039",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1039/"
       }
     },
     {
@@ -1745,7 +1753,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1936",
+        "dir_files": "1940",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -2015,7 +2023,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "556",
+        "dir_files": "560",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -2065,7 +2073,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "233",
+        "dir_files": "237",
         "dir_languages": "markdown,md#an-endpoint-carries-this-in-a-sharper-form,md#cause,md#codes,md#confirming-the-fix,md#detection,md#exact-paths-only,md#example,md#exclusive,md#fix,md#fixing-it,md#keeping-the-name,md#magusfile-authoring-diagnostics,md#members-that-declare-into-"
       }
     },
@@ -5893,6 +5901,18 @@
         "section": "reference",
         "tags": "MGS1038,magusfile,options,upgrade,removed,exclusive",
         "title": "MGS1038: a magus.project option was removed"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1039.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1039.md",
+      "source": "docs/reference/codes/magusfile/MGS1039.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1039,magusfile,spells,imports,upgrade,buzz",
+        "title": "MGS1039: magus is called without being imported"
       }
     },
     {
@@ -30900,6 +30920,36 @@
       "source": "docs/reference/codes/magusfile/MGS1038.md#why-this-stops-the-load-instead-of-ignoring-the-key",
       "attrs": {
         "anchor": "why-this-stops-the-load-instead-of-ignoring-the-key",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1039.md#mgs1039-magus-is-called-without-being-imported",
+      "kind": "docsection",
+      "label": "MGS1039: magus is called without being imported",
+      "source": "docs/reference/codes/magusfile/MGS1039.md#mgs1039-magus-is-called-without-being-imported",
+      "attrs": {
+        "anchor": "mgs1039-magus-is-called-without-being-imported",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1039.md#what-to-do",
+      "kind": "docsection",
+      "label": "What to do",
+      "source": "docs/reference/codes/magusfile/MGS1039.md#what-to-do",
+      "attrs": {
+        "anchor": "what-to-do",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1039.md#why",
+      "kind": "docsection",
+      "label": "Why",
+      "source": "docs/reference/codes/magusfile/MGS1039.md#why",
+      "attrs": {
+        "anchor": "why",
         "level": "2"
       }
     },
@@ -65040,6 +65090,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1039.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1039.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -69736,6 +69794,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1039",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS3001",
       "relation": "documents",
       "confidence": "inferred",
@@ -70049,14 +70115,6 @@
     {
       "source": "doc:CHANGELOG.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-session.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -71568,6 +71626,14 @@
     },
     {
       "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS1039",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS3001",
       "relation": "documents",
       "confidence": "inferred",
@@ -71881,14 +71947,6 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-session.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -83565,6 +83623,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1038.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1039.md",
+      "target": "diagnostic:MGS1039",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1039.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1039.md",
+      "target": "doc:libs/gopherbuzz/docs/codes/BZZ1001.md",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1039.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1039.md",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1039.md#mgs1039-magus-is-called-without-being-imported",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1039.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -115853,6 +115935,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1038.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1039.md#mgs1039-magus-is-called-without-being-imported",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1039.md#what-to-do",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1039.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1039.md#mgs1039-magus-is-called-without-being-imported",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1039.md#why",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1039.md"
     },
     {
       "source": "docsection:docs/reference/codes/magusfile/README.md#magusfile-authoring-diagnostics",

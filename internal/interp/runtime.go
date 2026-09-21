@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -585,7 +586,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		}
 		if err := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) }); err != nil {
 			_ = buzzSess.Close()
-			return nil, fmt.Errorf("magusfile: exec %s: %w", rel, err)
+			return nil, fmt.Errorf("magusfile: exec %s: %w", rel, hint.ExplainImplicitMagus(err))
 		}
 	}
 

@@ -233,6 +233,11 @@ const (
 	// removed key comes from an older one, and that advice sends someone already on the
 	// newest binary in a circle while the value they declared goes unhonored.
 	RemovedOption DiagnosticCode = "MGS1038"
+	// MagusNotImported is a magusfile, spell or script calling magus\ without importing
+	// it. magus was bound into every program implicitly until v0.5.0 made it an ordinary
+	// host module, so a file written for an older magus fails with a bare
+	// `undefined: magus` that says nothing about the one-line fix.
+	MagusNotImported DiagnosticCode = "MGS1039"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -466,7 +471,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
-	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption,
+	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
