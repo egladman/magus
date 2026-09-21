@@ -127,7 +127,7 @@ func (v jjVCS) History(ctx context.Context, dir string, limit int) ([]types.Comm
 // Describe reports "": jj has no native tag-describe (tags live in the colocated
 // git backend, with no first-class jj command for the git-describe shape). Per the
 // interface contract a backend without the concept returns "" rather than faking
-// it; a jj user needing tag info reaches for vcs.exe().
+// it; a jj user needing tag info reaches for vcs\cmd().
 func (v jjVCS) Describe(_ context.Context, _ string) (string, error) {
 	return "", nil
 }

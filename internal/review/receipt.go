@@ -192,7 +192,8 @@ func Record(cacheDir string, add []Receipt) error {
 	return os.Rename(tmp.Name(), dst)
 }
 
-// ReadStates reports each path's types.DiffReadState against the recorded receipts.
+// ReadStates reports each path as one of types.DiffReadUnread, DiffReadRead or
+// DiffReadStale, against the recorded receipts.
 //
 // One definition, because the CLI's preflight report and the console's review surface must
 // agree on what "read" means; two callers deciding for themselves is how one surface comes

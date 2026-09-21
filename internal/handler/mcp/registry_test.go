@@ -106,7 +106,7 @@ func TestRegistry_HandlersReadTheDeclaredParams(t *testing.T) {
 		require.NoError(t, err)
 		sources = append(sources, b...)
 	}
-	// magus_job decodes its row through types.Job's JSON tags (job.Merge) rather
+	// magus_job decodes its row through types.Job's JSON tags (job.ParseMerge) rather
 	// than reading each key, so that struct is where its param names are bound.
 	jobType, err := os.ReadFile(filepath.Join("..", "..", "..", "types", "job.go"))
 	require.NoError(t, err)

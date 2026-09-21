@@ -138,7 +138,7 @@ const cursorFile = "cursor.md"
 
 // Dir resolves the per-repository memory directory:
 // <XDG state>/magus/memory/<repo-basename>-<hash12>. The hash keys on repository
-// identity (repoid.Identity), not the checkout path, so every worktree AND every
+// identity, as internal/repoid resolves it, not the checkout path, so every worktree AND every
 // clone of a repo shares one memory. A store written under the older path-based key
 // is adopted on the way past.
 func Dir(root string) (string, error) {

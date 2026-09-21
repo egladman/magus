@@ -366,7 +366,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 }
 
 // TestPutLedgerMergesRatherThanReplaces proves the Buzz binding shares
-// internal/job.Merge with the magus_job MCP tool: a later put naming only
+// internal/job.ParseMerge with the magus_job MCP tool: a later put naming only
 // `state` must not erase the goal an earlier put declared.
 // Not parallel, and the env is why: see TestLedgerIsServedInProcess above. A root of
 // "" hashes to the same state directory in every checkout, so these rows would land in
@@ -387,7 +387,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 }
 
 // TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not
-// silently ignored; internal/job.Merge is what enforces this, and this pins that
+// silently ignored; internal/job.ParseMerge is what enforces this, and this pins that
 // the Buzz binding does not swallow its error.
 func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())

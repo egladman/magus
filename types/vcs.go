@@ -960,7 +960,7 @@ type VCSCheckpoint struct {
 	//
 	// It covers exactly what the backend's DirtyDiff covers, which is TRACKED content
 	// against the checked-out revision. Untracked files are UntrackedDigest's subject:
-	// this digest matches internal/diff.PatchDigest byte for byte, so a checkpoint and a
+	// this digest matches internal/changeset.PatchDigest byte for byte, so a checkpoint and a
 	// review session over one tree produce the same string, and folding anything else in
 	// would break that.
 	PatchDigest string `json:"patch_digest,omitempty" yaml:"patch_digest,omitempty"`

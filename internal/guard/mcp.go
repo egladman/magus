@@ -15,7 +15,7 @@ import (
 
 // mcpJudgedParams are the tool parameters a guard rule reads, in the order they render.
 //
-// Every field job.Merge applies, plus the two that name the call. A key this list omits
+// Every field job.ParseMerge applies, plus the two that name the call. A key this list omits
 // reaches the row with no rule having seen it, which is how a bound worker rewrote the
 // checkpoint its own work is graded against; TestMCPJudgedParamsCoverEveryMergedField holds
 // the two sides together.

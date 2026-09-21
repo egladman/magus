@@ -147,7 +147,7 @@ func untrackedDigest(ctx context.Context, dir string, res types.VCSResolution) s
 }
 
 // patchDigestBytes is how much of the hash the digest keeps: 16 bytes, rendered as
-// 32 hex chars: the width internal/diff.PatchDigest uses, which is the whole point
+// 32 hex chars: the width internal/changeset.PatchDigest uses, which is the whole point
 // (see patchDigest below). Still short enough to sit in a ledger cell.
 const patchDigestBytes = 16
 
@@ -155,7 +155,7 @@ const patchDigestBytes = 16
 // bytes, hex: 32 characters.
 //
 // The algorithm deliberately matches the review session's patch digest
-// (internal/diff.PatchDigest: hex over sum[:16], NOT 16 hex characters), so the two
+// (internal/changeset.PatchDigest: hex over sum[:16], NOT 16 hex characters), so the two
 // identities stay comparable: a checkpoint recorded when work was handed out and a
 // review session opened over the same tree must produce the SAME string, or neither
 // can be used to check the other. It is reimplemented rather than shared because the

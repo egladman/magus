@@ -18,7 +18,7 @@
 //   - spell.go, spell_buzz.go, command.go  spell loading, op dispatch, and command execution.
 //   - remote_cache.go  adapts a spell to the cache's remote-backend contract.
 //
-// Every binding is a buzz.DirectValue closure of the shape
+// Every binding is a vm.DirectValue closure of the shape
 // func(ctx, []buzz.Value) (buzz.Value, error); the marshal.go helpers keep
 // the argument-decoding at those call sites uniform rather than hand-rolled.
 package bindings

@@ -113,7 +113,7 @@ func TestCheckpointWithoutAResolvedVCS(t *testing.T) {
 
 // TestPatchDigest is the golden vector. The value is the first 16 BYTES of
 // sha256("--- a/x\n+++ b/x\n") in hex (32 characters, the exact shape
-// internal/diff.PatchDigest produces), computed independently of this package, so a
+// internal/changeset.PatchDigest produces), computed independently of this package, so a
 // change to the algorithm (a different hash, a different width, hashing something
 // other than the raw patch text) fails here rather than silently producing
 // identities that no longer match the review session's.
