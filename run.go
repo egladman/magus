@@ -2391,7 +2391,7 @@ func (m *Magus) targetHandler(name string) TargetHandler {
 // at a time, so it may be tight where the workspace-wide one cannot.
 //
 // A magusfile target is also bounded one layer down, where a ctx.needs-composed body
-// can carry its own ceiling (internal/interp.withDeclaredCeiling). This site is what
+// can carry its own ceiling (internal/interp.declaredTimeout). This site is what
 // covers a SPELL-backed target, which never reaches that closure; both are the same
 // context deadline, so a target covered twice is simply bounded twice.
 func (m *Magus) withTargetDeadline(ctx context.Context, pol types.Target) (context.Context, context.CancelFunc) {

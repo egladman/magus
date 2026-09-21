@@ -804,3 +804,60 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be a fiber")
 }
+
+// conditionalNeedsMagusfile declares a dependency inside a branch, which is the shape
+// that justifies parking a body rather than pre-resolving its dependencies from the
+// static graph.
+//
+// describe.Extract reads BOTH arms of the branch, so the declared graph names
+// container-only AND host-only: correct for `affected` and `explain`, which must
+// over-approximate, and wrong to execute. Only the running body knows which arm it
+// took, because it is the one that evaluated hasCharm.
+const conditionalNeedsMagusfile = `import "magus";
+import "fs";
+
+fun note(what: str) > void !> any {
+    var seen = "";
+    if (fs\exists("ran.txt")) { seen = fs\readFile("ran.txt"); }
+    fs\writeFile("ran.txt", seen + what + " ");
+}
+
+export fun always_runs(ctx: magus\Context, args: [str]) > void !> any { note("always"); }
+export fun container_only(ctx: magus\Context, args: [str]) > void !> any { note("container"); }
+export fun host_only(ctx: magus\Context, args: [str]) > void !> any { note("host"); }
+
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(always_runs);
+    if (ctx.hasCharm("container")) {
+        ctx.needs(container_only);
+    } else {
+        ctx.needs(host_only);
+    }
+    note("body");
+}
+`
+
+// TestConditionalNeedsDispatchesOnlyTheTakenBranch is the claim the fiber driver earns
+// its keep on: a parked ctx.needs reports the dependencies the body ACTUALLY asked for,
+// so the untaken arm of a branch never runs.
+//
+// Pre-resolving from the declared graph cannot do this. It would run both arms, which
+// for the root `build` target means building a container image on a host build.
+func TestConditionalNeedsDispatchesOnlyTheTakenBranch(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(conditionalNeedsMagusfile), 0o644))
+
+	_, err := interp.RunDir(context.Background(), dir, "build", nil)
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(dir, "ran.txt"))
+	require.NoError(t, err)
+	ran := string(raw)
+
+	assert.Contains(t, ran, "always", "the unconditional dependency must run")
+	assert.Contains(t, ran, "host", "the taken arm must run")
+	assert.NotContains(t, ran, "container",
+		"the UNTAKEN arm must not run; pre-resolving the declared graph would have run it")
+	assert.Contains(t, ran, "body", "the body must continue after its dependencies")
+}

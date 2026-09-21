@@ -444,7 +444,34 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 				return vm.Null, fmt.Errorf("ctx.needs: %w", err)
 			}
 		}
-		if err := runBuzzDependencies(callCtx, targets, names); err != nil {
+		// Park instead of blocking, WHEN a driver is there to resume us. What that buys
+		// is the ceiling: a blocking wait runs under the body's deadline, so a declared
+		// timeout ends up measuring the queue rather than the target. See
+		// interp.runTargetBody.
+		//
+		// The names ride a side channel rather than the suspend value, because the
+		// suspend value is what the call EVALUATES to: handing them back would make
+		// `final x = ctx.needs(format)` read the scheduler's internals, permanently.
+		// ctx.needs returns void, and suspending must not change that.
+		if w := types.DependencyWaitFromContext(callCtx); w != nil {
+			// The request carries its own CLOSURE, not just the names: the driver lives
+			// in internal/interp, which this package imports, so it cannot call back
+			// here. Handing it something it can simply invoke keeps the dependency
+			// pointing one way, and DependencyWait.Do times it without this site having
+			// to remember to.
+			w.Request(func(runCtx context.Context) error {
+				return runBuzzDependencies(runCtx, targets, names)
+			})
+			return vm.Null, vm.Suspend(vm.Null)
+		}
+		// Nothing driving this body: run them here and book the time by hand. A body
+		// reached through a path that does not drive fibers must still get its
+		// dependencies, and silently skipping them would be the worst failure this
+		// change could cause.
+		started := time.Now()
+		err := runBuzzDependencies(callCtx, targets, names)
+		types.DependencyWaitFromContext(callCtx).Add(time.Since(started))
+		if err != nil {
 			return vm.Null, fmt.Errorf("ctx.needs: %w", err)
 		}
 		return vm.Null, nil
@@ -542,7 +569,17 @@ func buildBuzzUses(sess *buzz.Session) func(context.Context, []vm.Value) (vm.Val
 		// only in the sense that a fiber which fails its acquire half has nothing
 		// to release; ResolveFiber is idempotent, so arming it first is harmless
 		// and covers a fiber that threw partway through acquiring.
-		defer func() { _, _ = sess.ResolveFiber(ctx, resource) }()
+		//
+		// WithoutCancel, and this is the whole point of the region: ResolveFiber
+		// checks ctx.Err() before it runs anything, so finalizing on the cancelled
+		// context skips the release half on exactly the path that most needs it. A
+		// Ctrl-C would leak whatever the resource holds. Pinned by
+		// TestHostDrivenFiberFinalizesUnderCancellationOnlyWithoutCancel.
+		//
+		// The release therefore runs after cancellation. It must stay short and
+		// non-blocking for that reason: this is error-path cleanup, not a second
+		// chance to do work the run was just told to stop doing.
+		defer func() { _, _ = sess.ResolveFiber(context.WithoutCancel(ctx), resource) }()
 		if _, err := sess.ResumeFiber(ctx, resource); err != nil {
 			return vm.Null, err
 		}
@@ -585,10 +622,10 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 	if len(names) == 0 {
 		return nil
 	}
-	// Everything below is time the CALLING body spends on targets other than itself, and
-	// its ceiling is running throughout. Recorded so a ceiling that expires can say which
-	// half of the elapsed time was its own work; see types.TrackDependencyWait.
-	defer func(started time.Time) { types.AddDependencyWait(callCtx, time.Since(started)) }(time.Now())
+	// The time this takes is the CALLING body's dependency time, and it is booked by
+	// whoever invoked this, not here: DependencyWait.Do for a parked body, and the
+	// inline branch of ctx.needs for a body nothing is driving. Timing it here too
+	// would count every dependency twice.
 	// These are dependencies (ctx.needs), so a service op among them is supervised
 	// in the background rather than blocked on (see runCommand). The directly-run
 	// target is dispatched without this marker, so it still foregrounds.
