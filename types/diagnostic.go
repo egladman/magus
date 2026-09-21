@@ -227,6 +227,12 @@ const (
 	// declare a VersionKey that extracts the version alone, which keeps a genuine tool
 	// upgrade keying everything while the feed keys only its drivers.
 	ObservationKeyedAsVersion DiagnosticCode = "MGS1037"
+	// RemovedOption is a magus.project key that an older magus accepted and this one
+	// removed. It is fatal where an unrecognized key is only ignored: an unrecognized key
+	// may come from a NEWER magus, so ignoring it with upgrade advice is right, but a
+	// removed key comes from an older one, and that advice sends someone already on the
+	// newest binary in a circle while the value they declared goes unhonored.
+	RemovedOption DiagnosticCode = "MGS1038"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -460,7 +466,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
-	FootprintDropsOpGlobs, ObservationKeyedAsVersion,
+	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

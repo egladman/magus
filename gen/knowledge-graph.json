@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6471,
-  "edge_count": 11570,
+  "node_count": 6477,
+  "edge_count": 11581,
   "relations": [
     {
       "id": "annotates",
@@ -791,6 +791,14 @@
       "label": "MGS1037",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1037/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1038",
+      "kind": "diagnostic",
+      "label": "MGS1038",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1038/"
       }
     },
     {
@@ -1737,7 +1745,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1931",
+        "dir_files": "1936",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -2007,7 +2015,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "551",
+        "dir_files": "556",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -2057,8 +2065,8 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "228",
-        "dir_languages": "markdown,md#an-endpoint-carries-this-in-a-sharper-form,md#cause,md#codes,md#confirming-the-fix,md#detection,md#exact-paths-only,md#example,md#fix,md#fixing-it,md#keeping-the-name,md#magusfile-authoring-diagnostics,md#members-that-declare-into-a-workspace,m"
+        "dir_files": "233",
+        "dir_languages": "markdown,md#an-endpoint-carries-this-in-a-sharper-form,md#cause,md#codes,md#confirming-the-fix,md#detection,md#exact-paths-only,md#example,md#exclusive,md#fix,md#fixing-it,md#keeping-the-name,md#magusfile-authoring-diagnostics,md#members-that-declare-into-"
       }
     },
     {
@@ -5873,6 +5881,18 @@
         "section": "reference",
         "tags": "MGS1037,magusfile,cache,observations,versions,scanners,spells",
         "title": "MGS1037: a tool's observation is keyed as its version"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1038.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1038.md",
+      "source": "docs/reference/codes/magusfile/MGS1038.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1038,magusfile,options,upgrade,removed,exclusive",
+        "title": "MGS1038: a magus.project option was removed"
       }
     },
     {
@@ -30850,6 +30870,46 @@
       "source": "docs/reference/codes/magusfile/MGS1037.md#why-it-is-declared-not-measured",
       "attrs": {
         "anchor": "why-it-is-declared-not-measured",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1038.md#exclusive",
+      "kind": "docsection",
+      "label": "exclusive",
+      "source": "docs/reference/codes/magusfile/MGS1038.md#exclusive",
+      "attrs": {
+        "anchor": "exclusive",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1038.md#mgs1038-a-magusproject-option-was-removed",
+      "kind": "docsection",
+      "label": "MGS1038: a magus.project option was removed",
+      "source": "docs/reference/codes/magusfile/MGS1038.md#mgs1038-a-magusproject-option-was-removed",
+      "attrs": {
+        "anchor": "mgs1038-a-magusproject-option-was-removed",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1038.md#what-to-do",
+      "kind": "docsection",
+      "label": "What to do",
+      "source": "docs/reference/codes/magusfile/MGS1038.md#what-to-do",
+      "attrs": {
+        "anchor": "what-to-do",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1038.md#why-this-stops-the-load-instead-of-ignoring-the-key",
+      "kind": "docsection",
+      "label": "Why this stops the load instead of ignoring the key",
+      "source": "docs/reference/codes/magusfile/MGS1038.md#why-this-stops-the-load-instead-of-ignoring-the-key",
+      "attrs": {
+        "anchor": "why-this-stops-the-load-instead-of-ignoring-the-key",
         "level": "2"
       }
     },
@@ -64982,6 +65042,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1038.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1038.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -69662,6 +69730,22 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1037",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS1038",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS3001",
       "relation": "documents",
       "confidence": "inferred",
@@ -71471,6 +71555,22 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS1033",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS1037",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS1038",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -83451,6 +83551,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1038.md",
+      "target": "diagnostic:MGS1038",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1038.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1038.md",
+      "target": "doc:docs/decisions/0001-bounded-concurrency-with-recursive-invocation.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1038.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1038.md",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1038.md#mgs1038-a-magusproject-option-was-removed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1038.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -115723,6 +115847,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1037.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1038.md#mgs1038-a-magusproject-option-was-removed",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1038.md#what-to-do",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1038.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1038.md#mgs1038-a-magusproject-option-was-removed",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1038.md#why-this-stops-the-load-instead-of-ignoring-the-key",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1038.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1038.md#what-to-do",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1038.md#exclusive",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1038.md"
     },
     {
       "source": "docsection:docs/reference/codes/magusfile/README.md#magusfile-authoring-diagnostics",

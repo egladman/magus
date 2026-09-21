@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/egladman/magus/types"
 )
 
 // CheckKeys splits the keys of a schema map into a typo, which is fatal, and keys this
@@ -13,12 +15,18 @@ import (
 // load, and that takes out `magus run go-build` too, so the workspace cannot build the
 // binary that would understand the key.
 //
+// A key in removed is fatal too, with its reason: it came from an older magus, so the
+// upgrade advice an unrecognized key gets would be wrong.
+//
 // ignored is only the keys preceding the typo, and MapKeys is insertion-ordered, so a
 // caller reports what it dropped above the key it refuses.
-func CheckKeys(present, known []string, where string) (ignored []string, err error) {
+func CheckKeys(present, known []string, removed map[string]string, where string) (ignored []string, err error) {
 	for _, k := range present {
 		if slices.Contains(known, k) {
 			continue
+		}
+		if why, ok := removed[k]; ok {
+			return ignored, types.DiagnosticErrorf(types.RemovedOption, "%s: option %q was %s", where, k, why)
 		}
 		if sug := Nearest(k, known); sug != "" {
 			return ignored, fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
