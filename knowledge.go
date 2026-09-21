@@ -29,7 +29,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/oci"
-	"github.com/egladman/magus/internal/repo"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
@@ -430,7 +429,7 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 		// still need reducing here.
 		out = append(out, knowledge.AgentContact{
 			Session: rec.Session,
-			Path:    repo.CheckoutRelative(ev.Text),
+			Path:    vcs.CheckoutRelative(ev.Text),
 			Read:    ev.Kind == sessions.EventFileRead,
 			Write:   ev.Kind == sessions.EventFileWrite,
 			AtMs:    ev.AtMs,

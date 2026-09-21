@@ -1,5 +1,5 @@
-// Package repo answers which repository a checkout belongs to, and renders that
-// answer as the directory name the per-repository state stores key on.
+// This file answers which repository a checkout belongs to, and renders that answer as
+// the directory name the per-repository state stores key on.
 //
 // It exists because "the repository" had two definitions and both were the checkout
 // path: internal/memory and internal/sessions each carried a copy of the rule, which
@@ -14,17 +14,23 @@
 // Identity is the default remote, which is the only name two clones of one
 // repository share.
 //
-// The remote comes from vcs.ConfiguredRemote, which reads each backend's own config
-// file and never spawns one. Identity resolves several times per command on the guard's
-// write path, so it must be cheap, and it must be ONE rule every caller shares: a driver
-// where one backend resolves and a file read where another does not is two rules, which
-// is the split this package exists to close.
+// The remote comes from ConfiguredRemote, which reads each backend's own config file and
+// never spawns one. Identity resolves several times per command on the guard's write
+// path, so it must be cheap, and it must be ONE rule every caller shares: a driver where
+// one backend resolves and a file read where another does not is two rules, which is the
+// split this exists to close.
 //
 // Anything it cannot reduce falls back to the checkout path, which is what the stores
 // keyed on before remotes did. Falling back SPLITS two clones, which is visible as a
 // store that looks empty; a wrong reduction would MERGE two repositories, which nothing
 // here can recover from.
-package repo
+//
+// It lives in this package rather than beside the stores that call it because identity
+// is a VCS question answered from VCS config, and the one time it lived elsewhere it
+// carried its own copy of the backend claim order and of gitLinkedDir, both of which
+// drifted from the originals here.
+
+package vcs
 
 import (
 	"crypto/sha256"
@@ -35,8 +41,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/egladman/magus/vcs"
 )
 
 // StateDir resolves where per-repository state of the given kind lives:
@@ -79,7 +83,7 @@ func LegacyDir(base, kind, root string) string {
 // Closing that needs a recorded identity history, which is more machinery than the case
 // has earned so far.
 func identity(root string) string {
-	if u := vcs.ConfiguredRemote(root); u != "" {
+	if u := ConfiguredRemote(root); u != "" {
 		if id := remoteIdentity(u); id != "" {
 			return id
 		}
@@ -94,7 +98,7 @@ func identity(root string) string {
 // rule's blind spot for a worktree of a bare repository. A "fix" here changes the key an
 // existing store is filed under, which does not repair that store, it hides it.
 func pathIdentity(root string) string {
-	gitdir, ok := linkedGitDir(root)
+	gitdir, ok := gitLinkedDir(root)
 	if !ok {
 		return root
 	}
@@ -160,23 +164,6 @@ func Adopt(legacy, dir string) error {
 func present(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil || !errors.Is(err, fs.ErrNotExist)
-}
-
-// linkedGitDir reports the gitdir a .git FILE points at. A plain checkout's .git is a
-// directory, which reads as absent here.
-func linkedGitDir(root string) (string, bool) {
-	b, err := os.ReadFile(filepath.Join(root, ".git"))
-	if err != nil {
-		return "", false
-	}
-	gitdir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
-	if gitdir == "" {
-		return "", false
-	}
-	if !filepath.IsAbs(gitdir) {
-		gitdir = filepath.Join(root, gitdir)
-	}
-	return gitdir, true
 }
 
 // remoteIdentity reduces a remote URL to what two spellings of one repository share:

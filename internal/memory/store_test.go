@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/repo"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +32,7 @@ func TestDirAdoptsAPathKeyedStore(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", state)
 	root := gitClone(t, "git@github.com:egladman/magus.git")
 
-	legacy := repo.LegacyDir(state, "memory", root)
+	legacy := vcs.LegacyDir(state, "memory", root)
 	require.NoError(t, os.MkdirAll(filepath.Join(legacy, recordsSubdir), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, recordsSubdir, "kept.md"), []byte("---\nname: kept\ntype: pointer\nrefs: []\ncreated: 1\n---\n"), 0o644))
 
