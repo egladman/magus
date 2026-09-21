@@ -130,7 +130,7 @@ func parseMagusfile(t *testing.T, dir string) error {
 // the spell by value.
 func TestBuzzLocalSpellImport(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir) // the import resolves relative to the cwd
+	t.Chdir(dir)
 
 	writeFile(t, dir, "spells/widget.buzz", `import "magus/spell";
 export fun mgs_getName() > str { return "widgetimport"; }

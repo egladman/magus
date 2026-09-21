@@ -721,10 +721,14 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 // against (see buzz.WithSearchPaths). `?` is the import name, filled in by the
 // resolver. Each of gopherbuzz's upstream PROJECT-RELATIVE layouts (a sibling
 // file, or a library directory) is searched, plus magus's own magusfiles/
-// convention, in order relative to the process cwd, the project root, and the
-// workspace root. The workspace root is read from ctx (types.WithWorkspace) and
-// omitted when absent or identical to the project dir, so the common single-project
-// case yields no duplicate entry.
+// convention, in order relative to the project root, then the workspace root. The
+// workspace root is read from ctx (types.WithWorkspace) and omitted when absent or
+// identical to the project dir, so the common single-project case yields no
+// duplicate entry.
+//
+// The process cwd is never a root: `magus --root <tree>` run from another checkout
+// would otherwise load that checkout's modules. An empty projectDir (the REPL under
+// --no-autoload) leaves the templates relative, which is the REPL's own directory.
 //
 // gopherbuzz's SYSTEM paths (/usr/share/buzz, /usr/local/share/buzz, $BUZZ_PATH)
 // are deliberately NOT adopted, and BUZZ_INCLUDE_PATH is cleared at the call sites:
@@ -733,8 +737,7 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 // sibling is not auto-tracked for affected/drift; declare it in the project's
 // `sources` so an edit marks the project dirty.
 func magusSearchPaths(ctx context.Context, projectDir string) []string {
-	// Roots searched, in order. "" is the process cwd (a bare, cwd-relative template).
-	roots := []string{"", projectDir}
+	roots := []string{projectDir}
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		if root := ws.Root(); root != "" && root != projectDir {
 			roots = append(roots, root)
@@ -751,11 +754,7 @@ func magusSearchPaths(ctx context.Context, projectDir string) []string {
 	paths := make([]string, 0, len(roots)*len(templates))
 	for _, r := range roots {
 		for _, t := range templates {
-			if r == "" {
-				paths = append(paths, t)
-			} else {
-				paths = append(paths, filepath.Join(r, t))
-			}
+			paths = append(paths, filepath.Join(r, t))
 		}
 	}
 	return paths

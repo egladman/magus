@@ -150,6 +150,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`--root` from another directory no longer loads that directory's modules.** A
+  magusfile's imports resolve against its project, then the workspace root.
 - **A vulnerability database release no longer invalidates every Go target's cache.** The
   database date keys only targets that run govulncheck.
 - **Replaying a fully cached run is fast again.** Tool probes run concurrently and skip
