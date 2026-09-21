@@ -2,9 +2,14 @@ The workspace the core-loop recording runs against.
 
 Four small stdlib-only Go projects plus a root aggregator, named after the same
 acme monorepo the console demo uses so both surfaces show one product.
-Independent modules rather than cross-project replace directives: what is on
-screen is the cache and the affected set, and inter-module wiring would cost
-demo lines without adding to either.
+
+apps/admin depends on libs/authkit, and that one edge is the whole subject of
+the last act: editing authkit has to reach admin for `affected` to be narrowing
+rather than guessing. The modules were independent once, on the grounds that
+inter-module wiring cost demo lines without adding to the cache or affected
+story. It did add to it. With no edge in the graph, the only projects joining
+the edited one were projects seeded by files nothing declared, so the recording
+demonstrated directory containment while the caption called it a dependency.
 
 Materialized to a temp directory at record time, never into this checkout. A
 magusfile.buzz committed as a live file anywhere below the root would be
@@ -12,14 +17,32 @@ discovered as a real project of the magus repo; inside one txtar it is data.
 The temp directory is also what makes the cache story honest - magus keeps its
 cache in .magus/ under the workspace root, so a fresh directory is a genuinely
 cold cache and the first run really does the work the second replays.
+
+The .gitignore is what every real workspace has and this one lacked: without it
+the lock files magus writes under .magus/, and the binaries go-build leaves in
+each project, are changed files nothing declares, so they seed their projects
+and `affected` reports magus's own output as the reason it reran.
+-- .gitignore --
+.magus/
+/apps/admin/admin
+/services/ledger/ledger
 -- apps/admin/go.mod --
 module acme/admin
 
 go 1.25
+
+require acme/authkit v0.0.0
+
+replace acme/authkit => ../../libs/authkit
 -- apps/admin/magusfile.buzz --
 import "magus";
 import "magus/spell/go";
 import "proc";
+// The one cross-project edge in the demo. admin's package imports acme/authkit
+// through a replace directive, so authkit has to be built before admin is: the
+// handle is what puts that in the graph, and what makes the last act of the
+// recording narrow to these two rather than to whatever happened to be dirty.
+import "project/../../libs/authkit" as authkit;
 
 magus\project({
     "spells": [go],
@@ -27,7 +50,7 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); go["go-vet"](ctx); }
-export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); go["go-build"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight, authkit\build); go["go-build"](ctx); }
 export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); go["go-test"](ctx); }
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build, test); }
 // audit fails on purpose, and is NOT part of ci.
@@ -47,12 +70,17 @@ package main
 import (
 	"flag"
 	"fmt"
+
+	"acme/authkit"
 )
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	flag.Parse()
 	fmt.Printf("admin listening on %s\n", *addr)
+	if _, err := authkit.Parse("bootstrap.0"); err != nil {
+		fmt.Printf("admin: rejecting tokens: %v\n", err)
+	}
 }
 -- apps/admin/main_test.go --
 package main

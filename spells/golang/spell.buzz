@@ -33,19 +33,24 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // carries its own platform field (see internal/cache/manifest.go) and refuses to replay
 // across platforms; that suffix was otherwise the ONLY thing putting platform into the key.
 //
-// govulncheck declares NO key on purpose. Its verdict comes from the Go vulnerability
-// DATABASE, and `-version` reports that database's last-modified date alongside the Go
-// and scanner versions. Extracting a semver would take the Go version (printed first)
-// and throw the database date away, leaving a newly published CVE unable to invalidate
-// a cached pass. Keying on the whole output is correct, and declaring nothing asks for it.
+// govulncheck declares an OBSERVE probe and NO version probe. Its verdict comes from the
+// Go vulnerability DATABASE, and `-version` reports that database's last-modified date
+// alongside the Go and scanner versions, so the whole output is what has to key a
+// govulncheck run: extracting a semver would take the Go version, printed first, and
+// throw the database date away, leaving a newly published CVE unable to invalidate a
+// cached pass.
 //
-// It declares the same argv as an OBSERVE probe as well, and the duplication is the
-// point: the database date reaching the key through the version probe is an accident of
-// govulncheck printing four facts under one flag, and an accident is not something the
-// doctor check for external ops (MGS1033) can read. Declared, it is a fact a spell states
-// rather than one a reader has to notice. The cost is one extra fast spawn, and only for
-// a target that actually composes the op, since observation probes are scoped to those
-// unlike version probes, which run for every project.
+// It declares that argv ONLY as an observation, because a version probe runs for every
+// project and lands in every target's key. MEASURED 2026-09-20: `build` in a project that
+// never composes the op was keyed on "DB updated: 2026-09-16 18:00:43 +0000 UTC", so each
+// database publication invalidated every build, test and lint entry in every Go project.
+// The scoped observation carries the same four lines to the targets that DO drive the op,
+// which is the whole reason it was declared, so nothing that should invalidate stops
+// invalidating. Version probes stay the wrong channel for a fact that moves on a clock.
+//
+// Nothing is lost to the version window: govulncheck declares no bounds (see below), so
+// its probe fed no gate. What it did feed is `magus describe tools`, which no longer
+// reports a govulncheck line.
 //
 // There is no update arm, because there is nothing to refresh: govulncheck fetches from
 // https://vuln.go.dev on every run and caches nothing locally. It CAN be pointed at a
@@ -57,7 +62,10 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // these ops need to function - 1.21 is where the toolchain line in go.mod became
 // something the module ops rely on - not which Go a repo has qualified. A ceiling here
 // would be this spell deciding that nobody may run a newer Go, which is a workspace's
-// call: `tools:` in magus.yaml is where that goes, and the two are intersected.
+// call: the `tools` key on magus\project is where that goes, and the two are intersected.
+// On the project and NOT in magus.yaml, deliberately, because config merges a user-global
+// tier beneath the workspace and a bound living there would gate every workspace on one
+// machine from a file nobody else reads. types/project.go states the rule.
 //
 // golangci-lint and govulncheck declare no window. Neither has a version below which
 // the ops are known to break, and inventing one to look thorough would fail builds over
@@ -67,8 +75,7 @@ export fun mgs_getTools() > {str: Tool} {
         "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch},
                    supported = VersionBounds{min = "1.21"}},
         "golangci-lint": Tool{probe = Command{bin = "golangci-lint", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
-        "govulncheck": Tool{probe = Command{bin = "govulncheck", args = ["-version"]},
-                            observe = Command{bin = "govulncheck", args = ["-version"]}},
+        "govulncheck": Tool{observe = Command{bin = "govulncheck", args = ["-version"]}},
     };
 }
 
@@ -185,7 +192,9 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
-// pinned by whatever the workspace uses, and mgs_getVersionProbes records which.
+// pinned by whatever the workspace uses, and the OBSERVE probe records which, alongside the
+// database date, for the targets that compose this op. There is no version probe: see the
+// tools table above for why one would key every target in the project.
 fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."], external = External.reads}; }
 // magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands
 // in the tree; scip-go writes there via --output. The runner resolves the bare

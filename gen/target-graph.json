@@ -1144,6 +1144,14 @@
             },
             {
               "project": ".",
+              "glob": "libs/pricing/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "libs/pricing/pricing.json"
+            },
+            {
+              "project": ".",
               "glob": "console/src/styles/tokens.css"
             },
             {
@@ -1403,6 +1411,14 @@
             {
               "project": ".",
               "glob": "libs/commentdash/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "libs/pricing/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "libs/pricing/pricing.json"
             },
             {
               "project": ".",
@@ -3393,6 +3409,161 @@
           "chain": [
             {
               "target": "preflight"
+            }
+          ],
+          "reads_secrets": false
+        }
+      ]
+    },
+    {
+      "path": "libs/pricing",
+      "name": "libs/pricing",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight",
+          "reads_secrets": false
+        },
+        {
+          "name": "generate",
+          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "dependencies": [
+            "preflight",
+            "index-generate"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "target": "index-generate",
+              "callIndex": 1
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "index-generate",
+          "declared": "index_generate",
+          "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
+          "reads_files": [
+            {
+              "project": "libs/pricing",
+              "glob": "../../**/MAGUS.md"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "MAGUS.md"
+            }
+          ]
+        },
+        {
+          "name": "format",
+          "doc": "No go-mod-tidy, unlike the sibling libraries: this package has no go.mod, so tidy here would rewrite the ROOT module's from a descendant project, which is the cross-project write magus rejects as MGS3001.",
+          "dependencies": [
+            "generate"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-fmt"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "generate"
+            }
+          ],
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.go"
+            }
+          ]
+        },
+        {
+          "name": "lint",
+          "doc": "go-vet only.",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-vet"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "build",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "test",
+          "doc": "No coverage profile, unlike the sibling libraries: those are separate modules whose statements the root suite never enters.",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-test"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "ci",
+          "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
+          "dependencies": [
+            "lint",
+            "build",
+            "test"
+          ],
+          "chain": [
+            {
+              "target": "lint"
+            },
+            {
+              "target": "build"
+            },
+            {
+              "target": "test"
             }
           ],
           "reads_secrets": false

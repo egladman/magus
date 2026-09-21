@@ -48,7 +48,11 @@ const (
 	// affected set (the entire point of that act) had scrolled off the top
 	// before the frame was taken. The unused rows are cropped back off at render
 	// time rather than paid for in the picture.
-	rows = 34
+	//
+	// Raised from 34 when the gate-inheritance notice began explaining the delta
+	// since the last green gate, one line per changed file, which is unbounded in
+	// a way the rest of the act is not.
+	rows = 48
 
 	capturePath = "tapes/core-loop.capture"
 	sessionPath = "tapes/core-loop.session.sh"

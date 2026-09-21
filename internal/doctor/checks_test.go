@@ -6,6 +6,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -859,4 +860,63 @@ func TestSameStepWritesCheckIsRegistered(t *testing.T) {
 	require.NotNil(t, def)
 	assert.Equal(t, types.UnorderedSameStepWrite, def.Code)
 	assert.True(t, def.NeedsWorkspace, "it reads declarations, which only exist once the workspace loads")
+}
+
+// spellWithTool builds a project binding one spell that declares one tool, which is the
+// only input MGS1037 reads.
+func spellWithTool(tool string, t spells.Tool) []*types.Project {
+	return []*types.Project{{Path: ".", Name: "root",
+		ResolvedSpells: []*spells.Spell{spells.NewSpell("go", spells.WithTools(map[string]spells.Tool{tool: t}))}}}
+}
+
+// TestObservationKeyedAsVersion is MGS1037. The four cases are the four declaration
+// shapes that exist in-tree, so each one names the spell it is standing in for.
+func TestObservationKeyedAsVersion(t *testing.T) {
+	probe := spells.Command{Bin: "govulncheck", Args: []string{"-version"}}
+
+	t.Run("same command, no key -> fail", func(t *testing.T) {
+		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+
+		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
+			spells.Tool{Probe: probe, Observe: probe}))
+
+		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		require.Len(t, got.Details, 1)
+		assert.Contains(t, got.Details[0], "govulncheck -version")
+		assert.Contains(t, got.Message, "MGS1037")
+	})
+
+	t.Run("different args -> ok", func(t *testing.T) {
+		// spells/docker: `trivy version` keys the cache, `trivy version --format json`
+		// is the observation. One binary, two commands, no leak.
+		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+
+		got := r.checkObservationKeyedAsVersion(spellWithTool("trivy", spells.Tool{
+			Probe:   spells.Command{Bin: "trivy", Args: []string{"version"}},
+			Observe: spells.Command{Bin: "trivy", Args: []string{"version", "--format", "json"}},
+		}))
+
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+
+	t.Run("same command with a key -> ok", func(t *testing.T) {
+		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+
+		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck", spells.Tool{
+			Probe: probe, Observe: probe, Key: spells.VersionKey{UpTo: spells.VersionPatch},
+		}))
+
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+
+	t.Run("observe with no probe -> ok", func(t *testing.T) {
+		// The shape the go spell carries today, and the one a check reading only
+		// Observe would misreport.
+		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+
+		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
+			spells.Tool{Observe: probe}))
+
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
 }

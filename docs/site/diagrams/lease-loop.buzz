@@ -70,7 +70,7 @@ export fun leaseLoopDiagram() > Diagram {
             Edge{ src = "verify", dst = "integrate" },
             Edge{ src = "integrate", dst = "cp", srcSide = "left", dstSide = "left", bend = 16 },
 
-            // The feedback leg: a released path is a ledger update, not a new step, so it
+            // The feedback leg: a released path is a job-row update, not a new step, so it
             // returns to the same row the lease was declared in.
             // bend sits at 740 rather than the middle of the 16px corridor: a bend exactly
             // between the two boxes leaves a zero-length final leg, and an arrowhead on one
@@ -78,7 +78,7 @@ export fun leaseLoopDiagram() > Diagram {
             Edge{ src = "work", dst = "decl", label = "release", kind = "accent",
                   srcSide = "left", dstSide = "right", bend = 740 },
 
-            Edge{ src = "decl", dst = "plan", label = "ledger rows",
+            Edge{ src = "decl", dst = "plan", label = "job rows",
                   srcSide = "bottom", srcSlot = 2, srcSlots = 2, dstSide = "top", bend = 196 },
             Edge{ src = "human", dst = "plan", label = "watches",
                   srcSide = "top", dstSide = "bottom" },

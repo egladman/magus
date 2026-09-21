@@ -106,6 +106,7 @@ libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/coverage.out merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/coverage.out merge=magus linguist-generated
+libs/pricing/MAGUS.md merge=magus linguist-generated
 libs/testlayout/MAGUS.md merge=magus linguist-generated
 libs/testlayout/coverage.out merge=magus linguist-generated
 libs/textsearch/MAGUS.md merge=magus linguist-generated

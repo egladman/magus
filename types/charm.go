@@ -50,18 +50,6 @@ const CharmGHA = "gha"
 // during an unrelated build. Stripped from ci alongside rw (see RunCI).
 const CharmUpdate = "update"
 
-// CharmUpdateAlias is the spelling CharmUpdate had before a second op claimed the grant.
-//
-// compat(until: no workspace magus supports still spells this charm "relock"): the charm
-// was named relock while go mod tidy was the only op that claimed it. NormalizeCharm
-// resolves it to CharmUpdate, so `target:relock` keeps running for one release and every
-// consumer downstream (spell charm arms, the ci strip, the typo guard) sees only update.
-// Observing that it is safe to drop: a release carrying the deprecation notice
-// hintCanonicalSpelling prints has shipped, and `magus query charm=relock` over the
-// workspaces you support returns nothing. Delete this const and the NormalizeCharm branch
-// together; the spell arms and docs already say update.
-const CharmUpdateAlias = "relock"
-
 // reservedCharms are the built-in charm names magus recognizes without any target
 // declaring them. Listed once here so the typo guard (IsReservedCharm) and the
 // doctor name-collision check (ReservedCharms) cannot drift. The entries are
@@ -77,16 +65,11 @@ func IsReservedCharm(name string) bool {
 	return slices.Contains(reservedCharms, NormalizeCharm(name))
 }
 
-// NormalizeCharm canonicalizes a charm name: Normalize's case and separator folding,
-// plus the one compatibility alias magus still answers to. Every path that reads a charm
-// name goes through it, so a run that says relock reaches a spell, a magusfile and the ci
-// strip as update and none of them has to know the alias exists.
-func NormalizeCharm(name string) string {
-	if n := Normalize(name); n != CharmUpdateAlias {
-		return n
-	}
-	return CharmUpdate
-}
+// NormalizeCharm canonicalizes a charm name with Normalize's case and separator
+// folding. It stays a distinct name from Normalize because every charm path routes
+// through it, so a spell arm, a magusfile and the ci strip compare one spelling and
+// a future alias has one place to land.
+func NormalizeCharm(name string) string { return Normalize(name) }
 
 // ReservedCharmDoc returns a one-line description of a reserved built-in charm, or
 // "" for a name that is not reserved. It is the single source `magus describe charm`

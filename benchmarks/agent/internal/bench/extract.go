@@ -11,22 +11,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/pricing"
 )
-
-const tokensPerPriceUnit = 1_000_000.0
-
-// A transcript records the dated model id the API served (the alias plus a
-// -YYYYMMDD suffix); the pricing table is keyed by alias, so the date is
-// stripped before lookup.
-var datedModelSuffix = regexp.MustCompile(`-\d{8}$`)
 
 // Tool names whose call counts feed file_reads / re_read_rate.
 var readTools = map[string]bool{"Read": true, "NotebookRead": true}
@@ -34,65 +26,6 @@ var readTools = map[string]bool{"Read": true, "NotebookRead": true}
 var testFileMarkers = []string{"_test.", ".test."}
 
 var requiredMeta = []string{"run_id", "arm", "task", "rep", "model"}
-
-// Rates are USD per million tokens for one model, in the pricing table's units.
-type Rates struct {
-	Input        float64 `json:"input"`
-	Output       float64 `json:"output"`
-	CacheRead    float64 `json:"cache_read"`
-	CacheWrite5m float64 `json:"cache_write_5m"`
-	CacheWrite1h float64 `json:"cache_write_1h"`
-}
-
-// PriceTable is pricing.json's models block: the five rates of every model the
-// extractor may price, keyed by model alias.
-type PriceTable map[string]Rates
-
-// Lookup finds a model's rates by its id, then by the id with its date stripped.
-func (t PriceTable) Lookup(model string) (Rates, bool) {
-	if r, ok := t[model]; ok {
-		return r, true
-	}
-	r, ok := t[datedModelSuffix.ReplaceAllString(model, "")]
-	return r, ok
-}
-
-// LoadPricing reads the per-model price table. A model must carry all five
-// rates; a table with no models is an error.
-func LoadPricing(file string) (PriceTable, error) {
-	raw, err := os.ReadFile(file)
-	if err != nil {
-		return nil, err
-	}
-	var doc struct {
-		Models map[string]map[string]*float64 `json:"models"`
-	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil, fmt.Errorf("pricing table %s: %w", file, err)
-	}
-	if len(doc.Models) == 0 {
-		return nil, fmt.Errorf("pricing table %s has no models", file)
-	}
-	table := PriceTable{}
-	for model, fields := range doc.Models {
-		var rates Rates
-		for _, rate := range []struct {
-			name string
-			dst  *float64
-		}{
-			{"input", &rates.Input}, {"output", &rates.Output}, {"cache_read", &rates.CacheRead},
-			{"cache_write_5m", &rates.CacheWrite5m}, {"cache_write_1h", &rates.CacheWrite1h},
-		} {
-			v := fields[rate.name]
-			if v == nil {
-				return nil, fmt.Errorf("pricing table %s: model %s lacks the five rates: no %s", file, model, rate.name)
-			}
-			*rate.dst = *v
-		}
-		table[model] = rates
-	}
-	return table, nil
-}
 
 // usageCounts are the five billable counters of one assistant turn, or their
 // sum over a model.
@@ -107,13 +40,13 @@ func (u usageCounts) add(o usageCounts) usageCounts {
 	}
 }
 
-func (u usageCounts) cost(r Rates) float64 {
+func (u usageCounts) cost(r pricing.Rates) float64 {
 	total := 0.0
-	total += float64(u.input) * r.Input / tokensPerPriceUnit
-	total += float64(u.output) * r.Output / tokensPerPriceUnit
-	total += float64(u.cacheRead) * r.CacheRead / tokensPerPriceUnit
-	total += float64(u.cacheWrite5m) * r.CacheWrite5m / tokensPerPriceUnit
-	total += float64(u.cacheWrite1h) * r.CacheWrite1h / tokensPerPriceUnit
+	total += float64(u.input) * r.Input / pricing.TokensPerPriceUnit
+	total += float64(u.output) * r.Output / pricing.TokensPerPriceUnit
+	total += float64(u.cacheRead) * r.CacheRead / pricing.TokensPerPriceUnit
+	total += float64(u.cacheWrite5m) * r.CacheWrite5m / pricing.TokensPerPriceUnit
+	total += float64(u.cacheWrite1h) * r.CacheWrite1h / pricing.TokensPerPriceUnit
 	return total
 }
 
@@ -126,12 +59,12 @@ func (u usageCounts) tokens() TokenCounts {
 }
 
 // priceUsage costs the per-model token totals. An unpriced model stops the run.
-func priceUsage(byModel map[string]usageCounts, pricing PriceTable, runID string) (float64, error) {
+func priceUsage(byModel map[string]usageCounts, table pricing.Table, runID string) (float64, error) {
 	total := 0.0
 	for _, model := range slices.Sorted(maps.Keys(byModel)) {
-		rates, ok := pricing.Lookup(model)
-		if !ok {
-			return 0, fmt.Errorf("%s: model %q is absent from the pricing table; add its published prices", runID, model)
+		rates, err := table.Lookup(model)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", runID, err)
 		}
 		total += byModel[model].cost(rates)
 	}
@@ -157,7 +90,7 @@ func contentText(content any) (string, error) {
 		}
 		return strings.Join(parts, "\n"), nil
 	}
-	raw, err := pycompat.Marshal(content, 0)
+	raw, err := json.Marshal(content)
 	return string(raw), err
 }
 
@@ -173,18 +106,21 @@ func blockText(block any) (string, error) {
 		case "image":
 			return "[image]", nil
 		}
-		raw, err := pycompat.Marshal(b, 0)
+		raw, err := json.Marshal(b)
 		return string(raw), err
 	}
 	return "", nil
 }
 
+// intField reads a counter a transcript writes as a JSON number. A fractional
+// value reports absent rather than truncating: a token count is never 3.5, so
+// one means the field is not what this reader takes it for.
 func intField(m map[string]any, key string) (int64, bool) {
-	n, ok := m[key].(pycompat.Number)
-	if !ok {
+	n, ok := m[key].(float64)
+	if !ok || n != math.Trunc(n) {
 		return 0, false
 	}
-	return n.Int64()
+	return int64(n), true
 }
 
 // intOrZero is `usage.get(key) or 0` for the counters a transcript may omit.
@@ -290,9 +226,8 @@ func (t *transcript) take(rec any) error {
 			}
 		}
 	case "result":
-		if cost, ok := m["total_cost_usd"].(pycompat.Number); ok {
-			c := cost.Float64()
-			t.reportedCostUSD = &c
+		if cost, ok := m["total_cost_usd"].(float64); ok {
+			t.reportedCostUSD = &cost
 		}
 		if usage, ok := m["usage"].(map[string]any); ok {
 			if out, ok := intField(usage, "output_tokens"); ok {
@@ -323,7 +258,7 @@ func (t *transcript) takeAssistant(message map[string]any) error {
 		}
 	}
 	if id, ok := message["id"]; ok && id != nil {
-		key, err := pycompat.Marshal(id, 0)
+		key, err := json.Marshal(id)
 		if err != nil {
 			return err
 		}
@@ -475,8 +410,8 @@ func readTranscript(file, runID, defaultModel string) (*transcript, error) {
 		if len(bytes.TrimSpace(line)) == 0 {
 			return nil
 		}
-		rec, err := pycompat.Unmarshal(line)
-		if err != nil {
+		var rec any
+		if err := json.Unmarshal(line, &rec); err != nil {
 			return fmt.Errorf("%s: malformed transcript.jsonl line: %w", runID, err)
 		}
 		return t.take(rec)
@@ -506,8 +441,8 @@ func readGuardEvents(file string) (events GuardEvents, captured bool, err error)
 	}
 	defer fh.Close()
 	err = jsonlLines(fh, func(line []byte) error {
-		doc, unmarshalErr := pycompat.Unmarshal(line)
-		if unmarshalErr != nil {
+		var doc any
+		if unmarshalErr := json.Unmarshal(line, &doc); unmarshalErr != nil {
 			return nil //nolint:nilerr // a malformed line is skipped by design; the rest of the trail still counts
 		}
 		event, ok := doc.(map[string]any)
@@ -547,7 +482,7 @@ func readInvariantViolations(file string) (InvariantViolations, error) {
 	if err != nil {
 		return InvariantViolations{}, err
 	}
-	var deleted []string
+	deleted := []string{} // serialized into metrics.jsonl; see runIDs
 	current := ""
 	for _, line := range strings.SplitAfter(string(raw), "\n") {
 		if strings.HasPrefix(line, "diff --git ") {
@@ -590,9 +525,9 @@ func readCheckExit(runDir string) *int64 {
 }
 
 type timing struct {
-	WallMs            *pycompat.Number `json:"wall_ms"`
-	TimeToFirstEditMs *pycompat.Number `json:"time_to_first_edit_ms"`
-	TimeToDoneMs      *pycompat.Number `json:"time_to_done_ms"`
+	WallMs            *float64 `json:"wall_ms"`
+	TimeToFirstEditMs *float64 `json:"time_to_first_edit_ms"`
+	TimeToDoneMs      *float64 `json:"time_to_done_ms"`
 }
 
 func readTiming(runDir string) (timing, error) {
@@ -611,9 +546,9 @@ func readTiming(runDir string) (timing, error) {
 }
 
 // readMeta returns meta.json's bytes and its control kind ("" for a scored
-// run) once the keys every run needs are present and non-empty. rep is read
-// as a Number so a float names the key at fault instead of failing the whole
-// decode into the record's int64.
+// run) once the keys every run needs are present and non-empty. rep is read as
+// a float so a fractional one names the key at fault instead of failing the
+// whole decode into the record's int64.
 func readMeta(runDir string) (raw []byte, control string, err error) {
 	raw, err = os.ReadFile(filepath.Join(runDir, "meta.json"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -631,11 +566,11 @@ func readMeta(runDir string) (raw []byte, control string, err error) {
 			return nil, "", fmt.Errorf("%s: meta.json has no %s", runDir, name)
 		}
 	}
-	var rep pycompat.Number
+	var rep float64
 	if err := json.Unmarshal(fields["rep"], &rep); err != nil {
 		return nil, "", fmt.Errorf("%s: meta.json rep: %w", runDir, err)
 	}
-	if _, ok := rep.Int64(); !ok {
+	if rep != math.Trunc(rep) {
 		return nil, "", fmt.Errorf("%s: meta.json rep is not an int", runDir)
 	}
 	if kind, ok := fields["control"]; ok {
@@ -653,7 +588,7 @@ func readMeta(runDir string) (raw []byte, control string, err error) {
 // is no transcript to measure. The report reads those verdicts to say whether
 // the task's check discriminates at all. A scored run without a transcript is
 // still an error.
-func extractRun(runDir string, pricing PriceTable) (RunRecord, error) {
+func extractRun(runDir string, table pricing.Table) (RunRecord, error) {
 	raw, control, err := readMeta(runDir)
 	if err != nil {
 		return RunRecord{}, err
@@ -686,7 +621,7 @@ func extractRun(runDir string, pricing PriceTable) (RunRecord, error) {
 	if err != nil {
 		return RunRecord{}, err
 	}
-	tableDollars, err := priceUsage(tr.byModel, pricing, run.RunID)
+	tableDollars, err := priceUsage(tr.byModel, table, run.RunID)
 	if err != nil {
 		return RunRecord{}, err
 	}
@@ -703,6 +638,17 @@ func extractRun(runDir string, pricing PriceTable) (RunRecord, error) {
 		return RunRecord{}, err
 	}
 	run.Tokens = tr.tokens()
+	// The table is the basis, and the host's total_cost_usd is recorded beside
+	// it rather than over it. That figure is a CLIENT-SIDE estimate from a price
+	// table compiled into the CLI binary, which carries no entry for the opus-5
+	// or sonnet-5 aliases and falls back to its default model's rates for both.
+	// The 2026-09-10 pilot's divergence was mix-invariant (0.665x on sonnet-5,
+	// 1.663x on opus-5), and reconstructing the implied rate vector from each
+	// model independently yields the same one, 3.00/15.00/0.30/3.75 per MTok.
+	// Those constants are 2/3 and 5/3, whose ratio is exactly the opus:sonnet
+	// list-price ratio. A mix-invariant constant can only come from a
+	// proportional rate vector, never from a token miscount, so the host's
+	// number is not a bill and the table is not the thing that is wrong.
 	run.Dollars = tableDollars
 	run.TableDollarsUSD = tableDollars
 	run.ReportedCostUSD = tr.reportedCostUSD
@@ -720,19 +666,12 @@ func extractRun(runDir string, pricing PriceTable) (RunRecord, error) {
 	run.CheckExit, run.Success = checkExit, success
 	run.InvariantViolations = violations
 	run.WallMs, run.TimeToFirstEditMs, run.TimeToDoneMs = times.WallMs, times.TimeToFirstEditMs, times.TimeToDoneMs
-	// The host's own bill wins when it recorded one: the table is a floor kept
-	// for transcripts that end without a result record, and it disagreed with
-	// the host by a constant 0.665x on Sonnet 5 and 1.663x on Opus 5 in the
-	// 2026-09-10 pilot, which is a table error rather than noise.
-	if tr.reportedCostUSD != nil && *tr.reportedCostUSD != 0 {
-		run.Dollars = *tr.reportedCostUSD
-	}
 	return RunRecord{Scored: run}, nil
 }
 
 // Extract measures every run under results, sorted by run id. A tree of
 // only controls is an error.
-func Extract(results string, pricing PriceTable) ([]RunRecord, error) {
+func Extract(results string, table pricing.Table) ([]RunRecord, error) {
 	entries, err := os.ReadDir(results)
 	if err != nil {
 		return nil, err
@@ -756,7 +695,7 @@ func Extract(results string, pricing PriceTable) ([]RunRecord, error) {
 	records := make([]RunRecord, 0, len(runDirs))
 	controls := 0
 	for _, dir := range runDirs {
-		record, err := extractRun(dir, pricing)
+		record, err := extractRun(dir, table)
 		if err != nil {
 			return nil, err
 		}
@@ -780,11 +719,11 @@ func (r RunRecord) ID() string {
 	return r.Scored.RunID
 }
 
-// JSON is one metrics.jsonl line: whichever record kind is set, in
-// json.dumps form without the newline.
+// JSON is one metrics.jsonl line: whichever record kind is set, without the
+// newline.
 func (r RunRecord) JSON() ([]byte, error) {
 	if r.Control != nil {
-		return pycompat.Marshal(r.Control, 0)
+		return json.Marshal(r.Control)
 	}
-	return pycompat.Marshal(r.Scored, 0)
+	return json.Marshal(r.Scored)
 }

@@ -661,7 +661,7 @@ func TestParityRenameIsNotDeletePlusAdd(t *testing.T) {
 // Untracked is where a concurrent agent's unfinished work lives, it is in no commit, and a
 // checkpoint blind to it answers "same tree?" most confidently about the state it can least
 // see. PatchDigest cannot carry it: that one is pinned byte-for-byte to
-// internal/diff.PatchDigest so a checkpoint and a review session stay comparable. Hence a
+// internal/changeset.PatchDigest so a checkpoint and a review session stay comparable. Hence a
 // second digest, on every backend rather than on git alone.
 func TestParityCheckpointSeesUntrackedContent(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {

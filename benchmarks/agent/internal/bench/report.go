@@ -7,36 +7,22 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 	"github.com/egladman/magus/internal/render/md"
 )
 
 // Below this the paired deltas are directional at best; Terminal-Bench runs 5.
 const minReps = 5
 
-// num prints a float to the given digits and an int as it is, which is how
-// the Python's f-string told the two apart.
-func num(value *pycompat.Number, digits int) string {
-	if value == nil {
-		return "n/a"
-	}
-	if i, ok := value.Int64(); ok {
-		return strconv.FormatInt(i, 10)
-	}
-	f := value.Float64()
-	return numFloat(&f, digits)
-}
-
-func numFloat(value *float64, digits int) string {
+// num prints a statistic to the given digits, or n/a when the cell had no
+// value to summarize.
+func num(value *float64, digits int) string {
 	if value == nil {
 		return "n/a"
 	}
 	return strconv.FormatFloat(*value, 'f', digits, 64)
 }
 
-func usd(value *pycompat.Number) string { return "$" + num(value, 4) }
-
-func usdFloat(value *float64) string { return "$" + numFloat(value, 4) }
+func usd(value *float64) string { return "$" + num(value, 4) }
 
 func pct(value *float64) string {
 	if value == nil {
@@ -49,7 +35,7 @@ func interval(bounds [2]*float64, digits int) string {
 	if bounds[0] == nil || bounds[1] == nil {
 		return "n/a"
 	}
-	return "[" + numFloat(bounds[0], digits) + ", " + numFloat(bounds[1], digits) + "]"
+	return "[" + num(bounds[0], digits) + ", " + num(bounds[1], digits) + "]"
 }
 
 // row is a table row. An alias, not a defined type, so []row is the [][]string
@@ -101,7 +87,7 @@ func headlineSection(a *Analysis) []string {
 		summary := a.ArmSummaries[arm]
 		cost := "infinite (no passes)"
 		if !summary.CostOfPassUSD.Infinite {
-			cost = usdFloat(summary.CostOfPassUSD.Value)
+			cost = usd(summary.CostOfPassUSD.Value)
 		}
 		rows = append(rows, row{
 			arm,
@@ -109,7 +95,7 @@ func headlineSection(a *Analysis) []string {
 			strconv.FormatInt(summary.Successes, 10),
 			pct(&summary.PassRate),
 			interval(summary.PassRateCI, 3),
-			usdFloat(summary.Dollars.Mean),
+			usd(summary.Dollars.Mean),
 			usd(summary.Dollars.Median),
 			cost,
 		})
@@ -170,10 +156,10 @@ func deltasSection(a *Analysis) []string {
 				task,
 				strconv.FormatInt(delta.NPairs, 10),
 				num(delta.DeltaMedian, m.digits),
-				numFloat(delta.DeltaMean, m.digits),
+				num(delta.DeltaMean, m.digits),
 				interval([2]*float64{delta.CILow, delta.CIHigh}, m.digits),
 				pct(delta.Relative),
-				numFloat(delta.PHolm, 3),
+				num(delta.PHolm, 3),
 				delta.Verdict,
 			})
 		}
@@ -194,7 +180,7 @@ func passRatesSection(a *Analysis) []string {
 			strconv.FormatInt(cell.K, 10),
 			pct(cell.PassAt1),
 			interval(cell.PassAt1CI, 3),
-			numFloat(&cell.PassPowK, 0),
+			num(&cell.PassPowK, 0),
 		})
 	}
 	return section(
@@ -253,11 +239,11 @@ func caveatLines(a *Analysis) []string {
 		lines = append(lines, fmt.Sprintf("More than one model appears across runs (%s); the arm is no longer the only variable.", strings.Join(a.Models, ", ")))
 	}
 	if ratio := quality.TableToBilledRatioMedian; ratio != nil && !(0.9 <= *ratio && *ratio <= 1.1) {
-		lines = append(lines, fmt.Sprintf("Dollars are the host's billed cost; the pricing table would have said %sx that, so the table is wrong for this model and only backs runs with no result record.",
+		lines = append(lines, fmt.Sprintf("Dollars are priced from the table at list price; the host's self-reported estimate disagrees by %sx. The likely cause is the host CLI's unknown-model fallback, which prices an id its compiled-in table lacks at a default model's rates; a ratio near 0.67 or 1.67 is that signature, since it is the Sonnet-to-Opus list-price ratio and not a token miscount.",
 			strconv.FormatFloat(*ratio, 'f', 2, 64)))
 	}
 	if n := len(quality.RunsWithoutBilledCost); n > 0 {
-		lines = append(lines, fmt.Sprintf("No billed cost for %d run(s); their dollars come from the pricing table.", n))
+		lines = append(lines, fmt.Sprintf("No self-reported cost for %d run(s); the table prices every run either way.", n))
 	}
 	var unverified []string
 	for _, task := range a.Tasks {
@@ -278,11 +264,19 @@ func Report(a *Analysis) string {
 	if models == "" {
 		models = "unrecorded"
 	}
+	platform := a.Platform
+	if platform == "" {
+		platform = "unrecorded"
+	}
 	head := []string{
 		"# Harness-effectiveness benchmark",
 		"",
 		fmt.Sprintf("%d runs, %d task(s), arms %s, model(s) %s, bootstrap seed %d.",
 			a.Runs, len(a.Tasks), strings.Join(a.Arms, " and "), models, a.Seed),
+		"",
+		// Named because the last bits of an interpolated quartile depend on it;
+		// see Analysis.Platform.
+		fmt.Sprintf("Computed on %s.", platform),
 		"",
 	}
 	// Every section ends with an empty line, so the join already closes the file

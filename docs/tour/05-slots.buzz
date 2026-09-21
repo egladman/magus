@@ -26,8 +26,9 @@ magus\project({
     "spells": [go, typescript],
     "targets": {
         // js-lint reserves LINT_SLOTS; while it holds them, the cheap checks wait
-        // rather than pile on. release runs alone - the degenerate case, "I need
-        // the whole machine," which is `exclusive` instead of a slot count.
+        // rather than pile on. release declares `exclusive` for a different reason,
+        // and it is not a bigger slot count: it mutates go.mod and creates tags, so
+        // a peer writing the tree partway through would corrupt the result.
         "js-lint": {"slots": LINT_SLOTS},
         "release": {"exclusive": true},
     },

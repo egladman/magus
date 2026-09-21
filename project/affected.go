@@ -36,6 +36,17 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 	changed := workspaceRelative(prefix, normalizeFiles(rawFiles))
 	base = res.Base
 
+	// TODO: decide whether magus's own cache directory belongs in a changeset at all.
+	// A workspace whose ignore rules do not cover it hands `git ls-files --others` the
+	// lock files the running command just wrote, so the cache seeds the root project
+	// into its own affected set and reruns it. Unlike every other entry here, magus
+	// knows where it put those bytes (cache.dir / MAGUS_CACHE_DIR, default .magus/ in
+	// the root), so excluding them needs no heuristic. HERE is the layer that owns what
+	// "changed" means, but types.Workspace does not carry the resolved cache dir and
+	// this signature does not take it, so the exclusion cannot be written without
+	// threading it through every caller. Ask first whether the scope is the cache dir
+	// or every path magus writes, which is the wider version of the same question.
+
 	seed, filesBySeed, undeclaredBySeed := attribute(newProjectIndex(ctx, w), changed)
 
 	g, err := dependency.Build(w, graphObserverOpts(ctx)...)

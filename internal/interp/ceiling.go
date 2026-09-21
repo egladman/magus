@@ -13,8 +13,23 @@ import (
 // internal/cache duplicates it: config imports this tree, so it cannot be imported back.
 const levelTrace slog.Level = slog.LevelDebug - 4
 
-// withDeclaredCeiling bounds one magusfile target body by the timeout its magusfile
-// declared, and is a pass-through for a target that declares none.
+// declaredTimeout reports the timeout a magusfile declared for one target body, and
+// zero for a target that declares none.
+//
+// A lookup, not a constructor and not a context derivation: it reads what the author
+// wrote and nothing else. Applying it is the caller's, and so is the dependency-wait
+// accumulator every body gets (types.WithDependencyWait), which used to be bundled in
+// here and made one function answer two unrelated questions.
+//
+// That split is the point. runTargetBody applies it per RESUME, so a declared timeout
+// bounds the time the body itself executes and not the time its dependencies take. A
+// ceiling used to cover the ctx.needs waits inside a body, so a target could exceed one
+// having done almost none of its own work; four targets once reported an identical
+// 15m52s timeout that one serialization upstream had caused, and each blamed itself.
+//
+// Only a PARKED body can have this. A blocking ctx.needs sits inside Exec under one
+// fixed context whose deadline cannot be changed; a parked one re-enters Exec, and the
+// driver hands it a fresh deadline each time.
 //
 // This is the seam because it is the only place a magusfile target body runs: the
 // scheduled target reaches it through runBuzz, and every ctx.needs-composed one
@@ -28,31 +43,16 @@ const levelTrace slog.Level = slog.LevelDebug - 4
 // No workspace in ctx is the bare `magus buzz` / REPL case. It reads as undeclared
 // rather than an error: there is no magusfile policy to consult, and refusing to run
 // a script because nobody declared a ceiling would be a strange thing to do.
-func withDeclaredCeiling(ctx context.Context, dir, target string) (context.Context, context.CancelFunc, time.Duration) {
-	// Every body gets its own accumulator, ceiling or not. Scoping it to the deadline
-	// instead leaves an uncapped body writing into its nearest ceilinged ancestor, whose
-	// own ctx.needs span already counts that whole child once: `ci` composes lint, format
-	// and generate, none of which declare a timeout, so each level re-adds time the level
-	// above already has. Composed then exceeds elapsed and own prints 0s.
-	ctx = types.TrackDependencyWait(ctx)
+func declaredTimeout(ctx context.Context, dir, target string) time.Duration {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return ctx, func() {}, 0
+		return 0
 	}
 	p := projectAt(ws, dir)
 	if p == nil {
-		return ctx, func() {}, 0
+		return 0
 	}
-	d := p.TargetPolicies[target].TimeoutDuration()
-	if d <= 0 {
-		return ctx, func() {}, 0
-	}
-	// A ceiling covers the ctx.needs waits inside the body, so a target can exceed one
-	// having done almost none of its own work. Reporting the elapsed time alone blames the
-	// target, and four targets once reported an identical 15m52s timeout that one
-	// serialization upstream had caused.
-	c, cancel := context.WithTimeout(ctx, d)
-	return c, cancel, d
+	return p.TargetPolicies[target].TimeoutDuration()
 }
 
 // projectAt is the project whose magusfile dir IS dir.
@@ -97,7 +97,7 @@ func logCeiling(ctx context.Context, target string, ceiling, elapsed time.Durati
 	if ceiling <= 0 || !slog.Default().Enabled(ctx, levelTrace) {
 		return
 	}
-	waited := types.DependencyWait(ctx)
+	waited := types.DependencyWaitFromContext(ctx).Elapsed()
 	slog.LogAttrs(ctx, levelTrace, "target.ceiling",
 		slog.String("target", target), slog.Duration("ceiling", ceiling),
 		slog.Duration("elapsed", elapsed), slog.Duration("composed", waited),

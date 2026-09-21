@@ -913,6 +913,66 @@ func (r *runner) checkCacheableExternalOps(projects []*types.Project) types.Doct
 	}
 }
 
+// checkObservationKeyedAsVersion is MGS1037: a tool declaring one command as both its
+// version probe and its observation probe, with nothing narrowing the version half.
+//
+// Declared rather than measured, and it needs no project walk: the hazard is visible in
+// the spell's own tool table, because the two probes differ in REACH rather than in what
+// they run. An observation reaches the targets whose ops drive the binary; a version
+// probe reaches every target in every project binding the spell. One command declared as
+// both, unnarrowed, sends the feed's identity down the unscoped channel.
+//
+// Reported per (spell, tool) rather than per project: the declaration is the spell's, so
+// naming every project that binds it would repeat one author's decision N times.
+func (r *runner) checkObservationKeyedAsVersion(projects []*types.Project) types.DoctorCheck {
+	const name = "observation-keyed-as-version"
+	seen := map[string]bool{}
+	var details []string
+	for _, p := range projects {
+		for _, sp := range p.ResolvedSpells {
+			for _, tool := range sp.ToolNames() {
+				t, ok := sp.Tool(tool)
+				if !ok || t.Probe.Bin == "" || t.Observe.Bin == "" {
+					continue
+				}
+				if t.Probe.Bin != t.Observe.Bin || !slices.Equal(t.Probe.Args, t.Observe.Args) {
+					continue
+				}
+				// A declared key is the author saying which part of the output is the
+				// version, which is the second of the two fixes.
+				if !t.Key.IsZero() {
+					continue
+				}
+				id := sp.Name() + ":" + tool
+				if seen[id] {
+					continue
+				}
+				seen[id] = true
+				details = append(details, fmt.Sprintf(
+					"spell %q tool %q declares `%s %s` as both probe and observe with no key, so everything that "+
+						"command prints keys every target in every project binding the spell, not just the targets "+
+						"driving the tool",
+					sp.Name(), tool, t.Probe.Bin, strings.Join(t.Probe.Args, " ")))
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK,
+			Message: "no tool routes its observation through the unscoped version channel"}
+	}
+	slices.Sort(details)
+	return types.DoctorCheck{
+		Name:   name,
+		Status: types.DoctorFail,
+		Message: fmt.Sprintf(
+			"%d tool(s) declare one command as both version and observation probe without narrowing the version "+
+				"half, so a value moving on the feed's clock invalidates targets that never run the tool; drop the "+
+				"version probe or declare a key that extracts the version alone (see %s)",
+			len(details), types.CodeURL(types.ObservationKeyedAsVersion)),
+		Details: details,
+	}
+}
+
 // externalOpFinding renders one MGS1033 finding, or "" when the op is fine. Both fixes
 // are named in every finding: which one applies is the author's call, and a message that
 // offered only skip_cache would push every scanner out of the cache when a probe would

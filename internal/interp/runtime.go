@@ -79,6 +79,11 @@ var removedMagusfileAPI = []struct {
 	{[]string{"needs"}, "call ctx.needs(<target>)"},
 	{[]string{"glob"}, `call ctx.glob("<pattern>")`},
 	{[]string{"insightMarkdown"}, `build the document from magus\insight()'s typed report`},
+	{[]string{"ledger", "clear"}, `call magus\job.clear()`},
+	{[]string{"ledger", "list"}, `call magus\job.list()`},
+	{[]string{"ledger", "put"}, `call magus\job.put()`},
+	{[]string{"ledger", "register"}, `call magus\job.register()`},
+	{[]string{"ledger"}, `use magus\job, which replaced it`},
 }
 
 // RemovedAPINames returns the dotted member path of every removed call, without the
@@ -627,13 +632,22 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		exportVals[key] = val
 		dir := src.Dir
 		targetMap[key] = func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-			ctx, cancel, ceiling := withDeclaredCeiling(ctx, dir, key)
-			defer cancel()
+			// Every body gets a dependency-wait accumulator, timeout or not. Scoping it
+			// to the deadline instead leaves an uncapped body writing into its nearest
+			// ceilinged ancestor, whose own ctx.needs span already counts that whole
+			// child once: `ci` composes lint, format and generate, none of which declare
+			// a timeout, so each level re-adds time the level above already has.
+			ctx = types.WithDependencyWait(ctx)
+			// The DURATION, not a context carrying it: runTargetBody applies it per
+			// resume, so it measures the body's own execution and not the time its
+			// dependencies take.
+			ceiling := declaredTimeout(ctx, dir, key)
 			started := time.Now()
 			v, err := TimeCall(ctx, ModeMagusfile, func() (vm.Value, error) {
 				// Prepend the magus.Context so the body's `ctx` parameter binds it; the
 				// user args (the `[str]` second parameter) ride along after.
-				return buzzSess.CallValue(ctx, captured, append([]vm.Value{targetCtxVal}, args...))
+				return runTargetBody(ctx, buzzSess, captured,
+					append([]vm.Value{targetCtxVal}, args...), ceiling)
 			})
 			elapsed := time.Since(started)
 			// Emitted on every ceiling-bearing body, not only the ones that expire. A
@@ -744,4 +758,88 @@ func magusSearchPaths(ctx context.Context, projectDir string) []string {
 		}
 	}
 	return paths
+}
+
+// runTargetBody runs one target body, driving it as a fiber so a ctx.needs inside it
+// can PARK rather than block.
+//
+// Why the body is a fiber at all, stated narrowly because the wider claims did not
+// survive measurement: the scheduling slot is ALREADY released while dependencies run
+// (Pool.Dispatch yields it), and the body's Buzz session cannot be released, since a
+// parked fiber still references it. What parking buys is the declared ceiling: a
+// blocking ctx.needs sits inside Exec under one fixed deadline, while a parked body
+// re-enters Exec and the driver hands it a fresh one, so a timeout measures the target
+// instead of the queue behind it.
+//
+// The loop is the whole mechanism: resume, and if the body parked with a dependency
+// request, run it and resume again. A body that never calls ctx.needs runs to
+// completion on the first resume and costs one extra fiber allocation.
+//
+// Dependencies are themselves target bodies reached through targets, so each one gets
+// its own driver and parks on its own ctx.needs. The recursion terminates because a
+// dependency graph is acyclic; magus refuses cycles at load.
+func runTargetBody(
+	ctx context.Context,
+	sess *buzz.Session,
+	body vm.Value,
+	args []vm.Value,
+	ceiling time.Duration,
+) (vm.Value, error) {
+	// base carries NO deadline. Dependencies run under it, so a declared timeout on this
+	// target never bounds another target's work; each dependency brings its own ceiling.
+	base := ctx
+	waiting := types.DependencyWaitFromContext(base)
+
+	fiber, err := sess.NewFiber(base, body, args)
+	if err != nil {
+		return vm.Null, err
+	}
+	// remaining is the body's UNSPENT ceiling. Each resume spends only the time the body
+	// itself runs, so parking to wait on dependencies costs it nothing.
+	remaining := ceiling
+	for {
+		runCtx, cancel := base, context.CancelFunc(func() {})
+		if ceiling > 0 {
+			runCtx, cancel = context.WithTimeout(base, remaining)
+		}
+		startedOwn := time.Now()
+		_, err := sess.ResumeFiber(runCtx, fiber)
+		ownElapsed := time.Since(startedOwn)
+		cancel()
+		if err != nil {
+			return vm.Null, err
+		}
+		if ceiling > 0 {
+			remaining -= ownElapsed
+			if remaining <= 0 {
+				remaining = 0
+			}
+		}
+		// COMPLETION IS THE FIBER'S STATUS, never the absence of a parked request. A
+		// resume reports null both for "yielded null" and "finished" (see
+		// Session.ResumeFiber), and a body can suspend for a reason this driver does
+		// not know about; reading "no request" as "done" would abandon it silently.
+		if done, ret := fiberDone(fiber); done {
+			return ret, nil
+		}
+		// base, not runCtx: dependency time is not the body's to spend. Do books it
+		// against this body, so the split logCeiling reports needs no separate call.
+		did, err := waiting.Do(base)
+		if err != nil {
+			return vm.Null, err
+		}
+		if !did {
+			return vm.Null, fmt.Errorf(
+				"target body suspended with no pending work: the driver cannot resume it and will not abandon it")
+		}
+	}
+}
+
+// fiberDone reports whether the body finished, with its return value.
+func fiberDone(fiber vm.Value) (bool, vm.Value) {
+	fib, ok := vm.AsFiber(fiber)
+	if !ok || fib.Status() != vm.FiberDone {
+		return false, vm.Null
+	}
+	return true, fib.Return()
 }

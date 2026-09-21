@@ -36,10 +36,10 @@ func TestCharmsForCI(t *testing.T) {
 	assert.Empty(t, CharmsForCI([]string{types.CharmReadWrite}))
 	assert.Nil(t, CharmsForCI(nil))
 
-	// The compat alias strips too, and it has to be tested from the OUTSIDE: a ci run
-	// receives whatever spelling the caller passed, and CharmsForCI is the last place
+	// A non-canonical spelling strips too, and it has to be tested from the OUTSIDE: a ci
+	// run receives whatever spelling the caller passed, and CharmsForCI is the last place
 	// that can canonicalize it before the charm survives into a gate that must not write.
-	assert.Equal(t, []string{"race"}, CharmsForCI([]string{"race", types.CharmUpdateAlias}))
+	assert.Equal(t, []string{"race"}, CharmsForCI([]string{"race", "UPDATE"}))
 
 	// The input is not mutated: the caller's RunOptions keep the charms it set.
 	given := []string{types.CharmReadWrite, "race"}

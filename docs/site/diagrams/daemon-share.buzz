@@ -5,7 +5,7 @@
 //
 // The subset is drawn route by route rather than as one "read-only views" box, because the
 // asymmetry IS the message: a share link is a URL handed to a phone, so the graph, the diff
-// routes, the plan, the ledger, /mcp and job control never appear on it. The three boxes on
+// routes, the plan, /mcp and job control never appear on it. The three boxes on
 // the left are internal/daemon/daemon.go's shareGuarded map and its complement, in order.
 namespace daemonShare;
 
@@ -19,7 +19,7 @@ export fun daemonShareDiagram() > Diagram {
         desc = "Sharing from the dashboard posts to a loopback-only endpoint, which mints a "
             + "time-boxed read-only token and opens an ephemeral LAN listener. The listener "
             + "serves four JSON read routes and the read Connect services, and nothing "
-            + "else: the graph, the diff routes, the derived plan, the lease ledger, "
+            + "else: the graph, the diff routes, the derived plan, the job store, "
             + "/mcp and job control stay loopback only.",
         width = 960,
         height = 600,
@@ -40,7 +40,7 @@ export fun daemonShareDiagram() > Diagram {
                   sub = "status, activity, metrics, insight",
                   role = "store", x = 176, y = 368, w = 280, h = 64 },
             Node{ id = "withheld", anchor = "internal/handler/graph", label = "Never on a share",
-                  sub = "graph, diff, plan, ledger, /mcp",
+                  sub = "graph, diff, plan, job, /mcp",
                   role = "optional", x = 176, y = 464, w = 280, h = 64 },
         ],
         // The withheld box takes no connector on purpose: an arrow into it would say the

@@ -15,8 +15,6 @@ The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or
 
 **Version probe (golangci-lint):** `golangci-lint --version`
 
-**Version probe (govulncheck):** `govulncheck -version`
-
 ## Passing arguments to ops
 
 Every op is invoked as `go["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
@@ -369,7 +367,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## govulncheck
 
-Invoked directly rather than through `go tool`, for the same reason as golangCILint above: `go tool govulncheck` requires the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - so the op could not run at all. On PATH it is pinned by whatever the workspace uses, and mgs_getVersionProbes records which.
+Invoked directly rather than through `go tool`, for the same reason as golangCILint above: `go tool govulncheck` requires the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - so the op could not run at all. On PATH it is pinned by whatever the workspace uses, and the OBSERVE probe records which, alongside the database date, for the targets that compose this op. There is no version probe: see the tools table above for why one would key every target in the project.
 
 **Command:** `govulncheck ./...`
 

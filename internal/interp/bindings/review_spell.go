@@ -273,7 +273,7 @@ func decodeReviewThread(row any, where string) (types.ReviewThread, error) {
 	}
 	// UNPLACED until something places it. The zero value is a valid hunk index, so leaving it
 	// would render every thread against the first hunk of its file (the wrong code, stated
-	// confidently) on any path that does not reach diff.PlaceThreads.
+	// confidently) on any path that does not reach changeset.PlaceThreads.
 	t := types.ReviewThread{Hunk: -1}
 	var err error
 	if t.ID, err = strField(m, "id", where); err != nil {

@@ -66,21 +66,44 @@ import "magus";
 import "magus/spell/python";
 import "os";
 magus\project({"spells": [python]});
-export fun build(ctx: magus\Context, args: [str]) > void { os.exec("python", ["-m", "py_compile", "src/tool.py"]); }
+export fun build(ctx: magus\Context, args: [str]) > void { os.exec("python3", ["-m", "py_compile", "src/tool.py"]); }
 MF
 
 # ── Makefile ──────────────────────────────────────────────────────────────────
+# One target per project, each with its real prerequisites. The single .PHONY
+# `all` this replaced ran four recipe lines in sequence with no prerequisites,
+# so `make -j8` got no parallelism and make rebuilt everything every time: it
+# was being compared on cold builds only, while every other tool was measured
+# with the incrementality it has.
 cat > "$GEN/Makefile" <<'MAKE'
 .PHONY: all clean
 
-all:
-	go build -o out/go-svc ./go-svc
+GO_BIN     := out/go-svc
+TS_LIB_OUT := ts-lib/dist/index.js
+TS_APP_OUT := ts-app/dist/index.js
+PY_STAMP   := py-tool/.py-compiled
+
+all: $(GO_BIN) $(TS_LIB_OUT) $(TS_APP_OUT) $(PY_STAMP)
+
+$(GO_BIN): go-svc/main.go go-svc/go.mod
+	mkdir -p out
+	go build -o $@ ./go-svc
+
+$(TS_LIB_OUT): ts-lib/src/index.ts ts-lib/tsconfig.json
 	cd ts-lib && pnpm tsc -b
+
+# ts-app imports @bench/ts-lib, so the lib output is a real prerequisite: this
+# is the edge that makes -j meaningful rather than a free-for-all.
+$(TS_APP_OUT): ts-app/src/index.ts ts-app/tsconfig.json $(TS_LIB_OUT)
 	cd ts-app && pnpm tsc -b
-	cd py-tool && python -m py_compile src/tool.py
+
+$(PY_STAMP): py-tool/src/tool.py
+	cd py-tool && python3 -m py_compile src/tool.py
+	touch $@
 
 clean:
-	rm -rf out ts-lib/dist ts-app/dist
+	rm -rf out ts-lib/dist ts-app/dist ts-lib/*.tsbuildinfo ts-app/*.tsbuildinfo
+	rm -rf py-tool/src/__pycache__ $(PY_STAMP)
 MAKE
 
 # ── schema ────────────────────────────────────────────────────────────────────
@@ -112,6 +135,17 @@ module bench/svc
 
 go 1.23
 GOMOD
+
+cat > "$GEN/go-svc/moon.yml" <<'YAML'
+language: go
+layer: application
+tasks:
+  build:
+    command: "go build -o dist/go-svc ."
+    toolchains: "system"
+    inputs: ["main.go", "go.mod"]
+    outputs: ["dist"]
+YAML
 
 cat > "$GEN/go-svc/main.go" <<'GO'
 package main
@@ -161,7 +195,7 @@ TS
 
 cat > "$GEN/ts-lib/moon.yml" <<'YAML'
 language: typescript
-type: library
+layer: library
 tasks:
   build:
     command: "pnpm tsc -b"
@@ -205,7 +239,7 @@ TS
 
 cat > "$GEN/ts-app/moon.yml" <<'YAML'
 language: typescript
-type: application
+layer: application
 dependsOn:
   - ts-lib
 tasks:
@@ -222,6 +256,17 @@ name = "py-tool"
 version = "0.0.0"
 requires-python = ">=3.9"
 TOML
+
+cat > "$GEN/py-tool/moon.yml" <<'YAML'
+language: python
+layer: tool
+tasks:
+  build:
+    command: "python3 -m py_compile src/tool.py"
+    toolchains: "system"
+    inputs: ["src/tool.py"]
+    outputs: ["src/__pycache__"]
+YAML
 
 cat > "$GEN/py-tool/src/tool.py" <<'PY'
 """Simple Python tool for the polyglot benchmark fixture."""
@@ -243,12 +288,17 @@ packages:
 YAML
 
 # ── moon workspace ────────────────────────────────────────────────────────────
+# All four projects, not just the TypeScript pair: a workspace listing half the
+# tree had moon building half the work magus and make each did, and the
+# resulting rows were published side by side as if they were the same job.
 mkdir -p "$GEN/.moon"
 cat > "$GEN/.moon/workspace.yml" <<'YAML'
 $schema: "https://moonrepo.dev/schemas/workspace.json"
 projects:
+  - "go-svc"
   - "ts-lib"
   - "ts-app"
+  - "py-tool"
 YAML
 cat > "$GEN/.moon/toolchain.yml" <<'YAML'
 $schema: "https://moonrepo.dev/schemas/toolchain.json"

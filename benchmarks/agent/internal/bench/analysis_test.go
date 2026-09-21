@@ -10,17 +10,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/pricing"
 )
 
-func loadTestPricing(t *testing.T) PriceTable {
+func loadTestPricing(t *testing.T) pricing.Table {
 	t.Helper()
-	pricing, err := LoadPricing(filepath.Join("..", "..", "pricing.json"))
+	table, err := pricing.Default()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return pricing
+	return table
 }
 
 // fixtureRecords builds the synthetic tree in a temp dir and extracts it,
@@ -52,11 +52,10 @@ func scoredRecord(t *testing.T, byID map[string]RunRecord, arm, task string, rep
 	return r.Scored
 }
 
-func boolp(b bool) *bool                         { return &b }
-func int64p(i int64) *int64                      { return &i }
-func floatp(f float64) *float64                  { return &f }
-func numberp(n pycompat.Number) *pycompat.Number { return &n }
-func almost(a, b, places float64) bool           { return math.Abs(a-b) < math.Pow(10, -places)/2 }
+func boolp(b bool) *bool               { return &b }
+func int64p(i int64) *int64            { return &i }
+func floatp(f float64) *float64        { return &f }
+func almost(a, b, places float64) bool { return math.Abs(a-b) < math.Pow(10, -places)/2 }
 
 func syntheticRecord(arm, task string, rep int64, dollars float64, tokens int64, success bool) RunRecord {
 	return RunRecord{Scored: &ScoredRun{
@@ -66,7 +65,7 @@ func syntheticRecord(arm, task string, rep int64, dollars float64, tokens int64,
 		Turns:  1, ToolCalls: 1, ToolCallsByName: map[string]int64{"Bash": 1},
 		FileReads: 1, DistinctFilesRead: 1, ToolResultBytes: 10,
 		CheckExit: int64p(map[bool]int64{true: 0, false: 1}[success]), Success: boolp(success),
-		WallMs: numberp(pycompat.Int(1000)), TimeToFirstEditMs: numberp(pycompat.Int(100)), TimeToDoneMs: numberp(pycompat.Int(900)),
+		WallMs: floatp(1000), TimeToFirstEditMs: floatp(100), TimeToDoneMs: floatp(900),
 	}}
 }
 
@@ -162,8 +161,8 @@ func TestBenchFixtureExtraction(t *testing.T) {
 		}
 	})
 	t.Run("timing is carried through", func(t *testing.T) {
-		got := []string{rampantA1.WallMs.String(), rampantA1.TimeToFirstEditMs.String(), rampantA1.TimeToDoneMs.String()}
-		if want := []string{"241000", "60500", "239000"}; !reflect.DeepEqual(got, want) {
+		got := []float64{*rampantA1.WallMs, *rampantA1.TimeToFirstEditMs, *rampantA1.TimeToDoneMs}
+		if want := []float64{241000, 60500, 239000}; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %v, want %v", got, want)
 		}
 	})
@@ -191,7 +190,7 @@ func TestBenchFixtureExtraction(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(line), `"control": null`) {
+		if !strings.Contains(string(line), `"control":null`) {
 			t.Errorf("no null control key in %s", line)
 		}
 	})
@@ -310,15 +309,21 @@ func TestBenchTranscriptDefects(t *testing.T) {
 			t.Errorf("tokens = %+v; input and cache still come from the turns", r.Tokens)
 		}
 	})
-	t.Run("billed cost beats the table when the host recorded one", func(t *testing.T) {
+	// The host's total_cost_usd is its own client-side estimate, priced from a
+	// table compiled into its binary that has no entry for these models. It is
+	// recorded for comparison and never substituted for the list-price total.
+	t.Run("the table prices the run even when the host reported a cost", func(t *testing.T) {
 		d := newDefectRun(t)
 		usage := map[string]any{"input_tokens": 1000, "output_tokens": 100}
 		d.writeTranscript(initRec,
 			map[string]any{"type": "assistant", "message": map[string]any{"id": "m1", "usage": usage, "content": []any{}}},
 			map[string]any{"type": "result", "subtype": "success", "total_cost_usd": 0.05, "usage": usage})
 		r := d.mustScore()
-		if r.Dollars != 0.05 || r.TableDollarsUSD <= 0 || r.TableDollarsUSD == 0.05 {
+		if r.Dollars != r.TableDollarsUSD || r.TableDollarsUSD <= 0 || r.Dollars == 0.05 {
 			t.Errorf("dollars=%v table=%v", r.Dollars, r.TableDollarsUSD)
+		}
+		if r.ReportedCostUSD == nil || *r.ReportedCostUSD != 0.05 {
+			t.Errorf("reported_cost_usd = %v; the host's estimate is still recorded", r.ReportedCostUSD)
 		}
 	})
 	t.Run("transcript with no assistant records", func(t *testing.T) {
@@ -335,7 +340,11 @@ func TestBenchTranscriptDefects(t *testing.T) {
 		d := newDefectRun(t)
 		d.writeSingleTurn("claude-opus-5-20260301", map[string]any{"input_tokens": 1_000_000, "output_tokens": 0})
 		r := d.mustScore()
-		if want := loadTestPricing(t)["claude-opus-5"].Input; !almost(r.Dollars, want, 7) {
+		rates, err := loadTestPricing(t).Lookup("claude-opus-5")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := rates.Input; !almost(r.Dollars, want, 7) {
 			t.Errorf("dollars = %v, want %v", r.Dollars, want)
 		}
 	})
@@ -414,7 +423,7 @@ func TestBenchControlsMustDiscriminate(t *testing.T) {
 }
 
 func TestBenchWilsonInterval(t *testing.T) {
-	// The bounds are CPython's own output for the same arithmetic, so a
+	// The bounds are the Wilson score interval to full precision, so a
 	// reordered operation shows up as a last-bit difference here.
 	cases := []struct {
 		successes, total int64
@@ -476,7 +485,7 @@ func TestBenchDeltasPairRepIWithRepI(t *testing.T) {
 		records = append(records, syntheticRecord("full", "task-a", c.rep, float64(c.base)/100.0, c.base, true))
 	}
 	row := pairedRow(t, records, 7, "total_billed_tokens")
-	if row.NPairs != 3 || *row.DeltaMean != 10.0 || row.DeltaMedian.String() != "10" || *row.CILow != 10.0 || *row.CIHigh != 10.0 {
+	if row.NPairs != 3 || *row.DeltaMean != 10.0 || *row.DeltaMedian != 10.0 || *row.CILow != 10.0 || *row.CIHigh != 10.0 {
 		t.Errorf("got %+v", row)
 	}
 }
@@ -514,28 +523,26 @@ func TestBenchHolm(t *testing.T) {
 		t.Errorf("not monotone: %v %v %v", *monotone["a"], *monotone["b"], *monotone["c"])
 	}
 	if *monotone["a"] != 0.09 {
-		t.Errorf("a = %v, want CPython's 0.09", *monotone["a"])
+		t.Errorf("a = %v, want 0.09 (3 * 0.03, the smallest p at family size 3)", *monotone["a"])
 	}
 }
 
 func TestBenchDescribe(t *testing.T) {
-	f := func(v float64) *pycompat.Number { return numberp(pycompat.Float(v)) }
-	spread := describe([]*pycompat.Number{f(4.0), nil, f(1.0), f(3.0), f(2.0)})
-	if spread.N != 4 || spread.Median.String() != "2.5" || spread.IQR[0].String() != "1.75" || spread.IQR[1].String() != "3.25" || *spread.Mean != 2.5 {
+	spread := describe([]*float64{floatp(4), nil, floatp(1), floatp(3), floatp(2)})
+	if spread.N != 4 || *spread.Median != 2.5 || *spread.IQR[0] != 1.75 || *spread.IQR[1] != 3.25 || *spread.Mean != 2.5 {
 		t.Errorf("got %+v", spread)
 	}
-	if describe([]*pycompat.Number{nil}).N != 0 {
+	if describe([]*float64{nil}).N != 0 {
 		t.Error("all-nil input must describe as empty")
 	}
-	// Counts keep their int form where a value is picked rather than
-	// interpolated, exactly as the Python's statistics module returned them.
-	i := func(v int64) *pycompat.Number { return numberp(pycompat.Int(v)) }
-	ints := describe([]*pycompat.Number{i(5), i(1), i(3)})
-	if ints.Median.String() != "3" || ints.IQR[0].String() != "2.0" || ints.IQR[1].String() != "4.0" || *ints.Mean != 3.0 {
+	// An odd count picks a value rather than interpolating, so the median is one
+	// of the inputs while the quartiles still land between them.
+	ints := describe([]*float64{floatp(5), floatp(1), floatp(3)})
+	if *ints.Median != 3 || *ints.IQR[0] != 2 || *ints.IQR[1] != 4 || *ints.Mean != 3 {
 		t.Errorf("ints: %+v", ints)
 	}
-	one := describe([]*pycompat.Number{i(7)})
-	if one.Median.String() != "7" || one.IQR[0].String() != "7" || one.IQR[1].String() != "7" || *one.Mean != 7.0 {
+	one := describe([]*float64{floatp(7)})
+	if *one.Median != 7 || *one.IQR[0] != 7 || *one.IQR[1] != 7 || *one.Mean != 7 {
 		t.Errorf("single: %+v", one)
 	}
 }
@@ -627,10 +634,18 @@ func mustAnalyze(t *testing.T, records []RunRecord, seed int64) *Analysis {
 // TestBenchPipelineMatchesPinnedOutput pins every stage's output over the
 // synthetic fixture (testdata/fixture-*, seed 20260902) against checked-in bytes.
 //
-// A regression pin on THIS binary, not a parity check against the Python pipeline:
-// nothing here runs Python, and the fixtures were produced once by hand. It catches a
-// change in seeding, draw sequence or summation order, never the two implementations
-// having diverged before the fixtures were written.
+// A regression pin on THIS binary: the fixtures were produced by it and are
+// regenerated whenever its arithmetic changes on purpose.
+//
+// It does NOT cover the resampler. MEASURED 2026-09-20: replacing the RNG
+// outright moved no bound in these fixtures, because every paired delta here is
+// constant across reps, and resampling identical values returns that value
+// whatever the draw order. A draw-sequence regression needs a fixture whose
+// deltas vary.
+//
+// analysis.json is compared to a tolerance rather than byte for byte, because
+// its floats carry platform-dependent last bits; metrics.jsonl and report.md
+// are exact.
 func TestBenchPipelineMatchesPinnedOutput(t *testing.T) {
 	_, _, records := fixtureRecords(t)
 	metrics, err := RecordsJSONL(records)
@@ -647,17 +662,112 @@ func TestBenchPipelineMatchesPinnedOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := mustAnalyze(t, loaded, 20260902)
+	// The real platform is whatever regenerated the fixture, so pinning its
+	// bytes would fail everywhere else. Its EFFECT is what the pin has to
+	// tolerate, which assertSameNumbers does.
+	a.Platform = "fixture"
 	raw, err := a.JSON()
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertSameBytes(t, "analysis.json", raw)
+	assertSameNumbers(t, "analysis.json", raw)
+	// The report rounds to a fixed number of digits, so it is byte-stable
+	// across platforms even where analysis.json is not.
 	assertSameBytes(t, "report.md", []byte(Report(a)))
 }
 
+// assertSameNumbers is assertSameBytes for a document whose floats carry
+// platform-dependent last bits: same shape, same keys, every number equal to
+// within a relative 1e-12. An exact byte pin here would be red on any machine
+// but the one that wrote it (see Analysis.Platform).
+func assertSameNumbers(t *testing.T, name string, got []byte) {
+	t.Helper()
+	file := filepath.Join("testdata", "fixture-"+name)
+	if os.Getenv("UPDATE_BENCH_FIXTURES") != "" {
+		if err := os.WriteFile(file, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("rewrote %s", file)
+		return
+	}
+	want, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotDoc, wantDoc any
+	if err := json.Unmarshal(got, &gotDoc); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(want, &wantDoc); err != nil {
+		t.Fatal(err)
+	}
+	compareJSON(t, name, gotDoc, wantDoc)
+}
+
+func compareJSON(t *testing.T, path string, got, want any) {
+	t.Helper()
+	switch w := want.(type) {
+	case map[string]any:
+		g, ok := got.(map[string]any)
+		if !ok {
+			t.Fatalf("%s: got %T, want object", path, got)
+		}
+		for k := range w {
+			if _, ok := g[k]; !ok {
+				t.Fatalf("%s/%s: missing from the analysis", path, k)
+			}
+		}
+		for k := range g {
+			if _, ok := w[k]; !ok {
+				t.Fatalf("%s/%s: absent from the pinned output", path, k)
+			}
+			compareJSON(t, path+"/"+k, g[k], w[k])
+		}
+	case []any:
+		g, ok := got.([]any)
+		if !ok {
+			t.Fatalf("%s: got %T, want array", path, got)
+		}
+		if len(g) != len(w) {
+			t.Fatalf("%s: length %d, pinned %d", path, len(g), len(w))
+		}
+		for i := range w {
+			compareJSON(t, fmt.Sprintf("%s[%d]", path, i), g[i], w[i])
+		}
+	case float64:
+		g, ok := got.(float64)
+		if !ok {
+			t.Fatalf("%s: got %T, want number", path, got)
+		}
+		if !almost(g, w, 12) && (w == 0 || math.Abs(g-w)/math.Abs(w) > 1e-12) {
+			t.Fatalf("%s: %v, pinned %v", path, g, w)
+		}
+	default:
+		if got != want {
+			t.Fatalf("%s: %v, pinned %v", path, got, want)
+		}
+	}
+}
+
+// UPDATE_BENCH_FIXTURES rewrites the pinned bytes instead of comparing against
+// them, for the case the pin exists to make visible: arithmetic or formatting
+// that changed on purpose. Run it, then READ the diff; a fixture updated without
+// anyone looking is a pin that has stopped pinning.
+//
+// An env var rather than a test flag, like UPDATE_MAGUS_API_LOCK: `magus run
+// test` appends forwarded args after the package list, where a flag the go
+// command does not know is dropped before any test binary sees it.
 func assertSameBytes(t *testing.T, name string, got []byte) {
 	t.Helper()
-	want, err := os.ReadFile(filepath.Join("testdata", "fixture-"+name))
+	file := filepath.Join("testdata", "fixture-"+name)
+	if os.Getenv("UPDATE_BENCH_FIXTURES") != "" {
+		if err := os.WriteFile(file, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("rewrote %s", file)
+		return
+	}
+	want, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}

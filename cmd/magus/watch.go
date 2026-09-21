@@ -103,7 +103,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	//   1. BuiltinIgnore  — VCS metadata, magus cache, editor temps.
 	//   2. OutputsIgnore  — per-project Outputs globs (rebuild-loop guard).
 	//   3. Config ignores — workspace-wide watch.ignore entries from magus.yaml.
-	//   4. Project ignores — magus.WatchIgnore() entries from magusfiles.
+	//   4. Project ignores — watch_ignore entries from magusfiles.
 	//   5. CLI ignores    — --ignore flags, highest user-supplied tier.
 	userPatterns := append([]types.IgnorePattern{}, rc.watchIgnores...)
 	userPatterns = append(userPatterns, projectIgnores...)

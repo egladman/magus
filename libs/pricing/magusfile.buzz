@@ -1,0 +1,103 @@
+// magusfile.buzz for pricing, the checked-in Claude API list-price table at
+// libs/pricing and the loader that reads it. Consumed by benchmarks/agent, which
+// prices a run's token totals from this table rather than from a host's
+// self-reported dollar figure.
+//
+//   magus run lint libs/pricing   go vet
+//   magus run test libs/pricing   the table's own conformance tests
+//   magus run ci libs/pricing     lint, build, and test
+//
+// DELIBERATELY NOT its own Go module. benchmarks/aggregate is one, and Go's
+// internal rule then forbade its import of internal/json, so it silently stopped
+// compiling for 51 days with nothing red. This package is imported from the magus
+// module and uses internal/json itself, so it stays an ordinary package of the
+// root module and earns its project status the way libs/textsearch does: a
+// magusfile, no go.mod.
+//
+// The table is data, not a fetch. Nothing here reaches the network, and no target
+// refreshes pricing.json as a side effect of building or reporting: a published
+// dollar figure must never move because an HTTP call succeeded or failed. Refresh
+// it by editing the file against the _source URL it records.
+
+import "magus";
+
+// go spell claims **/*.go. This file's own export-fun targets need no
+// declaration: magus binds the magusfile driver to every project.
+import "magus/spell/go";
+
+import "fs";
+
+magus\project({
+    "spells": [go],
+    // The table is go:embed'd, so it is a compile input that no *.go glob names.
+    // Undeclared, an edit to the prices would replay the verdict from the old ones.
+    "sources": ["pricing.json"],
+    // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
+    "targets": {
+        // Drift-gates MAGUS.md via git status: run alone, every time.
+        "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
+        // index-generate renders `magus describe graph -o markdown`, so its output is a
+        // function of the WHOLE knowledge graph. Its declared inputs (the magusfiles and
+        // the sibling indexes) are the only part of that a glob can name, so any other
+        // change leaves the key unmoved: a cache hit then replays a MAGUS.md built before
+        // it and REVERTS the committed one, which the drift gate above correctly reports
+        // as drift. Every other library carries the same opt-out.
+        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
+    },
+});
+
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(preflight);
+    ctx.needs(index_generate);
+}
+
+// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // Declared so `magus vcs resolve` can find the target that settles a conflict here:
+    // it matches per-TARGET outputs, and the project-level outputs list is not enough.
+    ctx.writesFiles("MAGUS.md");
+    // Every MAGUS.md embeds the same graph-derived routing tables, so a graph change
+    // anywhere can invalidate this file with nothing in this tree moving. The graph is
+    // unkeyable (see skip_cache above), but a routing change always rewrites the
+    // originating project's own index, so a sibling MAGUS.md moving in the diff is the
+    // keyable signal, and declaring them seeds this project into `magus affected`.
+    // Relative, not <alias>\file(): the cross form also unions a depends_on edge, which
+    // would put this project in EVERY owner change's affected set, not just index moves.
+    ctx.readsFiles("../../**/MAGUS.md");
+    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
+}
+
+// No go-mod-tidy, unlike the sibling libraries: this package has no go.mod, so
+// tidy here would rewrite the ROOT module's from a descendant project, which is
+// the cross-project write magus rejects as MGS3001.
+export fun format(ctx: magus\Context, args: [str]) > void {
+    // Not writesFiles: gofmt amends authored code rather than producing it, so these
+    // bytes stay off the snapshot/replay path. Undeclared, this is MGS4007.
+    ctx.modifiesExistingFiles("**/*.go");
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+}
+
+// go-vet only. golangci-lint runs over the whole root module from the root
+// project, which already reaches this package, so a second custom-linter build
+// here would buy nothing.
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
+
+// No coverage profile, unlike the sibling libraries: those are separate modules
+// whose statements the root suite never enters. This package is part of the root
+// module, so the root's `go test ./...` already records it in coverage.out and a
+// second profile would be the same blocks counted from a second run.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    go["go-test"](ctx, {"args": ["./..."]});
+}
+
+// The anchor `magus affected ci` keys off; fans out lint/build/test after format.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test);
+}

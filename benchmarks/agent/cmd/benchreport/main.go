@@ -2,7 +2,7 @@
 // three stages, each reading the previous one's file so a scored run is
 // analyzed as often as wanted without re-running an agent:
 //
-//	benchreport extract <results> -o metrics.jsonl [-p pricing.json]
+//	benchreport extract <results> -o metrics.jsonl [-p other-pricing.json]
 //	benchreport analyze <metrics.jsonl> -o analysis.json [--seed N]
 //	benchreport report <analysis.json> -o report.md
 //	benchreport makefixture <dir> -model <alias>
@@ -20,10 +20,11 @@ import (
 	"strconv"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/bench"
+	"github.com/egladman/magus/libs/pricing"
 )
 
 const usage = `usage:
-  benchreport extract <results> -o metrics.jsonl [-p pricing.json]
+  benchreport extract <results> -o metrics.jsonl [-p other-pricing.json]
   benchreport analyze <metrics.jsonl> -o analysis.json [--seed N]
   benchreport report <analysis.json> -o report.md
   benchreport makefixture <dir> -model <alias>
@@ -100,7 +101,7 @@ func summaryLine(record bench.RunRecord) string {
 func extract(args []string) error {
 	fs := flag.NewFlagSet("extract", flag.ContinueOnError)
 	out := fs.String("o", "", "metrics.jsonl to write")
-	pricingFile := fs.String("p", "benchmarks/agent/pricing.json", "pricing table")
+	pricingFile := fs.String("p", "", "price table to use instead of the one compiled in")
 	results, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -108,11 +109,19 @@ func extract(args []string) error {
 	if *out == "" {
 		return errors.New("-o is required")
 	}
-	pricing, err := bench.LoadPricing(*pricingFile)
+	// The checked-in table is compiled in, so a report never depends on the
+	// working directory or on a file someone forgot to pass. -p is for pricing
+	// an old results tree against the table that was current when it ran.
+	table, err := pricing.Default()
 	if err != nil {
 		return err
 	}
-	records, err := bench.Extract(results, pricing)
+	if *pricingFile != "" {
+		if table, err = pricing.Load(*pricingFile); err != nil {
+			return err
+		}
+	}
+	records, err := bench.Extract(results, table)
 	if err != nil {
 		return err
 	}

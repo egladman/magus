@@ -26,12 +26,12 @@ func TestDeclaredCeilingTracksDependencyWait(t *testing.T) {
 	}}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 
-	bodyCtx, cancel, ceiling := withDeclaredCeiling(ctx, "/w/api", "build")
-	defer cancel()
+	bodyCtx := types.WithDependencyWait(ctx)
+	ceiling := declaredTimeout(bodyCtx, "/w/api", "build")
 
 	require.Equal(t, 15*time.Minute, ceiling)
-	types.AddDependencyWait(bodyCtx, 90*time.Second)
-	assert.Equal(t, 90*time.Second, types.DependencyWait(bodyCtx),
+	types.DependencyWaitFromContext(bodyCtx).Add(90 * time.Second)
+	assert.Equal(t, 90*time.Second, types.DependencyWaitFromContext(bodyCtx).Elapsed(),
 		"a ceiling-bearing body carries no accumulator, so its split can never be measured")
 }
 
@@ -43,19 +43,19 @@ func TestDeclaredCeilingIsAPassThroughWithoutATimeout(t *testing.T) {
 		Dir:            "/w/api",
 		TargetPolicies: map[string]types.Target{"build": {}},
 	}}}
-	parent := types.TrackDependencyWait(types.WithWorkspace(context.Background(), ws))
-	types.AddDependencyWait(parent, time.Minute)
+	parent := types.WithDependencyWait(types.WithWorkspace(context.Background(), ws))
+	types.DependencyWaitFromContext(parent).Add(time.Minute)
 
-	bodyCtx, cancel, ceiling := withDeclaredCeiling(parent, "/w/api", "build")
-	defer cancel()
+	bodyCtx := types.WithDependencyWait(parent)
+	ceiling := declaredTimeout(bodyCtx, "/w/api", "build")
 
 	assert.Zero(t, ceiling)
 	_, hasDeadline := bodyCtx.Deadline()
-	assert.False(t, hasDeadline)
+	assert.False(t, hasDeadline, "declaredTimeout never applies a deadline; the driver does")
 
-	types.AddDependencyWait(bodyCtx, 30*time.Second)
-	assert.Equal(t, 30*time.Second, types.DependencyWait(bodyCtx))
-	assert.Equal(t, time.Minute, types.DependencyWait(parent),
+	types.DependencyWaitFromContext(bodyCtx).Add(30 * time.Second)
+	assert.Equal(t, 30*time.Second, types.DependencyWaitFromContext(bodyCtx).Elapsed())
+	assert.Equal(t, time.Minute, types.DependencyWaitFromContext(parent).Elapsed(),
 		"an uncapped body's dependency time reached the ceilinged ancestor that already counts it")
 }
 
@@ -68,8 +68,8 @@ func TestCeilingTraceReportsTheSplit(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: levelTrace})))
 
-	ctx := types.TrackDependencyWait(context.Background())
-	types.AddDependencyWait(ctx, 4*time.Second)
+	ctx := types.WithDependencyWait(context.Background())
+	types.DependencyWaitFromContext(ctx).Add(4 * time.Second)
 	logCeiling(ctx, "ci", 45*time.Minute, 10*time.Second)
 
 	out := buf.String()
@@ -86,7 +86,7 @@ func TestCeilingTraceIsSilentAboveTrace(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
-	logCeiling(types.TrackDependencyWait(context.Background()), "ci", time.Minute, time.Second)
+	logCeiling(types.WithDependencyWait(context.Background()), "ci", time.Minute, time.Second)
 
 	assert.Empty(t, strings.TrimSpace(buf.String()))
 }
@@ -97,3 +97,38 @@ type ceilingWorkspace struct {
 }
 
 func (w *ceilingWorkspace) All() []*types.Project { return w.projects }
+
+// The fix declaredTimeout exists for: a declared timeout bounds the time the BODY
+// runs, not the time its dependencies take.
+//
+// Before parking, a ceiling covered the ctx.needs waits inside a body, so a target
+// could exceed one having done almost none of its own work; four targets once reported
+// an identical 15m52s timeout that one serialization upstream had caused, and each
+// blamed itself. runTargetBody now spends the ceiling only across resumes.
+//
+// Asserted on the budget arithmetic rather than on wall clock, so it cannot go flaky on
+// a loaded machine: the driver subtracts only the time inside Exec, and dependency work
+// runs under a context with no deadline at all.
+func TestDeclaredCeilingIsNotSpentOnDependencies(t *testing.T) {
+	ws := &ceilingWorkspace{projects: []*types.Project{{
+		Dir:            "/w/api",
+		TargetPolicies: map[string]types.Target{"build": {Timeout: "50ms"}},
+	}}}
+	ctx := types.WithWorkspace(context.Background(), ws)
+
+	base := types.WithDependencyWait(ctx)
+	ceiling := declaredTimeout(base, "/w/api", "build")
+	require.Equal(t, 50*time.Millisecond, ceiling)
+
+	// The context a parked body's DEPENDENCIES run under carries no deadline, which is
+	// what keeps one target's declared timeout from bounding another target's work.
+	_, hasDeadline := base.Deadline()
+	assert.False(t, hasDeadline, "dependency work must not inherit the body's ceiling")
+
+	// And the context a RESUME runs under does carry it, so the body is still bounded.
+	runCtx, cancel := context.WithTimeout(base, ceiling)
+	defer cancel()
+	deadline, hasDeadline := runCtx.Deadline()
+	require.True(t, hasDeadline, "the body's own execution stays bounded")
+	assert.WithinDuration(t, time.Now().Add(ceiling), deadline, 20*time.Millisecond)
+}

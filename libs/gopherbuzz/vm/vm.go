@@ -1009,6 +1009,9 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				//     magus host bindings all copy out or consume synchronously).
 				result, err := directFn.Fn(vm.ctx, vm.stack[calleeIdx+1:stackLen])
 				if err != nil {
+					if vm.suspendedAtCall(err, calleeIdx) {
+						return Null, err
+					}
 					if vm.raiseHostError(err) {
 						f = &vm.frames[len(vm.frames)-1] // refresh f/code: frames unwound
 						code = f.chunk.Code
@@ -1210,6 +1213,12 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			case direct != nil:
 				result, ferr := direct.Fn(vm.ctx, vm.stack[recvIdx+1:stackLen])
 				if ferr != nil {
+					// The method-call path, which is how a host module's function is
+					// actually reached (`host.wait()`), so it is where a suspending
+					// native most often arrives.
+					if vm.suspendedAtCall(ferr, recvIdx) {
+						return Null, ferr
+					}
 					if vm.raiseHostError(ferr) {
 						f = &vm.frames[len(vm.frames)-1] // refresh f/code: frames unwound
 						code = f.chunk.Code

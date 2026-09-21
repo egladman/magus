@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
+	"github.com/egladman/magus/internal/json"
 )
 
 type armSpec struct {
@@ -179,7 +179,7 @@ func trailLines(arm string) []any {
 }
 
 func writeJSON(file string, value any) error {
-	raw, err := pycompat.Marshal(value, 2)
+	raw, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func writeJSON(file string, value any) error {
 func writeJSONL(file string, values []any) error {
 	var out []byte
 	for _, value := range values {
-		raw, err := pycompat.Marshal(value, 0)
+		raw, err := json.Marshal(value)
 		if err != nil {
 			return err
 		}

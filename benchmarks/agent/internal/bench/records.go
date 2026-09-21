@@ -6,8 +6,6 @@
 // or ControlRun per line, analysis.json one Analysis.
 package bench
 
-import "github.com/egladman/magus/benchmarks/agent/internal/pycompat"
-
 // The two recipes the paired comparison names. A record's arm stays a plain
 // string: the runner accepts arms outside this pair (_selftest), and cells
 // and pass rates cover whatever ran.
@@ -69,8 +67,9 @@ type ControlRun struct {
 
 // ScoredRun is one agent run measured from its artifacts. Success is nil when
 // no check ran and GuardEvents is nil when no trail was captured; neither is a
-// zero. Dollars is the host's billed cost when the transcript recorded one and
-// the priced table total otherwise. Control is always nil: every row carries
+// zero. Dollars is the token totals priced from the checked-in table, always;
+// ReportedCostUSD is the host's own estimate, recorded for comparison and never
+// substituted for it. Control is always nil: every row carries
 // the key so a reader tells the two record kinds apart by it.
 type ScoredRun struct {
 	RunID                string              `json:"run_id"`
@@ -94,22 +93,22 @@ type ScoredRun struct {
 	CheckExit            *int64              `json:"check_exit"`
 	Success              *bool               `json:"success"`
 	InvariantViolations  InvariantViolations `json:"invariant_violations"`
-	WallMs               *pycompat.Number    `json:"wall_ms"`
-	TimeToFirstEditMs    *pycompat.Number    `json:"time_to_first_edit_ms"`
-	TimeToDoneMs         *pycompat.Number    `json:"time_to_done_ms"`
+	WallMs               *float64            `json:"wall_ms"`
+	TimeToFirstEditMs    *float64            `json:"time_to_first_edit_ms"`
+	TimeToDoneMs         *float64            `json:"time_to_done_ms"`
 	// The meta.json passthrough: written as null when the runner recorded
 	// nothing, and a row may omit the key entirely, so these are the fields a
 	// reader does not require (the bench tag is what LoadRecords consults).
-	Effort       *string          `json:"effort"        bench:"optional"`
-	MaxTurns     *pycompat.Number `json:"max_turns"     bench:"optional"`
-	BudgetUSD    *pycompat.Number `json:"budget_usd"    bench:"optional"`
-	MagusBinary  *string          `json:"magus_binary"  bench:"optional"`
-	MagusVersion *string          `json:"magus_version" bench:"optional"`
-	FixtureSHA   *string          `json:"fixture_sha"   bench:"optional"`
-	Started      *string          `json:"started"       bench:"optional"`
-	Ended        *string          `json:"ended"         bench:"optional"`
-	ExitReason   *string          `json:"exit_reason"   bench:"optional"`
-	Control      *string          `json:"control"       bench:"optional"`
+	Effort       *string  `json:"effort"        bench:"optional"`
+	MaxTurns     *float64 `json:"max_turns"     bench:"optional"`
+	BudgetUSD    *float64 `json:"budget_usd"    bench:"optional"`
+	MagusBinary  *string  `json:"magus_binary"  bench:"optional"`
+	MagusVersion *string  `json:"magus_version" bench:"optional"`
+	FixtureSHA   *string  `json:"fixture_sha"   bench:"optional"`
+	Started      *string  `json:"started"       bench:"optional"`
+	Ended        *string  `json:"ended"         bench:"optional"`
+	ExitReason   *string  `json:"exit_reason"   bench:"optional"`
+	Control      *string  `json:"control"       bench:"optional"`
 }
 
 // RunRecord is one line of metrics.jsonl: exactly one of the two is set.
@@ -119,13 +118,12 @@ type RunRecord struct {
 }
 
 // Spread is median and IQR beside the mean; a mean alone hides the spread
-// that matters. Median and the IQR bounds keep the int form of a count metric
-// when they fall on a value rather than between two.
+// that matters.
 type Spread struct {
-	N      int64               `json:"n"`
-	Median *pycompat.Number    `json:"median"`
-	IQR    [2]*pycompat.Number `json:"iqr"`
-	Mean   *float64            `json:"mean"`
+	N      int64       `json:"n"`
+	Median *float64    `json:"median"`
+	IQR    [2]*float64 `json:"iqr"`
+	Mean   *float64    `json:"mean"`
 }
 
 // CellStats are the pass rates and metric spreads of one (arm, task) cell.
@@ -161,17 +159,17 @@ type ArmSummary struct {
 // PairedDelta is treatment minus baseline for one metric on one task, over
 // matched reps.
 type PairedDelta struct {
-	NPairs         int64            `json:"n_pairs"`
-	DeltaMean      *float64         `json:"delta_mean"`
-	DeltaMedian    *pycompat.Number `json:"delta_median"`
-	CILow          *float64         `json:"ci_low"`
-	CIHigh         *float64         `json:"ci_high"`
-	P              *float64         `json:"p"`
-	BaselineMedian *pycompat.Number `json:"baseline_median"`
-	Relative       *float64         `json:"relative"`
-	CIExcludesZero bool             `json:"ci_excludes_zero"`
-	Verdict        string           `json:"verdict"`
-	PHolm          *float64         `json:"p_holm"`
+	NPairs         int64    `json:"n_pairs"`
+	DeltaMean      *float64 `json:"delta_mean"`
+	DeltaMedian    *float64 `json:"delta_median"`
+	CILow          *float64 `json:"ci_low"`
+	CIHigh         *float64 `json:"ci_high"`
+	P              *float64 `json:"p"`
+	BaselineMedian *float64 `json:"baseline_median"`
+	Relative       *float64 `json:"relative"`
+	CIExcludesZero bool     `json:"ci_excludes_zero"`
+	Verdict        string   `json:"verdict"`
+	PHolm          *float64 `json:"p_holm"`
 }
 
 // ControlCount is how many controls of one kind a task ran and how many passed.
@@ -211,6 +209,15 @@ type DataQuality struct {
 // Analysis is analysis.json. Cells are keyed arm/task; Paired is keyed
 // metric, then task.
 type Analysis struct {
+	// Platform is the OS, architecture and toolchain the statistics were
+	// computed on, as GOOS/GOARCH/go-version.
+	//
+	// Load-bearing, not provenance decoration: quartile interpolation is
+	// `a*b + c*d`, which arm64 contracts into an FMA and amd64 does not, so two
+	// machines can report the same figure to different last bits. A number is
+	// only reproducible against the platform that produced it, so every report
+	// names it.
+	Platform         string                            `json:"platform"`
 	Seed             int64                             `json:"seed"`
 	BootstrapIters   int64                             `json:"bootstrap_iters"`
 	MinRelativeDelta float64                           `json:"min_relative_delta"`

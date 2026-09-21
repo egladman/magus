@@ -42,6 +42,13 @@ for name in "${env_keep[@]}"; do
     fi
 done
 
+# The CLI build, recorded beside the transcript for the runner to fold into
+# meta.json. A run's cost basis depends on it: the host's self-reported
+# total_cost_usd is priced from a table compiled into THIS binary, so which build
+# produced a transcript is what decides whether that figure can be compared to
+# list price at all. Unknown when the CLI cannot be asked, never guessed.
+printf '%s\n' "$(claude --version 2>/dev/null || echo unknown)" >"$(dirname "$transcript")/agent-cli.txt"
+
 cmd=(claude -p
     --output-format stream-json --verbose
     --permission-mode acceptEdits

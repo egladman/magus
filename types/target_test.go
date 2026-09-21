@@ -137,7 +137,7 @@ func TestValidateCharmName(t *testing.T) {
 // CeilingExceededError reports on.
 func expiredCeiling(t *testing.T) context.Context {
 	t.Helper()
-	ctx, cancel := context.WithDeadline(TrackDependencyWait(context.Background()), time.Now().Add(-time.Second))
+	ctx, cancel := context.WithDeadline(WithDependencyWait(context.Background()), time.Now().Add(-time.Second))
 	t.Cleanup(cancel)
 	return ctx
 }
@@ -147,7 +147,7 @@ func expiredCeiling(t *testing.T) context.Context {
 // serialization upstream while doing seconds of its own work.
 func TestCeilingExceededErrorSplitsWaitingFromOwnWork(t *testing.T) {
 	ctx := expiredCeiling(t)
-	AddDependencyWait(ctx, 14*time.Minute)
+	DependencyWaitFromContext(ctx).Add(14 * time.Minute)
 
 	err := CeilingExceededError(ctx, nil, "ci", 15*time.Minute, 15*time.Minute+52*time.Second)
 

@@ -353,7 +353,7 @@ func CeilingExceededError(ctx context.Context, err error, target string, ceiling
 	// time behind something else. Splitting it is what makes the difference actionable:
 	// own work at the ceiling means tune the target, dependency time at the ceiling means
 	// look upstream at what serialized.
-	if waited := DependencyWait(ctx); waited > 0 {
+	if waited := DependencyWaitFromContext(ctx).Elapsed(); waited > 0 {
 		msg += fmt.Sprintf(", %s of it on the targets it composes and %s on its own work",
 			waited.Round(time.Second), max(elapsed-waited, 0).Round(time.Second))
 	}

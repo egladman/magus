@@ -607,15 +607,15 @@ func TestDaemonDefaultAddrIsAUnixSocket(t *testing.T) {
 	assert.True(t, strings.HasSuffix(addr, "magus-daemon.sock"), addr)
 }
 
-// TestHintCanonicalSpellingTeachesUpdateOnce covers the one place a run is told the
-// `relock` charm has a new name. The alias resolves silently everywhere else by design
-// (a spell arm, RunCI, the cache key all see `update`), so if this line does not print,
-// nothing tells anyone to change, and the compat const has no condition that retires it.
+// TestHintCanonicalSpellingTeachesCharmOnce covers the one place a run is told it spelled
+// a charm non-canonically. Every other path resolves the spelling silently by design (a
+// spell arm, RunCI and the cache key all see the canonical form), so if this line does not
+// print, nothing tells anyone which spelling magus will report back.
 //
-// Once per invocation, not once per target: `magus run format:relock a b c` parses the
+// Once per invocation, not once per target: `magus run format:UPDATE a b c` parses the
 // same suffix per project, and a hint that repeats per project is one people filter out.
-func TestHintCanonicalSpellingTeachesUpdateOnce(t *testing.T) {
-	target, err := types.ParseTarget("format:relock")
+func TestHintCanonicalSpellingTeachesCharmOnce(t *testing.T) {
+	target, err := types.ParseTarget("format:UPDATE")
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -623,6 +623,6 @@ func TestHintCanonicalSpellingTeachesUpdateOnce(t *testing.T) {
 	hintCanonicalSpellingTo(&buf, target)
 
 	got := buf.String()
-	assert.Equal(t, 1, strings.Count(got, "hint:"), "the alias must teach once, not once per call: %q", got)
-	assert.Contains(t, got, `charm "relock" is canonically "update"`)
+	assert.Equal(t, 1, strings.Count(got, "hint:"), "the charm must teach once, not once per call: %q", got)
+	assert.Contains(t, got, `charm "UPDATE" is canonically "update"`)
 }

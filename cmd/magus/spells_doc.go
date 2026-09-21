@@ -14,7 +14,8 @@ package main
 //
 // Or from a Go magusfile using the magus package:
 //
-//	magus.RegisterProject(".", magus.WithSpell("go"))
+//	reg := magus.NewWorkspaceRegistry()
+//	reg.RegisterProject(".", magus.WithSpell("go"))
 //
 // To call a spell's targets directly from a Buzz target:
 //

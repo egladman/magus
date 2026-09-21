@@ -184,7 +184,7 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 	// visible and the stall watchdog now fails it by name, so what a ceiling here would
 	// still add is killing a settle that is making steady progress, on a figure nobody
 	// declared. A target that needs one declares `timeout`, which reaches these re-runs
-	// through the same seam as any other body (internal/interp.withDeclaredCeiling).
+	// through the same seam as any other body (internal/interp.declaredTimeout).
 	order := st.order
 
 	replayed := map[string]bool{}

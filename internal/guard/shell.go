@@ -976,7 +976,8 @@ var (
 	// which case this is. What the guard can see is that the chain is worth questioning.
 	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `" + hint.Run.With("lint", ".") + "` alone runs all three in order.\n" +
 		"Check what a target already pulls in before chaining: `" + hint.Run.With("<target>", "<project>", "--dry-run") + "` prints the plan without executing it.\n" +
-		"`" + hint.Affected.With("ci") + "` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice - and the second run can trip MGS4007 on an output the first one left behind.\n" +
+		"`" + hint.Affected.With("ci") + "` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice, and the second run can trip MGS4007 on an output the first one left behind.\n" +
+		"What it does NOT do is regenerate. A workspace whose default charms the gate strips (`--no-default-charms`) turns the composed `generate` into a drift GATE, so stale outputs fail it rather than being rewritten. Regenerate first, in ONE invocation across every affected project: `" + hint.Affected.With("generate:rw") + "`.\n" +
 		"Each extra invocation reloads the workspace and re-evaluates every magusfile. And `" + hint.Run.String() + "` takes one TARGET and many PROJECTS (`" + hint.Run.With("build", "api", "web") + "`), so two targets never belong in one call either."
 
 	// Both messages LEAD with the replacement, per this file's rule: the agent
@@ -1421,7 +1422,7 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	// Held rather than returned, like the git advisories below: a deny found later on the
 	// same line outranks it.
 	if chainedRunRe.MatchString(command) {
-		advisory = ShellVerdict{Context: adviseChainedRun}
+		advisory = ShellVerdict{Context: adviseChainedRun, Rule: denyRule{Name: advisoryChainedRun}}
 	}
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {

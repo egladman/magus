@@ -444,7 +444,34 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 				return vm.Null, fmt.Errorf("ctx.needs: %w", err)
 			}
 		}
-		if err := runBuzzDependencies(callCtx, targets, names); err != nil {
+		// Park instead of blocking, WHEN a driver is there to resume us. What that buys
+		// is the ceiling: a blocking wait runs under the body's deadline, so a declared
+		// timeout ends up measuring the queue rather than the target. See
+		// interp.runTargetBody.
+		//
+		// The names ride a side channel rather than the suspend value, because the
+		// suspend value is what the call EVALUATES to: handing them back would make
+		// `final x = ctx.needs(format)` read the scheduler's internals, permanently.
+		// ctx.needs returns void, and suspending must not change that.
+		if w := types.DependencyWaitFromContext(callCtx); w != nil {
+			// The request carries its own CLOSURE, not just the names: the driver lives
+			// in internal/interp, which this package imports, so it cannot call back
+			// here. Handing it something it can simply invoke keeps the dependency
+			// pointing one way, and DependencyWait.Do times it without this site having
+			// to remember to.
+			w.Request(func(runCtx context.Context) error {
+				return runBuzzDependencies(runCtx, targets, names)
+			})
+			return vm.Null, vm.Suspend(vm.Null)
+		}
+		// Nothing driving this body: run them here and book the time by hand. A body
+		// reached through a path that does not drive fibers must still get its
+		// dependencies, and silently skipping them would be the worst failure this
+		// change could cause.
+		started := time.Now()
+		err := runBuzzDependencies(callCtx, targets, names)
+		types.DependencyWaitFromContext(callCtx).Add(time.Since(started))
+		if err != nil {
 			return vm.Null, fmt.Errorf("ctx.needs: %w", err)
 		}
 		return vm.Null, nil
@@ -489,6 +516,77 @@ func resolveTargetFun(targets map[string]vm.Callable, exports map[string]vm.Valu
 // list (needs of it is a no-op). Only exported-function targets carry a handle, so a
 // pattern that would match a spell-provided op yields no handle for it; depend on
 // such a target directly.
+// buildBuzzUses implements `ctx.uses(&resource(), fun() > void { ... })`: the body runs
+// between a resource fiber's acquire half and its release half, and the release ALWAYS
+// runs.
+//
+// Named to sit beside ctx.needs, the same sentence about the target: this target NEEDS
+// format, this target USES a worktree. Third person like every predicate on this
+// context, and effectful like needs, which dispatches targets and blocks on them.
+//
+// NOT the `with` prefix, which here means DERIVES A VALUE (withEnv, withCwd, after
+// context.WithValue). NOT the participle `using`: every neighbor is a finite verb with
+// ctx as its subject, so a participle reads as an adjective modifying ctx. C#'s `using`
+// earns that form by being a statement keyword with no subject; a member has one.
+//
+// The resource is an ordinary Buzz fiber written acquire / yield / release:
+//
+//	fun worktree() > void *> void {
+//	    lock\take("worktree");
+//	    yield;                    // the body runs here
+//	    lock\drop("worktree");
+//	}
+//
+// Buzz cannot express that guarantee on its own. Its `foreach` ABANDONS a fiber when the
+// body breaks or throws, so the release half never runs (MEASURED; pinned by
+// TestForeachAbandonsAFiberWhenTheBodyThrows in gopherbuzz). Driving the fiber from the
+// host instead puts the finalizer in a Go defer, which fires on the throw path too. That
+// is Python's generator close() without a Buzz keyword for it, and it needed no change to
+// the language: gopherbuzz only had to EXPORT the drivers `resume` and `resolve` already
+// bind to.
+//
+// Why a fiber rather than a host-owned body form: the fiber is what makes the resource
+// set OPEN. A magusfile can define its own scoped resource and get the same guarantee,
+// instead of being limited to the ones magus happens to bind.
+func buildBuzzUses(sess *buzz.Session) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) != 2 {
+			return vm.Null, fmt.Errorf(`ctx.uses: requires a resource fiber and a body, as ctx.uses(&worktree(), fun() > void { ... })`)
+		}
+		resource, body := args[0], args[1]
+		if !vm.IsFiber(resource) {
+			return vm.Null, fmt.Errorf("ctx.uses: the resource must be a fiber (&resource()), not %s; a plain call cannot be released after the body", resource.Kind())
+		}
+		if !body.IsFun() {
+			return vm.Null, fmt.Errorf("ctx.uses: the second argument is the body to run, and it must be a function")
+		}
+		if sess == nil {
+			// TargetContextKeys builds the context with no session purely to
+			// enumerate member names; nothing runs a body on that path.
+			return vm.Null, nil
+		}
+		// Acquire: run the resource to its yield. Taken BEFORE the defer is armed
+		// only in the sense that a fiber which fails its acquire half has nothing
+		// to release; ResolveFiber is idempotent, so arming it first is harmless
+		// and covers a fiber that threw partway through acquiring.
+		//
+		// WithoutCancel, and this is the whole point of the region: ResolveFiber
+		// checks ctx.Err() before it runs anything, so finalizing on the cancelled
+		// context skips the release half on exactly the path that most needs it. A
+		// Ctrl-C would leak whatever the resource holds. Pinned by
+		// TestHostDrivenFiberFinalizesUnderCancellationOnlyWithoutCancel.
+		//
+		// The release therefore runs after cancellation. It must stay short and
+		// non-blocking for that reason: this is error-path cleanup, not a second
+		// chance to do work the run was just told to stop doing.
+		defer func() { _, _ = sess.ResolveFiber(context.WithoutCancel(ctx), resource) }()
+		if _, err := sess.ResumeFiber(ctx, resource); err != nil {
+			return vm.Null, err
+		}
+		return sess.CallValue(ctx, body, nil)
+	}
+}
+
 func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		var patterns []string
@@ -524,10 +622,10 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 	if len(names) == 0 {
 		return nil
 	}
-	// Everything below is time the CALLING body spends on targets other than itself, and
-	// its ceiling is running throughout. Recorded so a ceiling that expires can say which
-	// half of the elapsed time was its own work; see types.TrackDependencyWait.
-	defer func(started time.Time) { types.AddDependencyWait(callCtx, time.Since(started)) }(time.Now())
+	// The time this takes is the CALLING body's dependency time, and it is booked by
+	// whoever invoked this, not here: DependencyWait.Do for a parked body, and the
+	// inline branch of ctx.needs for a body nothing is driving. Timing it here too
+	// would count every dependency twice.
 	// These are dependencies (ctx.needs), so a service op among them is supervised
 	// in the background rather than blocked on (see runCommand). The directly-run
 	// target is dispatched without this marker, so it still foregrounds.
@@ -662,27 +760,31 @@ func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) []strin
 // part of the authored surface; it disappears when the context becomes a real type.
 const ctxMarker = "__magus_context"
 
-// execRefusedDecls are the ctx members a magus\Exec answers with a refusal rather
+// execRefusedMembers are the ctx members a magus\Exec answers with a refusal rather
 // than a no-op, so ctx.withEnv({...}).readsFiles("x") fails loudly instead of
 // declaring nothing. Named rather than written inline at its one use because it is
 // one of three places that enumerate this context's members independently (the other
 // two being buildTargetContext itself and the dry host's buildCtx), and a name is
 // what lets a test hold them against each other.
-var execRefusedDecls = []string{"needs", "glob", "readsFiles", "writesFiles", "modifiesExistingFiles", "envInputs", "observes", "hasCharm"}
+//
+// MEMBERS, not decls: `uses` runs a body rather than declaring anything, and it is
+// refused here for the same reason the declarations are. An Exec carries execution
+// overrides, so a region scoped to one would hold a resource for a run it does not own.
+var execRefusedMembers = []string{"needs", "glob", "readsFiles", "writesFiles", "modifiesExistingFiles", "envInputs", "observes", "hasCharm", "uses"}
 
 // TargetContextKeys returns the member names bound on the magus\Context a target
 // receives, and ExecRefusedKeys those a magus\Exec refuses. Same role as
 // MagusModuleKeys one surface over: nothing but a test connects the enumerations
 // above to the dry-run host's copy, so a declaration added to one and forgotten in
 // another is silent until someone's body stops tracing.
-func TargetContextKeys() []string { return buildTargetContext(nil, nil, nil, nil).MapKeys() }
+func TargetContextKeys() []string { return buildTargetContext(nil, nil, nil, nil, nil).MapKeys() }
 
 // ExecRefusedKeys returns the ctx members a magus\Exec derivation refuses. It carries the
-// same caveat as [TargetContextKeys]: execRefusedDecls is one of three independent
+// same caveat as [TargetContextKeys]: execRefusedMembers is one of three independent
 // enumerations of this context's members, and nothing but a test holds them against each
 // other, so a declaration added to buildTargetContext or the dry host's buildCtx and
 // forgotten here is silent until an Exec quietly accepts what it should refuse.
-func ExecRefusedKeys() []string { return slices.Clone(execRefusedDecls) }
+func ExecRefusedKeys() []string { return slices.Clone(execRefusedMembers) }
 
 // buildTargetContext assembles the shared magus.Context value every target receives
 // as its first argument. Its methods are the injected, per-target form of what used to
@@ -702,8 +804,9 @@ func ExecRefusedKeys() []string { return slices.Clone(execRefusedDecls) }
 //
 // The value is stateless, so the session stashes one instance and reuses it for every
 // target.
-func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles) vm.Value {
+func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles) vm.Value {
 	c := vm.NewMap()
+	c.MapSet("uses", directVal(obs, "ctx.uses", buildBuzzUses(sess)))
 	c.MapSet("needs", directVal(obs, "ctx.needs", buildBuzzNeeds(targets, exports, ext)))
 	// ctx.glob(...): resolve glob patterns to matching target function handles, the
 	// pattern resolver that feeds ctx.needs (ctx.needs(ctx.glob("*-generate"))). It
@@ -746,7 +849,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 			}
 			return execCtx(env, args[0]), nil
 		}))
-		for _, decl := range execRefusedDecls {
+		for _, decl := range execRefusedMembers {
 			e.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 				return vm.Null, fmt.Errorf(
 					"ctx.%s: magus\\Exec carries execution overrides only; declare on the magus\\Context the target received", decl)

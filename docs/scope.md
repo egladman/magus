@@ -260,7 +260,7 @@ sharded CI pipeline, sets five things:
 default_charms: [rw]
 sandbox: { env: { passthrough: ["GO*"] } }
 cache: { remote: { trusted_keys: ["..."] } }
-required_version: ">= 0.4.0"
+required_version: ">= 0.4.4"
 knowledge: { notes: { shared: notes }, vcs: { enabled: true } }
 ```
 
@@ -307,10 +307,10 @@ those surfaces, the pasted block included:
 
 ```text
 [pass] agent-skills: 4 install location(s) current with this binary
-    .agents/skills: up to date (skill v47, schema v9)
-    .claude/skills: up to date (skill v47, schema v9)
-    .opencode/skills: up to date (skill v47, schema v9)
-    AGENTS.md: up to date (skill v47, schema v9, content 00482e4b1658)
+    .agents/skills: up to date (skill v86, schema v14)
+    .claude/skills: up to date (skill v86, schema v14)
+    .opencode/skills: up to date (skill v86, schema v14)
+    AGENTS.md: up to date (skill v86, schema v14, content 2f5680e1e462)
 ```
 
 `MAGUS.md` lands at your repo root. The git merge driver writes your tracked
@@ -374,13 +374,13 @@ opt-in now.
 
 The other is not a bug and is not fixed: `go install` does not work at all. The
 root `go.mod` requires the nested `libs/gopherbuzz` and `libs/diagnostics`
-modules - each with its own `go.mod` - at `v0.0.0`, and resolves them only
-through this repo's own local `replace` directives. Neither nested module has
-ever been tagged, and `go install pkg@version` refuses outright to build any
-module whose `go.mod` carries a replace directive unless it is the main module
-of the build, so the install dies on the replace lines before dependency
-resolution starts. Nothing on the consuming side gets around that; tagging the
-nested modules is what would. The route the rule above says not to recommend is
+modules, each with its own `go.mod`, at `v0.0.0`, and resolves them only
+through this repo's own local `replace` directives. `go install pkg@version`
+refuses outright to build any module whose `go.mod` carries a replace directive
+unless it is the main module of the build, so the install dies on the replace
+lines before dependency resolution starts. Both nested modules now carry
+`v0.1.0` tags, so the tags are not what is missing: the root would have to
+require those versions and drop the replaces. The route the rule above says not to recommend is
 therefore a route that currently does not run, which makes documenting it and
 warning you off it less of a compromise than it reads as.
 

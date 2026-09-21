@@ -326,8 +326,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch},
 				Supported: spells.VersionBounds{Min: "1.21"}},
 			"golangci-lint": {Probe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
-			"govulncheck": {Probe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}},
-				Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
+			// Observe only, no Probe: a version probe keys every target in the project,
+			// so the database date `-version` prints reached targets that never run the
+			// scanner. See spells/golang/spell.buzz.
+			"govulncheck": {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
 		},
 		Language:           "go",
 		LanguageExtensions: []string{".go"},
@@ -567,10 +569,20 @@ func TestBuiltinsMatchGolden(t *testing.T) {
 		// identity — and the Doc is not even stable across compiler versions (whether
 		// bytecode serializes doc comments varies). Clear both before comparing the
 		// semantic fields (bin/args/charms).
+		//
+		// Into a COPY of Ops. Builtins is a sync.OnceValue, so g.Ops aliases the one
+		// registry map for the whole test binary, and clearing in place emptied every
+		// built-in op's Doc for whatever ran next.
+		// A spell with no ops keeps its nil map: testify tells nil from empty, and the
+		// golden writes nil.
 		g.DocOps = nil
-		for opName, op := range g.Ops {
-			op.Doc = ""
-			g.Ops[opName] = op
+		if len(g.Ops) > 0 {
+			ops := make(map[string]spells.Op, len(g.Ops))
+			for opName, op := range g.Ops {
+				op.Doc = ""
+				ops[opName] = op
+			}
+			g.Ops = ops
 		}
 		assert.Equalf(t, want, g, "built-in %q", name)
 	}
