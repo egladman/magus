@@ -358,6 +358,34 @@ func copySubtree(root, prefix, dstDir string) error {
 	return copyTree(staged, dstDir)
 }
 
+// ConfiguredRemote returns the default remote recorded in the config of whichever
+// backend claims root, read without running it. Empty when nothing claims root or the
+// claiming backend records no remote a file read can find.
+//
+// Walks builtin so the claim ordering has ONE definition; see its comment for why a
+// colocated jj workspace must not resolve as git.
+//
+// Honors no MAGUS_VCS_NAME override, unlike Resolve: this keys a state store, and one
+// that moves because an env var was exported for a command looks empty for reasons its
+// owner cannot see.
+func ConfiguredRemote(root string) string {
+	for _, d := range builtin {
+		if !claimsExist(root, d.Claims()) {
+			continue
+		}
+		r, ok := d.(types.RemoteConfigReporter)
+		if !ok {
+			return ""
+		}
+		u, err := r.ConfiguredRemote(root)
+		if err != nil {
+			return ""
+		}
+		return u
+	}
+	return ""
+}
+
 func claimsExist(root string, claims []string) bool {
 	for _, c := range claims {
 		if _, err := os.Stat(filepath.Join(root, c)); err == nil {

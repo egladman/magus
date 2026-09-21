@@ -56,7 +56,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/repoid"
+	"github.com/egladman/magus/internal/repo"
 )
 
 // SchemaVersion stamps every record written by this build. It exists so a reader
@@ -177,7 +177,7 @@ const fileExt = ".jsonl"
 // The hash keys on repository IDENTITY rather than the checkout path, which is the
 // whole point: every worktree AND every clone of one repo resolves to the same
 // directory, so a session started in one is visible from another. Both this and
-// internal/memory.Dir key through repoid, deliberately: they answer "state that
+// internal/memory.Dir key through repo, deliberately: they answer "state that
 // belongs to the repo, not to the checkout", and must not drift into disagreeing
 // about what a repo is.
 func Dir(root string) (string, error) {
@@ -185,7 +185,7 @@ func Dir(root string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("sessions: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
 	}
-	dir, err := repoid.StateDir(base, "sessions", root)
+	dir, err := repo.StateDir(base, "sessions", root)
 	if err != nil {
 		return "", fmt.Errorf("sessions: %w", err)
 	}

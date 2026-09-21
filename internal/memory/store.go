@@ -28,7 +28,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/repoid"
+	"github.com/egladman/magus/internal/repo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -138,7 +138,7 @@ const cursorFile = "cursor.md"
 
 // Dir resolves the per-repository memory directory:
 // <XDG state>/magus/memory/<repo-basename>-<hash12>. The hash keys on repository
-// identity, as internal/repoid resolves it, not the checkout path, so every worktree AND every
+// identity, as internal/repo resolves it, not the checkout path, so every worktree AND every
 // clone of a repo shares one memory. A store written under the older path-based key
 // is adopted on the way past.
 func Dir(root string) (string, error) {
@@ -146,7 +146,7 @@ func Dir(root string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("memory: state dir: %w", err)
 	}
-	dir, err := repoid.StateDir(base, "memory", root)
+	dir, err := repo.StateDir(base, "memory", root)
 	if err != nil {
 		return "", fmt.Errorf("memory: %w", err)
 	}

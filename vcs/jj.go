@@ -467,6 +467,22 @@ var (
 // line per remote; "origin" is the one git's implementation reports, so this matches it
 // rather than guessing at a single-remote repository. A repo with no origin (or no git
 // backend at all) yields ErrVCSUnsupported, and callers degrade to no link.
+// ConfiguredRemote implements types.RemoteConfigReporter for a COLOCATED workspace only,
+// where `jj git init` wrote a .git beside .jj and jj's remotes are that repository's.
+//
+// A non-colocated workspace keeps its store inside .jj and is reported unsupported
+// rather than traversed, deliberately: no fixture here describes that layout and CI
+// installs only git, so any path this walked would be a guess.
+func (v jjVCS) ConfiguredRemote(dir string) (string, error) {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		return "", types.ErrVCSUnsupported
+	}
+	if u := gitConfigRemote(gitCommonDir(dir)); u != "" {
+		return u, nil
+	}
+	return "", types.ErrVCSUnsupported
+}
+
 func (v jjVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
 	out, err := vcsOutput(ctx, dir, "jj", "git", "remote", "list")
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/egladman/magus/internal/repoid"
+	"github.com/egladman/magus/internal/repo"
 	"github.com/egladman/magus/internal/sessions"
 	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 )
@@ -82,7 +82,7 @@ func sessionActivity(session, path string, events []sessions.AgentEvent) *viewer
 		out.Host = cmp.Or(out.Host, ev.Host)
 		out.Transcript = cmp.Or(out.Transcript, ev.Transcript)
 		// compat: see knowledge.go's loadKnowledgeAgentContacts.
-		if ev.Kind == sessions.EventFileWrite && (ev.Text == path || repoid.CheckoutRelative(ev.Text) == path) {
+		if ev.Kind == sessions.EventFileWrite && (ev.Text == path || repo.CheckoutRelative(ev.Text) == path) {
 			writes = append(writes, i)
 		}
 	}

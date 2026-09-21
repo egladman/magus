@@ -768,6 +768,19 @@ func (v hgVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
 	return out, nil
 }
 
+// ConfiguredRemote implements types.RemoteConfigReporter by reading `[paths] default`
+// out of .hg/hgrc, where `hg paths default` above reads it from.
+//
+// Deliberately the narrower answer: hg layers user and system config over the
+// repository's file, so a default declared there is invisible here. That costs identity
+// nothing, since a per-user path cannot be what two clones share.
+func (v hgVCS) ConfiguredRemote(dir string) (string, error) {
+	if u := configSectionValue(filepath.Join(dir, ".hg", "hgrc"), "paths", "default"); u != "" {
+		return u, nil
+	}
+	return "", types.ErrVCSUnsupported
+}
+
 // DefaultRef implements types.DefaultRefReporter. Mercurial's primary line of development
 // is the branch literally named "default" (it is created by `hg init` and cannot be
 // renamed), so unlike git there is nothing to look up. It is still CONFIRMED to resolve

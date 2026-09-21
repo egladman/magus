@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/repoid"
+	"github.com/egladman/magus/internal/repo"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
@@ -649,7 +649,7 @@ func decodeLoadEvent(raw string, sameRepo func(string) bool) (*sessions.LoadEven
 	// Storing the checkout-relative path is what lets the @session shard land the
 	// event on a node.
 	if ev.Kind == sessions.EventFileRead || ev.Kind == sessions.EventFileWrite {
-		ev.Text = repoid.CheckoutRelative(ev.Text)
+		ev.Text = repo.CheckoutRelative(ev.Text)
 	}
 	command := ""
 	if ev.Kind == sessions.EventShellCommand {

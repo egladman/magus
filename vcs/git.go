@@ -50,6 +50,17 @@ func (v gitVCS) IsSecondaryCheckout(dir string) bool {
 	return strings.Contains(filepath.ToSlash(strings.TrimSpace(rest)), "/.git/worktrees/")
 }
 
+// ConfiguredRemote implements types.RemoteConfigReporter by reading .git/config, the
+// same answer `git remote get-url origin` gives without starting git. It resolves a
+// linked worktree or submodule to the shared config first, since only that one carries
+// remotes.
+func (v gitVCS) ConfiguredRemote(dir string) (string, error) {
+	if u := gitConfigRemote(gitCommonDir(dir)); u != "" {
+		return u, nil
+	}
+	return "", types.ErrVCSUnsupported
+}
+
 func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 	cmd := gitExec(ctx, "rev-parse", "--show-toplevel")
 	cmd.Dir = dir
