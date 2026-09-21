@@ -1,0 +1,76 @@
+// title: Timeouts: bounding a target that can hang
+// desc: A ceiling belongs on the target that can hang, not on the composite above it. Declare it too high in the graph and every member blames itself for one upstream stall.
+// doc: concepts/concurrency|Concurrency
+//
+// A `timeout` is a per-target ceiling, written as a duration string. It bounds the
+// time that target's OWN body spends executing, and deliberately not the time it
+// spends waiting on the targets it composes.
+//
+// That distinction is the whole page. A composite's body is mostly `ctx.needs`, so a
+// ceiling declared up there is measuring the queue rather than the work. Four targets
+// in this repo once reported an identical 15m52s timeout, each naming itself, when a
+// single upstream serialization had stalled all of them. Not one of them was slow.
+//
+// Where the ceiling belongs is the leaf that can actually hang: the target that opens a
+// socket, waits on a lock, or shells out to something with no timeout of its own. Put
+// it there and the refusal names the thing that stopped.
+//
+// Nesting needs no coordination. A composed target's ceiling is a second, tighter
+// deadline inside its parent's, and whichever expires first cancels. So a 2m leaf under
+// a 30m composite is bounded at 2m, and the composite's own 30m still covers everything
+// else it does.
+//
+// Three other bounds exist and none of them is this one:
+//
+//   magus.yaml target_timeout   the workspace-wide default, for targets declaring none
+//   MGS3012                     invocation SILENCE, not a duration: the stall watchdog
+//   the tool's own flag         always better when it has one, because it can clean up
+//
+// Reach for the tool's flag first. A ceiling cancels the context; a tool that owns its
+// own deadline can fail with a diagnostic about what it was doing.
+
+import "magus";
+import "magus/spell/go";
+
+magus\project({
+    "name": "tour-timeouts",
+    "spells": [go],
+    "targets": {
+        // The leaf that can hang, and the only place a duration is worth declaring
+        // here. It talks to something outside this machine, so its failure mode is
+        // "waits forever", which is exactly what a ceiling is for.
+        "smoke": {"timeout": "2m"},
+
+        // NOTE what is missing: `ci` below declares no timeout at all. Its body is
+        // three ctx.needs calls, so a ceiling on it would be a ceiling on the queue.
+        // If smoke hangs, smoke is what fails, and the message says so.
+
+        // A generous backstop on the one target that genuinely does long work in its
+        // own body. Sized so it only ever fires on a hang, never on a slow machine:
+        // a ceiling that trips on a loaded laptop teaches everyone to ignore it.
+        "integration": {"timeout": "30m"},
+    },
+});
+
+// Fast, bounded by the tool itself, and declaring nothing. Most targets look like this.
+export fun unit(ctx: magus\Context, args: [str]) > void {
+    go["go-test"](ctx);
+}
+
+// The one that reaches off the box. `2m` is the ceiling; the tool gets its own deadline
+// too, because a flag the tool understands produces a better error than a cancellation.
+export fun smoke(ctx: magus\Context, args: [str]) > void {
+    go["go-test"](ctx, {"args": ["-run", "TestSmoke", "-timeout", "90s"]});
+}
+
+// Long by design, so the ceiling is a backstop rather than a budget.
+export fun integration(ctx: magus\Context, args: [str]) > void {
+    go["go-test"](ctx, {"args": ["-tags", "integration"]});
+}
+
+// The composite. No timeout: a body that is only ctx.needs has almost no time of its
+// own, so a ceiling here would attribute an upstream stall to this target and send the
+// next reader to the wrong file.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(unit, smoke, integration);
+}

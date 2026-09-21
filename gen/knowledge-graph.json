@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6460,
-  "edge_count": 11553,
+  "node_count": 6471,
+  "edge_count": 11570,
   "relations": [
     {
       "id": "annotates",
@@ -2179,7 +2179,7 @@
       "label": "docs/tour",
       "source": "docs/tour",
       "attrs": {
-        "dir_files": "24",
+        "dir_files": "26",
         "dir_languages": "buzz"
       }
     },
@@ -43108,6 +43108,24 @@
       }
     },
     {
+      "id": "file:docs/tour/25-timeouts.buzz",
+      "kind": "file",
+      "label": "docs/tour/25-timeouts.buzz",
+      "source": "docs/tour/25-timeouts.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/tour/26-advisory.buzz",
+      "kind": "file",
+      "label": "docs/tour/26-advisory.buzz",
+      "source": "docs/tour/26-advisory.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:internal/cache/mtime.go",
       "kind": "file",
       "label": "internal/cache/mtime.go",
@@ -48738,7 +48756,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "The conventional anchor. Kept to lint here so the plan stays short.",
-      "source": "docs/tour/05-slots.buzz:55",
+      "source": "docs/tour/05-slots.buzz:68",
       "attrs": {
         "exported": "true"
       }
@@ -48748,7 +48766,17 @@
       "kind": "function",
       "label": "go_lint",
       "doc": "A cheap check. It stays at the default of one slot; several like it run at once.",
-      "source": "docs/tour/05-slots.buzz:39",
+      "source": "docs/tour/05-slots.buzz:46",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/05-slots.buzz:integration_test",
+      "kind": "function",
+      "label": "integration_test",
+      "doc": "The memory-declared one. Nothing here says \"4 slots\"; the 6000 above does, in the unit a `go test -race` run is actually measured in.",
+      "source": "docs/tour/05-slots.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -48758,7 +48786,7 @@
       "kind": "function",
       "label": "js_lint",
       "doc": "The greedy one: reserve 4 slots AND tell eslint to actually use 4 threads.",
-      "source": "docs/tour/05-slots.buzz:44",
+      "source": "docs/tour/05-slots.buzz:51",
       "attrs": {
         "exported": "true"
       }
@@ -48768,7 +48796,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint fans out to both. The scheduler runs the 1-slot check alongside other small work, but quiets the queue around js-lint's 4-slot reservation.",
-      "source": "docs/tour/05-slots.buzz:50",
+      "source": "docs/tour/05-slots.buzz:63",
       "attrs": {
         "exported": "true"
       }
@@ -48777,8 +48805,8 @@
       "id": "function:docs/tour/05-slots.buzz:release",
       "kind": "function",
       "label": "release",
-      "doc": "A stand-in release, so `graph` shows the exclusive policy in context.",
-      "source": "docs/tour/05-slots.buzz:60",
+      "doc": "A stand-in release, so `graph` shows a skip_cache policy in context.",
+      "source": "docs/tour/05-slots.buzz:73",
       "attrs": {
         "exported": "true"
       }
@@ -49504,6 +49532,86 @@
       "label": "agent_demo",
       "doc": "The subprocess half. A child cannot be handed a Go HTTP client, so magus binds a loopback endpoint for the run and the child is pointed at it. There is no gateway to install and no service to start: the listener belongs to this run and closes when it ends.  Note who decides which variable carries it. magus does NOT set one for you - you name it, because a tool with no base-URL knob should fail somewhere you can see it rather than silently talking to the real endpoint unauthenticated.  The URL carries a rand",
       "source": "docs/tour/24-secret-grants.buzz:88",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/25-timeouts.buzz:ci",
+      "kind": "function",
+      "label": "ci",
+      "doc": "The composite. No timeout: a body that is only ctx.needs has almost no time of its own, so a ceiling here would attribute an upstream stall to this target and send the next reader to the wrong file.",
+      "source": "docs/tour/25-timeouts.buzz:74",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/25-timeouts.buzz:integration",
+      "kind": "function",
+      "label": "integration",
+      "doc": "Long by design, so the ceiling is a backstop rather than a budget.",
+      "source": "docs/tour/25-timeouts.buzz:67",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/25-timeouts.buzz:smoke",
+      "kind": "function",
+      "label": "smoke",
+      "doc": "The one that reaches off the box. `2m` is the ceiling; the tool gets its own deadline too, because a flag the tool understands produces a better error than a cancellation.",
+      "source": "docs/tour/25-timeouts.buzz:62",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/25-timeouts.buzz:unit",
+      "kind": "function",
+      "label": "unit",
+      "doc": "Fast, bounded by the tool itself, and declaring nothing. Most targets look like this.",
+      "source": "docs/tour/25-timeouts.buzz:56",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/26-advisory.buzz:ci",
+      "kind": "function",
+      "label": "ci",
+      "doc": "ci composes all three. A vuln-scan failure is REPORTED here and does not fail the gate; a unit failure does. Run `magus run vuln-scan` directly and it fails properly, which is how you check on it deliberately rather than discovering it in a gate.",
+      "source": "docs/tour/26-advisory.buzz:69",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/26-advisory.buzz:link_check",
+      "kind": "function",
+      "label": "link_check",
+      "doc": "Advisory for a different reason: the failure is someone else's server.",
+      "source": "docs/tour/26-advisory.buzz:62",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/26-advisory.buzz:unit",
+      "kind": "function",
+      "label": "unit",
+      "doc": "The real gate. Nothing about it is advisory.",
+      "source": "docs/tour/26-advisory.buzz:52",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/26-advisory.buzz:vuln_scan",
+      "kind": "function",
+      "label": "vuln_scan",
+      "doc": "Advisory. A red here shows up in the run's report and `ci` still passes.",
+      "source": "docs/tour/26-advisory.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -66511,6 +66619,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/25-timeouts.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/25-timeouts.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/26-advisory.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/26-advisory.buzz"
     },
     {
       "source": "dir:internal",
@@ -129426,6 +129550,14 @@
     },
     {
       "source": "file:docs/tour/05-slots.buzz",
+      "target": "function:docs/tour/05-slots.buzz:integration_test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/05-slots.buzz"
+    },
+    {
+      "source": "file:docs/tour/05-slots.buzz",
       "target": "function:docs/tour/05-slots.buzz:js_lint",
       "relation": "contains",
       "confidence": "extracted",
@@ -130463,6 +130595,102 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/tour/24-secret-grants.buzz"
+    },
+    {
+      "source": "file:docs/tour/25-timeouts.buzz",
+      "target": "function:docs/tour/25-timeouts.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/25-timeouts.buzz"
+    },
+    {
+      "source": "file:docs/tour/25-timeouts.buzz",
+      "target": "function:docs/tour/25-timeouts.buzz:integration",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/25-timeouts.buzz"
+    },
+    {
+      "source": "file:docs/tour/25-timeouts.buzz",
+      "target": "function:docs/tour/25-timeouts.buzz:smoke",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/25-timeouts.buzz"
+    },
+    {
+      "source": "file:docs/tour/25-timeouts.buzz",
+      "target": "function:docs/tour/25-timeouts.buzz:unit",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/25-timeouts.buzz"
+    },
+    {
+      "source": "file:docs/tour/25-timeouts.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/25-timeouts.buzz"
+    },
+    {
+      "source": "file:docs/tour/25-timeouts.buzz",
+      "target": "import:magus/spell/go",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/25-timeouts.buzz"
+    },
+    {
+      "source": "file:docs/tour/26-advisory.buzz",
+      "target": "function:docs/tour/26-advisory.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/26-advisory.buzz"
+    },
+    {
+      "source": "file:docs/tour/26-advisory.buzz",
+      "target": "function:docs/tour/26-advisory.buzz:link_check",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/26-advisory.buzz"
+    },
+    {
+      "source": "file:docs/tour/26-advisory.buzz",
+      "target": "function:docs/tour/26-advisory.buzz:unit",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/26-advisory.buzz"
+    },
+    {
+      "source": "file:docs/tour/26-advisory.buzz",
+      "target": "function:docs/tour/26-advisory.buzz:vuln_scan",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/26-advisory.buzz"
+    },
+    {
+      "source": "file:docs/tour/26-advisory.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/26-advisory.buzz"
+    },
+    {
+      "source": "file:docs/tour/26-advisory.buzz",
+      "target": "import:magus/spell/go",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/26-advisory.buzz"
     },
     {
       "source": "file:internal/handler/metrics/quantile.go",
@@ -153147,6 +153375,22 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/tour/24-secret-grants.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/25-timeouts.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/26-advisory.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
