@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6538,
-  "edge_count": 11709,
+  "node_count": 6539,
+  "edge_count": 11711,
   "relations": [
     {
       "id": "annotates",
@@ -1709,7 +1709,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "242",
+        "dir_files": "243",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#--no-autoload,md#--step,md#-c-dir,md#1-install-magus,md#2-bootstrap-a-workspace-with-magus-init,md#3-read-your-first-magusfile,md#4-bind-your-first-spell,md#5-compose-a-ci-target-and-run-only-what-changed,md#a-"
       }
     },
@@ -1719,7 +1719,7 @@
       "label": "docs/guides/integrations",
       "source": "docs/guides/integrations",
       "attrs": {
-        "dir_files": "147",
+        "dir_files": "148",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#agents,md#amended-2026-09-02-machine-wide-admission-is-daemon-owned,md#annotations-and-folded-logs,md#available-tools,md#azure-pipelines,md#before-the-push-the-same-advisors-locally,md#bou"
       }
     },
@@ -21410,6 +21410,16 @@
       "source": "docs/guides/integrations/git.md#reading-a-patch-you-did-not-produce",
       "attrs": {
         "anchor": "reading-a-patch-you-did-not-produce",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/git.md#regeneration-after-the-merge",
+      "kind": "docsection",
+      "label": "Regeneration after the merge",
+      "source": "docs/guides/integrations/git.md#regeneration-after-the-merge",
+      "attrs": {
+        "anchor": "regeneration-after-the-merge",
         "level": "3"
       }
     },
@@ -78972,6 +78982,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/git.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/git.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/git.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
       "relation": "references",
       "confidence": "inferred",
@@ -110069,6 +110087,14 @@
     {
       "source": "docsection:docs/guides/integrations/git.md#reading-a-change-through-git",
       "target": "docsection:docs/guides/integrations/git.md#why-not-an-external-diff-or-a-difftool",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/git.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/git.md#the-merge-driver-and-what-it-cannot-do",
+      "target": "docsection:docs/guides/integrations/git.md#regeneration-after-the-merge",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

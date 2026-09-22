@@ -13,7 +13,7 @@ magus writes three things into a repository, and no more:
   and routing it to magus's merge driver;
 - a `merge.magus.driver` registration in the clone's own git config, because a driver
   cannot be committed;
-- the refresh hooks below, when the daemon starts.
+- the refresh, drift-notice and owed-regeneration hooks below, when the daemon starts.
 
 All three are managed sections or single config keys. Nothing rewrites your history,
 your branches, or a hook body you wrote yourself. Hooks your workspace writes in Buzz
@@ -193,6 +193,40 @@ MAGUS.md merge=magus linguist-generated
 You never run that command yourself. `linguist-generated` is the other half, and it is
 the half that always works: it collapses the file in GitHub's diff view and keeps it out
 of language statistics.
+
+### Regeneration after the merge
+
+The driver keeps the current version of the file and does not regenerate it. git calls
+it once per conflicted file while the merge is still writing the tree, so a generator
+started there would read a half-merged checkout. Instead the driver records what it
+owes: the project, the target that rebuilds the file, and the file itself, in
+`magus-owed-regeneration.json` in the worktree's git directory. Fifty kept files of one
+target are one entry.
+
+`post-merge`, `post-rewrite` and `post-commit` carry a third managed section,
+`magus-regenerate-owed`, in the same shape as the others: post a `regenerate-owed` job,
+return. `post-commit` is there because a merge git stopped on is concluded by
+`git commit`, which never fires `post-merge`. On the daemon the job:
+
+1. returns at once when nothing is owed, which is every ordinary commit;
+2. waits up to 30 seconds for the merge or rebase to let go of the tree, because
+   `post-rewrite` fires before a rebase removes its state and `post-commit` fires on every
+   pick, and otherwise leaves the record for the hook that fires when it finishes;
+3. runs each owed target once with `:rw`, deepest projects first, so `docs` regenerates
+   before the root that indexes its pages;
+4. stages the declared outputs of the rebuilt projects that changed, and clears the
+   record.
+
+It prints one line naming the runs, the file count and how to finish. It never amends:
+the job runs after git has returned, while you may be typing the next command, so it
+stages the result and prints `git commit --amend --no-edit` when HEAD is an unpushed
+commit, or asks for a new commit when HEAD may already be published.
+
+A failed regeneration leaves the record in place. `magus doctor` reports a non-empty
+record under `owed-regeneration` with the commands that settle it; run
+`magus job run regenerate-owed` to retry, or `magus server regenerate-owed` in a clone
+with no daemon, where no hook is installed. Only git records owed regenerations. Under
+Mercurial and Sapling the driver logs the command to run, as before.
 
 **A forge never runs a custom merge driver.** `merge=magus` needs `merge.magus.driver` in
 a git config, which is per-clone and cannot be committed, so github.com computes

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -42,7 +43,9 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "The VCS merge driver for declared output files. git and hg invoke this")
 	fmt.Fprintln(os.Stderr, "automatically during a merge when a conflicted file matches a declared")
 	fmt.Fprintln(os.Stderr, "output glob; it keeps the current version instead of writing conflict")
-	fmt.Fprintln(os.Stderr, "markers.")
+	fmt.Fprintln(os.Stderr, "markers. On git it records the regeneration it owes, and the")
+	fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(job.NameRegenerateOwed)+"` job the post-merge, post-rewrite and")
+	fmt.Fprintln(os.Stderr, "post-commit hooks submit runs it once the merge or rebase has finished.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `"+hint.Init.String()+"`.")
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
@@ -177,8 +180,9 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 // manipulation, once per conflicted file, while the owning project's generate target writes
 // every output that project declares, which mid-rebase left the tree dirty against what git
 // had staged, so `git rebase --continue` refused. A loop by construction, at one full build
-// per conflicted file. Taking a side here and settling it with an explicit
-// `magus run generate` is what the merge guidance already tells a human to do.
+// per conflicted file. It takes a side and records the owed regeneration instead; the
+// regenerate-owed job runs the record once the merge or rebase has finished (see
+// serverRegenerateOwed).
 func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	if len(args) < 5 {
 		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
@@ -218,10 +222,26 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	}
 
 	// %A already holds the current version and is the file the VCS reads back, so leaving it
-	// untouched IS the resolution: there is nothing to write.
-	slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
-		slog.String("path", relPath),
-		slog.String("regenerate", hint.Run.With(target, types.ProjectLabel(p.Path, p.Dir))))
+	// untouched IS the resolution: there is nothing to write to the tree. What is written is
+	// the owed regeneration, in the git dir, which the hooks settle once the merge is over.
+	regenerate := hint.Run.With(target+":rw", projectKey(p))
+	recorded, err := vcs.RecordOwedRegeneration(ctx, m.Root(), vcs.OwedRegeneration{
+		Project: projectKey(p), Target: target, Paths: []string{relPath},
+	})
+	switch {
+	case err != nil:
+		// Failing here would turn a settled file back into conflict markers over a
+		// bookkeeping write, so the merge proceeds and the person gets the command.
+		slog.WarnContext(ctx, "merge-driver: kept the current version of a generated file but could not record its regeneration; regenerate before committing",
+			slog.String("path", relPath), slog.String("regenerate", regenerate), slog.String("error", err.Error()))
+	case !recorded:
+		// No git dir, so no hook will settle it.
+		slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
+			slog.String("path", relPath), slog.String("regenerate", regenerate))
+	default:
+		slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; it is regenerated once the merge finishes",
+			slog.String("path", relPath), slog.String("regenerate", regenerate))
+	}
 	return nil
 }
 
