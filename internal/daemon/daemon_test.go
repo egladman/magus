@@ -389,7 +389,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	}
 	d := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: addr, HealthRoutes: routes})
 	mounted := make(chan []string, 1)
-	d.mounted = func(p []string) { mounted <- p }
+	d.onMounted = func(p []string) { mounted <- p }
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- d.Serve(ctx) }()

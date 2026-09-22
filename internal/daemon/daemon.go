@@ -73,9 +73,9 @@ type Daemon struct {
 	runs       func() []types.StatusRun
 	services   func() []types.StatusService
 	workspaces func() []activityhandler.Workspace
-	// mounted receives every route pattern once mounting is done, before the listener
+	// onMounted receives every route pattern once mounting is done, before the listener
 	// serves; the route-enumeration test reads the mux through it.
-	mounted func(patterns []string)
+	onMounted func(patterns []string)
 }
 
 // Option customizes a Daemon.
@@ -692,8 +692,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 		}
 	}
 
-	if s.mounted != nil {
-		s.mounted(httpServer.Patterns())
+	if s.onMounted != nil {
+		s.onMounted(httpServer.Patterns())
 	}
 	log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", httpServer.Addr().String()))
 	if err := httpServer.Serve(ctx); err != nil {
