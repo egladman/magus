@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/spells"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -595,6 +596,10 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	have := afterGlobalFlags(c.Name, c.Args)
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
+			// Installs are advised, never denied: see installAdvised.
+			if operation == spells.InstallOp {
+				continue
+			}
 			for _, charms := range [][]string{nil, {"rw"}} {
 				program, args, ok, err := spell.RenderCommand(operation, charms)
 				if err != nil || !ok || program == "" || filepath.Base(program) != c.Name {
@@ -609,6 +614,31 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 		}
 	}
 	return toolMatch{}, false
+}
+
+// installAdvised reports a command that is some spell's declared install run bare, such
+// as `pnpm install` or `npm ci`. Every manifest's installs are read, not the install op's
+// rendering, which names only the first. An operand after the install's own words names
+// packages (`pnpm install <pkg>`), which is a dependency edit, not an install.
+func installAdvised(deps Dependencies, c hint.Invocation) bool {
+	have := afterGlobalFlags(c.Name, c.Args)
+	for _, spell := range deps.spells() {
+		for _, man := range spell.Manifests() {
+			for _, in := range man.Installs {
+				if filepath.Base(in.Command.Bin) != c.Name {
+					continue
+				}
+				prefix := commandPrefix(in.Command.Bin, in.Command.Args)
+				if len(prefix) == 0 || len(have) < len(prefix) || !slices.Equal(have[:len(prefix)], prefix) {
+					continue
+				}
+				if !slices.ContainsFunc(have[len(prefix):], func(a string) bool { return !strings.HasPrefix(a, "-") }) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // commandPrefix extracts the semantic subcommand from an operation's rendered argv,
@@ -1103,6 +1133,9 @@ var (
 		"update is the reserved charm for moving PINNED UPSTREAM state forward, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry or a vulnerability feed serves today is update. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
 	updateGuardContext = "magus workspace: " + updateAdvice
 
+	// Advice, not a deny: a raw install is correct, only uncached.
+	installGuardContext = "magus workspace: `" + hint.Run.With(spells.InstallOp, "<project>...") + "` runs the same install, keyed on the lockfile, and replays it when nothing changed."
+
 	// Advice, not a deny: it wastes a line, it does not break anything.
 	echoOnSuccessAdvice = "Drop the `&& echo ...` and read the exit status: it already says the command passed, and a message that prints only on success adds nothing."
 
@@ -1515,6 +1548,8 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		return ShellVerdict{Deny: redirectDeny(redirVerb, redirDest), Rule: denyRule{Name: denyRuleOutputRedirect}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
 		return ShellVerdict{Context: updateGuardContext}
+	case parsed && slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return installAdvised(deps, c) }):
+		return ShellVerdict{Context: installGuardContext}
 	case ruleFires(cmds, parsed, command, docSearchFires, docSearchRe):
 		v := ShellVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch, Brief: docSearchBrief}
 		if s := proseSuggestion(cmds, hints); s != nil {

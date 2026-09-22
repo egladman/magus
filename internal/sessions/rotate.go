@@ -18,6 +18,13 @@ import (
 // workspace-level setting is a decision to take once, not a knob to add ahead of it.
 const DefaultRetention = 30 * 24 * time.Hour
 
+// pruneInterval is how often [Open] prunes a store, tracked by the modification time
+// of pruneStamp inside it. The stamp carries no fileExt, so no reader sees a session.
+const (
+	pruneInterval = time.Hour
+	pruneStamp    = ".pruned"
+)
+
 // Prune deletes whole session files whose newest fact is older than retain.
 //
 // Deleting is all it does. Nothing here rolls a file over, renames one, or truncates

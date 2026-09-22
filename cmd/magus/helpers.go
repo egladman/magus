@@ -7,8 +7,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"runtime/debug"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
@@ -100,6 +102,7 @@ var (
 	magusValue        *magus.Magus
 	magusErr          error
 	magusRootOverride string
+	magusLoaded       atomic.Bool
 
 	inspectOnce         sync.Once
 	inspectValue        types.WorkspaceRepository
@@ -125,12 +128,14 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 			return
 		}
 		stop := t.phase("magus.open")
+		defer relaxGC()()
 		opts := []magus.Option{magus.WithLoadedConfig(globalCfg), magus.WithVersion(version)}
 		if lim := bootstrapLimiterFrom(ctx); lim != nil {
 			opts = append(opts, workspace.WithLimiter(lim))
 		}
 		opts = append(opts, extra...)
 		magusValue, magusErr = magus.Open(ctx, root, opts...)
+		magusLoaded.Store(true)
 		stop()
 		if magusErr == nil && !skipMergeDriverRefresh(ctx) {
 			// Declared outputs are known only once the workspace is open, and they are
@@ -145,10 +150,32 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 	return magusValue, magusErr
 }
 
+// loadGCPercent is the GOGC a workspace load runs under. Evaluating every magusfile and
+// local spell allocates heavily and retains little: measured on this repository, 400
+// cut `magus ls` from 121ms to 110ms and its CPU by a quarter, for 37MB more peak RSS.
+const loadGCPercent = 400
+
+// relaxGC raises GOGC for a workspace load and returns the restore. An explicit GOGC in
+// the environment is the caller's choice and is left alone.
+func relaxGC() func() {
+	if os.Getenv("GOGC") != "" {
+		return func() {}
+	}
+	prev := debug.SetGCPercent(loadGCPercent)
+	return func() { debug.SetGCPercent(prev) }
+}
+
 func inspectWorkspace(ctx context.Context, rootOverride string) (types.WorkspaceRepository, error) {
 	t := traceFromContext(ctx)
 	inspectOnce.Do(func() {
 		inspectRootOverride = rootOverride
+		// startup already opened this workspace for most subcommands, and an open
+		// workspace answers everything an inspected one does; loading it twice doubled
+		// the cost of `magus ls`.
+		if magusLoaded.Load() && magusErr == nil && rootOverride == magusRootOverride {
+			inspectValue = magusValue
+			return
+		}
 		defer t.phase("workspace.find_root")()
 		root, err := magus.FindRoot(rootOverride)
 		if err != nil {
@@ -156,6 +183,7 @@ func inspectWorkspace(ctx context.Context, rootOverride string) (types.Workspace
 			return
 		}
 		stop := t.phase("workspace.inspect")
+		defer relaxGC()()
 		inspectValue, inspectErr = magus.Inspect(ctx, root,
 			magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		stop()

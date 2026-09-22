@@ -218,6 +218,28 @@ func TestOpenPrunesTheStore(t *testing.T) {
 	assert.Empty(t, storedSessions(t, dir))
 }
 
+// Pruning reads every session file's metadata, so Open does it at most once per
+// interval; a store pruned a moment ago is left alone.
+func TestOpenPrunesAtMostOncePerInterval(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	_, err := Open(dir, "first", SessionStart{})
+	require.NoError(t, err)
+
+	writeAged(t, dir, "ancient", 400*24*time.Hour, []Record{
+		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
+	})
+	_, err = Open(dir, "second", SessionStart{})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ancient"}, storedSessions(t, dir))
+
+	stale := time.Now().Add(-2 * pruneInterval)
+	require.NoError(t, os.Chtimes(filepath.Join(dir, pruneStamp), stale, stale))
+	_, err = Open(dir, "third", SessionStart{})
+	require.NoError(t, err)
+	assert.Empty(t, storedSessions(t, dir))
+}
+
 // A writer must never delete the file it is about to append to, whatever the clock
 // says about the session file already sitting under its session id.
 func TestOpenNeverPrunesItsOwnSessionFile(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -29,12 +30,12 @@ func spellInstall(p *types.Project, target string) bool {
 // installKeying is what every install step of one invocation shares with the steps the
 // scheduler builds, so an install keys the same whether scheduled or composed.
 type installKeying struct {
-	toolVersions map[string][]string
-	revision     string
-	dirty        bool
-	vcsName      string
-	skipReplay   bool
-	opts         []cache.RunOption
+	prober     *toolProber
+	revision   string
+	dirty      bool
+	vcsName    string
+	skipReplay bool
+	opts       []cache.RunOption
 }
 
 // installRunner is the types.InstallRunner one invocation installs: it runs each
@@ -46,9 +47,15 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 		if p == nil {
 			return run(ctx)
 		}
-		tv, ok := k.toolVersions[p.Path]
-		if !ok {
-			tv = m.toolVersionsByProject(ctx, []*types.Project{p})[p.Path]
+		// Only the install's own tools: they are all its step keys on, and the gate
+		// judges only what this install runs.
+		only := func(spell, tool string) bool {
+			return spell == spellName && slices.Contains(choice.Install.Tools, tool)
+		}
+		windows := map[string]string{}
+		tv := k.prober.versions(ctx, []*types.Project{p}, only, windows)[p.Path]
+		if err := checkToolWindows([]*types.Project{p}, windows); err != nil {
+			return err
 		}
 		step := m.installStep(p, spellName, choice, tv, types.CharmsFromContext(ctx))
 		step.ExtraArgs = project.ExtraArgs(ctx)
@@ -64,6 +71,33 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 			return lim.Yield(ctx, call)
 		}
 		return call()
+	}
+}
+
+// prewarmInstallProbes starts, in the background, the version probes each spell install
+// in stages will key on. The scheduler walks installs a dependency level at a time, and
+// each level otherwise waits on its own probe spawns before it can replay anything.
+func (m *Magus) prewarmInstallProbes(ctx context.Context, prober *toolProber, stages []stage) {
+	for _, st := range stages {
+		for _, p := range st.projects {
+			if !spellInstall(p, st.target) {
+				continue
+			}
+			for _, s := range p.ResolvedSpells {
+				op, ok := s.Op(spells.InstallOp)
+				if !ok || op.Kind != spells.OpKindInstall {
+					continue
+				}
+				choice, found, err := spell.ResolveInstall(op.Install, p.Dir, m.ws.Root)
+				if err != nil || !found {
+					continue
+				}
+				name, tools := s.Name(), choice.Install.Tools
+				go prober.versions(ctx, []*types.Project{p}, func(sp, tool string) bool {
+					return sp == name && slices.Contains(tools, tool)
+				}, nil)
+			}
+		}
 	}
 }
 

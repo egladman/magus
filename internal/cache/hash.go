@@ -582,7 +582,13 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 		}
 	}
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, werr error) error {
+	// Only a pattern can match during the walk, and an install's exact manifest and lock
+	// paths walked the whole workspace to add nothing.
+	walk := filepath.WalkDir
+	if len(pats) == 0 {
+		walk = func(string, fs.WalkDirFunc) error { return nil }
+	}
+	err := walk(root, func(path string, d fs.DirEntry, werr error) error {
 		if werr != nil {
 			return werr
 		}

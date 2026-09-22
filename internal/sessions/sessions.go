@@ -213,7 +213,8 @@ type Writer struct {
 // Opening also prunes the store at [DefaultRetention], which is what keeps a
 // grow-only store bounded without a daemon or a cron: every producer opens, so
 // every producer pays a little of the housekeeping. It is best-effort and cannot
-// fail the open; see [Prune].
+// fail the open; see [Prune]. It runs at most once per [pruneInterval], since reading
+// a store of ten thousand sessions cost every run 17ms to delete nothing.
 //
 // A session id that already has a file is RESUMED rather than restarted: see
 // [Writer.resume].
@@ -224,7 +225,13 @@ func Open(dir, session string, start SessionStart) (*Writer, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("sessions: create store %s: %w", dir, err)
 	}
-	prune(dir, DefaultRetention, session+fileExt)
+	stamp := filepath.Join(dir, pruneStamp)
+	if fi, err := os.Stat(stamp); err != nil || time.Since(fi.ModTime()) >= pruneInterval {
+		prune(dir, DefaultRetention, session+fileExt)
+		_ = os.WriteFile(stamp, nil, 0o644)
+		now := time.Now()
+		_ = os.Chtimes(stamp, now, now)
+	}
 	w := &Writer{path: filepath.Join(dir, session+fileExt), session: session, start: start}
 	w.resume()
 	return w, nil
