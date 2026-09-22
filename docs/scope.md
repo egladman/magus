@@ -458,6 +458,55 @@ is. The test for a proposed extension seam: it may change what magus does, never
 what a verdict means. And one seam is absent deliberately rather than sealed:
 there is no model adapter, because magus never calls a model.
 
+## Prior art and terminology
+
+The guard keeps its name, defined with established access-control terms
+rather than a coined one.
+
+| term                                             | source                                                                | what it names                                                                                                                                                                               |
+| ------------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| policy enforcement point / policy decision point | NIST SP 800-162; XACML                                                | the PEP applies a verdict where the action happens; the PDP computes that verdict from policy and attributes                                                                                |
+| reference monitor                                | Anderson, 1972                                                        | the design goal a PEP aims at: complete mediation, tamperproof, small enough to verify. A hook is neither tamperproof nor non-bypassable, so this names a goal, not a claim about the guard |
+| shield                                           | Alshiekh et al., Safe Reinforcement Learning via Shielding, AAAI 2018 | a monitor that vetoes a learning agent's proposed actions against a spec                                                                                                                    |
+
+Sources: https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf
+and https://cdn.aaai.org/ojs/11797/11797-13-15325-1-2-20201228.pdf.
+
+Not "guardrails". The OpenAI Agents SDK, AWS Bedrock Guardrails, NVIDIA NeMo
+Guardrails, Invariant, and Lakera all use that word for content-safety
+filtering of model input and output: what a model said or was asked, checked
+against a policy about language. magus's guard judges actions, not language,
+from facts a model never produces: declared outputs, the cache, the graph, VCS
+state, job leases. See https://openai.github.io/openai-agents-python/guardrails/,
+https://aws.amazon.com/bedrock/guardrails/, and
+https://github.com/NVIDIA-NeMo/Guardrails.
+
+Not "harness" either. Anthropic and OpenAI both use that word for the host's
+own agent loop, the code that reads a model's tool call and decides what runs
+next. magus is not that loop. Martin Bockeler's "outer harness"
+(https://martinfowler.com/articles/harness-engineering.html, 2026-04-02) is the
+nearest framing for where magus sits: deterministic guides and sensors placed
+around the loop, not the loop itself.
+
+Two projects sit closest as peers. Cupcake (https://cupcake.eqtylab.io/) is
+repo-versioned Rego policy applied at the same hook points across Claude Code,
+Cursor, OpenCode, and Factory, and calls itself a policy enforcement layer.
+Google's Agent Gateway
+(https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/gateways/agent-gateway-overview)
+names itself a policy enforcement point directly. Both judge an action at a
+hook the way the guard does. What differs: the guard's decisions read the
+build tool's own record rather than a general policy language, and on Linux a
+lease's write paths narrow the OS sandbox a worker runs inside, which neither
+peer does.
+
+A rule that reads only the hook's event payload (a command string or a file
+path) ports either way: a workspace rule expressed as a magus guard seam
+(`magus\guard.shell`) can be rewritten as a Cupcake Rego policy over the same
+hook event, and the reverse holds for a Cupcake policy that reads only the
+event. A rule that reads a magus fact, whether a path is a declared output,
+whether a project holds a live lease, has no Cupcake equivalent, because
+Cupcake has no build graph to read.
+
 ## Unsettled
 
 The engine carries complexity the constraint camp avoids by limiting their
