@@ -10,7 +10,7 @@ import "./tools/drift" as drift;
 // callable" at run time.
 import "./tools/toolchain" as toolchains;
 // The pull request checks pr.yaml runs; see pr_title and pr_changelog.
-import "./tools/conventional" as conventional;
+import "./tools/commits" as commits;
 import "./tools/changelog" as changelog;
 // This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
@@ -1110,7 +1110,7 @@ fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> an
 
 // Fails a pull request title that is not a conventional commit subject. Squash merges make
 // the title the subject main records, so this is where the format is enforced; the rule is
-// tools/conventional.buzz. Pass a title after `--` to check one by hand.
+// tools/commits.buzz. Pass a title after `--` to check one by hand.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     var title = args.join(" ");
     if (title == "") {
@@ -1120,7 +1120,7 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
         }
         title = event?.q("title").stringValue() ?? "";
     }
-    final problem = conventional\problem(title);
+    final problem = commits\problem(title);
     if (problem != "") {
         throw "pr-title: \"{title}\": {problem}";
     }
@@ -2977,7 +2977,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // releaser.buzz carries the version and release-name rules `release` decides on, and no
     // target ran its test blocks: the two hand-named modules above were the whole root list,
     // so those tests passed for as long as they existed without being run. --embedded
-    // because it is a magusfile import, the same reason tools/audit.buzz is.
+    // because it is a magusfile import, the same reason tools/advisories.buzz is.
     cover_for("releaser.buzz", ["--embedded"], {});
     // GLOBBED, for the reason the spell paragraph below gives, applied to the two trees
     // that were still hand-omitted. Both were carrying real breakage precisely because
@@ -2994,7 +2994,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //
     // The MODE is per file, not per directory, because tools/ is not uniform.
     // registry.buzz is the only one invoked bare, so it is the only one that has to
-    // survive strict; audit, drift and toolchain-policy are magusfile imports and
+    // survive strict; advisories, drift and toolchain-policy are magusfile imports and
     // therefore always embedded, and running THEM strict would fail a top-level `if`
     // or an unlabeled second argument that is legal everywhere they actually load - a
     // red for a defect that does not exist. (toolchain.buzz has no importer and no

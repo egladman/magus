@@ -6,7 +6,7 @@
 // is the enforcement point. Branch commits are squashed away and keep the repository's
 // lowercase imperative style with no prefix; the hook checks only commits made directly on
 // the base branch, which land as written.
-namespace conventional;
+namespace commits;
 
 import "std";
 
