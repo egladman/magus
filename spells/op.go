@@ -179,8 +179,9 @@ const (
 	OpKindSymbolIndex = "symbol-index"
 	// OpKindInstall tags the op magus synthesizes from the Installs a spell's manifests
 	// declare. The runner picks the command from the project's live lockfile at run
-	// time, since an op handler resolves once for every project.
-	OpKindInstall = "install"
+	// time, since an op handler resolves once for every project. It shares InstallOp's
+	// literal because magus registers the synthesized op under that exact name.
+	OpKindInstall = InstallOp
 )
 
 // InstallOp is the op name magus registers a spell's declared installs under.
