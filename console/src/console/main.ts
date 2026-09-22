@@ -60,7 +60,7 @@ import { initAppMenu } from "../ui/app-menu";
 import { initWorkspacePicker } from "../ui/workspace-picker";
 import { onWorkspaceScope, onWorkspaces, workspaceScope } from "../lib/scope";
 import { maybeAskWorkspace } from "../ui/signin";
-import { mountNotificationCenter, notify } from "../lib/notifications";
+import { mountNotificationCenter, notify, reportFailure } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
@@ -92,7 +92,8 @@ import {
   getNodeShapes,
 } from "../lib/settings";
 import { browserInstallHost, createInstallStore } from "../lib/install";
-import { registerServiceWorker } from "../lib/sw";
+import { registerServiceWorker, watchServedBuild } from "../lib/sw";
+import { showRefreshToast } from "../lib/refresh-toast";
 import type { PageController, PageModule } from "./page";
 
 // The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
@@ -130,6 +131,7 @@ function hasSavedWorkspace(): boolean {
   try {
     return localStorage.getItem("magus:workspace") !== null;
   } catch {
+    // not-a-failure: with storage disabled there is no saved workspace, which is what this answers
     return false;
   }
 }
@@ -289,6 +291,9 @@ const SURFACES: Launchable[] = [
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
 const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "runs"];
+// JOBS_PATH is served by the daemon but is no surface of its own: it is the Dashboard's Jobs view,
+// the page every `magus job` console link prints. Routed apart so it opens that view.
+const JOBS_PATH = "plan";
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
@@ -299,7 +304,8 @@ function consoleSurfaceFromPath(): string | null {
   const segs = location.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
   const last = segs[segs.length - 1];
   const parent = segs[segs.length - 2];
-  if (parent === "console" && last && CLEAN_PATH_SURFACES.includes(last)) return last;
+  if (parent !== "console" || !last) return null;
+  if (CLEAN_PATH_SURFACES.includes(last) || last === JOBS_PATH) return last;
   return null;
 }
 
@@ -358,6 +364,7 @@ function loadBuildInfo(): void {
       const b = res.status?.build;
       if (b?.version) setBuild(b.version, b.fingerprint || "");
     })
+    // reported: by the daemon transport; the version chip keeps its placeholder
     .catch(() => {});
 }
 
@@ -939,6 +946,16 @@ export function startConsole(
   // handler. Registering it from one surface instead would leave a console that never opened that
   // surface with neither an offline shell nor an install offer.
   void registerServiceWorker(new URL("./sw.js", import.meta.url));
+  watchServedBuild(new URL("./sw.js", import.meta.url), (running, served) =>
+    showRefreshToast(
+      "Console",
+      "This page runs console build " +
+        running +
+        " but the daemon now serves " +
+        served +
+        ". Reload: until then some views may be empty or wrong.",
+    ),
+  );
   // Snapshot the boot fragment BEFORE adoptDaemonOrigin consumes/strips the #token= (below), so the
   // attach-visibility notification further down can still tell it booted attached and name the port.
   const bootParams = parseHash();
@@ -950,18 +967,25 @@ export function startConsole(
   const readOnly = isReadOnly();
   document.documentElement.toggleAttribute("data-read-only", readOnly);
 
-  // Trade an operator token for a console-scoped one, once per token. Fire-and-forget on
-  // purpose: the console works whichever tier it holds, so nothing waits on this and a
-  // failure is never surfaced - the page keeps the credential it already had and the next
-  // load retries. Skipped for a read-only share session, whose share token the
-  // operator-only token mount would refuse anyway.
+  // Trade an operator token for a console-scoped one, once per token. Nothing waits on this:
+  // the console works whichever tier it holds. A failure IS surfaced, because it leaves the
+  // operator credential in the browser; the next load retries. Skipped for a read-only share
+  // session, whose share token the operator-only token mount would refuse anyway.
   //
   // Here in the SHELL rather than in a surface because each surface is its own bundle: one
   // exchange in the composition root covers every tab, and the storage it writes is what
   // the other bundles read.
   if (!readOnly) {
     const daemonHost = resolveDaemonHost();
-    if (daemonHost) void exchangeOperatorToken(daemonHost);
+    if (daemonHost)
+      void exchangeOperatorToken(daemonHost).then((outcome) => {
+        if (outcome !== "failed") return;
+        reportFailure(
+          "Sign-in",
+          "Could not trade the operator token for a console token, so this browser still holds the operator token. Reload to retry.",
+          "token-exchange:failed",
+        );
+      });
   }
 
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
@@ -2452,7 +2476,8 @@ export function startConsole(
   // path back to the console base. The fragment (any #port/#token/content) and query are preserved;
   // only the surface segment is dropped.
   if (entrySurface) {
-    if (registry.has(entrySurface)) open(entrySurface);
+    if (entrySurface === JOBS_PATH) openJobs();
+    else if (registry.has(entrySurface)) open(entrySurface);
     history.replaceState(null, "", consoleBasePath() + location.search + location.hash);
   }
 

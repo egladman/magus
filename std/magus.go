@@ -708,7 +708,7 @@ var magusMCPTools = []MCPTool{
 	},
 	{
 		Name: hint.ToolConsolePresent.String(),
-		Doc:  "Return a tokenless link to a local magus console surface. Use this only when a person asked to see the dashboard or related status. The MCP client may present the link as an action; this tool never opens a browser or changes console state.",
+		Doc:  "Return a tokenless link to a local magus console surface, plus `open`: a shell command that opens it signed in by minting the token in the person's own shell. Hand the person `open` to run rather than the bare link, which opens an unauthenticated page. Use this only when a person asked to see the dashboard or related status; this tool never opens a browser or changes console state.",
 		Params: []MCPParam{
 			{Name: "surface", Type: TypeString, Doc: "Console surface to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
 			{Name: "reason", Type: TypeString, Doc: "Optional brief text a compatible MCP client may show with the link."},

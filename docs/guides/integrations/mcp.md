@@ -135,6 +135,9 @@ Console:
 
 `magus_console_present` does not open a browser or hand a client a token. A compatible
 desktop client may render its link as an action. Other clients can return the link as text.
+Its `open` field is a shell command that opens the link signed in, for example
+`open "http://127.0.0.1:7391/console/dashboard/#token=$(magus config token print)"`; the
+token is a substitution the person's shell expands, so it never appears in the reply.
 The console must be enabled and bound locally.
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.

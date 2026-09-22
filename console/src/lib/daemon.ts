@@ -1,4 +1,5 @@
-import { errName } from "./guards";
+import { errMessage, errName } from "./guards";
+import { reportFailure } from "./notifications";
 // daemon.ts - the ONE audited module for addressing and talking to a magus daemon.
 //
 // Every surface (dashboard, graph explorer, log viewer, activity, the shell) imports
@@ -83,6 +84,7 @@ export function parseHash(): HashParams {
     try {
       return decodeURIComponent(s);
     } catch {
+      // not-a-failure: a truncated escape keeps its raw text, which is still the reader's link
       return s;
     }
   };
@@ -126,6 +128,7 @@ export function validateLoopbackHost(hostPort: string): string | null {
   try {
     u = new URL("http://" + hostPort);
   } catch {
+    // not-a-failure: an unparseable host is a rejected one; callers explain the null
     return null;
   }
   if (u.username || u.password) return null; // userinfo is never legitimate here
@@ -174,6 +177,7 @@ function loopbackPort(host: string): string | null {
   try {
     return new URL("http://" + norm).port || null;
   } catch {
+    // not-a-failure: norm already parsed once; no port means no #port= to add
     return null;
   }
 }
@@ -401,9 +405,9 @@ export async function fetchReadiness(
       : [];
     return { ready: body.ready, components };
   } catch {
-    // Covers the timeout, a refused/CORS-blocked connection, and a response body that is not valid
-    // JSON (an old daemon serving a plain-text /readyz, or none at all) - all collapse to the one
-    // "could not read" signal a caller falls back from.
+    // not-a-failure: an older daemon has no JSON /readyz; reachability itself is reported by the
+    // daemon transport and fetchSSE. A timeout, a refused connection and a non-JSON body all
+    // collapse to the one "could not read" signal a caller falls back from.
     return null;
   }
 }
@@ -436,8 +440,14 @@ export function consumeLiveToken(params: HashParams): void {
     // A new token is an unknown tier until something proves otherwise.
     sessionStorage.removeItem(SCOPED_KEY);
     localStorage.removeItem(SCOPED_KEY);
-  } catch {
-    /* storage disabled: token lives only for this call chain */
+  } catch (e) {
+    reportFailure(
+      "Sign-in",
+      "This browser refused to store the token from your link (" +
+        errMessage(e) +
+        "), so the console cannot sign in. Allow site data for this address and open the link again.",
+      "token:storage",
+    );
   }
   const kept: string[] = [];
   for (const k of Object.keys(params)) {
@@ -453,6 +463,7 @@ export function getLiveToken(): string | null {
   try {
     return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || null;
   } catch {
+    // reported: consumeLiveToken reports a store that refused the token; reading one finds nothing
     return null;
   }
 }
@@ -469,7 +480,20 @@ export function setLiveToken(token: string): boolean {
     (remembered ? sessionStorage : localStorage).removeItem(TOKEN_KEY);
     return true;
   } catch {
+    // reported: false is "not stored", which the caller reports
     return false;
+  }
+}
+
+// clearLiveToken forgets the stored bearer and its exchange mark, in both stores.
+export function clearLiveToken(): void {
+  try {
+    for (const store of [sessionStorage, localStorage]) {
+      store.removeItem(TOKEN_KEY);
+      store.removeItem(SCOPED_KEY);
+    }
+  } catch {
+    // not-a-failure: storage is disabled, so there was no stored token to forget
   }
 }
 
@@ -480,6 +504,7 @@ export function hasScopedToken(): boolean {
   try {
     return (sessionStorage.getItem(SCOPED_KEY) || localStorage.getItem(SCOPED_KEY)) === "1";
   } catch {
+    // not-a-failure: a cache miss costs one refused RPC; the daemon enforces the tier
     return false;
   }
 }
@@ -489,7 +514,7 @@ export function markScopedToken(): void {
   try {
     (isRemembered() ? localStorage : sessionStorage).setItem(SCOPED_KEY, "1");
   } catch {
-    /* storage disabled: the exchange simply reruns next load */
+    // not-a-failure: storage disabled, so the exchange simply reruns next load
   }
 }
 
@@ -497,6 +522,7 @@ export function isRemembered(): boolean {
   try {
     return localStorage.getItem(REMEMBER_KEY) === "1";
   } catch {
+    // not-a-failure: with storage disabled nothing is remembered, which is what this answers
     return false;
   }
 }
@@ -513,8 +539,12 @@ export function setRemembered(on: boolean): void {
       localStorage.removeItem(REMEMBER_KEY);
       localStorage.removeItem(TOKEN_KEY);
     }
-  } catch {
-    /* ignore */
+  } catch (e) {
+    reportFailure(
+      "Settings",
+      "Could not " + (on ? "remember" : "forget") + " this daemon's token: " + errMessage(e),
+      "token:remember",
+    );
   }
 }
 
@@ -537,6 +567,10 @@ export type SSEHeaders = Record<string, string>;
 // (a superseding connect, or teardown) is deliberately silent in both the initial
 // fetch and the read loop - it is not a connection failure, and treating it as one
 // would stack up redundant reconnect attempts.
+//
+// Every failure is also REPORTED here (reportFailure, keyed per stream so a reconnect loop reports
+// it once), as is an onEvent that throws: a frame the page cannot decode is reported and skipped,
+// and the stream keeps reading. A 401 signs the console out (signalAuthLost).
 export async function fetchSSE(
   url: string,
   headers: SSEHeaders,
@@ -545,30 +579,54 @@ export async function fetchSSE(
   signal: AbortSignal,
   onOpen?: () => void,
 ): Promise<void> {
+  const fail = (e: Error): void => {
+    reportFailure(
+      "Daemon",
+      "Lost the live feed from " + url + " (" + e.message + "); retrying.",
+      "sse:" + url + ":" + e.message,
+    );
+    onError(e);
+  };
   let response: Response;
   try {
     response = await fetch(url, { headers, signal });
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") return;
-    onError(e instanceof Error ? e : new Error(String(e)));
+    fail(e instanceof Error ? e : new Error(String(e)));
+    return;
+  }
+  if (response.status === 401) {
+    signalAuthLost(new URL(url).host);
+    onError(new Error("HTTP 401"));
     return;
   }
   if (!response.ok) {
-    onError(new Error("HTTP " + response.status));
+    fail(new Error("HTTP " + response.status));
     return;
   }
   if (onOpen) onOpen();
   if (!response.body) {
-    onError(new Error("no stream body"));
+    fail(new Error("no stream body"));
     return;
   }
+  const deliver = (type: string, data: string): void => {
+    try {
+      onEvent(type, data);
+    } catch (e) {
+      reportFailure(
+        "Daemon",
+        "Could not read a " + type + " event from " + url + ": " + errMessage(e),
+        "sse:decode:" + url + ":" + type,
+      );
+    }
+  };
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";
   try {
     while (true) {
       const { value, done } = await reader.read();
       if (done) {
-        onError(new Error("stream ended"));
+        fail(new Error("stream ended"));
         return;
       }
       buf += value;
@@ -600,12 +658,12 @@ export async function fetchSSE(
           // before). Strip one leading space per line, no more.
           else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
         }
-        onEvent(eventType, dataLines.join("\n"));
+        deliver(eventType, dataLines.join("\n"));
       }
     }
   } catch (e) {
     if (!(e instanceof Error) || e.name !== "AbortError")
-      onError(e instanceof Error ? e : new Error(String(e)));
+      fail(e instanceof Error ? e : new Error(String(e)));
   }
 }
 
@@ -619,6 +677,92 @@ function makeBearerInterceptor(token: string | null): Interceptor {
   };
 }
 
+// The services a client may be DENIED by design (see isCapabilityDenied): a denial from one of these
+// hides a section rather than failing anything, so it is the one error the transport does not report.
+const CAPABILITY_GATED = new Set([
+  "magus.token.v1alpha1.TokenService",
+  "magus.memory.v1alpha1.MemoryService",
+]);
+
+// reportRpcFailure is the transport's half of the rule that every failure reaches the person. The
+// caller still receives the error; this only makes sure it cannot vanish into an empty list.
+export function reportRpcFailure(host: string, service: string, method: string, e: unknown): void {
+  if (e instanceof ConnectError && e.code === Code.Canceled && !(e.cause instanceof TypeError))
+    return; // the caller aborted: a superseded poll or a closed pane, not a failure
+  if (CAPABILITY_GATED.has(service) && isCapabilityDenied(e)) return;
+  if (e instanceof ConnectError && e.code === Code.Unauthenticated) {
+    signalAuthLost(host);
+    return;
+  }
+  if (isUnreachable(e)) {
+    reportFailure(
+      "Daemon",
+      "Could not reach the daemon at " + host + ". Start it with `magus server start`.",
+      "daemon:unreachable:" + host,
+    );
+    return;
+  }
+  const code = e instanceof ConnectError ? Code[e.code] : "Error";
+  const detail = e instanceof ConnectError ? e.rawMessage : errMessage(e);
+  const name = service.slice(service.lastIndexOf(".") + 1) + "." + method;
+  reportFailure(
+    "Daemon",
+    name + " failed: " + detail,
+    "rpc:" + service + "/" + method + ":" + code,
+  );
+}
+
+// reportFetchFailure is reportRpcFailure for a plain fetch to the daemon (the /api/v1 routes that
+// are not Connect services). what names the read in the message: "the review session".
+export function reportFetchFailure(host: string, what: string, e: unknown): void {
+  if (errName(e) === "AbortError") return;
+  if (isUnreachable(e)) {
+    reportRpcFailure(host, "", "", e);
+    return;
+  }
+  reportFailure("Daemon", "Could not read " + what + ": " + errMessage(e), "fetch:" + what);
+}
+
+// reportHttpStatus reports a plain fetch the daemon answered with a non-2xx status. A 401 signs the
+// console out, as it does for a Connect call.
+export function reportHttpStatus(host: string, what: string, status: number): void {
+  if (status === 401) {
+    signalAuthLost(host);
+    return;
+  }
+  reportFailure(
+    "Daemon",
+    "Could not read " + what + ": the daemon answered HTTP " + status + ".",
+    "http:" + what + ":" + status,
+  );
+}
+
+// makeFailureInterceptor reports every failed call, a server stream's mid-stream failure included:
+// that one surfaces while the caller iterates, after next() has already returned.
+function makeFailureInterceptor(host: string): Interceptor {
+  return (next) => async (req) => {
+    const report = (e: unknown): void =>
+      reportRpcFailure(host, req.service.typeName, req.method.name, e);
+    try {
+      const res = await next(req);
+      if (!res.stream) return res;
+      const inner = res.message;
+      async function* guarded() {
+        try {
+          yield* inner;
+        } catch (e) {
+          report(e);
+          throw e;
+        }
+      }
+      return { ...res, message: guarded() };
+    } catch (e) {
+      report(e);
+      throw e;
+    }
+  };
+}
+
 // createDaemonTransport points a browser-native Connect transport at the daemon
 // origin, with the bearer interceptor pre-wired. Callers pass an already-resolved
 // host (resolveDaemonHost/daemonAttach) - never a raw fragment string.
@@ -628,8 +772,43 @@ export function createDaemonTransport(
 ): Transport {
   return createConnectTransport({
     baseUrl: "http://" + host,
-    interceptors: [makeBearerInterceptor(token)],
+    interceptors: [makeFailureInterceptor(host), makeBearerInterceptor(token)],
   });
+}
+
+// ---- sign-in ---------------------------------------------------------------
+
+// AUTH_LOST_EVENT fires on document when the daemon refuses the stored token. Every bundle shares
+// document, so the shell's sign-in gate hears a 401 raised inside any surface.
+export const AUTH_LOST_EVENT = "magus:auth-lost";
+
+// signalAuthLost forgets a token the daemon refused (expired or revoked) and says so. Keeping it
+// would sign every later request with a credential that can only fail, and each surface would read
+// that as an empty page.
+export function signalAuthLost(host: string): void {
+  clearLiveToken();
+  if (typeof document !== "undefined")
+    document.dispatchEvent(new CustomEvent(AUTH_LOST_EVENT, { detail: { host } }));
+  reportFailure(
+    "Sign-in",
+    "The daemon at " +
+      host +
+      " refused this console's token: it expired or was revoked. Sign in again.",
+    "auth:lost:" + host,
+  );
+}
+
+// signInCommand is the shell line that opens url signed in. The token is a substitution the reader's
+// shell expands, so the page never holds or displays it. The opener follows the browser's platform,
+// which is the machine a loopback daemon runs on.
+export function signInCommand(url: string, platform = browserPlatform()): string {
+  const sep = url.includes("#") ? "&" : "#";
+  const opener = /mac/i.test(platform) ? "open" : /win/i.test(platform) ? 'start ""' : "xdg-open";
+  return opener + ' "' + url + sep + 'token=$(magus config token print)"';
+}
+
+function browserPlatform(): string {
+  return typeof navigator === "undefined" ? "" : navigator.platform || navigator.userAgent || "";
 }
 
 // ---- connection state ------------------------------------------------------

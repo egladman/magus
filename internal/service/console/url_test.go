@@ -136,3 +136,20 @@ func TestJobLink(t *testing.T) {
 	assert.Empty(t, JobLink("127.0.0.1:7777", ""), "a link to no job in particular is the surface link, not this")
 	assert.Contains(t, KnownSurfaces, JobSurface, "the Jobs view has to be a surface the daemon serves the shell for")
 }
+
+func TestOpenCommandAs(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		goos, link, want string
+	}{
+		{"darwin", "http://127.0.0.1:7391/console/plan/",
+			`open "http://127.0.0.1:7391/console/plan/#token=$(magus config token print)"`},
+		{"linux", "http://127.0.0.1:7391/console/plan/#job=a",
+			`xdg-open "http://127.0.0.1:7391/console/plan/#job=a&token=$(magus config token print)"`},
+		{"windows", "http://127.0.0.1:7391/console/",
+			`start "" "http://127.0.0.1:7391/console/#token=$(magus config token print)"`},
+	} {
+		assert.Equal(t, tc.want, OpenCommandAs(tc.goos, "magus", tc.link), tc.goos)
+	}
+}

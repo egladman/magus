@@ -49,8 +49,9 @@ test("every clean-path surface the console routes is one the daemon serves", () 
   const routed = arrayLiteral(SHELL, "CLEAN_PATH_SURFACES");
   assert.ok(routed.length > 0, "CLEAN_PATH_SURFACES parsed empty");
   // A SUBSET, not an equality: "plan" is a dashboard mode with a served path and no surface of its
-  // own to open, so the daemon knows it and the boot router does not. The direction that matters is
-  // this one - the router must never name a path the daemon will not serve the shell for.
+  // own, so the boot router routes it apart (JOBS_PATH) rather than listing it here. The direction
+  // that matters is this one - the router must never name a path the daemon will not serve the
+  // shell for.
   for (const surface of routed) {
     assert.ok(known.has(surface), `CLEAN_PATH_SURFACES has ${surface}, KnownSurfaces does not`);
   }

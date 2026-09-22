@@ -49,6 +49,8 @@ import {
   wantsDemo,
   createDaemonTransport,
   parseHash,
+  reportFetchFailure,
+  reportHttpStatus,
 } from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
@@ -1914,6 +1916,7 @@ function safeUrl(u: string) {
     const p = new URL(u, location.href);
     return p.protocol === "http:" || p.protocol === "https:" ? u : null;
   } catch {
+    // not-a-failure: an unparseable url is an unsafe one, and it renders as plain text
     return null;
   }
 }
@@ -2879,7 +2882,7 @@ let graphEpoch = 0;
 let affectedFallback = "";
 
 // Re-asked on every live graph load rather than fetched once: the diff moves with the tree, not the
-// graph. Failure is silent - the view is supplementary, and a banner would talk over the reader.
+// graph. A failure gets the daemon transport's toast and no banner: the view is supplementary.
 async function refreshAffectedFromServer() {
   const client = graphClient();
   if (!client) return;
@@ -2896,7 +2899,7 @@ async function refreshAffectedFromServer() {
     // refuses the view while no set exists - so neither took effect the first time.
     if (activeView === "affected" || hashParams().view === "affected") activateView("affected");
   } catch {
-    /* network error; the chip keeps whatever it had */
+    // reported: by the daemon transport; the chip keeps whatever it had
   }
 }
 
@@ -2924,7 +2927,7 @@ async function refineBlastFromServer(nodeId: string, gen: number) {
     syncOverview();
     draw();
   } catch {
-    // Local answer stands, which is the offline behavior and already on screen.
+    // reported: by the daemon transport; the local answer on screen stands
   }
 }
 // refineTraceFromServer replaces the traced path with the daemon's.
@@ -2968,7 +2971,7 @@ async function refineTraceFromServer(from: string, to: string, gen: number) {
     syncOverview(); // the match set just changed under the panel that reports its size
     draw();
   } catch {
-    // Local answer stands.
+    // reported: by the daemon transport; the local answer stands
   }
 }
 
@@ -2994,6 +2997,7 @@ async function suggestNodes(prefix: string, gen: number) {
       .map((m) => '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.label) + "</option>")
       .join("");
   } catch {
+    // reported: by the daemon transport; no suggestions is the honest list
     list.innerHTML = "";
   }
 }
@@ -3036,8 +3040,7 @@ async function refineQueryFromServer(q: string, gen: number) {
     syncOverview(); // the match set just changed under the panel that reports its size
     draw();
   } catch {
-    // A refinement that cannot reach the daemon leaves the local answer standing, which is
-    // the offline behavior and already on screen. Nothing to report.
+    // reported: by the daemon transport. The local answer on screen stands, as it does offline.
   }
 }
 
@@ -5133,16 +5136,21 @@ async function liveRefetchGraph() {
   let resp;
   try {
     resp = await fetch(url, { headers });
-  } catch {
-    return; // network error on refetch; SSE reconnect will handle it
+  } catch (e) {
+    reportFetchFailure(liveHost, "the live graph", e); // the SSE reconnect retries
+    return;
   }
   if (resp.status === 304) return; // graph unchanged; ETag matched
-  if (!resp.ok) return;
+  if (!resp.ok) {
+    reportHttpStatus(liveHost, "the live graph", resp.status);
+    return;
+  }
   liveETag = resp.headers.get("ETag") || null;
   let data;
   try {
     data = await resp.json();
-  } catch {
+  } catch (e) {
+    reportFetchFailure(liveHost, "the live graph", e);
     return;
   }
   liveApplyGraphUpdate(data);
@@ -5284,7 +5292,7 @@ async function fetchLiveStatus() {
     // GraphService.FindAffected answers instead (refreshAffectedFromServer).
     publishLiveStatus();
   } catch {
-    /* network error; badge stays */
+    // reported: by the daemon transport; the badge stays
   }
 }
 

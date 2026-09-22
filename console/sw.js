@@ -51,6 +51,10 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // never touch daemon/loopback or cross-origin
+  // On the daemon's own origin the API is same-origin too, and cache-first would replay a stale
+  // /readyz or buffer the endless /api/v1/events stream. Only the console's own files are the shell.
+  // sw.js stays uncached so the page can read the build the daemon serves (lib/sw.ts).
+  if (!url.pathname.startsWith(BASE) || url.pathname === BASE + "sw.js") return;
   if (url.pathname.endsWith("/graph/knowledge-graph.json") || url.pathname.endsWith("/graph/target-graph.json")) {
     e.respondWith(
       fetch(req).then((res) => {
