@@ -9,6 +9,11 @@ import "./tools/drift" as drift;
 // cannot share a name - the alias would shadow and the call fails with "null is not
 // callable" at run time.
 import "./tools/toolchain" as toolchains;
+// The pull request checks pr.yaml runs; see pr_title and pr_changelog.
+import "./tools/conventional" as conventional;
+import "./tools/changelog" as changelog;
+// This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
+import "spells/git/hooks" as githooks;
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
@@ -323,6 +328,10 @@ magus\project({
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
+        "pr-title": {"skip_cache": "judges the pull request event, which no file input carries"},
+        "pr-changelog": {"skip_cache": "judges the pull request event and the base ref, which no file input carries"},
+        "git-hooks-install": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
+        "git-hooks-remove": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         // Runs a real session, so real durations and output refs land in the
         // capture and no two runs agree. Only the RENDER downstream of it
         // (termcast-generate) is reproducible enough to cache and to gate.
@@ -1074,6 +1083,96 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.modifiesExistingFiles("CHANGELOG.md");
     proc\exec("go", ["run", "./cmd/magus-utils", "generate-changelog",
         "-releases", "./releases", "-changelog", "./CHANGELOG.md"]);
+}
+
+// The pull_request payload GitHub Actions wrote for this run. Read only under the gha
+// charm, which is where CONTRIBUTING.md confines a host-native env var; without it the
+// checks take their input after `--`.
+fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> any {
+    if (!ctx.hasCharm("gha")) { return null; }
+    final path = os\env("GITHUB_EVENT_PATH") ?? "";
+    if (path == "" or !fs\exists(path)) {
+        throw "{target}: the gha charm is set but $GITHUB_EVENT_PATH names no file; run it in a pull_request workflow";
+    }
+    return serialize\jsonDecode(fs\readFile(path)).q("pull_request");
+}
+
+// Fails a pull request title that is not a conventional commit subject. Squash merges make
+// the title the subject main records, so this is where the format is enforced; the rule is
+// tools/conventional.buzz. Pass a title after `--` to check one by hand.
+export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
+    var title = args.join(" ");
+    if (title == "") {
+        final event = pull_request_event(ctx, target: "pr-title");
+        if (event == null) {
+            throw "pr-title: no title: pass one after `--`, or add the gha charm in a pull_request workflow";
+        }
+        title = event?.q("title").stringValue() ?? "";
+    }
+    final problem = conventional\problem(title);
+    if (problem != "") {
+        throw "pr-title: \"{title}\": {problem}";
+    }
+    magus\log.info("pr-title: \"{title}\" is a conventional commit subject");
+}
+
+// Fails a pull request that changes shipped code without adding a bullet to CHANGELOG.md's
+// [Unreleased] section. tools/changelog.buzz decides which paths ship. The waiver is the
+// pull request label changelog\optOutLabel(); a label passed after `--` counts too, for
+// checking a branch by hand.
+export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
+    var labels = mut [<str>];
+    foreach (a in args) { labels.append(a); }
+    final event = pull_request_event(ctx, target: "pr-changelog");
+    if (event != null) {
+        foreach (label in event?.q("labels").listValue() ?? [<serialize\Boxed>]) {
+            labels.append(label.q("name").stringValue());
+        }
+    }
+    if (labels.indexOf(changelog\optOutLabel()) != null) {
+        magus\log.info("pr-changelog: waived by the {changelog\optOutLabel()} label");
+        return;
+    }
+    if (vcs\name() != "git") {
+        throw "pr-changelog: reads the base CHANGELOG.md with `git show`, and this checkout is {vcs\name()}";
+    }
+    final base = vcs\base();
+    var shipped = mut [<str>];
+    foreach (f in vcs\changedFiles(base)) {
+        if (changelog\needsEntry(f.value)) { shipped.append(f.value); }
+    }
+    if (shipped.len() == 0) {
+        magus\log.info("pr-changelog: nothing shipped changed against {base}; no entry needed");
+        return;
+    }
+    final before = vcs\cmd(["show", base + ":CHANGELOG.md"], {"quiet": true}).stdout;
+    final added = changelog\addedEntries(releaser\unreleasedBody(before),
+        releaser\unreleasedBody(fs\readFile("CHANGELOG.md")));
+    if (added.len() > 0) {
+        magus\log.info("pr-changelog: {added.len()} new [Unreleased] entry(s) cover {shipped.len()} shipped path(s)");
+        return;
+    }
+    var listed = shipped.join("\n  ");
+    if (shipped.len() > 10) {
+        listed = shipped.sub(0, len: 10).join("\n  ") + "\n  ...and {shipped.len() - 10} more";
+    }
+    throw "pr-changelog: {shipped.len()} shipped path(s) changed against {base} and CHANGELOG.md's "
+        + "[Unreleased] section gained no entry. Add a bullet under the fitting heading, or have a "
+        + "maintainer label the pull request {changelog\optOutLabel()} when no user can notice it.\n  "
+        + listed;
+}
+
+// Installs a shim in git's hooks directory for every tools/git-hooks/<hook>.buzz, so the
+// hooks are reviewed and versioned like any other source. Without rw it only reports what
+// it would change. To add a hook, add the Buzz file and rerun this; spells/git/hooks.buzz
+// has the contract.
+export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {
+    githooks\install(ctx, dir: "tools/git-hooks");
+}
+
+// Deletes the shims git_hooks_install wrote, and no hook anything else wrote.
+export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
+    githooks\remove(ctx, dir: "tools/git-hooks");
 }
 
 // Regenerates everything derived from the boundary registry: the enum helpers

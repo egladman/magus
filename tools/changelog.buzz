@@ -1,0 +1,98 @@
+// Decides whether a pull request owes CHANGELOG.md an [Unreleased] entry, for the
+// pr-changelog target. Pure functions over paths and text, so the rule is tested
+// here and the target only gathers the inputs.
+namespace changelog;
+
+import "std";
+
+// The label that waives the entry. A label rather than a line in the pull request body:
+// the body becomes the squash commit's message, and only someone with triage rights can
+// add a label, so a waiver is a maintainer's call rather than the author's.
+export fun optOutLabel() > str {
+    return "no-changelog";
+}
+
+// needsEntry reports whether a change to path, relative to the repository root, is one a
+// user of a released magus could notice.
+//
+// Everything is shipped unless listed here. Failing closed means a new top-level directory
+// asks for an entry until someone decides otherwise, and the label covers the rest.
+// .github/actions is NOT exempt: other workspaces `uses:` those actions.
+export fun needsEntry(path: str) > bool {
+    if (path.endsWith(".md") or path.endsWith("_test.go") or path.endsWith(".test.ts")) {
+        return false;
+    }
+    if (path.indexOf("/testdata/") != null or path.startsWith("testdata/")) {
+        return false;
+    }
+    if (path == "magusfile.buzz" or path.endsWith("/magusfile.buzz")) {
+        return false;
+    }
+    // Repository tooling, plans and host wiring for working on magus itself. The root gen/
+    // holds this repository's own graphs and test mocks, which move with any magusfile edit.
+    final exemptDirs = [
+        ".claude/", ".codex/", ".cursor/", ".github/workflows/", "benchmarks/", "blog/",
+        "cmd/magus-", "gen/", "hack/", "harnesses/", "notes/", "releases/", "tapes/", "tools/",
+    ];
+    foreach (dir in exemptDirs) {
+        if (path.startsWith(dir)) { return false; }
+    }
+    final exemptFiles = [
+        ".gitignore", "_typos.toml", "badge.buzz", "coverage.buzz", "dprint-base.json",
+        "dprint.json", "magus.yaml", "mise.toml", "opencode.json", "releaser.buzz",
+    ];
+    if (exemptFiles.indexOf(path) != null) {
+        return false;
+    }
+    // The docs site is prose, except the guard templates a harness runs by path.
+    if (path.startsWith("docs/") and !path.startsWith("docs/guides/integrations/agents/")) {
+        return false;
+    }
+    return true;
+}
+
+// addedEntries returns the bullet lines in head's [Unreleased] body that base's lacks.
+// A set difference rather than a line diff, so a branch behind main, whose base already
+// carries entries the branch never saw, still finds exactly its own.
+export fun addedEntries(baseBody: str, headBody: str) > [str] {
+    var seen = mut {<str: bool>};
+    foreach (line in baseBody.split("\n")) {
+        seen[line.trim()] = true;
+    }
+    var added = mut [<str>];
+    foreach (line in headBody.split("\n")) {
+        final entry = line.trim();
+        if (entry.startsWith("- ") and seen[entry] == null) {
+            added.append(entry);
+        }
+    }
+    return added;
+}
+
+test "shipped code needs an entry and the exempt paths do not" {
+    std\assert(needsEntry("internal/cache/key.go"), message: "engine code");
+    std\assert(needsEntry("spells/golang/spell.buzz"), message: "a built-in spell");
+    std\assert(needsEntry(".github/actions/advice/action.yml"), message: "an action other workspaces use");
+    std\assert(needsEntry("docs/guides/integrations/agents/magus-command.buzz"), message: "a guard template a harness runs");
+    std\assert(needsEntry("go.mod"), message: "dependencies ship in the binary");
+    std\assert(!needsEntry("docs/concepts/targets.md"), message: "docs");
+    std\assert(!needsEntry("internal/agent/skills/magus-run/SKILL.md"), message: "markdown anywhere");
+    std\assert(!needsEntry("internal/cache/key_test.go"), message: "a Go test");
+    std\assert(!needsEntry("cmd/magus/testdata/run.txtar"), message: "testdata");
+    std\assert(!needsEntry(".github/workflows/ci.yaml"), message: "a workflow");
+    std\assert(!needsEntry("libs/gopherbuzz/magusfile.buzz"), message: "a project's build");
+    std\assert(!needsEntry("cmd/magus-utils/release.go"), message: "a repository tool");
+    std\assert(!needsEntry("docs/render.buzz"), message: "the docs renderer");
+    std\assert(!needsEntry("gen/target-graph.json"), message: "the repository's own graph");
+    std\assert(needsEntry("cmd/magus/gen/cli_flags.go"), message: "generated code in the binary");
+}
+
+test "only bullets the branch added count as an entry" {
+    final base = "### Added\n\n- an old thing";
+    std\assert(addedEntries(base, base).len() == 0, message: "nothing new");
+    std\assert(addedEntries(base, base + "\n- a new thing").len() == 1, message: "one new bullet");
+    std\assert(addedEntries(base + "\n- main gained this", base + "\n- a new thing")[0] == "- a new thing",
+        message: "a branch behind main finds only its own bullet");
+    std\assert(addedEntries("", "### Fixed").len() == 0, message: "a heading alone is not an entry");
+    std\assert(addedEntries(base, "### Added\n\n- an old thing, reworded").len() == 1, message: "a reworded bullet counts");
+}

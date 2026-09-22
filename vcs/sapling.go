@@ -1,7 +1,6 @@
 package vcs
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -610,29 +610,11 @@ func (v saplingVCS) culprit(ctx context.Context, dir string) (string, error) {
 	return sha, nil
 }
 
-// Managed-section markers; see the git.go block for why each pair is a locator MARK plus
-// the full line written.
-const (
-	slConfigBegin     = "# BEGIN magus-generated"
-	slConfigBeginLine = slConfigBegin + " - do not edit this section manually"
-	slConfigEnd       = "# END magus-generated"
-
-	slHookBegin     = "# BEGIN magus-refresh"
-	slHookBeginLine = slHookBegin + " - do not edit this section manually"
-	slHookEnd       = "# END magus-refresh"
-
-	slDriftHookBegin     = "# BEGIN magus-drift-notice"
-	slDriftHookBeginLine = slDriftHookBegin + " - do not edit this section manually"
-	slDriftHookEnd       = "# END magus-drift-notice"
-)
-
-// slDriftHooks mirrors hgDriftHooks: Sapling is a Mercurial-compatible fork and accepts
-// the same hook names in the same [hooks] section. Verified directly (sl 0.2.x): a
-// commit.NAME hook fired on `sl commit`, and an outgoing.NAME hook fired on `sl push`.
-var slDriftHooks = []string{"commit", "outgoing"}
-
 // slConfigPath is Sapling's per-repository config file, the counterpart of .hg/hgrc.
 func slConfigPath(root string) string { return filepath.Join(root, ".sl", "config") }
+
+// slMetaDir is the metadata directory whose lock serializes writes to .sl/config.
+func slMetaDir(root string) string { return filepath.Join(root, ".sl") }
 
 // InstallMergeDriver writes [merge-patterns] and [merge-tools] to .sl/config. Sapling
 // treats a merge-patterns key as a glob rooted at the repository root; the explicit
@@ -642,28 +624,21 @@ func slConfigPath(root string) string { return filepath.Join(root, ".sl", "confi
 // merging a conflicting change to a declared output invoked the named executable with
 // $base/$local/$other, and $local was the working-tree path (edited in place), which is the
 // contract magus's merge-driver subcommand is written against.
-func (v saplingVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []string) error {
-	var section strings.Builder
-	section.WriteString(slConfigBeginLine + "\n")
-	section.WriteString("[merge-patterns]\n")
-	for _, glob := range outputGlobs {
-		fmt.Fprintf(&section, "glob:%s = magus\n", glob)
-	}
-	section.WriteString("\n[merge-tools]\n")
-	section.WriteString("magus.executable = magus\n")
-	section.WriteString("magus.args = vcs merge-driver $base $local $other 0 $local\n")
-	section.WriteString("magus.premerge = False\n")
-	section.WriteString("magus.gui = False\n")
-	section.WriteString(slConfigEnd + "\n")
-	existing, _ := os.ReadFile(slConfigPath(root))
-	updated := replaceManagedSection(string(existing), section.String(), slConfigBegin, slConfigEnd)
-	return os.WriteFile(slConfigPath(root), []byte(updated), 0o644)
+func (v saplingVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
+	_, err := v.writeMergeDriver(ctx, root, outputGlobs)
+	return err
 }
 
-// CheckMergeDriver reports whether the magus merge driver is registered in .sl/config.
+func (v saplingVCS) writeMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
+	return lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
+		return writeHgFamilyMergeDriverSection(slConfigPath(root), outputGlobs)
+	})
+}
+
+// CheckMergeDriver reports whether .sl/config holds the magus merge-driver section. A
+// torn section is an error.
 func (v saplingVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
-	data, _ := os.ReadFile(slConfigPath(root))
-	return strings.Contains(string(data), slConfigBegin), nil
+	return managedSectionPresent(slConfigPath(root), generatedMarkers)
 }
 
 // EnsureMergeDriver implements types.MergeDriverInstaller. The config holds the glob list
@@ -673,64 +648,43 @@ func (v saplingVCS) EnsureMergeDriver(ctx context.Context, root string, outputGl
 	if len(outputGlobs) == 0 {
 		return false, nil
 	}
-	before, _ := os.ReadFile(slConfigPath(root))
-	if err := v.InstallMergeDriver(ctx, root, outputGlobs); err != nil {
-		return false, err
-	}
-	after, _ := os.ReadFile(slConfigPath(root))
-	return !bytes.Equal(before, after), nil
+	return v.writeMergeDriver(ctx, root, outputGlobs)
 }
 
-// InstallRefreshHook implements types.RefreshHookInstaller: it registers Sapling's `update`
-// hook (fires after the working copy moves: `sl goto`, a pull-update) to run command. It
-// shares replaceManagedSection with the merge-driver install, under its own markers so the
-// two managed sections coexist in .sl/config. Returns the hook label.
-func (v saplingVCS) InstallRefreshHook(_ context.Context, root, command string) ([]string, error) {
-	path := slConfigPath(root)
-	var section strings.Builder
-	section.WriteString(slHookBeginLine + "\n")
-	section.WriteString("[hooks]\n")
-	fmt.Fprintf(&section, "update.magus-refresh = %s >/dev/null 2>&1 || true\n", command)
-	section.WriteString(slHookEnd + "\n")
-	existing, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("vcs: read %s: %w", path, err)
+// InstallRefreshHook implements types.RefreshHookInstaller with Sapling's `update` hook,
+// which fires after the working copy moves (`sl goto`, a pull-update). The hook never
+// fails the sl command. It returns ["update"] when it changed .sl/config and nil when the
+// hook was already current. Installs are serialized per repository, and a torn managed
+// section in .sl/config is an error.
+func (v saplingVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
+	changed, err := lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
+		return writeHgFamilyRefreshSection(slConfigPath(root), command)
+	})
+	if err != nil {
+		return nil, err
 	}
-	updated := replaceManagedSection(string(existing), section.String(), slHookBegin, slHookEnd)
-	if updated == string(existing) {
+	if !changed {
 		return nil, nil
-	}
-	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
-		return nil, fmt.Errorf("vcs: write %s: %w", path, err)
 	}
 	return []string{"update"}, nil
 }
 
-// InstallDriftHook implements types.DriftHookInstaller: it registers Sapling's `commit`
-// and `outgoing` hooks (see slDriftHooks) to run command. It shares replaceManagedSection
-// with the merge-driver and refresh-hook installs, under its own markers so all three
-// managed sections coexist in .sl/config. Returns the labels of the hooks it installed.
-func (v saplingVCS) InstallDriftHook(_ context.Context, root, command string) ([]string, error) {
-	path := slConfigPath(root)
-	var section strings.Builder
-	section.WriteString(slDriftHookBeginLine + "\n")
-	section.WriteString("[hooks]\n")
-	for _, name := range slDriftHooks {
-		fmt.Fprintf(&section, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
+// InstallDriftHook implements types.DriftHookInstaller with Sapling's `commit` and
+// `outgoing` hooks (see hgFamilyDriftHooks). Neither hook can fail the sl command. It
+// returns their labels when it changed .sl/config and nil when they were already current.
+// Installs are serialized per repository, and a torn managed section in .sl/config is an
+// error.
+func (v saplingVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
+	changed, err := lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
+		return writeHgFamilyDriftSection(slConfigPath(root), command)
+	})
+	if err != nil {
+		return nil, err
 	}
-	section.WriteString(slDriftHookEnd + "\n")
-	existing, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("vcs: read %s: %w", path, err)
-	}
-	updated := replaceManagedSection(string(existing), section.String(), slDriftHookBegin, slDriftHookEnd)
-	if updated == string(existing) {
+	if !changed {
 		return nil, nil
 	}
-	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
-		return nil, fmt.Errorf("vcs: write %s: %w", path, err)
-	}
-	return append([]string(nil), slDriftHooks...), nil
+	return slices.Clone(hgFamilyDriftHooks), nil
 }
 
 // ConflictResolver and MergeStarter for Sapling. The resolve state machine is Mercurial's,

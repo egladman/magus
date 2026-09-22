@@ -149,29 +149,22 @@ func TestExportRevisionBadRev(t *testing.T) {
 
 func TestWriteManagedHookNewFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-checkout")
-	changed, err := writeManagedHook(path, gitHookBody("post-checkout", "magus server sync"))
+	body := gitHookBody("post-checkout", "magus server sync")
+	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile)
 	require.NoError(t, err)
 	assert.True(t, changed)
 
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	s := string(body)
-	assert.True(t, strings.HasPrefix(s, "#!/bin/sh"), "a new hook gets a shebang")
-	assert.Contains(t, s, gitHookBegin)
-	assert.Contains(t, s, "magus server sync")
-	assert.Contains(t, s, `[ "$3" = "1" ]`, "post-checkout guards on the branch-checkout flag")
-
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	assert.NotZero(t, info.Mode()&0o100, "the hook is executable")
+	assert.Equal(t, "[ \"$3\" = \"1\" ] || exit 0\nmagus server sync >/dev/null 2>&1 || true\n", body,
+		"post-checkout guards on the branch-checkout flag")
+	assertFile(t, path, "#!/bin/sh\n\n"+refreshMarkers.section(body), 0o755)
 }
 
 func TestWriteManagedHookIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-merge")
-	_, err := writeManagedHook(path, gitHookBody("post-merge", "magus server sync"))
+	_, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile)
 	require.NoError(t, err)
 
-	changed, err := writeManagedHook(path, gitHookBody("post-merge", "magus server sync"))
+	changed, err := writeManagedSection(path, refreshMarkers, gitHookBody("post-merge", "magus server sync"), hookFile)
 	require.NoError(t, err)
 	assert.False(t, changed, "re-installing an unchanged section is a no-op")
 }
@@ -180,15 +173,11 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "post-rewrite")
 	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\necho 'my own hook'\n"), 0o755))
 
-	changed, err := writeManagedHook(path, gitHookBody("post-rewrite", "magus server sync"))
+	body := gitHookBody("post-rewrite", "magus server sync")
+	changed, err := writeManagedSection(path, refreshMarkers, body, hookFile)
 	require.NoError(t, err)
 	assert.True(t, changed)
-
-	body, err := os.ReadFile(path)
-	require.NoError(t, err)
-	s := string(body)
-	assert.Contains(t, s, "echo 'my own hook'", "the user's hook body is preserved")
-	assert.Contains(t, s, gitHookBegin, "the managed section is appended")
+	assertFile(t, path, "#!/bin/sh\necho 'my own hook'\n\n"+refreshMarkers.section(body), 0o755)
 }
 
 // TestInstallDriftHookInstallsBoth pins that both post-commit and pre-push get the
@@ -200,18 +189,11 @@ func TestInstallDriftHookInstallsBoth(t *testing.T) {
 
 	installed, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"post-commit", "pre-push"}, installed)
+	assert.Equal(t, []string{"post-commit", "pre-push"}, installed)
 
-	for _, name := range []string{"post-commit", "pre-push"} {
-		body, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", name))
-		require.NoError(t, err, name)
-		s := string(body)
-		assert.Contains(t, s, gitDriftHookBegin, name)
-		assert.Contains(t, s, "magus job run check-drift >/dev/null 2>&1 || true", name)
-
-		info, err := os.Stat(filepath.Join(dir, ".git", "hooks", name))
-		require.NoError(t, err, name)
-		assert.NotZero(t, info.Mode()&0o100, "%s must be executable", name)
+	for _, name := range gitDriftHooks {
+		assertFile(t, filepath.Join(dir, ".git", "hooks", name),
+			"#!/bin/sh\n\n"+driftMarkers.section("magus job run check-drift >/dev/null 2>&1 || true\n"), 0o755)
 	}
 
 	again, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
@@ -219,9 +201,9 @@ func TestInstallDriftHookInstallsBoth(t *testing.T) {
 	assert.Empty(t, again, "re-installing an unchanged drift hook reports no install")
 }
 
-// TestInstallDriftHookCoexistsWithRefreshHook pins that the two managed sections this
-// repo can carry in one hook file (refresh and drift) never overwrite each other, in
-// either install order.
+// TestInstallDriftHookCoexistsWithRefreshHook pins that the two managed sections, and a
+// hand-written body, share one hook file without overwriting each other. Today's hook
+// sets do not overlap, so the shared file is staged by hand.
 func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
@@ -231,20 +213,68 @@ func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
 	_, err = gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
 	require.NoError(t, err)
 
-	// post-commit is drift-only and post-checkout/post-merge/post-rewrite are
-	// refresh-only, but a repository could plausibly grow both kinds of hook someday;
-	// the section markers are what keep them apart, not the file each happens to live
-	// in today. Assert on the one file relevant to both today's hook sets share: none,
-	// so assert each manager wrote its own file untouched by the other's markers.
-	postCommit, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", "post-commit"))
-	require.NoError(t, err)
-	assert.Contains(t, string(postCommit), gitDriftHookBegin)
-	assert.NotContains(t, string(postCommit), gitHookBegin)
+	postCommit := filepath.Join(dir, ".git", "hooks", "post-commit")
+	drift := driftMarkers.section("magus job run check-drift >/dev/null 2>&1 || true\n")
+	assertFile(t, postCommit, "#!/bin/sh\n\n"+drift, 0o755)
 
-	postCheckout, err := os.ReadFile(filepath.Join(dir, ".git", "hooks", "post-checkout"))
+	refresh := refreshMarkers.section("magus job run sync-graph >/dev/null 2>&1 || true\n")
+	_, err = writeManagedSection(postCommit, refreshMarkers, "magus job run sync-graph >/dev/null 2>&1 || true\n", hookFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(postCheckout), gitHookBegin)
-	assert.NotContains(t, string(postCheckout), gitDriftHookBegin)
+	_, err = gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
+	require.NoError(t, err)
+	assertFile(t, postCommit, "#!/bin/sh\n\n"+drift+"\n"+refresh, 0o755)
+}
+
+// Outside any repository there is nothing to hook, which the installer contract calls a
+// quiet no-op rather than a failure.
+func TestInstallGitHooksOutsideARepositoryInstallNothing(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	installed, err := gitVCS{}.InstallRefreshHook(t.Context(), dir, "magus job run sync-graph")
+	require.NoError(t, err)
+	assert.Nil(t, installed)
+	assert.NoDirExists(t, filepath.Join(dir, ".git"))
+
+	err = gitVCS{}.InstallMergeDriver(t.Context(), dir, []string{"gen/**"})
+	require.EqualError(t, err, "vcs: install merge driver: "+dir+" is not in a git repository")
+	assert.NoFileExists(t, filepath.Join(dir, ".gitattributes"))
+}
+
+// A cancelled install is an error, never the "not a repository, nothing to do" answer.
+func TestInstallGitHooksReportsCancellation(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	installed, err := gitVCS{}.InstallDriftHook(ctx, dir, "magus job run check-drift")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, installed)
+}
+
+// Every worktree of a repository shares one lock, in the common dir, so no lock file
+// appears in a worktree where it would show as untracked.
+func TestGitRepoPathsOfLinkedWorktree(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, dir, "worktree", "add", "-q", linked)
+
+	paths, ok, err := gitRepoPathsOf(t.Context(), linked)
+	require.NoError(t, err)
+	require.True(t, ok)
+	common, err := filepath.EvalSymlinks(paths.commonDir)
+	require.NoError(t, err)
+	want, err := filepath.EvalSymlinks(filepath.Join(dir, ".git"))
+	require.NoError(t, err)
+	assert.Equal(t, want, common)
+
+	_, err = gitVCS{}.InstallDriftHook(t.Context(), linked, "magus job run check-drift")
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(want, managedLockName))
+	assert.NoFileExists(t, filepath.Join(linked, managedLockName))
 }
 
 // TestCommitPushed covers the three answers CommitPushed can give: not pushed (ahead of
@@ -1198,4 +1228,223 @@ func TestGitPreserveNeedsNoConfiguredIdentity(t *testing.T) {
 	require.NotEmpty(t, handle)
 	assert.Equal(t, "two", gitCapture(t, dir, nil, "show", handle+":a.txt"),
 		"the capture does not hold the uncommitted work")
+}
+
+// TestEnsureMergeDriverIdempotent drives EnsureMergeDriver end to end against a real repo,
+// which is where the accumulation actually bit: every magus invocation runs it, so a section
+// appended rather than replaced grew .gitattributes by a block per command.
+//
+// EnsureMergeDriver builds its own git commands and does NOT route them through gitEnv, so
+// this pins the ambient git environment itself. GIT_DIR is the one that matters: git exports
+// it inside every hook and every `rebase --exec`, so running the suite from a pre-commit hook
+// sent `git config merge.magus.driver` into whatever repo was being committed to, the test
+// passing all the while, because it never looked. Pointing the variables at the fixture makes
+// the target explicit rather than merely unset, and the config assertion below is what proves
+// the write landed here.
+func TestEnsureMergeDriverIdempotent(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("GIT_DIR", filepath.Join(repo, ".git"))
+	t.Setenv("GIT_WORK_TREE", repo)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	outputGlobs := []string{"gen/**", "docs/gen/**"}
+	attrsPath := filepath.Join(repo, ".gitattributes")
+
+	changed, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
+	require.NoError(t, err)
+	assert.True(t, changed, "first call installs the section")
+
+	changed, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
+	require.NoError(t, err)
+	assert.False(t, changed, "second call has nothing to do")
+
+	// Assert the CONTENT, not just that two reads agree: with changed==false a write is
+	// impossible, so comparing the two reads can only ever restate the line above. An
+	// EnsureMergeDriver that wrote an empty section would satisfy that and fail a user.
+	assertFile(t, attrsPath, generatedMarkers.section(
+		"gen/** merge=magus linguist-generated\n"+
+			"docs/gen/** merge=magus linguist-generated\n"), 0o644)
+
+	// The registration is half of what EnsureMergeDriver promises, and reading it back from
+	// the fixture is also what would catch the config escaping into another repository.
+	assert.Contains(t, gitConfigValue(t, repo, "merge.magus.driver"), gitDriverArgs,
+		"driver registered in the fixture repo")
+
+	// Re-wiring is the other reason EnsureMergeDriver exists: a project that declares an
+	// output later must be added, not left frozen at the shape the workspace had on the day
+	// init ran. The steady state above cannot show that.
+	changed, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, []string{"gen/**", "dist/**"})
+	require.NoError(t, err)
+	assert.True(t, changed, "a changed glob set re-wires")
+	assertFile(t, attrsPath, generatedMarkers.section(
+		"gen/** merge=magus linguist-generated\n"+
+			"dist/** merge=magus linguist-generated\n"), 0o644)
+}
+
+// TestEnsureMergeDriverLeavesACRLFWorktreeClean pins the fix for the v0.4.1 windows release,
+// which stamped every artifact `v0.4.1-dirty` while the other four platforms were clean.
+//
+// .gitattributes is the one TRACKED file magus rewrites on every workspace load. Git for
+// Windows ships core.autocrlf=true and this repository declares no eol attribute, so
+// checkout smudges the LF blob to CRLF on disk; writing the managed section back as LF then
+// makes git report the file modified, and `git describe --dirty` says so.
+//
+// core.autocrlf is set on the fixture rather than mocked, so this runs the real smudge on
+// any host: the checkout below produces CRLF everywhere, which is what makes the case
+// reproducible off Windows. The final describe is the assertion that matters, because it is
+// the exact call version() makes.
+func TestEnsureMergeDriverLeavesACRLFWorktreeClean(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("GIT_DIR", filepath.Join(repo, ".git"))
+	t.Setenv("GIT_WORK_TREE", repo)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	outputGlobs := []string{"gen/**", "docs/gen/**"}
+
+	// Commit the section as an LF blob, the way every non-Windows contributor does.
+	_, wanted, err := gitVCS{}.gitAttrsState(repo, outputGlobs)
+	require.NoError(t, err)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n", ".gitattributes": wanted})
+	gitRun(t, repo, "config", "core.autocrlf", "true")
+	gitRun(t, repo, "tag", "v0.4.1")
+
+	// Re-checkout under autocrlf: this is the Windows runner's starting state.
+	require.NoError(t, os.Remove(filepath.Join(repo, ".gitattributes")))
+	gitRun(t, repo, "checkout", "--", ".gitattributes")
+	onDisk, err := os.ReadFile(filepath.Join(repo, ".gitattributes"))
+	require.NoError(t, err)
+	require.Contains(t, string(onDisk), "\r\n", "the fixture reproduces the CRLF smudge")
+
+	// changed is true here for a reason unrelated to the tracked file: a fresh clone has no
+	// merge.magus.driver registered, and that write lands in .git/config.
+	_, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
+	require.NoError(t, err)
+
+	after, err := os.ReadFile(filepath.Join(repo, ".gitattributes"))
+	require.NoError(t, err)
+	assert.Equal(t, string(onDisk), string(after),
+		"the section is rewritten with the line ending the file already uses, so the bytes do not move")
+
+	described, err := gitVCS{}.Describe(t.Context(), repo)
+	require.NoError(t, err)
+	assert.Equal(t, "v0.4.1", described, "a CRLF worktree is not dirt; v0.4.1 shipped as v0.4.1-dirty because it was")
+
+	changed, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
+	require.NoError(t, err)
+	assert.False(t, changed, "and the steady state stays quiet rather than rewriting every load")
+}
+
+// TestEnsureMergeDriverIgnoresAmbientGitDir pins the escape gitEnviron exists to stop.
+//
+// GIT_DIR overrides both -C and cmd.Dir, and git exports it into every hook and
+// `rebase --exec`. EnsureMergeDriver runs on workspace load, so before the scrub, a magus
+// command invoked from a pre-commit hook registered the merge driver in whatever repository
+// was being committed to, succeeding quietly, because nothing ever read the value back.
+func TestEnsureMergeDriverIgnoresAmbientGitDir(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	bystander := t.TempDir()
+	gitInitRepo(t, bystander, map[string]string{"magus.yaml": "version: 1\n"})
+
+	// Point the ambient environment at the bystander, exactly as a git hook would.
+	t.Setenv("GIT_DIR", filepath.Join(bystander, ".git"))
+	t.Setenv("GIT_WORK_TREE", bystander)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+
+	_, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, []string{"gen/**"})
+	require.NoError(t, err)
+
+	assert.Contains(t, gitConfigValue(t, repo, "merge.magus.driver"), gitDriverArgs,
+		"the named repo is the one configured")
+	assert.Empty(t, gitConfigValue(t, bystander, "merge.magus.driver"),
+		"the repo named only by ambient GIT_DIR must be left alone")
+}
+
+// gitConfigValue reads one local config key, returning "" when it is unset. It reads with a
+// scrubbed environment for the same reason the production path writes with one: an ambient
+// GIT_DIR would otherwise answer about a different repository than the caller named.
+func gitConfigValue(t *testing.T, repo, key string) string {
+	t.Helper()
+	cmd := gitExec(t.Context(), "-C", repo, "config", "--get", key)
+	out, err := cmd.Output()
+	if err != nil {
+		return "" // git exits 1 for an unset key; any real failure surfaces as an empty value
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// pathUnder decides whether a registration names a binary from THIS worktree, which is the
+// difference between a deliberate local driver and another worktree's build.
+func TestPathUnder(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "w", "repo")
+	for _, tc := range []struct {
+		name string
+		p    string
+		want bool
+	}{
+		{"the binary at the root", filepath.Join(root, "magus"), true},
+		{"a binary in a subdirectory", filepath.Join(root, "hack", "driver.sh"), true},
+		{"the root itself", root, true},
+		{"an unclean path that still lands inside", filepath.Join(root, "hack", "..", "magus"), true},
+		{"a sibling worktree", filepath.Join(string(filepath.Separator), "w", "other", "magus"), false},
+		{"a prefix-sharing sibling", root + "-2" + string(filepath.Separator) + "magus", false},
+		{"an installed release", filepath.Join(string(filepath.Separator), "usr", "local", "bin", "magus"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, pathUnder(root, tc.p))
+		})
+	}
+}
+
+// A workspace that builds its own magus prefers it, and that preference has to be a reason
+// to REPLACE what is registered. Reachability alone left a v0.3.0 release registered across
+// 142 worktrees: it answered the -h probe, so the steady-state check returned early and
+// nothing ever rewrote.
+func TestDriverIsPreferredHere(t *testing.T) {
+	root := t.TempDir()
+	release := "/usr/local/bin/magus" + gitDriverArgs
+
+	assert.True(t, driverIsPreferredHere(root, release),
+		"with no local build there is nothing better to offer, so PATH keeps its registration")
+
+	local := filepath.Join(root, "magus")
+	require.NoError(t, os.WriteFile(local, []byte("#!/bin/sh\n"), 0o755))
+
+	assert.False(t, driverIsPreferredHere(root, release),
+		"a local build must displace a registration pointing outside the worktree")
+	assert.True(t, driverIsPreferredHere(root, local+gitDriverArgs))
+	assert.True(t, driverIsPreferredHere(root, filepath.Join(root, "magus-dev")+gitDriverArgs),
+		"a deliberate pinned registration is from this worktree and must survive")
+}
+
+// TestRegisteredDriverReportsAbsence pins the two states git spells identically: `config`
+// exits 1 with no output for an absent key, and 0 with no output for a key set to the
+// empty value. Both are unusable, since every predicate downstream reads an executable
+// path out of the command.
+func TestRegisteredDriverReportsAbsence(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	setDriver := func(value string) {
+		t.Helper()
+		require.NoError(t, gitExec(t.Context(), "-C", repo, "config", "merge.magus.driver", value).Run())
+	}
+
+	cmd, ok := gitVCS{}.registeredDriver(t.Context(), repo)
+	assert.False(t, ok, "a fresh clone has registered nothing")
+	assert.Empty(t, cmd)
+
+	setDriver("")
+	cmd, ok = gitVCS{}.registeredDriver(t.Context(), repo)
+	assert.False(t, ok, "a key set to the empty value names no executable either")
+	assert.Empty(t, cmd)
+
+	want := "/usr/local/bin/magus" + gitDriverArgs
+	setDriver(want)
+	cmd, ok = gitVCS{}.registeredDriver(t.Context(), repo)
+	assert.True(t, ok)
+	assert.Equal(t, want, cmd)
 }
