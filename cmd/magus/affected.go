@@ -237,21 +237,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return err
 	}
 
-	var rw *magus.ReportWriter
-	if opts.Format == outputJSONL {
-		w, cleanup, openErr := outputDst()
-		if openErr != nil {
-			return openErr
-		}
-		defer func() { _ = cleanup() }()
-		var rwErr error
-		rw, rwErr = magus.NewReportWriter(w, globalCfg.Report.Filter)
-		if rwErr != nil {
-			return rwErr
-		}
-		m.SetGraphObserver(rw.GraphObserver())
-		defer func() { _ = rw.Close() }()
+	rw, cleanupReport, err := setupJSONLReport(m, opts)
+	if err != nil {
+		return err
 	}
+	defer func() { _ = cleanupReport() }()
 
 	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {
@@ -322,7 +312,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	noteUndeclaredSeedCost(os.Stderr, undeclaredOnly, rw)
 
 	if rw != nil {
-		reportUndeclaredSeeds(rw, undeclaredOnly)
+		reportUndeclaredSeeds(undeclaredOnly, rw)
 	}
 
 	var runOpts []magus.RunOption
@@ -405,7 +395,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
-	emitConcurrencyNudge(os.Stderr, m, rw, os.Args[1:])
+	emitConcurrencyNudge(os.Stderr, m, os.Args[1:], rw)
 
 	if chained {
 		return runChain(ctx, m, opts, target, targets, chain, readReturns(target))
@@ -888,7 +878,7 @@ func noteUndeclaredSeedCost(w io.Writer, undeclaredOnly map[string][]string, rw 
 		return
 	}
 	if rw != nil {
-		_ = rw.RecordNotice("warn", string(types.UndeclaredSeedingFile), undeclaredSeedNotice(undeclaredOnly, true))
+		_ = rw.RecordNotice("warn", types.UndeclaredSeedingFile, undeclaredSeedNotice(undeclaredOnly, true))
 		return
 	}
 	interactive.Emit(w, undeclaredSeedNotice(undeclaredOnly, true))
@@ -993,7 +983,7 @@ func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOpti
 // reportUndeclaredSeeds carries MGS1028 into the -o jsonl stream as one coded event per
 // project, the shape the engine's own diagnostic sink emits, so a consumer counts the
 // code and the unit instead of matching the hint's wording.
-func reportUndeclaredSeeds(rw *magus.ReportWriter, undeclaredOnly map[string][]string) {
+func reportUndeclaredSeeds(undeclaredOnly map[string][]string, rw *magus.ReportWriter) {
 	for _, seed := range slices.Sorted(maps.Keys(undeclaredOnly)) {
 		_ = rw.RecordDiagnostic(seed, types.UndeclaredSeedingFile,
 			"seeded only by changed files no project declares: "+

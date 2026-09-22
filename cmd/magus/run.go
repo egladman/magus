@@ -218,21 +218,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return err
 	}
 
-	var rw *magus.ReportWriter
-	if opts.Format == outputJSONL {
-		w, cleanup, openErr := outputDst()
-		if openErr != nil {
-			return openErr
-		}
-		defer func() { _ = cleanup() }()
-		var rwErr error
-		rw, rwErr = magus.NewReportWriter(w, globalCfg.Report.Filter)
-		if rwErr != nil {
-			return rwErr
-		}
-		m.SetGraphObserver(rw.GraphObserver())
-		defer func() { _ = rw.Close() }()
+	rw, cleanupReport, err := setupJSONLReport(m, opts)
+	if err != nil {
+		return err
 	}
+	defer func() { _ = cleanupReport() }()
 
 	// cwd is the caller's directory: for an adopted run it is the client's, carried on
 	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
@@ -378,7 +368,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
-	emitConcurrencyNudge(os.Stderr, m, rw, os.Args[1:])
+	emitConcurrencyNudge(os.Stderr, m, os.Args[1:], rw)
 
 	if chained {
 		return runChain(ctx, m, opts, targetName, targets, chain, readReturns(targetName))

@@ -229,12 +229,12 @@ type projectLocker struct {
 	// cannot suppress any of them: a run that stalls or yields without explanation is
 	// the failure they exist to prevent.
 	out io.Writer
-	// report is set for a structured (-o jsonl) invocation; when non-nil the wait/
+	// rw is set for a structured (-o jsonl) invocation; when non-nil the wait/
 	// resume lines go there as typed events instead of the prose lines above, which
 	// would otherwise be free text on a stream a caller is parsing as JSONL. ctx
 	// cannot carry this the way [report.WithWriter] does elsewhere: the lock is
 	// acquired before Run wraps ctx with it, so it is threaded in directly instead.
-	report *report.Writer
+	rw *report.Writer
 }
 
 // lockRetryDelay is how often a blocked acquire re-polls the OS lock while waiting.
@@ -267,7 +267,7 @@ func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
 // prose lines emitWaiting/emitResumed otherwise print, for a structured (-o jsonl)
 // invocation. nil is a no-op, so callers can pass opts.Report unconditionally.
 func withReportWriter(w *report.Writer) lockerOption {
-	return func(l *projectLocker) { l.report = w }
+	return func(l *projectLocker) { l.rw = w }
 }
 
 // writingTo redirects the lock's decision lines, for a test that reads them.
@@ -520,9 +520,9 @@ func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 	// A structured invocation gets the same fact as a typed event instead of the
 	// prose below: -o jsonl parses this stream, and a caller cannot tell where a
 	// "magus:" line ends and JSON begins.
-	if l.report != nil {
-		_ = report.Record(l.report, report.LockWait{
-			Project: p, HolderPID: rec.PID, HolderCommand: rec.Command,
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.LockWait{
+			Project: p, HolderPID: rec.PID, Command: rec.Command,
 		})
 		return
 	}
@@ -595,10 +595,10 @@ func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath stri
 				return
 			case <-t.C:
 				elapsed := time.Since(start)
-				if l.report != nil {
+				if l.rw != nil {
 					rec := l.readOwner(projectPath)
-					_ = report.Record(l.report, report.LockWait{
-						Project: p, HolderPID: rec.PID, HolderCommand: rec.Command,
+					_ = report.Record(l.rw, report.LockWait{
+						Project: p, HolderPID: rec.PID, Command: rec.Command,
 						ElapsedMs: elapsed.Milliseconds(),
 					})
 					continue
@@ -626,8 +626,8 @@ func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	if l.report != nil {
-		_ = report.Record(l.report, report.LockReleased{Project: p})
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.LockReleased{Project: p})
 		return
 	}
 	fmt.Fprintf(l.out, "magus: lock on project %s released; starting.\n", p)

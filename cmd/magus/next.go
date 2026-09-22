@@ -99,7 +99,7 @@ func (n nextGate) served(next []hint.Next) []hint.Next {
 // hints` can count uptake. -s and disabled hints skip it without spending the firing.
 // rw, when non-nil (a structured -o jsonl invocation), routes the nudge as a typed
 // notice instead of the two prose lines below.
-func emitConcurrencyNudge(w io.Writer, m *magus.Magus, rw *magus.ReportWriter, args []string) {
+func emitConcurrencyNudge(w io.Writer, m *magus.Magus, args []string, rw *magus.ReportWriter) {
 	if global.silent || !interactive.HintsEnabled() {
 		return
 	}

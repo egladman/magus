@@ -85,8 +85,8 @@ func (rw *ReportWriter) RecordRunBase(base, vcs string) error {
 // RecordNotice appends a free-form advisory line (a hint, warning, or one-time
 // banner) that has no dedicated event type of its own. level is "info" or "warn";
 // code is the diagnostic code (e.g. an MGS####) when the notice carries one.
-func (rw *ReportWriter) RecordNotice(level, code, msg string) error {
-	return report.Record(rw.w, report.Notice{Level: level, Code: code, Msg: msg})
+func (rw *ReportWriter) RecordNotice(level string, code types.DiagnosticCode, message string) error {
+	return report.Record(rw.w, report.Notice{Level: level, Code: string(code), Message: message})
 }
 
 // WithReport attaches rw to receive one JSONL event per executed target.

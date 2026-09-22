@@ -1310,7 +1310,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		dryStart := time.Now()
 		switch {
 		case opts.Report != nil:
-			_ = report.Record(opts.Report, report.Notice{Level: "info", Msg: "dry run: commands shown, not executed"})
+			_ = report.Record(opts.Report, report.Notice{Level: "info", Message: "dry run: commands shown, not executed"})
 		case m.cache != nil:
 			m.cache.LogDryBanner(ctx)
 		default:

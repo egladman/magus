@@ -41,10 +41,9 @@ const (
 	TypeRunBase               = "run.base"
 	TypeRunStep               = "run.step"
 	TypeRunSummary            = "run.summary"
-	TypeRunExec               = "run.exec"
 	TypeLockWait              = "lock.wait"
 	TypeLockReleased          = "lock.released"
-	TypeNotice                = "notice"
+	TypeNotice                = "run.notice"
 )
 
 // TargetResult reports the outcome of one target run — the single per-target event
@@ -208,24 +207,15 @@ type RunSummary struct {
 	DurationMs int64 `json:"duration_ms"`
 }
 
-// RunExec reports one subprocess magus spawns, echoed the way a text run shows it
-// ("$ cmd args"); logged for every real subprocess and, at info level, for a
-// dry-run's planned commands.
-type RunExec struct {
-	Cmd  string   `json:"cmd"`
-	Args []string `json:"args,omitempty"`
-	Dir  string   `json:"dir,omitempty"`
-}
-
 // LockWait reports a run blocked on another magus process holding a project's
 // lock -- emitted once when the wait starts and again on each heartbeat while it
 // continues, so a structured reader has the same liveness evidence a text run's
 // repeated line gives a human.
 type LockWait struct {
-	Project       string `json:"project"`
-	HolderPID     int    `json:"holder_pid,omitempty"`
-	HolderCommand string `json:"holder_command,omitempty"`
-	ElapsedMs     int64  `json:"elapsed_ms,omitempty"`
+	Project   string `json:"project"`
+	HolderPID int    `json:"holder_pid,omitempty"`
+	Command   string `json:"command,omitempty"`
+	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
 }
 
 // LockReleased reports that a previously-waited-on project lock freed and this
@@ -238,9 +228,9 @@ type LockReleased struct {
 // that has no dedicated event type of its own. Code is the diagnostic code (e.g.
 // an MGS####) when the notice carries one.
 type Notice struct {
-	Level string `json:"level"` // "info" | "warn"
-	Code  string `json:"code,omitempty"`
-	Msg   string `json:"msg"`
+	Level   string `json:"level"` // "info" | "warn"
+	Code    string `json:"code,omitempty"`
+	Message string `json:"msg"`
 }
 
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
@@ -261,7 +251,6 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RunBase{}):               TypeRunBase,
 	reflect.TypeOf(RunStep{}):               TypeRunStep,
 	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
-	reflect.TypeOf(RunExec{}):               TypeRunExec,
 	reflect.TypeOf(LockWait{}):              TypeLockWait,
 	reflect.TypeOf(LockReleased{}):          TypeLockReleased,
 	reflect.TypeOf(Notice{}):                TypeNotice,
