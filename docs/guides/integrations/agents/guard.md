@@ -9,7 +9,7 @@ tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 ## What the guard is
 
 The name follows established access-control terms (NIST SP 800-162,
-https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf).
+<https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf>).
 Each agent host's hook is the policy enforcement point: it intercepts the tool
 call and applies the verdict it gets back. magus's guard, `magus session
 hook`, is the policy decision point: it decides allow, advise, or deny from
@@ -18,7 +18,7 @@ the graph, VCS state, and job leases. The workspace's rules, built in plus
 anything declared in the root magusfile, are its policy. One sentence may
 borrow "shield" as an analogy (Alshiekh et al., Safe Reinforcement Learning
 via Shielding, AAAI 2018,
-https://cdn.aaai.org/ojs/11797/11797-13-15325-1-2-20201228.pdf): a shield is a
+<https://cdn.aaai.org/ojs/11797/11797-13-15325-1-2-20201228.pdf>): a shield is a
 monitor that vetoes a learning agent's proposed actions against a spec, and
 the guard plays that role for magus, never choosing an action itself. magus
 never calls a model and never owns the host's loop; see
