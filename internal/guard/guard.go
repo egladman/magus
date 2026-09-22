@@ -474,7 +474,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if callDir == "" {
 			callDir = location.dir
 		}
-		v := rankOwnBuild(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), deps, callDir, input, shellD)
+		v := rankOwnBuild(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), ownBuildVerdict(deps, callDir, input, shellD))
 		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
 		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
