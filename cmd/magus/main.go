@@ -405,6 +405,15 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	}
 }
 
+// finalizeConfig runs once every global flag, in either position, is bound into
+// globalCfg: it applies the verbosity flags and validates the result. Flags overwrite
+// yaml and env, so without this pass `--log-level bogus` ran with a value the yaml
+// loader refuses.
+func finalizeConfig() error {
+	applyDisplay()
+	return config.Validate(globalCfg)
+}
+
 // bindGlobalsAfterSubcommand reads the generated config flags out of the args that
 // FOLLOW the subcommand and applies them to globalCfg, so the value is present before
 // the workspace preload snapshots it. See the call site for why that ordering matters.
@@ -733,6 +742,11 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// `magus run build --concurrency 4` silently ran at the default width, and every
 	// other generated config flag was dead in that position too.
 	bindGlobalsAfterSubcommand(rest)
+	if err := finalizeConfig(); err != nil {
+		stopFlags()
+		fmt.Fprintf(os.Stderr, "magus: invalid configuration from flags: %v\n", err)
+		return startupResult{cleanup: cleanup}, 1
+	}
 	// globalCfg is the one the flags were bound into; cfg is the copy taken before any
 	// of them were parsed, and the startup path below still reads it: for the watch
 	// ignores, the daemon address, and (worst) the bootstrap limiter's width. That
@@ -794,7 +808,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	default:
 		concurrency := cfg.Concurrency
 		if concurrency <= 0 {
-			concurrency = cache.DefaultConcurrency()
+			concurrency = cache.ConfiguredConcurrency(cfg.ConcurrencyProfile)
 		}
 		// THE site that governs: this limiter is injected into the workspace and wins over
 		// m.cfg.Concurrency via limOnce, so a cap applied only in Magus.limiter never runs.
@@ -1117,7 +1131,7 @@ var daemonTrailBase string
 func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
 	n := cfg.Concurrency
 	if n <= 0 {
-		n = cache.DefaultConcurrency()
+		n = cache.ConfiguredConcurrency(cfg.ConcurrencyProfile)
 	}
 	lim := cache.NewLimiter(n)
 	// The machine budget. One daemon per user means one of these per machine, which is

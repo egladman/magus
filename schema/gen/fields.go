@@ -549,6 +549,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter.",
 	},
 	{
+		GoPath:   "ConcurrencyProfile",
+		YamlPath: "concurrency_profile",
+		EnvVar:   "MAGUS_CONCURRENCY_PROFILE",
+		Flag:     fieldtype.FlagNames{Long: "concurrency-profile"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...",
+	},
+	{
 		GoPath:   "MaxFailures",
 		YamlPath: "max_failures",
 		EnvVar:   "MAGUS_MAX_FAILURES",

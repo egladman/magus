@@ -39,7 +39,7 @@ func TestConnectGetStatusCarriesEnvelopeExtras(t *testing.T) {
 	since := time.Date(2026, 7, 21, 10, 0, 0, 0, time.UTC)
 	src := fakeSource{report: types.StatusSnapshot{
 		ObservingSince: since,
-		Config:         types.StatusConfig{DefaultCharms: []string{"rw"}, Concurrency: 8, Sandbox: true},
+		Config:         types.StatusConfig{DefaultCharms: []string{"rw"}, Concurrency: types.StatusConcurrency{Configured: 8}, Sandbox: true},
 	}}
 	svc := NewConnectService(src, types.BuildInfo{}, nil)
 

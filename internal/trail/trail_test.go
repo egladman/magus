@@ -419,7 +419,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 		t.Errorf("orphaned blob not garbage-collected")
 	}
 
-	// A temp file left by an in-flight WriteBlob (its name fails validRef) survives GC.
+	// A temp file left by an in-flight WriteBlob (its name fails ValidRef) survives GC.
 	tmp := filepath.Join(blobsPath(dir), "mcp0123456789abcd.tmp999")
 	if err := os.WriteFile(tmp, []byte("x"), 0o644); err != nil {
 		t.Fatalf("write temp: %v", err)
@@ -475,6 +475,24 @@ func TestGCBlobs_CollectsOrphanPastGraceWindow(t *testing.T) {
 	if _, err := ReadBlob(dir, ref); err == nil {
 		t.Fatalf("gcBlobs kept an orphaned blob past its grace window")
 	}
+}
+
+// TestGCBlobs_KeepsTheVerdictARepeatDenyCites pins the third ref an event can name: a
+// repeated guard deny prints a grd ref, and collecting it would leave that line pointing at
+// nothing while the event that printed it is still kept.
+func TestGCBlobs_KeepsTheVerdictARepeatDenyCites(t *testing.T) {
+	dir := t.TempDir()
+	ref, _ := WriteBlob(t.Context(), dir, "grd", []byte("the full verdict"))
+	backdateBlob(t, dir, ref, blobGraceWindow+time.Second)
+	line, err := json.Marshal(Event{Kind: KindAgentCommand, Action: "shell.command", VerdictRef: ref})
+	require.NoError(t, err)
+
+	gcBlobs(dir, []string{string(line)})
+
+	got, err := ReadBlob(dir, ref)
+	require.NoError(t, err)
+	assert.Equal(t, "the full verdict", string(got))
+	assert.True(t, ValidRef(ref))
 }
 
 func TestRotate_UnderCapAndEmptyBaseAreNoops(t *testing.T) {

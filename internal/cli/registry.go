@@ -1234,6 +1234,13 @@ which is an opaque label the caller chooses rather than a set magus knows: a
 magus that enumerated hosts would need a release per host, and a caller that
 cannot extract a session id must still be able to get a verdict.
 
+--transport names the form of the hook calling, such as sh or buzz, as that form
+declares it. With --agent-name and --session it names the CALLER that the
+once-per-session notices and the full text of a repeated deny are kept for, as
+one key, host/transport/session. A session id alone is not enough: two hosts can
+present the same id, and two forms of one hook wired into a session are two
+callers, each told a rule in full once.
+
 --lease is the exception: it IS policy. It names the lease the caller is acting
 as, and a write is then graded against that lease's declared write boundary in
 this workspace's lease ledger. Inside its write paths passes; inside its deny
@@ -1258,6 +1265,7 @@ not block every tool call.`,
 		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
 		{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)"},
 		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
+		{Name: "transport", Kind: FlagString, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session"},
 		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
 		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},

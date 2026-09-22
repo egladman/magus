@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -20,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -128,9 +130,19 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		}
 		ref := pos[1]
 		if !cache.LooksLikeRef(ref) {
-			msg := fmt.Sprintf("%q is not an output ref (expected out<hex>, e.g. out1a2b3c)", ref)
-			fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg).Error())
-			return errSilent{exitCode: 2}
+			if !trail.ValidRef(ref) {
+				msg := fmt.Sprintf("%q is not an output ref (expected out<hex> for a run, or a stored payload such as grd<hex> or mcp<hex>)", ref)
+				fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg).Error())
+				return errSilent{exitCode: 2}
+			}
+			if qf.Attempts || qf.Identity || qf.Publish || qf.Open || qf.Print {
+				return usagef("magus query output: %s is a stored payload, not a run; --attempts, --identity, --publish, --open and --print apply only to out<hex> refs", ref)
+			}
+			outOpts, oerr := outputOptionsOrDefault()
+			if oerr != nil {
+				return oerr
+			}
+			return queryTrailPayload(ctx, root, ref, outOpts)
 		}
 		outOpts, oerr := outputOptionsOrDefault()
 		if oerr != nil {
@@ -367,6 +379,46 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		interactive.Emit(os.Stderr, "reproduce this invocation here with `"+hint.X.With(ref)+"`")
 	}
 	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
+	return err
+}
+
+// trailPayloadRecord is the -o json/yaml projection of a stored payload: no run stands
+// behind it, so the ref and the bytes are the whole record.
+type trailPayloadRecord struct {
+	Ref    string `json:"ref"`
+	Output string `json:"output"`
+}
+
+// queryTrailPayload prints a payload the activity trail stored under a non-out prefix: a
+// guard verdict (grd), an MCP request or response (mcp). The ref names its own store, so a
+// miss here is final and the run-output store is not consulted.
+func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions) error {
+	switch out.Format {
+	case FormatText, FormatJSON, FormatYAML:
+	default:
+		return usagef("magus query output: -o %s is not supported; a stored payload has no fields to render, so json and yaml are the only structured forms", out.Format)
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	data, err := trail.ReadBlob(m.CacheDir(), ref)
+	if errors.Is(err, fs.ErrNotExist) {
+		msg := fmt.Sprintf("no stored payload for ref %q; the activity trail may have rotated it out, or the ref is mistyped", ref)
+		fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
+		return errSilent{exitCode: 2}
+	}
+	if err != nil {
+		return fmt.Errorf("magus query output: read %s: %w", ref, err)
+	}
+	if out.Format == FormatJSON || out.Format == FormatYAML {
+		return emitFormatted(out, trailPayloadRecord{Ref: ref, Output: string(data)})
+	}
+	// A verdict is stored without a trailing newline, so it would run into the prompt.
+	if !bytes.HasSuffix(data, []byte("\n")) {
+		data = append(data, '\n')
+	}
+	_, err = os.Stdout.Write(data)
 	return err
 }
 

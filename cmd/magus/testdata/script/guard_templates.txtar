@@ -846,7 +846,9 @@ stdout 'workers do not publish'
 env __MAGUS_AGENT_NAME=testscript
 
 # case: command/deny
-stdin $WORK/push-command.json
+# A leased worker runs as its own session, so this refusal is its first and explains itself
+# in full, whatever the orchestrator's session was told above.
+stdin $WORK/push-command-worker.json
 exec sh $WORK/parity.sh command
 stdout '"permissionDecision":"deny"'
 stdout 'workers do not publish'
@@ -901,6 +903,10 @@ sh_tmp=${TMPDIR:-/tmp}/parity-sh
 bz_tmp=${TMPDIR:-/tmp}/parity-buzz
 mkdir -p "$sh_tmp" "$bz_tmp"
 
+# Both forms answer the same event, session included, and each declares its own
+# --transport. magus keeps a deny's full text per host, transport and session, so the
+# two are two callers and each hears a rule in full the first time, as two forms wired
+# into one real session would.
 printf '%s' "$event" | TMPDIR=$sh_tmp sh "$__MAGUS_TEMPLATES/$stem.sh" \
   >"$sh_tmp/out" 2>"$sh_tmp/err"
 sh_status=$?
@@ -977,6 +983,8 @@ prefix_rule(
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "jj git push"}}
 -- push-command.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
+-- push-command-worker.json --
+{"hook_event_name": "PreToolUse", "session_id": "s-worker", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
 -- push-line.txt --
 git push origin HEAD
 -- push-command-turn.json --

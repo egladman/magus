@@ -356,8 +356,11 @@ guard_failure_notice() {
 #
 # --renders-ask rides the attributed call only. A binary too old for it is too old to ask,
 # so the retry dropping it loses nothing.
+#
+# --transport sh names this form as the caller; the Buzz port says buzz. magus keeps a
+# deny's full text and its once-per-session notices per host, transport and session.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --transport sh --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

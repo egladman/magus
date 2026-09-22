@@ -353,15 +353,18 @@ func buildCacheStatus(c config.Cache) types.CacheStatus {
 	return types.CacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
 }
 
-// buildConfigStatus reports the resolved config a run executes under. ConcurrencyEffective
+// buildConfigStatus reports the resolved config a run executes under. Concurrency.Effective
 // is resolved by the run path's own function so status cannot drift from the width a build
 // actually gets.
 func buildConfigStatus(c config.Config) types.StatusConfig {
 	return types.StatusConfig{
-		DefaultCharms:        c.DefaultCharms,
-		Concurrency:          c.Concurrency,
-		ConcurrencyEffective: cache.ResolveConcurrency(c.Concurrency),
-		Sandbox:              c.Sandbox.Enabled,
+		DefaultCharms: c.DefaultCharms,
+		Concurrency: types.StatusConcurrency{
+			Configured: c.Concurrency,
+			Profile:    c.ConcurrencyProfile,
+			Effective:  cache.ResolveConcurrency(c.Concurrency, c.ConcurrencyProfile),
+		},
+		Sandbox: c.Sandbox.Enabled,
 	}
 }
 
@@ -395,8 +398,9 @@ func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFram
 	}
 	fmt.Fprintln(tw, "")
 	fmt.Fprintln(tw, "concurrency")
-	fmt.Fprintf(tw, "  configured\t%s\n", intOrDef(r.Config.Concurrency, "(default)"))
-	fmt.Fprintf(tw, "  effective\t%d\n", r.Config.ConcurrencyEffective)
+	fmt.Fprintf(tw, "  configured\t%s\n", intOrDef(r.Config.Concurrency.Configured, "(from profile)"))
+	fmt.Fprintf(tw, "  profile\t%s\n", strOrDef(r.Config.Concurrency.Profile, "balanced"))
+	fmt.Fprintf(tw, "  effective\t%d\n", r.Config.Concurrency.Effective)
 	if global.verbose >= 1 {
 		fmt.Fprintln(tw, "")
 		fmt.Fprintln(tw, "build")

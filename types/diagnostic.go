@@ -238,6 +238,10 @@ const (
 	// host module, so a file written for an older magus fails with a bare
 	// `undefined: magus` that says nothing about the one-line fix.
 	MagusNotImported DiagnosticCode = "MGS1039"
+	// UnknownConfigKey is a magus.yaml key this magus does not recognize. Until v0.5.0 the
+	// load only warned and carried on, so a file that loaded then can stop the load now,
+	// and the code is what links that failure to the page saying why it changed.
+	UnknownConfigKey DiagnosticCode = "MGS1040"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -409,12 +413,16 @@ const (
 	// checkDriftForCommit in cmd/magus. Sibling of MGS4006 (generated-output drift, the
 	// other class the same notice carries) and distinct from MGS4007 (a target rewriting
 	// an undeclared source, checked after a target runs, not after a commit is made).
-	UnformattedCommit        DiagnosticCode = "MGS4009"
-	NearDuplicateServices    DiagnosticCode = "MGS5001"
-	ServiceOpDetached        DiagnosticCode = "MGS5002"
-	CommandOpNeverExits      DiagnosticCode = "MGS5003"
-	DaemonRequired           DiagnosticCode = "MGS5004"
-	CharmPatchInvalid        DiagnosticCode = "MGS6001"
+	UnformattedCommit     DiagnosticCode = "MGS4009"
+	NearDuplicateServices DiagnosticCode = "MGS5001"
+	ServiceOpDetached     DiagnosticCode = "MGS5002"
+	CommandOpNeverExits   DiagnosticCode = "MGS5003"
+	DaemonRequired        DiagnosticCode = "MGS5004"
+	CharmPatchInvalid     DiagnosticCode = "MGS6001"
+	// CharmRenamed is a run activating a charm under a name magus has retired, with no
+	// selected target declaring that name for itself. The old name matches nothing, so
+	// without this the run would go ahead without the grant it asked for.
+	CharmRenamed             DiagnosticCode = "MGS6002"
 	UnresolvableBuzzImport   DiagnosticCode = "MGS7001"
 	DanglingDocReference     DiagnosticCode = "MGS7002"
 	OutputRefMissing         DiagnosticCode = "MGS8001"
@@ -472,6 +480,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
+	UnknownConfigKey,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
@@ -482,7 +491,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
-	CharmPatchInvalid,
+	CharmPatchInvalid, CharmRenamed,
 	UnresolvableBuzzImport, DanglingDocReference,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,

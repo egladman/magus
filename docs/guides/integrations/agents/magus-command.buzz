@@ -718,9 +718,12 @@ fun main(args: [str]) > void {
     //
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
+    //
+    // --transport buzz names this form as the caller; the sh copy says sh. magus keeps a
+    // deny's full text and its once-per-session notices per host, transport and session.
     final attributed = mut [<str>];
     foreach (flag in guard.flags) { attributed.append(flag); }
-    foreach (word in ["--agent-name", agentName, "--session", session, "--transcript", transcript]) {
+    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--transcript", transcript]) {
         attributed.append(word);
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }

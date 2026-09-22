@@ -1629,3 +1629,13 @@ func TestApplyRunKeyingCarriesObservations(t *testing.T) {
 	assert.Equal(t, []string{"go:go:1.25"}, step.ToolVersions)
 	assert.Equal(t, []string{"rw"}, step.Charms)
 }
+
+// A retired charm name no selected target declares fails the run; any other undeclared
+// charm only warns, and a target declaring the old name for itself keeps it.
+func TestCheckUndeclaredCharms(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	require.ErrorIs(t, checkUndeclaredCharms(ctx, []string{"relock"}, map[string]struct{}{}), types.CharmRenamed)
+	assert.NoError(t, checkUndeclaredCharms(ctx, []string{"relock"}, map[string]struct{}{"relock": {}}))
+	assert.NoError(t, checkUndeclaredCharms(ctx, []string{"typo", types.CharmUpdate}, map[string]struct{}{}))
+}

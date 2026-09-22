@@ -154,6 +154,9 @@ type Event struct {
 	Preview       string `json:"preview,omitempty"`       // opening characters of the response, for list views
 	RequestBytes  int64  `json:"request_bytes,omitempty"` // full request length
 	ResponseBytes int64  `json:"response_bytes,omitempty"`
+	// VerdictRef is the grd blob holding a guard deny in full, when the reader was shown
+	// the short repeat form instead. Named here so rotation keeps the blob the deny cites.
+	VerdictRef string `json:"verdict_ref,omitempty"`
 }
 
 // UnmarshalJSON decodes an event, reading a duration written under either spelling.
@@ -224,6 +227,8 @@ type AgentCommand struct {
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
 	PreauthorizedBy string
+	// VerdictRef is the grd blob a repeat deny cites; see Event.VerdictRef.
+	VerdictRef string
 }
 
 const agentCommandSchemaVersion = 1
@@ -330,6 +335,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		RequestBytes:  reqBytes,
 		ResponseRef:   respRef,
 		ResponseBytes: respBytes,
+		VerdictRef:    command.VerdictRef,
 		Preview:       preview,
 	})
 }
@@ -586,7 +592,7 @@ func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref strin
 // validated as a bare provenance-prefixed hash before it touches the filesystem, and the read
 // creates nothing.
 func ReadBlob(base, ref string) ([]byte, error) {
-	if !validRef(ref) {
+	if !ValidRef(ref) {
 		return nil, fmt.Errorf("trail: invalid ref %q: expected a 2-8 letter provenance prefix (e.g. %q) followed by %d hex chars", ref, "mcp", refHexLen)
 	}
 	return os.ReadFile(filepath.Join(blobsPath(base), ref))
@@ -850,7 +856,7 @@ func rotate(base string, max int) {
 const blobGraceWindow = 30 * time.Second
 
 // gcBlobs removes blob files that none of the kept event lines reference AND that are
-// older than blobGraceWindow. Temp files (from an in-flight WriteBlob) fail validRef and
+// older than blobGraceWindow. Temp files (from an in-flight WriteBlob) fail ValidRef and
 // are left alone regardless of age.
 func gcBlobs(base string, keptLines []string) {
 	referenced := make(map[string]struct{})
@@ -865,6 +871,9 @@ func gcBlobs(base string, keptLines []string) {
 		if e.ResponseRef != "" {
 			referenced[e.ResponseRef] = struct{}{}
 		}
+		if e.VerdictRef != "" {
+			referenced[e.VerdictRef] = struct{}{}
+		}
 	}
 	entries, err := os.ReadDir(blobsPath(base))
 	if err != nil {
@@ -873,7 +882,7 @@ func gcBlobs(base string, keptLines []string) {
 	cutoff := time.Now().Add(-blobGraceWindow)
 	for _, ent := range entries {
 		name := ent.Name()
-		if ent.IsDir() || !validRef(name) {
+		if ent.IsDir() || !ValidRef(name) {
 			continue
 		}
 		if _, ok := referenced[name]; ok {
@@ -907,11 +916,12 @@ func validPrefix(prefix string) bool {
 	return true
 }
 
-// validRef matches the GetPayload wire pattern: a valid prefix followed by exactly refHexLen hex
-// chars. The hash is a FIXED-length suffix, so the split is len-refHexLen; a greedy letter-scan
+// ValidRef reports whether ref names a trail blob (mcp, grd, agent and the rest), so a
+// caller can route it to [ReadBlob] without touching the filesystem. It matches the
+// GetPayload wire pattern: a valid prefix followed by exactly refHexLen hex chars. The hash is a FIXED-length suffix, so the split is len-refHexLen; a greedy letter-scan
 // would misfire because hex digits a-f are also lowercase letters. It rejects any separator or
 // dot, so ReadBlob cannot escape the blob dir.
-func validRef(ref string) bool {
+func ValidRef(ref string) bool {
 	if len(ref) < 2+refHexLen || len(ref) > 8+refHexLen {
 		return false
 	}

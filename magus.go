@@ -1367,7 +1367,7 @@ func (m *Magus) limiter() *cache.Limiter {
 	m.limOnce.Do(func() {
 		n := m.cfg.Concurrency
 		if n <= 0 {
-			n = cache.DefaultConcurrency()
+			n = cache.ConfiguredConcurrency(m.cfg.ConcurrencyProfile)
 		}
 		// Announced, never silent: a run quietly narrower than asked for is as hard to
 		// attribute as one that thrashes. Said once, at the moment it takes effect.

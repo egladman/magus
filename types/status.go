@@ -185,16 +185,25 @@ type MCPEndpointStatus struct {
 type StatusConfig struct {
 	// DefaultCharms are the execution charms applied to every run (e.g. rw, cd, gha).
 	DefaultCharms []string `json:"default_charms,omitempty" yaml:"default_charms,omitempty"`
-	// Concurrency is the CONFIGURED cap on concurrent builds; 0 means nothing was
-	// configured, not that no build may run.
-	Concurrency int `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
-	// ConcurrencyEffective is the width a run actually gets: Concurrency resolved through
-	// the default and the machine clamp (internal/cache.ResolveConcurrency). It is the
-	// number to budget against; Concurrency alone cannot be, because its common value is
-	// the one that means "ask someone else".
-	ConcurrencyEffective int `json:"concurrency_effective" yaml:"concurrency_effective"`
+	// Concurrency is how wide a build runs and where that number came from.
+	Concurrency StatusConcurrency `json:"concurrency" yaml:"concurrency"`
 	// Sandbox reports whether subprocess/spell sandboxing is enabled.
 	Sandbox bool `json:"sandbox" yaml:"sandbox"`
+}
+
+// StatusConcurrency is the configured inputs to a build's width and the width they
+// resolve to.
+type StatusConcurrency struct {
+	// Configured is the explicit cap; 0 means nothing was configured, not that no build
+	// may run. It overrides Profile when set.
+	Configured int `json:"configured,omitempty" yaml:"configured,omitempty"`
+	// Profile is the configured profile; empty means the balanced default.
+	Profile string `json:"profile,omitempty" yaml:"profile,omitempty"`
+	// Effective is the width a run actually gets, resolved through the profile and the
+	// machine clamp (internal/cache.ResolveConcurrency). It is the number to budget
+	// against; Configured alone cannot be, because its common value is the one that means
+	// "ask someone else".
+	Effective int `json:"effective" yaml:"effective"`
 }
 
 // ServiceState is where a supervised service sits in its lifecycle. Deliberately NOT

@@ -37,7 +37,8 @@ import (
 // Kind names an advisory that is held to one firing per session (internal/guard/advisory.go).
 // It is empty for the advisories that correct the command in front of the reader, where
 // a second firing reports a second mistake rather than repeating a standing fact, and it
-// is always empty on a deny: a refusal explains itself every time it refuses.
+// is always empty on a deny: a refusal explains itself every time it refuses, and Judge
+// alone decides how briefly (denial.go).
 //
 // Brief is what Kind ships on a repeat firing, and it is empty for a kind that
 // should go quiet instead. It names the command and nothing else, because a repeat
@@ -1365,10 +1366,19 @@ func evaluateWith(deps Dependencies, command string, hints *hint.Translator) She
 	// each caught only when a later step failed for an unrelated-looking reason. The reason
 	// text was correct and complete about the redirect every time. What it never said was
 	// how much else went with it.
-	if cmds, parsed := ParseCommandsDialect(command, d); v.Deny != "" && parsed && len(cmds) > 1 {
-		v.Deny += fmt.Sprintf("\nNOTHING on this line ran: re-issue the other %d command(s) separately.", len(cmds)-1)
+	if v.Deny != "" {
+		v.Deny += nothingRanNote(command, d)
 	}
 	return v
+}
+
+// nothingRanNote is the line a deny carries when it refused several commands at once, or ""
+// for a single one, where the refusal already says it did not run.
+func nothingRanNote(command string, d Dialect) string {
+	if cmds, parsed := ParseCommandsDialect(command, d); parsed && len(cmds) > 1 {
+		return fmt.Sprintf("\nnothing ran (%d commands)", len(cmds))
+	}
+	return ""
 }
 
 func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d Dialect) ShellVerdict {

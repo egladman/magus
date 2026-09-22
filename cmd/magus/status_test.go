@@ -829,8 +829,8 @@ func TestBuildConfigStatusConcurrency(t *testing.T) {
 			t.Setenv("MAGUS_CONCURRENCY", tc.env)
 			t.Setenv("GITHUB_ACTIONS", "") // the hosted-runner default must not decide this
 			got := buildConfigStatus(config.Config{Concurrency: tc.configured})
-			assert.Equal(t, tc.want, got.ConcurrencyEffective)
-			assert.Equal(t, tc.configured, got.Concurrency, "the configured value is kept alongside")
+			assert.Equal(t, tc.want, got.Concurrency.Effective)
+			assert.Equal(t, tc.configured, got.Concurrency.Configured, "the configured value is kept alongside")
 		})
 	}
 }
@@ -866,7 +866,7 @@ func TestPrintStatusTextReportsSlotsAndConcurrency(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
 	r := types.StatusSnapshot{
-		Config: types.StatusConfig{ConcurrencyEffective: 8},
+		Config: types.StatusConfig{Concurrency: types.StatusConcurrency{Effective: 8}},
 		Pool:   &types.StatusOutput{ParentPID: 4242, Mode: "daemon", Capacity: 8, Running: 2, Available: 6},
 	}
 	printStatusText(f, r, false, 0)
@@ -877,7 +877,7 @@ func TestPrintStatusTextReportsSlotsAndConcurrency(t *testing.T) {
 
 	assert.Contains(t, out, "available: 6")
 	assert.Contains(t, out, "concurrency")
-	assert.Contains(t, out, "(default)", "an unset configured value says so instead of printing 0")
+	assert.Contains(t, out, "(from profile)", "an unset configured value says so instead of printing 0")
 	assert.Contains(t, out, "effective")
 	assert.Contains(t, out, "8")
 }
@@ -907,9 +907,8 @@ func statusFixture(now time.Time) types.StatusSnapshot {
 		Cache: types.CacheStatus{Immutable: true, Dir: "/tmp/magus-cache", SizeMB: 512},
 		Build: types.BuildStatus{SelfUpdate: true},
 		Config: types.StatusConfig{
-			Concurrency:          8,
-			ConcurrencyEffective: 8,
-			DefaultCharms:        []string{"rw"},
+			Concurrency:   types.StatusConcurrency{Configured: 8, Effective: 8},
+			DefaultCharms: []string{"rw"},
 		},
 		Pool: &types.StatusOutput{
 			ParentPID:     4242,

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/types"
 )
 
 func TestMergeConfig(t *testing.T) {
@@ -255,7 +256,7 @@ func TestEmptyDocumentIsNotAnError(t *testing.T) {
 	}
 }
 
-// TestUnknownKeyMessage pins the whole rendered message, not a substring: what
+// TestUnknownKeyMessage pins the code and the whole rendered message, not a substring: what
 // the rewrite buys is the shape a reader meets, and yaml.v3's own text already
 // satisfied every Contains assert around it.
 //
@@ -298,7 +299,8 @@ func TestUnknownKeyMessage(t *testing.T) {
 
 			_, err = loadDirInto(Defaults(), dir)
 			require.Error(t, err)
-			assert.Equal(t, tc.want, err.Error())
+			require.ErrorIs(t, err, types.UnknownConfigKey)
+			assert.Equal(t, types.DiagnosticErrorf(types.UnknownConfigKey, "%s", tc.want).Error(), err.Error())
 		})
 	}
 }

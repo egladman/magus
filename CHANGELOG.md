@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
   `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
   observation nor `skip_cache`. The docker spell gains `trivy-image`.
+- **`concurrency_profile` sets build width relative to the machine.** `conservative` (half
+  the cores), `balanced` (`min(cores, 8)`, the default) or `aggressive` (every core), also as
+  `--concurrency-profile` and `MAGUS_CONCURRENCY_PROFILE`. An explicit `concurrency`
+  overrides it.
 - **MGS1037: a tool's observation keyed as its version.** `magus doctor` refuses one command
   declared as both version and observation probe without a narrowing `key`.
 - **MGS1038: a removed `magus.project` option stops the load.** It names the key and the
@@ -64,8 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`magus session ls` and `--brief` show each provider's published prompt-cache window.**
 - **`magus describe job` derives a holder's terms; `magus job wait` grades the result.**
   Terms add reached projects, output globs, sibling holds and hidden coupling. `wait`
-  checks paths, descendants and a passing run of the row's `check`; `magus job exit
-  --schema` prints the result contract.
+  checks paths, descendants and a passing run of the row's `check`, exiting 1 on a
+  rejection and 2 when it cannot answer; `magus job exit --schema` prints the result
+  contract.
 - **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
 - **`magus doctor` reports whether a bound lease is enforced** (`bound-lease`).
 - **`magus session hints` reports uptake per suggestion id.**
@@ -79,16 +84,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **Breaking: the `relock` charm is renamed `update`, with no alias.** A target spelling
-  `relock` fails as an undeclared charm; rename the suffix. `ci` strips `update` as it
-  stripped `relock`, and `rw` does not include it.
+- **Breaking: `magus status -o json` nests concurrency.** `config.concurrency` is an object
+  of `configured`, `profile` and `effective`; `config.concurrency_effective` is gone.
+- **Breaking: the `relock` charm is renamed `update`, with no alias.** A run spelling
+  `relock` fails with MGS6002, which names `update`; rename the suffix. `ci` strips
+  `update` as it stripped `relock`, and `rw` does not include it.
 - **Breaking: `magus` must be imported.** A magusfile, spell or script calling `magus\`
   needs `import "magus";`; without it the load fails with MGS1039, which names the fix.
-- **Breaking: an unknown key in `magus.yaml` fails the load.** Each is reported as
+- **Breaking: an unknown key in `magus.yaml` fails the load.** MGS1040 reports each as
   `file:line` with the nearest known key; a second YAML document in a file is rejected.
-- **Breaking: `magus job wait` grades evidence.** The result's `passed` field is removed;
-  the outcome is read from the run behind `output_ref`, which must be a run of the row's
-  `check`. Exit 2 means magus could not answer, 1 means rejected.
 - **Breaking: a holder's rendered terms carry commands.** `footer` is replaced by
   `bootstrap`, a list of `{run, why}`, and the rules and skills blocks are gone.
 - **Breaking: `--skill-form` takes `both`, `short` or `full`.** Skills stamp
@@ -132,6 +136,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **The agent surface stops promising a checkpoint restore.** A checkpoint records a
   digest, not the patch; magus-vcs-hygiene covers recovering work.
 - **"Handoff journal" is renamed to memory** across the command, docs and manpage.
+- **A repeated guard deny is one line and a ref.** The first deny from a rule in a session
+  carries the full reason, `nothing ran (N commands)` on a multi-command line, and the
+  rule's page. Later ones name the rule and cite `magus query output grd<hex>`, counted by
+  `magus session hints` as `deny-verdict`.
+- **Per-session guard state is keyed per host.** Facts a rule reads, such as skill loads
+  and projects written, key on `<host>/<session>`; fire-once notices and deny explanations
+  key on `<host>/<transport>/<session>`, each part escaped. `magus shell --transport` names
+  the hook form; the shipped sh and Buzz command and path hooks pass `sh` and `buzz`.
+- **`magus query output` reads trail payloads.** `grd` (guard verdicts) and `mcp` refs
+  resolve beside `out` run outputs.
 
 ### Removed
 
@@ -145,6 +159,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **`--root` from another directory no longer loads that directory's modules.** A
   magusfile's imports resolve against its project, then the workspace root.
+- **Config values given as flags are validated.** `--log-level bogus` ran with a value the
+  same setting in `magus.yaml` or the environment is refused for.
+- **`log.level` is honored.** It was overwritten at startup by the level `-v` and `-q`
+  imply, so `log.level: debug` in `magus.yaml`, `MAGUS_LOG_LEVEL` and `--log-level` left the
+  process at `info`. A verbosity flag still wins when given.
 - **A vulnerability database release no longer invalidates every Go target's cache.** The
   database date keys only targets that run govulncheck.
 - **Replaying a fully cached run is fast again.** Tool probes run concurrently and skip

@@ -18,8 +18,9 @@ import (
 // stale-binary notice and the graph-beats-grep hint each fired dozens of times with
 // byte-identical text, and the reader stopped seeing either.
 //
-// DENIALS ARE EXEMPT, and so is the reason a denial carries. A refusal explains itself
-// every time it refuses; that is the one verdict the caller cannot see past.
+// DENIALS ARE NEVER SILENCED. A refusal explains itself every time it refuses, since it
+// is the one verdict the caller cannot see past; the guard uses this gate only to shorten
+// a repeat to one line and a ref (internal/guard/denial.go).
 //
 // Only the kinds enrolled below are held to one firing, and enrolling one is deliberate.
 // The rest correct the command in front of the reader (a `cd` before magus, a `time`
@@ -64,9 +65,10 @@ type Gate struct {
 	session  string
 }
 
-// NewGate keys the gate on the cache dir the caller already resolved and the
-// session id the host reported. An empty cacheDir means magus could not locate a
-// workspace, and the gate then suppresses nothing.
+// NewGate keys the gate on the cache dir the caller already resolved and an opaque
+// session key: the host's session id, or a key naming the caller within it, as the
+// guard's callerKey does. An empty cacheDir means magus could not locate a workspace,
+// and the gate then suppresses nothing.
 func NewGate(cacheDir, session string) Gate {
 	return Gate{cacheDir: cacheDir, session: strings.TrimSpace(session)}
 }

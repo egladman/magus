@@ -495,6 +495,8 @@ const (
 	FlagShellSession = "session"
 	// shell: --transcript
 	FlagShellTranscript = "transcript"
+	// shell: --transport
+	FlagShellTransport = "transport"
 	// status: --W
 	FlagStatusW = "W"
 	// status: --c
@@ -1080,6 +1082,7 @@ type ShellFlags struct {
 	Observe            bool   // --observe
 	Lease              string // --lease
 	AgentName          string // --agent-name
+	Transport          string // --transport
 	Session            string // --session
 	Transcript         string // --transcript
 	Event              string // --event
@@ -1094,6 +1097,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
 	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)")
 	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only)")
+	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session")
 	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")

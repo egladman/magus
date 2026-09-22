@@ -97,7 +97,8 @@ func runConfigView(cfg config.Config, args []string) error {
 
 func printConfigText(cfg config.Config) {
 	fmt.Printf("log.format: %s\n", strOrDef(cfg.Log.Format, "(default: pretty)"))
-	fmt.Printf("concurrency: %s\n", intOrDef(cfg.Concurrency, "(default: min(NumCPU, 8))"))
+	fmt.Printf("concurrency: %s\n", intOrDef(cfg.Concurrency, "(from concurrency_profile)"))
+	fmt.Printf("concurrency_profile: %s\n", strOrDef(cfg.ConcurrencyProfile, "(default: balanced)"))
 	fmt.Printf("history_path: %s\n", strOrDef(cfg.HistoryPath, "(disabled)"))
 	fmt.Printf("dry_run:  %v\n", cfg.DryRun)
 	fmt.Println()

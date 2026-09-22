@@ -470,8 +470,11 @@ guard_failure_notice() {
 #
 # --renders-ask rides the attributed call only. A binary too old for it is too old to ask,
 # so the retry dropping it loses nothing.
+#
+# --transport sh names this form as the caller; the Buzz port says buzz. magus keeps a
+# deny's full text and its once-per-session notices per host, transport and session.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --transport sh --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)
@@ -679,7 +682,7 @@ guard() {
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
 # shellcheck disable=SC2086
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
+verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --transport sh --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)
@@ -1613,9 +1616,12 @@ fun main(args: [str]) > void {
     //
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
+    //
+    // --transport buzz names this form as the caller; the sh copy says sh. magus keeps a
+    // deny's full text and its once-per-session notices per host, transport and session.
     final attributed = mut [<str>];
     foreach (flag in guard.flags) { attributed.append(flag); }
-    foreach (word in ["--agent-name", agentName, "--session", session, "--transcript", transcript]) {
+    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--transcript", transcript]) {
         attributed.append(word);
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }
@@ -1973,7 +1979,7 @@ fun main(args: [str]) > void {
     // The retry tests status AND emptiness together, for the same reason as the command
     // template now that this surface can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
-    final attributed = mut ["--agent-name", agentName, "--session", session, "--transcript", transcript];
+    final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and trimTrailingNewlines(result!.stdout) == "")) {

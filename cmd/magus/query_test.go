@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -155,6 +156,39 @@ func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
 	assert.Contains(t, out, "Nothing has produced it here, but this workspace would print it for:")
 	assert.Contains(t, out, "magus run build\n", "root project (\".\") must be omitted from the suggested command")
 	assert.NotContains(t, out, "magus run build .", "root project must not be spelled out as \".\"")
+}
+
+// TestQueryOutputReadsTrailPayloads pins the other prefixes in the shared ref namespace: a
+// repeated guard deny cites a grd ref, and `query output` is the command it names, so that
+// ref must resolve here rather than be refused as malformed or looked up as a run.
+func TestQueryOutputReadsTrailPayloads(t *testing.T) {
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	m := newQueryTestWorkspace(t)
+	ctx := withMagus(context.Background(), m)
+	ref, _ := trail.WriteBlob(ctx, m.CacheDir(), "grd", []byte("the full verdict"))
+	require.NotEmpty(t, ref)
+
+	out := captureStdout(t, func() {
+		require.NoError(t, queryCmd(ctx, "", []string{"output", ref}))
+	})
+	assert.Equal(t, "the full verdict\n", out)
+
+	out = captureStdout(t, func() {
+		require.NoError(t, queryTrailPayload(ctx, "", ref, OutputOptions{Format: FormatJSON}))
+	})
+	assert.JSONEq(t, `{"ref":"`+ref+`","output":"the full verdict"}`, out)
+
+	assert.Error(t, queryCmd(ctx, "", []string{"--attempts", "output", ref}), "run flags are refused on a payload")
+
+	missing := "grd" + strings.Repeat("0", 16)
+	stderr := captureStderr(t, func() {
+		var silent errSilent
+		require.ErrorAs(t, queryCmd(ctx, "", []string{"output", missing}), &silent)
+	})
+	assert.Contains(t, stderr, `no stored payload for ref "`+missing+`"`)
 }
 
 // TestShowOutputIdentity_RevisionRendering drives showOutputIdentity end to end in a real git

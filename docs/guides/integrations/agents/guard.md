@@ -410,8 +410,24 @@ identical paragraph teaches nothing, and this page's standard says why that
 matters - a check that is red by default is a check people learn to ignore,
 taking the real failures with it.
 
-Denials are exempt, and so is every reason a denial carries. A refusal explains
-itself every time it refuses; it is the one verdict the caller cannot see past.
+Denials are never silenced. A refusal explains itself every time it refuses; it
+is the one verdict the caller cannot see past. What changes is the length: the
+first time a rule denies in a session you get its whole reason, then
+`nothing ran (N commands)` when the line held several, then `see:` and the
+rule's page. Each later deny from that rule is one line naming the rule and what
+it catches, the same `nothing ran` line, and a ref to the full verdict:
+
+```text
+denied again [whole-tree]: a whole-tree VCS reset, checkout, restore or clean, which cannot be undone
+nothing ran (2 commands)
+full verdict: magus query output grd1a2b3c4d5e6f7a8b
+see: https://eli.gladman.cc/magus/reference/rules/whole-tree/
+```
+
+The ref is stored in the activity trail under the `grd` prefix, and the line is
+a breadcrumb with the id `deny-verdict`, so `magus session hints` counts how
+often it is read.
+
 The advisories that correct the command itself - a `cd` before magus, a `time`
 wrapper, a chained run - are exempt too, because a second firing reports a
 second mistake.

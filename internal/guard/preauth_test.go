@@ -182,6 +182,7 @@ func servedNextTemplates(t *testing.T) map[string]string {
 	}))
 	add(hint.NextForAffected("ci", []string{"docs"}))
 	add(hint.NextForFailure(".", "test", "out84fea3b6ae30"))
+	add([]hint.Next{hint.NextForDenial("grd84fea3b6ae30ab")})
 
 	declared, err := os.ReadFile("../../internal/hint/next.go")
 	require.NoError(t, err)
