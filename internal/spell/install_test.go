@@ -167,16 +167,31 @@ func TestBuiltinTypescriptInstall(t *testing.T) {
 // using files only, and returns their roots.
 func fakeWorktrees(t *testing.T) (primary, linked string) {
 	t.Helper()
+	names := fakeWorktreeSet(t, "linked")
+	return names["primary"], names["linked"]
+}
+
+// fakeWorktreeSet lays out a primary checkout (holding the shared .git) plus one linked
+// worktree per name, the way git does, using files only. It returns every root keyed by
+// name, "primary" included, so a test can pick which siblings exist without hand-rolling
+// the admin-dir plumbing per case.
+func fakeWorktreeSet(t *testing.T, names ...string) map[string]string {
+	t.Helper()
 	base := t.TempDir()
-	primary = filepath.Join(base, "primary")
-	linked = filepath.Join(base, "linked")
-	admin := filepath.Join(primary, ".git", "worktrees", "linked")
-	require.NoError(t, os.MkdirAll(admin, 0o755))
-	require.NoError(t, os.MkdirAll(linked, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"), []byte("gitdir: "+admin+"\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(admin, "gitdir"), []byte(filepath.Join(linked, ".git")+"\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(admin, "commondir"), []byte("../..\n"), 0o644))
-	return primary, linked
+	primary := filepath.Join(base, "primary")
+	require.NoError(t, os.MkdirAll(primary, 0o755))
+	out := map[string]string{"primary": primary}
+	for _, name := range names {
+		dir := filepath.Join(base, name)
+		admin := filepath.Join(primary, ".git", "worktrees", name)
+		require.NoError(t, os.MkdirAll(admin, 0o755))
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: "+admin+"\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(admin, "gitdir"), []byte(filepath.Join(dir, ".git")+"\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(admin, "commondir"), []byte("../..\n"), 0o644))
+		out[name] = dir
+	}
+	return out
 }
 
 func TestSeedInstall(t *testing.T) {
@@ -191,8 +206,9 @@ func TestSeedInstall(t *testing.T) {
 		proj := filepath.Join(linked, "app")
 		require.NoError(t, os.MkdirAll(proj, 0o755))
 
-		from, err := SeedInstall(context.Background(), choice, proj)
+		from, found, err := SeedInstall(context.Background(), choice, proj)
 		require.NoError(t, err)
+		require.True(t, found)
 		real, _ := filepath.EvalSymlinks(primary)
 		assert.Equal(t, real, from)
 		assert.FileExists(t, filepath.Join(proj, "node_modules", ".pnpm", "lock.yaml"))
@@ -205,8 +221,9 @@ func TestSeedInstall(t *testing.T) {
 		proj := filepath.Join(linked, "app")
 		writeFile(t, filepath.Join(proj, "node_modules", "mine"))
 
-		from, err := SeedInstall(context.Background(), choice, proj)
+		from, found, err := SeedInstall(context.Background(), choice, proj)
 		require.NoError(t, err)
+		assert.False(t, found)
 		assert.Empty(t, from)
 		assert.NoFileExists(t, filepath.Join(proj, "node_modules", "from-primary"))
 	})
@@ -216,8 +233,9 @@ func TestSeedInstall(t *testing.T) {
 		proj := filepath.Join(linked, "app")
 		require.NoError(t, os.MkdirAll(proj, 0o755))
 
-		from, err := SeedInstall(context.Background(), spells.InstallChoice{Install: spells.Install{Dir: ".venv"}}, proj)
+		from, found, err := SeedInstall(context.Background(), spells.InstallChoice{Install: spells.Install{Dir: ".venv"}}, proj)
 		require.NoError(t, err)
+		assert.False(t, found)
 		assert.Empty(t, from)
 		assert.NoDirExists(t, filepath.Join(proj, ".venv"))
 	})
@@ -229,8 +247,45 @@ func TestSeedInstall(t *testing.T) {
 		stale := filepath.Join(proj, "node_modules"+seedSuffix+"99999999")
 		writeFile(t, filepath.Join(stale, "partial"))
 
-		_, err := SeedInstall(context.Background(), choice, proj)
+		_, _, err := SeedInstall(context.Background(), choice, proj)
 		require.NoError(t, err)
 		assert.NoDirExists(t, stale)
+	})
+	t.Run("leaves a live seed's lock and directory alone", func(t *testing.T) {
+		primary, linked := fakeWorktrees(t)
+		writeFile(t, filepath.Join(primary, "app", "node_modules", "x"))
+		proj := filepath.Join(linked, "app")
+		// A reused pid must not decide this: the flock, not the number, is live.
+		live := filepath.Join(proj, "node_modules"+seedSuffix+"424242")
+		writeFile(t, filepath.Join(live, "partial"))
+		lock, err := acquireSeedLock(live + seedLockSuffix)
+		require.NoError(t, err)
+		defer lock.Close()
+
+		_, _, err = SeedInstall(context.Background(), choice, proj)
+		require.NoError(t, err)
+		assert.DirExists(t, live)
+	})
+	t.Run("tries the next sibling when one clone fails", func(t *testing.T) {
+		if os.Getuid() == 0 {
+			t.Skip("running as root; permission checks do not apply")
+		}
+		roots := fakeWorktreeSet(t, "bad", "good", "linked")
+		badSrc := filepath.Join(roots["bad"], "app", "node_modules")
+		writeFile(t, filepath.Join(badSrc, "x"))
+		writeFile(t, filepath.Join(roots["good"], "app", "node_modules", "x"))
+		proj := filepath.Join(roots["linked"], "app")
+		require.NoError(t, os.MkdirAll(proj, 0o755))
+		// Unreadable, so cloning it fails and SeedInstall must fall through to "good"
+		// rather than giving up on the first sibling ("bad" sorts before "good").
+		require.NoError(t, os.Chmod(badSrc, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(badSrc, 0o755) })
+
+		from, found, err := SeedInstall(context.Background(), choice, proj)
+		require.NoError(t, err)
+		require.True(t, found)
+		real, _ := filepath.EvalSymlinks(roots["good"])
+		assert.Equal(t, real, from)
+		assert.FileExists(t, filepath.Join(proj, "node_modules", "x"))
 	})
 }
