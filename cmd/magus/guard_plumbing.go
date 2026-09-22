@@ -47,6 +47,7 @@ func guardDependencies() guard.Dependencies {
 		Spells:           project.DefaultSpellRegistry().All,
 		SymbolDefined:    symbolDefinedForGuard,
 		HeadCommit:       headCommitForGuard,
+		CheckoutBase:     checkoutBaseForGuard,
 	}
 	if m := loadedWorkspace(context.Background()); m != nil {
 		deps.SpawnRule = m.SpawnRule()
@@ -120,6 +121,21 @@ func headCommitForGuard(ctx context.Context) string {
 		return ""
 	}
 	return meta.Short
+}
+
+// checkoutBaseForGuard answers the checkout at root as `magus vcs checkpoint -o name`
+// prints it, or "" when it cannot be read. Resolved by root rather than through
+// inspectWorkspace, which is memoized for one root and the hook may name another.
+func checkoutBaseForGuard(ctx context.Context, root string) string {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return ""
+	}
+	cp, err := vcs.Checkpoint(ctx, root, res, false)
+	if err != nil {
+		return ""
+	}
+	return checkpointToken(cp)
 }
 
 // symbolDefinedForGuard answers the one question that lets the guard deny a symbol

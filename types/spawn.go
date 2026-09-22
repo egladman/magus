@@ -206,6 +206,15 @@ type SpawnTarget struct {
 	// IdleMs is how long ago magus last saw this agent spawned, continued or finish its
 	// spawn call, in milliseconds. Nil when magus has no record of it.
 	IdleMs *int64
+	// Description is the title the agent was spawned with, empty when magus never saw
+	// its spawn finish.
+	Description string
+	// Model is the model its spawn named, raw, empty when the spawn named none.
+	Model string
+	// ContextTokens is the agent's last observed context size: input plus cache-read
+	// plus cache-write tokens from the latest usage its host reported for it. Nil when
+	// the host reported none.
+	ContextTokens *int64
 }
 
 // SpawnVerdict is what a magus\guard.spawn rule returns. The zero value allows.

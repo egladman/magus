@@ -1651,6 +1651,13 @@ func ObjectSpawnTarget(v types.SpawnTarget) vm.Value {
 		optIdleMs = vm.IntValue(int64((*v.IdleMs)))
 	}
 	out.MapSet("idleMs", optIdleMs)
+	out.MapSet("description", vm.StrValue(v.Description))
+	out.MapSet("model", vm.StrValue(v.Model))
+	optContextTokens := vm.Null
+	if v.ContextTokens != nil {
+		optContextTokens = vm.IntValue(int64((*v.ContextTokens)))
+	}
+	out.MapSet("contextTokens", optContextTokens)
 	return out
 }
 

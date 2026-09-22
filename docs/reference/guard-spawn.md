@@ -1,7 +1,7 @@
 ---
 title: magus\guard.spawn
 description: Register one Buzz function the agent guard calls on every subagent spawn and continuation, to add a deny or an advisory from your own rules. magus ships the seam and no rules.
-tags: [guard, agents, spawn, subagents, policy, magusfile, hooks, strengthen-only]
+tags: [guard, agents, spawn, subagents, policy, magusfile, hooks, strengthen-only, attribution, context]
 ---
 
 # magus\guard.spawn
@@ -26,6 +26,9 @@ magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
     if (req.target != null and (req.target!.idleMs ?? 0) > 300000 and magus\guard.once("idle-{req.target!.agent}")) {
         return magus\guard.advise("{req.target!.agent} has been idle over five minutes; a fresh brief may be cheaper.");
     }
+    if (req.target != null and (req.target!.contextTokens ?? 0) > 200000) {
+        return magus\guard.deny("{req.target!.agent} carries over 200k tokens of context; spawn fresh with a narrow brief.");
+    }
     return magus\guard.allow();
 });
 ```
@@ -47,7 +50,24 @@ magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
 | `parent`      | the description the calling subagent was itself spawned with; empty for a root caller |
 | `role`        | `worker` when a lease binds the calling session in this checkout, else `root`         |
 | `lease`       | the bound job row for a worker, null for root                                         |
-| `target`      | for a continue: the `agent` addressed and `idleMs` since magus last saw it            |
+| `target`      | for a continue: the agent addressed and what magus recorded about it (below)          |
+
+`target` is null on a spawn. On a continue:
+
+| field           | what it is                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| `agent`         | the name or id the caller addressed                                                               |
+| `idleMs`        | milliseconds since magus last saw it spawned, continued or finish its spawn call; null when never |
+| `description`   | the title the agent was spawned with; empty when magus never saw that spawn finish                |
+| `model`         | the model that spawn named, raw; empty when it named none                                         |
+| `contextTokens` | the agent's last observed context size in tokens; null when the host reported no usage for it     |
+
+`contextTokens` is input plus cache-read plus cache-write tokens from the latest usage
+record the host reported for that agent: what the model was handed on its last call,
+which is the context a resume has to rebuild. Claude Code reports it through
+`SubagentStop`, whose `agent_transcript_path` magus reads for its last usage record,
+looking at the file's final 512 KiB only. Cursor and Codex report no per-agent usage,
+so it stays null there.
 
 Every field is what the host reported or magus recorded. A host that does not report
 a field leaves it empty; nothing is inferred from which host sent the call, and no
@@ -56,6 +76,30 @@ model string is mapped to a tier.
 `magus\guard.once(key)` is true the first time a key is asked in the calling session.
 `magus\guard.count(key)` adds one to a key's tally in that session and returns it.
 Both work only while the guard runs the rule.
+
+`magus\job\list()` works inside the rule and answers from the job rows the guard read
+for this call, so the rule and the built-in verdict it adds to read the same store.
+Every job member that writes raises inside a rule.
+
+## Job attribution
+
+A spawn whose title (`description`) reads `<parent>/<role> <job>`, where `<job>` names
+a declared, running or exited job, attributes the new agent to that job. From then on
+every hook call carrying that agent's id is graded under the job's lease, as if its
+shell had `BAGGAGE=magus.lease=<job>`: an explicit `--lease` still wins, and the agent's
+job outranks the session's `magus job exec` binding, because a subagent shares its
+parent's session id and only its agent id tells the two apart.
+
+When the job has not reported a base and the spawn did not ask for its own checkout,
+magus records this checkout's revision and dirty-patch digest for it, the values
+`magus job exec` records, so the agent's first write is not refused for a missing exec.
+An isolated agent's checkout is one magus cannot see from the spawning side, so it
+reports its own base with `magus job exec`.
+
+Attribution is recorded when the host reports the finished spawn call with the child's
+id. Claude Code reports that at launch for a background agent, and only on return for
+a foreground one, so a foreground agent's own calls run unattributed. A host with no
+agent id keeps `BAGGAGE` and `magus job exec`.
 
 ## Strengthen only
 
@@ -80,12 +124,12 @@ imported by path are read from the working tree on both sides.
 
 ## Hosts
 
-| host        | spawn                     | continue          |
-| ----------- | ------------------------- | ----------------- |
-| Claude Code | `Agent`, `Task`           | `SendMessage`     |
-| Cursor      | `subagentStart`           | none the host has |
-| Codex       | not wired: no prompt sent | none the host has |
-| OpenCode    | not wired                 | not wired         |
+| host        | spawn                     | continue          | `contextTokens` |
+| ----------- | ------------------------- | ----------------- | --------------- |
+| Claude Code | `Agent`, `Task`           | `SendMessage`     | `SubagentStop`  |
+| Cursor      | `subagentStart`           | none the host has | not reported    |
+| Codex       | not wired: no prompt sent | none the host has | not reported    |
+| OpenCode    | not wired                 | not wired         | not wired       |
 
 Each change to the effective rules is recorded once on the activity trail as a
 `guard_policy` event, and every verdict event names the policy digest in force and

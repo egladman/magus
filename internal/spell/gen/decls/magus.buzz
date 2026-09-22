@@ -618,6 +618,9 @@ export object Job {
 export object SpawnTarget {
     agent: str = "",
     idleMs: int? = null,
+    description: str = "",
+    model: str = "",
+    contextTokens: int? = null,
 }
 
 export object SpawnRequest {

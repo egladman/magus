@@ -87,6 +87,10 @@ type Dependencies struct {
 	// VCS to ask. The push gate matches it against the commit each recorded gate run was
 	// built from; with no answer that rule stands down rather than refusing on an absence.
 	HeadCommit func(ctx context.Context) string
+	// CheckoutBase is the checkout at root as `magus vcs checkpoint -o name` prints it:
+	// `<rev>`, or `<rev>+<digest>` when dirty. "" when there is no VCS to ask. It is the
+	// base an attributed spawn records for its job, the value `magus job exec` records.
+	CheckoutBase func(ctx context.Context, root string) string
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -119,6 +123,13 @@ func (d Dependencies) headCommit(ctx context.Context) string {
 		return ""
 	}
 	return d.HeadCommit(ctx)
+}
+
+func (d Dependencies) checkoutBase(ctx context.Context, root string) string {
+	if d.CheckoutBase == nil || root == "" {
+		return ""
+	}
+	return d.CheckoutBase(ctx, root)
 }
 
 func (d Dependencies) spells() []*spells.Spell {
@@ -237,6 +248,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			// list, a search) has nothing any rule can read. Falling through judged the raw
 			// JSON as a shell line, so a denied command merely NAMED inside a todo blocked
 			// the tool call that wrote the todo.
+			if env.AgentTranscript != "" {
+				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.sessionKey()), who.Agent, env.AgentTranscript)
+			}
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		input = env.Value
@@ -258,15 +272,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	location := hookLocation(ctx, deps)
 	policyDigest := recordPolicy(ctx, deps, location, false)
 	ctx = withJobStoreRows(ctx, location)
-	actingLease := req.Lease
-	if actingLease == "" {
-		// Keyed on the SESSION the host reported, so several sessions sharing one checkout
-		// each resolve their own binding. A host that reports none reads the checkout-wide
-		// marker, which is what every binding was before this.
-		actingLease = job.Checkout{CacheDir: location.cacheDir, Session: who.Session}.ActingLease()
-	}
 	markers := hint.NewGate(location.cacheDir, who.callerKey())
 	facts := hint.NewGate(location.cacheDir, who.sessionKey())
+	actingLease := actingLeaseFor(req.Lease, who, location, facts)
 	tool := hookToolCommand
 	switch {
 	case req.Observe:
@@ -650,8 +658,11 @@ type hookEnvelope struct {
 	TranscriptPath string `json:"transcript_path"`
 	// AgentID is the subagent making this tool call, on a host that tells a subagent's
 	// calls from its root session's; "" for the root session and for hosts that do not.
-	AgentID  string `json:"agent_id"`
-	ToolName string `json:"tool_name"`
+	AgentID string `json:"agent_id"`
+	// AgentTranscriptPath is that subagent's own log, on an event that reports on the
+	// subagent rather than a tool call. Read only for its last usage record.
+	AgentTranscriptPath string `json:"agent_transcript_path"`
+	ToolName            string `json:"tool_name"`
 	// ToolResponse is what a finished call returned, present only on an after-the-call
 	// event. Read as any so a host that reports it as a string costs this field rather than
 	// the decode of the whole envelope.
@@ -832,6 +843,9 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 			return hookRequest{}, false
 		}
 		req.NothingToJudge = true
+		if env.AgentID != "" {
+			req.AgentTranscript = env.AgentTranscriptPath
+		}
 	}
 	return req, true
 }
@@ -902,7 +916,10 @@ type hookRequest struct {
 	// none. Recorded rather than judged: it is what lets a later spawn ask whether the
 	// session read its brief. See denySpawnWithoutBrief.
 	LoadedSkill string
-	Who         hookAttribution
+	// AgentTranscript is the log of the subagent a nothing-to-judge envelope reports on,
+	// "" when it names none. Its last usage record is the subagent's context size.
+	AgentTranscript string
+	Who             hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be

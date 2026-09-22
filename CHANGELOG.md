@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   subagent spawn and continuation and may deny or advise, never lift a built-in deny. An
   uncommitted loosening waits for a commit. Policy changes land on the trail as
   `guard_policy`; MGS1045 refuses a bad registration. magus ships no rule.
+- **A spawn rule sees its continue target's facts and the job store.** `target` carries
+  the spawn's `description`, `model` and last observed `contextTokens`;
+  `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
+  grades the child under that job's lease and records its base.
 - **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
   loads offline once cached; MGS1041 refuses a tag alone, MGS1042 mismatched bytes.
   `magus spell build|push|pull|ls` build a reproducible digest, push under several tags,

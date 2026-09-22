@@ -340,6 +340,59 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 	assert.Equal(t, types.StateRunning, report.Jobs[0].State)
 }
 
+// A guard rule runs under the rows the guard pinned: list answers from them even with a
+// workspace on the context whose store holds something else, and every write refuses.
+func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ws := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	_, err := MagusPutJob(ws, "on-disk", map[string]any{"criteria": "not what the guard read"})
+	require.NoError(t, err)
+
+	pinned := types.Job{ID: "orchestrator/guard-facts", Criteria: "the seam", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	cases := []struct {
+		name    string
+		snap    types.JobSnapshot
+		want    types.JobList
+		wantErr string
+	}{
+		{
+			name: "the guard's rows",
+			snap: types.JobSnapshot{Rows: []types.Job{pinned}},
+			want: types.NewJobList([]types.Job{pinned}),
+		},
+		{name: "an empty store", snap: types.JobSnapshot{}, want: types.NewJobList(nil)},
+		{
+			name:    "a store the guard could not read",
+			snap:    types.JobSnapshot{Err: errors.New("jobs.json: unexpected end of JSON input")},
+			wantErr: "unexpected end of JSON input",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := types.WithJobSnapshot(ws, tc.snap)
+			got, err := MagusListJob(ctx)
+			if tc.wantErr != "" {
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+
+	ctx := types.WithJobSnapshot(ws, types.JobSnapshot{Rows: []types.Job{pinned}})
+	_, err = MagusPutJob(ctx, pinned.ID, map[string]any{"state": "pass"})
+	assert.ErrorContains(t, err, "read-only")
+	_, _, err = MagusRegisterJob(ctx, pinned.ID, "abc123")
+	assert.ErrorContains(t, err, "read-only")
+	_, err = MagusClearJob(ctx)
+	assert.ErrorContains(t, err, "read-only")
+	report, err := MagusListJob(ws)
+	require.NoError(t, err)
+	require.Len(t, report.Jobs, 1)
+	assert.Equal(t, "on-disk", report.Jobs[0].ID, "nothing was written through the snapshot")
+}
+
 // TestLedgerNeedsAWorkspace mirrors TestInsightNeedsAWorkspace: there is no `magus
 // job` CLI subcommand to fall back to, so a caller with no workspace on the context
 // is told so.
