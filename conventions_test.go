@@ -2711,6 +2711,7 @@ func TestTypesStaysPureDomain(t *testing.T) {
 		"github.com/egladman/magus/spells",
 		"github.com/egladman/magus/libs/diagnostics",
 		"github.com/egladman/magus/internal/json",
+		"github.com/egladman/magus/types/enum",
 	}
 
 	entries, err := os.ReadDir("types")
@@ -2728,7 +2729,7 @@ func TestTypesStaysPureDomain(t *testing.T) {
 				"%s imports %q: types is the near-leaf domain package and may not reach the world", path, p)
 			if strings.HasPrefix(p, "github.com/egladman/magus/") {
 				assert.Contains(t, allowedMagus, p,
-					"%s imports %q: types may depend on spells, libs/diagnostics and internal/json, nothing else in magus", path, p)
+					"%s imports %q: types may depend on spells, libs/diagnostics, internal/json and types/enum, nothing else in magus", path, p)
 			}
 		}
 	}

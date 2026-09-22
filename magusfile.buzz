@@ -1175,19 +1175,12 @@ export fun git_hooks_remove(ctx: magus\Context, args: [str]) > void !> any {
     githooks\remove(ctx, dir: "tools/git-hooks");
 }
 
-// Regenerates everything derived from the boundary registry: the enum helpers
-// (Values/Valid/String for each boundaryEnum), the runtime boundary list, and the
-// Go-to-Buzz encoders. The reflection lives only in magus-utils while writing those
-// files; the emitted encoders use direct field access, so Magus never reflects at a
-// Buzz boundary.
-//
-// Every directive lives in cmd/magus-utils rather than beside its output, so one
-// `go generate` runs them all. When the enum directive lived in types/, adding a
-// boundaryEnums entry left types/enum_gen.go and spells/enum_gen.go stale with nothing
-// to say so - found when PlatformStyle was added and its Valid() simply was not there.
+// Regenerates everything derived from the boundary registry: the runtime boundary list
+// and the Go-to-Buzz encoders. The reflection lives only in magus-utils while writing
+// those files; the emitted encoders use direct field access, so Magus never reflects at
+// a Buzz boundary. Enum case lists are hand-written in types/enums.go and spells/enums.go.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("types/enum_gen.go", "spells/enum_gen.go",
-        "internal/interp/bindings/gen/boundary_list.go",
+    ctx.writesFiles("internal/interp/bindings/gen/boundary_list.go",
         "internal/interp/bindings/gen/boundary_objects.go");
     proc\exec("go", ["generate", "./cmd/magus-utils"]);
 }

@@ -338,15 +338,9 @@
         {
           "name": "types-generate",
           "declared": "types_generate",
-          "doc": "Regenerates everything derived from the boundary registry: the enum helpers (Values/Valid/String for each boundaryEnum), the runtime boundary list, and the Go-to-Buzz encoders.",
+          "doc": "Regenerates everything derived from the boundary registry: the runtime boundary list and the Go-to-Buzz encoders.",
           "reads_secrets": false,
           "writes_files": [
-            {
-              "glob": "types/enum_gen.go"
-            },
-            {
-              "glob": "spells/enum_gen.go"
-            },
             {
               "glob": "internal/interp/bindings/gen/boundary_list.go"
             },
