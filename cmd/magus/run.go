@@ -361,6 +361,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
+	emitConcurrencyNudge(os.Stderr, m, os.Args[1:])
 
 	if chained {
 		return runChain(ctx, m, opts, targetName, targets, chain, readReturns(targetName))

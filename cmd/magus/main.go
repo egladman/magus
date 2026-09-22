@@ -568,12 +568,11 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return startupResult{cleanup: cleanup}, 1
 	}
-	configgen.ApplyEnv(&cfg, os.Getenv)
 	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.
 	// Without a second pass the whole MAGUS_* surface goes unchecked while the
 	// equivalent yaml is rejected. Printed and exiting 1 like the load failure
 	// above, for the same reason: it is the same multi-line validator text.
-	if err := config.Validate(cfg); err != nil {
+	if err := errors.Join(configgen.ApplyEnv(&cfg, os.Getenv), config.Validate(cfg)); err != nil {
 		fmt.Fprintf(os.Stderr, "magus: invalid configuration from the environment: %v\n", err)
 		return startupResult{cleanup: cleanup}, 1
 	}
@@ -808,7 +807,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	default:
 		concurrency := cfg.Concurrency
 		if concurrency <= 0 {
-			concurrency = cache.ConfiguredConcurrency(cfg.ConcurrencyProfile)
+			concurrency = cache.ProfileConcurrency(cfg.ConcurrencyProfile)
 		}
 		// THE site that governs: this limiter is injected into the workspace and wins over
 		// m.cfg.Concurrency via limOnce, so a cap applied only in Magus.limiter never runs.
@@ -1131,7 +1130,7 @@ var daemonTrailBase string
 func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runConfig) {
 	n := cfg.Concurrency
 	if n <= 0 {
-		n = cache.ConfiguredConcurrency(cfg.ConcurrencyProfile)
+		n = cache.ProfileConcurrency(cfg.ConcurrencyProfile)
 	}
 	lim := cache.NewLimiter(n)
 	// The machine budget. One daemon per user means one of these per machine, which is

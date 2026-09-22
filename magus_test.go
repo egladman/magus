@@ -1379,14 +1379,14 @@ func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
 func TestApplyEnv_VolatilityEnabledTrue(t *testing.T) {
 	t.Setenv("MAGUS_VOLATILITY_ENABLED", "true")
 	cfg := config.Defaults()
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
 	assert.True(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=true: Volatility.Enabled should be true")
 }
 
 func TestApplyEnv_VolatilityEnabledFalse(t *testing.T) {
 	t.Setenv("MAGUS_VOLATILITY_ENABLED", "false")
 	cfg := config.Defaults()
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
 	assert.False(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=false: Volatility.Enabled should be false")
 }
 
@@ -1396,7 +1396,7 @@ func TestApplyEnvToConfig(t *testing.T) {
 	t.Setenv("MAGUS_DRY_RUN", "1")
 
 	cfg := config.Defaults()
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
 
 	assert.False(t, cfg.Cache.WriteEnabled())
 	assert.Equal(t, 6, cfg.Concurrency)
@@ -1406,6 +1406,27 @@ func TestApplyEnvToConfig(t *testing.T) {
 func TestApplyEnv_SandboxEnabled(t *testing.T) {
 	t.Setenv("MAGUS_SANDBOX_ENABLED", "true")
 	cfg := config.Defaults()
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
 	assert.True(t, cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED=true: Sandbox.Enabled should be true")
+}
+
+// The environment overwrites fields after the yaml is validated, so an SDK load has to
+// validate again: an unknown profile must be a config error, never a value that reaches
+// the limiter.
+func TestLoadConfigValidatesTheEnvironment(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("concurrency_profile: balanced\n"), 0o644))
+	t.Setenv("MAGUS_CONCURRENCY_PROFILE", "turbo")
+
+	_, err := loadConfig(root)
+	require.ErrorContains(t, err, `MAGUS_CONCURRENCY_PROFILE: unknown concurrency profile "turbo"`)
+}
+
+// yaml reaches the same door as env and flags, so a misspelled profile stops the load.
+func TestLoadConfigRefusesAnUnknownProfile(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("concurrency_profile: turbo\n"), 0o644))
+
+	_, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
+	require.ErrorContains(t, err, `unknown concurrency profile "turbo"`)
 }

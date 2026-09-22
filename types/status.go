@@ -198,7 +198,7 @@ type StatusConcurrency struct {
 	// may run. It overrides Profile when set.
 	Configured int `json:"configured,omitempty" yaml:"configured,omitempty"`
 	// Profile is the configured profile; empty means the balanced default.
-	Profile string `json:"profile,omitempty" yaml:"profile,omitempty"`
+	Profile ConcurrencyProfile `json:"profile,omitempty" yaml:"profile,omitempty"`
 	// Effective is the width a run actually gets, resolved through the profile and the
 	// machine clamp (internal/cache.ResolveConcurrency). It is the number to budget
 	// against; Configured alone cannot be, because its common value is the one that means

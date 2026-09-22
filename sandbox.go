@@ -103,6 +103,8 @@ func loadWorkspaceConfig(root string) (config.Config, error) {
 		}
 		cfg = config.Defaults()
 	}
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	if err := configgen.ApplyEnv(&cfg, os.Getenv); err != nil {
+		return config.Config{}, fmt.Errorf("magus: invalid configuration from the environment: %w", err)
+	}
 	return cfg, nil
 }

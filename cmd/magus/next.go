@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
@@ -91,6 +92,26 @@ func (n nextGate) served(next []hint.Next) []hint.Next {
 	served := hint.ServableTo(n.role, n.writePaths, next)
 	hint.AppendServedNext(n.gate.CacheDir(), served)
 	return served
+}
+
+// emitConcurrencyNudge prints a finished run's concurrency_profile nudge, at most once
+// per session, with the re-run as a breadcrumb journaled under its id so `magus session
+// hints` can count uptake. -s and disabled hints skip it without spending the firing.
+func emitConcurrencyNudge(w io.Writer, m *magus.Magus, args []string) {
+	if global.silent || !interactive.HintsEnabled() {
+		return
+	}
+	line := m.ConcurrencyNudge()
+	if line == "" {
+		return
+	}
+	next := []hint.Next{hint.NextForSlotWait(string(types.ProfileAggressive), args)}
+	gate := hint.NewGate(m.CacheDir(), sessionOrTerminal(""))
+	if gate.MarkFired(hint.MarkerKind(next[0].ID)) {
+		return
+	}
+	hint.AppendServedNext(gate.CacheDir(), next)
+	fmt.Fprintf(w, "hint: %s\n%s", line, hint.Render(next, func(hint.Next) string { return "" }))
 }
 
 // printNext writes a result's breadcrumbs, the command on its own line and the reason

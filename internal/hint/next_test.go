@@ -328,3 +328,22 @@ func TestRenderIsTheOneTwoLineLayout(t *testing.T) {
 		Render(next, func(Next) string { return "" }))
 	assert.Empty(t, Render(nil, func(n Next) string { return n.Why }))
 }
+
+// TestNextForSlotWait pins that the re-run replaces any profile the caller passed, in
+// either spelling, and leaves spell args after "--" alone.
+func TestNextForSlotWait(t *testing.T) {
+	keepBinaryName(t)
+	ResolveBinaryNameFrom("./magus")
+
+	got := NextForSlotWait("aggressive", []string{
+		"--concurrency-profile", "conservative", "-concurrency-profile=balanced",
+		"run", "test", ".", "--", "-run", "Test A", "--concurrency-profile=x",
+	})
+	argv := []string{"./magus", "--concurrency-profile", "aggressive", "run", "test", ".",
+		"--", "-run", "Test A", "--concurrency-profile=x"}
+	assert.Equal(t, Next{
+		ID:   "concurrency-profile",
+		Run:  `./magus --concurrency-profile aggressive run test . -- -run "Test A" --concurrency-profile=x`,
+		Argv: argv,
+	}, got)
+}

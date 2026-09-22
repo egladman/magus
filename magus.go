@@ -77,8 +77,9 @@ type Magus struct {
 	// out-of-date binary can state about itself. See explainStale.
 	version string
 
-	limOnce sync.Once
-	lim     *cache.Limiter
+	limOnce   sync.Once
+	lim       *cache.Limiter
+	slotWaits cache.SlotWaitMeter
 
 	buzzPoolOnce sync.Once
 	buzzPoolReg  *buzz.PoolRegistry
@@ -396,7 +397,10 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 		}
 		return config.Config{}, err
 	}
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	// LoadFile validated the yaml; the environment overwrites those fields after it.
+	if err := errors.Join(configgen.ApplyEnv(&cfg, os.Getenv), config.Validate(cfg)); err != nil {
+		return config.Config{}, fmt.Errorf("invalid configuration from the environment: %w", err)
+	}
 	return cfg, nil
 }
 
@@ -675,6 +679,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		},
 		func(delta int) {
 			m.tel.RecordPoolWaiting(ctx, int64(delta))
+			m.slotWaits.Add(delta)
 		},
 	)
 	return m, nil
@@ -1386,7 +1391,7 @@ func (m *Magus) limiter() *cache.Limiter {
 	m.limOnce.Do(func() {
 		n := m.cfg.Concurrency
 		if n <= 0 {
-			n = cache.ConfiguredConcurrency(m.cfg.ConcurrencyProfile)
+			n = cache.ProfileConcurrency(m.cfg.ConcurrencyProfile)
 		}
 		// Announced, never silent: a run quietly narrower than asked for is as hard to
 		// attribute as one that thrashes. Said once, at the moment it takes effect.

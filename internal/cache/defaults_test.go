@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/egladman/magus/types"
 )
 
 // TestDefaultConcurrency_GitHubActions verifies that a GitHub-hosted
@@ -78,40 +80,22 @@ func TestClampConcurrency(t *testing.T) {
 	assert.Equal(t, ceiling, n)
 }
 
-// Each profile is a width relative to the machine, never below one slot. balanced is
-// the pre-profile default exactly, so an unset profile changes nothing on upgrade.
-func TestConcurrencyProfileWidth(t *testing.T) {
-	cases := []struct {
-		profile ConcurrencyProfile
-		cores   int
-		want    int
-	}{
-		{"", 10, 8}, {Balanced, 10, 8}, {Balanced, 4, 4},
-		{Conservative, 10, 5}, {Conservative, 1, 1},
-		{Aggressive, 10, 10}, {Aggressive, 32, 32},
-		{Balanced, 0, 1}, {"turbo", 10, 8},
-	}
-	for _, tc := range cases {
-		assert.Equal(t, tc.want, tc.profile.Width(tc.cores), "%q on %d cores", tc.profile, tc.cores)
-	}
-}
-
 // A hosted runner's core count is 4 for every profile, and MAGUS_CONCURRENCY beats them all.
 func TestProfileConcurrency_HostedRunnerAndEnv(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
 	t.Setenv("GITHUB_ACTIONS", "true")
 	t.Setenv("RUNNER_ENVIRONMENT", "github-hosted")
-	assert.Equal(t, 2, ProfileConcurrency(Conservative))
-	assert.Equal(t, 4, ProfileConcurrency(Aggressive))
+	assert.Equal(t, 2, ProfileConcurrency(types.ProfileConservative))
+	assert.Equal(t, 4, ProfileConcurrency(types.ProfileAggressive))
 
 	t.Setenv("MAGUS_CONCURRENCY", "3")
-	assert.Equal(t, 3, ProfileConcurrency(Aggressive))
+	assert.Equal(t, 3, ProfileConcurrency(types.ProfileAggressive))
 }
 
 // An explicit width overrides the profile; the profile applies only when none is set.
 func TestResolveConcurrency_ExplicitOverridesProfile(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
 	t.Setenv("GITHUB_ACTIONS", "")
-	assert.Equal(t, 1, ResolveConcurrency(1, "aggressive"))
-	assert.Equal(t, MachineCeiling(), ResolveConcurrency(0, "aggressive"))
+	assert.Equal(t, 1, ResolveConcurrency(1, types.ProfileAggressive))
+	assert.Equal(t, MachineCeiling(), ResolveConcurrency(0, types.ProfileAggressive))
 }
