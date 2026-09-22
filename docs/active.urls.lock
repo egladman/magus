@@ -153,6 +153,7 @@ development/docs-guides-integrations-agents/
 development/docs/
 development/evals/
 development/gopherbuzz/
+development/libs-coldread/
 development/libs-commentdash/
 development/libs-diag/
 development/libs-diagnostics/
@@ -377,6 +378,11 @@ reference/codes/auth/MGS9003/
 reference/codes/auth/MGS9004/
 reference/codes/auth/MGS9005/
 reference/codes/auth/MGS9006/
+reference/codes/auth/MGS9007/
+reference/codes/auth/MGS9008/
+reference/codes/auth/MGS9009/
+reference/codes/auth/MGS9010/
+reference/codes/auth/MGS9011/
 reference/codes/capability/
 reference/codes/capability/MGS1101/
 reference/codes/capability/MGS1102/
@@ -428,6 +434,8 @@ reference/codes/magusfile/MGS1037/
 reference/codes/magusfile/MGS1038/
 reference/codes/magusfile/MGS1039/
 reference/codes/magusfile/MGS1040/
+reference/codes/magusfile/MGS1041/
+reference/codes/magusfile/MGS1042/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -515,6 +523,7 @@ reference/manpage/magus-server/
 reference/manpage/magus-session/
 reference/manpage/magus-sessions/
 reference/manpage/magus-shell/
+reference/manpage/magus-spell/
 reference/manpage/magus-status/
 reference/manpage/magus-tail/
 reference/manpage/magus-vcs/
@@ -523,6 +532,7 @@ reference/manpage/magus-watch/
 reference/manpage/magus-where/
 reference/manpage/magus-x/
 reference/manpage/magus/
+reference/remote-spells/
 reference/rules/
 reference/rules/busy-wait/
 reference/rules/buzz-unbriefed/
@@ -625,6 +635,7 @@ spells/py/
 spells/rs/
 spells/ts/
 tags/
+tags/403/
 tags/activity/
 tags/admission/
 tags/adoption/
@@ -644,6 +655,7 @@ tags/audit/
 tags/auth/
 tags/authoring/
 tags/bash/
+tags/bearer/
 tags/benchmarks/
 tags/bisect/
 tags/bounds/
@@ -700,6 +712,7 @@ tags/detach/
 tags/determinism/
 tags/diagnostics/
 tags/diff/
+tags/digest/
 tags/discovery/
 tags/docker/
 tags/docs/
@@ -829,6 +842,7 @@ tags/performance/
 tags/permissions/
 tags/philosophy/
 tags/picker/
+tags/pinning/
 tags/platform/
 tags/plugin/
 tags/podman/
@@ -843,6 +857,7 @@ tags/protobuf/
 tags/provenance/
 tags/provider/
 tags/pry/
+tags/publish/
 tags/pull-request/
 tags/pytest/
 tags/python/
@@ -856,6 +871,7 @@ tags/reference/
 tags/registry/
 tags/release/
 tags/remote-cache/
+tags/remote/
 tags/repl/
 tags/replay/
 tags/reproduce/
@@ -879,6 +895,7 @@ tags/services/
 tags/session/
 tags/setup/
 tags/sharding/
+tags/share/
 tags/shared-services/
 tags/sharing/
 tags/shell/

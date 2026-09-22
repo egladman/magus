@@ -27,7 +27,7 @@ func TestBearerGuard(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuard(SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+		BearerGuard(JSONErrors, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 
@@ -36,12 +36,21 @@ func TestBearerGuard(t *testing.T) {
 		assert.Equal(t, http.StatusOK, serve(authHeader, rawQuery).Code)
 	}
 
-	rejected := func(t *testing.T, authHeader, rawQuery string) {
+	// missing and refused are the two 401s: no bearer credential at all, or one that
+	// verify turned down. Only the second earns error="invalid_token".
+	missing := func(t *testing.T, authHeader, rawQuery string) {
 		t.Helper()
 		rr := serve(authHeader, rawQuery)
 		assert.Equal(t, http.StatusUnauthorized, rr.Code)
-		assert.NotEmpty(t, rr.Header().Get("WWW-Authenticate"), "missing WWW-Authenticate challenge")
-		assert.Contains(t, rr.Body.String(), "MGS9001", "the 401 body carries the lookupable bearer-rejected code")
+		assert.Equal(t, `Bearer realm="magus"`, rr.Header().Get("WWW-Authenticate"))
+		assert.Equal(t, "MGS9011", decodeStatus(t, rr.Body.Bytes()).reason())
+	}
+	refused := func(t *testing.T, authHeader, rawQuery string) {
+		t.Helper()
+		rr := serve(authHeader, rawQuery)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
+		assert.Equal(t, `Bearer realm="magus", error="invalid_token"`, rr.Header().Get("WWW-Authenticate"))
+		assert.Equal(t, "MGS9001", decodeStatus(t, rr.Body.Bytes()).reason())
 	}
 
 	// Header path.
@@ -50,16 +59,16 @@ func TestBearerGuard(t *testing.T) {
 	t.Run("valid bearer mixed-case scheme", func(t *testing.T) { authorized(t, "BeArEr "+token, "") })
 	// A query token is NOT a credential carrier for the header-only guard: a valid
 	// token in the URL must be rejected (RFC 6750 section 2.3: keep secrets out of URLs).
-	t.Run("valid query token rejected (header-only)", func(t *testing.T) { rejected(t, "", "token="+token) })
+	t.Run("valid query token rejected (header-only)", func(t *testing.T) { missing(t, "", "token="+token) })
 	t.Run("header still wins with a bogus query token", func(t *testing.T) { authorized(t, "Bearer "+token, "token=wrong") })
 	// Rejections.
-	t.Run("no header no query", func(t *testing.T) { rejected(t, "", "") })
-	t.Run("wrong token header", func(t *testing.T) { rejected(t, "Bearer not-the-token", "") })
-	t.Run("token as prefix of real one", func(t *testing.T) { rejected(t, "Bearer s3cret", "") })
-	t.Run("real token plus suffix", func(t *testing.T) { rejected(t, "Bearer "+token+"x", "") })
-	t.Run("missing scheme", func(t *testing.T) { rejected(t, token, "") })
-	t.Run("wrong scheme", func(t *testing.T) { rejected(t, "Basic "+token, "") })
-	t.Run("empty bearer", func(t *testing.T) { rejected(t, "Bearer ", "") })
+	t.Run("no header no query", func(t *testing.T) { missing(t, "", "") })
+	t.Run("wrong token header", func(t *testing.T) { refused(t, "Bearer not-the-token", "") })
+	t.Run("token as prefix of real one", func(t *testing.T) { refused(t, "Bearer s3cret", "") })
+	t.Run("real token plus suffix", func(t *testing.T) { refused(t, "Bearer "+token+"x", "") })
+	t.Run("missing scheme", func(t *testing.T) { missing(t, token, "") })
+	t.Run("wrong scheme", func(t *testing.T) { missing(t, "Basic "+token, "") })
+	t.Run("empty bearer", func(t *testing.T) { missing(t, "Bearer ", "") })
 }
 
 // TestBearerGuardWithQueryToken covers the browser-EventSource variant that also
@@ -80,7 +89,7 @@ func TestBearerGuardWithQueryToken(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuardWithQueryToken(SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+		BearerGuardWithQueryToken(JSONErrors, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 	code := func(authHeader, rawQuery string) int { return serve(authHeader, rawQuery).Code }
@@ -102,7 +111,7 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+	BearerGuard(JSONErrors, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
@@ -114,7 +123,7 @@ func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(reject, okHandler).ServeHTTP(rr, req)
+	BearerGuard(JSONErrors, reject, okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 

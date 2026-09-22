@@ -7,6 +7,11 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"connectrpc.com/connect"
+
+	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/types"
 )
 
 // consoleCSP is the Content-Security-Policy served with every console HTML document, on BOTH
@@ -86,7 +91,12 @@ func StaticHandler(consoleDir string) http.Handler {
 			return
 		}
 		if !isShellFile(consoleDir, r.URL.Path) {
-			http.NotFound(w, r)
+			httpx.JSONErrors.Refuse(w, r, httpx.Refusal{
+				Code:    connect.CodeNotFound,
+				Reason:  types.ConsoleFileWithheld,
+				Title:   "console file withheld",
+				Message: "the console mount serves only the app shell without a token; read data through the authenticated API",
+			})
 			return
 		}
 		fileServer.ServeHTTP(cw, r)

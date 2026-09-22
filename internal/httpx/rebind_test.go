@@ -27,7 +27,7 @@ func TestDnsRebindGuard(t *testing.T) {
 			req.Header.Set("Origin", origin)
 		}
 		rr := httptest.NewRecorder()
-		GuardRebind(loopback, okHandler).ServeHTTP(rr, req)
+		GuardRebind(JSONErrors, loopback, okHandler).ServeHTTP(rr, req)
 		return rr.Code
 	}
 

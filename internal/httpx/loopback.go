@@ -3,6 +3,10 @@ package httpx
 import (
 	"net"
 	"net/http"
+
+	"connectrpc.com/connect"
+
+	"github.com/egladman/magus/types"
 )
 
 // The tool-page RPCs (ViewerService, StatusService) are meant to be reachable only from
@@ -32,10 +36,15 @@ func isLoopbackAddr(addr string) bool {
 // This checks the transport peer, not the Host header (that is GuardRebind's job). Applied
 // once around the tool-page mux; the interceptor form for a pure Connect server checks the
 // same via the peer address.
-func RequireLoopbackPeer(next http.Handler) http.Handler {
+func RequireLoopbackPeer(format ErrorFormat, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackAddr(r.RemoteAddr) {
-			http.Error(w, "forbidden: local access only", http.StatusForbidden)
+			format.Refuse(w, r, Refusal{
+				Code:    connect.CodePermissionDenied,
+				Reason:  types.LoopbackPeerRequired,
+				Title:   "local access only",
+				Message: "this route only answers a caller on this machine's loopback interface",
+			})
 			return
 		}
 		next.ServeHTTP(w, r)

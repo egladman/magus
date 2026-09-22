@@ -442,6 +442,21 @@ const (
 	NoAuthToken              DiagnosticCode = "MGS9004"
 	ConnectorNameExists      DiagnosticCode = "MGS9005"
 	ConnectorNotFound        DiagnosticCode = "MGS9006"
+	// HostNotAllowed is a request whose Host or Origin names a host the daemon does not
+	// serve: the DNS-rebinding guard, answered 403.
+	HostNotAllowed DiagnosticCode = "MGS9007"
+	// LoopbackPeerRequired is a request to a local-only route from a peer that is not on
+	// this machine's loopback interface, answered 403.
+	LoopbackPeerRequired DiagnosticCode = "MGS9008"
+	// ShareBoundToAnotherDevice is a valid share token replayed from a device other than
+	// the one that first used it, answered 403.
+	ShareBoundToAnotherDevice DiagnosticCode = "MGS9009"
+	// ConsoleFileWithheld is a console path outside the tokenless app shell, answered 404.
+	ConsoleFileWithheld DiagnosticCode = "MGS9010"
+	// BearerMissing is a request to a guarded route that carried no bearer token at all,
+	// answered 401. A token that was sent and refused is BearerRejected instead: the two
+	// need different fixes (attach one, or mint a new one).
+	BearerMissing DiagnosticCode = "MGS9011"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -503,6 +518,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
 	NoAuthToken, ConnectorNameExists, ConnectorNotFound,
+	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
+	BearerMissing,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

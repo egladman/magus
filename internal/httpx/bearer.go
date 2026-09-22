@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"connectrpc.com/connect"
+
 	"github.com/egladman/magus/types"
 )
 
@@ -26,10 +28,10 @@ type verifier func(presented string) bool
 //
 // verify is called on every request, so a rotate, create, or revoke takes effect
 // without restarting the server; it must fail closed (return false) on any error.
-// Failures return 401 with a WWW-Authenticate challenge and a generic body that
-// does not distinguish a missing token from a wrong one.
-func BearerGuard(verify verifier, next http.Handler) http.Handler {
-	return guard(verify, headerToken, next)
+// A refusal is a 401 in format: MGS9011 when no token was presented, MGS9001 when
+// one was, which never says whether it was wrong, expired, or revoked.
+func BearerGuard(format ErrorFormat, verify verifier, next http.Handler) http.Handler {
+	return guard(format, verify, headerToken, next)
 }
 
 // BearerGuardWithQueryToken is [BearerGuard] that ALSO accepts the token from a
@@ -38,26 +40,44 @@ func BearerGuard(verify verifier, next http.Handler) http.Handler {
 // set an Authorization header, so the query carrier is the sole option. It is a
 // deliberate, scoped exception to the header-only rule (RFC 6750 section 2.3);
 // keep it off the MCP endpoint, which every supported client reaches with a header.
-func BearerGuardWithQueryToken(verify verifier, next http.Handler) http.Handler {
-	return guard(verify, presentedToken, next)
+func BearerGuardWithQueryToken(format ErrorFormat, verify verifier, next http.Handler) http.Handler {
+	return guard(format, verify, presentedToken, next)
 }
 
 // guard is the shared 401-or-pass core; extract names the token carriers a given
 // mount accepts (header-only, or header-plus-query).
-func guard(verify verifier, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
+func guard(format ErrorFormat, verify verifier, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		presented, ok := extract(r)
 		if !ok {
-			unauthorized(w)
+			format.Refuse(w, r, bearerMissing)
 			return
 		}
 		if !verify(presented) {
-			unauthorized(w)
+			format.Refuse(w, r, bearerRejected)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
 }
+
+// Telling a missing token from a refused one reveals only what the caller already
+// knows, whether it sent one. Wrong, expired, and revoked stay one answer, so a
+// caller cannot probe which tokens exist.
+var (
+	bearerMissing = Refusal{
+		Code:    connect.CodeUnauthenticated,
+		Reason:  types.BearerMissing,
+		Title:   "no bearer token presented",
+		Message: "the request carried no bearer token; send one as `Authorization: Bearer <token>`. Mint or inspect a connector token with: magus config mcp connector",
+	}
+	bearerRejected = Refusal{
+		Code:    connect.CodeUnauthenticated,
+		Reason:  types.BearerRejected,
+		Title:   "bearer token rejected",
+		Message: "the daemon rejected the bearer token: it is wrong, expired, or revoked. Mint or inspect a connector token with: magus config mcp connector",
+	}
+)
 
 // SingleTokenVerifier returns a [verifier] that accepts exactly the one token
 // yielded by expected. It compares the SHA-256 digests of the presented and
@@ -110,13 +130,4 @@ func bearerToken(header string) (string, bool) {
 		return "", false
 	}
 	return tok, true
-}
-
-func unauthorized(w http.ResponseWriter) {
-	w.Header().Set("WWW-Authenticate", `Bearer realm="magus"`)
-	// Coded so a client debugging an MCP connection gets a lookupable reason. Deliberately GENERIC (it
-	// names every possibility, distinguishing none) to preserve the guard's anti-enumeration posture.
-	http.Error(w, types.FormatDiagnostic(types.BearerRejected,
-		"the daemon rejected the bearer token: it is missing, wrong, expired, or revoked. Mint or inspect a connector token with: magus config mcp connector"),
-		http.StatusUnauthorized)
 }

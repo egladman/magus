@@ -1,8 +1,10 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -15,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/auth"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -402,30 +405,89 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 		Timeout:       5 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	anonymous := func(method, path string) int {
+	anonymous := func(method, path string) *http.Response {
 		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer reqCancel()
 		req, err := http.NewRequestWithContext(reqCtx, method, base+path, nil)
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
 		_ = resp.Body.Close()
-		return resp.StatusCode
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+		return resp
 	}
-	refused := []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound}
+	status := func(method, path string) int { return anonymous(method, path).StatusCode }
+	// assertRefused requires the refusal a client can act on: structured JSON in the route's
+	// own protocol, carrying an MGS code, and a bearer challenge on every 401.
+	assertRefused := func(method, path string) {
+		t.Helper()
+		resp := anonymous(method, path)
+		what := method + " " + path
+		if !assert.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound},
+			resp.StatusCode, "%s answered without a token", what) {
+			return
+		}
+		if resp.StatusCode == http.StatusUnauthorized {
+			// An anonymous caller presented no token, so the challenge carries no error=.
+			assert.Equal(t, `Bearer realm="magus"`, resp.Header.Get("WWW-Authenticate"), what)
+		}
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"), what)
+		body, _ := io.ReadAll(resp.Body)
+		// A Connect procedure (/<package>.<Service>/...) answers in Connect's error envelope,
+		// whose details are base64 Any values; every other route in AIP-193's JSON, whose
+		// details are readable.
+		if svc, _, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/"); strings.Contains(svc, ".") {
+			var got struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+				Details []struct {
+					Type string `json:"type"`
+				} `json:"details"`
+			}
+			if !assert.NoError(t, json.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
+				return
+			}
+			assert.Contains(t, []string{"unauthenticated", "permission_denied", "not_found"}, got.Code, what)
+			assert.Contains(t, got.Message, "[MGS9", what)
+			if assert.Len(t, got.Details, 2, what) {
+				assert.Equal(t, "google.rpc.ErrorInfo", got.Details[0].Type, what)
+				assert.Equal(t, "google.rpc.Help", got.Details[1].Type, what)
+			}
+			return
+		}
+		var got struct {
+			Error struct {
+				Code    int    `json:"code"`
+				Status  string `json:"status"`
+				Details []struct {
+					Reason string `json:"reason"`
+				} `json:"details"`
+			} `json:"error"`
+		}
+		if !assert.NoError(t, json.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
+			return
+		}
+		assert.Equal(t, resp.StatusCode, got.Error.Code, what)
+		assert.NotEmpty(t, got.Error.Status, what)
+		if assert.NotEmpty(t, got.Error.Details, what) {
+			assert.True(t, strings.HasPrefix(got.Error.Details[0].Reason, "MGS9"), "%s: reason %q", what, got.Error.Details[0].Reason)
+		}
+	}
 
 	for _, pattern := range patterns {
 		switch {
 		case health[pattern]:
-			assert.Equal(t, http.StatusOK, anonymous(http.MethodGet, pattern), pattern)
+			assert.Equal(t, http.StatusOK, status(http.MethodGet, pattern), pattern)
 		case pattern == "/console/":
 			for _, p := range []string{"/console/", "/console/console.js", "/console/sw.js",
 				"/console/manifest.webmanifest", "/console/graph/", "/console/graph/explorer.js"} {
-				assert.Equal(t, http.StatusOK, anonymous(http.MethodGet, p), "shell file %s", p)
+				assert.Equal(t, http.StatusOK, status(http.MethodGet, p), "shell file %s", p)
 			}
 			for _, p := range []string{"/console/graph/knowledge-graph.json",
 				"/console/graph/target-graph.json", "/console/graph/explorer.js.map"} {
-				assert.Contains(t, refused, anonymous(http.MethodGet, p), "%s must be refused", p)
+				assertRefused(http.MethodGet, p)
 			}
 		default:
 			// A trailing-slash pattern is a subtree: probe it and a path beneath it.
@@ -435,7 +497,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 			}
 			for _, p := range paths {
 				for _, method := range []string{http.MethodGet, http.MethodPost} {
-					assert.Contains(t, refused, anonymous(method, p), "%s %s answered without a token", method, p)
+					assertRefused(method, p)
 				}
 			}
 		}
