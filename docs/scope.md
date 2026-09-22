@@ -130,7 +130,7 @@ it is correct. magus did not author this data and cannot verify it.
 The surviving design is a version range you declare, compared against a version
 magus already probes. It never learns which versions exist upstream and never
 picks one. To find out when your range has gone stale, write that in your own
-repo with `http`, `json`, and `semver`, the way `tools/audit.buzz` wraps the
+repo with `http`, `json`, and `semver`, the way `tools/advisories.buzz` wraps the
 advisory scanner. The binary supplies primitives. You supply knowledge about the
 world.
 

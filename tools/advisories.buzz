@@ -1,4 +1,4 @@
-// audit.buzz - advisory scanning that fails only on findings you can act on today.
+// advisories.buzz - advisory scanning that fails only on findings you can act on today.
 //
 // `pnpm audit` answers "does a known advisory match this tree?" with an exit code. A build
 // gate needs a different answer: "is there anything I can do about it right now?" Those
