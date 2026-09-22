@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
@@ -106,7 +105,7 @@ func emitConcurrencyNudge(w io.Writer, m *magus.Magus, args []string) {
 	if line == "" {
 		return
 	}
-	next := []hint.Next{hint.NextForSlotWait(string(cache.Aggressive), args)}
+	next := []hint.Next{hint.NextForSlotWait(string(types.ProfileAggressive), args)}
 	gate := hint.NewGate(m.CacheDir(), sessionOrTerminal(""))
 	if gate.MarkFired(hint.MarkerKind(next[0].ID)) {
 		return

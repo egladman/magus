@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/types"
 )
 
 // Limiter is a weighted semaphore that caps concurrent spell executions.
@@ -48,7 +49,7 @@ type slotPressure struct {
 	width               int
 	aggressiveWidth     int
 	explicitConcurrency bool
-	profile             cache.ConcurrencyProfile
+	profile             types.ConcurrencyProfile
 	machineQueued       bool
 }
 
@@ -56,7 +57,7 @@ type slotPressure struct {
 // has no case for it.
 func (p slotPressure) nudge() string {
 	switch {
-	case p.explicitConcurrency, p.profile == cache.Aggressive:
+	case p.explicitConcurrency, p.profile == types.ProfileAggressive:
 		// The user chose a width; second-guessing that choice is noise.
 		return ""
 	case p.machineQueued:
@@ -81,13 +82,13 @@ func (m *Magus) ConcurrencyNudge() string {
 	if m.cache == nil || m.machineAdmitter != nil {
 		return ""
 	}
-	aggressiveWidth, _ := cache.ClampConcurrency(cache.ProfileConcurrency(cache.Aggressive))
+	aggressiveWidth, _ := cache.ClampConcurrency(cache.ProfileConcurrency(types.ProfileAggressive))
 	return slotPressure{
 		waited:              m.slotWaits.Waited(),
 		width:               m.limiter().Capacity(),
 		aggressiveWidth:     aggressiveWidth,
 		explicitConcurrency: m.cfg.Concurrency > 0,
-		profile:             cache.ConcurrencyProfile(m.cfg.ConcurrencyProfile),
+		profile:             m.cfg.ConcurrencyProfile,
 		machineQueued:       m.cache.MachineQueued(),
 	}.nudge()
 }

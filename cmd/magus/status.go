@@ -399,7 +399,7 @@ func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFram
 	fmt.Fprintln(tw, "")
 	fmt.Fprintln(tw, "concurrency")
 	fmt.Fprintf(tw, "  configured\t%s\n", intOrDef(r.Config.Concurrency.Configured, "(from profile)"))
-	fmt.Fprintf(tw, "  profile\t%s\n", strOrDef(r.Config.Concurrency.Profile, "balanced"))
+	fmt.Fprintf(tw, "  profile\t%s\n", r.Config.Concurrency.Profile)
 	fmt.Fprintf(tw, "  effective\t%d\n", r.Config.Concurrency.Effective)
 	if global.verbose >= 1 {
 		fmt.Fprintln(tw, "")

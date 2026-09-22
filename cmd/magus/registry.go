@@ -89,7 +89,9 @@ func loadWorkspaceCfg(root string) (config.Config, error) {
 		// Missing file is fine; use env-var defaults.
 		cfg = config.Defaults()
 	}
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	if err := configgen.ApplyEnv(&cfg, os.Getenv); err != nil {
+		return config.Config{}, fmt.Errorf("invalid configuration from the environment: %w", err)
+	}
 	return cfg, nil
 }
 

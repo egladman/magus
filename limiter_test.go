@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,7 +38,7 @@ func TestLimiterFacade(t *testing.T) {
 func TestSlotPressureNudge(t *testing.T) {
 	pressured := slotPressure{
 		waited: 41*time.Second + 300*time.Millisecond, width: 8, aggressiveWidth: 16,
-		profile: cache.Balanced,
+		profile: types.ProfileBalanced,
 	}
 	with := func(edit func(*slotPressure)) slotPressure {
 		p := pressured
@@ -48,12 +48,12 @@ func TestSlotPressureNudge(t *testing.T) {
 	got := map[string]string{
 		"pressured":        pressured.nudge(),
 		"explicit":         with(func(p *slotPressure) { p.explicitConcurrency = true }).nudge(),
-		"aggressive":       with(func(p *slotPressure) { p.profile = cache.Aggressive }).nudge(),
+		"aggressive":       with(func(p *slotPressure) { p.profile = types.ProfileAggressive }).nudge(),
 		"machine queued":   with(func(p *slotPressure) { p.machineQueued = true }).nudge(),
 		"no idle cores":    with(func(p *slotPressure) { p.aggressiveWidth = 8 }).nudge(),
 		"under the floor":  with(func(p *slotPressure) { p.waited = slotWaitFloor - time.Millisecond }).nudge(),
 		"at the floor":     with(func(p *slotPressure) { p.waited = slotWaitFloor }).nudge(),
-		"conservative too": with(func(p *slotPressure) { p.profile = cache.Conservative; p.width = 4 }).nudge(),
+		"conservative too": with(func(p *slotPressure) { p.profile = types.ProfileConservative; p.width = 4 }).nudge(),
 	}
 	assert.Equal(t, map[string]string{
 		"pressured":        "this run waited 41s for slots; concurrency_profile: aggressive would have given it 16",

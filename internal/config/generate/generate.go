@@ -229,6 +229,11 @@ func scalarKind(t string) string {
 	case "[]string":
 		return "stringslice"
 	}
+	// A named domain type crosses as text: it implements encoding.TextUnmarshaler, which
+	// is the one place its values are checked for yaml, env and flag alike.
+	if strings.HasPrefix(t, "types.") {
+		return "text"
+	}
 	return ""
 }
 
@@ -345,7 +350,7 @@ import (
 type ConfigFlag struct {
 	Flag   string // CLI flag name, e.g. "cache-dir"
 	EnvVar string // matching MAGUS_* env var
-	Kind   string // "string", "int", "bool", "float64", "duration", or "boolptr"
+	Kind   string // "string", "int", "bool", "float64", "duration", "text", or "boolptr"
 }
 
 // ConfigFlags is the generated inventory of every config-backed flag.
@@ -377,6 +382,8 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.Float64Var(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
 {{- else if eq .Kind "duration"}}
 	fs.DurationVar(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
+{{- else if eq .Kind "text"}}
+	fs.TextVar(&{{.GoPath}}, "{{.Flag}}", {{.GoPath}}, "{{.Usage}}")
 {{- end}}
 {{- end}}
 }

@@ -34,7 +34,7 @@ type Config struct {
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
 
 	// ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores, 8), the default) or aggressive (every core).
-	ConcurrencyProfile string `json:"concurrency_profile" yaml:"concurrency_profile" validate:"omitempty,oneof=conservative balanced aggressive"`
+	ConcurrencyProfile types.ConcurrencyProfile `json:"concurrency_profile" yaml:"concurrency_profile"`
 
 	// MaxFailures bounds how many projects may fail before a run stops starting
 	// more. Zero, the default, is unlimited: a batch runs everything it can and
