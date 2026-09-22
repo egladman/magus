@@ -129,10 +129,14 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
   not have.
 - **Bare names (`import "go"`).** Ambiguous between a built-in, a workspace module and a
   remote spell, and two registries publishing the same short name would collide.
-- **Dropping the `magus/` prefix from built-ins (`spell/go`).** Go-like, but a magusfile
-  imports workspace files by dotless paths too, so `spell/go` could equally be a file in the
-  workspace and the search order would silently pick one. It would also sit one letter from
-  the `spells/<name>` directory convention workspaces use for their own spells.
+- **Dropping the `magus/` prefix from built-ins (`spell/go`, or bare `go`).** With declared
+  overrides and an error on any undeclared collision (decision 7), nothing would silently
+  resolve to the wrong spell, so the prefix is not needed for correctness. It stays for
+  STABILITY: workspaces already import their own modules by bare names (`coverage`, `badge`),
+  so without a namespace magus owns, each new built-in added in a release could collide with
+  a workspace module named first and turn a magus upgrade into a load error. Go gets that
+  guarantee from its dot rule, since user code is always dotted; magus gets it from the
+  prefix. Dropping it would also rename every existing `magus/spell/...` import for no gain.
 - **Implicit override by file presence (a workspace `spells/go` silently replaces the
   embedded `go`).** It keeps the call site identical, which is right, but makes the override
   invisible: nothing in an import or a manifest says the embedded code no longer runs. The
