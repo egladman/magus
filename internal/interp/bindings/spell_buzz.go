@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,31 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// CheckSpellFile compiles the Buzz spell at path without registering it and returns
+// why it fails to load. Import resolution swallows that error (see
+// loadLocalBuzzSpell), so a caller that must see every broken spell asks here. A
+// module that is not a spell is not a failure.
+func CheckSpellFile(ctx context.Context, path string) error {
+	_, _, err := compileBuzzSpell(ctx, path)
+	if errors.Is(err, spell.ErrNotASpell) {
+		return nil
+	}
+	return err
+}
+
+func compileBuzzSpell(ctx context.Context, path string) (spells.Descriptor, string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, err)
+	}
+	src := string(data)
+	spec, err := extractDescriptorWithModules(ctx, src, filepath.Dir(path))
+	if err != nil {
+		return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, hint.ExplainImplicitMagus(err))
+	}
+	return spec, src, nil
+}
+
 // loadBuzzSpell reads, extracts (with host modules registered), and idempotently
 // registers a Buzz spell with handler op support, returning its spec and the
 // registered driver. This is the single place a Buzz spell becomes a registered
@@ -29,14 +55,9 @@ import (
 // can't. Op bodies re-read their inputs each invocation, so a fixed captured
 // source is correct, and the registration is idempotent for re-imports.
 func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.Spell, error) {
-	data, err := os.ReadFile(path)
+	spec, src, err := compileBuzzSpell(ctx, path)
 	if err != nil {
-		return spells.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
-	}
-	src := string(data)
-	spec, err := extractDescriptorWithModules(ctx, src, filepath.Dir(path))
-	if err != nil {
-		return spells.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, hint.ExplainImplicitMagus(err))
+		return spells.Descriptor{}, nil, err
 	}
 	sp := spells.NewSpell(spec.Name,
 		spells.WithSources(spec.Needs...),

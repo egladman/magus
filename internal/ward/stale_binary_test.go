@@ -104,3 +104,30 @@ func TestExplainStaleBinary_AppliesToDevBuilds(t *testing.T) {
 	assert.Nil(t, CheckRequiredVersion(">= 99.0.0", DevVersion),
 		"CheckRequiredVersion exempts dev builds; ExplainStaleBinary deliberately does not")
 }
+
+// TestExplainStaleBinary_NotesOnlyTheBranchItExplains pins the joined load error: one
+// stale-shaped failure among several must not relabel the others as a stale binary.
+func TestExplainStaleBinary_NotesOnlyTheBranchItExplains(t *testing.T) {
+	stale := realBuzzErr(t, `final s = Secret{value = "x"};`)
+	other := buzzErr("MGS1038", "option removed")
+	got := ExplainStaleBinary(errors.Join(stale, other), "0.4.0", ">= 0.4.0")
+
+	multi, ok := got.(interface{ Unwrap() []error })
+	require.True(t, ok, "the join must survive")
+	branches := multi.Unwrap()
+	require.Len(t, branches, 2)
+	assert.Contains(t, branches[0].Error(), "OUT-OF-DATE BINARY")
+	assert.Equal(t, other, branches[1], "an unrelated branch is returned untouched")
+}
+
+// TestExplainStaleBinary_KeepsAMultiWrapWhole pins that only a join splits: a
+// "%w: %w" wrapper keeps its own text and is noted as one error.
+func TestExplainStaleBinary_KeepsAMultiWrapWhole(t *testing.T) {
+	stale := realBuzzErr(t, `final s = Secret{value = "x"};`)
+	wrapped := fmt.Errorf("project a: %w: %w", errors.New("load"), stale)
+	got := ExplainStaleBinary(wrapped, "0.4.0", ">= 0.4.0")
+
+	assert.ErrorIs(t, got, wrapped)
+	assert.Contains(t, got.Error(), wrapped.Error(), "the wrapper's own text survives")
+	assert.Contains(t, got.Error(), "OUT-OF-DATE BINARY")
+}

@@ -108,6 +108,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   captures and restores the working copy, untracked files included.
 - **Breaking for SDK callers: `RenderedSkills` takes a form, not a variant.** The
   `*ForForm` methods are gone.
+- **A workspace load reports every broken magusfile and every shadowed spell at once.**
+  `ls`, `doctor` and every other command name them all instead of stopping at the first.
 - **A declared `timeout` bounds the target's own time.** A body parks while its
   `ctx.needs` dependencies run and gets a fresh deadline per stretch of its own work.
 - **The job store refuses a write to another holder's row.** A leased session may record
