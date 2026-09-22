@@ -177,7 +177,7 @@ func TestHarnessConfigCandidates(t *testing.T) {
 	root := t.TempDir()
 	writeDoctorHarness(t, root)
 
-	got, err := harnessConfigCandidates(root)
+	got, err := harnessConfigCandidates(root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(root, "host", "hooks.json")}, got)
 }

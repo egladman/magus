@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking
+
+- **`harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
+  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
+  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
+  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
+  forking its spell's import path instead.
+
 ### Added
 
 - **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
@@ -135,7 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A deny on a multi-command line says nothing on it ran.**
 - **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
   wired with `magus\harness.provider`. Adapt one by forking it and changing the import
-  path. JSON under `harnesses/` remains the unwired fallback.
+  path.
 - **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
   runs it anyway.
 - **A failing `magus doctor` no longer cancels CI shards.** The final gate carries its

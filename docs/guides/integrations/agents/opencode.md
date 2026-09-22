@@ -47,9 +47,9 @@ The guard is the TypeScript plugin, not managed hook fragments. To adapt without
 Magus source edits, fork the spell and change only the import path; see
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md).
 
-`harnesses/opencode.json` remains the unwired fallback so
-`magus agent harness install --id opencode` can still refresh `.opencode/skills`.
-OpenCode has no shell-command hook config, so that descriptor is skills-only too.
+`magus agent harness install --id opencode` refreshes `.opencode/skills` once the
+spell is wired with `magus\harness.provider(opencode)`; OpenCode has no
+shell-command hook config, so the descriptor it resolves to is skills-only too.
 
 If you already installed into `.claude/skills` for Claude Code, OpenCode reads
 those too and this step is optional. [Skills](skills.md) covers the rest of the

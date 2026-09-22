@@ -2069,7 +2069,8 @@ func workspaceHarnesses(ws types.WorkspaceReader) []string {
 // harnessConfigCandidates resolves configuration paths from user-owned
 // contracts. Doctor deliberately has no built-in host inventory: adding a
 // collaborator must be data, not a binary release. wired are magusfile-
-// selected harness spell names unioned with JSON descriptors.
+// selected harness spell names, the only source now that JSON descriptors
+// are gone.
 func harnessConfigCandidates(root string, wired ...string) ([]string, error) {
 	ctx := agent.ContextWithWiredHarnesses(context.Background(), wired)
 	ids, err := agent.KnownHarnesses(ctx, root, wired...)
@@ -2268,7 +2269,7 @@ func guardHookConfigs(ctx context.Context, root string, wired ...string) []strin
 const guardProbeBudget = 5 * time.Second
 
 // checkGuardWiring is the free-function core. wiredNames are magusfile-selected
-// harness spell names unioned with JSON descriptors.
+// harness spell names, the only source now that JSON descriptors are gone.
 func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wiredNames ...string) types.DoctorCheck {
 	const name = "guard-wiring"
 
@@ -2353,7 +2354,7 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 			Status:  types.DoctorAdvice,
 			Message: "no harness descriptor found in this checkout; the guard rules exist but no collaborator is configured to invoke them",
 			Details: []string{
-				"wire magus\\harness.provider(<spell>) in the root magusfile (several hosts are fine), or add a descriptor under harnesses/ or .magus/harnesses/",
+				"wire magus\\harness.provider(<spell>) in the root magusfile (several hosts are fine)",
 			},
 		}
 	}
@@ -2379,7 +2380,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: "no skill catalog supplied; check skipped"}
 	}
 	root := r.ws.Root()
-	statuses := r.opts.skills.CheckStatuses(root)
+	statuses := r.opts.skills.CheckStatuses(r.runCtx(), root, workspaceHarnesses(r.ws)...)
 	if len(statuses) == 0 {
 		return types.DoctorCheck{
 			Name:    name,

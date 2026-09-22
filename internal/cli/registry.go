@@ -2301,13 +2301,13 @@ AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
 harness applies, removes, or verifies harnesses selected with
 magus\harness.provider (several hosts are fine when you bounce between LLM
-tools) or a JSON descriptor: apply merges opaque host-config fragments the
-descriptor already names, remove deletes only those same fragments (a user's
-own hooks beside them are untouched, and nothing is asked for confirmation -
-pass --dry-run to preview one first), and verify actually runs the wired guard
-command against a synthetic event rather than trusting its mere presence in
-the config. Omit --id to act on every magusfile-wired provider. Guard feedback
-that keeps recurring is doctor's recurring-guard-denials check, not a verb here.
+tools): apply merges opaque host-config fragments the descriptor already
+names, remove deletes only those same fragments (a user's own hooks beside
+them are untouched, and nothing is asked for confirmation - pass --dry-run to
+preview one first), and verify actually runs the wired guard command against
+a synthetic event rather than trusting its mere presence in the config. Omit
+--id to act on every magusfile-wired provider. Guard feedback that keeps
+recurring is doctor's recurring-guard-denials check, not a verb here.
 
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
@@ -2328,7 +2328,7 @@ a pattern no graph verb fits.`,
 	Usage: "magus agent <install|harness|starter|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
-		{Name: "harness", Short: "Apply, remove, or verify harnesses wired in the magusfile or JSON descriptors", Children: []Command{
+		{Name: "harness", Short: "Apply, remove, or verify harnesses wired in the magusfile", Children: []Command{
 			{Name: "apply", Short: "Write descriptor-managed hook entries", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to apply every magusfile-wired provider"}}},
 			{Name: "remove", Short: "Delete only the descriptor-managed hook entries apply would have written, leaving a user's own hooks untouched", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to remove every magusfile-wired provider"}}},
 			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},

@@ -184,7 +184,7 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 	cacheDir, root := registeredLease(t, "adj/enforcing")
 	wireGuardHook(t, root)
 
-	got := checkBoundLease(context.Background(), cacheDir, root)
+	got := checkBoundLease(context.Background(), cacheDir, root, "test-host")
 
 	require.Equal(t, types.DoctorCheck{
 		Name:    "bound-lease",

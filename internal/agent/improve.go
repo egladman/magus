@@ -27,8 +27,8 @@ type ImproveOptions struct {
 	Limit      int
 	IncludeAll bool
 	// WiredHarnesses are magusfile-selected harness spell names
-	// (Magus.Harnesses). Unioned into KnownHarnesses so spell-only hosts
-	// appear in coverage without a harnesses/*.json file.
+	// (Magus.Harnesses), the only source KnownHarnesses has now that
+	// harnesses/*.json is gone: a host that is not wired here has no coverage.
 	WiredHarnesses []string
 }
 

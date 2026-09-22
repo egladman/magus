@@ -720,23 +720,6 @@ That is the ownership switch: Magus ships the default spell; your import path
 chooses which tree apply reads. See the magus-workspace-rules skill section
 "Adapting a Buzz harness".
 
-### JSON descriptors (`improve --apply`)
-
-For hosts still described by `harnesses/<id>.json`, a human may apply
-Magus-owned fragment merges:
-
-```sh
-magus agent improve --apply --id claude-code
-magus agent improve --apply --id codex
-```
-
-`--apply` is the explicit authorization to write. It updates only Magus-owned
-host `PreToolUse` entries in the workspace-local JSON configuration for the
-selected host and preserves all other settings. It never creates or changes a
-user-level host config, compiled guard rules, installed skills, `AGENTS.md`, or
-memory. Review the resulting ordinary config diff; commit it only when that
-workspace keeps its harness in version control.
-
 A later `magus run` request in the same host session is shown as a follow-up,
 not a success: pre-tool hooks cannot observe execution or an exit status. After
 a person makes a durable decision, use the existing workspace-rules loop to

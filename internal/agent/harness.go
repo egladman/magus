@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,14 +10,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 )
 
-const (
-	harnessSchemaVersion = 2
-	harnessDirName       = "harnesses"
-)
+const harnessSchemaVersion = 2
 
 // HarnessStatus is the explicit verification outcome for a harness config.
 type HarnessStatus string
@@ -159,7 +154,8 @@ type HarnessVerification struct {
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
 // harness spell (magus\harness.provider). Registered by the bindings layer so agent
-// stays free of the Buzz VM. A miss (false) falls through to JSON descriptors.
+// stays free of the Buzz VM. A miss (false) means no spell answers for that id;
+// LoadHarness has no other source to fall back to.
 type HarnessSpellLoader func(ctx context.Context, id string) (HarnessDescriptor, string, bool, error)
 
 var harnessSpellLoader HarnessSpellLoader
@@ -175,7 +171,8 @@ type wiredHarnessesKey struct{}
 // ContextWithWiredHarnesses attaches magusfile-selected harness IDs so
 // LoadHarness prefers a harness spell only when that id was wired via
 // magus\harness.provider. Callers that omit this keep the prior behavior
-// (any registered harness spell wins), which unit tests that load JSON only rely on.
+// (any registered harness spell wins), which some unit tests rely on when they
+// register a fake loader directly rather than going through a magusfile.
 func ContextWithWiredHarnesses(ctx context.Context, ids []string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -188,11 +185,11 @@ func wiredHarnessesFromContext(ctx context.Context) (ids []string, ok bool) {
 	return ids, ok
 }
 
-// LoadHarness resolves one validated descriptor. When the context carries
-// ContextWithWiredHarnesses, a harness spell wins only if that id is wired;
-// otherwise any registered harness spell that exports harness_config still
-// wins over JSON (tests and callers that have not inspected the magusfile).
-// Workspace-owned JSON still outranks user-global JSON when no spell applies.
+// LoadHarness resolves one validated descriptor, always from a harness spell:
+// there is no other source. When the context carries ContextWithWiredHarnesses,
+// a harness spell answers only if that id is wired; otherwise any registered
+// harness spell that exports harness_config answers (tests and callers that
+// have not inspected the magusfile). A miss is an error either way.
 func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescriptor, source string, err error) {
 	if err = ctx.Err(); err != nil {
 		return
@@ -224,125 +221,14 @@ func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescri
 			return
 		}
 	}
-	descriptors, problems, loadErr := loadHarnessDescriptors(root)
-	if loadErr != nil {
-		err = loadErr
-		return
-	}
-	d, ok := descriptors[id]
-	if !ok {
-		err = harnessMissingError(id, problems)
-		return
-	}
-	descriptor, source = d.descriptor, d.source
+	err = harnessMissingError(id)
 	return
 }
 
-type loadedHarness struct {
-	descriptor HarnessDescriptor
-	source     string
-}
-
-// HarnessProblem names a descriptor file that disqualified ITSELF, and why. One
-// unreadable file must not disable every host on the machine: a stray .json in a
-// user config dir would otherwise turn harness support off everywhere. It is
-// never dropped in silence either, which is what Source and Reason are for.
-type HarnessProblem struct {
-	Source string `json:"source"`
-	ID     string `json:"id,omitempty"`
-	Reason string `json:"reason"`
-}
-
-func (p HarnessProblem) String() string {
-	return p.Source + ": " + p.Reason
-}
-
-// HarnessProblems lists the descriptors that disqualified themselves, so a
-// command surface can report a misconfiguration instead of skipping it.
-func HarnessProblems(ctx context.Context, root string) ([]HarnessProblem, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	_, problems, err := loadHarnessDescriptors(root)
-	return problems, err
-}
-
-// harnessMissingError explains a miss. A descriptor that disqualified itself is
-// named with its reason: without that, a typo and a malformed file read the same,
-// and only one of the two is fixable by trying another name.
-func harnessMissingError(id string, problems []HarnessProblem) error {
-	for _, p := range problems {
-		if p.ID == id {
-			return fmt.Errorf("harness %q is disqualified by its descriptor %s: %s", id, p.Source, p.Reason)
-		}
-	}
-	missing := fmt.Sprintf("no harness named %q (wire magus\\harness.provider(<spell>), or install a descriptor in harnesses/, .magus/harnesses/, or $XDG_CONFIG_HOME/magus/harnesses)", id)
-	if len(problems) == 0 {
-		return errors.New(missing)
-	}
-	reported := make([]string, 0, len(problems))
-	for _, p := range problems {
-		reported = append(reported, p.String())
-	}
-	return fmt.Errorf("%s; these descriptors disqualified themselves: %s", missing, strings.Join(reported, "; "))
-}
-
-func loadHarnesses(root string) (map[string]loadedHarness, error) {
-	loaded, _, err := loadHarnessDescriptors(root)
-	return loaded, err
-}
-
-// loadHarnessDescriptors loads every descriptor it can and reports the rest.
-// A descriptor is disqualified one file at a time: an unreadable directory is
-// still an error, because that is the machine failing rather than a file.
-func loadHarnessDescriptors(root string) (map[string]loadedHarness, []HarnessProblem, error) {
-	dirs := make([]string, 0, 2)
-	if base, err := config.UserConfigDir(); err == nil {
-		dirs = append(dirs, filepath.Join(base, "magus", harnessDirName))
-	}
-	dirs = append(dirs,
-		filepath.Join(root, harnessDirName),
-		filepath.Join(root, ".magus", harnessDirName),
-	)
-	loaded := map[string]loadedHarness{}
-	var problems []HarnessProblem
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return nil, nil, fmt.Errorf("agent: read harness descriptors in %s: %w", dir, err)
-		}
-		seen := map[string]string{}
-		for _, entry := range entries {
-			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-				continue
-			}
-			source := filepath.Join(dir, entry.Name())
-			body, err := os.ReadFile(source)
-			if err != nil {
-				problems = append(problems, HarnessProblem{Source: source, Reason: "read harness descriptor: " + err.Error()})
-				continue
-			}
-			var d HarnessDescriptor
-			if err := decodeHarnessJSON(body, &d); err != nil {
-				problems = append(problems, HarnessProblem{Source: source, Reason: "parse harness descriptor: " + err.Error()})
-				continue
-			}
-			if err := validateHarnessDescriptor(d); err != nil {
-				problems = append(problems, HarnessProblem{Source: source, ID: d.ID, Reason: "invalid harness descriptor: " + err.Error()})
-				continue
-			}
-			if first, dup := seen[d.ID]; dup {
-				problems = append(problems, HarnessProblem{Source: source, ID: d.ID, Reason: fmt.Sprintf("duplicate harness descriptor ID %q, already loaded from %s", d.ID, first)})
-				continue
-			}
-			seen[d.ID] = source
-			loaded[d.ID] = loadedHarness{descriptor: d, source: source}
-		}
-	}
-	return loaded, problems, nil
+// harnessMissingError explains a miss: no spell is wired for id (or none is
+// registered at all). There is no compat JSON fallback left to check.
+func harnessMissingError(id string) error {
+	return fmt.Errorf("no harness named %q (wire magus\\harness.provider(<spell>) in the root magusfile)", id)
 }
 
 func validateHarnessDescriptor(d HarnessDescriptor) error {
@@ -1115,15 +1001,16 @@ func writeHarnessAtomically(path string, body []byte) error {
 // KnownHarnesses is useful to generic UIs and tests without leaking a fixed
 // provider list into the binary. It returns IDs in deterministic order.
 //
-// wired are magusfile-selected harness spell names (Magus.Harnesses()). They are
-// unioned with JSON descriptors so a spell-only host still appears in
-// doctor/improve without a harnesses/*.json file. A workspace may wire several
-// hosts; bouncing between LLM providers is the intended case.
+// wired are magusfile-selected harness spell names (Magus.Harnesses()) and are
+// the only source of an ID: there is no compat JSON directory left to union
+// them against, so a caller that wants a spell to appear must pass its id. A
+// workspace may wire several hosts; bouncing between LLM providers is the
+// intended case.
 //
-// Omitting wired (or passing a nil/empty slice) means no magusfile providers to
-// union, which is fine. A blank entry inside wired is not: empty and whitespace-
-// only names are rejected rather than skipped, so a bad AddHarness cannot
-// disappear into the union.
+// Omitting wired (or passing a nil/empty slice) means no known harnesses,
+// which is fine. A blank entry inside wired is not: empty and whitespace-only
+// names are rejected rather than skipped, so a bad wiring cannot disappear
+// silently.
 
 // HarnessConfigPaths resolves the config file of every known harness that has one in this
 // checkout, skipping any that cannot be resolved or is not there.
@@ -1155,20 +1042,15 @@ func HarnessConfigPaths(ctx context.Context, root string, wired ...string) []str
 	return slices.Compact(out)
 }
 
+// root is accepted for symmetry with LoadHarness and the rest of this surface
+// (a harness is scoped to a workspace), but this function itself reads nothing
+// from it: wired is the only input.
 func KnownHarnesses(ctx context.Context, root string, wired ...string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	descriptors, err := loadHarnesses(root)
-	if err != nil {
-		return nil, err
-	}
-	seen := make(map[string]struct{}, len(descriptors)+len(wired))
-	ids := make([]string, 0, len(descriptors)+len(wired))
-	for id := range descriptors {
-		seen[id] = struct{}{}
-		ids = append(ids, id)
-	}
+	seen := make(map[string]struct{}, len(wired))
+	ids := make([]string, 0, len(wired))
 	for _, id := range wired {
 		id = strings.TrimSpace(id)
 		if id == "" {

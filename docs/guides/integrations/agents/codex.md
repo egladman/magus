@@ -104,7 +104,7 @@ and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Improving recurring friction](guard.md#improving-recurring-friction).
 
-Or target Codex alone (spell or `harnesses/codex.json` fallback):
+Or target Codex alone:
 
 ```sh
 magus agent harness apply --id codex
@@ -242,19 +242,6 @@ the spell and changing only the import path; then `magus agent harness apply`
 and `verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Improving recurring friction](guard.md#improving-recurring-friction).
-
-`harnesses/codex.json` remains as a fallback when the magusfile does not wire
-the spell. Recurring Magus-owned fragment merges for that JSON path still use:
-
-```sh
-magus agent improve --apply --id codex
-```
-
-That writes only Magus-owned native `PreToolUse` entries in the workspace-local
-JSON configuration and preserves every other setting. It never writes
-user-level configuration, lifecycle entries, templates, compiled guard rules,
-skills, memory, or `AGENTS.md`. Review the JSON diff, then `magus agent harness
-verify --id codex`.
 
 The `Stop` entry is not a guard. It records where the work stands each time a
 turn ends, which is worth having here in particular: a Codex session that runs
