@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -180,21 +181,23 @@ func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.Re
 	return nil
 }
 
-// resolveBackendSpell turns a backend selector into a driver: a .buzz path or a
-// pinned oci:// reference is loaded (and registered) as a spell with handler op
-// support; any other value is a spell name looked up in the registry. The magusfile
-// wires the backend by calling magus.cache.remote(<spell handle>), which records the
-// spell's name.
+// resolveBackendSpell turns a backend selector into a driver: a .buzz path, or the
+// registry path of a spell magus.yaml declares, is loaded (and registered) as a spell
+// with handler op support; any other value is a spell name looked up in the registry.
+// The magusfile wires the backend by calling magus.cache.remote(<spell handle>), which
+// records the spell's name.
 func resolveBackendSpell(ctx context.Context, selector string) (spells.Driver, error) {
+	// Before the registry-path test: a relative file path may carry a dot in its first
+	// element (build.d/cache.buzz) and still name a file.
+	if strings.HasSuffix(selector, ".buzz") {
+		return loadSpellFile(ctx, selector)
+	}
 	if spells.IsRemoteImport(selector) {
-		entry, err := remotespell.EntryPath(ctx, selector)
+		dir, err := remotespell.ImportsFromContext(ctx).Dir(selector)
 		if err != nil {
 			return nil, err
 		}
-		return loadSpellFile(ctx, entry)
-	}
-	if strings.HasSuffix(selector, ".buzz") {
-		return loadSpellFile(ctx, selector)
+		return loadSpellFile(ctx, filepath.Join(dir, "spell.buzz"))
 	}
 	drv, ok := project.DefaultSpellRegistry().Lookup(selector)
 	if !ok {

@@ -15,6 +15,36 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// The spell declarations sit inline beside the reserved keys, so the document reads
+// like the imports it answers, and a strict decode still takes it.
+func TestLoadFileReadsInlineSpellImports(t *testing.T) {
+	path := filepath.Join(t.TempDir(), Filename)
+	require.NoError(t, os.WriteFile(path, []byte(`spells:
+  registries:
+    - host: ghcr.io
+      username: ci
+      password: GITHUB_TOKEN
+  ghcr.io/team/spells/lint:
+    tag: "1.4"
+  magus/spell/go:
+    path: spells/go
+`), 0o644))
+	cfg, err := LoadFile(path, true)
+	require.NoError(t, err)
+	assert.Equal(t, SpellsConfig{
+		Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}},
+		Imports: map[string]SpellImport{
+			"ghcr.io/team/spells/lint": {Tag: "1.4"},
+			"magus/spell/go":           {Path: "spells/go"},
+		},
+	}, cfg.Spells)
+
+	// An unknown field inside one declaration is still refused by name.
+	require.NoError(t, os.WriteFile(path, []byte("spells:\n  ghcr.io/team/spells/lint:\n    digest: sha256:abc\n"), 0o644))
+	_, err = LoadFile(path, false)
+	require.ErrorIs(t, err, types.UnknownConfigKey)
+}
+
 func TestMergeConfig(t *testing.T) {
 	t.Parallel()
 	base := Defaults()

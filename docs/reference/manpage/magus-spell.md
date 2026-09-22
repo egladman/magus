@@ -1,23 +1,23 @@
 ---
 title: magus spell
 generated_from: internal/cli/registry.go
-description: "Pack a spell directory's tracked files as an OCI artifact with the standard provenance annotations, push it under one or more tags, pull and verify a published spell, and list a repository's tags."
-tags: [cli, magus spell, spell, publish, pull, oci, registry, digest, remote spells, credentials]
+description: "Pack a spell directory's tracked files as an OCI artifact with the standard provenance annotations, push it under one or more tags, pull and verify a published spell, list a repository's tags, and check or rewrite the magus.lock pins of the remote spells magus.yaml declares."
+tags: [cli, magus spell, spell, publish, pull, oci, registry, digest, remote spells, credentials, magus.lock, lock, update]
 ---
 
 # magus-spell
 
-Build, publish, pull and list spells as OCI artifacts pinned by digest
+Build, publish, pull and list spells as OCI artifacts, and pin them in magus.lock
 
 ## Synopsis
 
-**magus** spell \<build|push|pull|ls\> [args] [flags]
+**magus** spell \<build|push|pull|ls|lock\> [args] [flags]
 
 ## Description
 
-A spell as an artifact: what one workspace publishes so another pulls it
-pinned by digest, versioned apart from the magus binary. Authoring a spell is
-magus init spell.
+A spell as an artifact: what one workspace publishes so another imports it
+by registry path, pinned by digest in magus.lock and versioned apart from the
+magus binary. Authoring a spell is magus init spell.
 
 Subcommands (the first argument):
 
@@ -29,8 +29,14 @@ build    Pack \<dir\> exactly as push would and print the manifest digest the
            upload. Prints \<registry\>/\<repository\>@sha256:\<digest\>.
   pull     Fetch \<ref\> by tag or digest, verify the manifest and layer digests,
            and print the pinned reference and the directory holding the files:
-           [\<dir\>] when given, otherwise the user cache.
+           [\<dir\>] when given, otherwise the user cache. A bare registry path,
+           as a magusfile imports it, pulls the digest magus.lock pins.
   ls       List \<registry\>/\<repository\>'s tags, following pagination.
+  lock     Check that magus.lock pins every remote spell magus.yaml declares,
+           for its declared tag, and verify each pinned digest; no tag is
+           resolved. --update resolves each tag and rewrites magus.lock, and is
+           what the update charm on the lock-owning target runs. The workspace
+           is not loaded, so credentials resolve through the environment.
 
 Only files the VCS tracks are packed, each with a fixed mode, owner and time,
 and the manifest carries org.opencontainers.image.{title,source,revision,created},
@@ -73,6 +79,11 @@ someone makes it public.
 **--username** *string*
 : The registry username; the password is then read from stdin, overriding spells.registries
 
+### spell lock options
+
+**--update**
+: Ask the registry what each declared tag names now, and rewrite magus.lock
+
 ## Subcommands
 
 **build**
@@ -86,6 +97,9 @@ someone makes it public.
 
 **ls**
 : List a spell repository's tags
+
+**lock**
+: Check magus.lock against magus.yaml, or rewrite it with --update
 
 ## Examples
 
@@ -111,6 +125,12 @@ magus spell pull ghcr.io/owner/repo/spells/cursor:v1.2.0 ./vendor/cursor
 
 ```sh
 magus spell ls ghcr.io/owner/repo/spells/cursor
+```
+
+*Pin every declared remote spell's tag in magus.lock*
+
+```sh
+magus spell lock --update
 ```
 
 ## See Also

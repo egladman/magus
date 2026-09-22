@@ -62,12 +62,13 @@ Prefer wiring the Cursor harness from the root magusfile when you bounce between
 hosts; apply then covers every wired provider:
 
 ```buzz
-import "oci://ghcr.io/egladman/magus/spells/cursor@sha256:<digest>" as cursor
-magus\harness.provider(cursor)
+import "ghcr.io/egladman/magus/spells/cursor";
+magus\harness.provider(cursor);
 ```
 
-The import is pinned by the digest cd's `spell-publish` step prints for a commit,
-so the harness versions apart from your magus binary; see
+Declare the spell in `magus.yaml` with the tag cd's `spell-publish` step pushed, and
+run your lock target with `:update` to pin its digest in `magus.lock`, so the harness
+versions apart from your magus binary; see
 [Remote spells](../../../reference/remote-spells.md).
 
 ```sh
