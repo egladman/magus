@@ -103,7 +103,7 @@ func TestCheckRemoteSpellImports(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	pinned := "oci://ghcr.io/team/spells/x@" + digest.FromBytes([]byte("m")).String()
 
-	assert.NoError(t, checkRemoteSpellImports(t.Context(), `import "spells/local" as local;`))
+	assert.NoError(t, checkRemoteSpellImports(t.Context(), `import "spells/local";`))
 
 	err := checkRemoteSpellImports(t.Context(), `import "oci://ghcr.io/team/spells/x:latest" as x;`)
 	require.ErrorIs(t, err, types.RemoteSpellUnpinned)

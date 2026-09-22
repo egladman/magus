@@ -15,8 +15,8 @@ exec magus describe target lint
 concurrency: 4
 -- magusfile.buzz --
 import "magus";
-import "spells/pg" as pg;
-import "spells/acme" as acme;
+import "spells/pg";
+import "spells/acme";
 magus.project({ "spells": [pg, acme] });
 export fun serve(ctx: magus\Context, args: [str]) > void { pg.serve(); }
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }

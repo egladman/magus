@@ -35,7 +35,7 @@ concurrency: 4
 -- magusfile.buzz --
 import "magus";
 import "fs";
-import "spells/acme" as acme;
+import "spells/acme";
 magus.project({ "spells": [acme], "targets": {"check": {"skip_cache": "test policy"}} });
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile("BODY_RAN", "yes");

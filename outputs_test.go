@@ -180,7 +180,7 @@ func writeCrossOutputWorkspace(t *testing.T) (*Magus, string) {
 	write("site/magusfile.buzz", "")
 	write("producer/magusfile.buzz", `import "magus";
 import "fs";
-import "project/../site" as site;
+import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(site.file("generated.txt"));
@@ -322,7 +322,7 @@ func TestCrossOutputMutualRefIsRejectedAtLoad(t *testing.T) {
 	write("site/magusfile.buzz", "")
 	write("site/src.md", "source")
 	write("renderer/magusfile.buzz", `import "magus";
-import "project/../site" as site;
+import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(site.file("src.md"));
@@ -468,7 +468,7 @@ func TestCrossOutputDiagnosticsCarryCodes(t *testing.T) {
 				"site/magusfile.buzz": "",
 				"site/src.md":         "source",
 				"p1/magusfile.buzz": `import "magus";
-import "project/../site" as site;
+import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(site.file("src.md"));

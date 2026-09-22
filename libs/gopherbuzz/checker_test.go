@@ -19,7 +19,7 @@ func checkSrc(src string) []typeError {
 	if err != nil {
 		return []typeError{{Line: 0, Col: 0, Msg: err.Error()}}
 	}
-	errs, _ := checkWithGlobals(prog, nil, nil, nil, nil, nil, nil)
+	errs, _ := checkWithGlobals(prog, nil, nil, nil, nil, nil, nil, true)
 	return errs
 }
 
@@ -387,7 +387,7 @@ func TestCheck_InjectedGlobalMemberCall(t *testing.T) {
 	// registers none, so exercise checkWithGlobals with a neutral injected name.
 	prog, err := ParseEmbedded(`host.project.register(".");`)
 	require.NoError(t, err, "parse")
-	errs, _ := checkWithGlobals(prog, []string{"host"}, nil, nil, nil, nil, nil)
+	errs, _ := checkWithGlobals(prog, []string{"host"}, nil, nil, nil, nil, nil, true)
 	assert.Emptyf(t, errs, "expected no errors, got:\n%s", fmtErrors(errs))
 }
 
@@ -550,6 +550,65 @@ func TestCheckTypeNoFalsePositives(t *testing.T) {
 	t.Run("reassign int", func(t *testing.T) {
 		noFalsePositive(t, `var x = 1; x = 2; x = x + 3; final __r = x;`, 5)
 	})
+}
+
+// TestCheck_RedundantImportAlias verifies BZZ1008: for an import path resolveImport
+// binds as a single value regardless of aliasing (a "spells/" spell or a "buzz:"
+// stdlib module), an alias equal to the path's last segment binds the same name the
+// import would without it. collectTopLevel computes the default name from the path
+// string alone, so this needs no file on disk (unlike the Session-based import
+// tests below). checkSrc runs embedded (see TestCheck_RedundantImportAliasIsMagusDialectOnly
+// for the strict side of this rule).
+func TestCheck_RedundantImportAlias(t *testing.T) {
+	checkErr(t, `import "spells/harness/codex" as codex;`, `import alias "codex" is redundant, drop `+"`as codex`")
+	// The buzz: stdlib scheme is stripped before comparing, matching resolveImport.
+	checkErr(t, `import "buzz:std" as std;`, `import alias "std" is redundant`)
+}
+
+// TestCheck_RedundantImportAliasIsMagusDialectOnly verifies BZZ1008 fires only in
+// embedded mode (the REPL, magus eval, magusfile loading), never under upstream-strict
+// parsing: upstream's own suite writes `import "buzz:math" as math;` idiomatically
+// (tests/behavior/math.buzz, os.buzz), and gopherbuzz must still accept it there, since
+// "spells/", "project/" and "magus/spell/" are magus's own dialect and upstream never
+// writes them at all. NewSession defaults to strict; TestUpstreamConformance never opts
+// into WithEmbedded, which is what keeps the upstream suite green under this rule.
+func TestCheck_RedundantImportAliasIsMagusDialectOnly(t *testing.T) {
+	// A plain top-level import parses the same either way; only the checker's embedded
+	// flag is under test here, so one parse feeds both checkWithGlobals calls below.
+	const src = `import "buzz:std" as std;`
+	prog, err := Parse(src)
+	require.NoError(t, err)
+
+	errs, _ := checkWithGlobals(prog, nil, nil, nil, nil, nil, nil, true)
+	assert.NotEmptyf(t, errs, "embedded mode must flag the redundant alias")
+
+	errs, _ = checkWithGlobals(prog, nil, nil, nil, nil, nil, nil, false)
+	assert.Emptyf(t, errs, "strict mode must stay silent, got:\n%s", fmtErrors(errs))
+}
+
+// TestCheck_FileImportSameNameAliasIsNotRedundant verifies BZZ1008 stays silent for
+// a plain FILE import (no "spells/", "project/", "magus/spell/" or "buzz:" prefix)
+// even when the alias repeats the path's last segment. resolveImport's file-import
+// branch reads imp.Alias for more than the bound name: an alias execs the file in
+// an isolated sub-session, while no alias flat-merges its globals into this scope,
+// so the alias is what requests isolation and is never redundant there, matching
+// magusfile.buzz's own "badge"/"releaser"/"drift" imports.
+func TestCheck_FileImportSameNameAliasIsNotRedundant(t *testing.T) {
+	checkOK(t, `import "badge" as badge;`)
+	checkOK(t, `import "./tools/drift" as drift;`)
+}
+
+// TestCheck_ImportAliasRenameIsNotRedundant verifies a real rename (the alias
+// differs from the path's last segment) is untouched.
+func TestCheck_ImportAliasRenameIsNotRedundant(t *testing.T) {
+	checkOK(t, `import "spells/harness/claude-code" as claude;`)
+}
+
+// TestCheck_FlatImportUnderscoreIsNotRedundant verifies `as _` (upstream's flat
+// import) is never flagged: it requests a different binding shape, not a spelling
+// of the default name.
+func TestCheck_FlatImportUnderscoreIsNotRedundant(t *testing.T) {
+	checkOK(t, `import "spells/harness/codex" as _;`)
 }
 
 // writeModule drops a .buzz file into dir for an import test.
@@ -1219,7 +1278,7 @@ func warningsOf(t *testing.T, src string) []typeError {
 	t.Helper()
 	prog, err := ParseEmbedded(src)
 	require.NoError(t, err)
-	errs, warnings := checkWithGlobals(prog, nil, nil, nil, nil, nil, nil)
+	errs, warnings := checkWithGlobals(prog, nil, nil, nil, nil, nil, nil, true)
 	require.Empty(t, errs, "the fixture must type-check cleanly, or the warning is not what failed it")
 	return warnings
 }

@@ -8,7 +8,7 @@
 //
 // Import the one you use:
 //
-//   import "magus/spell/podman" as podman;
+//   import "magus/spell/podman";
 //
 // A workspace that runs both (a laptop on podman, CI on docker) imports both and picks in
 // the magusfile; magus does not detect a container runtime for you.

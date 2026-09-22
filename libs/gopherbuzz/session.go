@@ -779,7 +779,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 		globals = append(globals, name)
 	}
 	checkStart := time.Now()
-	errs, checkWarnings := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint())
+	errs, checkWarnings := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error

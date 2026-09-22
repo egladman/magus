@@ -860,7 +860,7 @@ func TestCrossFileInputs(t *testing.T) {
 	write("lib/go.mod", "module lib\n")
 	// The consumer declares a cross-project AND a same-project input on the same target.
 	write("consumer/app/main.go", "package app\n")
-	write("consumer/magusfile.buzz", `import "project/../lib" as lib;
+	write("consumer/magusfile.buzz", `import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file("go.mod"), "app/**");
 }

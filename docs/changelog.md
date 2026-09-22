@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
+  `import "path" as alias;` errors when `alias` repeats the default binding, for
+  `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
+  alias isolates it, so it is exempt, as is `as _`. The root magusfile and built-in
+  harness spells dropped their redundant `as codex`, `as cursor`, `as opencode`.
 - **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
   loads offline once cached; MGS1041 refuses a tag alone, MGS1042 mismatched bytes.
   `magus spell build|push|pull|ls` build a reproducible digest, push under several tags,

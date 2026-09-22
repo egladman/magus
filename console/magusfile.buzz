@@ -14,7 +14,7 @@ import "vcs";
 // Reference drawer imports from source. Affected tracking is glob-based (not
 // import-graph), so this handle lets lint pull in textsearch.lint (type-check + biome) - a
 // lib edit then marks the console affected and re-checks it through the target graph.
-import "project/../libs/textsearch" as textsearch;
+import "project/../libs/textsearch";
 import "project/.." as root;
 
 // lcov merges the per-process reports into the one figure the floor gates on.
