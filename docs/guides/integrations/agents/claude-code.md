@@ -71,7 +71,7 @@ the workspace, change only the import path (for example
 `import "harness/claude-code" as claude`), edit the workspace Buzz, then re-run
 apply and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
 Or target Claude Code alone (spell or `harnesses/claude-code.json` fallback):
 
@@ -162,14 +162,14 @@ This host is a Buzz harness spell. Adapt without Magus source edits by forking
 the spell and changing only the import path; then `magus agent harness apply`
 and `verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
 `harnesses/claude-code.json` remains as a fallback when the magusfile does not
 wire the spell. Recurring Magus-owned fragment merges for that JSON path still
 use:
 
 ```sh
-magus agent improve --apply --id claude-code
+magus agent harness apply --id claude-code
 ```
 
 That writes only Magus-owned native `PreToolUse` entries in the workspace-local
@@ -370,8 +370,8 @@ outputs and unclaimed paths, the live leases with the command that binds each
 one, the last recorded run's failures with the ref that holds their output, the
 guard wiring, and where the rules live.
 If recurring guard evidence crossed its review threshold, it also receives one
-improvement-review line with `magus agent improve`; it is a proposal, never an
-automatic instruction or memory edit.
+line pointing to `magus doctor`'s recurring-guard-denials check; it states facts,
+never an automatic instruction or memory edit.
 
 ```json
 {

@@ -688,17 +688,17 @@ A host without a hook cannot be observed: no local CLI can discover commands
 another process did not report. The coverage boundary is explicit rather than
 guessed.
 
-## Improving recurring friction
+## Recurring guard friction
 
-The trail is evidence, not automatic self-modification. By default, `magus agent
-improve` is read-only. It deduplicates only repeated stable denial rules (three
-times in one host session, or across two sessions) and proposes a destination:
-discard it, improve a local skill, adapt a host harness, or report an upstream
-issue.
+The trail is evidence, not automatic self-modification. `magus doctor`'s
+recurring-guard-denials check is read-only. It deduplicates repeated stable
+denial rules (three times in one host session, or the same pattern across two
+sessions) and reports the facts: rule, surface, denial count, session count, and
+followed rate. It proposes no destination; a human decides whether to discard
+the pattern, adapt a local skill or host harness, or report an upstream issue.
 
 ```sh
-magus agent improve
-magus agent improve --session <host-session-id> -o json
+magus doctor
 ```
 
 ### Buzz harness spells (preferred)
@@ -720,17 +720,17 @@ That is the ownership switch: Magus ships the default spell; your import path
 chooses which tree apply reads. See the magus-workspace-rules skill section
 "Adapting a Buzz harness".
 
-### JSON descriptors (`improve --apply`)
+### JSON descriptors (`harness apply`)
 
 For hosts still described by `harnesses/<id>.json`, a human may apply
 Magus-owned fragment merges:
 
 ```sh
-magus agent improve --apply --id claude-code
-magus agent improve --apply --id codex
+magus agent harness apply --id claude-code
+magus agent harness apply --id codex
 ```
 
-`--apply` is the explicit authorization to write. It updates only Magus-owned
+`harness apply` is the explicit authorization to write. It updates only Magus-owned
 host `PreToolUse` entries in the workspace-local JSON configuration for the
 selected host and preserves all other settings. It never creates or changes a
 user-level host config, compiled guard rules, installed skills, `AGENTS.md`, or
