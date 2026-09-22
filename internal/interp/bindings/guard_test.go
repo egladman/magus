@@ -13,7 +13,7 @@ import (
 func TestBuildGuard(t *testing.T) {
 	t.Run("valid shell rule records onto the registry", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil)
+		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil)
 
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StrValue("no-curl-prod"))
@@ -32,7 +32,7 @@ func TestBuildGuard(t *testing.T) {
 
 	t.Run("bash alias defaults dialect to bash", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil)
+		guard := buildGuard(workspace.ContextWithRegistry(context.Background(), reg), nil, nil)
 
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StrValue("x"))
@@ -46,7 +46,7 @@ func TestBuildGuard(t *testing.T) {
 	})
 
 	t.Run("invalid dialect is rejected", func(t *testing.T) {
-		guard := buildGuard(context.Background(), nil)
+		guard := buildGuard(context.Background(), nil, nil)
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StrValue("x"))
 		rule.MapSet("decision", vm.StrValue("deny"))
@@ -59,7 +59,7 @@ func TestBuildGuard(t *testing.T) {
 	})
 
 	t.Run("bad decision is rejected", func(t *testing.T) {
-		guard := buildGuard(context.Background(), nil)
+		guard := buildGuard(context.Background(), nil, nil)
 		rule := vm.NewMap()
 		rule.MapSet("name", vm.StrValue("x"))
 		rule.MapSet("decision", vm.StrValue("warn"))

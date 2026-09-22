@@ -149,7 +149,7 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 	magus.MapSet("review", buildReview(ctx, obs))
 	magus.MapSet("workspace", buildWorkspace(ctx, obs))
 	magus.MapSet("job", buildJob(obs))
-	guard := buildGuard(ctx, obs)
+	guard := buildGuard(ctx, sess, obs)
 	harness := buildHarness(ctx, obs)
 	magus.MapSet("guard", guard)
 	magus.MapSet("harness", harness)
@@ -247,6 +247,7 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 		ci.MapSet("provider", magusfileOnly(obs, `magus\ci.provider`))
 		guard.MapSet("shell", magusfileOnly(obs, `magus\guard.shell`))
 		guard.MapSet("bash", magusfileOnly(obs, `magus\guard.bash`))
+		guard.MapSet("spawn", magusfileOnly(obs, `magus\guard.spawn`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
 	}
 	return magus

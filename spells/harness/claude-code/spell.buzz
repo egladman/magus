@@ -101,6 +101,15 @@ fun claude_observe_command() > str {
 // in step" used to be a comment; the invariant test below is what keeps them.
 final SKILL_MATCHER = "Skill";
 
+// Both names the spawn tool has had across Claude Code releases. The same matcher runs
+// after the call too: the finished call's response carries the id the child was given,
+// which is what lets that child's own spawns name their parent.
+final SPAWN_MATCHER = "Agent|Task";
+
+// A message to a subagent that already exists, so a workspace spawn rule sees every
+// continuation as well as every spawn.
+final CONTINUE_MATCHER = "SendMessage";
+
 fun claude_agent_command() > str {
     // --observes-skill-loads because THIS config wires SKILL_MATCHER. A rule that requires
     // a skill before a spawn can only be satisfied where loads are reported, so the wiring
@@ -149,7 +158,13 @@ fun claude_entries() > [any] {
                 claude_pretool_entry("^mcp__magus__", claude_guard_command()),
                 claude_pretool_entry("Read", claude_observe_command()),
                 claude_pretool_entry(SKILL_MATCHER, claude_guard_command()),
-                claude_pretool_entry("Agent|Task", claude_agent_command()),
+                claude_pretool_entry(SPAWN_MATCHER + "|" + CONTINUE_MATCHER, claude_agent_command()),
+            ],
+        },
+        {
+            "path": ["hooks", "PostToolUse"],
+            "entries": [
+                claude_pretool_entry(SPAWN_MATCHER, claude_guard_command()),
             ],
         },
         {
@@ -265,6 +280,17 @@ test "no entry carries an environment assignment" {
     }
 }
 
+test "the spawn entry also sees every continuation" {
+    final pre = claude_entries()[0];
+    var matched = "";
+    foreach (entry in pre["entries"] as [any]) {
+        foreach (hook in entry["hooks"] as [any]) {
+            if (((hook["command"] as? str) ?? "") == claude_agent_command()) { matched = (entry["matcher"] as? str) ?? ""; }
+        }
+    }
+    assert\equal(matched, "Agent|Task|SendMessage", "spawn and continue share one entry, and so one verdict path");
+}
+
 test "the one per-entry flag rides after the argv separator" {
     // Only the spawn surface declares a capability, and it is the only entry that differs
     // from the bare guard command at all.
@@ -331,9 +357,9 @@ test "the interpreter is the same string on every machine" {
     assert\isTrue(claude_checkpoint_command().startsWith("{chosen} buzz"), "Stop checkpoint");
 }
 
-test "harness_entries covers PreToolUse SessionStart and Stop" {
+test "harness_entries covers PreToolUse PostToolUse SessionStart and Stop" {
     final entries = claude_entries();
-    assert\equal(entries.len(), 3, "three managed path blocks");
+    assert\equal(entries.len(), 4, "four managed path blocks");
     final pre = entries[0];
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
@@ -351,10 +377,16 @@ test "harness_entries covers PreToolUse SessionStart and Stop" {
         final matcher = entry["matcher"] as? str;
         assert\isTrue(matcher != null and matcher!.len() > 0, "matcher present");
     }
-    final start = entries[1];
+    final post = entries[1];
+    final post_path = post["path"] as [str];
+    assert\equal(post_path[1], "PostToolUse", "a finished spawn reports its child's id");
+    final post_entries = post["entries"] as [any];
+    assert\equal(post_entries.len(), 1, "only the spawn matcher runs after the call");
+    assert\equal(post_entries[0]["matcher"] as? str, SPAWN_MATCHER, "the same tools the spawn surface matches");
+    final start = entries[2];
     final start_path = start["path"] as [str];
     assert\equal(start_path[1], "SessionStart", "rehydrate on compact");
-    final stop = entries[2];
+    final stop = entries[3];
     final stop_path = stop["path"] as [str];
     assert\equal(stop_path[1], "Stop", "checkpoint");
 }

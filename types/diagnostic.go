@@ -249,6 +249,11 @@ const (
 	// served that way by a registry, or found that way in the cache while MAGUS_OFFLINE
 	// forbids a fresh pull. Nothing loads.
 	RemoteSpellDigestMismatch DiagnosticCode = "MGS1042"
+	// GuardSpawnMisdeclared is a magus\guard.spawn registration the workspace cannot use:
+	// one that is not a function, a second one in the same load, or one outside the root
+	// magusfile. The load stops, because a rule that silently did not register is a guard
+	// that looks enforced and is not.
+	GuardSpawnMisdeclared DiagnosticCode = "MGS1045"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -487,7 +492,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
-	UnknownConfigKey, RemoteSpellUnpinned, RemoteSpellDigestMismatch,
+	UnknownConfigKey, RemoteSpellUnpinned, RemoteSpellDigestMismatch, GuardSpawnMisdeclared,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

@@ -7,9 +7,12 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -198,8 +201,31 @@ func runHarnessChange(ctx context.Context, rootOverride string, args []string, v
 		if err := writeHarnessOutput(os.Stdout, update); err != nil {
 			return err
 		}
+		recordHarnessChange(ctx, root, verb, update)
 	}
 	return nil
+}
+
+// recordHarnessChange appends a host-config change to the activity trail. The hook wiring
+// is what lets the guard see an agent at all, so its arrival and removal belong beside the
+// guard_policy rows for the rules it carries. A plan or a no-op records nothing.
+func recordHarnessChange(ctx context.Context, root, verb string, update agent.HarnessUpdate) {
+	if !update.Changed || update.Planned {
+		return
+	}
+	base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return
+	}
+	trail.Append(ctx, base, trail.Event{
+		Ts:        time.Now().UnixMilli(),
+		Kind:      trail.KindConfigChange,
+		Actor:     "cli",
+		Workspace: root,
+		Action:    "harness." + verb,
+		Outcome:   trail.OutcomeOK,
+		Preview:   update.ID + " " + update.Path,
+	})
 }
 
 func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []string) error {

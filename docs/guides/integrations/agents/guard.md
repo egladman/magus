@@ -201,6 +201,10 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   bounce between tools). Optional `dialect` selects the mvdan/sh parser variant
   for outer parse when judging rules; the last declared non-empty dialect wins.
   `magus\guard.bash` remains as a deprecated alias that defaults dialect to bash.
+- **A workspace spawn rule** (`magus\guard.spawn(fun)` in the root magusfile): one
+  Buzz function called on every subagent spawn and continuation with a normalized
+  request, answering allow, advise or deny. Strengthen only, like the shell rules.
+  magus ships none; see [magus\guard.spawn](../../../reference/guard-spawn.md).
 
 | dialect | parser                        |
 | ------- | ----------------------------- |
@@ -752,7 +756,9 @@ rather than a command or a file path is a lease handoff: it appends an
 `agent_spawn` event and returns `pass` without evaluating a rule, because there
 is no command and no path to judge, and a prompt that merely mentions a denied
 command would otherwise block the lease that describes it. See
-[Leases](leases.md).
+[Leases](leases.md). The spawn rules that do run read session state, and a
+workspace's own [magus\guard.spawn](../../../reference/guard-spawn.md) function
+reads the normalized request; none of them runs the command rules over the prose.
 
 ## Measuring adoption
 
