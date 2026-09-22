@@ -84,9 +84,13 @@ Prefer wiring the Codex harness from the root magusfile when you bounce between
 hosts; apply then covers every wired provider:
 
 ```buzz
-import "spells/harness/codex" as codex
+import "oci://ghcr.io/egladman/magus/spells/codex@sha256:<digest>" as codex
 magus\harness.provider(codex)
 ```
+
+The import is pinned by the digest cd's `spell-publish` step prints for a commit,
+so the harness versions apart from your magus binary; see
+[Remote spells](../../../reference/remote-spells.md).
 
 ```sh
 magus agent harness apply

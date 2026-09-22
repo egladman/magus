@@ -30,6 +30,7 @@ function __magus_subcommands
         mcp        'print how to reach the MCP server (served by the daemon, not a standalone command)' \
         status     'inspect the concurrency pool of a running parent magus' \
         buzz       'run a Buzz script (Buzz stdlib + every magus host module)' \
+        spell      'build, push, pull and list spells as OCI artifacts pinned by digest (spell build|push|pull|ls)' \
         agent      'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
         init       'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
         doctor     'validate the workspace' \

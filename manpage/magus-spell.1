@@ -1,0 +1,144 @@
+.TH MAGUS-SPELL 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-spell \- Build, publish, pull and list spells as OCI artifacts pinned by digest
+.SH SYNOPSIS
+.B magus
+.RI "spell <build|push|pull|ls> [args] [flags]"
+.SH DESCRIPTION
+A spell as an artifact: what one workspace publishes so another pulls it
+pinned by digest, versioned apart from the magus binary. Authoring a spell is
+magus init spell.
+.PP
+Subcommands (the first argument):
+.PP
+build    Pack <dir> exactly as push would and print the manifest digest the
+           push would produce, without touching the network. \-\-out writes the
+           layer tar too.
+  push     Pack <dir> as one uncompressed tar layer and push it to <ref>, a
+           <registry>/<repository>:<tag>, then under each \-\-tag with no second
+           upload. Prints <registry>/<repository>@sha256:<digest>.
+  pull     Fetch <ref> by tag or digest, verify the manifest and layer digests,
+           and print the pinned reference and the directory holding the files:
+           [<dir>] when given, otherwise the user cache.
+  ls       List <registry>/<repository>'s tags, following pagination.
+.PP
+Only files the VCS tracks are packed, each with a fixed mode, owner and time,
+and the manifest carries org.opencontainers.image.{title,source,revision,created},
+created being the revision's commit time (SOURCE_DATE_EPOCH overrides), so one
+commit builds to one digest on every machine. <dir> must hold a tracked
+spell.buzz; a tracked symlink is refused.
+.PP
+Credentials: the spells.registries entry in magus.yaml for the reference's host
+names a username and a secret reference, resolved through the workspace's
+secret provider. \-\-username overrides it and reads the password from stdin.
+With neither, requests are anonymous. A new GHCR package is private until
+someone makes it public.
+.SS spell build options
+.RS
+.TP
+\fB\-\-out\fR \fIstring\fR
+Also write the packed layer (an uncompressed tar) to this file
+.TP
+\fB\-\-source\fR \fIstring\fR
+The org.opencontainers.image.source URL; default: the VCS remote as https
+.RE
+.SS spell push options
+.RS
+.TP
+\fB\-\-source\fR \fIstring\fR
+The org.opencontainers.image.source URL; default: the VCS remote as https
+.TP
+\fB\-\-tag\fR \fIstring\fR
+Another tag to write the same manifest under; repeatable
+.TP
+\fB\-\-username\fR \fIstring\fR
+The registry username; the password is then read from stdin, overriding spells.registries
+.RE
+.SS spell pull options
+.RS
+.TP
+\fB\-\-username\fR \fIstring\fR
+The registry username; the password is then read from stdin, overriding spells.registries
+.RE
+.SS spell ls options
+.RS
+.TP
+\fB\-\-username\fR \fIstring\fR
+The registry username; the password is then read from stdin, overriding spells.registries
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBbuild\fR
+Pack a spell directory and print the manifest digest a push would produce
+.TP
+\fBpush\fR
+Push a spell directory's tracked files as an OCI artifact and print its pinned reference
+.TP
+\fBpull\fR
+Fetch and verify a published spell into the cache or a directory
+.TP
+\fBls\fR
+List a spell repository's tags
+.RE
+.SH EXAMPLES
+\fIPrint the digest a push of this commit would produce\fR
+.PP
+.EX
+magus spell build spells/harness/cursor
+.EE
+.PP
+\fIPublish under a version and a floating tag\fR
+.PP
+.EX
+magus spell push spells/harness/cursor ghcr.io/owner/repo/spells/cursor:v1.2.0 --tag latest
+.EE
+.PP
+\fIPull a published spell into a directory\fR
+.PP
+.EX
+magus spell pull ghcr.io/owner/repo/spells/cursor:v1.2.0 ./vendor/cursor
+.EE
+.PP
+\fIList a spell repository's tags\fR
+.PP
+.EX
+magus spell ls ghcr.io/owner/repo/spells/cursor
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-events\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-job\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

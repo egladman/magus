@@ -35,6 +35,7 @@ var All = []Command{
 	completionCommand,
 	manCommand,
 	initCommand,
+	spellCommand,
 	agentCommand,
 	selfCommand,
 	versionCommand,
@@ -673,6 +674,81 @@ Subcommands (the first argument):
 		{"Open target dependency graph", "magus graph export --open --targets"},
 		{"Scope target graph to one project", "magus graph export --open --targets docs"},
 		{"Print the URL instead of opening", "magus graph export --open --targets --print"},
+	},
+}
+
+var spellCommand = Command{
+	Name:        "spell",
+	Short:       "Build, publish, pull and list spells as OCI artifacts pinned by digest",
+	Description: "Pack a spell directory's tracked files as an OCI artifact with the standard provenance annotations, push it under one or more tags, pull and verify a published spell, and list a repository's tags.",
+	Tags:        []string{"cli", "magus spell", "spell", "publish", "pull", "oci", "registry", "digest", "remote spells", "credentials"},
+	Long: `A spell as an artifact: what one workspace publishes so another pulls it
+pinned by digest, versioned apart from the magus binary. Authoring a spell is
+magus init spell.
+
+Subcommands (the first argument):
+
+  build    Pack <dir> exactly as push would and print the manifest digest the
+           push would produce, without touching the network. --out writes the
+           layer tar too.
+  push     Pack <dir> as one uncompressed tar layer and push it to <ref>, a
+           <registry>/<repository>:<tag>, then under each --tag with no second
+           upload. Prints <registry>/<repository>@sha256:<digest>.
+  pull     Fetch <ref> by tag or digest, verify the manifest and layer digests,
+           and print the pinned reference and the directory holding the files:
+           [<dir>] when given, otherwise the user cache.
+  ls       List <registry>/<repository>'s tags, following pagination.
+
+Only files the VCS tracks are packed, each with a fixed mode, owner and time,
+and the manifest carries org.opencontainers.image.{title,source,revision,created},
+created being the revision's commit time (SOURCE_DATE_EPOCH overrides), so one
+commit builds to one digest on every machine. <dir> must hold a tracked
+spell.buzz; a tracked symlink is refused.
+
+Credentials: the spells.registries entry in magus.yaml for the reference's host
+names a username and a secret reference, resolved through the workspace's
+secret provider. --username overrides it and reads the password from stdin.
+With neither, requests are anonymous. A new GHCR package is private until
+someone makes it public.`,
+	Usage: "magus spell <build|push|pull|ls> [args] [flags]",
+	Children: []Command{
+		{
+			Name:  "build",
+			Short: "Pack a spell directory and print the manifest digest a push would produce",
+			Flags: []Flag{
+				{Name: "out", Kind: FlagString, Doc: "Also write the packed layer (an uncompressed tar) to this file"},
+				{Name: "source", Kind: FlagString, Doc: "The org.opencontainers.image.source URL; default: the VCS remote as https"},
+			},
+		},
+		{
+			Name:  "push",
+			Short: "Push a spell directory's tracked files as an OCI artifact and print its pinned reference",
+			Flags: []Flag{
+				{Name: "username", Kind: FlagString, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
+				{Name: "tag", Kind: FlagCustom, Doc: "Another tag to write the same manifest under; repeatable"},
+				{Name: "source", Kind: FlagString, Doc: "The org.opencontainers.image.source URL; default: the VCS remote as https"},
+			},
+		},
+		{
+			Name:  "pull",
+			Short: "Fetch and verify a published spell into the cache or a directory",
+			Flags: []Flag{
+				{Name: "username", Kind: FlagString, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
+			},
+		},
+		{
+			Name:  "ls",
+			Short: "List a spell repository's tags",
+			Flags: []Flag{
+				{Name: "username", Kind: FlagString, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
+			},
+		},
+	},
+	Examples: []Example{
+		{"Print the digest a push of this commit would produce", "magus spell build spells/harness/cursor"},
+		{"Publish under a version and a floating tag", "magus spell push spells/harness/cursor ghcr.io/owner/repo/spells/cursor:v1.2.0 --tag latest"},
+		{"Pull a published spell into a directory", "magus spell pull ghcr.io/owner/repo/spells/cursor:v1.2.0 ./vendor/cursor"},
+		{"List a spell repository's tags", "magus spell ls ghcr.io/owner/repo/spells/cursor"},
 	},
 }
 

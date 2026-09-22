@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 type rootWorkspace struct {
@@ -91,4 +93,24 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 			t.Cleanup(func() { _ = load.Session.Close() })
 		})
 	}
+}
+
+// A remote spell is pulled and verified before Exec, so a bad pin stops the load with
+// its code rather than surfacing later as an unbound name. The pull itself is
+// internal/spell/remote's to test; MAGUS_OFFLINE keeps this one off the network.
+func TestCheckRemoteSpellImports(t *testing.T) {
+	t.Setenv("MAGUS_OFFLINE", "1")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	pinned := "oci://ghcr.io/team/spells/x@" + digest.FromBytes([]byte("m")).String()
+
+	assert.NoError(t, checkRemoteSpellImports(t.Context(), `import "spells/local" as local;`))
+
+	err := checkRemoteSpellImports(t.Context(), `import "oci://ghcr.io/team/spells/x:latest" as x;`)
+	require.ErrorIs(t, err, types.RemoteSpellUnpinned)
+
+	err = checkRemoteSpellImports(t.Context(), `import "`+pinned+`";`)
+	require.ErrorContains(t, err, "a remote spell must be aliased")
+
+	err = checkRemoteSpellImports(t.Context(), `import "`+pinned+`" as x;`)
+	require.ErrorContains(t, err, "is not cached and MAGUS_OFFLINE is set", "the import reaches the resolver")
 }

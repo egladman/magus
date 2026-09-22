@@ -14,9 +14,11 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -332,6 +334,32 @@ func spellImportNames(src string) []string {
 	return handles
 }
 
+// checkRemoteSpellImports pulls and verifies every remote spell src imports, so the
+// resolver that later binds each one only reads a verified cache entry. A parse error
+// yields nil: Exec re-parses and reports it with position.
+func checkRemoteSpellImports(ctx context.Context, src string) error {
+	if !strings.Contains(src, `"`+spells.RemotePrefix) {
+		return nil
+	}
+	prog, err := buzz.ParseEmbedded(src)
+	if err != nil {
+		return nil //nolint:nilerr // Exec reports the syntax error
+	}
+	for _, stmt := range prog.Stmts {
+		imp, ok := stmt.(*ast.ImportStmt)
+		if !ok || !spells.IsRemoteImport(imp.Path) {
+			continue
+		}
+		if imp.Alias == "" || imp.Alias == "_" {
+			return fmt.Errorf("import %q: a remote spell must be aliased: add `as <name>`", imp.Path)
+		}
+		if _, err := remotespell.EntryPath(ctx, imp.Path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // importBoundNames maps each import's bound namespace identifier to its path. A flat
 // import (`as _`) binds no name; an alias binds itself; a plain import binds the path's
 // last segment. Returns nil on a parse error (Exec re-parses and reports it).
@@ -575,6 +603,12 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 				_ = buzzSess.Close()
 				return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
 			}
+		}
+		// The module resolver has no error channel, so a remote spell is fetched and
+		// verified here, where a bad pin can stop the load with its code.
+		if err := checkRemoteSpellImports(ctx, code); err != nil {
+			_ = buzzSess.Close()
+			return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
 		}
 		// Reject a call magus no longer binds before Exec, so the magusfile fails at
 		// load naming the migration rather than at run time as "null is not callable"

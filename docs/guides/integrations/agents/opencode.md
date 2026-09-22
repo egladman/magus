@@ -33,9 +33,13 @@ Prefer wiring the OpenCode harness from the root magusfile so skills install
 and multi-host apply see it beside the other hosts:
 
 ```buzz
-import "spells/harness/opencode" as opencode
+import "oci://ghcr.io/egladman/magus/spells/opencode@sha256:<digest>" as opencode
 magus\harness.provider(opencode)
 ```
+
+The import is pinned by the digest cd's `spell-publish` step prints for a commit,
+so the harness versions apart from your magus binary; see
+[Remote spells](../../../reference/remote-spells.md).
 
 The spell is skills-only (empty config path): `magus agent harness apply` writes
 nothing for OpenCode, and verify does not invent a stamp JSON for Magus to check.

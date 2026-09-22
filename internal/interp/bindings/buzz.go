@@ -100,6 +100,9 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		if v, ok := resolveProjectImport(ctx, importPath, ext); ok {
 			return v, true
 		}
+		if spells.IsRemoteImport(importPath) {
+			return resolveRemoteSpellImport(ctx, importPath)
+		}
 		return resolveLocalSpellImport(ctx, importPath)
 	})
 }

@@ -154,6 +154,31 @@ type SpellsConfig struct {
 	// its import path here with a reason permits the shadow deliberately. `magus
 	// doctor` flags an entry whose shadow no longer exists, so stale reasons are pruned.
 	AllowShadow []ShadowAck `json:"allow_shadow" yaml:"allow_shadow"`
+	// Registries are the credentials `magus spell` verbs present to a container
+	// registry, one entry per host. A registry with no entry is reached anonymously.
+	Registries []SpellRegistry `json:"registries" yaml:"registries" validate:"unique=Host,dive"`
+}
+
+// SpellRegistry authenticates to one registry host. Password is a secret REFERENCE,
+// never the value: it resolves through the workspace's selected secret provider
+// exactly as magus\secret.read does, so under the built-in provider it names an
+// environment variable (GITHUB_TOKEN for ghcr.io in Actions), and under a provider
+// spell it is that provider's own path.
+type SpellRegistry struct {
+	// Host is the registry as a reference spells it: "ghcr.io", "localhost:5000".
+	Host     string `json:"host" yaml:"host" validate:"required,registry_host"`
+	Username string `json:"username" yaml:"username" validate:"required"`
+	Password string `json:"password" yaml:"password" validate:"required"`
+}
+
+// Registry returns the entry for host, and whether there is one.
+func (s SpellsConfig) Registry(host string) (SpellRegistry, bool) {
+	for _, r := range s.Registries {
+		if r.Host == strings.ToLower(host) {
+			return r, true
+		}
+	}
+	return SpellRegistry{}, false
 }
 
 // ShadowAck acknowledges one intentional spell shadow. Name is the import path the

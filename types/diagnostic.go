@@ -242,6 +242,13 @@ const (
 	// load only warned and carried on, so a file that loaded then can stop the load now,
 	// and the code is what links that failure to the page saying why it changed.
 	UnknownConfigKey DiagnosticCode = "MGS1040"
+	// RemoteSpellUnpinned is an oci:// spell import with no manifest digest. A tag can be
+	// moved, so the bytes a workspace runs could change under an unchanged magusfile.
+	RemoteSpellUnpinned DiagnosticCode = "MGS1041"
+	// RemoteSpellDigestMismatch is a pinned spell whose bytes do not hash to the pin:
+	// served that way by a registry, or found that way in the cache while MAGUS_OFFLINE
+	// forbids a fresh pull. Nothing loads.
+	RemoteSpellDigestMismatch DiagnosticCode = "MGS1042"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -480,7 +487,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
-	UnknownConfigKey,
+	UnknownConfigKey, RemoteSpellUnpinned, RemoteSpellDigestMismatch,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

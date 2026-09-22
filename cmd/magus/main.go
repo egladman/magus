@@ -897,6 +897,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return refsCmd(ctx, root, subArgs)
 	case "graph":
 		return graphCmd(ctx, root, subArgs)
+	case "spell":
+		return spellCmd(ctx, root, subArgs)
 	case "watch":
 		return watchCmd(ctx, root, rc, subArgs)
 	case "events":

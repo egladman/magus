@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"sort"
+	"strings"
 )
 
 // Driver is implemented by both spells (*Spell) and MCP tools.
@@ -468,6 +469,18 @@ func NewSpell(name string, opts ...Option) *Spell {
 
 // ModulePrefix is the import namespace every spell is reachable under.
 const ModulePrefix = "magus/spell/"
+
+// RemotePrefix starts a spell import published as an OCI artifact and pinned by
+// digest: `import "oci://<registry>/<repository>@sha256:<hex>" as name`.
+// internal/spell/remote resolves it.
+const RemotePrefix = "oci://"
+
+// IsRemoteImport reports whether importPath names a remote spell. It does not
+// validate the reference; the resolver does, so a malformed one reaches a coded
+// error instead of the file search.
+func IsRemoteImport(importPath string) bool {
+	return strings.HasPrefix(importPath, RemotePrefix)
+}
 
 // ModulePath is the literal a magusfile writes to bind this spell's handle:
 // ModulePath("go") is "magus/spell/go", for `import "magus/spell/go"`.

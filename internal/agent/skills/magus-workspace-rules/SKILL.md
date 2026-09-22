@@ -139,13 +139,15 @@ A harness written as a Buzz spell is selected by an **import path** in the root
 magusfile, then wired with `{{buzz "harness.provider"}}`. Magus does not own your
 copy of that spell once you point the import at a workspace path.
 
-Shipped (Magus-owned) path:
+Shipped (Magus-owned) harnesses are not compiled into the binary. They are
+published as OCI artifacts and imported pinned by manifest digest, so a harness
+versions apart from the binary:
 
 ```buzz
-import "spells/harness/cursor" as cursor
-import "spells/harness/codex" as codex
-import "spells/harness/claude-code" as claude
-import "spells/harness/opencode" as opencode
+import "oci://ghcr.io/egladman/magus/spells/cursor@sha256:<digest>" as cursor
+import "oci://ghcr.io/egladman/magus/spells/codex@sha256:<digest>" as codex
+import "oci://ghcr.io/egladman/magus/spells/claude-code@sha256:<digest>" as claude
+import "oci://ghcr.io/egladman/magus/spells/opencode@sha256:<digest>" as opencode
 {{buzz "harness.provider"}}(cursor)
 {{buzz "harness.provider"}}(codex)
 {{buzz "harness.provider"}}(claude)
@@ -163,16 +165,17 @@ Workspace-owned adaptation - change the import path, keep the provider call:
 3. Edit the workspace Buzz spell: matchers, managed host-config fragments, the
    guard command string, skills form, `harness_mcp` (MCP setup hint / docs
    pointer / host CLI sketch) - whatever the host needs. Do not edit Magus Go,
-   embedded `spells/` inside a release binary, or stamped skills.
+   the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
+   skills.
 4. Run `{{cmd "agent harness apply"}}` (or `--id <id>`) and
    `{{cmd "agent harness verify"}}`. Apply prints MCP setup guidance only; the user owns host MCP client
    config. The token stays a secret ref (`MAGUS_MCP_TOKEN`). Commit the
    magusfile import change and the forked spell together.
 
 {{if .Full}}That is the whole self-improvement surface for Buzz harnesses: the import path
-is the ownership switch. A later Magus upgrade can change the shipped spell under
-`spells/harness/...`; your workspace fork is unaffected until you deliberately
-rebase it. Additive policy that is not host-shaped stays in
+is the ownership switch. A Magus upgrade never changes a pinned harness; a newer
+shipped spell arrives only when someone moves the pin, and your workspace fork is
+unaffected until you deliberately rebase it. Additive policy that is not host-shaped stays in
 `{{buzz "guard.shell"}}({...})`, not in the harness spell.{{end}}
 
 JSON descriptors (`harnesses/<id>.json`) are the older sibling. For those, a

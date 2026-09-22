@@ -70,6 +70,8 @@ import "project/libs/testlayout" as testlayout;
 // engine reads the parsed config (magus.yaml, then env, then flags). `insecure: false`
 // in magus.yaml with the env var set wires a backend here that the engine then refuses.
 import "spells/github/actions" as github;
+// TODO: switch these to the pinned oci:// imports spell-publish prints once cd has
+// published them and the GHCR packages are public (docs/reference/remote-spells.md).
 import "spells/harness/cursor" as cursor;
 import "spells/harness/codex" as codex;
 import "spells/harness/claude-code" as claude;
@@ -246,6 +248,7 @@ magus\project({
         // would report the charms and credentials of whatever ran last.
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
+        "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
         // NO skip_cache, and the reason it used to carry is now an input instead. The
         // answer still depends on trivy's vulnerability database rather than on this tree
         // alone, which is why a hit once reported yesterday's CVEs against today's image;
@@ -534,6 +537,14 @@ final GHCR = Registry{
 final GHCR_GRAPH = Registry{
     host = "ghcr.io",
     repository = "ghcr.io/egladman/magus/knowledge-graph",
+    user_ref = "GHCR_USERNAME",
+    token_ref = "GHCR_TOKEN",
+};
+
+// Published spells, one repository per spell beneath this one, for the same reason.
+final GHCR_SPELLS = Registry{
+    host = "ghcr.io",
+    repository = "ghcr.io/egladman/magus/spells",
     user_ref = "GHCR_USERNAME",
     token_ref = "GHCR_TOKEN",
 };
@@ -1465,6 +1476,38 @@ fun publish_graph(ctx: magus\Context) > void !> any {
             opts: {"stdin": token});
     }
     magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
+}
+
+// Publishes each spell below as an OCI artifact, so a workspace imports it pinned by
+// digest (`oci://ghcr.io/egladman/magus/spells/<name>@sha256:...`) and it versions apart
+// from the binary. It packs only tracked files, so an unchanged spell republishes to the
+// digest it already had. The key is the repository name under GHCR_SPELLS.
+//
+// cd is the deliver switch: without it each spell is built and its digest printed, and
+// nothing leaves the machine. The spell sources are declared inputs, so a change under
+// spells/harness selects this target through the graph and no workflow names it.
+export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
+    final dirs = {
+        "claude-code": "spells/harness/claude-code",
+        "codex": "spells/harness/codex",
+        "cursor": "spells/harness/cursor",
+        "opencode": "spells/harness/opencode",
+    };
+    ctx.readsFiles("spells/harness/**/*");
+    if (!ctx.hasCharm("cd")) {
+        foreach (_, dir in dirs) {
+            magus\cmd("spell", args: ["build", dir]);
+        }
+        return;
+    }
+    final reg = GHCR_SPELLS;
+    final tag = commit();
+    final user = magus\secret.read(reg.user_ref);
+    final token = magus\secret.read(reg.token_ref);
+    foreach (name, dir in dirs) {
+        magus\cmd("spell", args: ["push", dir, reg.repository + "/" + name + ":" + tag, "--username", user],
+            opts: {"stdin": token});
+    }
 }
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
