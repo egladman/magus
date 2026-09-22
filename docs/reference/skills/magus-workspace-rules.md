@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 11030
-skill_short_bytes: 8950
+skill_full_bytes: 11255
+skill_short_bytes: 9106
 ---
 
 # magus-workspace-rules
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `661bbf41ab1c` |
+| `skill-content` | `7a9c8c075fab` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -72,7 +72,7 @@ and a generator overwrites without asking.
 | the repository memory (`magus memory`) | the user | for the EVIDENCE, not the rule |
 | the compiled guard rules | magus | cannot be weakened from a workspace |
 | `magus\guard.shell(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only (`guard.bash` is deprecated) |
-| `magus\harness.provider(...)` in the root magusfile | this workspace | YES - wire hosts; adapt a Buzz harness by changing the **import path** to a workspace-owned spell fork (see below) |
+| `magus\harness.provider(...)` in the root magusfile | this workspace | YES - wire hosts; adapt a Buzz harness by declaring a `path:` override in `magus.yaml` that points its import at a workspace-owned spell fork (see below) |
 
 ## Never edit an installed skill
 
@@ -171,42 +171,51 @@ in the root magusfile (additive only).
 
 ## Adapting a Buzz harness (no Magus source edits)
 
-A harness written as a Buzz spell is selected by an **import path** in the root
+A harness written as a Buzz spell is selected by an **import** in the root
 magusfile, then wired with `magus\harness.provider`. Magus does not own your
-copy of that spell once you point the import at a workspace path.
+copy of that spell once `magus.yaml` points the import at a workspace path.
 
 Shipped (Magus-owned) harnesses are not compiled into the binary. They are
-published as OCI artifacts and imported pinned by manifest digest, so a harness
-versions apart from the binary:
+published as OCI artifacts and imported by registry path; `magus.yaml` declares the
+tag each one tracks and `magus.lock` pins its digest, so a harness versions apart
+from the binary:
 
 ```buzz
-import "oci://ghcr.io/egladman/magus/spells/cursor@sha256:<digest>" as cursor
-import "oci://ghcr.io/egladman/magus/spells/codex@sha256:<digest>" as codex
-import "oci://ghcr.io/egladman/magus/spells/claude-code@sha256:<digest>" as claude
-import "oci://ghcr.io/egladman/magus/spells/opencode@sha256:<digest>" as opencode
+import "ghcr.io/egladman/magus/spells/cursor";
+import "ghcr.io/egladman/magus/spells/codex";
+import "ghcr.io/egladman/magus/spells/claude-code" as claude;
+import "ghcr.io/egladman/magus/spells/opencode";
 magus\harness.provider(cursor)
 magus\harness.provider(codex)
 magus\harness.provider(claude)
 magus\harness.provider(opencode)
 ```
 
-Workspace-owned adaptation - change the import path, keep the provider call:
+Workspace-owned adaptation: declare an override, change no import and no provider call.
 
 1. Copy the shipped spell tree into the workspace (for example
    `harness/cursor/` beside the magusfile). Keep `mgs_getName()` as the host id
    (`cursor`, `claude-code`, ...) so apply/verify still resolve that id.
-2. Change **only** the import string in the root magusfile to that workspace
-   path (`import "harness/cursor" as cursor`). Leave
-   `magus\harness.provider(cursor)` as-is.
+2. In `magus.yaml`, replace the registry path with that directory, as Go's
+   `replace` does:
+
+   ```yaml
+   spells:
+     ghcr.io/egladman/magus/spells/cursor:
+       path: harness/cursor
+   ```
+
+   The import and `magus\harness.provider(cursor)` stay as they are. A copy
+   placed at a path without this entry is never read.
 3. Edit the workspace Buzz spell: matchers, managed host-config fragments, the
-   guard command string, skills form, `harness_mcp` (MCP setup hint / docs
-   pointer / host CLI sketch) - whatever the host needs. Do not edit Magus Go,
+   guard command string, skills form, `harness_mcp` (MCP setup hint, docs
+   pointer, host CLI sketch), whatever the host needs. Do not edit Magus Go,
    the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
    skills.
 4. Run `magus agent harness apply` (or `--id <id>`) and
    `magus agent harness verify`. Apply prints MCP setup guidance only; the user owns host MCP client
    config. The token stays a secret ref (`MAGUS_MCP_TOKEN`). Commit the
-   magusfile import change and the forked spell together.
+   `magus.yaml` entry and the forked spell together.
 
 JSON descriptors (`harnesses/<id>.json`) are the older sibling. For those, a
 human may apply Magus-owned fragment merges with `magus agent harness apply
@@ -262,7 +271,7 @@ generator overwrites its output without asking.
 | the repository memory (`magus memory`) | the user | for the EVIDENCE, not the rule |
 | the compiled guard rules | magus | cannot be weakened from a workspace |
 | `magus\guard.shell(...)` in the root magusfile | this workspace | YES - additive deny/advise only; strengthen-only (`guard.bash` is deprecated) |
-| `magus\harness.provider(...)` in the root magusfile | this workspace | YES - wire hosts; adapt a Buzz harness by changing the **import path** to a workspace-owned spell fork (see below) |
+| `magus\harness.provider(...)` in the root magusfile | this workspace | YES - wire hosts; adapt a Buzz harness by declaring a `path:` override in `magus.yaml` that points its import at a workspace-owned spell fork (see below) |
 
 ## Never edit an installed skill
 
@@ -376,47 +385,57 @@ in the root magusfile (additive only).
 
 ## Adapting a Buzz harness (no Magus source edits)
 
-A harness written as a Buzz spell is selected by an **import path** in the root
+A harness written as a Buzz spell is selected by an **import** in the root
 magusfile, then wired with `magus\harness.provider`. Magus does not own your
-copy of that spell once you point the import at a workspace path.
+copy of that spell once `magus.yaml` points the import at a workspace path.
 
 Shipped (Magus-owned) harnesses are not compiled into the binary. They are
-published as OCI artifacts and imported pinned by manifest digest, so a harness
-versions apart from the binary:
+published as OCI artifacts and imported by registry path; `magus.yaml` declares the
+tag each one tracks and `magus.lock` pins its digest, so a harness versions apart
+from the binary:
 
 ```buzz
-import "oci://ghcr.io/egladman/magus/spells/cursor@sha256:<digest>" as cursor
-import "oci://ghcr.io/egladman/magus/spells/codex@sha256:<digest>" as codex
-import "oci://ghcr.io/egladman/magus/spells/claude-code@sha256:<digest>" as claude
-import "oci://ghcr.io/egladman/magus/spells/opencode@sha256:<digest>" as opencode
+import "ghcr.io/egladman/magus/spells/cursor";
+import "ghcr.io/egladman/magus/spells/codex";
+import "ghcr.io/egladman/magus/spells/claude-code" as claude;
+import "ghcr.io/egladman/magus/spells/opencode";
 magus\harness.provider(cursor)
 magus\harness.provider(codex)
 magus\harness.provider(claude)
 magus\harness.provider(opencode)
 ```
 
-Workspace-owned adaptation - change the import path, keep the provider call:
+Workspace-owned adaptation: declare an override, change no import and no provider call.
 
 1. Copy the shipped spell tree into the workspace (for example
    `harness/cursor/` beside the magusfile). Keep `mgs_getName()` as the host id
    (`cursor`, `claude-code`, ...) so apply/verify still resolve that id.
-2. Change **only** the import string in the root magusfile to that workspace
-   path (`import "harness/cursor" as cursor`). Leave
-   `magus\harness.provider(cursor)` as-is.
+2. In `magus.yaml`, replace the registry path with that directory, as Go's
+   `replace` does:
+
+   ```yaml
+   spells:
+     ghcr.io/egladman/magus/spells/cursor:
+       path: harness/cursor
+   ```
+
+   The import and `magus\harness.provider(cursor)` stay as they are. A copy
+   placed at a path without this entry is never read.
 3. Edit the workspace Buzz spell: matchers, managed host-config fragments, the
-   guard command string, skills form, `harness_mcp` (MCP setup hint / docs
-   pointer / host CLI sketch) - whatever the host needs. Do not edit Magus Go,
+   guard command string, skills form, `harness_mcp` (MCP setup hint, docs
+   pointer, host CLI sketch), whatever the host needs. Do not edit Magus Go,
    the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
    skills.
 4. Run `magus agent harness apply` (or `--id <id>`) and
    `magus agent harness verify`. Apply prints MCP setup guidance only; the user owns host MCP client
    config. The token stays a secret ref (`MAGUS_MCP_TOKEN`). Commit the
-   magusfile import change and the forked spell together.
+   `magus.yaml` entry and the forked spell together.
 
-That is the whole self-improvement surface for Buzz harnesses: the import path
-is the ownership switch. A Magus upgrade never changes a pinned harness; a newer
-shipped spell arrives only when someone moves the pin, and your workspace fork is
-unaffected until you deliberately rebase it. Additive policy that is not host-shaped stays in
+That is the whole self-improvement surface for Buzz harnesses: the `magus.yaml`
+declaration is the ownership switch, and the one line a reviewer sees. A Magus upgrade
+never changes a pinned harness; a newer shipped spell arrives only when someone runs
+the lock target with `:update`, and your workspace fork is unaffected until you
+deliberately rebase it. Additive policy that is not host-shaped stays in
 `magus\guard.shell({...})`, not in the harness spell.
 
 JSON descriptors (`harnesses/<id>.json`) are the older sibling. For those, a

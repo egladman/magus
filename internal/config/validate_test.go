@@ -76,6 +76,71 @@ func TestValidate_SpellRegistries(t *testing.T) {
 	}
 }
 
+// A spell declaration magus could not honor fails at load: an entry the resolver
+// would skip is a remote import that later reads as undeclared.
+func TestValidate_SpellImports(t *testing.T) {
+	valid := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+	valid.Spells.Imports = map[string]SpellImport{
+		"ghcr.io/egladman/magus/spells/cursor": {Tag: "1.4"},
+		"localhost:5000/team/spells/lint":      {Path: "vendor/lint"},
+		"magus/spell/go":                       {Path: "spells/go"},
+	}
+	require.NoError(t, Validate(valid))
+
+	for name, tc := range map[string]struct {
+		imports map[string]SpellImport
+		want    []FieldFailure
+	}{
+		"misspelled reserved key": {
+			imports: map[string]SpellImport{"registires": {}},
+			want:    []FieldFailure{{Field: "spells.registires", Tag: "spell_import_path", Param: "registries", Value: "registires"}},
+		},
+		"workspace path": {
+			imports: map[string]SpellImport{"spells/lint": {Path: "spells/lint"}},
+			want:    []FieldFailure{{Field: "spells.spells/lint", Tag: "spell_import_path", Value: "spells/lint"}},
+		},
+		"uppercase registry path": {
+			imports: map[string]SpellImport{"ghcr.io/Team/lint": {Tag: "1"}},
+			want:    []FieldFailure{{Field: "spells.ghcr.io/Team/lint", Tag: "spell_import_path", Value: "ghcr.io/Team/lint"}},
+		},
+		"tag and path": {
+			imports: map[string]SpellImport{"ghcr.io/team/lint": {Tag: "1", Path: "vendor/lint"}},
+			want:    []FieldFailure{{Field: "spells.ghcr.io/team/lint", Tag: "spell_tag_or_path"}},
+		},
+		"neither tag nor path": {
+			imports: map[string]SpellImport{"ghcr.io/team/lint": {}},
+			want:    []FieldFailure{{Field: "spells.ghcr.io/team/lint", Tag: "spell_tag_or_path"}},
+		},
+		"bad tag": {
+			imports: map[string]SpellImport{"ghcr.io/team/lint": {Tag: "-1.4"}},
+			want:    []FieldFailure{{Field: "spells.ghcr.io/team/lint.tag", Tag: "spell_tag", Value: "-1.4"}},
+		},
+		"embedded with a tag": {
+			imports: map[string]SpellImport{"magus/spell/go": {Tag: "1.4"}},
+			want: []FieldFailure{
+				{Field: "spells.magus/spell/go.path", Tag: "required"},
+				{Field: "spells.magus/spell/go.tag", Tag: "spell_embedded_tag", Value: "1.4"},
+			},
+		},
+		"override escapes the workspace": {
+			imports: map[string]SpellImport{"magus/spell/go": {Path: "../go"}},
+			want:    []FieldFailure{{Field: "spells.magus/spell/go.path", Tag: "spell_override_path", Value: "../go"}},
+		},
+		"nested remote paths": {
+			imports: map[string]SpellImport{"ghcr.io/team/lint": {Tag: "1"}, "ghcr.io/team/lint/extra": {Tag: "1"}},
+			want:    []FieldFailure{{Field: "spells.ghcr.io/team/lint/extra", Tag: "spell_path_nested", Param: "ghcr.io/team/lint", Value: "ghcr.io/team/lint/extra"}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := valid
+			cfg.Spells.Imports = tc.imports
+			var ve *ValidationError
+			require.ErrorAs(t, Validate(cfg), &ve)
+			assert.Equal(t, tc.want, ve.Failures)
+		})
+	}
+}
+
 func TestSpellsConfigRegistry(t *testing.T) {
 	s := SpellsConfig{Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}}}
 	got, ok := s.Registry("GHCR.IO")

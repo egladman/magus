@@ -17,7 +17,7 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	require.Len(t, feedback, 1)
 	assert.Equal(t, "raw-tool", feedback[0].Rule)
 	assert.Equal(t, 1, feedback[0].Denied)
-	assert.False(t, feedback[0].NeedsReview(), "a one-off guard correction is not an improvement candidate")
+	assert.False(t, feedback[0].NeedsReview(), "a one-off guard correction is not a recurring candidate")
 
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")

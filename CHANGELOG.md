@@ -13,11 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
   alias isolates it, so it is exempt, as is `as _`. The root magusfile and built-in
   harness spells dropped their redundant `as codex`, `as cursor`, `as opencode`.
-- **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
-  loads offline once cached; MGS1041 refuses a tag alone, MGS1042 mismatched bytes.
-  `magus spell build|push|pull|ls` build a reproducible digest, push under several tags,
-  verify a pull and list tags. Registry credentials are secret references under
-  `spells.registries`.
+- **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
+  is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
+  charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
+  embedded or remote spell. MGS1041 through MGS1044 cover undeclared, stale, mismatched
+  and invalid. `magus spell build|push|pull|ls` publish.
 - **`magus job fork` declares a job from the terminal.** Flags cover one row
   (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
   `--stdin` takes a full record and `--schema` prints its contract.
@@ -102,6 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
+  denial count, session count, and followed rate; the retired advice layer's destination
+  and confidence labels are gone. A human reads the evidence and decides.
 - **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
   and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
   and fails when the build does. The graph JSON is no longer committed.

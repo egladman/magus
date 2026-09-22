@@ -144,6 +144,7 @@ daemon/
 debugging/
 decisions/
 decisions/0001-bounded-concurrency-with-recursive-invocation/
+decisions/0002-remote-spells-are-imported-by-registry-path/
 dependencies/
 development/
 development/cmd-magus-starter/
@@ -153,6 +154,7 @@ development/docs-guides-integrations-agents/
 development/docs/
 development/evals/
 development/gopherbuzz/
+development/libs-coldread/
 development/libs-commentdash/
 development/libs-diag/
 development/libs-diagnostics/
@@ -428,6 +430,10 @@ reference/codes/magusfile/MGS1037/
 reference/codes/magusfile/MGS1038/
 reference/codes/magusfile/MGS1039/
 reference/codes/magusfile/MGS1040/
+reference/codes/magusfile/MGS1041/
+reference/codes/magusfile/MGS1042/
+reference/codes/magusfile/MGS1043/
+reference/codes/magusfile/MGS1044/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -515,6 +521,7 @@ reference/manpage/magus-server/
 reference/manpage/magus-session/
 reference/manpage/magus-sessions/
 reference/manpage/magus-shell/
+reference/manpage/magus-spell/
 reference/manpage/magus-status/
 reference/manpage/magus-tail/
 reference/manpage/magus-vcs/
@@ -523,6 +530,7 @@ reference/manpage/magus-watch/
 reference/manpage/magus-where/
 reference/manpage/magus-x/
 reference/manpage/magus/
+reference/remote-spells/
 reference/rules/
 reference/rules/busy-wait/
 reference/rules/buzz-unbriefed/
@@ -628,6 +636,7 @@ tags/
 tags/activity/
 tags/admission/
 tags/adoption/
+tags/adr/
 tags/advise/
 tags/affected/
 tags/agent-install/
@@ -687,6 +696,7 @@ tags/cycle/
 tags/daemon/
 tags/deadlock/
 tags/debugging/
+tags/decision/
 tags/decisions/
 tags/declarations/
 tags/deny/
@@ -700,6 +710,7 @@ tags/detach/
 tags/determinism/
 tags/diagnostics/
 tags/diff/
+tags/digest/
 tags/discovery/
 tags/docker/
 tags/docs/
@@ -772,6 +783,7 @@ tags/ledger/
 tags/lint/
 tags/linux/
 tags/load/
+tags/lockfile/
 tags/locks/
 tags/logging/
 tags/logs/
@@ -782,6 +794,7 @@ tags/magus-hook/
 tags/magus-init/
 tags/magus-job/
 tags/magus-ledger/
+tags/magus-lock/
 tags/magus-memory/
 tags/magus-no-wait/
 tags/magus-query/
@@ -822,6 +835,7 @@ tags/output-ref/
 tags/output-refs/
 tags/output/
 tags/outputs/
+tags/override/
 tags/ownership/
 tags/passthrough/
 tags/path/
@@ -843,6 +857,7 @@ tags/protobuf/
 tags/provenance/
 tags/provider/
 tags/pry/
+tags/publish/
 tags/pull-request/
 tags/pytest/
 tags/python/
@@ -856,7 +871,9 @@ tags/reference/
 tags/registry/
 tags/release/
 tags/remote-cache/
+tags/remote/
 tags/repl/
+tags/replace/
 tags/replay/
 tags/reproduce/
 tags/review/
@@ -915,6 +932,7 @@ tags/troubleshooting/
 tags/tty/
 tags/tui/
 tags/typescript/
+tags/update/
 tags/upgrade/
 tags/uv/
 tags/vcs/
