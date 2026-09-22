@@ -53,13 +53,14 @@ Prefer wiring the Claude Code harness from the root magusfile when you bounce
 between hosts; apply then covers every wired provider:
 
 ```buzz
-import "oci://ghcr.io/egladman/magus/spells/claude-code@sha256:<digest>" as claude
-magus\harness.provider(claude)
+import "ghcr.io/egladman/magus/spells/claude-code" as claude;
+magus\harness.provider(claude);
 ```
 
-The import is pinned by the digest cd's `spell-publish` step prints for a commit,
-so the harness versions apart from your magus binary; see
-[Remote spells](../../../reference/remote-spells.md).
+The alias is needed only because `claude-code` is not a Buzz identifier. Declare the
+spell in `magus.yaml` with the tag cd's `spell-publish` step pushed, and run your lock
+target with `:update` to pin its digest in `magus.lock`, so the harness versions apart
+from your magus binary; see [Remote spells](../../../reference/remote-spells.md).
 
 ```sh
 magus agent harness apply

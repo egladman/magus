@@ -144,12 +144,13 @@ magus\project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); retu
 
 ### Remote spell
 
-A spell published to a container registry as an OCI artifact, imported pinned by its
-manifest digest. It versions apart from the magus binary and loads offline once cached.
-The agent harness spells ship this way. See [Remote spells](../reference/remote-spells.md).
+A spell published to a container registry as an OCI artifact, imported by its
+repository path the way a Go import names its repository. `magus.yaml` declares the tag
+it tracks, `magus.lock` pins the manifest digest, and it loads offline once cached. The
+agent harness spells ship this way. See [Remote spells](../reference/remote-spells.md).
 
 ```buzz
-import "oci://ghcr.io/<owner>/<repo>/spells/ruby@sha256:<digest>" as rb;
+import "ghcr.io/<owner>/<repo>/spells/ruby" as rb;
 ```
 
 ## Composing spells

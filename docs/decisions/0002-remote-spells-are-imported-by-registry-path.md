@@ -7,7 +7,7 @@ tags: [adr, decision, spells, oci, imports, buzz, lockfile, supply-chain]
 
 # ADR 0002: remote spells are imported by registry path
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-22
 - **Supersedes:** the `import "oci://<registry>/<repository>@sha256:<digest>" as x;` form drafted in the remote spells change, which never shipped.
 
@@ -85,8 +85,9 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
    locked digest only: deterministic, offline-capable once cached, and never contacting a
    registry to learn what a tag means.
 6. **A verified artifact is materialized under a cache root laid out by path**, and that root
-   joins the magusfile search roots, so the ordinary `?/main.buzz` template resolves the
-   import. The parser never sees a URL.
+   joins the magusfile search roots, so the ordinary templates resolve the import
+   (`?/spell.buzz` for a spell, the layout every published spell carries). The parser
+   never sees a URL.
 7. **An override is declared in `magus.yaml`, like Go's `replace`.** The import string never
    changes: code keeps saying `import "magus/spell/go";` or
    `import "ghcr.io/team/spells/lint";`, and one entry redirects it to a workspace copy.
@@ -149,9 +150,20 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
 - **A tag resolved at run time.** Makes two runs of the same commit able to execute different
   bytes, which is what the lock exists to prevent.
 
-## Open questions
+## Resolved questions
 
-- The name of the target that owns `magus.lock` and its `update` behavior.
-- Whether an override may also point at another registry path (a fork) rather than only a
-  workspace `path`, as Go's `replace` allows; if so, the replacement is declared and locked
-  like any remote spell.
+- **The target that owns `magus.lock` is `spell-lock`**, declared in the root
+  `magusfile.buzz` with `magus.lock` as its output. It is a thin wrapper over
+  `magus spell lock`, which never loads the workspace: plain, it checks the lock against
+  `magus.yaml` and verifies every pinned digest; under the `update` charm it runs
+  `magus spell lock --update`, the only code path that resolves a tag. The name is this
+  repository's convention; the lock names no target, so another workspace may call its
+  own anything. A stale pin fails the import that names it, not the workspace load, so
+  the target still loads to repair it; when the lock-owning magusfile imports the stale
+  spell itself, `magus spell lock --update` is the escape and every error says so.
+- **An override points at a workspace `path` only, never at another registry path.** A
+  fork is served today by publishing it under its own path and changing the import,
+  which is the visible move decision 1 already pays for on purpose. A registry-to-registry
+  replace would put a second name in the lock for one import, a second pin to review per
+  upgrade, and a resolution chain for a case nobody has asked for; it can be added later
+  as a `replace:` key without changing anything decided here.

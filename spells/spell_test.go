@@ -225,8 +225,27 @@ func TestSpellServiceTargets(t *testing.T) {
 }
 
 func TestIsRemoteImport(t *testing.T) {
-	assert.True(t, IsRemoteImport("oci://ghcr.io/o/r/spells/x@sha256:abc"), "the resolver, not this check, rejects a bad digest")
-	assert.False(t, IsRemoteImport("spells/harness/cursor"))
-	assert.False(t, IsRemoteImport("https://example.com/x"))
-	assert.False(t, IsRemoteImport("magus/spell/go"))
+	for path, want := range map[string]bool{
+		"ghcr.io/egladman/magus/spells/go": true,
+		"localhost:5000/team/spells/lint":  true,
+		"127.0.0.1:5000/team/lint":         true,
+		"spells/harness/cursor":            false,
+		"magus/spell/go":                   false,
+		"./tools/drift":                    false,
+		"../shared/lint":                   false,
+		"ghcr.io":                          false, // a host alone names no repository
+		"ghcr.io/":                         false,
+		"https://example.com/x":            false,
+		"localhost:/x":                     false,
+		"buzz:os":                          false,
+	} {
+		assert.Equal(t, want, IsRemoteImport(path), path)
+	}
+}
+
+func TestIsEmbeddedImport(t *testing.T) {
+	assert.True(t, IsEmbeddedImport("magus/spell/go"))
+	assert.False(t, IsEmbeddedImport("magus"))
+	assert.False(t, IsEmbeddedImport("spells/go"))
+	assert.False(t, IsEmbeddedImport("ghcr.io/egladman/magus/spells/go"))
 }
