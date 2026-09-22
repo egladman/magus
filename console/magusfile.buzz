@@ -1,8 +1,8 @@
 import "magus";
 import "proc";
-// The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
+// The shared advisory gate. See tools/advisories.buzz for why an exit code is the wrong
 // question and what this asks instead.
-import "../tools/audit" as audit;
+import "../tools/advisories" as advisories;
 import "../tools/toolchain-policy" as policy;
 // Modules the targets use: fs (lcov reads), os (pnpm/esbuild), vcs (the gen/ drift gate).
 import "fs";
@@ -246,7 +246,7 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 // days in the first place.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    audit\audit();
+    advisories\audit();
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the

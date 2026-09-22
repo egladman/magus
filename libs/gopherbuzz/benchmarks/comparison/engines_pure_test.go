@@ -1,5 +1,7 @@
 //go:build !cgo_engines
 
+// cross-cutting: the pure-Go half of the tag-split engine list for comparison_test.go
+
 package comparison
 
 // extraEngines contributes no extra engines in the default pure-Go build.

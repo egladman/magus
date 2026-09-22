@@ -1,3 +1,5 @@
+// cross-cutting: benchmark harness against upstream Buzz; this package has no source
+
 // Package upstream benchmarks gopherbuzz against the reference Buzz implementation
 // on identical source.
 //
