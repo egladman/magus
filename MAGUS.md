@@ -69,7 +69,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `preflight`                        |
-| libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `test`, `build`                                |
+| libs/coldread                   |       8 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
 | libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
@@ -185,7 +185,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `format`                  | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
 | `preflight`               |                                                                                                                                                                                                                                                                      |
 
-## Project: libs/commentdash
+## Project: libs/coldread
 
 | Target           | What it does                                                                                                                                                 |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |

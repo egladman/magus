@@ -1,4 +1,4 @@
-module github.com/egladman/magus/libs/commentdash
+module github.com/egladman/magus/libs/coldread
 
 go 1.26
 

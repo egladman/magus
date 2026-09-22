@@ -3,8 +3,8 @@
   "schema_version": 14,
   "directed": true,
   "multigraph": false,
-  "node_count": 6538,
-  "edge_count": 11709,
+  "node_count": 6540,
+  "edge_count": 11711,
   "relations": [
     {
       "id": "annotates",
@@ -8097,10 +8097,10 @@
       }
     },
     {
-      "id": "doc:libs/commentdash/readme.md",
+      "id": "doc:libs/coldread/readme.md",
       "kind": "doc",
-      "label": "libs/commentdash/readme.md",
-      "source": "libs/commentdash/readme.md",
+      "label": "libs/coldread/readme.md",
+      "source": "libs/coldread/readme.md",
       "attrs": {
         "role": "readme"
       }
@@ -41304,103 +41304,123 @@
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#arithmetic-between-identifiers-is-still-reported",
+      "id": "docsection:libs/coldread/readme.md#arithmetic-between-identifiers-is-still-reported",
       "kind": "docsection",
       "label": "Arithmetic between identifiers is still reported",
-      "source": "libs/commentdash/readme.md#arithmetic-between-identifiers-is-still-reported",
+      "source": "libs/coldread/readme.md#arithmetic-between-identifiers-is-still-reported",
       "attrs": {
         "anchor": "arithmetic-between-identifiers-is-still-reported",
-        "level": "3"
+        "level": "4"
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#building-the-binary",
+      "id": "docsection:libs/coldread/readme.md#building-the-binary",
       "kind": "docsection",
       "label": "Building the binary",
-      "source": "libs/commentdash/readme.md#building-the-binary",
+      "source": "libs/coldread/readme.md#building-the-binary",
       "attrs": {
         "anchor": "building-the-binary",
         "level": "2"
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#commentdash",
+      "id": "docsection:libs/coldread/readme.md#coldread",
       "kind": "docsection",
-      "label": "commentdash",
-      "source": "libs/commentdash/readme.md#commentdash",
+      "label": "coldread",
+      "source": "libs/coldread/readme.md#coldread",
       "attrs": {
-        "anchor": "commentdash",
+        "anchor": "coldread",
         "level": "1"
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#configuration",
+      "id": "docsection:libs/coldread/readme.md#configuration",
       "kind": "docsection",
       "label": "Configuration",
-      "source": "libs/commentdash/readme.md#configuration",
+      "source": "libs/coldread/readme.md#configuration",
       "attrs": {
         "anchor": "configuration",
         "level": "2"
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#indentation-follows-godoccomment",
+      "id": "docsection:libs/coldread/readme.md#indentation-follows-godoccomment",
       "kind": "docsection",
       "label": "Indentation follows go/doc/comment",
-      "source": "libs/commentdash/readme.md#indentation-follows-godoccomment",
+      "source": "libs/coldread/readme.md#indentation-follows-godoccomment",
       "attrs": {
         "anchor": "indentation-follows-godoccomment",
-        "level": "3"
+        "level": "4"
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#known-limits",
+      "id": "docsection:libs/coldread/readme.md#known-limits",
       "kind": "docsection",
       "label": "Known limits",
-      "source": "libs/commentdash/readme.md#known-limits",
+      "source": "libs/coldread/readme.md#known-limits",
       "attrs": {
         "anchor": "known-limits",
         "level": "2"
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#standalone-use",
+      "id": "docsection:libs/coldread/readme.md#standalone-use",
       "kind": "docsection",
       "label": "Standalone use",
-      "source": "libs/commentdash/readme.md#standalone-use",
+      "source": "libs/coldread/readme.md#standalone-use",
       "attrs": {
         "anchor": "standalone-use",
         "level": "2"
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#the-bullet-exemption-is-not-optional",
+      "id": "docsection:libs/coldread/readme.md#the-aside-check",
+      "kind": "docsection",
+      "label": "The aside check",
+      "source": "libs/coldread/readme.md#the-aside-check",
+      "attrs": {
+        "anchor": "the-aside-check",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:libs/coldread/readme.md#the-bullet-exemption-is-not-optional",
       "kind": "docsection",
       "label": "The bullet exemption is not optional",
-      "source": "libs/commentdash/readme.md#the-bullet-exemption-is-not-optional",
+      "source": "libs/coldread/readme.md#the-bullet-exemption-is-not-optional",
       "attrs": {
         "anchor": "the-bullet-exemption-is-not-optional",
+        "level": "4"
+      }
+    },
+    {
+      "id": "docsection:libs/coldread/readme.md#the-intent-checks",
+      "kind": "docsection",
+      "label": "The intent checks",
+      "source": "libs/coldread/readme.md#the-intent-checks",
+      "attrs": {
+        "anchor": "the-intent-checks",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:libs/coldread/readme.md#the-wrapped-half",
+      "kind": "docsection",
+      "label": "The wrapped half",
+      "source": "libs/coldread/readme.md#the-wrapped-half",
+      "attrs": {
+        "anchor": "the-wrapped-half",
         "level": "3"
       }
     },
     {
-      "id": "docsection:libs/commentdash/readme.md#the-wrapped-half",
+      "id": "docsection:libs/coldread/readme.md#what-aside-does-not-report",
       "kind": "docsection",
-      "label": "The wrapped half",
-      "source": "libs/commentdash/readme.md#the-wrapped-half",
+      "label": "What aside does not report",
+      "source": "libs/coldread/readme.md#what-aside-does-not-report",
       "attrs": {
-        "anchor": "the-wrapped-half",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:libs/commentdash/readme.md#what-it-does-not-report",
-      "kind": "docsection",
-      "label": "What it does not report",
-      "source": "libs/commentdash/readme.md#what-it-does-not-report",
-      "attrs": {
-        "anchor": "what-it-does-not-report",
-        "level": "2"
+        "anchor": "what-aside-does-not-report",
+        "level": "3"
       }
     },
     {
@@ -43439,10 +43459,10 @@
       }
     },
     {
-      "id": "file:libs/commentdash/magusfile.buzz",
+      "id": "file:libs/coldread/magusfile.buzz",
       "kind": "file",
-      "label": "libs/commentdash/magusfile.buzz",
-      "source": "libs/commentdash/magusfile.buzz",
+      "label": "libs/coldread/magusfile.buzz",
+      "source": "libs/coldread/magusfile.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -49975,78 +49995,78 @@
       }
     },
     {
-      "id": "function:libs/commentdash/magusfile.buzz:build",
+      "id": "function:libs/coldread/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/commentdash/magusfile.buzz:106",
+      "source": "libs/coldread/magusfile.buzz:108",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/commentdash/magusfile.buzz:ci",
+      "id": "function:libs/coldread/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/commentdash/magusfile.buzz:116",
+      "source": "libs/coldread/magusfile.buzz:118",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/commentdash/magusfile.buzz:format",
+      "id": "function:libs/coldread/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/commentdash/magusfile.buzz:74",
+      "source": "libs/coldread/magusfile.buzz:76",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/commentdash/magusfile.buzz:generate",
+      "id": "function:libs/coldread/magusfile.buzz:generate",
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.",
-      "source": "libs/commentdash/magusfile.buzz:51",
+      "source": "libs/coldread/magusfile.buzz:53",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/commentdash/magusfile.buzz:index_generate",
+      "id": "function:libs/coldread/magusfile.buzz:index_generate",
       "kind": "function",
       "label": "index_generate",
       "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/commentdash/magusfile.buzz:58",
+      "source": "libs/coldread/magusfile.buzz:60",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/commentdash/magusfile.buzz:lint",
+      "id": "function:libs/coldread/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "go-vet only, as in libs/testlayout. Deliberately NOT golangci-lint: this module is what a custom golangci-lint binary is built FROM, and linting it with a binary that carries it is a bootstrap nobody needs.",
-      "source": "libs/commentdash/magusfile.buzz:105",
+      "source": "libs/coldread/magusfile.buzz:107",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/commentdash/magusfile.buzz:preflight",
+      "id": "function:libs/coldread/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/commentdash/magusfile.buzz:48",
+      "source": "libs/coldread/magusfile.buzz:50",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/commentdash/magusfile.buzz:test",
+      "id": "function:libs/coldread/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
       "doc": "The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured.",
-      "source": "libs/commentdash/magusfile.buzz:109",
+      "source": "libs/coldread/magusfile.buzz:111",
       "attrs": {
         "exported": "true"
       }
@@ -55826,9 +55846,9 @@
       }
     },
     {
-      "id": "import:project/libs/commentdash",
+      "id": "import:project/libs/coldread",
       "kind": "import",
-      "label": "project/libs/commentdash",
+      "label": "project/libs/coldread",
       "attrs": {
         "diagnostic": "MGS7001"
       }
@@ -60933,10 +60953,10 @@
       }
     },
     {
-      "id": "project:libs/commentdash",
+      "id": "project:libs/coldread",
       "kind": "project",
-      "label": "libs/commentdash",
-      "source": "libs/commentdash",
+      "label": "libs/coldread",
+      "source": "libs/coldread",
       "attrs": {
         "engine": "buzz",
         "target_count": "8"
@@ -62092,79 +62112,79 @@
       }
     },
     {
-      "id": "target:libs/commentdash:build",
+      "id": "target:libs/coldread:build",
       "kind": "target",
       "label": "build",
-      "source": "libs/commentdash",
+      "source": "libs/coldread",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/commentdash:ci",
+      "id": "target:libs/coldread:ci",
       "kind": "target",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/commentdash",
+      "source": "libs/coldread",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/commentdash:format",
+      "id": "target:libs/coldread:format",
       "kind": "target",
       "label": "format",
-      "source": "libs/commentdash",
+      "source": "libs/coldread",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/commentdash:generate",
+      "id": "target:libs/coldread:generate",
       "kind": "target",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift.",
-      "source": "libs/commentdash",
+      "source": "libs/coldread",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/commentdash:index-generate",
+      "id": "target:libs/coldread:index-generate",
       "kind": "target",
       "label": "index-generate",
       "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/commentdash",
+      "source": "libs/coldread",
       "attrs": {
         "declared_as": "index_generate",
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/commentdash:lint",
+      "id": "target:libs/coldread:lint",
       "kind": "target",
       "label": "lint",
       "doc": "go-vet only, as in libs/testlayout.",
-      "source": "libs/commentdash",
+      "source": "libs/coldread",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/commentdash:preflight",
+      "id": "target:libs/coldread:preflight",
       "kind": "target",
       "label": "preflight",
-      "source": "libs/commentdash",
+      "source": "libs/coldread",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/commentdash:test",
+      "id": "target:libs/coldread:test",
       "kind": "target",
       "label": "test",
       "doc": "The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured.",
-      "source": "libs/commentdash",
+      "source": "libs/coldread",
       "attrs": {
         "engine": "buzz"
       }
@@ -100035,12 +100055,12 @@
       "provenance": "internal/handler/README.md"
     },
     {
-      "source": "doc:libs/commentdash/readme.md",
-      "target": "docsection:libs/commentdash/readme.md#commentdash",
+      "source": "doc:libs/coldread/readme.md",
+      "target": "docsection:libs/coldread/readme.md#coldread",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
       "source": "doc:libs/gopherbuzz/README.md",
@@ -123507,76 +123527,92 @@
       "provenance": "internal/handler/README.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#commentdash",
-      "target": "docsection:libs/commentdash/readme.md#building-the-binary",
+      "source": "docsection:libs/coldread/readme.md#coldread",
+      "target": "docsection:libs/coldread/readme.md#building-the-binary",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#commentdash",
-      "target": "docsection:libs/commentdash/readme.md#configuration",
+      "source": "docsection:libs/coldread/readme.md#coldread",
+      "target": "docsection:libs/coldread/readme.md#configuration",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#commentdash",
-      "target": "docsection:libs/commentdash/readme.md#known-limits",
+      "source": "docsection:libs/coldread/readme.md#coldread",
+      "target": "docsection:libs/coldread/readme.md#known-limits",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#commentdash",
-      "target": "docsection:libs/commentdash/readme.md#standalone-use",
+      "source": "docsection:libs/coldread/readme.md#coldread",
+      "target": "docsection:libs/coldread/readme.md#standalone-use",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#commentdash",
-      "target": "docsection:libs/commentdash/readme.md#the-wrapped-half",
+      "source": "docsection:libs/coldread/readme.md#coldread",
+      "target": "docsection:libs/coldread/readme.md#the-aside-check",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#commentdash",
-      "target": "docsection:libs/commentdash/readme.md#what-it-does-not-report",
+      "source": "docsection:libs/coldread/readme.md#coldread",
+      "target": "docsection:libs/coldread/readme.md#the-intent-checks",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#what-it-does-not-report",
-      "target": "docsection:libs/commentdash/readme.md#arithmetic-between-identifiers-is-still-reported",
+      "source": "docsection:libs/coldread/readme.md#the-aside-check",
+      "target": "docsection:libs/coldread/readme.md#the-wrapped-half",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#what-it-does-not-report",
-      "target": "docsection:libs/commentdash/readme.md#indentation-follows-godoccomment",
+      "source": "docsection:libs/coldread/readme.md#the-aside-check",
+      "target": "docsection:libs/coldread/readme.md#what-aside-does-not-report",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "docsection:libs/commentdash/readme.md#what-it-does-not-report",
-      "target": "docsection:libs/commentdash/readme.md#the-bullet-exemption-is-not-optional",
+      "source": "docsection:libs/coldread/readme.md#what-aside-does-not-report",
+      "target": "docsection:libs/coldread/readme.md#arithmetic-between-identifiers-is-still-reported",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
+    },
+    {
+      "source": "docsection:libs/coldread/readme.md#what-aside-does-not-report",
+      "target": "docsection:libs/coldread/readme.md#indentation-follows-godoccomment",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/coldread/readme.md"
+    },
+    {
+      "source": "docsection:libs/coldread/readme.md#what-aside-does-not-report",
+      "target": "docsection:libs/coldread/readme.md#the-bullet-exemption-is-not-optional",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/coldread/readme.md"
     },
     {
       "source": "docsection:libs/gopherbuzz/README.md#baseline-jit",
@@ -131859,116 +131895,116 @@
       "provenance": "internal/spell/charm.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
-      "target": "function:libs/commentdash/magusfile.buzz:build",
+      "source": "file:libs/coldread/magusfile.buzz",
+      "target": "function:libs/coldread/magusfile.buzz:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
-      "target": "function:libs/commentdash/magusfile.buzz:ci",
+      "source": "file:libs/coldread/magusfile.buzz",
+      "target": "function:libs/coldread/magusfile.buzz:ci",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
-      "target": "function:libs/commentdash/magusfile.buzz:format",
+      "source": "file:libs/coldread/magusfile.buzz",
+      "target": "function:libs/coldread/magusfile.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
-      "target": "function:libs/commentdash/magusfile.buzz:generate",
+      "source": "file:libs/coldread/magusfile.buzz",
+      "target": "function:libs/coldread/magusfile.buzz:generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
-      "target": "function:libs/commentdash/magusfile.buzz:index_generate",
+      "source": "file:libs/coldread/magusfile.buzz",
+      "target": "function:libs/coldread/magusfile.buzz:index_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
-      "target": "function:libs/commentdash/magusfile.buzz:lint",
+      "source": "file:libs/coldread/magusfile.buzz",
+      "target": "function:libs/coldread/magusfile.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
-      "target": "function:libs/commentdash/magusfile.buzz:preflight",
+      "source": "file:libs/coldread/magusfile.buzz",
+      "target": "function:libs/coldread/magusfile.buzz:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
-      "target": "function:libs/commentdash/magusfile.buzz:test",
+      "source": "file:libs/coldread/magusfile.buzz",
+      "target": "function:libs/coldread/magusfile.buzz:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
+      "source": "file:libs/coldread/magusfile.buzz",
       "target": "import:../../spells/golang/gomod",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
+      "source": "file:libs/coldread/magusfile.buzz",
       "target": "import:../../tools/drift",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
+      "source": "file:libs/coldread/magusfile.buzz",
       "target": "import:fs",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
+      "source": "file:libs/coldread/magusfile.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
+      "source": "file:libs/coldread/magusfile.buzz",
       "target": "import:magus/spell/go",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "file:libs/commentdash/magusfile.buzz",
+      "source": "file:libs/coldread/magusfile.buzz",
       "target": "import:magus/spell/markdown",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
       "source": "file:libs/diagnostics/magusfile.buzz",
@@ -134532,7 +134568,7 @@
     },
     {
       "source": "file:magusfile.buzz",
-      "target": "import:project/libs/commentdash",
+      "target": "import:project/libs/coldread",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -148837,7 +148873,7 @@
     },
     {
       "source": "project:.",
-      "target": "project:libs/commentdash",
+      "target": "project:libs/coldread",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -149988,116 +150024,116 @@
       "provenance": "docs/guides/integrations/agents"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "doc:libs/commentdash/readme.md",
+      "source": "project:libs/coldread",
+      "target": "doc:libs/coldread/readme.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/readme.md"
+      "provenance": "libs/coldread/readme.md"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "file:libs/commentdash/magusfile.buzz",
+      "source": "project:libs/coldread",
+      "target": "file:libs/coldread/magusfile.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash/magusfile.buzz"
+      "provenance": "libs/coldread/magusfile.buzz"
     },
     {
-      "source": "project:libs/commentdash",
+      "source": "project:libs/coldread",
       "target": "package:gomod github.com/golangci/plugin-module-register",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
+      "source": "project:libs/coldread",
       "target": "package:gomod golang.org/x/mod",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
+      "source": "project:libs/coldread",
       "target": "package:gomod golang.org/x/sync",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
+      "source": "project:libs/coldread",
       "target": "package:gomod golang.org/x/tools",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "target:libs/commentdash:build",
+      "source": "project:libs/coldread",
+      "target": "target:libs/coldread:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "target:libs/commentdash:ci",
+      "source": "project:libs/coldread",
+      "target": "target:libs/coldread:ci",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "target:libs/commentdash:format",
+      "source": "project:libs/coldread",
+      "target": "target:libs/coldread:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "target:libs/commentdash:generate",
+      "source": "project:libs/coldread",
+      "target": "target:libs/coldread:generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "target:libs/commentdash:index-generate",
+      "source": "project:libs/coldread",
+      "target": "target:libs/coldread:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "target:libs/commentdash:lint",
+      "source": "project:libs/coldread",
+      "target": "target:libs/coldread:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "target:libs/commentdash:preflight",
+      "source": "project:libs/coldread",
+      "target": "target:libs/coldread:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "project:libs/commentdash",
-      "target": "target:libs/commentdash:test",
+      "source": "project:libs/coldread",
+      "target": "target:libs/coldread:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
       "source": "project:libs/diagnostics",
@@ -151740,7 +151776,7 @@
     },
     {
       "source": "target:.:coverage-render",
-      "target": "target:libs/commentdash:test",
+      "target": "target:libs/coldread:test",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -154412,7 +154448,7 @@
     },
     {
       "source": "target:docs:index-generate",
-      "target": "file:libs/commentdash/magusfile.buzz",
+      "target": "file:libs/coldread/magusfile.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -155155,164 +155191,164 @@
       "provenance": "docs"
     },
     {
-      "source": "target:libs/commentdash:build",
+      "source": "target:libs/coldread:build",
       "target": "op:go:go-build",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:build",
+      "source": "target:libs/coldread:build",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:build",
-      "target": "target:libs/commentdash:format",
+      "source": "target:libs/coldread:build",
+      "target": "target:libs/coldread:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:ci",
-      "target": "target:libs/commentdash:build",
+      "source": "target:libs/coldread:ci",
+      "target": "target:libs/coldread:build",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:ci",
-      "target": "target:libs/commentdash:lint",
+      "source": "target:libs/coldread:ci",
+      "target": "target:libs/coldread:lint",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:ci",
-      "target": "target:libs/commentdash:test",
+      "source": "target:libs/coldread:ci",
+      "target": "target:libs/coldread:test",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:format",
+      "source": "target:libs/coldread:format",
       "target": "op:go:go-fmt",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:format",
+      "source": "target:libs/coldread:format",
       "target": "op:go:go-mod-tidy",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:format",
+      "source": "target:libs/coldread:format",
       "target": "op:markdown:dprint",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:format",
+      "source": "target:libs/coldread:format",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:format",
+      "source": "target:libs/coldread:format",
       "target": "spell:markdown",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:format",
-      "target": "target:libs/commentdash:generate",
+      "source": "target:libs/coldread:format",
+      "target": "target:libs/coldread:generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:generate",
-      "target": "target:libs/commentdash:index-generate",
+      "source": "target:libs/coldread:generate",
+      "target": "target:libs/coldread:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:generate",
-      "target": "target:libs/commentdash:preflight",
+      "source": "target:libs/coldread:generate",
+      "target": "target:libs/coldread:preflight",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:lint",
+      "source": "target:libs/coldread:lint",
       "target": "op:go:go-vet",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:lint",
+      "source": "target:libs/coldread:lint",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:lint",
-      "target": "target:libs/commentdash:format",
+      "source": "target:libs/coldread:lint",
+      "target": "target:libs/coldread:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:test",
+      "source": "target:libs/coldread:test",
       "target": "op:go:go-test",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:test",
+      "source": "target:libs/coldread:test",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
-      "source": "target:libs/commentdash:test",
-      "target": "target:libs/commentdash:format",
+      "source": "target:libs/coldread:test",
+      "target": "target:libs/coldread:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/commentdash"
+      "provenance": "libs/coldread"
     },
     {
       "source": "target:libs/diagnostics:build",

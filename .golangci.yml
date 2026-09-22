@@ -102,15 +102,17 @@ linters:
     # no runtime plugin loading, and it is why `magus run lint` builds the binary.
     - testlayout
 
-    # commentdash reports a comment spelling an em-dash with a spaced hyphen, which
-    # this repo bans in prose. The reasoning and the per-exemption measurements are
-    # in libs/commentdash/readme.md.
+    # coldread reports a comment that tells a cold reader nothing the code does
+    # not, and a comment spelling an em-dash with a spaced hyphen, which this repo
+    # bans in prose. The reasoning and the measurements are in
+    # libs/coldread/readme.md.
     #
-    # It only ever fires on new prose: the 4513 asides this tree carried, and the 211
-    # that wrap onto a second line, were cleared before it was enabled. What the rule
-    # exempts is therefore load-bearing rather than cosmetic, and the gofmt doc-list
-    # bullet in particular: flag one of those and the linter fights the formatter.
-    - commentdash
+    # The aside check only ever fires on new prose: the 4513 asides this tree
+    # carried, and the 211 that wrap onto a second line, were cleared before it was
+    # enabled. What the rule exempts is therefore load-bearing rather than cosmetic,
+    # and the gofmt doc-list bullet in particular: flag one of those and the linter
+    # fights the formatter.
+    - coldread
 
   settings:
     custom:
@@ -119,16 +121,21 @@ linters:
         description: reports a test file whose name narrows a source file's name
         original-url: github.com/egladman/magus/libs/testlayout
 
-      commentdash:
+      coldread:
         type: module
-        description: reports a comment using a spaced hyphen as an em-dash aside
-        original-url: github.com/egladman/magus/libs/commentdash
+        description: reports a comment that tells a cold reader nothing the code does not
+        original-url: github.com/egladman/magus/libs/coldread
         settings:
           # The wrapped half is the same aside with its second clause on the next
           # line. It is a separate setting because its fix can move a clause across
           # a line break rather than swapping one character, which reviews as a
           # different kind of edit.
           wrapped: true
+          # history fired 359 times over this tree when the check landed, most of
+          # them "used to" in test docs pinning a past regression. It stays off
+          # until a sweep rewrites those to state the invariant the test pins.
+          disable:
+            - history
 
     sloglint:
       # all, not scope: EVERY slog call must take a context. `scope` would only catch a

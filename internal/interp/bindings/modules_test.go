@@ -1834,7 +1834,7 @@ func TestDeclarationsWithRealFunctionsAreNotExecuted(t *testing.T) {
 // It walks the surfaces that matter rather than asserting registration, because
 // registration was never the hard part: being SEEN was.
 func TestSourceModuleIsIndistinguishable(t *testing.T) {
-	// 1. It imports and RUNS like any other module.
+	// It imports and RUNS like any other module.
 	sess := scriptSession(t)
 	err := sess.Exec(context.Background(), `
 import "std";
@@ -1847,7 +1847,7 @@ test "a Buzz-implemented stdlib module behaves like a Go one" {
 `)
 	require.NoError(t, err)
 
-	// 2. describe modules lists it in the catalogue, with its doc.
+	// describe modules lists it in the catalogue, with its doc.
 	var summary *types.ModuleEntry
 	for _, m := range hostmodules.Describe("") {
 		if m.Name == "lcov" {
@@ -1858,8 +1858,8 @@ test "a Buzz-implemented stdlib module behaves like a Go one" {
 	require.NotNil(t, summary, "a source module must appear in the module catalogue")
 	assert.NotEmpty(t, summary.Doc)
 
-	// 3. Its methods and their docs are derived from the Buzz source, so the
-	//    detail view is populated exactly as a Go module's is.
+	// Its methods and their docs are derived from the Buzz source, so the detail
+	// view is populated exactly as a Go module's is.
 	detail := hostmodules.Describe("lcov")
 	require.Len(t, detail, 1)
 	byName := map[string]types.ModuleMethodEntry{}
@@ -1871,7 +1871,7 @@ test "a Buzz-implemented stdlib module behaves like a Go one" {
 	assert.NotEmpty(t, byName["percent"].Doc, "the doc comment must come off the Buzz source")
 	assert.Contains(t, byName["percent"].Buzz, "lcov\\percent", "the Buzz signature must render")
 
-	// 4. A non-exported helper stays private, like an unexported Go function.
+	// A non-exported helper stays private, like an unexported Go function.
 	assert.NotContains(t, byName, "keepsSource")
 }
 

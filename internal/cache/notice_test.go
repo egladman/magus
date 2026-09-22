@@ -62,7 +62,7 @@ func TestFailureExcerptFindsAKeywordlessLinterFinding(t *testing.T) {
 	for range 300 {
 		b.WriteString("INF Executing template file=/x/types/gen/mocks/inspector.go version=v3.5.4\n")
 	}
-	b.WriteString("internal/interp/ceiling.go:58:56: comment uses a spaced hyphen as an em-dash aside; write a colon instead (commentdash)\n")
+	b.WriteString("internal/interp/ceiling.go:58:56: comment uses a spaced hyphen as an em-dash aside; write a colon instead (coldread)\n")
 	for range 300 {
 		b.WriteString("INF Writing template to file file=/x/types/gen/mocks/observer.go version=v3.5.4\n")
 	}

@@ -7,13 +7,14 @@ import (
 )
 
 // TestNewPluginDecodesSettings drives the path production actually runs: a yaml
-// settings block arrives as map[string]any and has to reach [commentdash.Options].
+// settings block arrives as map[string]any and has to reach [coldread.Options].
 // The json tags, not a hand-written field copy, are what carry the values across,
 // and a copy is where a new option compiles clean while ignoring the user's yaml.
 func TestNewPluginDecodesSettings(t *testing.T) {
 	p, err := newPlugin(map[string]any{
 		"allow":   []any{"*_gen.go"},
 		"wrapped": true,
+		"disable": []any{"history"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +32,7 @@ func TestNewPluginDecodesSettings(t *testing.T) {
 	// The name is the golangci-lint config key: linters.settings.custom.<name> and
 	// the entry in linters.enable both have to match what register.Plugin was given,
 	// and a drift between them fails at config load rather than at compile time.
-	if analyzers[0].Name != "commentdash" {
+	if analyzers[0].Name != "coldread" {
 		t.Errorf("analyzer name %q must match the registered plugin name", analyzers[0].Name)
 	}
 }
@@ -39,6 +40,12 @@ func TestNewPluginDecodesSettings(t *testing.T) {
 func TestNewPluginRejectsMalformedGlob(t *testing.T) {
 	if _, err := newPlugin(map[string]any{"allow": []any{"[bad"}}); err == nil {
 		t.Fatal("expected a malformed glob to fail at construction")
+	}
+}
+
+func TestNewPluginRejectsUnknownCheck(t *testing.T) {
+	if _, err := newPlugin(map[string]any{"disable": []any{"histroy"}}); err == nil {
+		t.Fatal("expected a misspelled check name to fail at construction")
 	}
 }
 

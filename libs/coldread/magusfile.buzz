@@ -1,13 +1,15 @@
-// magusfile.buzz for commentdash, a standalone Go module (github.com/egladman/magus/libs/commentdash)
-// at libs/commentdash: a static analyzer reporting a Go comment that spells an
-// em-dash with a spaced hyphen. Its own module (not part of the magus module)
-// because golangci-lint compiles a plugin INTO its binary rather than loading one
-// at runtime, so the rule has to be a dependency someone can pin at a version,
-// which is what makes it a project here rather than a package in the magus tree.
+// magusfile.buzz for coldread, a standalone Go module (github.com/egladman/magus/libs/coldread)
+// at libs/coldread: a static analyzer reporting Go comments that tell a cold reader
+// nothing the code does not (restatements, step and change narration, doc stubs,
+// commented-out code) plus the spaced-hyphen em-dash. Its own module (not part of
+// the magus module) because golangci-lint compiles a plugin INTO its binary rather
+// than loading one at runtime, so the rule has to be a dependency someone can pin at
+// a version, which is what makes it a project here rather than a package in the
+// magus tree.
 //
-//   magus run build libs/commentdash   compile the analyzer and the plugin glue
-//   magus run test libs/commentdash    run the analysistest suite
-//   magus run ci libs/commentdash      lint, build, and test
+//   magus run build libs/coldread   compile the analyzer and the plugin glue
+//   magus run test libs/coldread    run the analysistest suite
+//   magus run ci libs/coldread      lint, build, and test
 //
 // Nothing in the magus module imports it, and nothing should: the consumer is
 // `golangci-lint custom`, which reads libs/testlayout/.custom-gcl.yml. One binary
@@ -50,7 +52,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    gomod\replaceWorkspaceModules(ctx, go, "libs/commentdash");
+    gomod\replaceWorkspaceModules(ctx, go, "libs/coldread");
     ctx.needs(index_generate);
 }
 

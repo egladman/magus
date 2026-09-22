@@ -1248,7 +1248,7 @@
               "target": "test"
             },
             {
-              "project": "libs/commentdash",
+              "project": "libs/coldread",
               "target": "test"
             },
             {
@@ -1272,7 +1272,7 @@
               "target": "test"
             },
             {
-              "project": "libs/commentdash",
+              "project": "libs/coldread",
               "target": "test"
             },
             {
@@ -1397,15 +1397,15 @@
             },
             {
               "project": ".",
-              "glob": "libs/commentdash/go.mod"
+              "glob": "libs/coldread/go.mod"
             },
             {
               "project": ".",
-              "glob": "libs/commentdash/go.sum"
+              "glob": "libs/coldread/go.sum"
             },
             {
               "project": ".",
-              "glob": "libs/commentdash/**/*.go"
+              "glob": "libs/coldread/**/*.go"
             }
           ],
           "reads_secrets": false
@@ -1456,7 +1456,7 @@
             },
             {
               "project": ".",
-              "glob": "libs/commentdash/**/*.go"
+              "glob": "libs/coldread/**/*.go"
             },
             {
               "project": ".",
@@ -1815,7 +1815,7 @@
         }
       ],
       "depends_on": [
-        "libs/commentdash",
+        "libs/coldread",
         "libs/diagnostics",
         "libs/gopherbuzz",
         "libs/testlayout"
@@ -2882,8 +2882,8 @@
       ]
     },
     {
-      "path": "libs/commentdash",
-      "name": "libs/commentdash",
+      "path": "libs/coldread",
+      "name": "libs/coldread",
       "engine": "buzz",
       "nodes": [
         {
@@ -2914,7 +2914,7 @@
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
           "reads_files": [
             {
-              "project": "libs/commentdash",
+              "project": "libs/coldread",
               "glob": "../../**/MAGUS.md"
             }
           ],
@@ -2952,7 +2952,7 @@
           ],
           "reads_files": [
             {
-              "project": "libs/commentdash",
+              "project": "libs/coldread",
               "glob": "dprint.json"
             }
           ],
