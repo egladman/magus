@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -86,6 +87,16 @@ func TestRoundTripAllTypes(t *testing.T) {
 		GraphError{Op: "build", Message: "cycle"},
 		VolatilityCall{Project: "svc-a", Target: "test", Status: "retried_volatile", Attempts: 2, RetryReason: "predicted_volatile"},
 		ShardTotal{Shard: "0", NShards: 4, DurationMs: 78321},
+		RunScope{Label: ".", Source: "3 projects"},
+		RunCharms{Charms: "rw"},
+		RunCache{Tier: "local", Mode: "read+write"},
+		RunBase{Base: "origin/main", VCS: "git"},
+		RunStep{Label: "magus", Target: "types-generate", Status: "pass", DurationMs: 695},
+		RunSummary{Hits: 1, Misses: 2, Errors: 0, DurationMs: 1600},
+		RunExec{Cmd: "go", Args: []string{"build", "./..."}, Dir: "."},
+		LockWait{Project: ".", HolderPID: 4242, HolderCommand: "magus run ci"},
+		LockReleased{Project: "."},
+		Notice{Level: "warn", Code: "MGS1028", Msg: "projects seeded by changed files nothing declares"},
 	}
 	for _, e := range events {
 		require.NoError(t, recordAny(w, e), "Record %T", e)
@@ -100,6 +111,9 @@ func TestRoundTripAllTypes(t *testing.T) {
 		TypeTargetResult, TypeTargetResult, TypeTargetResult,
 		TypeGraphBuild, TypeGraphQuery, TypeGraphError,
 		TypeVolatility, TypeShardTotal,
+		TypeRunScope, TypeRunCharms, TypeRunCache, TypeRunBase,
+		TypeRunStep, TypeRunSummary, TypeRunExec,
+		TypeLockWait, TypeLockReleased, TypeNotice,
 	}
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
@@ -478,4 +492,61 @@ func TestConcurrentRecordAndClose(t *testing.T) {
 			wg.Wait()
 		}
 	})
+}
+
+// TestStructuredRunEventTypes is a table test over every event type added to route
+// the -o jsonl progress/header/lock lines (previously free text on the pretty
+// renderer) into the run.target.result envelope. Each case records one event, then
+// decodes the body back into the SAME struct and asserts it whole, not field by
+// field, so a future field addition that the test forgets shows up as a diff
+// instead of silently passing.
+func TestStructuredRunEventTypes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		event    any
+		wantType string
+	}{
+		{"RunScope", RunScope{Label: "3 projects", Source: "git diff vs origin/main"}, TypeRunScope},
+		{"RunScope no source", RunScope{Label: "."}, TypeRunScope},
+		{"RunCharms", RunCharms{Charms: "rw"}, TypeRunCharms},
+		{"RunCache", RunCache{Tier: "local", Mode: "read+write"}, TypeRunCache},
+		{"RunBase", RunBase{Base: "origin/main", VCS: "git"}, TypeRunBase},
+		{"RunStep pass", RunStep{Label: "magus", Target: "types-generate", Status: "pass", DurationMs: 695}, TypeRunStep},
+		{"RunStep fail", RunStep{Label: "magus", Target: "lint", Status: "fail", DurationMs: 40, Error: "exit status 1"}, TypeRunStep},
+		{"RunSummary", RunSummary{Hits: 3, Misses: 1, Errors: 0, DurationMs: 1600}, TypeRunSummary},
+		{"RunSummary dry", RunSummary{Dry: true, Planned: 4, DurationMs: 12}, TypeRunSummary},
+		{"RunExec", RunExec{Cmd: "go", Args: []string{"build", "./..."}, Dir: "internal/cache"}, TypeRunExec},
+		{"LockWait", LockWait{Project: ".", HolderPID: 4242, HolderCommand: "magus run ci", ElapsedMs: 15000}, TypeLockWait},
+		{"LockReleased", LockReleased{Project: "libs/gopherbuzz"}, TypeLockReleased},
+		{"Notice", Notice{Level: "warn", Code: "MGS1028", Msg: "projects seeded by changed files nothing declares"}, TypeNotice},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			w := NewWriter(&buf, WithBlockOnFull())
+			require.NoError(t, recordAny(w, tc.event))
+			require.NoError(t, w.Close())
+
+			var head struct {
+				Schema int    `json:"schema"`
+				Type   string `json:"type"`
+			}
+			line := bytes.TrimSpace(buf.Bytes())
+			require.NoError(t, json.Unmarshal(line, &head), "unmarshal %q", line)
+			assert.Equal(t, Schema, head.Schema)
+			assert.Equal(t, tc.wantType, head.Type)
+
+			// Whole-struct: decode the SAME line back into the event's own type
+			// (the envelope's extra "schema"/"type" keys are ignored by the
+			// target struct, which has no fields for them) and compare against
+			// the original value field by field in one assertion.
+			got := reflect.New(reflect.TypeOf(tc.event)).Interface()
+			require.NoError(t, json.Unmarshal(line, got))
+			assert.Equal(t, tc.event, reflect.ValueOf(got).Elem().Interface())
+		})
+	}
 }

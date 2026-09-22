@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
 	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/types"
 )
@@ -91,7 +92,7 @@ func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 // gate marks this invocation the workspace's gate, which is what admits it to
 // supersession in both directions: it may take a lock from an earlier gate on this same
 // tree, and a later one may take its locks (MGS3014). Everything else queues as before.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool) (*projectHold, error) {
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
@@ -104,7 +105,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
 	}
-	var lopts []lockerOption
+	lopts := []lockerOption{withReportWriter(rw)}
 	if gate {
 		lopts = append(lopts, asGate())
 	}
@@ -228,6 +229,12 @@ type projectLocker struct {
 	// cannot suppress any of them: a run that stalls or yields without explanation is
 	// the failure they exist to prevent.
 	out io.Writer
+	// report is set for a structured (-o jsonl) invocation; when non-nil the wait/
+	// resume lines go there as typed events instead of the prose lines above, which
+	// would otherwise be free text on a stream a caller is parsing as JSONL. ctx
+	// cannot carry this the way [report.WithWriter] does elsewhere: the lock is
+	// acquired before Run wraps ctx with it, so it is threaded in directly instead.
+	report *report.Writer
 }
 
 // lockRetryDelay is how often a blocked acquire re-polls the OS lock while waiting.
@@ -255,6 +262,13 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 
 // asGate marks this invocation the workspace's gate. See projectLocker.gate.
 func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
+
+// withReportWriter routes the wait/resume lines to w as typed events instead of the
+// prose lines emitWaiting/emitResumed otherwise print, for a structured (-o jsonl)
+// invocation. nil is a no-op, so callers can pass opts.Report unconditionally.
+func withReportWriter(w *report.Writer) lockerOption {
+	return func(l *projectLocker) { l.report = w }
+}
 
 // writingTo redirects the lock's decision lines, for a test that reads them.
 func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
@@ -502,6 +516,16 @@ func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 	if p == "" {
 		p = "."
 	}
+	rec := l.readOwner(projectPath)
+	// A structured invocation gets the same fact as a typed event instead of the
+	// prose below: -o jsonl parses this stream, and a caller cannot tell where a
+	// "magus:" line ends and JSON begins.
+	if l.report != nil {
+		_ = report.Record(l.report, report.LockWait{
+			Project: p, HolderPID: rec.PID, HolderCommand: rec.Command,
+		})
+		return
+	}
 	fmt.Fprintf(l.out, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
 	// What is SAFE while you wait, which is the question a blocked caller actually has and
 	// the one the line above leaves open.
@@ -524,7 +548,6 @@ func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 	// stderr output, and handing it to another package to display verbatim would put
 	// presentation for a surface magus cannot see inside magus. The region composes
 	// its own from these fields.
-	rec := l.readOwner(projectPath)
 	slog.InfoContext(ctx, "lock.waiting",
 		slog.String("project", p),
 		slog.Int("holder_pid", rec.PID),
@@ -572,6 +595,14 @@ func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath stri
 				return
 			case <-t.C:
 				elapsed := time.Since(start)
+				if l.report != nil {
+					rec := l.readOwner(projectPath)
+					_ = report.Record(l.report, report.LockWait{
+						Project: p, HolderPID: rec.PID, HolderCommand: rec.Command,
+						ElapsedMs: elapsed.Milliseconds(),
+					})
+					continue
+				}
 				fmt.Fprintf(l.out,
 					"magus: still waiting for the lock on project %s (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.%s\n",
 					p, elapsed.Round(time.Second), orphanHint(elapsed, l.describeOwner(projectPath)))
@@ -594,6 +625,10 @@ func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
 	p := projectPath
 	if p == "" {
 		p = "."
+	}
+	if l.report != nil {
+		_ = report.Record(l.report, report.LockReleased{Project: p})
+		return
 	}
 	fmt.Fprintf(l.out, "magus: lock on project %s released; starting.\n", p)
 	slog.InfoContext(ctx, "lock.acquired", slog.String("project", p))

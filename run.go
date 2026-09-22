@@ -1308,9 +1308,12 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// under its [dry] line. Reads still work, so the plan reflects real conditionals.
 		recCtx := types.WithTrace(ctx)
 		dryStart := time.Now()
-		if m.cache != nil {
+		switch {
+		case opts.Report != nil:
+			_ = report.Record(opts.Report, report.Notice{Level: "info", Msg: "dry run: commands shown, not executed"})
+		case m.cache != nil:
 			m.cache.LogDryBanner(ctx)
-		} else {
+		default:
 			fmt.Println("dry run: commands shown, not executed")
 		}
 		planned := 0
@@ -1318,12 +1321,17 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			for _, p := range st.projects {
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
-				if m.cache != nil {
+				switch {
+				case opts.Report != nil:
+					_ = report.Record(opts.Report, report.RunStep{
+						Label: label, Target: charmedTarget(st.target, opts.Charms), Status: "dry",
+					})
+				case m.cache != nil:
 					// Charms folded in, matching the executed line: a dry run whose repro
 					// command omits them prints a command that reproduces something else,
 					// and it is printed precisely when the reader is asking what will run.
 					m.cache.LogDry(ctx, p.Path, label, charmedTarget(st.target, opts.Charms))
-				} else {
+				default:
 					fmt.Printf("[dry] %s\n", label)
 				}
 				// Fresh memo per target so a shared dependency (e.g. format -> generate)
@@ -1338,7 +1346,12 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// A dry run ends with a footer like every other run. Without it the output
 		// simply stopped after the last plan line, so the one shape a reader looks
 		// for at the bottom was missing precisely when they were reviewing a plan.
-		if m.cache != nil {
+		switch {
+		case opts.Report != nil:
+			_ = report.Record(opts.Report, report.RunSummary{
+				Dry: true, Planned: planned, DurationMs: time.Since(dryStart).Milliseconds(),
+			})
+		case m.cache != nil:
 			m.cache.LogDrySummary(ctx, planned, time.Since(dryStart))
 		}
 		return nil
@@ -1386,7 +1399,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// against a SEPARATE concurrent magus process; the intra-process scheduler fans
 	// out beneath it untouched. Acquired here (after the dry-run early return) so a
 	// dry run, which mutates nothing, takes no lock.
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.Report)
 	if err != nil {
 		return err
 	}
@@ -1689,7 +1702,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// stage observer: it prints a progress line as each magus.needs sub-target
 		// completes, giving the reader a checklist of what ran in place of the wall.
 		if m.cache.Collapsing() {
-			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label, policies: policiesOf(p)})
+			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label, policies: policiesOf(p), report: opts.Report})
 		}
 		if s.NoCache {
 			// An uncached composer still executes its body, so this is the runtime
@@ -1773,12 +1786,22 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Footer summary for a fan-out: a single line tallying the per-project results.
 	// Skipped for a single project, where the per-project status line already says it all.
 	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
-		m.cache.LogSummary(ctx, time.Since(start))
+		if opts.Report != nil {
+			_ = report.Record(opts.Report, report.RunSummary{
+				Hits: s.Hit, Misses: s.Miss, Errors: s.Error, DurationMs: time.Since(start).Milliseconds(),
+			})
+		} else {
+			m.cache.LogSummary(ctx, time.Since(start))
+		}
 	}
 	// Beside the footer, not deferred by the caller: every path that runs targets
 	// reaches here, including `magus x` and the MCP run tool, and a deferred summary
-	// landed after the terminal band was released.
-	m.cache.LogRemoteSummary(ctx)
+	// landed after the terminal band was released. Skipped in structured mode: the
+	// remote tallies have no dedicated event yet, and cache.WithLog(jsonl,...) already
+	// keeps the safety net (a plain JSON line) from reaching stdout by writing to stderr.
+	if opts.Report == nil {
+		m.cache.LogRemoteSummary(ctx)
+	}
 
 	return runErr
 }
@@ -1793,6 +1816,9 @@ type stageObserver struct {
 	// policies is the owning project's per-target policy, read for the one thing the
 	// row cannot show without it: which failures the composite carries on past.
 	policies map[string]types.Target
+	// report is set for a structured (-o jsonl) invocation; when non-nil TargetEnd
+	// emits a typed run.step event instead of the cache logger's prose line.
+	report *report.Writer
 }
 
 // policiesOf is p's per-target policy map, nil-safe for a step whose project did not
@@ -1806,6 +1832,25 @@ func policiesOf(p *types.Project) map[string]types.Target {
 }
 
 func (o stageObserver) TargetEnd(ctx context.Context, name string, elapsed time.Duration, err error) {
+	if o.report != nil {
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		status := "pass"
+		switch {
+		case err == nil:
+		case o.policies[name].Advisory:
+			status = "advisory"
+		default:
+			status = "fail"
+		}
+		_ = report.Record(o.report, report.RunStep{
+			Label: o.label, Target: name, Status: status,
+			DurationMs: elapsed.Milliseconds(), Error: errMsg,
+		})
+		return
+	}
 	// ctx, not _: LogStage puts runErr.Error() in an attr, and a magusfile can throw an
 	// interpolated credential. Without the context the record redacts against nothing.
 	o.cache.LogStage(ctx, o.label, name, elapsed, err, o.policies[name].Advisory)

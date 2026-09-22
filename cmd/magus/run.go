@@ -150,7 +150,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// caller reading a captured transcript gets the finished result instead: Emit dedupes
 	// within a process, so one invocation per tool call repeats it forever, and the line
 	// measured 48KB across four agent sessions that could not act on any of it.
-	if global.silent && isInteractiveTTY() {
+	// A structured invocation never gets this: -o jsonl on a TTY is rare, and the
+	// one free-text line it would add is not worth a special-cased typed event.
+	if global.silent && isInteractiveTTY() && global.output != string(FormatJSONL) {
 		// Says what arrives and when, rather than sending the reader to poll a
 		// dashboard in another terminal. This run BLOCKS: waiting for it is the
 		// normal thing to do, and every target that runs prints an output ref
@@ -202,10 +204,36 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return nil
 	}
 
+	// finalizeConfig already pointed globalCfg.Log.Format at "jsonl" for this
+	// invocation (before the workspace preload could build the cache logger from
+	// the old format); resolved again here so the header below can route through
+	// rw instead of the cache logger's prose lines.
+	opts, optsErr := outputOptionsOrDefault()
+	if optsErr != nil {
+		return optsErr
+	}
+
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
 	}
+
+	var rw *magus.ReportWriter
+	if opts.Format == outputJSONL {
+		w, cleanup, openErr := outputDst()
+		if openErr != nil {
+			return openErr
+		}
+		defer func() { _ = cleanup() }()
+		var rwErr error
+		rw, rwErr = magus.NewReportWriter(w, globalCfg.Report.Filter)
+		if rwErr != nil {
+			return rwErr
+		}
+		m.SetGraphObserver(rw.GraphObserver())
+		defer func() { _ = rw.Close() }()
+	}
+
 	// cwd is the caller's directory: for an adopted run it is the client's, carried on
 	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
@@ -230,7 +258,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
-	m.LogScope(ctx, scopeLabel, source)
+	if rw != nil {
+		_ = rw.RecordRunScope(scopeLabel, source)
+	} else {
+		m.LogScope(ctx, scopeLabel, source)
+	}
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
@@ -240,8 +272,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if targetName == "ci" {
 		charms = magus.CharmsForCI(charms)
 	}
-	m.LogCharms(ctx, strings.Join(charms, ","))
-	m.LogCache(ctx)
+	if rw != nil {
+		_ = rw.RecordRunCharms(strings.Join(charms, ","))
+		tier, mode := m.CacheDescription()
+		_ = rw.RecordRunCache(tier, mode)
+	} else {
+		m.LogCharms(ctx, strings.Join(charms, ","))
+		m.LogCache(ctx)
+	}
 	if len(targets) == 0 {
 		// Zero targets here means the fan-out found no projects at all in the resolved
 		// workspace: a degenerate or wrong-workspace resolution, not "nothing to do".
@@ -259,27 +297,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, partial)
 	if gateErr := gate.evaluate(ctx, rf.NoRedundancyCheck); gateErr != nil {
 		return gateErr
-	}
-
-	opts, optsErr := outputOptionsOrDefault()
-	if optsErr != nil {
-		return optsErr
-	}
-
-	var rw *magus.ReportWriter
-	if opts.Format == outputJSONL {
-		w, cleanup, openErr := outputDst()
-		if openErr != nil {
-			return openErr
-		}
-		defer func() { _ = cleanup() }()
-		var rwErr error
-		rw, rwErr = magus.NewReportWriter(w, globalCfg.Report.Filter)
-		if rwErr != nil {
-			return rwErr
-		}
-		m.SetGraphObserver(rw.GraphObserver())
-		defer func() { _ = rw.Close() }()
 	}
 
 	var runOpts []magus.RunOption
@@ -361,7 +378,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
-	emitConcurrencyNudge(os.Stderr, m, os.Args[1:])
+	emitConcurrencyNudge(os.Stderr, m, rw, os.Args[1:])
 
 	if chained {
 		return runChain(ctx, m, opts, targetName, targets, chain, readReturns(targetName))

@@ -97,6 +97,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
+  projects/charms/cache header, per-stage progress, the run summary and lock-wait
+  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
+  `lock.released`, `notice`) on the same stream as `run.target.result`; anything not
+  yet converted falls back to a plain JSON line instead of prose.
 - **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
   and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
   and fails when the build does. The graph JSON is no longer committed.

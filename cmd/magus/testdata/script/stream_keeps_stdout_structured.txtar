@@ -32,6 +32,23 @@ exec magus run noisy -o json
 stdout '^\{'
 ! stdout 'CHATTER_ON_STDOUT'
 
+# -- -o jsonl: EVERY line on BOTH streams is a parseable JSON object, not just the
+# target's own captured output. The projects/charms/cache header, per-stage progress
+# and the run summary used to print through the cache's pretty logger regardless of
+# -o: a caller parsing this run as JSONL met "projects: ." beside a run.target.result
+# line with no way to tell where one record ended and the next began. Those now route
+# through the same report.Writer as run.target.result (the run.scope/run.charms/
+# run.cache events), and anything this package does not yet convert by name falls back
+# to a plain JSON line on stderr instead of prose (see internal/cache/log.go's
+# jsonlSafetyNetHandler) -- so both checks below hold for ANY message, named or not,
+# present or future, not only the ones this change happened to name.
+exec magus run noisy -o jsonl
+stdout '"type":"run.target.result"'
+stdout '"type":"run.scope"'
+! stdout 'CHATTER_ON_STDOUT'
+! stdout '(?m)^[^{]'
+! stderr '(?m)^[^{]'
+
 -- magus.yaml --
 concurrency: 1
 -- magusfile.buzz --

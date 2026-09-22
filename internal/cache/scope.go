@@ -41,7 +41,17 @@ func (c *Cache) LogCharms(ctx context.Context, charms string) {
 // with nothing on screen to explain the pause. Presence and name are known without
 // asking; whether the backend engages is the run's business, not the header's.
 func (c *Cache) LogCache(ctx context.Context) {
-	tier := "local"
+	tier, mode := c.Description()
+	c.log.InfoContext(ctx, "cache.backend",
+		slog.String("tier", tier), slog.String("mode", mode))
+}
+
+// Description returns the cache-tier header's facts (which tiers this run can
+// reach, and whether it may write to them) without logging them, for a caller
+// that renders its own header line -- e.g. a structured (-o jsonl) run building
+// one combined start-of-run record instead of routing through the cache logger.
+func (c *Cache) Description() (tier, mode string) {
+	tier = "local"
 	if c.remote != nil {
 		name := c.remote.Name()
 		if name == "" {
@@ -49,12 +59,11 @@ func (c *Cache) LogCache(ctx context.Context) {
 		}
 		tier = name + " + local"
 	}
-	mode := "read-only"
+	mode = "read-only"
 	if c.mutable {
 		mode = "read+write"
 	}
-	c.log.InfoContext(ctx, "cache.backend",
-		slog.String("tier", tier), slog.String("mode", mode))
+	return tier, mode
 }
 
 // LogBase emits what a run's affected set was compared against, beside the projects and
