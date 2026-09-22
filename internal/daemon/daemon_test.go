@@ -18,6 +18,8 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -502,6 +504,109 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 			}
 		}
 	}
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("daemon did not shut down")
+	}
+}
+
+// A daemon whose workspace failed to load still listens: status and the console shell are
+// served, and every workspace call answers the failure in its route's own protocol behind
+// the same guard, so an anonymous caller learns nothing about the tree.
+func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	port := freePort(t)
+	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
+	failure := &types.WorkspaceFailure{
+		Message: "magusfile: exec magusfile.buzz: [BZZ1005] ...",
+		Diagnostics: []types.SourceDiagnostic{{
+			Code: "BZZ1005", File: "magusfile.buzz", Line: 3, Column: 3, Message: "cannot assign str to int",
+		}},
+	}
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	d := NewUnloaded(mcp.Options{Version: "test", HTTPAddr: addr, HealthRoutes: map[string]http.Handler{"/readyz": ok}},
+		Unloaded{Root: "/repo", Err: func() rpcerr.Error { return rpcerr.WorkspaceFailed("/repo", failure) }})
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+	cli, err := auth.Load()
+	require.NoError(t, err)
+
+	call := func(method, path, token, contentType, body string) (int, []byte) {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, method, base+path, strings.NewReader(body))
+		require.NoError(t, err)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		got, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return resp.StatusCode, got
+	}
+
+	graph := "/magus.graph.v1alpha1.GraphService/QueryNodes"
+	code, _ := call(http.MethodPost, graph, "", "application/json", "{}")
+	assert.Equal(t, http.StatusUnauthorized, code, "the guard still comes first")
+
+	code, body := call(http.MethodPost, graph, cli, "application/json", "{}")
+	assert.Equal(t, http.StatusBadRequest, code)
+	var connectErr struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+		Details []struct {
+			Type string `json:"type"`
+		} `json:"details"`
+	}
+	require.NoError(t, json.Unmarshal(body, &connectErr), "%s", body)
+	assert.Equal(t, "failed_precondition", connectErr.Code)
+	assert.Contains(t, connectErr.Message, "[MGS3016] workspace /repo failed to load: magusfile.buzz:3:3 [BZZ1005]")
+	var kinds []string
+	for _, d := range connectErr.Details {
+		kinds = append(kinds, d.Type)
+	}
+	assert.Equal(t, []string{"google.rpc.ErrorInfo", "google.rpc.PreconditionFailure", "google.rpc.ResourceInfo", "google.rpc.Help"}, kinds)
+
+	code, body = call(http.MethodGet, "/api/v1/graph", cli, "", "")
+	assert.Equal(t, http.StatusBadRequest, code)
+	var aip struct {
+		Error struct {
+			Status  string `json:"status"`
+			Details []struct {
+				Type       string `json:"@type"`
+				Reason     string `json:"reason"`
+				Violations []struct {
+					Type    string `json:"type"`
+					Subject string `json:"subject"`
+				} `json:"violations"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(body, &aip), "%s", body)
+	assert.Equal(t, "FAILED_PRECONDITION", aip.Error.Status)
+	require.Len(t, aip.Error.Details, 4)
+	assert.Equal(t, "MGS3016", aip.Error.Details[0].Reason)
+	require.Len(t, aip.Error.Details[1].Violations, 1)
+	assert.Equal(t, "BZZ1005", aip.Error.Details[1].Violations[0].Type)
+	assert.Equal(t, "magusfile.buzz:3:3", aip.Error.Details[1].Violations[0].Subject)
+
+	// StatusService needs no workspace, so it answers even now.
+	code, body = call(http.MethodPost, "/magus.status.v1alpha1.StatusService/GetStatus", cli, "application/json", "{}")
+	assert.Equal(t, http.StatusOK, code, "%s", body)
 
 	cancel()
 	select {

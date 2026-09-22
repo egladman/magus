@@ -380,7 +380,14 @@ const (
 	//
 	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
 	// command is valid again the moment the later gate finishes.
-	GateSuperseded            DiagnosticCode = "MGS3014"
+	GateSuperseded DiagnosticCode = "MGS3014"
+	// WorkspaceLoadFailed is a daemon call against a workspace whose magusfiles failed to
+	// load. The proximate cause of the refusal; the BZZ or MGS code the load stopped on
+	// rides beside it as the underlying one. Retrying cannot help until a source changes.
+	WorkspaceLoadFailed DiagnosticCode = "MGS3016"
+	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
+	// transient twin of MGS3016: the same call succeeds once the load finishes.
+	WorkspaceStillLoading     DiagnosticCode = "MGS3017"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -509,6 +516,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
+	WorkspaceLoadFailed, WorkspaceStillLoading,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

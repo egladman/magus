@@ -249,6 +249,49 @@ func (m *Magus) explainStale(err error) error {
 	return ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion)
 }
 
+// LoadFailure describes err, a failed Open of root, as the daemon reports a FAILED
+// workspace: the error as rendered, plus the source position of each failing file that has
+// one. A position outside root keeps its absolute path.
+func LoadFailure(root string, err error) *types.WorkspaceFailure {
+	f := &types.WorkspaceFailure{Message: err.Error()}
+	for _, branch := range joinedBranches(err) {
+		d, ok := buzz.DiagnosticOf(branch)
+		if !ok {
+			continue
+		}
+		sd := types.SourceDiagnostic{Code: d.Code, Line: d.Line, Column: d.Col, Message: d.Msg}
+		// A BZZ code's error carries its docs URL; an outer MGS wrapper must not lend its own.
+		var de *types.DiagnosticError
+		if d.Code != "" && errors.As(branch, &de) && de.Code == d.Code {
+			sd.URL = de.BuzzError()["url"]
+		}
+		var exec *interp.ExecError
+		if errors.As(branch, &exec) {
+			sd.File = exec.Path
+			if rel, rerr := filepath.Rel(root, exec.Path); rerr == nil && !strings.HasPrefix(rel, "..") {
+				sd.File = filepath.ToSlash(rel)
+			}
+		}
+		f.Diagnostics = append(f.Diagnostics, sd)
+	}
+	return f
+}
+
+// joinedBranches splits err at the first errors.Join in its chain: a load joins one error
+// per failing file, and errors.As would only ever find the first.
+func joinedBranches(err error) []error {
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		if j, ok := e.(interface{ Unwrap() []error }); ok {
+			var out []error
+			for _, b := range j.Unwrap() {
+				out = append(out, joinedBranches(b)...)
+			}
+			return out
+		}
+	}
+	return []error{err}
+}
+
 // load completes workspace setup shared by Inspect and Open: magusfile preloading,
 // workspace-registry application, and magusfile spell autobind.
 func (m *Magus) load(ctx context.Context) error {

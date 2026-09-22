@@ -4,9 +4,11 @@ package status
 
 import (
 	"encoding/base64"
+	"slices"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/egladman/magus/internal/rpcerr"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	"github.com/egladman/magus/types"
 )
@@ -146,8 +148,22 @@ func deriveHealth(r types.StatusSnapshot) statusv1.Health {
 		return statusv1.Health_HEALTH_DOWN
 	case r.PoolError != "":
 		return statusv1.Health_HEALTH_DEGRADED
+	case slices.ContainsFunc(r.Pool.Workspaces, func(w types.StatusWorkspace) bool { return w.State == types.WorkspaceFailed }):
+		return statusv1.Health_HEALTH_DEGRADED
 	default:
 		return statusv1.Health_HEALTH_HEALTHY
+	}
+}
+
+func workspaceStateToProto(s types.WorkspaceState) statusv1.Workspace_State {
+	switch s {
+	case types.WorkspaceLoading:
+		return statusv1.Workspace_STATE_LOADING
+	case types.WorkspaceFailed:
+		return statusv1.Workspace_STATE_FAILED
+	default:
+		// An older daemon reports no state and only loaded workspaces.
+		return statusv1.Workspace_STATE_ACTIVE
 	}
 }
 
@@ -171,6 +187,10 @@ func poolToProto(p *types.StatusOutput) *statusv1.Pool {
 		ws := &statusv1.Workspace{
 			Root: w.Root, LoadTime: tsFromTime(w.LoadedAt), LastAccessTime: tsFromTime(w.LastAccess),
 			SecretProvider: w.SecretProvider,
+			State:          workspaceStateToProto(w.State),
+		}
+		if w.State == types.WorkspaceFailed {
+			ws.Error = rpcerr.WorkspaceFailed(w.Root, w.Error).Status()
 		}
 		if w.CacheHit != 0 || w.CacheMiss != 0 || w.CacheError != 0 || w.CacheBytes != 0 {
 			ws.Cache = &statusv1.Cache{

@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/egladman/magus/internal/rpcerr"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -83,6 +84,29 @@ func TestStatusProtoHealth(t *testing.T) {
 	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusSnapshotToProto(types.StatusSnapshot{}, types.BuildInfo{Version: "v1"}).GetHealth())
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED,
 		statusSnapshotToProto(types.StatusSnapshot{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
+}
+
+// A failed workspace is a resource in STATE_FAILED carrying the same google.rpc.Status a
+// call against it returns, and it rolls the dashboard's health up to degraded.
+func TestStatusProtoCarriesAFailedWorkspace(t *testing.T) {
+	failure := &types.WorkspaceFailure{Message: "boom", Diagnostics: []types.SourceDiagnostic{{
+		Code: "BZZ1005", File: "magusfile.buzz", Line: 3, Column: 3, Message: "cannot assign",
+	}}}
+	s := statusSnapshotToProto(types.StatusSnapshot{Pool: &types.StatusOutput{Workspaces: []types.StatusWorkspace{
+		{Root: "/ok"},
+		{Root: "/loading", State: types.WorkspaceLoading},
+		{Root: "/repo", State: types.WorkspaceFailed, Error: failure},
+	}}}, types.BuildInfo{Version: "v1"})
+
+	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED, s.GetHealth())
+	ws := s.GetPool().GetWorkspaces()
+	require.Len(t, ws, 3)
+	assert.Equal(t, statusv1.Workspace_STATE_ACTIVE, ws[0].GetState(), "an older daemon's workspace is loaded")
+	assert.Nil(t, ws[0].GetError())
+	assert.Equal(t, statusv1.Workspace_STATE_LOADING, ws[1].GetState())
+	assert.Nil(t, ws[1].GetError())
+	assert.Equal(t, statusv1.Workspace_STATE_FAILED, ws[2].GetState())
+	assert.True(t, proto.Equal(rpcerr.WorkspaceFailed("/repo", failure).Status(), ws[2].GetError()))
 }
 
 // TestEncodeStatusEventRoundTrip confirms a status snapshot decodes back: base64 -> proto.

@@ -61,6 +61,12 @@ func TestEvaluateHealth(t *testing.T) {
 	assertHealth("readiness/daemon-mode-with-workspace",
 		&proc.StatusReply{ParentPID: 1, Mode: "daemon", Workspaces: []proc.Workspace{{Root: "/ws"}}},
 		nil, probeReadiness, "", true, "1 workspace")
+	failed := &proc.StatusReply{ParentPID: 1, Mode: "daemon", Workspaces: []proc.Workspace{
+		{Root: "/repo", State: types.WorkspaceFailed}, {Root: "/loading", State: types.WorkspaceLoading},
+	}}
+	assertHealth("readiness/failed-root-names-the-code", failed, nil, probeReadiness, "/repo", false, "MGS3016")
+	assertHealth("readiness/loading-root-not-ready", failed, nil, probeReadiness, "/loading", false, "not loaded")
+	assertHealth("readiness/only-unloaded-workspaces", failed, nil, probeReadiness, "", false, "no workspaces loaded")
 	assertHealth("readiness/proc-mode-rejected",
 		&proc.StatusReply{ParentPID: 1, Mode: "proc"}, nil, probeReadiness, "", false, "per-process mode")
 	assertHealth("liveness/proc-mode-still-alive",
@@ -191,6 +197,8 @@ func TestWorkspacesComponent(t *testing.T) {
 		// Two workspaces with recognizable roots: the count is wanted in Detail, but the
 		// roots themselves must NOT leak into it on this unguarded surface.
 		{"two-workspaces", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
+		{"one-failed", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/a", State: types.WorkspaceActive}, {Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "degraded", Detail: "1 loaded, 1 failed to load"}},
+		{"all-failed", &types.StatusOutput{Mode: "daemon", Workspaces: []types.StatusWorkspace{{Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "1 failed to load"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

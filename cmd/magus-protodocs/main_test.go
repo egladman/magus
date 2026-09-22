@@ -588,6 +588,9 @@ func TestAnchorReproducesTheAutoHeadingID(t *testing.T) {
 		"a b":                              "a-b",
 		"???":                              "heading",
 		"":                                 "heading",
+		// goldmark drops the dot, so two nested States still get distinct ids.
+		"magus.status.v1alpha1.Workspace.State": "workspacestate",
+		"magus.status.v1alpha1.TargetRun.State": "targetrunstate",
 	} {
 		assert.Equal(t, want, anchor(in), "anchor(%q)", in)
 	}
@@ -596,6 +599,13 @@ func TestAnchorReproducesTheAutoHeadingID(t *testing.T) {
 func TestLeaf(t *testing.T) {
 	assert.Equal(t, "Token", leaf("magus.token.v1.Token"))
 	assert.Equal(t, "Token", leaf("Token"))
+}
+
+func TestLocalNameKeepsTheParentOfANestedType(t *testing.T) {
+	assert.Equal(t, "Token", localName("magus.token.v1.Token"))
+	assert.Equal(t, "Workspace.State", localName("magus.status.v1alpha1.Workspace.State"))
+	assert.Equal(t, "Status", localName("google.rpc.Status"))
+	assert.Equal(t, "Token", localName("Token"))
 }
 
 // TestTypeLinkPicksTheRightTarget covers the three answers: a same-package type

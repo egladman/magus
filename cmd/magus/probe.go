@@ -101,16 +101,32 @@ func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root 
 	if root != "" {
 		clean := filepath.Clean(root)
 		for _, ws := range status.Workspaces {
-			if filepath.Clean(ws.Root) == clean {
+			if filepath.Clean(ws.Root) != clean {
+				continue
+			}
+			if ws.State == types.WorkspaceFailed {
+				return false, fmt.Sprintf("workspace %s failed to load [%s]", root, types.WorkspaceLoadFailed)
+			}
+			if ws.Loaded() {
 				return true, fmt.Sprintf("workspace %s is loaded", root)
 			}
 		}
 		return false, fmt.Sprintf("workspace %s is not loaded", root)
 	}
-	if len(status.Workspaces) > 0 {
-		return true, fmt.Sprintf("%d workspace(s) loaded", len(status.Workspaces))
+	if n := loadedCount(status.Workspaces); n > 0 {
+		return true, fmt.Sprintf("%d workspace(s) loaded", n)
 	}
 	return false, "no workspaces loaded"
+}
+
+func loadedCount(ws []types.StatusWorkspace) int {
+	n := 0
+	for _, w := range ws {
+		if w.Loaded() {
+			n++
+		}
+	}
+	return n
 }
 
 // probeResult is one probe's verdict: which kind ran, whether it passed, and the
@@ -428,10 +444,24 @@ func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent 
 		c.Status, c.Detail = types.ReadinessDown, "daemon unreachable"
 	case snapshot.Mode == "proc":
 		c.Status, c.Detail = types.ReadinessDown, "daemon is in per-process mode"
-	case len(snapshot.Workspaces) == 0:
-		c.Status, c.Detail = types.ReadinessDown, "no workspaces loaded"
 	default:
-		c.Status, c.Detail = types.ReadinessOK, fmt.Sprintf("%d loaded", len(snapshot.Workspaces))
+		loaded := loadedCount(snapshot.Workspaces)
+		failed := 0
+		for _, w := range snapshot.Workspaces {
+			if w.State == types.WorkspaceFailed {
+				failed++
+			}
+		}
+		switch {
+		case loaded == 0 && failed == 0:
+			c.Status, c.Detail = types.ReadinessDown, "no workspaces loaded"
+		case loaded == 0:
+			c.Status, c.Detail = types.ReadinessDown, fmt.Sprintf("%d failed to load", failed)
+		case failed > 0:
+			c.Status, c.Detail = types.ReadinessDegraded, fmt.Sprintf("%d loaded, %d failed to load", loaded, failed)
+		default:
+			c.Status, c.Detail = types.ReadinessOK, fmt.Sprintf("%d loaded", loaded)
+		}
 	}
 	return c
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/spells"
@@ -1173,6 +1174,27 @@ func floorWorkspace(t *testing.T, constraint string) string {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
 		[]byte("import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
 	return root
+}
+
+// A load joins one error per failing file; each is its own diagnostic. A coded type error
+// needs the magusfile bindings, which cmd/magus links; its registry test covers that case.
+func TestLoadFailureLocatesEachJoinedFile(t *testing.T) {
+	err := fmt.Errorf("magus: repo: %w", errors.Join(
+		&interp.ExecError{Path: "/repo/a/magusfile.buzz", Err: errors.New("buzz: line 2:1: expected identifier")},
+		&interp.ExecError{Path: "/elsewhere/spell.buzz", Err: errors.New("buzz: line 5:4: unexpected }")},
+	))
+	assert.Equal(t, &types.WorkspaceFailure{
+		Message: err.Error(),
+		Diagnostics: []types.SourceDiagnostic{
+			{File: "a/magusfile.buzz", Line: 2, Column: 1, Message: "expected identifier"},
+			{File: "/elsewhere/spell.buzz", Line: 5, Column: 4, Message: "unexpected }"},
+		},
+	}, LoadFailure("/repo", err))
+}
+
+func TestLoadFailureWithoutAPosition(t *testing.T) {
+	err := errors.New("daemon: load config /repo: magus.yaml: unknown key")
+	assert.Equal(t, &types.WorkspaceFailure{Message: err.Error()}, LoadFailure("/repo", err))
 }
 
 // The wiring, not the comparison: internal/ward covers the semver logic, and this
