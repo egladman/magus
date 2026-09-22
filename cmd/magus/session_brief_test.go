@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
@@ -126,18 +128,34 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// An empty magusfile marks the directory as a workspace root.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# rules\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "harnesses"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "harnesses", "brief-host.json"), []byte(`{
-  "schema_version": 2,
-  "id": "brief-host",
-  "display": {"name": "Brief Host"},
-  "config": {"path": "host/hooks.json"},
-  "skills": {"paths": [".agents/skills"], "form": "both"},
-  "managed_entries": [{
-    "path": ["hooks", "before"],
-    "entries": [{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}]
-  }]
-}`), 0o644))
+	// "brief-host" is wired as a harness spell (no harnesses/*.json compat
+	// directory left to write it into): a WorkspaceRegistry records the wiring the
+	// way magus\harness.provider would, and RegisterHarnessSpellLoader answers for
+	// it the way a real spell's harness_config would.
+	agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
+		if id != "brief-host" {
+			return agent.HarnessDescriptor{}, "", false, nil
+		}
+		return agent.HarnessDescriptor{
+			SchemaVersion: 2,
+			ID:            "brief-host",
+			Display:       agent.HarnessDisplay{Name: "Brief Host"},
+			Config:        agent.HarnessConfig{Path: "host/hooks.json"},
+			Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormBoth},
+			ManagedEntries: []agent.HarnessEntries{{
+				Path: []string{"hooks", "before"},
+				Entries: []map[string]any{{
+					"match":    "run",
+					"commands": []any{map[string]any{"type": "command", "command": "sh magus-command.sh"}},
+				}},
+			}},
+		}, "spell:brief-host", true, nil
+	})
+	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(nil) })
+	reg := magus.NewWorkspaceRegistry()
+	reg.AddHarness("brief-host")
+	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg))
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "host", "hooks.json"),
 		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}]}}`), 0o644))
@@ -167,7 +185,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 		Project: "internal/ledger", Status: journal.StatusFail, Ref: "ref-1",
 	})
 
-	brief := gatherSessionBrief(ctx, root, nil)
+	brief := gatherSessionBrief(ctx, root, ws)
 
 	assert.Equal(t, root, brief.Workspace)
 	require.Len(t, brief.Leases, 1)
