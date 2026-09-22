@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -28,9 +30,11 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -109,6 +113,10 @@ type Magus struct {
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
 	resolver *secret.Resolver
+
+	// spellImports is resolved once in load, before any magusfile, and read by every
+	// import resolver after; see SpellImports.
+	spellImports *remotespell.Imports
 
 	// hostMemBytes caches the machine's memory for slotsForPolicy; see hostTotalBytes.
 	hostMemOnce  sync.Once
@@ -260,6 +268,19 @@ func (m *Magus) load(ctx context.Context) error {
 	// root is only present on the run path (Magus.Run), so preload-time resolution
 	// (describe, affected, ls) could not walk spell imports up to the root.
 	ctx = types.WithWorkspace(ctx, m)
+	// Remote spells resolve before any Buzz loads, from magus.lock alone: a load never
+	// asks a registry what a tag means.
+	imports, err := remotespell.LoadImports(ctx, m.ws.Root, m.cfg.Spells, remotespell.LoadOptions{
+		Client: m.spellRegistryClient,
+		Embedded: func(name string) bool {
+			_, ok := spell.Builtins()[name]
+			return ok
+		},
+	})
+	if err != nil {
+		return err
+	}
+	m.spellImports = imports
 	customTargets, err := preloadMagusfiles(ctx, m)
 	if err != nil {
 		// Apply and the policy check would judge a registry the failed magusfiles
@@ -301,6 +322,31 @@ func (m *Magus) load(ctx context.Context) error {
 	m.autobindMagusfileSpell()
 	return m.spellShadows()
 }
+
+// SpellImports returns the spells magus.yaml declares, as this workspace's load resolved
+// them. The import resolvers reach it through the workspace on the context.
+func (m *Magus) SpellImports() *remotespell.Imports { return m.spellImports }
+
+// spellRegistryClient is the client a remote spell pull uses for host: authenticated
+// by its spells.registries entry when there is one, anonymous otherwise. It runs before
+// any magusfile could select a secret provider, so the reference resolves through the
+// built-in environment provider.
+func (m *Magus) spellRegistryClient(ctx context.Context, host string) (*oci.Client, error) {
+	c := &oci.Client{HTTP: &http.Client{Timeout: spellPullTimeout}}
+	entry, ok := m.cfg.Spells.Registry(host)
+	if !ok {
+		return c, nil
+	}
+	pass, err := m.resolver.Read(ctx, entry.Password)
+	if err != nil {
+		return nil, fmt.Errorf("spells.registries %s: %w", host, err)
+	}
+	c.Username, c.Password = entry.Username, pass.Reveal()
+	return c, nil
+}
+
+// spellPullTimeout bounds one registry request of a remote spell pull.
+const spellPullTimeout = 2 * time.Minute
 
 // spellShadows is the shadow ward: a nested spells/<name> that a root-wins ancestor
 // already defines is dead code (its import always resolves to the ancestor). Block it
