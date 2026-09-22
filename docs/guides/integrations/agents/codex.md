@@ -102,7 +102,7 @@ the workspace, change only the import path (for example
 `import "harness/codex" as codex`), edit the workspace Buzz, then re-run apply
 and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
 Or target Codex alone:
 
@@ -241,7 +241,7 @@ This host is a Buzz harness spell. Adapt without Magus source edits by forking
 the spell and changing only the import path; then `magus agent harness apply`
 and `verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
 The `Stop` entry is not a guard. It records where the work stands each time a
 turn ends, which is worth having here in particular: a Codex session that runs
@@ -258,7 +258,7 @@ this checkout: branch and revision, commits not yet on the base ref, the dirty
 tree split into sources, generated outputs and unclaimed paths, the live leases,
 the last recorded run's failures, and where the rules live.
 When repeated guard feedback needs review, the same brief adds one bounded line
-that directs the model to `magus agent improve`; it does not edit memory or
+that directs the model to `magus doctor`; it does not edit memory or
 instructions by itself.
 
 Two variables shape it for this host. `REHYDRATE_FORMAT=json` is required, not

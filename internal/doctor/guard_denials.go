@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -16,23 +16,14 @@ const recurringGuardDenialLimit = 500
 // checkRecurringGuardDenials reports guard denials an agent hit repeatedly, so the friction
 // a workspace keeps causing is visible where every other workspace verdict already is.
 //
-// It replaced `magus agent improve`, which was a verb for a read-only report: it took the
-// same evidence, ranked it, and ended in "a human decides", which is what doctor IS. Its
-// only other half, --apply, duplicated `magus agent harness apply` call for call.
-//
 // ADVICE, never a failure. A denial is the guard doing its job, and a recurring one may
 // still be correct: the same wrong instinct repeated is a reader's habit, not a workspace
 // defect. What is reportable is that it KEEPS happening, because that is the part no single
-// session can see. The destination is a human's to choose, and the magus-workspace-rules
-// skill carries the method for choosing it.
+// session can see. This states the evidence only; choosing a destination is a human's job,
+// and the magus-workspace-rules skill carries the method for choosing it.
 func (r *runner) checkRecurringGuardDenials() types.DoctorCheck {
 	const name = "recurring-guard-denials"
-	report, err := agent.Improve(r.ctx, agent.ImproveOptions{
-		Root:           r.root,
-		CacheDir:       r.cacheDir(),
-		Limit:          recurringGuardDenialLimit,
-		WiredHarnesses: workspaceHarnesses(r.ws),
-	})
+	feedback, err := trail.RecentGuardFeedback(r.cacheDir(), "", recurringGuardDenialLimit)
 	if err != nil {
 		return types.DoctorCheck{
 			Name:     name,
@@ -41,13 +32,19 @@ func (r *runner) checkRecurringGuardDenials() types.DoctorCheck {
 			Message:  "no readable activity trail, so nothing can be said about recurring denials",
 		}
 	}
-	if len(report.Candidates) == 0 {
+	recurring := make([]trail.GuardFeedback, 0, len(feedback))
+	for _, item := range feedback {
+		if item.NeedsReview() {
+			recurring = append(recurring, item)
+		}
+	}
+	if len(recurring) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no guard denial has recurred across sessions"}
 	}
-	details := make([]string, 0, len(report.Candidates))
-	for _, c := range report.Candidates {
-		details = append(details, fmt.Sprintf("%s on %s: %d denial(s) across %d session(s); %s",
-			c.Rule, c.Surface, c.Denied, c.Sessions, c.Next))
+	details := make([]string, 0, len(recurring))
+	for _, c := range recurring {
+		details = append(details, fmt.Sprintf("%s on %s: %d denial(s) across %d session(s), followed %d/%d",
+			c.Rule, c.Surface, c.Denied, c.Sessions, c.FollowedSessions, c.Sessions))
 	}
 	slices.Sort(details)
 	return types.DoctorCheck{
@@ -55,7 +52,7 @@ func (r *runner) checkRecurringGuardDenials() types.DoctorCheck {
 		Status:   types.DoctorAdvice,
 		Evidence: types.EvidenceInferred,
 		Message: fmt.Sprintf("%d guard rule(s) denied the same shape more than once; the friction is real whether the rule is right or the reader is",
-			len(report.Candidates)),
+			len(recurring)),
 		Details: details,
 	}
 }

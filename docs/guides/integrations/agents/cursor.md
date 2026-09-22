@@ -80,7 +80,7 @@ the workspace, change only the import path (for example
 `import "harness/cursor" as cursor`), edit the workspace Buzz, then re-run apply
 and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
 Or target Cursor alone:
 

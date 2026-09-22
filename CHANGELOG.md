@@ -97,6 +97,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
+  denial count, session count, and followed rate; the retired advice layer's destination
+  and confidence labels are gone. A human reads the evidence and decides.
 - **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
   and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
   and fails when the build does. The graph JSON is no longer committed.
