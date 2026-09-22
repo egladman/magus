@@ -46,6 +46,7 @@ import {
   authHeaders,
   isRemembered,
   setRemembered,
+  mayLoadBundledDemo,
   wantsDemo,
   createDaemonTransport,
   parseHash,
@@ -523,7 +524,8 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   // A BARE /graph/ (no directive at all) is the cold visit that gets the empty state instead,
   // deferring the graph.json download until the visitor asks. Loading via a reload into boot
   // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
-  if (wantsDemo(params) || params.view || params.q || params.node) {
+  // The daemon refuses to serve these files too; this keeps an attached surface from asking.
+  if (mayLoadBundledDemo(params) && (wantsDemo(params) || params.view || params.q || params.node)) {
     try {
       // Two demos ship, both generated from THIS workspace by the root graph-generate
       // target: the knowledge graph and the target graph. Selected by the same fragment

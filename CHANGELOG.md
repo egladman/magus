@@ -217,6 +217,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
 
+### Security
+
+- **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
+  built console file, including the demo graph JSON holding the whole knowledge graph and
+  its notes. Other files and directory listings now return 404, on loopback and on the LAN
+  share, and an attached graph explorer never falls back to that demo data.
+
 ## [v0.4.3] - 2026-09-06
 
 See the full changelog at

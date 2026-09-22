@@ -109,6 +109,15 @@ export function wantsDemo(params: HashParams): boolean {
   return params.demo !== undefined;
 }
 
+// mayLoadBundledDemo reports whether a surface may fetch demo data bundled next to the app
+// (the graph explorer's knowledge-graph.json). Never under a daemon attach: that file is this
+// repo's own graph, notes included, and falling back to it after a failed or tokenless attach
+// shows workspace data nobody authenticated for. Synthetic in-source demos are not covered.
+// Read it after adoptDaemonOrigin, or a daemon-origin page is not yet known to be attached.
+export function mayLoadBundledDemo(params: HashParams = parseHash()): boolean {
+  return daemonAttach(params) === null;
+}
+
 // ---- the loopback lock -----------------------------------------------------
 
 // validateLoopbackHost: a configured/entered daemon host MUST be literally 127.0.0.1

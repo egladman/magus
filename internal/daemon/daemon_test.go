@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -332,6 +333,113 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "/mcp must not admit the hosted Origin")
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("daemon did not shut down")
+	}
+}
+
+// TestEveryRouteRefusesAnAnonymousCaller walks every pattern the daemon mounted (read off the
+// server, not a list kept here) and proves a caller with no bearer token reaches only the
+// health probes and the console's app shell. A route mounted without a guard fails this test
+// without anyone having to remember to add it.
+func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := fixtureWorkspace(t)
+
+	// A built console holding the hosted demo's data beside the shell, as the real build does.
+	consoleDir := t.TempDir()
+	for name, body := range map[string]string{
+		"index.html":                 "<html><head>\n</head><body>shell</body></html>",
+		"console.js":                 "js",
+		"sw.js":                      "self",
+		"manifest.webmanifest":       "{}",
+		"graph/explorer.js":          "js",
+		"graph/knowledge-graph.json": `{"nodes":[{"kind":"note"}]}`,
+		"graph/target-graph.json":    `{"projects":[]}`,
+	} {
+		p := filepath.Join(consoleDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
+	}
+	t.Setenv("MAGUS_CONSOLE_DIR", consoleDir)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m, err := magus.Open(ctx, root)
+	require.NoError(t, err)
+
+	port := freePort(t)
+	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
+
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	// The same three probes cmd/magus mounts; /healthz is its liveness alias.
+	health := map[string]bool{"/livez": true, "/readyz": true, "/healthz": true}
+	routes := map[string]http.Handler{}
+	for p := range health {
+		routes[p] = ok
+	}
+	d := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: addr, HealthRoutes: routes})
+	mounted := make(chan []string, 1)
+	d.mounted = func(p []string) { mounted <- p }
+
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+	patterns := <-mounted
+	for _, want := range []string{"/mcp", "/api/", "/console/", "/api/v1/share"} {
+		require.Contains(t, patterns, want, "the walk must see the whole mux")
+	}
+
+	client := &http.Client{
+		Timeout:       5 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	anonymous := func(method, path string) int {
+		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer reqCancel()
+		req, err := http.NewRequestWithContext(reqCtx, method, base+path, nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	refused := []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound}
+
+	for _, pattern := range patterns {
+		switch {
+		case health[pattern]:
+			assert.Equal(t, http.StatusOK, anonymous(http.MethodGet, pattern), pattern)
+		case pattern == "/console/":
+			for _, p := range []string{"/console/", "/console/console.js", "/console/sw.js",
+				"/console/manifest.webmanifest", "/console/graph/", "/console/graph/explorer.js"} {
+				assert.Equal(t, http.StatusOK, anonymous(http.MethodGet, p), "shell file %s", p)
+			}
+			for _, p := range []string{"/console/graph/knowledge-graph.json",
+				"/console/graph/target-graph.json", "/console/graph/explorer.js.map"} {
+				assert.Contains(t, refused, anonymous(http.MethodGet, p), "%s must be refused", p)
+			}
+		default:
+			// A trailing-slash pattern is a subtree: probe it and a path beneath it.
+			paths := []string{pattern}
+			if strings.HasSuffix(pattern, "/") {
+				paths = append(paths, pattern+"Probe")
+			}
+			for _, p := range paths {
+				for _, method := range []string{http.MethodGet, http.MethodPost} {
+					assert.Contains(t, refused, anonymous(method, p), "%s %s answered without a token", method, p)
+				}
+			}
+		}
+	}
 
 	cancel()
 	select {

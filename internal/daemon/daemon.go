@@ -73,6 +73,9 @@ type Daemon struct {
 	runs       func() []types.StatusRun
 	services   func() []types.StatusService
 	workspaces func() []activityhandler.Workspace
+	// mounted receives every route pattern once mounting is done, before the listener
+	// serves; the route-enumeration test reads the mux through it.
+	mounted func(patterns []string)
 }
 
 // Option customizes a Daemon.
@@ -569,10 +572,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// adds the SPA fallback so the clean /console/<surface>/ surface paths resolve to the
 			// shell, and a strict CSP on the HTML. Static serving stays unauthenticated by design
 			// - the app shell is not a secret; it reads the bearer token from the URL fragment and
-			// replays it on the guarded /api and Connect routes above, but it is wrapped in the
-			// same GuardRebind the rest of the loopback surface uses, so a forged cross-origin Host
-			// cannot reach it. Mounted only when a build was found; otherwise the daemon still runs
-			// (MCP + data routes) and /console/ just 404s until a console is built.
+			// replays it on the guarded /api and Connect routes above. The shell is ALL it
+			// serves: StaticHandler refuses any file outside its shell allowlist, because the
+			// build also writes the hosted demo's graph JSON (this repo's knowledge graph, notes
+			// included) into the same dir. It is wrapped in the same GuardRebind the rest of the
+			// loopback surface uses, so a forged cross-origin Host cannot reach it. Mounted only
+			// when a build was found; otherwise the daemon still runs (MCP + data routes) and
+			// /console/ just 404s until a console is built.
 			if ok {
 				httpServer.Handle("/console/", httpx.GuardRebind(allowed, console.StaticHandler(consoleDir)))
 				log.InfoContext(ctx, "[BRIDGE] static console mounted", slog.String("path", "/console/"), slog.String("dir", consoleDir))
@@ -679,6 +685,9 @@ func (s *Daemon) Serve(ctx context.Context) error {
 		}
 	}
 
+	if s.mounted != nil {
+		s.mounted(httpServer.Patterns())
+	}
 	log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", httpServer.Addr().String()))
 	if err := httpServer.Serve(ctx); err != nil {
 		log.WarnContext(ctx, "[AGENT] shutdown error", slog.String("error", err.Error()))
