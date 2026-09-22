@@ -112,7 +112,7 @@ func consoleJobLine(id string) string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	serving, daemonVersion := consoleDaemon()
+	serving, daemonVersion := probeConsoleDaemon()
 	if !serving {
 		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
 	}
@@ -147,8 +147,9 @@ func printConsoleJobLine(out io.Writer, id string) {
 	}
 }
 
-// consoleDaemon reports whether a PERSISTENT daemon is up, and its version. A per-process
-// proc server answers a socket too and serves no console, so only a "daemon" mode counts.
+// probeConsoleDaemon reports whether a PERSISTENT daemon is up, and its version. A
+// per-process proc server answers a socket too and serves no console, so only a "daemon"
+// mode counts.
 //
 // It probes the daemon's own address, never MAGUS_DAEMON_SOCKET: when the daemon refuses a
 // mismatched build, startup points that variable at this process's own proc server, and
@@ -158,7 +159,7 @@ func printConsoleJobLine(out io.Writer, id string) {
 // socket round trip on the way to printing one line, `magus ls jobs` reaches it through a
 // caller that has no context to pass, and a link nobody can build is not worth widening four
 // signatures for.
-func consoleDaemon() (serving bool, daemonVersion string) {
+func probeConsoleDaemon() (serving bool, daemonVersion string) {
 	ctx, cancel := context.WithTimeout(context.Background(), consoleProbeTimeout)
 	defer cancel()
 	st, err := proc.QueryStatus(ctx, admissionDaemonAddr(globalCfg))

@@ -189,11 +189,11 @@ func SurfaceLink(surface string, fragment ...FragmentParam) string {
 // wrong for a daemon reply read in another directory: that caller uses [OpenCommandAs]
 // with hint.DefaultBinaryName.
 func OpenCommand(link string) string {
-	return OpenCommandAs(runtime.GOOS, hint.BinaryName(), link)
+	return OpenCommandAs(link, runtime.GOOS, hint.BinaryName())
 }
 
 // OpenCommandAs is [OpenCommand] for a named GOOS and magus binary spelling.
-func OpenCommandAs(goos, bin, link string) string {
+func OpenCommandAs(link, goos, bin string) string {
 	sep := "#"
 	if strings.Contains(link, "#") {
 		sep = "&"
