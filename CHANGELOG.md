@@ -6,14 +6,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Breaking
-
-- **`harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
-  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
-  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
-  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
-  forking its spell's import path instead.
-
 ### Added
 
 - **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
@@ -175,6 +167,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
+  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
+  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
+  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
+  forking its spell's import path instead.
 - **Breaking: the `exclusive` target and project option, with no replacement.** A
   magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.

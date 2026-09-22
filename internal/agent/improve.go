@@ -77,7 +77,7 @@ func Improve(ctx context.Context, opts ImproveOptions) (ImproveReport, error) {
 	}
 	if opts.Root != "" {
 		ctx = ContextWithWiredHarnesses(ctx, opts.WiredHarnesses)
-		ids, err := KnownHarnesses(ctx, opts.Root, opts.WiredHarnesses...)
+		ids, err := KnownHarnesses(ctx, opts.WiredHarnesses...)
 		if err != nil {
 			return ImproveReport{}, fmt.Errorf("load harness descriptors: %w", err)
 		}

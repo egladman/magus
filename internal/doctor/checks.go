@@ -2073,7 +2073,7 @@ func workspaceHarnesses(ws types.WorkspaceReader) []string {
 // are gone.
 func harnessConfigCandidates(root string, wired ...string) ([]string, error) {
 	ctx := agent.ContextWithWiredHarnesses(context.Background(), wired)
-	ids, err := agent.KnownHarnesses(ctx, root, wired...)
+	ids, err := agent.KnownHarnesses(ctx, wired...)
 	if err != nil {
 		return nil, err
 	}
@@ -2247,7 +2247,7 @@ func HookConfigs(ctx context.Context, root string, wired ...string) []string {
 func guardHookConfigs(ctx context.Context, root string, wired ...string) []string {
 	var out []string
 	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
-	ids, err := agent.KnownHarnesses(ctx, root, wired...)
+	ids, err := agent.KnownHarnesses(ctx, wired...)
 	if err != nil {
 		return nil
 	}
@@ -2314,7 +2314,7 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 	}
 
 	ctx = agent.ContextWithWiredHarnesses(ctx, wiredNames)
-	ids, err := agent.KnownHarnesses(ctx, root, wiredNames...)
+	ids, err := agent.KnownHarnesses(ctx, wiredNames...)
 	if err != nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: "could not load harness descriptors", Details: []string{err.Error()}}
 	}

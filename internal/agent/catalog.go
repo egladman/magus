@@ -1207,7 +1207,7 @@ type HarnessSkillLocation struct {
 // data (a spell), not a release, and a harness with no id in wired contributes nothing,
 // same as it contributing no id at all.
 func HarnessSkillLocations(ctx context.Context, root string, wired ...string) ([]HarnessSkillLocation, error) {
-	ids, err := KnownHarnesses(ctx, root, wired...)
+	ids, err := KnownHarnesses(ctx, wired...)
 	if err != nil {
 		return nil, err
 	}

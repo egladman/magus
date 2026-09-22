@@ -422,30 +422,26 @@ func TestInvokesMagusRejectsGenericGuardScripts(t *testing.T) {
 // test: wired is the only source of an id now that harnesses/*.json is gone, so an
 // id that nobody wired is simply not known, spell or not.
 func TestKnownHarnessesReturnsWiredIDsDedupedAndSorted(t *testing.T) {
-	root := t.TempDir()
-
-	ids, err := KnownHarnesses(context.Background(), root)
+	ids, err := KnownHarnesses(context.Background())
 	require.NoError(t, err)
 	assert.Empty(t, ids, "nothing is known without an explicit wired id")
 
 	// nil / no wired args: still empty. Distinct from a blank entry in wired.
-	ids, err = KnownHarnesses(context.Background(), root, nil...)
+	ids, err = KnownHarnesses(context.Background(), nil...)
 	require.NoError(t, err)
 	assert.Empty(t, ids)
 
-	ids, err = KnownHarnesses(context.Background(), root, "cursor", "test-host", "codex", "cursor")
+	ids, err = KnownHarnesses(context.Background(), "cursor", "test-host", "codex", "cursor")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"codex", "cursor", "test-host"}, ids)
 }
 
 func TestKnownHarnessesRejectsEmptyWiredID(t *testing.T) {
-	root := t.TempDir()
-
-	_, err := KnownHarnesses(context.Background(), root, "cursor", "", "codex")
+	_, err := KnownHarnesses(context.Background(), "cursor", "", "codex")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 
-	_, err = KnownHarnesses(context.Background(), root, "  ")
+	_, err = KnownHarnesses(context.Background(), "  ")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 }

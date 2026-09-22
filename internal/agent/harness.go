@@ -1019,7 +1019,7 @@ func writeHarnessAtomically(path string, body []byte) error {
 // nothing for a checkout whose wired interpreter is missing, which is exactly the state a
 // caller asking which configs exist needs to inspect.
 func HarnessConfigPaths(ctx context.Context, root string, wired ...string) []string {
-	ids, err := KnownHarnesses(ctx, root, wired...)
+	ids, err := KnownHarnesses(ctx, wired...)
 	if err != nil {
 		return nil
 	}
@@ -1042,10 +1042,9 @@ func HarnessConfigPaths(ctx context.Context, root string, wired ...string) []str
 	return slices.Compact(out)
 }
 
-// root is accepted for symmetry with LoadHarness and the rest of this surface
-// (a harness is scoped to a workspace), but this function itself reads nothing
-// from it: wired is the only input.
-func KnownHarnesses(ctx context.Context, root string, wired ...string) ([]string, error) {
+// KnownHarnesses returns the wired harness ids trimmed, deduplicated and
+// sorted. An empty id is an error, since it names no spell to load.
+func KnownHarnesses(ctx context.Context, wired ...string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
