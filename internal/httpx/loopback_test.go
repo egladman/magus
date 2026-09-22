@@ -20,7 +20,7 @@ func TestIsLoopbackAddr(t *testing.T) {
 }
 
 func TestRequireLoopbackPeerGuard(t *testing.T) {
-	ok := RequireLoopbackPeer(JSONErrors, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	ok := RequireLoopbackPeer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 
 	local := httptest.NewRequest(http.MethodGet, "/api", nil)
 	local.RemoteAddr = "127.0.0.1:5555"

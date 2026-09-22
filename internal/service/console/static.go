@@ -91,7 +91,7 @@ func StaticHandler(consoleDir string) http.Handler {
 			return
 		}
 		if !isShellFile(consoleDir, r.URL.Path) {
-			httpx.JSONErrors.Refuse(w, r, httpx.Refusal{
+			httpx.FormatJSON.Refuse(w, r, httpx.Refusal{
 				Code:    connect.CodeNotFound,
 				Reason:  types.ConsoleFileWithheld,
 				Title:   "console file withheld",

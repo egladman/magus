@@ -97,7 +97,7 @@ func (s *TokenSuite) TestPathLocation() {
 	assert.Equal(t, filepath.Join(s.stateDir, "magus", "mcp_token"), path)
 }
 
-// TestGuardHotReload proves httpx.BearerGuard(JSONErrors, VerifyMCPBearer, ...) picks up a rotated or
+// TestGuardHotReload proves httpx.BearerGuard(FormatJSON, VerifyMCPBearer, ...) picks up a rotated or
 // revoked cli token without rebuilding the handler — the daemon's hot-reload
 // contract. It lives here (not in httpx) because it exercises the persistent
 // token store's Save/Revoke path feeding the shared guard.
@@ -107,7 +107,7 @@ func (s *TokenSuite) TestGuardHotReload() {
 	a, _ := Generate()
 	_, err := SaveNew(a)
 	require.NoError(t, err, "SaveNew")
-	h := httpx.BearerGuard(httpx.JSONErrors, VerifyMCPBearer, okHandler)
+	h := httpx.BearerGuard(httpx.FormatJSON, VerifyMCPBearer, okHandler)
 
 	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+a), "token A")
 

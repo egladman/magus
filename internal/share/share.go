@@ -230,7 +230,7 @@ func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
 // Route is one data route a share serves, with the format its refusals are written in.
 type Route struct {
 	Handler http.Handler
-	Errors  httpx.ErrorFormat
+	Format  httpx.ErrorFormat
 }
 
 // Start mints a fresh read-only token and opens a new LAN listener serving the
@@ -299,7 +299,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 	// runs after BearerGuard, so it only ever sees requests that already carry a valid
 	// token; it binds the first device and rejects the token replayed from any other.
 	for pattern, rt := range guarded {
-		mux.Handle(pattern, httpx.BearerGuard(rt.Errors, verify, sg.admit(rt.Errors, rt.Handler)))
+		mux.Handle(pattern, httpx.BearerGuard(rt.Format, verify, sg.admit(rt.Format, rt.Handler)))
 	}
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}

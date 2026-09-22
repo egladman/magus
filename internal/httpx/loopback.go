@@ -36,10 +36,12 @@ func isLoopbackAddr(addr string) bool {
 // This checks the transport peer, not the Host header (that is GuardRebind's job). Applied
 // once around the tool-page mux; the interceptor form for a pure Connect server checks the
 // same via the peer address.
-func RequireLoopbackPeer(format ErrorFormat, next http.Handler) http.Handler {
+func RequireLoopbackPeer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackAddr(r.RemoteAddr) {
-			format.Refuse(w, r, Refusal{
+			// Every mux-level caller here is a plain JSON route; a Connect server checks
+			// loopback via its own interceptor instead of this middleware.
+			FormatJSON.Refuse(w, r, Refusal{
 				Code:    connect.CodePermissionDenied,
 				Reason:  types.LoopbackPeerRequired,
 				Title:   "local access only",

@@ -22,12 +22,12 @@ import (
 type ErrorFormat uint8
 
 const (
-	// JSONErrors renders google.rpc.Status in AIP-193's HTTP/1.1+JSON shape,
+	// FormatJSON renders google.rpc.Status in AIP-193's HTTP/1.1+JSON shape,
 	// {"error":{"code","message","status","details"}}.
-	JSONErrors ErrorFormat = iota
-	// ConnectErrors renders it as a Connect error, in the variant the request's content type
+	FormatJSON ErrorFormat = iota
+	// FormatConnect renders it as a Connect error, in the variant the request's content type
 	// selects: unary JSON, a streaming end-of-stream message, or gRPC trailers.
-	ConnectErrors
+	FormatConnect
 )
 
 // Refusal is a request turned away before any handler ran: a credential, host, peer, or
@@ -61,7 +61,7 @@ func (e ErrorFormat) Refuse(w http.ResponseWriter, r *http.Request, f Refusal) {
 	}
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Content-Type-Options", "nosniff")
-	if e == ConnectErrors {
+	if e == FormatConnect {
 		// A failed write means the client is gone; there is no one left to tell.
 		_ = connectErrors.Write(w, r, f.connectError())
 		return

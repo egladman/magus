@@ -59,7 +59,7 @@ func TestRefuseWritesAIPStatusJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer nope")
 	rr := httptest.NewRecorder()
-	BearerGuard(JSONErrors, rejectAll, okHandler).ServeHTTP(rr, req)
+	BearerGuard(FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
 	t.Logf("%s", rr.Body.Bytes())
 
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
@@ -85,7 +85,7 @@ func TestRefuseOmitsTheBearerChallengeOn403(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
 	req.Host = "evil.example"
 	rr := httptest.NewRecorder()
-	GuardRebind(JSONErrors, AllowedHosts(netip.MustParseAddrPort("127.0.0.1:7391")), okHandler).ServeHTTP(rr, req)
+	GuardRebind(FormatJSON, AllowedHosts(netip.MustParseAddrPort("127.0.0.1:7391")), okHandler).ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusForbidden, rr.Code)
 	assert.Empty(t, rr.Header().Get("WWW-Authenticate"))
@@ -98,7 +98,7 @@ func TestRefuseOmitsTheBearerChallengeOn403(t *testing.T) {
 // client parses rather than a shape this test assumes.
 func TestRefuseSpeaksConnectOnConnectMounts(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(BearerGuard(ConnectErrors, rejectAll, okHandler))
+	srv := httptest.NewServer(BearerGuard(FormatConnect, rejectAll, okHandler))
 	t.Cleanup(srv.Close)
 	url := srv.URL + "/magus.probe.v1alpha1.ProbeService/Call"
 
@@ -155,7 +155,7 @@ func TestJSONMountIgnoresConnectLookingRequests(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
-	BearerGuard(JSONErrors, rejectAll, okHandler).ServeHTTP(rr, req)
+	BearerGuard(FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
 
 	assert.Equal(t, "UNAUTHENTICATED", decodeStatus(t, rr.Body.Bytes()).Error.Status)
 }
