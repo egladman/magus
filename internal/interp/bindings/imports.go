@@ -162,7 +162,11 @@ func spellSearchLevels(ctx context.Context) []string {
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		root = ws.Root()
 	}
-	return append(rootFirstLevels(root, start), "")
+	levels := rootFirstLevels(root, start)
+	if root == "" {
+		levels = append(levels, "")
+	}
+	return levels
 }
 
 // rootFirstLevels returns the directory chain from root down to start inclusive,

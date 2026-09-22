@@ -213,7 +213,7 @@ final greeting = "from the magusfile";
 
 export fun noop(ctx: magus\Context, _a: [str]) > void {}
 `)
-	sess, err := interp.NewBuzzReplSession(ctx, dir)
+	sess, err := interp.NewBuzzReplSession(ctx, dir, true)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sess.Close() })
 

@@ -6,16 +6,45 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMagusSearchPathsHaveNoCwdRoot(t *testing.T) {
+type rootWorkspace struct {
+	types.WorkspaceRepository
+	root string
+}
+
+func (w rootWorkspace) Root() string { return w.root }
+
+func TestMagusSearchPaths(t *testing.T) {
 	t.Parallel()
-	project := t.TempDir()
-	for _, p := range magusSearchPaths(context.Background(), project) {
-		assert.True(t, filepath.IsAbs(p), "search path %q resolves against the process cwd", p)
+	j := filepath.Join
+	root := j("/", "w")
+	project := j(root, "api")
+	templatesUnder := func(dir string) []string {
+		return []string{
+			j(dir, "?.buzz"),
+			j(dir, "?", "main.buzz"),
+			j(dir, "?", "src", "main.buzz"),
+			j(dir, "?", "src", "?.buzz"),
+			j(dir, "magusfiles", "?.buzz"),
+		}
 	}
+
+	t.Run("project then workspace root", func(t *testing.T) {
+		ctx := types.WithWorkspace(context.Background(), rootWorkspace{root: root})
+		want := append(templatesUnder(project), templatesUnder(root)...)
+		assert.Equal(t, want, magusSearchPaths(ctx, project))
+	})
+	t.Run("project at the root is searched once", func(t *testing.T) {
+		ctx := types.WithWorkspace(context.Background(), rootWorkspace{root: root})
+		assert.Equal(t, templatesUnder(root), magusSearchPaths(ctx, root))
+	})
+	t.Run("no workspace searches only the project", func(t *testing.T) {
+		assert.Equal(t, templatesUnder(project), magusSearchPaths(context.Background(), project))
+	})
 }
 
 // A magusfile run via --root from another checkout must load its own modules,
@@ -28,7 +57,7 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 		name          string
 		projectHelper string
 		cwdHelper     string
-		wantErr       bool
+		wantErr       string
 	}{
 		{
 			name:          "project module wins over a broken cwd module",
@@ -38,7 +67,7 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 		{
 			name:      "cwd module is not a fallback",
 			cwdHelper: helper,
-			wantErr:   true,
+			wantErr:   `buzz: import "helper": module not found`,
 		},
 	}
 	for _, tc := range cases {
@@ -54,12 +83,12 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 			src, err := Find(project)
 			require.NoError(t, err)
 			load, err := execBuzzSrc(context.Background(), src, true)
-			if tc.wantErr {
-				require.Error(t, err)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
 				return
 			}
 			require.NoError(t, err)
-			_ = load.Session.Close()
+			t.Cleanup(func() { _ = load.Session.Close() })
 		})
 	}
 }

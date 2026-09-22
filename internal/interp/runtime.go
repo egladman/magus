@@ -678,16 +678,16 @@ func NewBuzzWorkerFunc(src *Source) buzz.WorkerFunc {
 }
 
 // NewBuzzReplSession creates a Buzz session with host bindings installed, ready
-// for the shared REPL. When autoloadDir is non-empty and a magusfile.buzz is
-// found in or above it, its files are executed first so their top-level
+// for the shared REPL. Imports resolve against dir. When autoload is set and dir
+// holds a magusfile.buzz, its files are executed first so their top-level
 // definitions are available at the prompt.
 // The returned engine.Session also satisfies the optional REPL/debug interfaces.
-func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session, error) {
+func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.Session, error) {
 	// WithREPL suppresses the BZZ3001 unused-import warning, matching upstream Buzz
 	// (Parser.zig gates the same warning on `self.flavor != .Repl`): a REPL evaluates
 	// one statement at a time, so an import "unused so far" may just be used by a
 	// line not typed yet.
-	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithSearchPaths(magusSearchPaths(ctx, autoloadDir)...))
+	buzzSess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithREPL(), buzz.WithSearchPaths(magusSearchPaths(ctx, dir)...))
 	buzzSess.SetIncludeDirs(nil)
 	AttachSessionObservers(ctx, buzzSess, ModeRepl)
 	if buzzHostBindingsFn != nil {
@@ -696,8 +696,8 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 		buzzHostBindingsFn(ctx, buzzSess, buzzSess.Targets(), nil, false)
 	}
 
-	if autoloadDir != "" {
-		if src, err := Find(autoloadDir); err == nil && src.Engine == "buzz" {
+	if autoload {
+		if src, err := Find(dir); err == nil && src.Engine == "buzz" {
 			for _, path := range src.Files {
 				data, rerr := os.ReadFile(path)
 				if rerr != nil {
@@ -721,14 +721,13 @@ func NewBuzzReplSession(ctx context.Context, autoloadDir string) (engine.Session
 // against (see buzz.WithSearchPaths). `?` is the import name, filled in by the
 // resolver. Each of gopherbuzz's upstream PROJECT-RELATIVE layouts (a sibling
 // file, or a library directory) is searched, plus magus's own magusfiles/
-// convention, in order relative to the project root, then the workspace root. The
+// convention, in order relative to projectDir, then the workspace root. The
 // workspace root is read from ctx (types.WithWorkspace) and omitted when absent or
-// identical to the project dir, so the common single-project case yields no
-// duplicate entry.
+// identical to projectDir, so the common single-project case yields no duplicate
+// entry.
 //
-// The process cwd is never a root: `magus --root <tree>` run from another checkout
-// would otherwise load that checkout's modules. An empty projectDir (the REPL under
-// --no-autoload) leaves the templates relative, which is the REPL's own directory.
+// The process cwd is deliberately not a root: `magus --root <tree>` run from
+// another checkout would load that checkout's modules.
 //
 // gopherbuzz's SYSTEM paths (/usr/share/buzz, /usr/local/share/buzz, $BUZZ_PATH)
 // are deliberately NOT adopted, and BUZZ_INCLUDE_PATH is cleared at the call sites:
