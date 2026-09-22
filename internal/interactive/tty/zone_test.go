@@ -3,13 +3,14 @@ package tty
 import (
 	"bytes"
 	"fmt"
-	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestZoneLeaseIsDisabledWithoutATerminal(t *testing.T) {
@@ -426,3 +427,10 @@ func TestPaintTwoConsumersShareOneTerminal(t *testing.T) {
 	// A single notification rides the bottom rule rather than taking a row.
 	assert.Equal(t, "cache stampede on go-build", toastRow(s, 24-borderRowsPerEdge))
 }
+
+// Small readers over the emulator, so the assertions below stay about what a
+// reader would see rather than about accessor spelling.
+func cursorRowOf(s *screen.Screen) int { r, _ := s.Cursor(); return r }
+func cursorColOf(s *screen.Screen) int { _, c := s.Cursor(); return c }
+func scrollTopOf(s *screen.Screen) int { t, _ := s.ScrollRegion(); return t }
+func scrollBotOf(s *screen.Screen) int { _, b := s.ScrollRegion(); return b }

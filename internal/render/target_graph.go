@@ -317,8 +317,7 @@ func catalogOrder(nodes []types.TargetGraphNode) []types.TargetGraphNode {
 //
 // ANTI-DRIFT: the classDef names below ("anchor", "target") are mirrored verbatim
 // in console/src/console/graph/mermaid.ts (toMermaid / targets flavor). A rename
-// here must be matched there. internal/render/mermaid_drift_test.go asserts this
-// in CI.
+// here must be matched there. TestTargetGraphMermaidClassDefs asserts this in CI.
 var targetRoleClasses = []renderClass{
 	{Name: "anchor", Style: "fill:#2563eb,color:#ffffff,stroke:#1e40af,stroke-width:2px"},
 	{Name: "target", Style: "fill:#e2e8f0,color:#0f172a,stroke:#94a3b8"},

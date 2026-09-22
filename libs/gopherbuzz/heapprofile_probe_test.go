@@ -1,5 +1,7 @@
 //go:build !buzz_safe && !buzz_unsafe
 
+// cross-cutting: drives vm/heapprofile.go through many Sessions; vm cannot import this package
+
 package buzz
 
 import (
