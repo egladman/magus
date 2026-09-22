@@ -190,9 +190,16 @@ type Step struct {
 	// because they move independently; see config.CacheInclude.
 	IncludeOS   bool
 	IncludeArch bool
-	NoCache     bool // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay  bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Slots       int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	// Stamps are files (relative to WorkspaceRoot) a tool writes when its work
+	// completes. They are not hashed: they change DURING the run, so the key computed
+	// before it could never match an entry filed after it. Instead the entry records
+	// each stamp's digest as the run left it, and a hit replays only while every stamp
+	// still reads the same. A stamped entry describes one local tree, so it is never
+	// fetched from or pushed to a remote.
+	Stamps     []string
+	NoCache    bool // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	Slots      int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
 	// including every target it composes, carried alongside the slot count Slots
 	// derives from the same figure. Slots throttle peers inside THIS process; the
@@ -414,8 +421,8 @@ func (c *Cache) IsCached(ctx context.Context, s Step) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, mErr := c.readManifest(s.ProjectPath, hash)
-	return mErr == nil, nil
+	m, mErr := c.readManifest(s.ProjectPath, hash)
+	return mErr == nil && len(movedStamps(s.WorkspaceRoot, s.Stamps, m.Stamps)) == 0, nil
 }
 
 // Run executes fn under the cache. On a hash match it replays recorded outputs;
@@ -507,7 +514,14 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if !s.NoCache && !s.SkipReplay {
 		manifest, mErr := c.readManifest(s.ProjectPath, hash)
 		fromRemote := false
-		if mErr != nil && c.remote != nil {
+		if mErr == nil && len(s.Stamps) > 0 {
+			if moved := movedStamps(s.WorkspaceRoot, s.Stamps, manifest.Stamps); len(moved) > 0 {
+				slog.DebugContext(ctx, "cache.stamp", slog.String("project", s.ProjectPath),
+					slog.String("target", s.Target), slog.Any("moved", moved))
+				mErr = errStampMoved
+			}
+		}
+		if mErr != nil && c.remote != nil && len(s.Stamps) == 0 {
 			// Local miss (manifest absent or unreadable): pull the artifact from the
 			// remote backend into the local cache, then re-read so the shared hit path
 			// below replays it.
@@ -723,7 +737,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// attempt's), so a consumer could not resolve the producer's ref: the whole
 	// point of shipping them.
 	if storable {
-		if c.remote != nil {
+		if c.remote != nil && len(s.Stamps) == 0 {
 			c.pushToRemote(ctx, s, hash)
 		}
 		c.evictOldest(ctx, c.sizeCap())

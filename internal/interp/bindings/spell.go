@@ -387,6 +387,49 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	}
 }
 
+// runInstall resolves the project's install against its live lockfile, seeds a missing
+// dependency tree, and runs the package manager. Under a run it goes through the run's
+// install runner, so a replayable install forks nothing whichever way it was reached.
+func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
+	dir := opts.cwd
+	if !filepath.IsAbs(dir) {
+		base, err := std.EffectiveCwd(ctx)
+		if err != nil {
+			return err
+		}
+		dir = filepath.Join(base, dir)
+	}
+	opts.cwd = dir
+	stop := dir
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		stop = ws.Root()
+	}
+	choice, found, err := spell.ResolveInstall(op.Install, dir, stop)
+	if err != nil {
+		return err
+	}
+	if !found {
+		slog.DebugContext(ctx, "spell: nothing to install (no manifest with a lockfile)", "dir", dir)
+		return nil
+	}
+	body := func(ctx context.Context) error {
+		switch from, err := spell.SeedInstall(ctx, choice, dir); {
+		case err != nil:
+			slog.WarnContext(ctx, "magus: could not seed the dependency tree from another checkout; installing without it",
+				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("err", err.Error()))
+		case from != "":
+			slog.InfoContext(ctx, "magus: seeded the dependency tree from another checkout",
+				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("from", from))
+		}
+		_, err := runCommand(ctx, spells.Op{Command: choice.Install.Command}, opts)
+		return err
+	}
+	if r := types.InstallRunnerFromContext(ctx); r != nil {
+		return r(ctx, dir, op.Install.Spell, choice, body)
+	}
+	return body(ctx)
+}
+
 func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRequest) (any, error) {
 	ops, tools, ignoreDirs := spec.Ops, spec.Tools, spec.IgnoreDirs
 	op, ok := ops[req.Target]
@@ -402,6 +445,9 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 		return nil, err
 	}
 	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: ignoreDirs}
+	if op.Kind == spells.OpKindInstall {
+		return nil, runInstall(ctx, op, opts)
+	}
 	// A symbol indexer writes its index into the cache, not the tree: magus hands it
 	// the destination via MAGUS_SYMBOL_INDEX so the spell command (a bare
 	// "$MAGUS_SYMBOL_INDEX" arg token, resolved by resolveRunnerRefs) needs no

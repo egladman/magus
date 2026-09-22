@@ -51,6 +51,42 @@ func (v gitVCS) IsSecondaryCheckout(dir string) bool {
 	return strings.Contains(filepath.ToSlash(strings.TrimSpace(rest)), "/.git/worktrees/")
 }
 
+// Checkouts implements types.CheckoutLister from the files `git worktree list` reads:
+// the primary checkout is the parent of a non-bare common dir, and each linked
+// worktree's admin dir holds a gitdir file naming its .git.
+func (v gitVCS) Checkouts(root string) ([]string, error) {
+	common := gitCommonDir(root)
+	self, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	add := func(dir string) {
+		real, err := filepath.EvalSymlinks(dir)
+		if err != nil || real == self || slices.Contains(out, real) {
+			return
+		}
+		if fi, err := os.Stat(real); err == nil && fi.IsDir() {
+			out = append(out, real)
+		}
+	}
+	if filepath.Base(common) == ".git" {
+		add(filepath.Dir(common))
+	}
+	entries, err := os.ReadDir(filepath.Join(common, "worktrees"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	for _, e := range entries {
+		b, err := os.ReadFile(filepath.Join(common, "worktrees", e.Name(), "gitdir"))
+		if err != nil {
+			continue
+		}
+		add(filepath.Dir(strings.TrimSpace(string(b))))
+	}
+	return out, nil
+}
+
 // ConfiguredRemote implements types.RemoteConfigReporter by reading .git/config, the
 // same answer `git remote get-url origin` gives without starting git. It resolves a
 // linked worktree or submodule to the shared config first, since only that one carries

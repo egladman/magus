@@ -603,6 +603,13 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// memory its own siblings held.
 	step.MemoryMB, step.MemoryDeclaredBy = m.chainMemoryMB(p, target)
 	step.Slots = slotsForPolicy(pol.Slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
+	// The install target only dispatches each spell's install, and each keys itself
+	// (installStep). Keyed here on the project baseline, a hit would skip the stamp
+	// check that notices a deleted tree.
+	if spellInstall(p, target) {
+		step.NoCache = true
+		step.Sources, step.Outputs, step.RequiredOutputs = nil, nil, nil
+	}
 	return step
 }
 
@@ -1669,6 +1676,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		svcSession.ReleaseAll(shutdownCtx)
 	}()
 	ctx = service.WithSession(ctx, svcSession)
+	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
+		toolVersions: toolVer, revision: revision, dirty: dirty, vcsName: vcsName,
+		skipReplay: opts.NoCache, opts: cacheOpts,
+	}))
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err
 	}

@@ -118,6 +118,7 @@ magus\project({
     // Outputs are owned by the stage that writes them. A project-wide output would make
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
+        "preflight": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
         // index-generate renders `magus describe graph -o markdown`, so its output is a
         // function of the WHOLE knowledge graph - every source file in the workspace and
@@ -168,20 +169,14 @@ final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";         // generated site output, under this project
 
-export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
-
+// preflight installs node_modules through the typescript spell's install. That install
+// keys itself on the lockfile, the pnpm settings and pnpm's own completion stamp, so an
+// unchanged tree forks nothing and a canceled install, which leaves a node_modules that
+// EXISTS but is incomplete, reinstalls. Reached once per
+// invocation through preflight, so the fan-out of build-* targets below does not race
+// several installs in the same directory.
 // pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
-// Always let pnpm validate the install. A canceled or interrupted install leaves a
-// node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))`
-// guard this replaced read that tree as ready and handed the missing packages to
-// esbuild instead - surfacing as `Could not resolve "@codemirror/view"` from
-// build-playground-editor, which reads like a source bug rather than a half-installed
-// tree. On a warm tree --frozen-lockfile is about a second and changes nothing.
-// Reached once per invocation through preflight, so the fan-out of build-* targets
-// below does not race several installs in the same directory.
-fun install() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-}
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { typescript["install"](ctx); }
 
 // index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 // magusfile, so it stays in lockstep with the targets. generate calls it; run

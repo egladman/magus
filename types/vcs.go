@@ -374,6 +374,16 @@ type RemoteConfigReporter interface {
 	ConfiguredRemote(dir string) (string, error)
 }
 
+// CheckoutLister is an optional capability for VCSDriver implementations that can list
+// every checkout of the repository containing root (a git worktree set) by reading
+// files, without starting the tool. The install op seeds a missing dependency tree
+// from a sibling, on a path where a subprocess per project is not affordable.
+type CheckoutLister interface {
+	// Checkouts returns the root of every OTHER live checkout of root's repository,
+	// primary first. A checkout whose directory is gone is omitted.
+	Checkouts(root string) ([]string, error)
+}
+
 // DefaultRefReporter is an optional capability (sibling of RemoteReporter) for
 // VCSDriver implementations that can report the repository's default branch, e.g.
 // "main", independent of whatever branch is currently checked out. Committed

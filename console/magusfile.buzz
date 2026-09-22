@@ -73,6 +73,7 @@ magus\project({
     // to it.
     "outputs": ["gen/**"],
     "targets": {
+        "preflight": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         // build rebuilds the committed gen/ and gates on drift, so it must run every time.
         // Its own vcs\isDirty check is inert (see build below); skip_cache is what keeps
         // the rebuild honest.
@@ -88,17 +89,11 @@ magus\project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
-
+// preflight installs node_modules through the typescript spell's install. That install
+// keys itself on the lockfile, the pnpm settings and pnpm's own completion stamp, so an
+// unchanged tree forks nothing and an interrupted one reinstalls.
 // pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
-// Always let pnpm validate the install. An interrupted install leaves a node_modules
-// that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
-// handing the missing packages straight to tsc/esbuild. Reached once per invocation
-// through preflight, which every target below already needs, so the unconditional
-// --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-}
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { typescript["install"](ctx); }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests)
 // and holds the merged line coverage above a floor.

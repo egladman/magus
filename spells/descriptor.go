@@ -112,6 +112,53 @@ type Manifest struct {
 	// declared. (Locks are also relative to nothing, so Path's base, the reason Path
 	// beats a string elsewhere, has nothing to carry.)
 	LockCandidates []string `json:"lock_candidates,omitempty" buzz:"lockCandidates"`
+	// Installs is how each lockfile is materialized, keyed by the lock candidate it
+	// reads. Keyed by lock rather than declared once because the lock is what says which
+	// package manager a project uses: pnpm-lock.yaml and package-lock.json both serve
+	// package.json and install with different tools. A candidate with no entry has no
+	// install, and the synthesized install op fails on it rather than guessing.
+	Installs map[string]Install `json:"installs,omitempty"`
+}
+
+// Install declares how one lockfile's dependencies are materialized. magus synthesizes
+// an `install` op from these declarations; see [InstallOp].
+type Install struct {
+	// Command materializes the dependencies WITHOUT changing the lockfile (pnpm install
+	// --frozen-lockfile, uv sync --locked). Its update charm re-resolves and rewrites the
+	// lockfile instead, the same split go-mod-tidy draws.
+	Command Command `json:"command"`
+	// Dir is the dependency directory the command populates, relative to the project.
+	// Empty for an ecosystem whose dependencies live in a global store (Go, cargo).
+	Dir string `json:"dir,omitempty"`
+	// Relocatable reports that Dir may be seeded by cloning another checkout's copy
+	// before the command runs. True only where the tree holds no absolute path to its
+	// own location: node_modules links relatively, a venv's scripts name their
+	// interpreter absolutely.
+	Relocatable bool `json:"relocatable,omitempty"`
+	// Stamps are files the tool writes when an install COMPLETES, relative to the
+	// project. A recorded install replays only while every stamp still reads as it did
+	// when that install finished, so a deleted or interrupted tree runs the tool again.
+	// Empty means the tool keeps no such record, and the install always runs.
+	Stamps []string `json:"stamps,omitempty"`
+	// Inputs are the tool's settings files beside the manifest and lock, relative to the
+	// project (.npmrc, pnpm-workspace.yaml): they change what an install does, so they
+	// key it.
+	Inputs []string `json:"inputs,omitempty"`
+	// Tools names which of the spell's tools key the install. Only these: a tool that
+	// runs from the dependency tree (tsc) reads differently before and after the install
+	// it would be keying.
+	Tools []string `json:"tools,omitempty"`
+}
+
+// InstallChoice is the Install one project resolved to: which manifest it has, which
+// lock candidate is live, and how that lock installs.
+type InstallChoice struct {
+	// Manifest is the manifest file, absolute.
+	Manifest string
+	// Lock is the live lockfile, absolute. It may sit above the project: a workspace
+	// hoists one lock to its root.
+	Lock    string
+	Install Install
 }
 
 // Descriptor is a spell's static description. For built-ins it is produced by

@@ -56,6 +56,7 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 		CreatedAt:   time.Now().UTC(),
 		Platform:    c.platform,
 		DurationMs:  ran.Milliseconds(),
+		Stamps:      stampDigests(root, s.Stamps),
 	}
 	// Carry the target's return value onto the entry so a hit can replay it; absent
 	// for a void target, which is nearly all of them.

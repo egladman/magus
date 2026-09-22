@@ -58,10 +58,15 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 "dprint.json"],
     "targets": {
+        "preflight": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
+// preflight installs node_modules through the typescript spell's install. That install
+// keys itself on the lockfile, the pnpm settings and pnpm's own completion stamp, so an
+// unchanged tree forks nothing and an interrupted one reinstalls.
+// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
+export fun preflight(ctx: magus\Context, args: [str]) > void !> any { typescript["install"](ctx); }
 
 // Everything generate writes, project-relative because that is where this target runs.
 // The schema DIRECTORY rather than its files: drift\expand walks it, so a schema the SDK
@@ -145,15 +150,6 @@ export fun cursor_schemas_generate(ctx: magus\Context, args: [str]) > void !> an
     proc\exec("pnpm", ["run", "cursor-schemas"], ".", {});
 }
 
-// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
-// Always let pnpm validate the install. An interrupted install leaves a node_modules
-// that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
-// handing the missing packages straight to tsc/esbuild. Reached once per invocation
-// through preflight, which every target below already needs, so the unconditional
-// --frozen-lockfile costs about a second on a warm tree and never races itself.
-fun install() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-}
 
 // lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus
 // Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors

@@ -936,6 +936,8 @@ func TestGuardAdversarial(t *testing.T) {
 		{"wrapped absolute build", "mise exec -- env -u GOROOT go build -o /tmp/magus ./cmd/magus"},
 		{"bare build", "go build ./..."},
 		{"go mod tidy", "go mod tidy"},
+		// The go spell's install op runs it, keyed, so `magus run install` is the route.
+		{"go mod download", "go mod download"},
 		{"gofmt -w", "gofmt -w ."},
 		{"go generate", "go generate ./..."},
 		{"wrapped write", "mise exec -- go generate ./..."},
@@ -978,7 +980,6 @@ func TestGuardAdversarial(t *testing.T) {
 		{"version probe", "golangci-lint --version"},
 		{"go version", "go version"},
 		{"go help", "go help test"},
-		{"go mod download reads", "go mod download"},
 		{"go list reads", "go list ./..."},
 		{"go mod vendor has no spell operation", "go mod vendor"},
 		{"prettier through an unsupported package runner", "npx prettier --write ."},

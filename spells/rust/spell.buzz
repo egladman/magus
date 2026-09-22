@@ -46,8 +46,17 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "target", isDir 
 // have a Cargo.toml and no lock of their own. That is why the lock is declared as a
 // bare filename and located by walking up from the project rather than being read
 // beside the manifest.
+//
+// The install fetches into cargo's shared registry cache, so there is no tree to seed
+// and no stamp to check, and it always runs. Under update, `cargo update` re-resolves
+// and rewrites Cargo.lock.
 export fun mgs_listManifests() > [Manifest] {
-    return [Manifest{value = "Cargo.toml", lockCandidates = ["Cargo.lock"]}];
+    final args = ["fetch", "--locked"];
+    return [Manifest{value = "Cargo.toml", lockCandidates = ["Cargo.lock"], installs = {"Cargo.lock": Install{
+        command = Command{bin = "cargo", args = args, charms = {
+            "update": Charm{ops = set(args, "fetch", "update").ops + drop(args, "--locked").ops},
+        }},
+    }}}];
 }
 
 fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }

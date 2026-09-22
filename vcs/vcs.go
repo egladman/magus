@@ -293,6 +293,28 @@ func ConfiguredRemote(root string) string {
 	return ""
 }
 
+// Checkouts finds the checkout containing dir and returns its root plus every other
+// live checkout of the same repository, primary first. others is nil when the claiming
+// VCS cannot list checkouts, or when dir is in no checkout at all.
+func Checkouts(dir string) (root string, others []string, err error) {
+	for level := dir; ; level = filepath.Dir(level) {
+		for _, d := range builtin {
+			if !claimsExist(level, d.Claims()) {
+				continue
+			}
+			l, ok := d.(types.CheckoutLister)
+			if !ok {
+				return level, nil, nil
+			}
+			others, err := l.Checkouts(level)
+			return level, others, err
+		}
+		if filepath.Dir(level) == level {
+			return "", nil, nil
+		}
+	}
+}
+
 func claimsExist(root string, claims []string) bool {
 	for _, c := range claims {
 		if _, err := os.Stat(filepath.Join(root, c)); err == nil {

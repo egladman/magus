@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`install` materializes dependencies from the lockfile.** The typescript, python, go
+  and rust spells provide it; `install:update` re-resolves and rewrites the lockfile. An
+  unchanged install whose completion stamp is intact replays without forking the package
+  manager. On macOS an absent `node_modules` is first cloned from a sibling checkout.
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
