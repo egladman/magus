@@ -1292,7 +1292,7 @@ type workspaceJobLimits interface {
 // already accepted for v1 (see internal/job/store.go): a magusfile target is just
 // another such process.
 func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error) {
-	if _, pinned := types.JobSnapshotFromContext(ctx); pinned {
+	if types.HasJobSnapshot(ctx) {
 		return nil, fmt.Errorf("magus\\%s: the job store is read-only here: a guard rule reads the rows the guard already read, through magus\\job.list, and cannot change them", member)
 	}
 	ws := types.WorkspaceFromContext(ctx)

@@ -204,7 +204,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
-	if id := actingLeaseFor(explicitLease, who, at, facts); id != "" {
+	if id := actingLeaseFor(who, at, facts, explicitLease); id != "" {
 		req.Role = types.SpawnRoleWorker
 		req.Lease = &types.Job{ID: id}
 		if rows, err := leaseRows(ctx, at); err == nil {
@@ -348,7 +348,7 @@ func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, b
 // hands them their parent's session id, so the marker cannot tell them apart and the
 // agent id can. The marker is keyed on the session, so several sessions sharing one
 // checkout each resolve their own; a host that reports none reads the checkout-wide one.
-func actingLeaseFor(explicit string, who hookAttribution, at location, facts hint.Gate) string {
+func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
@@ -432,10 +432,12 @@ func lastContextTokens(path string) (int64, bool) {
 	}
 	start := max(info.Size()-agentUsageTail, 0)
 	buf := make([]byte, info.Size()-start)
-	if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
+	n, err := f.ReadAt(buf, start)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return 0, false
 	}
-	lines := bytes.Split(buf, []byte("\n"))
+	// A short read must not feed the unwritten tail of buf to json.Unmarshal.
+	lines := bytes.Split(buf[:n], []byte("\n"))
 	if start > 0 {
 		// The tail cut the first line, and half a record is not one.
 		lines = lines[1:]

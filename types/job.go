@@ -1444,3 +1444,10 @@ func JobSnapshotFromContext(ctx context.Context) (JobSnapshot, bool) {
 	}
 	return JobSnapshot{Rows: rows, Err: snap.Err}, true
 }
+
+// HasJobSnapshot reports whether a snapshot is pinned, without cloning its rows: for a
+// caller that only needs the presence check, such as a write refusal.
+func HasJobSnapshot(ctx context.Context) bool {
+	_, ok := ctx.Value(jobSnapshotKey{}).(JobSnapshot)
+	return ok
+}

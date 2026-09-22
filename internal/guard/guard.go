@@ -274,7 +274,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	ctx = withJobStoreRows(ctx, location)
 	markers := hint.NewGate(location.cacheDir, who.callerKey())
 	facts := hint.NewGate(location.cacheDir, who.sessionKey())
-	actingLease := actingLeaseFor(req.Lease, who, location, facts)
+	actingLease := actingLeaseFor(who, location, facts, req.Lease)
 	tool := hookToolCommand
 	switch {
 	case req.Observe:
