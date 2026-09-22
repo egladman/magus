@@ -7,6 +7,8 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -115,4 +117,38 @@ func TestDenyNamesTheInstallWhenTheSkillIsMissing(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(current, "SKILL.md"), []byte("new"), 0o644))
 	reason = denySpawnWithoutBrief(hint.NewGate(t.TempDir(), "session-installed"), true, workspace)
 	assert.NotContains(t, reason, "not installed", "an installed skill only needs loading")
+}
+
+// TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld pins the advisory that makes the
+// collision proof unskippable: an orchestrator handing out a second worker in a checkout
+// somebody is already writing in is told so, with the union of the write paths to check and the
+// worktree that makes the check unnecessary.
+func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
+	held := types.Job{
+		ID: "wave/holder", Criteria: "the store", WritePaths: []string{"internal/job", "types/job.go"},
+		State: types.StateRunning, Registered: 1,
+	}
+	ctx, _ := fleetFixture(t, held)
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	at := hookLocation(ctx, Dependencies{})
+
+	t.Run("nothing bound here says nothing", func(t *testing.T) {
+		assert.Empty(t, adviseSharedCheckoutSpawn(ctx, hint.NewGate(cacheDir, "quiet"), at))
+	})
+
+	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "holder"}.Bind(held.ID))
+
+	gate := hint.NewGate(cacheDir, "orchestrator")
+	note := adviseSharedCheckoutSpawn(ctx, gate, at)
+	require.NotEmpty(t, note)
+	assert.Contains(t, note, "wave/holder")
+	assert.Contains(t, note, "internal/job")
+	assert.Contains(t, note, "types/job.go")
+	assert.Contains(t, note, hint.DescribeFile.String())
+	assert.Contains(t, note, "worktree")
+
+	t.Run("it fires once per session", func(t *testing.T) {
+		again := adviseSharedCheckoutSpawn(ctx, gate, at)
+		assert.NotEqual(t, note, again, "the full text is spent once; a brief line is what repeats")
+	})
 }

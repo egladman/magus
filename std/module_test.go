@@ -2,9 +2,6 @@ package std
 
 import (
 	"context"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -333,140 +330,40 @@ func TestTypeTagGoType(t *testing.T) {
 // covArrow is signature.go's return separator, surrounding spaces included.
 const covArrow = " -> "
 
-// TestBuzzSignature pins the call form docs and `magus describe module` render.
-func TestBuzzSignature(t *testing.T) {
-	mod := Module{Name: "env"}
-
-	for _, tc := range []struct {
-		name   string
-		method Method
-		want   string
-	}{
-		{
-			name:   "snake_case name camelCases, types render the returns",
-			method: Method{Name: "get_or", Args: []Arg{{Name: "name", Type: TypeString}, {Name: "def", Type: TypeString}}, Returns: []Ret{{Type: TypeString}}},
-			want:   "env\\getOr(name, def)" + covArrow + "string",
-		},
-		{
-			name:   "several returns are comma-joined",
-			method: Method{Name: "lookup", Args: []Arg{{Name: "name", Type: TypeString}}, Returns: []Ret{{Type: TypeString}, {Type: TypeBool}}},
-			want:   "env\\lookup(name)" + covArrow + "string, bool",
-		},
-		{
-			name:   "no declared return means no suffix",
-			method: Method{Name: "set", Args: []Arg{{Name: "name", Type: TypeString}, {Name: "value", Type: TypeString}}},
-			want:   "env\\set(name, value)",
-		},
-		{
-			name:   "BuzzName overrides the camelCase derivation",
-			method: Method{Name: "has_charm", BuzzName: "has_charm", Args: []Arg{{Name: "name", Type: TypeString}}, Returns: []Ret{{Type: TypeBool}}},
-			want:   "env\\has_charm(name)" + covArrow + "bool",
-		},
-		{
-			name:   "a variadic arg trails dots and is never also bracketed",
-			method: Method{Name: "join", Args: []Arg{{Name: "parts", Type: TypeString, Variadic: true, Optional: true}}, Returns: []Ret{{Type: TypeString}}},
-			want:   "env\\join(parts...)" + covArrow + "string",
-		},
-		{
-			name:   "an optional arg is bracketed",
-			method: Method{Name: "arch", Args: []Arg{{Name: "name", Type: TypeString}, {Name: "style", Type: TypeString, Optional: true}}, Returns: []Ret{{Type: TypeString}}},
-			want:   "env\\arch(name, [style])" + covArrow + "string",
-		},
-		{
-			name:   "a named return prints its name",
-			method: Method{Name: "size", Returns: []Ret{{Name: "width", Type: TypeInt}, {Name: "height", Type: TypeInt}}},
-			want:   "env\\size()" + covArrow + "width, height",
-		},
-		{
-			name:   "an object return prints the object, not the map it marshals to",
-			method: Method{Name: "stat", Args: []Arg{{Name: "path", Type: TypeString}}, Returns: []Ret{{Type: TypeAnyMap, Object: "FileInfo"}}},
-			want:   "env\\stat(path)" + covArrow + "FileInfo",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, BuzzSignature(mod, tc.method))
-		})
+// TestNoModuleDeclaresFields keeps the host surface to members Buzz can declare.
+//
+// A Method becomes `export extern fun name() > str` in the generated declarations,
+// so the checker knows its type and a caller's mistake is a compile error. A Field
+// becomes a plain value on the module map and gets NO declaration at all: Buzz's
+// parser accepts `extern` only before `fun` (parser.go), and upstream Buzz declares
+// its whole native stdlib the same way, so there is no syntax for an extern value to
+// generate. The checker therefore cannot type a Field, and nothing about it is
+// checkable.
+//
+// That is not theoretical. vcs.name and vcs.base were Fields; four of the module's
+// own doc-strings described `vcs.name()` with call parens, the docs site, the buzz
+// reference and the editor hovers all render from those doc-strings, and a magusfile
+// written against them compiled clean and failed at RUNTIME with "str is not
+// callable", inside a branch that only executes in CI. Both are Methods now, and
+// `vcs.name()` is what the surface both documents and accepts.
+//
+// The Field machinery is still wired (magus-docs, langservice-manifest, and the
+// ModuleFieldEntry boundary type all render it) because removing it would change a
+// Buzz-visible introspection shape for no functional gain. This gate is what keeps it
+// unused: a constant that cannot be type-checked is not worth the parens it saves.
+func TestNoModuleDeclaresFields(t *testing.T) {
+	for _, m := range All() {
+		assert.Emptyf(t, m.Fields,
+			"module %q declares Fields, which generate no extern declaration and so cannot be\n"+
+				"type-checked - a caller writing %s\\%s() compiles clean and fails at runtime.\n"+
+				"Declare it as a Method returning the value instead.",
+			m.Name, m.Name, fieldNames(m))
 	}
 }
 
-// TestBuzzMethodName: the declared name and the callable one differ, and only the
-// callable one resolves.
-func TestBuzzMethodName(t *testing.T) {
-	assert.Equal(t, "readFile", BuzzMethodName(Method{Name: "read_file"}))
-	assert.Equal(t, "glob", BuzzMethodName(Method{Name: "glob"}))
-	assert.Equal(t, "has_charm", BuzzMethodName(Method{Name: "has_charm", BuzzName: "has_charm"}))
-}
-
-func TestBuzzStdlibEquiv(t *testing.T) {
-	got, ok := BuzzStdlibEquiv("fs", "mkdir_all")
-	assert.True(t, ok)
-	assert.Equal(t, "fs.makeDirectory", got)
-
-	// os.exit, os.sleep and crypto.*_file are deliberately absent: the Buzz stdlib
-	// call does something materially different in each case.
-	for _, tc := range [][2]string{{"os", "exit"}, {"os", "sleep"}, {"crypto", "sha256_file"}, {"fs", "no_such_method"}} {
-		got, ok := BuzzStdlibEquiv(tc[0], tc[1])
-		assert.Falsef(t, ok, "BuzzStdlibEquiv(%q, %q)", tc[0], tc[1])
-		assert.Empty(t, got)
+func fieldNames(m Module) string {
+	if len(m.Fields) == 0 {
+		return "<field>"
 	}
-}
-
-// TestMethodSource resolves an Impl back to the file and line it is defined at,
-// which is what links a generated doc page to the code.
-func TestMethodSource(t *testing.T) {
-	_, thisFile, _, ok := runtime.Caller(0)
-	require.True(t, ok, "runtime.Caller")
-	repoRoot := filepath.Dir(filepath.Dir(thisFile))
-
-	file, line := MethodSource(Method{Impl: FsGlob}, repoRoot)
-	if file == "" {
-		t.Skip("built with -trimpath: no absolute path to relativize")
-	}
-	assert.Equal(t, "std/fs.go", file)
-	assert.Positive(t, line)
-
-	// A file outside repoRoot relativizes to a "..' path and is reported as unknown
-	// rather than as a path escaping the tree.
-	outside, outsideLine := MethodSource(Method{Impl: FsGlob}, t.TempDir())
-	assert.Empty(t, outside)
-	assert.Zero(t, outsideLine)
-
-	for _, impl := range []any{nil, 42} {
-		f, l := MethodSource(Method{Impl: impl}, repoRoot)
-		assert.Emptyf(t, f, "MethodSource(Impl=%v)", impl)
-		assert.Zerof(t, l, "MethodSource(Impl=%v)", impl)
-	}
-}
-
-func TestFieldFuncName(t *testing.T) {
-	assert.Equal(t, "covResolverCtx", FieldFuncName(Field{Resolver: covResolverCtx}))
-	assert.Empty(t, FieldFuncName(Field{}))
-}
-
-func TestFieldResolverTakesCtx(t *testing.T) {
-	assert.True(t, FieldResolverTakesCtx(Field{Resolver: covResolverCtx}))
-	assert.False(t, FieldResolverTakesCtx(Field{Resolver: covResolverBare}))
-	assert.False(t, FieldResolverTakesCtx(Field{}))
-}
-
-// TestImplPackage covers the qualifier codegen writes at the call site. It stops
-// assuming every Impl lives in package std, so the assertion is on the pair rather
-// than on the identifier alone.
-func TestImplPackage(t *testing.T) {
-	path, ident := MethodImplPackage(Method{Impl: FsGlob})
-	assert.True(t, strings.HasSuffix(path, "/std"), "import path %q should end at the std package", path)
-	assert.Equal(t, "std", ident)
-
-	path, ident = FieldResolverPackage(Field{Resolver: covResolverCtx})
-	assert.True(t, strings.HasSuffix(path, "/std"), "import path %q should end at the std package", path)
-	assert.Equal(t, "std", ident)
-
-	for _, impl := range []any{nil, 42} {
-		p, i := MethodImplPackage(Method{Impl: impl})
-		assert.Emptyf(t, p, "MethodImplPackage(Impl=%v) path", impl)
-		assert.Emptyf(t, i, "MethodImplPackage(Impl=%v) ident", impl)
-	}
-	p, i := FieldResolverPackage(Field{})
-	assert.Empty(t, p)
-	assert.Empty(t, i)
+	return m.Fields[0].Name
 }

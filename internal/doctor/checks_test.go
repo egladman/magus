@@ -2,21 +2,28 @@ package doctor
 
 import (
 	"context"
-	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"errors"
+	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // writeJournal fabricates the run journal StalledTargets reads: one JSONL record per
@@ -919,4 +926,767 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 
 		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
+}
+
+func TestCheckJSONCodec(t *testing.T) {
+	got := (&runner{}).checkJSONCodec()
+	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.True(t, strings.HasPrefix(got.Message, "encoding/json "), got.Message)
+}
+
+// graphStubWorkspace answers Graph() with a fixed error, which is the only thing
+// checkGraphCycles reads.
+type graphStubWorkspace struct {
+	types.WorkspaceReader
+	err error
+}
+
+func (g graphStubWorkspace) Graph() (*types.Graph, error) { return nil, g.err }
+
+func TestCheckGraphCycles(t *testing.T) {
+	ok := (&runner{ws: graphStubWorkspace{}}).checkGraphCycles()
+	assert.Equal(t, types.DoctorOK, ok.Status)
+	assert.Equal(t, "no cycles detected", ok.Message)
+
+	// The graph builder is what detects a cycle, so its error IS the finding and has
+	// to reach the report rather than being replaced with a generic message.
+	bad := (&runner{ws: graphStubWorkspace{err: errors.New("cycle: a -> b -> a")}}).checkGraphCycles()
+	assert.Equal(t, types.DoctorFail, bad.Status)
+	assert.Equal(t, "cycle: a -> b -> a", bad.Message)
+}
+
+// TestCheckConcurrencySizing pins the machine's size through MAGUS_CONCURRENCY so the
+// verdict does not depend on the CPU count of whoever runs the suite.
+func TestCheckConcurrencySizing(t *testing.T) {
+	t.Setenv("MAGUS_CONCURRENCY", "4")
+
+	sized := func(n int) types.DoctorCheck {
+		return (&runner{opts: options{cfg: config.Config{Concurrency: n}}}).checkConcurrencySizing()
+	}
+
+	t.Run("unset", func(t *testing.T) {
+		got := sized(0)
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "unset; sized to this machine (4)")
+	})
+
+	t.Run("matches the machine", func(t *testing.T) {
+		got := sized(4)
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "4, which is what this machine sizes to")
+	})
+
+	// Advice, not fail: a deliberately small value is a legitimate choice and magus
+	// cannot tell it apart from a stale one.
+	t.Run("undersized", func(t *testing.T) {
+		got := sized(2)
+		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Contains(t, got.Message, "undersized")
+		assert.Contains(t, got.Message, "leaves capacity idle")
+		assert.Equal(t, []string{"config", "set", "key=concurrency,value=4"}, got.Fix)
+	})
+
+	// The worse direction: the work still completes, just slower, so nothing ever
+	// points at the cause.
+	t.Run("oversized", func(t *testing.T) {
+		got := sized(16)
+		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Contains(t, got.Message, "oversized")
+		assert.Contains(t, got.Message, "contend rather than finish sooner")
+		assert.Equal(t, []string{"config", "set", "key=concurrency,value=4"}, got.Fix)
+	})
+}
+
+func TestCheckWorkspaceRegistration(t *testing.T) {
+	loaded := time.Now().Add(-90 * time.Second)
+
+	t.Run("no daemon", func(t *testing.T) {
+		got := (&runner{}).checkWorkspaceRegistration()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "no loaded workspaces in daemon", got.Message)
+	})
+
+	t.Run("daemon reachable but holding nothing", func(t *testing.T) {
+		r := &runner{opts: options{daemonInfo: &DaemonInfo{Reachable: true}}}
+		assert.Equal(t, "no loaded workspaces in daemon", r.checkWorkspaceRegistration().Message)
+	})
+
+	t.Run("unreachable daemon", func(t *testing.T) {
+		r := &runner{opts: options{daemonInfo: &DaemonInfo{
+			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}},
+		}}}
+		assert.Equal(t, "no loaded workspaces in daemon", r.checkWorkspaceRegistration().Message)
+	})
+
+	t.Run("registered", func(t *testing.T) {
+		r := &runner{root: "/repo", opts: options{daemonInfo: &DaemonInfo{
+			Reachable:  true,
+			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}, {Root: "/other", LastAccess: loaded}},
+		}}}
+		got := r.checkWorkspaceRegistration()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "loaded in daemon")
+		assert.Contains(t, got.Message, "(2 workspace(s) total)")
+		require.Len(t, got.Details, 2)
+		assert.Contains(t, got.Details[0], "/repo")
+		assert.Contains(t, got.Details[0], "idle ")
+	})
+
+	// Not yet loaded is normal (a workspace loads on first use), so this stays OK
+	// and only says what it sees.
+	t.Run("not registered", func(t *testing.T) {
+		r := &runner{root: "/repo", opts: options{daemonInfo: &DaemonInfo{
+			Reachable:  true,
+			Workspaces: []LoadedWorkspace{{Root: "/elsewhere", LastAccess: loaded}},
+		}}}
+		got := r.checkWorkspaceRegistration()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "not yet loaded in daemon")
+	})
+
+	// The daemon passes the workspace through r.ws, leaving r.root empty on that path.
+	t.Run("root comes from the workspace when set", func(t *testing.T) {
+		r := &runner{ws: rootStubWorkspace{root: "/repo"}, opts: options{daemonInfo: &DaemonInfo{
+			Reachable:  true,
+			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}},
+		}}}
+		assert.Contains(t, r.checkWorkspaceRegistration().Message, "loaded in daemon")
+	})
+}
+
+func TestSockDirOrDefault(t *testing.T) {
+	var absent *DaemonInfo
+	assert.Equal(t, "", absent.sockDirOrDefault())
+	assert.Equal(t, "", (&DaemonInfo{}).sockDirOrDefault())
+	assert.Equal(t, "/run/magus", (&DaemonInfo{SockDir: "/run/magus"}).sockDirOrDefault())
+}
+
+// listenUnix opens a real socket so the dial probe has something live to find. macOS
+// caps a Unix socket path near 104 bytes and a temp dir can exceed it, so a failure to
+// bind is reported as an environment skip rather than as a defect in the check.
+func listenUnix(t *testing.T, path string) {
+	t.Helper()
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Skipf("cannot bind a unix socket at %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+}
+
+func TestIsSocketAlive(t *testing.T) {
+	dir := t.TempDir()
+
+	dead := filepath.Join(dir, "dead.sock")
+	require.NoError(t, os.WriteFile(dead, nil, 0o644))
+	assert.False(t, isSocketAlive(context.Background(), dead), "a plain file is not a listener")
+	assert.False(t, isSocketAlive(context.Background(), filepath.Join(dir, "absent.sock")))
+
+	live := filepath.Join(dir, "live.sock")
+	listenUnix(t, live)
+	assert.True(t, isSocketAlive(context.Background(), live))
+}
+
+func TestCheckStaleSockets(t *testing.T) {
+	t.Run("no socket directory configured", func(t *testing.T) {
+		got := (&runner{}).checkStaleSockets()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "no socket directory", got.Message)
+	})
+
+	t.Run("socket directory does not exist", func(t *testing.T) {
+		r := &runner{opts: options{daemonInfo: &DaemonInfo{SockDir: filepath.Join(t.TempDir(), "absent")}}}
+		got := r.checkStaleSockets()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "no socket directory", got.Message)
+	})
+
+	t.Run("empty directory", func(t *testing.T) {
+		r := &runner{opts: options{daemonInfo: &DaemonInfo{SockDir: t.TempDir()}}}
+		got := r.checkStaleSockets()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "0 live socket(s)", got.Message)
+	})
+
+	// Leftover dead sockets are harmless cruft, so they are context rather than a
+	// failure. Anything not named magus-*.sock, and any directory, is not ours.
+	t.Run("stale sockets are reported, not failed", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus-a.sock"), nil, 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus-b.sock"), nil, 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "other.sock"), nil, 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus-notasocket"), nil, 0o644))
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, "magus-dir.sock"), 0o755))
+
+		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "2 stale socket(s)", got.Message)
+		require.Len(t, got.Details, 2)
+		for _, d := range got.Details {
+			assert.True(t, strings.HasPrefix(d, "stale: "), d)
+		}
+	})
+
+	// Multiple live daemons is a real conflict, and the only shape that fails.
+	t.Run("two live daemons", func(t *testing.T) {
+		dir := t.TempDir()
+		listenUnix(t, filepath.Join(dir, "magus-a.sock"))
+		listenUnix(t, filepath.Join(dir, "magus-b.sock"))
+
+		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
+		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Contains(t, got.Message, "multiple daemons running")
+		require.Len(t, got.Details, 2)
+		for _, d := range got.Details {
+			assert.True(t, strings.HasPrefix(d, "live: "), d)
+		}
+	})
+
+	// A daemon plus a run in flight is the ORDINARY state now that a run takes its
+	// admission from the daemon and hosts its own pool for its children. Counting the
+	// pool as a daemon reported that state as a conflict.
+	t.Run("a live per-process pool beside the daemon is not a conflict", func(t *testing.T) {
+		dir := t.TempDir()
+		listenUnix(t, filepath.Join(dir, "magus-daemon.sock"))
+		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
+
+		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "1 live socket(s)", got.Message)
+	})
+}
+
+func TestCheckStaleShadowAcks(t *testing.T) {
+	acks := config.Config{Spells: config.SpellsConfig{AllowShadow: []config.ShadowAck{
+		{Name: "spells/hello", Reason: "the nested copy is deliberate"},
+		{Name: "spells/world", Reason: "ditto"},
+	}}}
+
+	t.Run("nothing acknowledged", func(t *testing.T) {
+		got := (&runner{}).checkStaleShadowAcks()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "no allow_shadow entries", got.Message)
+	})
+
+	t.Run("workspace not loaded", func(t *testing.T) {
+		got := (&runner{opts: options{cfg: acks}}).checkStaleShadowAcks()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, "workspace not loaded", got.Message)
+	})
+
+	// An acknowledgment whose shadow is gone is dead config: the reason it carries no
+	// longer describes anything, which is what keeps the opt-out list meaningful.
+	t.Run("every ack is stale", func(t *testing.T) {
+		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}, opts: options{cfg: acks}}
+		got := r.checkStaleShadowAcks()
+		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Contains(t, got.Message, "2 allow_shadow entr(ies) no longer match a real shadow")
+		require.Len(t, got.Details, 2)
+		// Sorted, so the report does not reorder between runs over the same config.
+		assert.Contains(t, got.Details[0], `"spells/hello" no longer shadows anything`)
+		assert.Contains(t, got.Details[0], "the nested copy is deliberate")
+		assert.Contains(t, got.Details[1], `"spells/world"`)
+	})
+}
+
+// plant writes a file under root, creating its parents, and returns the path.
+func plant(t *testing.T, root, rel, body string) string {
+	t.Helper()
+	p := filepath.Join(root, filepath.FromSlash(rel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+	require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+	return p
+}
+
+// touchAt backdates or advances a path's mtime, which is the whole input to the
+// staleness comparison.
+func touchAt(t *testing.T, path string, at time.Time) {
+	t.Helper()
+	require.NoError(t, os.Chtimes(path, at, at))
+}
+
+// withoutPathMagus empties PATH so exec.LookPath("magus") cannot resolve, which is what
+// makes "no guard at all" reachable on a developer machine that has one installed.
+func withoutPathMagus(t *testing.T) {
+	t.Helper()
+	t.Setenv("PATH", t.TempDir())
+}
+
+func TestNewestGoSource(t *testing.T) {
+	root := t.TempDir()
+	base := time.Now().Add(-24 * time.Hour)
+
+	touchAt(t, plant(t, root, "old.go", "package a\n"), base)
+	newest := plant(t, root, "sub/new.go", "package b\n")
+	touchAt(t, newest, base.Add(time.Hour))
+	// Not Go source, so its mtime must not win.
+	touchAt(t, plant(t, root, "README.md", "hi\n"), base.Add(10*time.Hour))
+	// The directories that never hold guard sources, each planted with a file newer
+	// than everything else so a missing skip shows up as the wrong answer.
+	for _, dir := range []string{".git", "node_modules", "gen", ".claude"} {
+		touchAt(t, plant(t, root, dir+"/skipped.go", "package c\n"), base.Add(20*time.Hour))
+	}
+
+	at, path := newestGoSource(root)
+	assert.Equal(t, filepath.FromSlash("sub/new.go"), path)
+	assert.WithinDuration(t, base.Add(time.Hour), at, time.Second)
+}
+
+func TestNewestGoSourceWithoutGoFiles(t *testing.T) {
+	at, path := newestGoSource(t.TempDir())
+	assert.True(t, at.IsZero())
+	assert.Equal(t, "", path)
+}
+
+func TestCheckGuardBinary(t *testing.T) {
+	// A stale guard is worse than an absent one: an absent guard is noticed within a
+	// command or two, a stale one is trusted indefinitely.
+	t.Run("older than the working tree", func(t *testing.T) {
+		root := t.TempDir()
+		now := time.Now()
+		touchAt(t, plant(t, root, "main.go", "package main\n"), now)
+		bin := plant(t, root, "magus", "#!/bin/sh\n")
+		require.NoError(t, os.Chmod(bin, 0o755))
+		touchAt(t, bin, now.Add(-time.Hour))
+
+		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
+		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Contains(t, got.Message, "stale rules")
+		require.Len(t, got.Details, 3)
+		assert.Contains(t, got.Details[1], filepath.FromSlash("main.go"))
+		assert.Contains(t, got.Details[2], "rebuild:")
+	})
+
+	t.Run("newer than every tracked Go source", func(t *testing.T) {
+		root := t.TempDir()
+		now := time.Now()
+		touchAt(t, plant(t, root, "main.go", "package main\n"), now.Add(-time.Hour))
+		bin := plant(t, root, "magus", "#!/bin/sh\n")
+		require.NoError(t, os.Chmod(bin, 0o755))
+		touchAt(t, bin, now)
+
+		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "hook would run ./magus")
+	})
+
+	// The resolved path is reported always, not only on failure: "which binary is
+	// judging me?" has no other way to be asked.
+	t.Run("falls back to PATH", func(t *testing.T) {
+		dir := t.TempDir()
+		fake := filepath.Join(dir, "magus")
+		require.NoError(t, os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755))
+		t.Setenv("PATH", dir)
+
+		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "no ./magus built")
+		assert.Contains(t, got.Message, fake)
+	})
+
+	t.Run("no binary anywhere", func(t *testing.T) {
+		withoutPathMagus(t)
+		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
+		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Contains(t, got.Message, "a guard hook is unenforced")
+		assert.Equal(t, []string{"build one: magus run build ."}, got.Details)
+	})
+
+	// A non-executable ./magus is not a binary a hook can run, so resolution has to
+	// carry on to PATH rather than stopping at the name.
+	t.Run("non-executable ./magus", func(t *testing.T) {
+		withoutPathMagus(t)
+		root := t.TempDir()
+		plant(t, root, "magus", "not a binary\n")
+
+		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
+		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Contains(t, got.Message, "no ./magus and no magus on PATH")
+	})
+}
+
+// TestResolveGuardBinaryForWiring is kept separate from checkGuardBinary on purpose, so
+// a change to one check's resolution order cannot silently retarget the other's probe.
+func TestResolveGuardBinaryForWiring(t *testing.T) {
+	t.Run("prefers ./magus", func(t *testing.T) {
+		root := t.TempDir()
+		bin := plant(t, root, "magus", "#!/bin/sh\n")
+		require.NoError(t, os.Chmod(bin, 0o755))
+
+		got, ok := resolveGuardBinaryForWiring(root)
+		require.True(t, ok)
+		assert.Equal(t, bin, got)
+	})
+
+	t.Run("falls back to PATH", func(t *testing.T) {
+		dir := t.TempDir()
+		fake := filepath.Join(dir, "magus")
+		require.NoError(t, os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755))
+		t.Setenv("PATH", dir)
+
+		got, ok := resolveGuardBinaryForWiring(t.TempDir())
+		require.True(t, ok)
+		assert.Equal(t, fake, got)
+	})
+
+	t.Run("nothing to resolve", func(t *testing.T) {
+		withoutPathMagus(t)
+		_, ok := resolveGuardBinaryForWiring(t.TempDir())
+		assert.False(t, ok)
+	})
+
+	t.Run("a directory named magus is not a binary", func(t *testing.T) {
+		withoutPathMagus(t)
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "magus"), 0o755))
+
+		_, ok := resolveGuardBinaryForWiring(root)
+		assert.False(t, ok)
+	})
+}
+
+func TestHarnessConfigCandidates(t *testing.T) {
+	root := t.TempDir()
+	writeDoctorHarness(t, root)
+
+	got, err := harnessConfigCandidates(root)
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join(root, "host", "hooks.json")}, got)
+}
+
+func TestGuardReferencedTemplates(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, ".claude")
+	require.NoError(t, os.MkdirAll(configDir, 0o755))
+
+	fromRoot := plant(t, root, "docs/guides/magus-command.sh", "#!/bin/sh\n")
+	besideConfig := plant(t, configDir, "magus-path.sh", "#!/bin/sh\n")
+
+	t.Run("resolves against the root and against the config dir", func(t *testing.T) {
+		body := []byte(`{"command": "sh docs/guides/magus-command.sh", "other": "magus-path.sh"}`)
+		found, missing := guardReferencedTemplates(root, configDir, body)
+		assert.Equal(t, []string{fromRoot, besideConfig}, found)
+		assert.Empty(t, missing)
+	})
+
+	t.Run("resolves Codex's VCS-neutral workspace-root shell expansion", func(t *testing.T) {
+		body := []byte(`{"command": "sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/magus-command.sh\""}`)
+		found, missing := guardReferencedTemplates(root, configDir, body)
+		assert.Equal(t, []string{fromRoot}, found)
+		assert.Empty(t, missing)
+	})
+
+	// Root-relative treatment is deliberately a narrow compatibility rule for the
+	// documented expansion, not a way for a config to smuggle an arbitrary shell
+	// command into doctor.
+	t.Run("does not resolve an arbitrary magus shell expansion from the root", func(t *testing.T) {
+		body := []byte(`{"command": "sh \"$(magus version)/docs/guides/magus-command.sh\""}`)
+		found, missing := guardReferencedTemplates(root, configDir, body)
+		assert.Empty(t, found)
+		assert.NotEmpty(t, missing)
+	})
+
+	// A config whose hook points at a template that is not there runs nothing;
+	// reporting only what resolved would grade exactly that case as healthy.
+	t.Run("an unresolvable token is the finding", func(t *testing.T) {
+		body := []byte(`{"command": "sh hooks/cursor-hook.sh"}`)
+		found, missing := guardReferencedTemplates(root, configDir, body)
+		assert.Empty(t, found)
+		assert.Equal(t, []string{"hooks/cursor-hook.sh"}, missing, "the token is reported as the config wrote it")
+	})
+
+	t.Run("a config naming no template", func(t *testing.T) {
+		found, missing := guardReferencedTemplates(root, configDir, []byte(`{"hooks": []}`))
+		assert.Empty(t, found)
+		assert.Empty(t, missing)
+	})
+
+	// The token starts at the nearest quote, space, tab, newline or '=', so a bare
+	// basename is taken whole rather than swallowing the word before it.
+	t.Run("a bare basename", func(t *testing.T) {
+		bare := plant(t, root, "cursor-hook.sh", "#!/bin/sh\n")
+		found, missing := guardReferencedTemplates(root, configDir, []byte("hook=cursor-hook.sh\n"))
+		assert.Equal(t, []string{bare}, found)
+		assert.Empty(t, missing)
+	})
+}
+
+func TestGuardTemplateMarkerProblem(t *testing.T) {
+	marker := agent.GuardTemplateMarker
+
+	t.Run("current", func(t *testing.T) {
+		body := []byte("#!/bin/sh\n# " + marker + " " + strconv.Itoa(agent.GuardTemplateVersion) + "\n")
+		assert.Equal(t, "", guardTemplateMarkerProblem(body))
+	})
+
+	t.Run("ahead of this binary", func(t *testing.T) {
+		body := []byte("# " + marker + " " + strconv.Itoa(agent.GuardTemplateVersion+1) + "\n")
+		assert.Equal(t, "", guardTemplateMarkerProblem(body))
+	})
+
+	t.Run("behind", func(t *testing.T) {
+		body := []byte("# " + marker + " 1\n")
+		got := guardTemplateMarkerProblem(body)
+		assert.Contains(t, got, "template version 1 is older than current version "+strconv.Itoa(agent.GuardTemplateVersion))
+		assert.Contains(t, got, "re-download it")
+	})
+
+	// A MISSING marker is a finding, not a pass: the marker postdates the templates,
+	// so a copy carrying none is older than versioning. Measured on a real machine, a
+	// plugin still calling a removed subcommand graded healthy without this.
+	t.Run("no marker at all", func(t *testing.T) {
+		got := guardTemplateMarkerProblem([]byte("#!/bin/sh\necho hi\n"))
+		assert.Contains(t, got, "carries no "+marker+" line")
+		assert.Contains(t, got, "predates template versioning")
+	})
+
+	// An unreadable version is treated as current rather than as a version-0 copy:
+	// the marker is there, so the file is not from before versioning.
+	t.Run("unparsable version", func(t *testing.T) {
+		assert.Equal(t, "", guardTemplateMarkerProblem([]byte("# "+marker+" seven\n")))
+	})
+
+	// The marker on the last line, with no newline after it.
+	t.Run("marker at end of file", func(t *testing.T) {
+		assert.Equal(t, "", guardTemplateMarkerProblem([]byte("# "+marker+" "+strconv.Itoa(agent.GuardTemplateVersion))))
+	})
+}
+
+func TestCheckObserverRecording(t *testing.T) {
+	// observe appends n hook observations of one tool into the workspace's trail.
+	observe := func(t *testing.T, root, tool string, n int) {
+		t.Helper()
+		base := (&runner{root: root}).cacheDir()
+		for i := range n {
+			trail.AppendAgentCommand(context.Background(), base, trail.AgentCommand{
+				Host: "test",
+				Tool: tool,
+				Path: fmt.Sprintf("file-%d.go", i),
+			})
+		}
+	}
+
+	// A workspace no agent has run in is the ordinary case, and failing it would train
+	// people to ignore the check.
+	t.Run("nothing recorded", func(t *testing.T) {
+		got := (&runner{root: t.TempDir()}).checkObserverRecording()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "no agent activity recorded yet")
+	})
+
+	// Below the sample floor a handful of events with no reads is what a fixture or
+	// one session looks like; judging it would be this check making the exact mistake
+	// it exists to catch.
+	t.Run("too few to judge", func(t *testing.T) {
+		root := t.TempDir()
+		observe(t, root, "file.write", observerMinSample-1)
+
+		got := (&runner{root: root}).checkObserverRecording()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "too few to judge")
+		assert.Contains(t, got.Message, strconv.Itoa(observerMinSample-1)+" observation(s)")
+	})
+
+	// Commands with no reads is the diagnostic pattern: wiring correct, doctor green,
+	// and the story behind a change unreconstructable.
+	t.Run("not one read", func(t *testing.T) {
+		root := t.TempDir()
+		observe(t, root, "file.write", 20)
+		observe(t, root, "shell.command", 40)
+
+		got := (&runner{root: root}).checkObserverRecording()
+		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Contains(t, got.Message, "NOT ONE read")
+		require.NotEmpty(t, got.Details)
+		assert.Contains(t, got.Details[0], "writes: 20")
+		assert.Contains(t, got.Details[0], "shell: 40")
+		assert.Contains(t, got.Details[0], "reads: 0")
+	})
+
+	// Wired, recording, and still useless for its purpose: a diff can name the agent
+	// that wrote a file but not what it had just read.
+	t.Run("sparse reading trail", func(t *testing.T) {
+		root := t.TempDir()
+		observe(t, root, "file.read", 5)
+		observe(t, root, "file.write", 60)
+
+		got := (&runner{root: root}).checkObserverRecording()
+		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Contains(t, got.Message, "too sparse to explain a change")
+		assert.Contains(t, got.Message, "5 read(s) against 60 write(s)")
+	})
+
+	t.Run("recording healthily", func(t *testing.T) {
+		root := t.TempDir()
+		observe(t, root, "file.read", 60)
+		observe(t, root, "file.write", 10)
+
+		got := (&runner{root: root}).checkObserverRecording()
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "recording: 60 read(s), 10 write(s)")
+	})
+}
+
+func TestCacheDir(t *testing.T) {
+	assert.Equal(t, filepath.Join("/repo", ".magus"), (&runner{root: "/repo"}).cacheDir())
+
+	abs := &runner{root: "/repo", opts: options{cfg: config.Config{Cache: config.Cache{Dir: "/var/cache/magus/"}}}}
+	assert.Equal(t, filepath.FromSlash("/var/cache/magus"), abs.cacheDir())
+
+	rel := &runner{root: "/repo", opts: options{cfg: config.Config{Cache: config.Cache{Dir: "build/cache"}}}}
+	assert.Equal(t, filepath.Join("/repo", "build", "cache"), rel.cacheDir())
+}
+
+func TestFirstExistingConfig(t *testing.T) {
+	assert.Equal(t, "", firstExistingConfig(t.TempDir()))
+
+	dotted := t.TempDir()
+	want := plant(t, dotted, ".magus.yaml", "log:\n")
+	assert.Equal(t, want, firstExistingConfig(dotted))
+
+	// magus.yaml wins when both exist, matching the loader's own order.
+	both := t.TempDir()
+	plain := plant(t, both, "magus.yaml", "log:\n")
+	plant(t, both, ".magus.yaml", "log:\n")
+	assert.Equal(t, plain, firstExistingConfig(both))
+}
+
+func TestConfigFilePaths(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	root := t.TempDir()
+	want := plant(t, root, "magus.yaml", "log:\n")
+
+	got := configFilePaths(root)
+	assert.Contains(t, got, want)
+	// Only files that exist: every path returned is handed straight to config.LoadFile,
+	// and a missing one would be reported as a config problem the user does not have.
+	for _, p := range got {
+		_, err := os.Stat(p)
+		assert.NoError(t, err, p)
+	}
+
+	// An empty root is the daemon's path, where the workspace arrives through r.ws.
+	assert.NotPanics(t, func() { configFilePaths("") })
+}
+
+func TestNameConvention(t *testing.T) {
+	cases := []struct{ name, want string }{
+		{"build", ""},
+		{"", ""},
+		{"no_cache", "snake_case"},
+		{"buildAll", "camelCase"},
+		{"BuildAll", "PascalCase"},
+		{"Build", "PascalCase"},
+		// A delimiter wins over casing: snake_case is the stronger signal.
+		{"Build_All", "snake_case"},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, nameConvention(c.name), "nameConvention(%q)", c.name)
+	}
+}
+
+func TestEscapesRoot(t *testing.T) {
+	assert.False(t, escapesRoot(""), "many node kinds put a name rather than a path here")
+	assert.False(t, escapesRoot("internal/doctor/checks.go"))
+	assert.False(t, escapesRoot("a..b"), "a name containing dots is not a parent segment")
+	assert.True(t, escapesRoot("../elsewhere/x.go"))
+	assert.True(t, escapesRoot("a/../../b"))
+}
+
+func TestToSlashRel(t *testing.T) {
+	root := filepath.FromSlash("/repo")
+	assert.Equal(t, "internal/doctor/checks.go",
+		toSlashRel(root, filepath.Join(root, "internal", "doctor", "checks.go")))
+	// filepath.Rel fails against an empty root, and the absolute path is better than
+	// a detail naming no file at all.
+	assert.Equal(t, filepath.FromSlash("/repo/x.go"), toSlashRel("", filepath.FromSlash("/repo/x.go")))
+}
+
+func TestSymlinkEscapes(t *testing.T) {
+	// EvalSymlinks first: macOS's TempDir sits under the /var -> /private/var link, and
+	// an unresolved root makes every in-tree target read as an escape.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	plant(t, root, "inside.txt", "hi\n")
+	plant(t, outside, "outside.txt", "hi\n")
+
+	t.Run("in-tree", func(t *testing.T) {
+		link := filepath.Join(root, "in.link")
+		require.NoError(t, os.Symlink(filepath.Join(root, "inside.txt"), link))
+		_, escapes := symlinkEscapes(root, link)
+		assert.False(t, escapes)
+	})
+
+	// The sandbox-escape vector this check exists for, where landlock is unavailable.
+	t.Run("escaping", func(t *testing.T) {
+		link := filepath.Join(root, "out.link")
+		require.NoError(t, os.Symlink(filepath.Join(outside, "outside.txt"), link))
+		target, escapes := symlinkEscapes(root, link)
+		assert.True(t, escapes)
+		assert.Contains(t, target, "outside.txt")
+	})
+
+	// EvalSymlinks fails on a dangling link, so direction is judged lexically instead
+	// of the link being waved through.
+	t.Run("dangling relative link", func(t *testing.T) {
+		link := filepath.Join(root, "dangling.link")
+		require.NoError(t, os.Symlink("../gone.txt", link))
+		_, escapes := symlinkEscapes(root, link)
+		assert.True(t, escapes)
+	})
+
+	t.Run("dangling in-tree link", func(t *testing.T) {
+		link := filepath.Join(root, "dangling-inside.link")
+		require.NoError(t, os.Symlink("gone.txt", link))
+		_, escapes := symlinkEscapes(root, link)
+		assert.False(t, escapes)
+	})
+}
+
+func TestPrunedPrefix(t *testing.T) {
+	// Nobody writes "gen/*.binpb" hoping it matches nothing.
+	for _, glob := range []string{"gen/*.binpb", "./gen/**/*.go", "node_modules/**/*.js", "vendor/*"} {
+		_, ok := prunedPrefix(glob)
+		assert.True(t, ok, "prunedPrefix(%q)", glob)
+	}
+	dir, ok := prunedPrefix("gen/*.binpb")
+	require.True(t, ok)
+	assert.Equal(t, "gen", dir)
+
+	// A wildcard-free path names one file and is resolved by stat, so it reaches the
+	// key from inside a pruned tree normally.
+	for _, glob := range []string{"gen/knowledge-graph.json", "**/*.go", "internal/**/*.go", "src/*.ts"} {
+		_, ok := prunedPrefix(glob)
+		assert.False(t, ok, "prunedPrefix(%q)", glob)
+	}
+}
+
+// TestPrunedPrefixIgnoresARelativePrefix keeps "." and ".." out of the segment scan,
+// which would otherwise never match an ignore dir but would cost a lookup each.
+func TestPrunedPrefixIgnoresARelativePrefix(t *testing.T) {
+	dir, ok := prunedPrefix("../gen/*.go")
+	require.True(t, ok)
+	assert.Equal(t, "gen", dir)
+}
+
+// TestGuardTemplateBasenamesAreShipped pins the list against the templates that actually
+// exist, because for the whole life of one rename it named magus-pause.sh, a file the
+// same commit had renamed to magus-checkpoint.sh.
+//
+// The cost of that is total and silent: guardReferencedTemplates only inspects a config
+// for basenames in this list, so the one check written to catch a silently stale hook
+// could not match the only name a config ever carries. A wired host graded healthy while
+// running a script that invoked a subcommand magus no longer has.
+//
+// Membership is deliberately NOT asserted in the other direction: a template a host
+// discovers by placing it in a directory is graded in checkGuardWiring's directory
+// branch and correctly absent here (magus-observe.sh is the standing example).
+func TestGuardTemplateBasenamesAreShipped(t *testing.T) {
+	dir := filepath.Join("..", "..", "docs", "guides", "integrations", "agents")
+	for _, base := range guardTemplateBasenames {
+		assert.FileExistsf(t, filepath.Join(dir, base),
+			"guardTemplateBasenames names %q, which this repo does not ship; a config can never carry that name, so the check silently matches nothing", base)
+	}
 }

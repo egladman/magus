@@ -1,3 +1,5 @@
+// cross-cutting: end-to-end runs through the public magus API; this package has no source
+
 // Package e2e holds end-to-end orchestration tests for the public magus
 // API. It lives in its own package because exercising Run/RunCI requires
 // blank-importing the host bindings, whose init() registers the built-in spells
