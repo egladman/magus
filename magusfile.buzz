@@ -70,8 +70,10 @@ import "project/libs/testlayout" as testlayout;
 // engine reads the parsed config (magus.yaml, then env, then flags). `insecure: false`
 // in magus.yaml with the env var set wires a backend here that the engine then refuses.
 import "spells/github/actions" as github;
-// TODO: switch these to the pinned oci:// imports spell-publish prints once cd has
-// published them and the GHCR packages are public (docs/reference/remote-spells.md).
+// TODO: import these by registry path (`import "ghcr.io/egladman/magus/spells/cursor";`,
+// declared in magus.yaml and pinned by spell-lock:update) once cd has published them and
+// the GHCR packages are public (docs/reference/remote-spells.md). Until then a switch
+// would leave magus.lock with nothing to pin and every load of this magusfile failing.
 import "spells/harness/cursor" as cursor;
 import "spells/harness/codex" as codex;
 import "spells/harness/claude-code" as claude;
@@ -1475,10 +1477,11 @@ fun publish_graph(ctx: magus\Context) > void !> any {
     magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
 }
 
-// Publishes each spell below as an OCI artifact, so a workspace imports it pinned by
-// digest (`oci://ghcr.io/egladman/magus/spells/<name>@sha256:...`) and it versions apart
-// from the binary. It packs only tracked files, so an unchanged spell republishes to the
-// digest it already had. The key is the repository name under GHCR_SPELLS.
+// Publishes each spell below as an OCI artifact, so a workspace imports it by registry
+// path (`import "ghcr.io/egladman/magus/spells/<name>";`, declared in its magus.yaml
+// and pinned in its magus.lock) and it versions apart from the binary. It packs only
+// tracked files, so an unchanged spell republishes to the digest it already had. The
+// key is the repository name under GHCR_SPELLS.
 //
 // cd is the deliver switch: without it each spell is built and its digest printed, and
 // nothing leaves the machine. The spell sources are declared inputs, so a change under
@@ -1505,6 +1508,21 @@ export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
         magus\cmd("spell", args: ["push", dir, reg.repository + "/" + name + ":" + tag, "--username", user],
             opts: {"stdin": token});
     }
+}
+
+// Owns magus.lock, the digest each remote spell magus.yaml declares was pinned to.
+// Plain, it checks the lock against magus.yaml and verifies every pinned digest,
+// resolving no tag. Under the update charm, and only there, it asks the registry what
+// each declared tag names now and rewrites the lock, so reviewing an upgrade is
+// reviewing that diff. ci strips update, so the gate can never move a pin.
+export fun spell_lock(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("magus.yaml");
+    ctx.writesFiles("magus.lock");
+    if (ctx.hasCharm("update")) {
+        magus\cmd("spell", args: ["lock", "--update"]);
+        return;
+    }
+    magus\cmd("spell", args: ["lock"]);
 }
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local

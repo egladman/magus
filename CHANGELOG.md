@@ -8,11 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
-  loads offline once cached; MGS1041 refuses a tag alone, MGS1042 mismatched bytes.
-  `magus spell build|push|pull|ls` build a reproducible digest, push under several tags,
-  verify a pull and list tags. Registry credentials are secret references under
-  `spells.registries`.
+- **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
+  is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
+  charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
+  embedded or remote spell. MGS1041 through MGS1044 cover undeclared, stale, mismatched
+  and invalid. `magus spell build|push|pull|ls` publish.
 - **`magus job fork` declares a job from the terminal.** Flags cover one row
   (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
   `--stdin` takes a full record and `--schema` prints its contract.
