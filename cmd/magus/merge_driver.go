@@ -158,7 +158,9 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 	}
 	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), workspaceOutputGlobs(m))
 	if err != nil {
-		slog.DebugContext(ctx, "merge-driver: could not refresh registration", slog.String("error", err.Error()))
+		// Error, not Debug: a torn managed section or a stuck lock leaves the merge driver
+		// unregistered, and nothing else would say so. The command itself still runs.
+		slog.ErrorContext(ctx, "merge-driver: could not refresh registration", slog.String("error", err.Error()))
 		return
 	}
 	if changed {

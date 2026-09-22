@@ -1,7 +1,6 @@
 package vcs
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -397,54 +396,27 @@ func (v hgVCS) culprit(ctx context.Context, dir string) (string, error) {
 	return sha, nil
 }
 
-// Managed-section markers; see the git.go block for why each pair is a locator MARK
-// plus the full line written.
-const (
-	hgRCBegin     = "# BEGIN magus-generated"
-	hgRCBeginLine = hgRCBegin + " - do not edit this section manually"
-	hgRCEnd       = "# END magus-generated"
+// hgMetaDir is the metadata directory whose lock serializes writes to .hg/hgrc.
+func hgMetaDir(root string) string { return filepath.Join(root, ".hg") }
 
-	hgHookBegin     = "# BEGIN magus-refresh"
-	hgHookBeginLine = hgHookBegin + " - do not edit this section manually"
-	hgHookEnd       = "# END magus-refresh"
-
-	hgDriftHookBegin     = "# BEGIN magus-drift-notice"
-	hgDriftHookBeginLine = hgDriftHookBegin + " - do not edit this section manually"
-	hgDriftHookEnd       = "# END magus-drift-notice"
-)
-
-// hgDriftHooks: "commit" fires right after a local commit is created; "outgoing" fires
-// in the source repo once a push (or pull/bundle) has determined which changesets are
-// leaving it, the closest hg has to git's pre-push. Verified against hg 6.x: both fire
-// with a plain shell hook value and neither can block (a non-zero "commit" hook cannot
-// undo the commit; "outgoing" firing after the changeset set is already decided is why
-// it, not "preoutgoing", is the one used here).
-var hgDriftHooks = []string{"commit", "outgoing"}
+func hgrcPath(root string) string { return filepath.Join(root, ".hg", "hgrc") }
 
 // InstallMergeDriver writes [merge-patterns] and [merge-tools] to .hg/hgrc.
-func (v hgVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []string) error {
-	hgrcPath := filepath.Join(root, ".hg", "hgrc")
-	var section strings.Builder
-	section.WriteString(hgRCBeginLine + "\n")
-	section.WriteString("[merge-patterns]\n")
-	for _, glob := range outputGlobs {
-		fmt.Fprintf(&section, "glob:%s = magus\n", glob)
-	}
-	section.WriteString("\n[merge-tools]\n")
-	section.WriteString("magus.executable = magus\n")
-	section.WriteString("magus.args = vcs merge-driver $base $local $other 0 $local\n")
-	section.WriteString("magus.premerge = False\n")
-	section.WriteString("magus.gui = False\n")
-	section.WriteString(hgRCEnd + "\n")
-	existing, _ := os.ReadFile(hgrcPath)
-	updated := replaceManagedSection(string(existing), section.String(), hgRCBegin, hgRCEnd)
-	return os.WriteFile(hgrcPath, []byte(updated), 0o644)
+func (v hgVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
+	_, err := v.writeMergeDriver(ctx, root, outputGlobs)
+	return err
 }
 
-// CheckMergeDriver reports whether the magus merge driver is registered in .hg/hgrc.
+func (v hgVCS) writeMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
+	return lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
+		return writeHgFamilyMergeDriverSection(hgrcPath(root), outputGlobs)
+	})
+}
+
+// CheckMergeDriver reports whether .hg/hgrc holds the magus merge-driver section. A torn
+// section is an error.
 func (v hgVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
-	data, _ := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
-	return strings.Contains(string(data), hgRCBegin), nil
+	return managedSectionPresent(hgrcPath(root), generatedMarkers)
 }
 
 // EnsureMergeDriver implements types.MergeDriverInstaller. hgrc holds the glob list
@@ -454,64 +426,42 @@ func (v hgVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs [
 	if len(outputGlobs) == 0 {
 		return false, nil
 	}
-	before, _ := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
-	if err := v.InstallMergeDriver(ctx, root, outputGlobs); err != nil {
-		return false, err
-	}
-	after, _ := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
-	return !bytes.Equal(before, after), nil
+	return v.writeMergeDriver(ctx, root, outputGlobs)
 }
 
-// InstallRefreshHook implements types.RefreshHookInstaller: it registers an hg `update`
-// hook (fires after a working-directory change: checkout, pull-update) that runs
-// command. It shares replaceManagedSection with the merge-driver install, under its own
-// markers so the two managed sections coexist in .hg/hgrc. Returns the hook label.
-func (v hgVCS) InstallRefreshHook(_ context.Context, root, command string) ([]string, error) {
-	hgrcPath := filepath.Join(root, ".hg", "hgrc")
-	var section strings.Builder
-	section.WriteString(hgHookBeginLine + "\n")
-	section.WriteString("[hooks]\n")
-	fmt.Fprintf(&section, "update.magus-refresh = %s >/dev/null 2>&1 || true\n", command)
-	section.WriteString(hgHookEnd + "\n")
-	existing, err := os.ReadFile(hgrcPath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("vcs: read %s: %w", hgrcPath, err)
+// InstallRefreshHook implements types.RefreshHookInstaller with an hg `update` hook,
+// which fires after the working directory moves (checkout, pull-update). The hook never
+// fails the hg command. It returns ["update"] when it changed .hg/hgrc and nil when the
+// hook was already current. Installs are serialized per repository, and a torn managed
+// section in .hg/hgrc is an error.
+func (v hgVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
+	changed, err := lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
+		return writeHgFamilyRefreshSection(hgrcPath(root), command)
+	})
+	if err != nil {
+		return nil, err
 	}
-	updated := replaceManagedSection(string(existing), section.String(), hgHookBegin, hgHookEnd)
-	if updated == string(existing) {
+	if !changed {
 		return nil, nil
-	}
-	if err := os.WriteFile(hgrcPath, []byte(updated), 0o644); err != nil {
-		return nil, fmt.Errorf("vcs: write %s: %w", hgrcPath, err)
 	}
 	return []string{"update"}, nil
 }
 
-// InstallDriftHook implements types.DriftHookInstaller: it registers hg's `commit` and
-// `outgoing` hooks (see hgDriftHooks) to run command. It shares replaceManagedSection
-// with the merge-driver and refresh-hook installs, under its own markers so all three
-// managed sections coexist in .hg/hgrc. Returns the labels of the hooks it installed.
-func (v hgVCS) InstallDriftHook(_ context.Context, root, command string) ([]string, error) {
-	hgrcPath := filepath.Join(root, ".hg", "hgrc")
-	var section strings.Builder
-	section.WriteString(hgDriftHookBeginLine + "\n")
-	section.WriteString("[hooks]\n")
-	for _, name := range hgDriftHooks {
-		fmt.Fprintf(&section, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
+// InstallDriftHook implements types.DriftHookInstaller with hg's `commit` and `outgoing`
+// hooks (see hgFamilyDriftHooks). Neither hook can fail the hg command. It returns their
+// labels when it changed .hg/hgrc and nil when they were already current. Installs are
+// serialized per repository, and a torn managed section in .hg/hgrc is an error.
+func (v hgVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
+	changed, err := lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
+		return writeHgFamilyDriftSection(hgrcPath(root), command)
+	})
+	if err != nil {
+		return nil, err
 	}
-	section.WriteString(hgDriftHookEnd + "\n")
-	existing, err := os.ReadFile(hgrcPath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("vcs: read %s: %w", hgrcPath, err)
-	}
-	updated := replaceManagedSection(string(existing), section.String(), hgDriftHookBegin, hgDriftHookEnd)
-	if updated == string(existing) {
+	if !changed {
 		return nil, nil
 	}
-	if err := os.WriteFile(hgrcPath, []byte(updated), 0o644); err != nil {
-		return nil, fmt.Errorf("vcs: write %s: %w", hgrcPath, err)
-	}
-	return slices.Clone(hgDriftHooks), nil
+	return slices.Clone(hgFamilyDriftHooks), nil
 }
 
 // ConflictResolver (below) is implemented for hg so `magus vcs resolve` is not a

@@ -168,6 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Installs of magus-managed git, hg and Sapling sections are atomic.** They are
+  serialized per repository and leave a hook executable. A torn section marker is an error.
 - **`--root` from another directory no longer loads that directory's modules.** A
   magusfile's imports resolve against its project, then the workspace root.
 - **Config values given as flags are validated.** `--log-level bogus` ran with a value the

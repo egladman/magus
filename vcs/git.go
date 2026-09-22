@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -978,23 +979,8 @@ func parseNameStatus(line string) (types.FileChange, bool) {
 	}
 }
 
-// Managed-section markers: a locator plus the full line written. Matchers use the
-// locator alone, so a section written by an older magus (whose banner used an em-dash)
-// is still found and rewritten rather than duplicated below.
-const (
-	gitAttrsBegin     = "# BEGIN magus-generated"
-	gitAttrsBeginLine = gitAttrsBegin + " - do not edit this section manually"
-	gitAttrsEnd       = "# END magus-generated"
-	gitDriverArgs     = " vcs merge-driver %O %A %B %L %P"
-
-	gitHookBegin     = "# BEGIN magus-refresh"
-	gitHookBeginLine = gitHookBegin + " - do not edit this section manually"
-	gitHookEnd       = "# END magus-refresh"
-
-	gitDriftHookBegin     = "# BEGIN magus-drift-notice"
-	gitDriftHookBeginLine = gitDriftHookBegin + " - do not edit this section manually"
-	gitDriftHookEnd       = "# END magus-drift-notice"
-)
+// gitDriverArgs is everything after the executable in merge.magus.driver.
+const gitDriverArgs = " vcs merge-driver %O %A %B %L %P"
 
 // gitRefreshHooks fire on a history-changing event that can stale the knowledge graph /
 // symbol index: a branch switch, a merge/pull, and a rebase/amend.
@@ -1006,12 +992,23 @@ var gitRefreshHooks = []string{"post-checkout", "post-merge", "post-rewrite"}
 // gitRefreshHooks, just addressed to a different job.
 var gitDriftHooks = []string{"post-commit", "pre-push"}
 
-// InstallMergeDriver writes .gitattributes entries and registers the magus merge driver.
+// InstallMergeDriver writes .gitattributes entries and registers the magus merge driver,
+// both under one repository lock so a concurrent install cannot pair one's attributes
+// with the other's registration. A root outside any git repository is an error.
 func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
-	if err := v.writeGitAttrs(root, outputGlobs); err != nil {
+	paths, ok, err := gitRepoPathsOf(ctx, root)
+	if err != nil {
 		return err
 	}
-	return v.writeGitConfig(ctx, root)
+	if !ok {
+		return fmt.Errorf("vcs: install merge driver: %s is not in a git repository", root)
+	}
+	return withRepoLock(ctx, paths.commonDir, func() error {
+		if _, err := writeManagedSection(filepath.Join(root, ".gitattributes"), generatedMarkers, gitAttrsBody(outputGlobs), configFile); err != nil {
+			return err
+		}
+		return v.writeGitConfig(ctx, root)
+	})
 }
 
 // EnsureMergeDriver re-wires the driver whenever the declared output globs have moved
@@ -1026,12 +1023,14 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 	if len(outputGlobs) == 0 {
 		return false, nil
 	}
-	attrsCurrent, attrsWanted := v.gitAttrsState(root, outputGlobs)
+	attrsCurrent, attrsWanted, err := v.gitAttrsState(root, outputGlobs)
+	if err != nil {
+		return false, err
+	}
 	// One read answers all three questions. Ensure runs on every workspace load and its
 	// contract is to be cheap in the steady state, so it cannot spawn a subprocess each.
 	registered, haveDriver := v.registeredDriver(ctx, root)
-	attrsPresent := v.attrsSectionPresent(root)
-	if attrsCurrent == attrsWanted && haveDriver && attrsPresent &&
+	if attrsCurrent == attrsWanted && haveDriver &&
 		driverExeExists(registered) && driverIsReachableHere(ctx, root, registered) &&
 		driverIsPreferredHere(root, registered) && driverUsable(ctx, registered) {
 		return false, nil
@@ -1052,12 +1051,6 @@ func (v gitVCS) registeredDriver(ctx context.Context, root string) (cmd string, 
 	}
 	cmd = strings.TrimSpace(string(out))
 	return cmd, cmd != ""
-}
-
-// attrsSectionPresent reports whether .gitattributes carries the managed section.
-func (v gitVCS) attrsSectionPresent(root string) bool {
-	data, _ := os.ReadFile(filepath.Join(root, ".gitattributes"))
-	return strings.Contains(string(data), gitAttrsBegin)
 }
 
 // driverArgsCurrent reports whether a registered command still names the subcommand this
@@ -1180,53 +1173,38 @@ func splitDriver(registered string) (exe, args string) {
 	return rest, ""
 }
 
-// CheckMergeDriver reports whether both .gitattributes and git config driver registration are present.
+// CheckMergeDriver reports whether both .gitattributes and git config driver registration
+// are present. A torn managed section in .gitattributes is an error.
 func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error) {
 	if _, ok := v.registeredDriver(ctx, root); !ok {
 		return false, nil // not configured; not an error
 	}
-	return v.attrsSectionPresent(root), nil
+	return managedSectionPresent(filepath.Join(root, ".gitattributes"), generatedMarkers)
 }
 
 // gitAttrsState returns .gitattributes as it is now and as the declared globs say it
-// should be, so callers can compare the two without writing.
-//
-// The section keeps the line ending the file already uses. .gitattributes is the one
-// tracked file magus rewrites on every workspace load, and under core.autocrlf=true (the
-// Git for Windows default) checkout smudges it to CRLF on disk; writing it back as LF
-// marks the file modified and turns `git describe --dirty` into `<tag>-dirty`. The
-// sibling managed sections land in untracked files (.git/config, .hg/hgrc, hook scripts),
-// so only this writer needs it.
-func (v gitVCS) gitAttrsState(root string, outputGlobs []string) (current, wanted string) {
-	existing, _ := os.ReadFile(filepath.Join(root, ".gitattributes"))
-	nl := "\n"
-	if bytes.Contains(existing, []byte("\r\n")) {
-		nl = "\r\n"
+// should be, so callers can compare the two without writing. It renders exactly what
+// writeManagedSection would write, CRLF preservation included.
+func (v gitVCS) gitAttrsState(root string, outputGlobs []string) (current, wanted string, err error) {
+	path := filepath.Join(root, ".gitattributes")
+	existing, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", "", fmt.Errorf("vcs: read %s: %w", path, err)
 	}
-
-	var section strings.Builder
-	section.WriteString(gitAttrsBeginLine + nl)
-	for _, glob := range outputGlobs {
-		fmt.Fprintf(&section, "%s merge=magus linguist-generated%s", glob, nl)
+	wanted, err = renderManagedFile(path, string(existing), generatedMarkers, gitAttrsBody(outputGlobs), configFile)
+	if err != nil {
+		return "", "", err
 	}
-	section.WriteString(gitAttrsEnd + nl)
-
-	wanted = replaceManagedSection(string(existing), section.String(), gitAttrsBegin, gitAttrsEnd)
-	if nl == "\r\n" {
-		// replaceManagedSection joins head and body with bare "\n", so the whole result is
-		// normalized rather than the section alone. The LF path is left byte-for-byte as it
-		// was, so no non-Windows tree sees a different file.
-		wanted = strings.ReplaceAll(strings.ReplaceAll(wanted, "\r\n", "\n"), "\n", "\r\n")
-	}
-	return string(existing), wanted
+	return string(existing), wanted, nil
 }
 
-func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
-	current, updated := v.gitAttrsState(root, outputGlobs)
-	if current == updated {
-		return nil // already correct: do not churn the file's mtime
+// gitAttrsBody is the managed .gitattributes section's content for outputGlobs.
+func gitAttrsBody(outputGlobs []string) string {
+	var body strings.Builder
+	for _, glob := range outputGlobs {
+		fmt.Fprintf(&body, "%s merge=magus linguist-generated\n", glob)
 	}
-	return os.WriteFile(filepath.Join(root, ".gitattributes"), []byte(updated), 0o644)
+	return body.String()
 }
 
 // gitMergeDriverCommand is the command line git runs to resolve a conflict in a
@@ -1402,33 +1380,87 @@ func pathUnder(root, p string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// InstallRefreshHook implements types.RefreshHookInstaller: it writes (or refreshes) the
-// managed magus section into each of gitRefreshHooks so a history-changing event runs
-// command. It reuses replaceManagedSection (the same managed-section mechanism as the
-// merge-driver install), so it is idempotent and never clobbers a user's own hook body.
-// A non-git tree yields no error and no installs.
+// InstallRefreshHook implements types.RefreshHookInstaller: after it returns, each of
+// gitRefreshHooks runs command on a history-changing event, fail-open, beside whatever
+// the hook already did. It returns the hooks it changed, none when all were current.
+// A root outside any git repository installs nothing and is not an error; a hook written
+// for an interpreter other than sh, or holding a torn managed section, is. Installs are
+// serialized per repository.
 func (v gitVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
-	hooksDir, err := vcsOutput(ctx, root, "git", "rev-parse", "--git-path", "hooks")
+	return installGitHookSections(ctx, root, gitRefreshHooks, refreshMarkers, func(name string) string {
+		return gitHookBody(name, command)
+	})
+}
+
+// gitRepoPaths are the directories of a git repository that magus writes managed
+// sections into or locks, both absolute.
+type gitRepoPaths struct {
+	// hooksDir is where git runs hooks: core.hooksPath when set, else the common
+	// directory's hooks/.
+	hooksDir string
+	// commonDir is the metadata directory every worktree of the repository shares.
+	commonDir string
+}
+
+// gitRepoPathsOf resolves root's gitRepoPaths in one git call. ok is false when root is
+// not inside a git repository; any other failure, cancellation included, is an error.
+func gitRepoPathsOf(ctx context.Context, root string) (paths gitRepoPaths, ok bool, err error) {
+	cmd := gitExec(ctx, "-C", root, "rev-parse", "--git-path", "hooks", "--git-common-dir")
+	// The C locale keeps git's "not a git repository" wording what the test below reads.
+	cmd.Env = append(cmd.Env, "LC_ALL=C")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return nil, nil //nolint:nilerr // not a git repo (or git unavailable): nothing to install
+		if ctx.Err() != nil {
+			return gitRepoPaths{}, false, ctx.Err()
+		}
+		if strings.Contains(stderr.String(), "not a git repository") {
+			return gitRepoPaths{}, false, nil
+		}
+		return gitRepoPaths{}, false, fmt.Errorf("vcs: git rev-parse in %s: %w: %s", root, err, strings.TrimSpace(stderr.String()))
 	}
-	if !filepath.IsAbs(hooksDir) {
-		hooksDir = filepath.Join(root, hooksDir)
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) != 2 {
+		return gitRepoPaths{}, false, fmt.Errorf("vcs: git rev-parse in %s: want 2 lines, got %q", root, out)
 	}
-	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
-		return nil, fmt.Errorf("vcs: mkdir %s: %w", hooksDir, err)
+	abs := func(p string) string {
+		if filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(root, p)
+	}
+	return gitRepoPaths{hooksDir: abs(lines[0]), commonDir: abs(lines[1])}, true, nil
+}
+
+// installGitHookSections writes the m section, with body(name) as its content, into each
+// named hook of root's repository under one repository lock, and returns the hooks it
+// changed. A root outside any git repository installs nothing.
+func installGitHookSections(ctx context.Context, root string, names []string, m managedMarkers, body func(name string) string) ([]string, error) {
+	paths, ok, err := gitRepoPathsOf(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+	if err := os.MkdirAll(paths.hooksDir, 0o755); err != nil {
+		return nil, fmt.Errorf("vcs: mkdir %s: %w", paths.hooksDir, err)
 	}
 	var installed []string
-	for _, name := range gitRefreshHooks {
-		changed, err := writeManagedHook(filepath.Join(hooksDir, name), gitHookBody(name, command))
-		if err != nil {
-			return installed, err
+	err = withRepoLock(ctx, paths.commonDir, func() error {
+		for _, name := range names {
+			changed, err := writeManagedSection(filepath.Join(paths.hooksDir, name), m, body(name), hookFile)
+			if err != nil {
+				return err
+			}
+			if changed {
+				installed = append(installed, name)
+			}
 		}
-		if changed {
-			installed = append(installed, name)
-		}
-	}
-	return installed, nil
+		return nil
+	})
+	return installed, err
 }
 
 // gitHookBody is the shell a hook runs. post-checkout also fires on file checkouts (git
@@ -1443,71 +1475,19 @@ func gitHookBody(name, command string) string {
 	return guard + command + " >/dev/null 2>&1 || true\n"
 }
 
-// InstallDriftHook implements types.DriftHookInstaller: it writes (or refreshes) the
-// managed magus section into each of gitDriftHooks so a commit and the push that follows
-// it both poke this daemon to check for stale generated output, in the background. It
-// reuses writeManagedHookSection under its own markers (gitDriftHookBegin/End) so the
-// drift section and the refresh section coexist in a hook file neither owns exclusively.
-// A non-git tree yields no error and no installs.
+// InstallDriftHook implements types.DriftHookInstaller: after it returns, a commit and
+// the push that follows it (gitDriftHooks) both run command, fail-open, so the daemon
+// checks for stale generated output in the background. Its section coexists with the
+// refresh section and any hand-written body in the same hook. It returns the hooks it
+// changed, none when all were current. A root outside any git repository installs
+// nothing and is not an error; a hook written for an interpreter other than sh, or
+// holding a torn managed section, is. Installs are serialized per repository.
 func (v gitVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
-	hooksDir, err := vcsOutput(ctx, root, "git", "rev-parse", "--git-path", "hooks")
-	if err != nil {
-		return nil, nil //nolint:nilerr // not a git repo (or git unavailable): nothing to install
-	}
-	if !filepath.IsAbs(hooksDir) {
-		hooksDir = filepath.Join(root, hooksDir)
-	}
-	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
-		return nil, fmt.Errorf("vcs: mkdir %s: %w", hooksDir, err)
-	}
-	var installed []string
-	for _, name := range gitDriftHooks {
-		// Neither hook needs a guard: post-commit fires only on a real commit, and
-		// pre-push fires only on a real push, unlike post-checkout's dual meaning.
-		body := command + " >/dev/null 2>&1 || true\n"
-		changed, err := writeManagedHookSection(filepath.Join(hooksDir, name), body, gitDriftHookBeginLine, gitDriftHookBegin, gitDriftHookEnd)
-		if err != nil {
-			return installed, err
-		}
-		if changed {
-			installed = append(installed, name)
-		}
-	}
-	return installed, nil
-}
-
-// writeManagedHook is writeManagedHookSection fixed to the refresh-hook markers, kept as
-// its own name because it is the one call site (and test subject) that predates the
-// drift hook needing a second managed section in the same file.
-func writeManagedHook(path, body string) (bool, error) {
-	return writeManagedHookSection(path, body, gitHookBeginLine, gitHookBegin, gitHookEnd)
-}
-
-// writeManagedHookSection inserts or updates the section named by begin/end in the hook
-// at path, giving a new file a POSIX-sh shebang and preserving any existing user body (and
-// any OTHER managed section already there, since two magus hooks, refresh and drift,
-// can share one file). It reports whether the file changed and keeps the hook executable.
-func writeManagedHookSection(path, body, beginLine, begin, end string) (bool, error) {
-	section := beginLine + "\n" + body + end + "\n"
-	existing, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return false, fmt.Errorf("vcs: read %s: %w", path, err)
-	}
-	var next string
-	if os.IsNotExist(err) {
-		// replaceManagedSection normalizes to one blank line before a section, so a new
-		// file written without it differs from itself on the next install, forever.
-		next = "#!/bin/sh\n\n" + section
-	} else {
-		next = replaceManagedSection(string(existing), section, begin, end)
-	}
-	if next == string(existing) {
-		return false, nil
-	}
-	if err := os.WriteFile(path, []byte(next), 0o755); err != nil {
-		return false, fmt.Errorf("vcs: write %s: %w", path, err)
-	}
-	return true, nil
+	// Neither hook needs a guard: post-commit fires only on a real commit, and pre-push
+	// fires only on a real push, unlike post-checkout's dual meaning.
+	return installGitHookSections(ctx, root, gitDriftHooks, driftMarkers, func(string) string {
+		return command + " >/dev/null 2>&1 || true\n"
+	})
 }
 
 // gitArgChunkSize bounds pathspecs per git invocation. Resolving in bulk exists to avoid
