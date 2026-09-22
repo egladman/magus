@@ -501,6 +501,8 @@ const (
 	FlagSpellBuildOut = "out"
 	// spell build: --source
 	FlagSpellBuildSource = "source"
+	// spell lock: --update
+	FlagSpellLockUpdate = "update"
 	// spell ls: --username
 	FlagSpellLsUsername = "username"
 	// spell pull: --username
@@ -1709,6 +1711,18 @@ type SpellLsFlags struct {
 func BindSpellLs(fs *flag.FlagSet) *SpellLsFlags {
 	var f SpellLsFlags
 	fs.StringVar(&f.Username, FlagSpellLsUsername, "", "The registry username; the password is then read from stdin, overriding spells.registries")
+	return &f
+}
+
+// SpellLockFlags are the flags declared for `magus spell lock`.
+type SpellLockFlags struct {
+	Update bool // --update
+}
+
+// BindSpellLock registers `magus spell lock`'s flags on fs and returns the destination.
+func BindSpellLock(fs *flag.FlagSet) *SpellLockFlags {
+	var f SpellLockFlags
+	fs.BoolVar(&f.Update, FlagSpellLockUpdate, false, "Ask the registry what each declared tag names now, and rewrite magus.lock")
 	return &f
 }
 

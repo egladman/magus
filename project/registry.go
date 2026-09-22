@@ -76,6 +76,28 @@ func (r *SpellRegistry) RegisterIfAbsent(s *spells.Spell) *spells.Spell {
 	return s
 }
 
+// ReplaceSpell registers s in place of any spell of the same name, keeping its position
+// so All's order is stable, and reports whether one was replaced. It is how a declared
+// override takes an embedded spell's name: registration is by name, so the override
+// has to own the entry rather than sit beside it. The registry is per process, so the
+// replacement holds for every workspace that process loads.
+func (r *SpellRegistry) ReplaceSpell(s *spells.Spell) bool {
+	if s == nil {
+		return false
+	}
+	r.runEnsure()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, existing := range r.items {
+		if existing.Name() == s.Name() {
+			r.items[i] = s
+			return true
+		}
+	}
+	r.items = append(r.items, s)
+	return false
+}
+
 // UnregisterSpell removes the named spell; no-ops if not found.
 func (r *SpellRegistry) UnregisterSpell(name string) {
 	r.mu.Lock()

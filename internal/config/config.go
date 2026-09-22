@@ -157,6 +157,26 @@ type SpellsConfig struct {
 	// Registries are the credentials `magus spell` verbs present to a container
 	// registry, one entry per host. A registry with no entry is reached anonymously.
 	Registries []SpellRegistry `json:"registries" yaml:"registries" validate:"unique=Host,dive"`
+	// Imports declares spells by the path a magusfile imports them under, so an entry
+	// reads like the import it answers:
+	//
+	//	spells:
+	//	  ghcr.io/team/spells/lint:
+	//	    tag: "1.4"            # a remote spell; magus.lock pins its digest
+	//	  magus/spell/go:
+	//	    path: spells/go       # a workspace copy replaces the embedded spell
+	//
+	// Inline beside allow_shadow and registries rather than under a key of its own; a
+	// spell path always has a slash, so it can never be mistaken for either.
+	Imports map[string]SpellImport `json:",inline" yaml:",inline"`
+}
+
+// SpellImport declares one spell import path. Exactly one field is set: Tag for a
+// remote spell, which only the update charm resolves, or Path for a workspace
+// directory that replaces an embedded or remote spell, the way Go's replace does.
+type SpellImport struct {
+	Tag  string `json:"tag,omitempty" yaml:"tag,omitempty"`
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 }
 
 // SpellRegistry authenticates to one registry host. Password is a secret REFERENCE,

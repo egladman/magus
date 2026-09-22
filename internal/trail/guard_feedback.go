@@ -23,10 +23,10 @@ type GuardFeedback struct {
 	Evidence         []string  `json:"evidence,omitempty"`
 }
 
-// NeedsReview holds the deliberately conservative threshold for a proposed
-// improvement: three repeats in one session, or the same pattern in two host
-// sessions. A one-off denial is a correction in progress, not evidence that a
-// skill, rule, or host integration should change.
+// NeedsReview holds the deliberately conservative threshold for flagging a pattern:
+// three repeats in one session, or the same pattern in two host sessions. A one-off
+// denial is a correction in progress, not evidence that a skill, rule, or host
+// integration should change.
 func (f GuardFeedback) NeedsReview() bool {
 	return f.Denied >= 3 || f.Sessions >= 2
 }
@@ -34,7 +34,7 @@ func (f GuardFeedback) NeedsReview() bool {
 // RecentGuardFeedback derives candidates from existing hook activity. It does
 // not write a second journal: agent-command activity is the source of truth,
 // and a derived view avoids divergence between what the guard saw and what a
-// later improvement review reports.
+// later report reads.
 func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, error) {
 	events, err := ReadRecent(base, limit)
 	if err != nil || len(events) == 0 {
