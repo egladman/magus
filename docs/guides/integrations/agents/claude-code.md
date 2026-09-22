@@ -74,7 +74,7 @@ apply and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 
-Or target Claude Code alone (spell or `harnesses/claude-code.json` fallback):
+Or target Claude Code alone:
 
 ```sh
 magus agent harness apply --id claude-code
@@ -165,24 +165,10 @@ and `verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 
-`harnesses/claude-code.json` remains as a fallback when the magusfile does not
-wire the spell. Recurring Magus-owned fragment merges for that JSON path still
-use:
-
-```sh
-magus agent harness apply --id claude-code
-```
-
-That writes only Magus-owned native `PreToolUse` entries in the workspace-local
-JSON configuration and preserves every other setting. It never writes
-user-level configuration, templates, compiled guard rules, skills, memory, or
-`AGENTS.md`. Review the JSON diff, then `magus agent harness verify --id
-claude-code`.
-
 ## MCP tool calls
 
 Claude Code's `PreToolUse` also fires for a tool served over MCP, matching
-`mcp__<server>__<tool>`. The shipped descriptor includes a Magus-MCP matcher,
+`mcp__<server>__<tool>`. The shipped spell includes a Magus-MCP matcher,
 so `magus agent harness apply --id claude-code` installs this entry alongside
 the command and file surfaces:
 

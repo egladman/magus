@@ -75,35 +75,32 @@ test("validates every packaged descriptor without maintaining a provider registr
   assert.equal(new Set(descriptors.map((descriptor) => descriptor.id)).size, descriptors.length);
 });
 
-test("runtime harness descriptors cover read observation and checkpoints", () => {
-  // Discrete-script hosts: JSON under harnesses/ is still the apply SoT, and each
-  // one must wire both the Read observer and the stop checkpoint by name.
-  for (const name of ["codex.json", "claude-code.json"]) {
-    const harness = JSON.parse(readFileSync(path.join(repository, "harnesses", name), "utf8")) as {
-      id: string;
-      managed_entries: Array<Record<string, unknown>>;
-    };
-    const managed = JSON.stringify(harness.managed_entries);
+test("runtime harness spells cover read observation and checkpoints", () => {
+  // Discrete-script hosts: harnesses/*.json compat descriptors are gone, so this
+  // reads the Buzz spell source directly; each one must still wire both the Read
+  // observer and the stop checkpoint by name.
+  for (const name of ["codex", "claude-code"]) {
+    const spell = readFileSync(path.join(repository, "spells/harness", name, "spell.buzz"), "utf8");
     // Either shipped form of the observer: the sh copy, or the Buzz port a
     // `magus buzz` wiring names. They render the same behavior, and an executed
     // case refuses a difference; what this asks is that the host records reads
     // at all, not which of the two files it reached for.
     assert.ok(
-      managed.includes("magus-observe.sh") || managed.includes("magus-observe.buzz"),
-      `${harness.id} must record read observations`,
+      spell.includes("magus-observe.sh") || spell.includes("magus-observe.buzz"),
+      `${name} must record read observations`,
     );
     // Either form again, for the reason above: codex is still wired to the sh copy
     // and claude-code has moved to the Buzz port, and this asks whether the host
     // records where the work stopped, not which runtime it spells that in.
     assert.ok(
-      managed.includes("magus-checkpoint.sh") || managed.includes("magus-checkpoint.buzz"),
-      `${harness.id} must record stop checkpoints`,
+      spell.includes("magus-checkpoint.sh") || spell.includes("magus-checkpoint.buzz"),
+      `${name} must record stop checkpoints`,
     );
   }
 
-  // Cursor: the harness spell is the magusfile SoT; harnesses/cursor.json stays
-  // for --id without a wire. Both point at the unified cursor-hook.sh, which
-  // covers command/path/observe/checkpoint in one script (sessionEnd = checkpoint).
+  // Cursor: the harness spell is the magusfile SoT, with no JSON sibling left to
+  // stay in lockstep with. It points at the unified cursor-hook.sh, which covers
+  // command/path/observe/checkpoint in one script (sessionEnd = checkpoint).
   const cursorSpell = readFileSync(
     path.join(repository, "spells/harness/cursor/spell.buzz"),
     "utf8",
@@ -113,28 +110,15 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
   assert.match(cursorSpell, /beforeShellExecution/, "cursor spell wires the shell guard");
   assert.match(cursorSpell, /preToolUse/, "cursor spell wires the write guard");
 
-  const cursorJson = JSON.parse(
-    readFileSync(path.join(repository, "harnesses", "cursor.json"), "utf8"),
-  ) as { id: string; managed_entries: Array<Record<string, unknown>> };
-  const cursorManaged = JSON.stringify(cursorJson.managed_entries);
-  assert.equal(cursorJson.id, "cursor");
-  assert.ok(
-    cursorManaged.includes("cursor-hook.sh"),
-    "cursor JSON stays in lockstep with the spell",
-  );
-  assert.ok(cursorManaged.includes("sessionEnd"), "cursor JSON wires sessionEnd for checkpoints");
-
   // OpenCode: plugin transport, not managed shell entries. Skills install paths
-  // are the only apply surface; the plugin calls magus directly.
-  const opencode = JSON.parse(
-    readFileSync(path.join(repository, "harnesses", "opencode.json"), "utf8"),
-  ) as { id: string; managed_entries?: unknown; skills: { paths: string[] } };
-  assert.equal(opencode.id, "opencode");
-  assert.equal(opencode.managed_entries, undefined);
-  assert.ok(
-    opencode.skills.paths.some((p) => p.includes(".opencode")),
-    "opencode installs skills",
+  // are the only apply surface (harness_entries is empty, pinned by the spell's
+  // own test suite); the plugin calls magus directly.
+  const opencodeSpell = readFileSync(
+    path.join(repository, "spells/harness/opencode/spell.buzz"),
+    "utf8",
   );
+  assert.ok(opencodeSpell.includes('return "opencode"'), "opencode spell names its id");
+  assert.ok(opencodeSpell.includes(".opencode/skills"), "opencode installs skills");
 });
 
 test("selects the named VCS-neutral command-deny scenario", () => {

@@ -325,7 +325,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		c := checkGuardWiring(context.Background(), root, testProbeBudget)
 		require.Equal(t, types.DoctorAdvice, c.Status)
 		assert.Contains(t, c.Message, "no harness descriptor found")
-		assert.Contains(t, strings.Join(c.Details, "\n"), "harnesses/")
+		assert.Contains(t, strings.Join(c.Details, "\n"), "magus\\harness.provider")
 	})
 
 	t.Run("probe passes, descriptor verifies its configured adapter -> ok", func(t *testing.T) {
@@ -333,7 +333,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeGuardProbeStub(t, root, denyingProbeStub)
 		writeCheckpointHarness(t, root, guardedHarnessConfig())
 
-		c := checkGuardWiring(context.Background(), root, testProbeBudget)
+		c := checkGuardWiring(context.Background(), root, testProbeBudget, "test-host")
 		require.Equal(t, types.DoctorOK, c.Status)
 		assert.Contains(t, c.Details, filepath.Join(root, "host", "hooks.json"))
 	})
@@ -343,7 +343,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeGuardProbeStub(t, root, denyingProbeStub)
 		writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
-		c := checkGuardWiring(context.Background(), root, testProbeBudget)
+		c := checkGuardWiring(context.Background(), root, testProbeBudget, "test-host")
 		require.Equal(t, types.DoctorFail, c.Status)
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, c.Message, "harness wiring is incomplete")
@@ -664,7 +664,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, ".agents/skills/magus-query"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(root, ".agents/skills/magus-query/SKILL.md"),
 			[]byte("---\nname: magus-query\n---\nold generated body\n"), 0o644))
-		r := &runner{ws: rootStubWorkspace{root: root}}
+		r := &runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}
 		r.opts.skills = agent.Default(types.KnowledgeSchemaVersion)
 
 		got := r.checkAgentSkills()
@@ -772,13 +772,13 @@ func TestHookConfigsCoversTheCheckoutOnly(t *testing.T) {
 	writeCheckpointHarness(t, root, guardedHarnessConfig())
 	wired := filepath.Join(root, "host", "hooks.json")
 
-	assert.Equal(t, []string{wired}, HookConfigs(context.Background(), root))
+	assert.Equal(t, []string{wired}, HookConfigs(context.Background(), root, "test-host"))
 
 	// A config that names magus without running a hook of its own is not wiring: the
 	// same two markers the guard-wiring check reads, so neither can count a file the
 	// other would not.
 	require.NoError(t, os.WriteFile(wired, []byte(`{"note":"magus lives here"}`), 0o644))
-	assert.Empty(t, HookConfigs(context.Background(), root))
+	assert.Empty(t, HookConfigs(context.Background(), root, "test-host"))
 }
 
 // sameStepFixture is the 2026-09-10 gate stall as a workspace declares it: `ci` composes a
@@ -1348,7 +1348,7 @@ func TestHarnessConfigCandidates(t *testing.T) {
 	root := t.TempDir()
 	writeDoctorHarness(t, root)
 
-	got, err := harnessConfigCandidates(root)
+	got, err := harnessConfigCandidates(root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, []string{filepath.Join(root, "host", "hooks.json")}, got)
 }

@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 11255
-skill_short_bytes: 9106
+skill_full_bytes: 10754
+skill_short_bytes: 8605
 ---
 
 # magus-workspace-rules
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `7a9c8c075fab` |
+| `skill-content` | `3f2c50e3fc1f` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -216,14 +216,6 @@ Workspace-owned adaptation: declare an override, change no import and no provide
    `magus agent harness verify`. Apply prints MCP setup guidance only; the user owns host MCP client
    config. The token stays a secret ref (`MAGUS_MCP_TOKEN`). Commit the
    `magus.yaml` entry and the forked spell together.
-
-JSON descriptors (`harnesses/<id>.json`) are the older sibling. For those, a
-human may apply Magus-owned fragment merges with `magus agent harness apply
---id claude-code` (or `codex`). That writes only Magus-owned native `PreToolUse`
-entries in the workspace-local JSON configuration and preserves every other
-setting. It never writes user-level configuration, compiled guard rules,
-installed skills, `AGENTS.md`, or memory. Prefer the Buzz import-path fork when
-the host is already a harness spell.
 
 ## Prune on a schedule you already have
 
@@ -437,14 +429,6 @@ never changes a pinned harness; a newer shipped spell arrives only when someone 
 the lock target with `:update`, and your workspace fork is unaffected until you
 deliberately rebase it. Additive policy that is not host-shaped stays in
 `magus\guard.shell({...})`, not in the harness spell.
-
-JSON descriptors (`harnesses/<id>.json`) are the older sibling. For those, a
-human may apply Magus-owned fragment merges with `magus agent harness apply
---id claude-code` (or `codex`). That writes only Magus-owned native `PreToolUse`
-entries in the workspace-local JSON configuration and preserves every other
-setting. It never writes user-level configuration, compiled guard rules,
-installed skills, `AGENTS.md`, or memory. Prefer the Buzz import-path fork when
-the host is already a harness spell.
 
 ## Prune on a schedule you already have
 

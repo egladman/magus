@@ -184,9 +184,6 @@ magus\project({
         // and conventions_test.go asserts it invokes the shipped template rather
         // than inlining a copy, so an edit here can turn the root tests red.
         ".claude/settings.json",
-        // Harness descriptors (JSON) remain as a compat fallback for hosts not yet
-        // migrated to harness spells under spells/harness/.
-        "harnesses/*.json",
         "spells/harness/**/*.buzz",
         // The vendored agent-host schemas host_schema_test.go grades the hook configs
         // against. No spell claims them (the go spell takes *.go and *.txtar), so a

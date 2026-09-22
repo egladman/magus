@@ -12,6 +12,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// registerHarnessSpell decodes a JSON descriptor body — the same shape a
+// harnesses/<id>.json compat file used to carry — into a HarnessDescriptor and
+// registers it as a fake harness spell for id, restoring the previous loader when
+// the test ends. LoadHarness has no JSON fallback any more, and ApplyHarness,
+// RemoveHarness and VerifyHarness operate on whatever LoadHarness resolves without
+// caring which source supplied it, so every fixture body below is unchanged from
+// the JSON-descriptor era; only how a test hands it to LoadHarness moved. body is
+// decoded, not validated, so a fixture that is deliberately invalid (an escaping
+// config path, a command that does not invoke magus) still reaches
+// validateHarnessDescriptor through LoadHarness exactly as it did as a file.
+func registerHarnessSpell(t *testing.T, id, body string) {
+	t.Helper()
+	var d HarnessDescriptor
+	require.NoError(t, decodeHarnessJSON([]byte(body), &d))
+	prev := harnessSpellLoader
+	t.Cleanup(func() { harnessSpellLoader = prev })
+	harnessSpellLoader = func(_ context.Context, wantID string) (HarnessDescriptor, string, bool, error) {
+		if wantID != id {
+			return HarnessDescriptor{}, "", false, nil
+		}
+		return d, "spell:" + id, true, nil
+	}
+}
+
 func TestApplyHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	root := t.TempDir()
 	writeTestHarness(t, root)
@@ -69,9 +93,7 @@ func TestApplyHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
 
 func TestApplyHarnessCanWireReadObserver(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "reader.json"), []byte(`{
+	registerHarnessSpell(t, "reader", `{
   "schema_version": 2,
   "id": "reader",
   "display": {"name": "Reader"},
@@ -81,7 +103,7 @@ func TestApplyHarnessCanWireReadObserver(t *testing.T) {
     "path": ["hooks", "PreToolUse"],
     "entries": [{"matcher": "Read", "hooks": [{"type": "command", "command": "sh magus-observe.sh"}]}]
   }]
-}`), 0o644))
+}`)
 
 	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "reader"})
 	require.NoError(t, err)
@@ -138,7 +160,7 @@ func TestWorkspaceHarnessLoads(t *testing.T) {
 	d, source, err := LoadHarness(context.Background(), root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, "test-host", d.ID)
-	assert.Equal(t, filepath.Join(root, "harnesses", "test-host.json"), source)
+	assert.Equal(t, "spell:test-host", source)
 }
 
 func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
@@ -161,9 +183,7 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 
 func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "flat.json"), []byte(`{
+	registerHarnessSpell(t, "flat", `{
   "schema_version": 2,
   "id": "flat",
   "display": {"name": "Flat"},
@@ -175,7 +195,7 @@ func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
     {"path": ["hooks", "afterTool"], "entries": [{"matcher": "Write", "command": "sh cursor-hook.sh"}]},
     {"path": ["hooks", "sessionStop"], "entries": [{"command": "sh magus-checkpoint.sh"}]}
   ]
-}`), 0o644))
+}`)
 
 	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
 	require.NoError(t, err)
@@ -203,9 +223,7 @@ func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 
 func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "managed.json"), []byte(`{
+	registerHarnessSpell(t, "managed", `{
   "schema_version": 2,
   "id": "managed",
   "display": {"name": "Managed"},
@@ -221,7 +239,7 @@ func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
       "entries": [{"hooks": [{"type": "command", "command": "sh magus-checkpoint.sh"}]}]
     }
   ]
-}`), 0o644))
+}`)
 
 	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "managed"})
 	require.NoError(t, err)
@@ -312,9 +330,7 @@ func TestApplyHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 
 func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "bad.json"), []byte(`{
+	registerHarnessSpell(t, "bad", `{
   "schema_version": 2,
   "id": "bad",
   "display": {"name": "Bad"},
@@ -323,13 +339,12 @@ func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
     "path": ["hooks"],
     "entries": [{"match":"run", "commands":[{"type":"command", "command":"bypass"}]}]
   }]
-}`), 0o644))
+}`)
 	_, _, err := LoadHarness(context.Background(), root, "bad")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "workspace-relative")
 
-	require.NoError(t, os.Remove(filepath.Join(dir, "bad.json")))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "bypass.json"), []byte(`{
+	registerHarnessSpell(t, "bypass", `{
   "schema_version": 2,
   "id": "bypass",
   "display": {"name": "Bypass"},
@@ -339,7 +354,7 @@ func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
     "path": ["hooks"],
     "entries": [{"command": "bypass"}]
   }]
-}`), 0o644))
+}`)
 	_, _, err = LoadHarness(context.Background(), root, "bypass")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not invoke magus")
@@ -353,14 +368,12 @@ func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 // distinct status instead.
 func TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "skills-only.json"), []byte(`{
+	registerHarnessSpell(t, "skills-only", `{
   "schema_version": 2,
   "id": "skills-only",
   "display": {"name": "Skills Only"},
   "skills": {"paths": [".agents/skills"], "form": "both"}
-}`), 0o644))
+}`)
 
 	result, err := VerifyHarness(context.Background(), root, "skills-only")
 	require.NoError(t, err)
@@ -377,15 +390,13 @@ func TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified(t *testing.T) {
 
 func TestVerifyHarnessRejectsConfigThatDoesNotInvokeMagus(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "empty.json"), []byte(`{
+	registerHarnessSpell(t, "empty", `{
   "schema_version": 2,
   "id": "empty",
   "display": {"name": "Empty"},
   "config": {"path": "empty/hooks.json"},
   "skills": {"paths": [], "form": "short"}
-}`), 0o644))
+}`)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "empty"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "empty", "hooks.json"), []byte(`{"hooks":[]}`), 0o644))
 
@@ -407,40 +418,36 @@ func TestInvokesMagusRejectsGenericGuardScripts(t *testing.T) {
 	assert.True(t, invokesMagus("./magus session notify"))
 }
 
-func TestKnownHarnessesUnionsWiredSpellNames(t *testing.T) {
-	root := t.TempDir()
-	writeTestHarness(t, root)
-
-	ids, err := KnownHarnesses(context.Background(), root)
+// TestKnownHarnessesReturnsWiredIDsDedupedAndSorted replaces the old union-with-JSON
+// test: wired is the only source of an id now that harnesses/*.json is gone, so an
+// id that nobody wired is simply not known, spell or not.
+func TestKnownHarnessesReturnsWiredIDsDedupedAndSorted(t *testing.T) {
+	ids, err := KnownHarnesses(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, []string{"test-host"}, ids)
+	assert.Empty(t, ids, "nothing is known without an explicit wired id")
 
-	// nil / no wired args: JSON only. Distinct from a blank entry in wired.
-	ids, err = KnownHarnesses(context.Background(), root, nil...)
+	// nil / no wired args: still empty. Distinct from a blank entry in wired.
+	ids, err = KnownHarnesses(context.Background(), nil...)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"test-host"}, ids)
+	assert.Empty(t, ids)
 
-	ids, err = KnownHarnesses(context.Background(), root, "cursor", "test-host", "codex")
+	ids, err = KnownHarnesses(context.Background(), "cursor", "test-host", "codex", "cursor")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"codex", "cursor", "test-host"}, ids)
 }
 
 func TestKnownHarnessesRejectsEmptyWiredID(t *testing.T) {
-	root := t.TempDir()
-	writeTestHarness(t, root)
-
-	_, err := KnownHarnesses(context.Background(), root, "cursor", "", "codex")
+	_, err := KnownHarnesses(context.Background(), "cursor", "", "codex")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 
-	_, err = KnownHarnesses(context.Background(), root, "  ")
+	_, err = KnownHarnesses(context.Background(), "  ")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 }
 
 func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 	root := t.TempDir()
-	writeTestHarness(t, root)
 
 	prev := harnessSpellLoader
 	t.Cleanup(func() { harnessSpellLoader = prev })
@@ -467,12 +474,12 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 	assert.Equal(t, "spell:test-host", src)
 	assert.Equal(t, "spell/hooks.json", d.Config.Path)
 
-	// Wired without this id: fall through to JSON.
+	// Wired without this id: the spell is not even tried, and there is no JSON
+	// fallback left to catch it, so the id is simply unknown.
 	ctx := ContextWithWiredHarnesses(context.Background(), []string{"cursor"})
-	d, src, err = LoadHarness(ctx, root, "test-host")
-	require.NoError(t, err)
-	assert.NotEqual(t, "spell:test-host", src)
-	assert.Equal(t, "test-host/hooks.json", d.Config.Path)
+	_, _, err = LoadHarness(ctx, root, "test-host")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `no harness named "test-host"`)
 
 	// Wired including this id: spell wins.
 	ctx = ContextWithWiredHarnesses(context.Background(), []string{"test-host"})
@@ -480,54 +487,6 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "spell:test-host", src)
 	assert.Equal(t, "spell/hooks.json", d.Config.Path)
-}
-
-// TestOneBadDescriptorDisqualifiesOnlyItself bounds the blast radius of a stray
-// file. A single unparsable descriptor used to fail the whole load, so one .json
-// in a user config dir turned harness support off for every host on the machine.
-// It is skipped now, but never quietly: it is reported by name with its error,
-// and a lookup that misses names it too, because a typo and a malformed file
-// would otherwise read the same.
-func TestOneBadDescriptorDisqualifiesOnlyItself(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	root := t.TempDir()
-	writeTestHarness(t, root)
-	broken := filepath.Join(root, "harnesses", "broken.json")
-	require.NoError(t, os.WriteFile(broken, []byte(`{"schema_version": 2, "id":`), 0o644))
-
-	d, source, err := LoadHarness(context.Background(), root, "test-host")
-	require.NoError(t, err, "a malformed neighbour must not disqualify a valid descriptor")
-	assert.Equal(t, "test-host", d.ID)
-	assert.Equal(t, filepath.Join(root, "harnesses", "test-host.json"), source)
-
-	ids, err := KnownHarnesses(context.Background(), root)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"test-host"}, ids)
-
-	problems, err := HarnessProblems(context.Background(), root)
-	require.NoError(t, err)
-	require.Len(t, problems, 1)
-	assert.Equal(t, broken, problems[0].Source)
-	assert.Contains(t, problems[0].Reason, "parse harness descriptor")
-
-	_, _, err = LoadHarness(context.Background(), root, "absent")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "broken.json", "a miss must name what disqualified itself")
-
-	// A descriptor that parses but fails validation knows its own id, so the miss
-	// answers with the reason rather than with "no harness named".
-	require.NoError(t, os.WriteFile(filepath.Join(root, "harnesses", "escaping.json"), []byte(`{
-  "schema_version": 2,
-  "id": "escaping",
-  "display": {"name": "Escaping"},
-  "config": {"path": "../outside.json"}
-}`), 0o644))
-	_, _, err = LoadHarness(context.Background(), root, "escaping")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "workspace-relative")
-	ids, err = KnownHarnesses(context.Background(), root)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"test-host"}, ids)
 }
 
 // writeStubGuardScript drops a trivial POSIX sh script at root/name that drains
@@ -543,11 +502,12 @@ func writeStubGuardScript(t *testing.T, root, name, output string) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(script), 0o755))
 }
 
+// writeTestHarness registers the "test-host" fixture as a fake harness spell. root
+// is accepted only so every existing call site (this package and catalog_test.go)
+// need not change; the descriptor no longer lives under it.
 func writeTestHarness(t *testing.T, root string) {
 	t.Helper()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-host.json"), []byte(`{
+	registerHarnessSpell(t, "test-host", `{
   "schema_version": 2,
   "id": "test-host",
   "display": {"name": "Test Host", "color": "#111111"},
@@ -560,7 +520,7 @@ func writeTestHarness(t *testing.T, root string) {
       {"match": "write", "commands": [{"type": "command", "command": "sh magus-path.sh", "timeout": 10}]}
     ]
   }]
-}`), 0o644))
+}`)
 }
 
 // TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults pins defect 1: before this,
@@ -572,9 +532,7 @@ func writeTestHarness(t *testing.T, root string) {
 // nothing a person added beside it.
 func TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "flat.json"), []byte(`{
+	registerHarnessSpell(t, "flat", `{
   "schema_version": 2,
   "id": "flat",
   "display": {"name": "Flat"},
@@ -584,7 +542,7 @@ func TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults(t *testing.T) {
   "managed_entries": [
     {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-hook.sh"}]}
   ]
-}`), 0o644))
+}`)
 
 	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
 	require.NoError(t, err)
@@ -631,9 +589,7 @@ func TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults(t *testing.T) {
 // A value the user changed since is theirs now.
 func TestRemoveHarnessLeavesAUserModifiedConfigDefaultAlone(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "flat.json"), []byte(`{
+	registerHarnessSpell(t, "flat", `{
   "schema_version": 2,
   "id": "flat",
   "display": {"name": "Flat"},
@@ -643,7 +599,7 @@ func TestRemoveHarnessLeavesAUserModifiedConfigDefaultAlone(t *testing.T) {
   "managed_entries": [
     {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-hook.sh"}]}
   ]
-}`), 0o644))
+}`)
 	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
 	require.NoError(t, err)
 
@@ -691,14 +647,12 @@ func TestRemoveHarnessRecognizesAHandEditedManagedEntryByIdentity(t *testing.T) 
 // a skills-only descriptor (empty config.path), so remove has nothing to undo.
 func TestRemoveHarnessOnSkillsOnlyDescriptorIsANoOp(t *testing.T) {
 	root := t.TempDir()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "skills-only.json"), []byte(`{
+	registerHarnessSpell(t, "skills-only", `{
   "schema_version": 2,
   "id": "skills-only",
   "display": {"name": "Skills Only"},
   "skills": {"paths": [".agents/skills"], "form": "both"}
-}`), 0o644))
+}`)
 
 	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "skills-only"})
 	require.NoError(t, err)
@@ -753,13 +707,11 @@ func TestRemoveHarnessDryRunPlansWithoutWriting(t *testing.T) {
 
 const promptRules = "prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"
 
-// writePromptHarness installs a skills-only descriptor that keeps two host-native approval
+// writePromptHarness registers a skills-only descriptor that keeps two host-native approval
 // prompts: a whole rules file, and one key inside a JSON config the person also edits.
 func writePromptHarness(t *testing.T, root string) {
 	t.Helper()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "prompter.json"), []byte(`{
+	registerHarnessSpell(t, "prompter", `{
   "schema_version": 2,
   "id": "prompter",
   "display": {"name": "Prompter"},
@@ -768,7 +720,7 @@ func writePromptHarness(t *testing.T, root string) {
     {"path": ".codex/rules/magus.rules", "content": `+strconvQuote(promptRules)+`},
     {"path": "opencode.json", "key": ["permission", "bash", "git push *"], "value": "ask"}
   ]
-}`), 0o644))
+}`)
 }
 
 func strconvQuote(s string) string {
