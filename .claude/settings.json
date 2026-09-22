@@ -1,4 +1,7 @@
 {
+  "env": {
+    "MAGUS_NO_WAIT": "1"
+  },
   "hooks": {
     "PreToolUse": [
       {
