@@ -187,6 +187,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A fresh magus checkout can build its first binary.** The `raw-tool` rule advises
+  `go build -o magus ./cmd/magus` alone into a checkout root with no `magus` yet, and denies
+  it once one exists. `go -C <dir> <verb>` and `go <verb> -C <dir>` reach one verdict, and a
+  bare `cd <dir>` no longer trips the `cd` rule.
 - **Installs of magus-managed git, hg and Sapling sections are atomic.** They are
   serialized per repository and leave a hook executable. A torn section marker is an error.
 - **A `MAGUS_*` value that does not parse stops the load.** A bad number or duration was

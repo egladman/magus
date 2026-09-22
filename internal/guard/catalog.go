@@ -68,6 +68,7 @@ var denyRuleDocs = []RuleDoc{
 		Why: "magus is CWD-relative, so a leading `cd` is how the right command lands on the wrong project. " +
 			"The project is an argument and is written bare (`magus run build libs/foo`); a DIFFERENT workspace is `--root <path>`, and `magus where <name>` resolves a fuzzy name. " +
 			"A `cd` prefix also relocates every later command on the line and re-fires shell chpwd hooks, mise among them, which can fail on an empty command. " +
+			"A `cd` alone on its line passes: it relocates nothing after it, and on a host whose shell persists it is how a session moves into its own checkout. " +
 			"A host shell tool that genuinely needs a different directory for one call has a working_directory field, which does not rewrite the command line."},
 	{Name: string(denyRuleCIWatch), Decision: "deny",
 		Catches: "a `gh` invocation that BLOCKS until CI finishes, rather than asking once",
@@ -124,7 +125,9 @@ var denyRuleDocs = []RuleDoc{
 		Catches: "a toolchain command a spell already wraps, run outside the cache",
 		Why: "magus covers these exactly and adds cache, sandbox and affected tracking, so the refusal costs nothing: `magus run <target> <project>`, and `magus describe targets -o name` lists what this workspace calls them. " +
 			"Tool flags go after `--`. A raw WRITE (codegen, a formatter with -w/--write/--fix, `go mod tidy`, build output landing on a tracked path) is the firm half: it leaves the owning target reporting drift it did not cause, and that has no exceptions. " +
-			"The guard reads the command being RUN, so a wrapper, a `VAR=value` prefix or `bash -c` reaches the same verdict. " +
+			"The guard reads the command being RUN, so a wrapper, a `VAR=value` prefix or `bash -c` reaches the same verdict, and `go -C <dir> <verb>` reads the same as `go <verb> -C <dir>`. " +
+			"One build is exempt, in a checkout of magus itself: `go build -o magus ./cmd/magus`, alone on its line, into a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
+			"Once the binary exists the deny applies again and names `./magus run go-build .`, which regenerates the embedded spell bytecode a bare link bakes in stale. " +
 			"It was an advisory first, and changed behavior zero times over a long session while leaving the Go build cache poisoned by uninstrumented runs, which is why it denies."},
 	{Name: string(denyRuleReadAck), Decision: "deny",
 		Catches: "an agent stamping a read receipt, which records that a PERSON read a change",
