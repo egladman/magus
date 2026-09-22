@@ -176,8 +176,8 @@ func graphPush(ctx context.Context, root string, args []string) error {
 //
 // The build runs first, WITH symbols, so the store on disk is current before it is read.
 // The SCIP shards are the expensive half and are never committed, which is the whole
-// reason to publish; gen/knowledge-graph.json already carries the domain graph, so
-// republishing that alone would add nothing.
+// reason to publish; gen/knowledge-graph.json is a local build output that already
+// carries the domain graph, so republishing that alone would add nothing.
 func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Layer, error) {
 	if _, err := loadKnowledgeGraph(ctx, root, refresh, false, true /* includeSymbols */); err != nil {
 		return nil, err

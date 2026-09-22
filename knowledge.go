@@ -302,8 +302,8 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 }
 
 // loadKnowledgeCoverage reads the local Go coverage profile (best-effort) into per-file
-// coverage for the observed @coverage overlay. The profile is coverage.out at the
-// workspace root (what `magus run coverage` writes), and its lines are module-qualified,
+// coverage for the observed @coverage overlay. The profile is .magus/coverage.out at the
+// workspace root (what `magus run test .` writes), and its lines are module-qualified,
 // so the module path from go.mod is stripped to recover the workspace-relative paths the
 // file/symbol nodes use. A missing profile, an unreadable go.mod, or a profile with no
 // data yields no coverage, so the attrs are simply absent, never an error: a workspace
@@ -371,7 +371,7 @@ func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 	if root == "" {
 		return nil
 	}
-	profile, err := os.ReadFile(filepath.Join(root, "coverage.out"))
+	profile, err := os.ReadFile(filepath.Join(root, ".magus", "coverage.out"))
 	if err != nil {
 		return nil // no profile produced yet
 	}
