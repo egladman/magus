@@ -87,9 +87,27 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
 6. **A verified artifact is materialized under a cache root laid out by path**, and that root
    joins the magusfile search roots, so the ordinary `?/main.buzz` template resolves the
    import. The parser never sees a URL.
-7. **Misconfiguration is an error, each with its own code and doc page:** a dotted import
+7. **An override is declared in `magus.yaml`, like Go's `replace`.** The import string never
+   changes: code keeps saying `import "magus/spell/go";` or
+   `import "ghcr.io/team/spells/lint";`, and one entry redirects it to a workspace copy.
+
+   ```yaml
+   spells:
+     magus/spell/go:
+       path: spells/go             # the workspace copy replaces the embedded spell
+     ghcr.io/team/spells/lint:
+       path: vendor/lint           # or a local copy replaces a remote one
+   ```
+
+   The declaration IS the acknowledgment. A workspace spell that would shadow an embedded
+   or declared one without such an entry is an error, the rule MGS1002 already applies to a
+   nested spell shadowed higher in the tree. An override is never inferred from a file
+   existing, because a stray directory would then change what runs with nothing in any
+   import or manifest diff to show it.
+8. **Misconfiguration is an error, each with its own code and doc page:** a dotted import
    with no `magus.yaml` entry; a declared spell with no lock entry, or whose lock entry was
-   written for a different tag; a declared path that collides with a built-in spell.
+   written for a different tag; an override whose `path` holds no spell; an undeclared
+   shadow of an embedded or declared spell.
 
 ## Consequences
 
@@ -115,6 +133,11 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
   imports workspace files by dotless paths too, so `spell/go` could equally be a file in the
   workspace and the search order would silently pick one. It would also sit one letter from
   the `spells/<name>` directory convention workspaces use for their own spells.
+- **Implicit override by file presence (a workspace `spells/go` silently replaces the
+  embedded `go`).** It keeps the call site identical, which is right, but makes the override
+  invisible: nothing in an import or a manifest says the embedded code no longer runs. The
+  declared override in decision 7 keeps the call site identical and makes the replacement
+  reviewable. Precedent: Go's `replace`, Cargo's `[patch]`.
 - **The same path for built-in and remote (`magus/spell/go` served by a registry).** Hides
   where the bytes come from, which is the one fact a reader of a supply-chain boundary needs.
 - **Declarations in the magusfile.** Remote spells must resolve before any Buzz loads, so
@@ -125,5 +148,6 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
 ## Open questions
 
 - The name of the target that owns `magus.lock` and its `update` behavior.
-- Whether a workspace may override a built-in spell with a remote one, and if so how that is
-  spelled without weakening decision 2.
+- Whether an override may also point at another registry path (a fork) rather than only a
+  workspace `path`, as Go's `replace` allows; if so, the replacement is declared and locked
+  like any remote spell.
