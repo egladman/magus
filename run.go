@@ -606,7 +606,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// The install target only dispatches each spell's install, and each keys itself
 	// (installStep). Keyed here on the project baseline, a hit would skip the stamp
 	// check that notices a deleted tree.
-	if spellInstall(p, target) {
+	if isSpellInstall(p, target) {
 		step.NoCache = true
 		step.Sources, step.Outputs, step.RequiredOutputs = nil, nil, nil
 	}

@@ -12,9 +12,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// spellInstall reports whether target on p is an install op a spell synthesized, as
+// isSpellInstall reports whether target on p is an install op a spell synthesized, as
 // opposed to a magusfile export that shadows the name.
-func spellInstall(p *types.Project, target string) bool {
+func isSpellInstall(p *types.Project, target string) bool {
 	if target != spells.InstallOp || magusfileOverride(p, p.ResolvedSpells, target) >= 0 {
 		return false
 	}
@@ -42,7 +42,7 @@ type installKeying struct {
 // place replays without forking the package manager.
 func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 	return func(ctx context.Context, dir, spellName string, choice spells.InstallChoice, run func(context.Context) error) error {
-		p := m.projectAt(dir)
+		p := m.projectByDir(dir)
 		if p == nil {
 			return run(ctx)
 		}
@@ -117,8 +117,12 @@ func (m *Magus) installStep(p *types.Project, spellName string, choice spells.In
 	return step
 }
 
-// projectAt returns the project whose directory is dir, or nil.
-func (m *Magus) projectAt(dir string) *types.Project {
+// projectByDir returns the project whose directory is dir, or nil. Unlike Get, which
+// is keyed by workspace-relative Path, this is keyed by the caller's filesystem dir, so
+// it scans rather than looking up. One install runs per changed spell per project, not
+// per file, so the linear scan does not show up even on a workspace with thousands of
+// projects.
+func (m *Magus) projectByDir(dir string) *types.Project {
 	dir = filepath.Clean(dir)
 	for _, p := range m.All() {
 		if filepath.Clean(p.Dir) == dir {
