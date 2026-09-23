@@ -432,7 +432,7 @@ func TestMachineGateStopsWaitingWithItsContext(t *testing.T) {
 func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
 	b, _, _ := testBudget(t, 10_000, 8)
-	held := b.Request("100.1", types.MachineClaim{
+	held := b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
 	})
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
@@ -440,7 +440,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	var out bytes.Buffer
 	c, err := Open(t.Context(), t.TempDir(),
 		WithLogger(slog.New(NewPrettyHandler(&out, slog.LevelInfo))),
-		WithMachineAdmission(LocalAdmitter{Budget: b}, true))
+		WithMachineAdmission(LocalAdmitter{Budget: b}))
 	require.NoError(t, err)
 
 	var observed []error
