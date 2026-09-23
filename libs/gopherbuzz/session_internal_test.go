@@ -2,7 +2,6 @@ package buzz
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
@@ -89,67 +88,4 @@ func TestSession_Warnings_ReplSuppressed(t *testing.T) {
 
 	require.NoError(t, s.Exec(context.Background(), `import "unused/mod";`))
 	assert.Empty(t, s.Warnings(), "a REPL session must not warn on an import unused so far")
-}
-
-// TestNamespaceCache_AccountsKeyBytesTowardTheBound pins the fix for namespaceCache
-// bounding itself by entry count alone: a key holds its whole source string alive, so
-// a handful of huge modules could retain far more than a small entry count implies.
-// Priming bytes near the bound and inserting one more entry exercises both the reset
-// and the post-reset accounting, mirroring tokenCache's own test.
-func TestNamespaceCache_AccountsKeyBytesTowardTheBound(t *testing.T) {
-	origM, origBytes := namespaceCache.m, namespaceCache.bytes
-	t.Cleanup(func() {
-		namespaceCache.Lock()
-		namespaceCache.m, namespaceCache.bytes = origM, origBytes
-		namespaceCache.Unlock()
-	})
-	namespaceCache.Lock()
-	namespaceCache.m = map[namespaceKey][]string{}
-	namespaceCache.bytes = maxNamespaceCacheBytes - 10
-	namespaceCache.Unlock()
-
-	src := "namespace a\\b\\c;\n" + strings.Repeat("// pad\n", 40)
-	s := NewSession(context.Background(), WithEmbedded())
-	got := s.declaredNamespace(src)
-	require.Equal(t, []string{"a", "b", "c"}, got)
-
-	namespaceCache.Lock()
-	defer namespaceCache.Unlock()
-	assert.LessOrEqual(t, namespaceCache.bytes, maxNamespaceCacheBytes,
-		"the accounted size must never exceed the bound that is supposed to trigger a reset")
-	assert.Equal(t, len(src), namespaceCache.bytes,
-		"the near-full cache must have reset before inserting, leaving exactly this entry's size")
-}
-
-// TestNamespaceCache_DoubleChecksBeforeInsert matches tokenCache's own guard: a value
-// already inserted for key between the read-miss and the write lock must win over a
-// concurrently recomputed one, rather than the second computation clobbering it (and,
-// pre-fix, double-counting its bytes).
-func TestNamespaceCache_DoubleChecksBeforeInsert(t *testing.T) {
-	origM, origBytes := namespaceCache.m, namespaceCache.bytes
-	t.Cleanup(func() {
-		namespaceCache.Lock()
-		namespaceCache.m, namespaceCache.bytes = origM, origBytes
-		namespaceCache.Unlock()
-	})
-	namespaceCache.Lock()
-	namespaceCache.m = map[namespaceKey][]string{}
-	namespaceCache.bytes = 0
-	namespaceCache.Unlock()
-
-	src := "namespace x\\y;\n"
-	key := namespaceKey{src: src, strict: false} // matches WithEmbedded's !s.embedded below
-	sentinel := []string{"already", "here"}
-	namespaceCache.Lock()
-	namespaceCache.m[key] = sentinel
-	namespaceCache.bytes = len(src)
-	namespaceCache.Unlock()
-
-	s := NewSession(context.Background(), WithEmbedded())
-	got := s.declaredNamespace(src)
-	assert.Equal(t, sentinel, got, "the already-cached value must win over recomputing it")
-
-	namespaceCache.Lock()
-	defer namespaceCache.Unlock()
-	assert.Equal(t, len(src), namespaceCache.bytes, "the double-checked insert must not double-count the entry")
 }

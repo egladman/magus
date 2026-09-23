@@ -2,12 +2,12 @@ package buzz
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"unsafe"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
@@ -107,13 +107,7 @@ func (p *parser) markImportUsed(name string) {
 // labeled. This is the default because it matches upstream — leniency is the
 // deviation, not strictness, so it must be opted into explicitly (ParseEmbedded).
 func Parse(src string) (*ast.Program, error) {
-	toks, err := tokenize(src)
-	if err != nil {
-		return nil, err
-	}
-	p := newParser(toks)
-	p.strict = true
-	return p.parseProgram()
+	return parseModed(nil, src, true)
 }
 
 // ParseEmbedded relaxes the two script-conformance rules Parse enforces (top-level
@@ -121,38 +115,62 @@ func Parse(src string) (*ast.Program, error) {
 // eval, magusfile loading, and interactive snippets, where top-level statements
 // are the whole point. It is the named, deliberate deviation from upstream Buzz.
 func ParseEmbedded(src string) (*ast.Program, error) {
-	toks, err := tokenize(src)
-	if err != nil {
-		return nil, err
-	}
-	return newParser(toks).parseProgram()
+	return parseModed(nil, src, false)
 }
 
-// tokenCache memoizes token.Tokenize by source text, process-wide. A host that loads
-// many sessions lexes the same module once per importing session, three times per
-// import (namespace, declarations, compile): one magus workspace load lexed 36MB of
-// source to read about 2MB. Tokens are safe to share because the parser only reads them.
-var tokenCache = struct {
-	sync.Mutex
-	m     map[string][]token.Token
-	bytes int
-}{m: map[string][]token.Token{}}
+// ParseCache memoizes the lexing step of parsing by source text. A host that runs
+// many sessions over the same modules lexes each module once instead of several
+// times per session: every import is lexed for its namespace, its declarations and
+// its code. Sessions lex through it when given WithParseCache; a host's own parses
+// go through its Parse and ParseEmbedded methods.
+//
+// A ParseCache is safe for concurrent use by any number of sessions. It retains each
+// cached source string and its tokens; when an insert would pass the bound it drops
+// every entry and starts over, so a long-lived host does not hold every revision of
+// every file it has read. Sources shorter than 256 bytes, and sources that fail to
+// lex, are never cached. The cached tokens are read only by the parser and never
+// reach a caller, so no session can alter what another reads.
+type ParseCache struct {
+	maxBytes int
 
-// maxTokenCacheBytes bounds the memory tokenCache retains; at the bound it starts over,
-// which keeps a long-lived host from holding every revision of every file it has read.
-const maxTokenCacheBytes = 64 << 20
+	mu     sync.RWMutex
+	tokens map[string][]token.Token
+	bytes  int
+}
+
+// NewParseCache returns an empty cache that retains about maxBytes at most, counting
+// each entry's source text and its tokens. A maxBytes of zero or less retains
+// nothing, the same as passing no cache.
+func NewParseCache(maxBytes int) *ParseCache {
+	return &ParseCache{maxBytes: maxBytes, tokens: map[string][]token.Token{}}
+}
+
+// Parse is the package-level Parse, lexing through c. Each call returns a new Program
+// the caller owns. A nil c caches nothing.
+func (c *ParseCache) Parse(src string) (*ast.Program, error) {
+	return parseModed(c, src, true)
+}
+
+// ParseEmbedded is the package-level ParseEmbedded, lexing through c. Each call
+// returns a new Program the caller owns. A nil c caches nothing.
+func (c *ParseCache) ParseEmbedded(src string) (*ast.Program, error) {
+	return parseModed(c, src, false)
+}
 
 // minCachedSource keeps interpolation fragments and one-line snippets, which are cheap
 // to lex and numerous, out of the cache.
 const minCachedSource = 256
 
-func tokenize(src string) ([]token.Token, error) {
-	if len(src) < minCachedSource {
+var tokenSize = int(reflect.TypeFor[token.Token]().Size())
+
+// tokenize is token.Tokenize through the cache; a nil c caches nothing.
+func (c *ParseCache) tokenize(src string) ([]token.Token, error) {
+	if c == nil || c.maxBytes <= 0 || len(src) < minCachedSource {
 		return token.Tokenize(src)
 	}
-	tokenCache.Lock()
-	toks, ok := tokenCache.m[src]
-	tokenCache.Unlock()
+	c.mu.RLock()
+	toks, ok := c.tokens[src]
+	c.mu.RUnlock()
 	if ok {
 		return toks, nil
 	}
@@ -160,32 +178,37 @@ func tokenize(src string) ([]token.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Copied to its length: the lexer over-allocates for comment-heavy source, and a
-	// full-capacity slice keeps any reader's append from writing into a shared array.
+	// The key holds the whole source alive, so it counts toward the bound too.
+	size := len(src) + len(toks)*tokenSize
+	if size > c.maxBytes {
+		return toks, nil
+	}
+	// Trimmed to its length: the lexer over-allocates for comment-heavy source, and
+	// the bound counts length, not capacity.
 	toks = slices.Clone(toks)
-	// The key holds the whole source string alive, not just the token slice, so it
-	// counts toward the bound too; omitting it undercounted every entry by len(src).
-	size := len(toks)*int(unsafe.Sizeof(token.Token{})) + len(src)
-	tokenCache.Lock()
-	defer tokenCache.Unlock()
-	if cached, ok := tokenCache.m[src]; ok {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if cached, ok := c.tokens[src]; ok {
 		return cached, nil
 	}
-	if tokenCache.bytes+size > maxTokenCacheBytes {
-		clear(tokenCache.m)
-		tokenCache.bytes = 0
+	if c.bytes+size > c.maxBytes {
+		clear(c.tokens)
+		c.bytes = 0
 	}
-	tokenCache.m[src] = toks
-	tokenCache.bytes += size
+	c.tokens[src] = toks
+	c.bytes += size
 	return toks, nil
 }
 
-// parseModed parses src strict (Parse) or embedded (ParseEmbedded).
-func parseModed(src string, strict bool) (*ast.Program, error) {
-	if strict {
-		return Parse(src)
+// parseModed parses src strict (Parse) or embedded (ParseEmbedded), lexing through c.
+func parseModed(c *ParseCache, src string, strict bool) (*ast.Program, error) {
+	toks, err := c.tokenize(src)
+	if err != nil {
+		return nil, err
 	}
-	return ParseEmbedded(src)
+	p := newParser(toks)
+	p.strict = strict
+	return p.parseProgram()
 }
 
 // unusedImportDiag is one unreferenced top-level import found while parsing (see
@@ -204,8 +227,8 @@ type unusedImportDiag struct {
 // every caller outside this package. Used only by Session.checkShared, which already
 // treats parsing as the expensive, non-hot-path step (checkShared's own doc comment:
 // resolving imports executes code and reads files from disk).
-func parseModedTracked(src string, strict bool) (*ast.Program, []unusedImportDiag, error) {
-	toks, err := tokenize(src)
+func parseModedTracked(c *ParseCache, src string, strict bool) (*ast.Program, []unusedImportDiag, error) {
+	toks, err := c.tokenize(src)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2666,7 +2689,7 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 		}
 		// Sub-parse the interpolation expression in the same mode as the enclosing
 		// parser so strictness is consistent across the program.
-		sub, err := parseModed(part.Text+";", p.strict)
+		sub, err := parseModed(nil, part.Text+";", p.strict)
 		if err != nil {
 			if raw {
 				literal(part.Text)
