@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -344,33 +342,15 @@ func TestTrackedUndeclaredSeedsGoesQuietWithoutAVCS(t *testing.T) {
 	assert.Nil(t, got)
 }
 
-// TestNoteUndeclaredSeedCostReachesASilentRun pins the CHANNEL, not the wording. The run
-// that pays for MGS1028 is usually the gate, and a gate is usually run with -s, so a line
-// routed through slog (level error under -s) would reach nobody who was billed for it.
-// The hint channel is the one thing -s bubbles up, and hints.enabled is the one switch
-// that turns it off.
-func TestNoteUndeclaredSeedCostReachesASilentRun(t *testing.T) {
-	t.Cleanup(snapshotGlobals())
-	global.quiet, global.silent = true, true
-	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
-	interactive.SetHintsEnabled(true)
-
-	var buf bytes.Buffer
-	noteUndeclaredSeedCost(&buf, map[string][]string{"silent-run": {".golangci.yml", "dprint.json"}}, nil)
-	got := buf.String()
-	assert.Contains(t, got, "hint: ["+string(types.UndeclaredSeedingFile)+"]")
+// TestUndeclaredSeedNoticeNamesFilesAndFix pins what MGS1028's notice carries. The
+// channel it rides (a hint in text, which -s still bubbles up and hints.enabled turns
+// off) is the sink's, pinned by TestTextSinkRendersANoticeAsAHint at the root.
+func TestUndeclaredSeedNoticeNamesFilesAndFix(t *testing.T) {
+	got := undeclaredSeedNotice(map[string][]string{"silent-run": {".golangci.yml", "dprint.json"}}, true)
+	assert.Contains(t, got, "["+string(types.UndeclaredSeedingFile)+"]")
 	assert.Contains(t, got, "silent-run (.golangci.yml, dprint.json)", "the run prints a project list and never the changeset, so the files come with it")
 	assert.Contains(t, got, "sources", "the one-line fix rides along")
 	assert.Contains(t, got, types.CodeURL(types.UndeclaredSeedingFile))
-
-	buf.Reset()
-	noteUndeclaredSeedCost(&buf, nil, nil)
-	assert.Empty(t, buf.String(), "a run with nothing undeclared-only says nothing")
-
-	buf.Reset()
-	interactive.SetHintsEnabled(false)
-	noteUndeclaredSeedCost(&buf, map[string][]string{"hints-off": {"LICENSE"}}, nil)
-	assert.Empty(t, buf.String())
 }
 
 // TestUndeclaredSeedNoticeCapsEveryList: the notice promises to be one line. A changeset

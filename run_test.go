@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
@@ -50,7 +52,7 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 		cache.WithLogger(slog.New(cache.NewPrettyHandler(&out, slog.LevelInfo))))
 	require.NoError(t, err, "cache.Open")
 
-	obs := stageObserver{cache: c, label: "fixture", policies: policiesOf(p)}
+	obs := stageObserver{out: textSink{cache: c, out: io.Discard}, label: "fixture", policies: policiesOf(p)}
 	obs.TargetEnd(t.Context(), "security", time.Second, errors.New("govulncheck: exit 1"))
 	obs.TargetEnd(t.Context(), "test", time.Second, errors.New("go test: exit 1"))
 
@@ -884,11 +886,47 @@ func TestExpandAffectedSignalsFallbackWithoutVCS(t *testing.T) {
 	require.NotEmpty(t, source, "source carries the reason, which is what the warning shows the user")
 }
 
-func TestWithReportWriter(t *testing.T) {
+// The notice channel is the hint one in text: the run that pays for a notice is often a
+// gate run with -s, and hints are what -s still bubbles up; hints.enabled turns them off.
+func TestTextSinkRendersANoticeAsAHint(t *testing.T) {
+	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
+	interactive.SetHintsEnabled(true)
 	var buf bytes.Buffer
-	var r run
-	WithReportWriter(&buf)(&r)
-	assert.Same(t, &buf, r.ReportWriter, "WithReportWriter: run.ReportWriter not set to provided writer")
+	s := textSink{out: &buf}
+	s.emit(t.Context(), report.Notice{Level: "warn", Code: "MGS1028", Message: "[MGS1028] notice-one"})
+	assert.Equal(t, "hint: [MGS1028] notice-one\n", buf.String())
+
+	buf.Reset()
+	interactive.SetHintsEnabled(false)
+	s.emit(t.Context(), report.Notice{Level: "warn", Message: "notice-two"})
+	assert.Empty(t, buf.String())
+}
+
+// A lock's decisions render as the prose a person reads, first wait and heartbeat apart,
+// and in a structured run as records: the same event, one choice of sink.
+func TestLockDecisionsRenderPerSink(t *testing.T) {
+	var text bytes.Buffer
+	ts := textSink{out: &text}
+	ts.emit(t.Context(), report.LockWait{Project: "app", Holder: "pid 7 (magus run)"})
+	ts.emit(t.Context(), report.LockWait{Project: "app", ElapsedMs: 2000})
+	ts.emit(t.Context(), report.LockSuperseded{Project: "app", TimedOut: true, BoundMs: 50})
+	lines := strings.Split(strings.TrimSpace(text.String()), "\n")
+	require.Len(t, lines, 4)
+	assert.Equal(t, "magus: project app is being changed by another magus process (held by pid 7 (magus run)); "+
+		"waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.", lines[0])
+	assert.Contains(t, lines[1], "editing files OUTSIDE app is safe")
+	assert.Contains(t, lines[2], "still waiting for the lock on project app (2s elapsed)")
+	assert.Equal(t, "magus: the earlier gate on project app did not stop within 50ms; waiting for it instead.", lines[3])
+
+	var jsonl bytes.Buffer
+	w := report.NewWriter(&jsonl, report.WithBlockOnFull())
+	js := jsonlSink{w: w}
+	js.emit(t.Context(), report.LockWait{Project: "app", HolderPID: 7})
+	js.emit(t.Context(), report.LockSuperseded{Project: "app", HolderPID: 7})
+	require.NoError(t, w.Close())
+	assert.Equal(t, `{"schema":4,"type":"lock.wait","project":"app","holder_pid":7,"elapsed_ms":0}
+{"schema":4,"type":"lock.superseded","project":"app","holder_pid":7,"timed_out":false,"bound_ms":0}
+`, jsonl.String())
 }
 
 func TestRunOptions(t *testing.T) {

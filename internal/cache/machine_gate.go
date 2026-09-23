@@ -79,6 +79,9 @@ type machineGate struct {
 	// notify replaces the stderr writes when set, so a test observes the wait without
 	// a terminal.
 	notify func(string)
+	// structured routes the wait lines through log, for a -o jsonl run whose stderr
+	// carries records only.
+	structured bool
 }
 
 // acquire claims the machine budget for one step and returns the function that frees
@@ -140,7 +143,7 @@ func blindToOwnAncestry(ctx context.Context) bool {
 // indistinguishable from a hung one.
 func (g *machineGate) wait(ctx context.Context, waiter string, c types.MachineClaim, first types.MachineVerdict) (func(), error) {
 	g.queued.Store(true)
-	g.say(machineWaitingMessage(c, first))
+	g.say(ctx, machineWaitingMessage(c, first))
 	started := time.Now()
 	poll := time.NewTicker(machinePollEvery)
 	defer poll.Stop()
@@ -156,7 +159,7 @@ func (g *machineGate) wait(ctx context.Context, waiter string, c types.MachineCl
 			// the stall watchdog, which would otherwise abort a run that is queued behind
 			// a busy machine exactly as if it had wedged.
 			ProgressFromContext(ctx).Beat()
-			g.say(fmt.Sprintf("magus: still queued for the machine budget (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.\n",
+			g.say(ctx, fmt.Sprintf("magus: still queued for the machine budget (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.\n",
 				time.Since(started).Round(time.Second)))
 		case <-poll.C:
 			v, err := g.admit.Request(ctx, waiter, c)
@@ -171,7 +174,7 @@ func (g *machineGate) wait(ctx context.Context, waiter string, c types.MachineCl
 			}
 			switch {
 			case v.Granted:
-				g.say(fmt.Sprintf("magus: machine budget freed after %s; starting %s %s.\n",
+				g.say(ctx, fmt.Sprintf("magus: machine budget freed after %s; starting %s %s.\n",
 					time.Since(started).Round(time.Second), displayProject(c.Project), c.Target))
 				return g.releaser(v.ID), nil
 			case !v.Fits:
@@ -264,9 +267,13 @@ func workingDir() string {
 	return dir
 }
 
-func (g *machineGate) say(msg string) {
+func (g *machineGate) say(ctx context.Context, msg string) {
 	if g.notify != nil {
 		g.notify(msg)
+		return
+	}
+	if g.structured {
+		g.log.InfoContext(ctx, "cache.machine.wait", slog.String("msg", strings.TrimSpace(msg)))
 		return
 	}
 	fmt.Fprint(os.Stderr, msg)

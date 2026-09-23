@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -168,7 +170,29 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...Modu
 	// registration path: gopherbuzz's stdlib and magus's own modules are both
 	// buzz.Modules applied through Session.Provide.
 	buzzstd.RegisterWithOutput(sess, cfg.scriptOut)
+	if base, ok := sess.NativeModule("std"); ok {
+		base.MapSet("print", vm.DirectValue("std.print", capturedPrint(cfg.scriptOut)))
+	}
 	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules(cfg.modules)...)
+}
+
+// capturedPrint is std.print writing into the running target's captured stdout when
+// there is one, and to fallback otherwise. A target's print is its output: it belongs in
+// the run log behind the target's ref and is withheld or streamed like a subprocess's
+// output, rather than bypassing the capture onto the terminal, where it broke -o jsonl.
+func capturedPrint(fallback io.Writer) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		out := fallback
+		if w, ok := run.CapturedStdout(ctx); ok {
+			out = w
+		}
+		if len(args) < 1 {
+			fmt.Fprintln(out)
+			return vm.Null, nil
+		}
+		fmt.Fprintln(out, args[0].String())
+		return vm.Null, nil
+	}
 }
 
 // registerMagusModules installs the magus module surface a Buzz session sees: Buzz's

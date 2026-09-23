@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -45,9 +46,18 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
+// isStructuredLog reports a -o jsonl invocation, the one format config validation
+// refuses from magus.yaml and the CLI sets after it.
+func isStructuredLog(l config.Log) bool { return strings.EqualFold(l.Format, "jsonl") }
+
 // collapseOnSuccess decides whether per-project subprocess output is withheld until a
-// failure. It is the default for human output; -v streams live.
+// failure. It is the default for human output; -v streams live. A structured run always
+// withholds, whatever -s or -vv say: a raw line on either stream breaks the one contract
+// it has, and the stage observer this attaches is what emits run.step.
 func collapseOnSuccess(l config.Log) bool {
+	if isStructuredLog(l) {
+		return true
+	}
 	switch strings.ToLower(l.Format) {
 	case "pretty", "plain", "":
 		// human formats can collapse
@@ -265,21 +275,20 @@ func (m *Magus) explainStale(err error) error {
 // one. A position outside root keeps its absolute path.
 func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
 	f := &types.WorkspaceFailure{Message: err.Error()}
-	for _, branch := range joinedBranches(err) {
-		d, ok := buzz.DiagnosticOf(branch)
+	for _, branch := range joinedBranches(err, "") {
+		d, ok := buzz.DiagnosticOf(branch.err)
 		if !ok {
 			continue
 		}
 		sd := types.SourceDiagnostic{Code: d.Code, Line: d.Line, Column: d.Col, Message: d.Msg}
 		// A BZZ code's error carries its docs URL; an outer MGS wrapper must not lend its own.
 		var de *types.DiagnosticError
-		if d.Code != "" && errors.As(branch, &de) && de.Code == d.Code {
+		if d.Code != "" && errors.As(branch.err, &de) && de.Code == d.Code {
 			sd.URL = de.BuzzError()["url"]
 		}
-		var exec *interp.ExecError
-		if errors.As(branch, &exec) {
-			sd.File = exec.Path
-			if rel, rerr := filepath.Rel(root, exec.Path); rerr == nil && !strings.HasPrefix(rel, "..") {
+		if branch.file != "" {
+			sd.File = branch.file
+			if rel, rerr := filepath.Rel(root, branch.file); rerr == nil && !strings.HasPrefix(rel, "..") {
 				sd.File = filepath.ToSlash(rel)
 			}
 		}
@@ -288,19 +297,34 @@ func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
 	return f
 }
 
-// joinedBranches splits err at the first errors.Join in its chain: a load joins one error
-// per failing file, and errors.As would only ever find the first.
-func joinedBranches(err error) []error {
+// sourceLocated is a load error that names the file it failed in: interp.ExecError and
+// interp.ImportError.
+type sourceLocated interface{ SourcePath() string }
+
+// locatedBranch is one leaf of a load error and the innermost file that encloses it.
+type locatedBranch struct {
+	err  error
+	file string
+}
+
+// joinedBranches splits err at every errors.Join in its chain: a load joins one error per
+// failing file, and one file's imports join one error per import, and errors.As would only
+// ever find the first. file is the location inherited from above the split, since a join
+// under an ImportError leaves the file on the wrapper rather than on each branch.
+func joinedBranches(err error, file string) []locatedBranch {
 	for e := err; e != nil; e = errors.Unwrap(e) {
+		if l, ok := e.(sourceLocated); ok {
+			file = l.SourcePath()
+		}
 		if j, ok := e.(interface{ Unwrap() []error }); ok {
-			var out []error
+			var out []locatedBranch
 			for _, b := range j.Unwrap() {
-				out = append(out, joinedBranches(b)...)
+				out = append(out, joinedBranches(b, file)...)
 			}
 			return out
 		}
 	}
-	return []error{err}
+	return []locatedBranch{{err: err, file: file}}
 }
 
 // load completes workspace setup shared by Inspect and Open: magusfile preloading,
@@ -693,7 +717,12 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if m.cfg.Cache.SizeMB != 0 {
 		cfgOpts = append(cfgOpts, cache.WithSizeMB(m.cfg.Cache.SizeMB))
 	}
-	cfgOpts = append(cfgOpts, cache.WithLog(m.cfg.Log.Format, m.cfg.Log.SlogLevel()))
+	if isStructuredLog(m.cfg.Log) {
+		lvl := m.cfg.Log.SlogLevel()
+		cfgOpts = append(cfgOpts, cache.WithStructuredLog(secret.NewRedactingHandler(report.NewNoticeHandler(os.Stderr, lvl)), lvl))
+	} else {
+		cfgOpts = append(cfgOpts, cache.WithLog(m.cfg.Log.Format, m.cfg.Log.SlogLevel()))
+	}
 	cfgOpts = append(cfgOpts, cache.WithSilent(m.cfg.Log.IsSilent()))
 	cfgOpts = append(cfgOpts, cache.WithCollapse(collapseOnSuccess(m.cfg.Log)))
 	// Build the telemetry provider before the cache so a wired remote backend can

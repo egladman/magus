@@ -21,31 +21,20 @@ import (
 // because config imports cache, so cache cannot import config back.
 const levelTrace slog.Level = slog.LevelDebug - 4
 
-// newLogger returns a *slog.Logger for the given format ("text", "json", "jsonl", or
-// "pretty") and level.
+// newLogger returns a *slog.Logger for the given format ("text", "json", or "pretty")
+// and level. A structured (-o jsonl) run uses [WithStructuredLog] instead.
 //
 // Human formats (pretty, plain) render to stderr so stdout stays clean for machine
 // output; json/text keep their slog handlers. Pretty uses the shared PrettyHandler,
 // which is also installed as the process-wide default logger (see cmd/magus) so that
 // general diagnostics render in the same compact style as cache events instead of raw
 // "time=... level=..." lines interleaving with the pretty output.
-//
-// "jsonl" is a SAFETY NET, not the primary path: cmd/magus converts the named cache
-// events (the projects/charms/cache header, per-stage progress, the run summary) into
-// typed events on the run's own report.Writer, matching the run.target.result
-// envelope, before they would reach a logger at all (see cache_ops.go and run.go's
-// stageObserver). This format only covers what is left -- cache.warn, cache.memory,
-// cache.remote.* and anything future code logs without adding a conversion -- so
-// -o jsonl never leaks free text even for a message this package does not yet know
-// about. It writes to STDERR, keeping stdout reserved for the report stream.
 func newLogger(format string, level slog.Level) *slog.Logger {
 	switch strings.ToLower(format) {
 	case "text":
 		return slog.New(secret.NewRedactingHandler(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 	case "json":
 		return slog.New(secret.NewRedactingHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
-	case "jsonl":
-		return slog.New(secret.NewRedactingHandler(newJSONLSafetyNetHandler(os.Stderr, level)))
 	default:
 		return slog.New(NewPrettyHandler(os.Stderr, level))
 	}
@@ -64,12 +53,7 @@ var jsonlSafetyNetDropped = map[string]bool{
 	"cache.pool":  true,
 }
 
-// newJSONLSafetyNetHandler wraps a plain JSON slog handler to drop the events named
-// in jsonlSafetyNetDropped.
-func newJSONLSafetyNetHandler(w io.Writer, level slog.Level) slog.Handler {
-	return jsonlSafetyNetHandler{slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})}
-}
-
+// jsonlSafetyNetHandler drops the events named in jsonlSafetyNetDropped.
 type jsonlSafetyNetHandler struct{ slog.Handler }
 
 func (h jsonlSafetyNetHandler) Handle(ctx context.Context, r slog.Record) error {
@@ -890,11 +874,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	case "cache.backend":
 		h.printf("cache: %s (%s)\n", recordStr(r, "tier"), recordStr(r, "mode"))
 	case "cache.base":
-		if vcs := recordStr(r, "vcs"); vcs != "" {
-			h.printf("base: %s (%s)\n", recordStr(r, "base"), vcs)
-		} else {
-			h.printf("base: %s\n", recordStr(r, "base"))
-		}
+		h.printf("base: %s\n", recordStr(r, "base"))
 	case "run.exec":
 		// Every subprocess magus spawns (proc.exec, fork spells) logs through this event
 		// in run.Exec. Rendered as a shell-style echo, indented under the owning

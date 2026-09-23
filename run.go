@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -24,7 +23,6 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
-	"github.com/egladman/magus/internal/interactive"
 	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/observability"
@@ -51,8 +49,8 @@ type RunOption func(*run)
 type run struct {
 	DryRun            bool
 	Charms            []string       // execution charms propagated via context; "rw" enables mutating targets
-	Report            *report.Writer // caller-owned; caller closes; mutually exclusive with ReportWriter
-	ReportWriter      io.Writer      // run engine wraps this in its own Writer
+	Report            *report.Writer // caller-owned; caller closes
+	sink              eventSink      // the run's progress output; derived from Report when unset
 	NoVolatilityRetry bool
 	BaseRef           string
 	Race              bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
@@ -66,10 +64,6 @@ type run struct {
 
 // WithDryRun prints what would run without invoking any handler.
 func WithDryRun() RunOption { return func(o *run) { o.DryRun = true } }
-
-// WithReportWriter streams one JSONL event per target to w; the run engine
-// constructs and closes the report.Writer around it.
-func WithReportWriter(w io.Writer) RunOption { return func(o *run) { o.ReportWriter = w } }
 
 // WithWrite enables mutating mode for format/generate targets; sugar for the "rw" charm.
 func WithWrite() RunOption { return WithCharms(types.CharmReadWrite) }
@@ -115,10 +109,14 @@ func WithNoCache() RunOption { return func(o *run) { o.NoCache = true } }
 // about the run changes, and every non-gate invocation queues as before.
 func WithGate() RunOption { return func(o *run) { o.Gate = true } }
 
-func applyRunOpts(opts []RunOption) run {
+// applyRunOpts folds opts and settles the invocation's one sink.
+func (m *Magus) applyRunOpts(opts []RunOption) run {
 	var o run
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if o.sink == nil {
+		o.sink = m.newSink(o.Report)
 	}
 	return o
 }
@@ -130,7 +128,7 @@ func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOpti
 	if len(targets) == 0 {
 		return nil
 	}
-	return m.redactError(m.runResolved(ctx, targets, applyRunOpts(opts)))
+	return m.redactError(m.runResolved(ctx, targets, m.applyRunOpts(opts)))
 }
 
 // undeclaredScopeEvent builds the run's scope event when any selected project was
@@ -251,7 +249,7 @@ func CharmsForCI(charms []string) []string {
 // not a hardcoded preflight...test chain. The magusfile composes the pipeline
 // order via magus.needs.
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
-	o := applyRunOpts(opts)
+	o := m.applyRunOpts(opts)
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
 	// and update so a ci run verifies the pinned upstream state rather than refreshing
 	// it against whatever the registry or the feed serves today.
@@ -278,7 +276,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 				hint = "these projects come from a workspace provider, so ci lives on the provider spell: " +
 					"expose a \"ci\" op in its mgs_listTargets and the anchor is satisfied"
 			}
-			interactive.Emit(os.Stderr, hint)
+			o.sink.emit(ctx, report.Notice{Level: "info", Message: hint})
 			return types.DiagnosticErrorf(types.NoCITarget,
 				"no %q target defined in the selected project(s); it is the anchor %q and %q key off, "+
 					"so this run would do nothing", types.TargetCI, "magus affected ci", "magus affected --plan")
@@ -345,7 +343,7 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 
 // RunAffected computes the VCS-diff target set and runs target on it.
 func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOption) error {
-	o := applyRunOpts(opts)
+	o := m.applyRunOpts(opts)
 	targets, source, fellBack, err := m.ExpandAffected(ctx, target, o.BaseRef)
 	if err != nil {
 		return err
@@ -362,15 +360,15 @@ func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOptio
 		// compute affected set ...)"). RunAffected's real caller is the MCP run_affected
 		// tool, where there is no scope line and an agent would otherwise be told only
 		// that the run passed, with no way to know it had just built the whole workspace.
-		interactive.Emit(os.Stderr, fmt.Sprintf(
+		o.sink.emit(ctx, report.Notice{Level: "warn", Code: string(types.AffectedSetUncomputable), Message: fmt.Sprintf(
 			"[%s] affected: could not compute a changed-file set, so EVERY project was selected. "+
 				"This runs a full build, not an incremental one. Reason: %s (see %s)",
-			types.AffectedSetUncomputable, source, types.CodeURL(types.AffectedSetUncomputable)))
+			types.AffectedSetUncomputable, source, types.CodeURL(types.AffectedSetUncomputable))})
 	}
 	if len(targets) == 0 {
 		return nil
 	}
-	return m.Run(ctx, targets, opts...)
+	return m.redactError(m.runResolved(ctx, targets, o))
 }
 
 // undeclaredCharms returns the active charms that no selected target declares,
@@ -1239,6 +1237,11 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 // paths below, and a deferred swap is the only way to make every one of them report the
 // abort rather than the cancellation it surfaced as.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) (err error) {
+	// Before the dry-run branch and the locks, which both emit through it.
+	if opts.sink == nil {
+		opts.sink = m.newSink(opts.Report)
+	}
+	out := opts.sink
 	// Ahead of the dry-run branch, not after it: a dry run evaluates the same
 	// target bodies under a tracing context, so without the forwarded args here
 	// it printed the op's own command and silently omitted them, under-reporting
@@ -1308,32 +1311,18 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// under its [dry] line. Reads still work, so the plan reflects real conditionals.
 		recCtx := types.WithTrace(ctx)
 		dryStart := time.Now()
-		switch {
-		case opts.Report != nil:
-			_ = report.Record(opts.Report, report.Notice{Level: "info", Message: "dry run: commands shown, not executed"})
-		case m.cache != nil:
-			m.cache.LogDryBanner(ctx)
-		default:
-			fmt.Println("dry run: commands shown, not executed")
-		}
+		out.emit(ctx, report.Notice{Level: "info", Message: dryRunBanner})
 		planned := 0
 		for _, st := range stages {
 			for _, p := range st.projects {
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
-				switch {
-				case opts.Report != nil:
-					_ = report.Record(opts.Report, report.RunStep{
-						Label: label, Target: charmedTarget(st.target, opts.Charms), Status: "dry",
-					})
-				case m.cache != nil:
-					// Charms folded in, matching the executed line: a dry run whose repro
-					// command omits them prints a command that reproduces something else,
-					// and it is printed precisely when the reader is asking what will run.
-					m.cache.LogDry(ctx, p.Path, label, charmedTarget(st.target, opts.Charms))
-				default:
-					fmt.Printf("[dry] %s\n", label)
-				}
+				// Charms folded in, matching the executed line: a dry run whose repro
+				// command omits them prints a command that reproduces something else,
+				// and it is printed precisely when the reader is asking what will run.
+				out.emit(ctx, report.RunStep{
+					Label: label, Project: p.Path, Target: charmedTarget(st.target, opts.Charms), Status: "dry",
+				})
 				// Fresh memo per target so a shared dependency (e.g. format -> generate)
 				// records once, matching the real run's pool dedup.
 				stepCtx := buzz.WithTargetMemo(recCtx, buzz.NewTargetMemo())
@@ -1346,14 +1335,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// A dry run ends with a footer like every other run. Without it the output
 		// simply stopped after the last plan line, so the one shape a reader looks
 		// for at the bottom was missing precisely when they were reviewing a plan.
-		switch {
-		case opts.Report != nil:
-			_ = report.Record(opts.Report, report.RunSummary{
-				Dry: true, Planned: planned, DurationMs: time.Since(dryStart).Milliseconds(),
-			})
-		case m.cache != nil:
-			m.cache.LogDrySummary(ctx, planned, time.Since(dryStart))
-		}
+		out.emit(ctx, report.RunSummary{
+			Dry: true, Planned: planned, DurationMs: time.Since(dryStart).Milliseconds(),
+		})
 		return nil
 	}
 
@@ -1399,7 +1383,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// against a SEPARATE concurrent magus process; the intra-process scheduler fans
 	// out beneath it untouched. Acquired here (after the dry-run early return) so a
 	// dry run, which mutates nothing, takes no lock.
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.Report)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, out)
 	if err != nil {
 		return err
 	}
@@ -1532,12 +1516,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// copies of one shared service (same image and container port, subtly different).
 	// Scoped to the run's reachable projects so it fires at the moment of cost.
 	m.warnNearDuplicateServices(uniqueProjects, charmKey)
-
-	if opts.Report == nil && opts.ReportWriter != nil {
-		rw := report.NewWriter(opts.ReportWriter)
-		defer func() { _ = rw.Close() }()
-		opts.Report = rw
-	}
 
 	if opts.Report != nil {
 		ctx = report.WithWriter(ctx, opts.Report)
@@ -1702,7 +1680,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// stage observer: it prints a progress line as each magus.needs sub-target
 		// completes, giving the reader a checklist of what ran in place of the wall.
 		if m.cache.Collapsing() {
-			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label, policies: policiesOf(p), report: opts.Report})
+			spanCtx = buzz.WithObserver(spanCtx, stageObserver{out: out, label: s.Label, policies: policiesOf(p)})
 		}
 		if s.NoCache {
 			// An uncached composer still executes its body, so this is the runtime
@@ -1769,7 +1747,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if opts.RaceReplay && runErr == nil {
 		// Every stage replays; a caller who asked for the check wants the whole list.
 		for _, st := range stages {
-			if err := runReplay(ctx, m.ws, st.projects, st.target, byPath, st.handler, opts.Report); err != nil && runErr == nil {
+			if err := runReplay(ctx, m.ws, st.projects, st.target, byPath, st.handler, out); err != nil && runErr == nil {
 				runErr = err
 			}
 		}
@@ -1786,39 +1764,30 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Footer summary for a fan-out: a single line tallying the per-project results.
 	// Skipped for a single project, where the per-project status line already says it all.
 	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
-		if opts.Report != nil {
-			_ = report.Record(opts.Report, report.RunSummary{
-				Hits: s.Hit, Misses: s.Miss, Errors: s.Error, DurationMs: time.Since(start).Milliseconds(),
-			})
-		} else {
-			m.cache.LogSummary(ctx, time.Since(start))
-		}
+		out.emit(ctx, report.RunSummary{
+			Hits: s.Hit, Misses: s.Miss, Errors: s.Error, DurationMs: time.Since(start).Milliseconds(),
+		})
 	}
 	// Beside the footer, not deferred by the caller: every path that runs targets
 	// reaches here, including `magus x` and the MCP run tool, and a deferred summary
-	// landed after the terminal band was released. Skipped in structured mode: the
-	// remote tallies have no dedicated event yet, and cache.WithLog(jsonl,...) already
-	// keeps the safety net (a plain JSON line) from reaching stdout by writing to stderr.
-	if opts.Report == nil {
-		m.cache.LogRemoteSummary(ctx)
+	// landed after the terminal band was released.
+	if rs, ok := m.cache.RemoteSummary(ctx); ok {
+		out.emit(ctx, report.RunRemote(rs))
 	}
 
 	return runErr
 }
 
-// stageObserver bridges the Buzz pool's per-target notifications to the cache logger:
-// as each magus.needs sub-target finishes, it emits a stage progress line for the
-// owning project. Attached only in collapse mode (see executeStages), where the
-// project's own subprocess output is withheld. It implements buzz.TargetObserver.
+// stageObserver bridges the Buzz pool's per-target notifications to the run's sink:
+// as each magus.needs sub-target finishes, it emits a run.step for the owning project.
+// Attached only in collapse mode (see executeStages), where the project's own
+// subprocess output is withheld. It implements buzz.TargetObserver.
 type stageObserver struct {
-	cache *cache.Cache
+	out   eventSink
 	label string // normalized project display name (never "" or "."); see types.ProjectLabel
 	// policies is the owning project's per-target policy, read for the one thing the
 	// row cannot show without it: which failures the composite carries on past.
 	policies map[string]types.Target
-	// report is set for a structured (-o jsonl) invocation; when non-nil TargetEnd
-	// emits a typed run.step event instead of the cache logger's prose line.
-	report *report.Writer
 }
 
 // policiesOf is p's per-target policy map, nil-safe for a step whose project did not
@@ -1831,29 +1800,25 @@ func policiesOf(p *types.Project) map[string]types.Target {
 	return p.TargetPolicies
 }
 
+// TargetEnd passes ctx, not _: the step carries err's message, and a magusfile can throw
+// an interpolated credential. Without the context the record redacts against nothing.
 func (o stageObserver) TargetEnd(ctx context.Context, name string, elapsed time.Duration, err error) {
-	if o.report != nil {
-		errMsg := ""
-		if err != nil {
-			errMsg = err.Error()
-		}
-		status := "pass"
-		switch {
-		case err == nil:
-		case o.policies[name].Advisory:
-			status = "advisory"
-		default:
-			status = "fail"
-		}
-		_ = report.Record(o.report, report.RunStep{
-			Label: o.label, Target: name, Status: status,
-			DurationMs: elapsed.Milliseconds(), Error: errMsg,
-		})
-		return
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
 	}
-	// ctx, not _: LogStage puts runErr.Error() in an attr, and a magusfile can throw an
-	// interpolated credential. Without the context the record redacts against nothing.
-	o.cache.LogStage(ctx, o.label, name, elapsed, err, o.policies[name].Advisory)
+	status := "pass"
+	switch {
+	case err == nil:
+	case o.policies[name].Advisory:
+		status = "advisory"
+	default:
+		status = "fail"
+	}
+	o.out.emit(ctx, report.RunStep{
+		Label: o.label, Target: name, Status: status,
+		DurationMs: elapsed.Milliseconds(), Error: errMsg,
+	})
 }
 
 // dedupeByProject returns one step per ProjectPath (first seen).
@@ -1882,7 +1847,7 @@ func (m *Magus) buildRaceRuntime() *race.Runtime {
 // state. Every offender is reported before it returns.
 func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Project, target string,
 	byPath map[string]*types.Project, handler TargetHandler,
-	w *report.Writer,
+	out eventSink,
 ) error {
 	// One resolution per project, reused for admission and both snapshots, so the selection
 	// loop and the comparison loops cannot disagree about what the outputs are.
@@ -1907,8 +1872,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 		if err != nil {
 			// Report and keep going: returning here would skip byte-stability for every
 			// remaining project, which is the "gate that checked nothing" this exists to stop.
-			fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.NondeterministicOutput,
-				fmt.Sprintf("cannot check byte-stability\n  project=%s target=%s err=%v", p.Path, target, err)))
+			out.emit(ctx, report.DeterminismMismatch{Project: p.Path, Target: target, Error: err.Error()})
 			offenders = append(offenders, p.Path)
 			continue
 		}
@@ -1918,10 +1882,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 		// spell contributes dist/** to every target) routinely matches nothing, and a
 		// check-only target like test would fail for a glob it never claimed.
 		if len(snap) == 0 && len(p.TargetOutputs[target]) > 0 {
-			fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.NondeterministicOutput,
-				fmt.Sprintf("declared outputs matched nothing, so byte-stability was not checked\n  project=%s target=%s globs=%s",
-					p.Path, target, formatOutputGlobs(sets[p.Path]))))
-			_ = report.Record(w, report.DeterminismMismatch{Project: p.Path, Target: target})
+			out.emit(ctx, report.DeterminismMismatch{Project: p.Path, Target: target, Globs: formatOutputGlobs(sets[p.Path])})
 			offenders = append(offenders, p.Path)
 			continue
 		}
@@ -1946,8 +1907,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 		}
 		postSnap, err := diff.HashContent(ctx, sets[p.Path])
 		if err != nil {
-			fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.NondeterministicOutput,
-				fmt.Sprintf("cannot check byte-stability\n  project=%s target=%s err=%v", p.Path, target, err)))
+			out.emit(ctx, report.DeterminismMismatch{Project: p.Path, Target: target, Error: err.Error()})
 			offenders = append(offenders, p.Path)
 			continue
 		}
@@ -1955,14 +1915,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 		if len(changed) == 0 {
 			continue
 		}
-		fmt.Fprintln(os.Stderr, types.FormatDiagnostic(types.NondeterministicOutput,
-			fmt.Sprintf("non-deterministic output\n  project=%s target=%s differing_paths=%v",
-				p.Path, target, changed)))
-		_ = report.Record(w, report.DeterminismMismatch{
-			Project:        p.Path,
-			Target:         target,
-			DifferingPaths: changed,
-		})
+		out.emit(ctx, report.DeterminismMismatch{Project: p.Path, Target: target, DifferingPaths: changed})
 		offenders = append(offenders, p.Path)
 	}
 	if len(offenders) == 0 {

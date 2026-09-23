@@ -49,11 +49,23 @@ func WithMaxImportBytes(n int64) Option {
 	}
 }
 
-// WithLog sets the log format ("pretty", "text", "json", "jsonl") and minimum level.
+// WithLog sets the log format ("pretty", "plain", "text", "json") and minimum level.
 func WithLog(format string, level slog.Level) Option {
 	return func(c *Cache) {
 		c.log = newLogger(format, level)
 		c.logLevel = level
+	}
+}
+
+// WithStructuredLog makes the cache a participant in a structured (-o jsonl) run: h
+// receives every cache record no typed report event already carries, and a target's
+// own output never reaches the terminal, on success or failure. It stays in the run
+// log behind the output ref the run.target.result event names.
+func WithStructuredLog(h slog.Handler, level slog.Level) Option {
+	return func(c *Cache) {
+		c.log = slog.New(jsonlSafetyNetHandler{h})
+		c.logLevel = level
+		c.structured = true
 	}
 }
 

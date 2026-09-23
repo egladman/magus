@@ -24,8 +24,8 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
-	workspace.LogScope(t.Context(), "test", "unit")
-	workspace.LogCharms(t.Context(), "rw")
+	workspace.Sink(nil).Scope(t.Context(), "test", "unit")
+	workspace.Sink(nil).Charms(t.Context(), "rw")
 	_, _, err = workspace.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
 	assert.ErrorIs(t, workspace.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)
@@ -78,20 +78,40 @@ func TestResolveCacheDir_DoesNotNeedWorkspaceLoad(t *testing.T) {
 	assert.Equal(t, filepath.Join(root, "cache"), got)
 }
 
-// TestCacheHeadersOnAnOpenWorkspace: the four header emitters are no-ops on an
+// TestCacheHeadersOnAnOpenWorkspace: the text sink's header emitters are no-ops on an
 // Inspect workspace and reach the cache logger on an opened one. Nothing observable
 // comes back, so what this pins is that the live-cache path runs at all: the
 // Inspect path is covered by TestCacheOperationsWithoutOpenCache.
 func TestCacheHeadersOnAnOpenWorkspace(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", nil)
 	ctx := t.Context()
+	s := m.Sink(nil)
 
 	assert.NotPanics(t, func() {
-		m.LogScope(ctx, "api", "magusfile")
-		m.LogCharms(ctx, "rw")
-		m.LogCache(ctx)
-		m.LogBase(ctx, "main", "git")
+		s.Scope(ctx, "api", "magusfile")
+		s.Charms(ctx, "rw")
+		s.Cache(ctx)
+		s.Base(ctx, "git diff vs main")
 	})
+}
+
+// A JSONL sink records the same headers as typed events, and nothing reaches the cache
+// logger: the caller parsing the stream meets one record per header.
+func TestJSONLSinkRecordsHeaders(t *testing.T) {
+	m, _ := openTempWorkspace(t, "api", nil)
+	var buf bytes.Buffer
+	rw, err := NewReportWriter(&buf, nil)
+	require.NoError(t, err)
+	s := m.Sink(rw)
+	s.Scope(t.Context(), "api", "magusfile")
+	s.Base(t.Context(), "git diff vs main")
+	s.Notice(t.Context(), "warn", types.AffectedSetUncomputable, "full build")
+	require.NoError(t, rw.Close())
+
+	assert.Equal(t, `{"schema":4,"type":"run.scope","label":"api","source":"magusfile"}
+{"schema":4,"type":"run.base","base":"git diff vs main"}
+{"schema":4,"type":"run.notice","level":"warn","code":"`+string(types.AffectedSetUncomputable)+`","msg":"full build"}
+`, buf.String())
 }
 
 func TestCacheDirIsUnderTheWorkspaceRoot(t *testing.T) {

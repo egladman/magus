@@ -313,26 +313,49 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 		slog.Duration("duration", time.Since(putStart)))
 }
 
-// LogRemoteSummary accounts for what the remote cache did this run, reading the
-// run-scoped counters off ctx. It is the only place the ZERO case gets stated: a run
-// that never touched a configured remote says so rather than saying nothing, and
-// silence is what made that indistinguishable from working.
-func (c *Cache) LogRemoteSummary(ctx context.Context) {
+// RemoteSummary is what the remote cache did during one run.
+type RemoteSummary struct {
+	Hits      int64
+	Misses    int64
+	Published int64
+	Failures  int64
+	DownBytes int64
+	UpBytes   int64
+}
+
+// RemoteSummary reads the run-scoped remote counters off ctx. It reports false when no
+// remote is configured or ctx carries no counters (a caller outside Magus.Run); a
+// configured remote the run never touched reports true with every count zero.
+func (c *Cache) RemoteSummary(ctx context.Context) (RemoteSummary, bool) {
 	stats := remoteStatsFrom(ctx)
 	if c.remote == nil || stats == nil {
-		return
+		return RemoteSummary{}, false
 	}
-	fails := stats.fails.Load()
+	return RemoteSummary{
+		Hits:      stats.hits.Load(),
+		Misses:    stats.misses.Load(),
+		Published: stats.puts.Load(),
+		Failures:  stats.fails.Load(),
+		DownBytes: stats.down.Load(),
+		UpBytes:   stats.up.Load(),
+	}, true
+}
+
+// LogRemoteSummary accounts for what the remote cache did this run. It is the only
+// place the ZERO case gets stated: a run that never touched a configured remote says so
+// rather than saying nothing, and silence is what made that indistinguishable from
+// working.
+func (c *Cache) LogRemoteSummary(ctx context.Context, s RemoteSummary) {
 	attrs := []any{
-		slog.Int64("hits", stats.hits.Load()),
-		slog.Int64("misses", stats.misses.Load()),
-		slog.Int64("published", stats.puts.Load()),
-		slog.Int64("failures", fails),
-		slog.Int64("down_bytes", stats.down.Load()),
-		slog.Int64("up_bytes", stats.up.Load()),
+		slog.Int64("hits", s.Hits),
+		slog.Int64("misses", s.Misses),
+		slog.Int64("published", s.Published),
+		slog.Int64("failures", s.Failures),
+		slog.Int64("down_bytes", s.DownBytes),
+		slog.Int64("up_bytes", s.UpBytes),
 	}
 	// Warn so a run whose remote degraded cannot end on a line that reads like success.
-	if fails > 0 {
+	if s.Failures > 0 {
 		c.log.WarnContext(ctx, "cache.remote.summary", attrs...)
 		return
 	}

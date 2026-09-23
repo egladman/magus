@@ -73,13 +73,12 @@ func (c *Cache) Description() (tier, mode string) {
 // base already reads "git diff vs origin/main": the VCS name in front of the ref, rather
 // than a git:// URI, because no such scheme is standard across git, Mercurial and jj and
 // inventing one would put a magus-only string where a reader expects a ref they can paste
-// straight back into their own VCS. vcs is accepted for a caller that has the two apart.
-func (c *Cache) LogBase(ctx context.Context, base, vcs string) {
+// straight back into their own VCS.
+func (c *Cache) LogBase(ctx context.Context, base string) {
 	if base == "" {
 		return
 	}
-	c.log.InfoContext(ctx, "cache.base",
-		slog.String("base", base), slog.String("vcs", vcs))
+	c.log.InfoContext(ctx, "cache.base", slog.String("base", base))
 }
 
 // LogStage emits a per-stage progress event for one magus.needs sub-target that ran

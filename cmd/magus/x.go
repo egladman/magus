@@ -92,7 +92,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	}
 	_ = interactive.SaveLastTarget(chosen.Dir, targetName)
 
-	m.LogScope(ctx, chosen.Path, "")
+	m.Sink(nil).Scope(ctx, chosen.Path, "")
 
 	if *step {
 		ctx = withStepGate(ctx)
@@ -384,7 +384,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 		}
 	}
 
-	m.LogScope(ctx, d.Project, "ref "+ref)
+	m.Sink(nil).Scope(ctx, d.Project, "ref "+ref)
 	if step {
 		ctx = withStepGate(ctx)
 	}

@@ -242,6 +242,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return err
 	}
 	defer func() { _ = cleanupReport() }()
+	sink := m.Sink(rw)
 
 	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {
@@ -268,13 +269,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// different build), and burying it in parentheses after a project list made it the
 	// one header fact nobody read. source already names the VCS that produced it
 	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
-	if rw != nil {
-		_ = rw.RecordRunScope(scopeLabel, "")
-		_ = rw.RecordRunBase(source, "")
-	} else {
-		m.LogScope(ctx, scopeLabel, "")
-		m.LogBase(ctx, source, "")
-	}
+	sink.Scope(ctx, scopeLabel, "")
+	sink.Base(ctx, source)
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
@@ -284,14 +280,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if target == "ci" {
 		charms = magus.CharmsForCI(charms)
 	}
-	if rw != nil {
-		_ = rw.RecordRunCharms(strings.Join(charms, ","))
-		tier, mode := m.CacheDescription()
-		_ = rw.RecordRunCache(tier, mode)
-	} else {
-		m.LogCharms(ctx, strings.Join(charms, ","))
-		m.LogCache(ctx)
-	}
+	sink.Charms(ctx, strings.Join(charms, ","))
+	sink.Cache(ctx)
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
 		return nil
@@ -309,7 +299,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return gateErr
 	}
 	// After the gate agreed to run, because a refused gate pays for nothing.
-	noteUndeclaredSeedCost(os.Stderr, undeclaredOnly, rw)
+	noteUndeclaredSeedCost(ctx, sink, undeclaredOnly)
 
 	if rw != nil {
 		reportUndeclaredSeeds(undeclaredOnly, rw)
@@ -338,9 +328,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if af.NoCache {
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
-	if rw != nil {
-		runOpts = append(runOpts, magus.WithReport(rw))
-	}
+	runOpts = append(runOpts, magus.WithSink(sink))
 	if len(extraArgs) > 0 {
 		runOpts = append(runOpts, magus.WithExtraArgs(extraArgs))
 	}
@@ -873,15 +861,11 @@ func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
 // daemon dedupes fewer of these than the project-only twin above. That is the trade for
 // naming files the reader cannot see anywhere else, and interactive.maxEmittedDedupe
 // bounds what it can cost.
-func noteUndeclaredSeedCost(w io.Writer, undeclaredOnly map[string][]string, rw *magus.ReportWriter) {
+func noteUndeclaredSeedCost(ctx context.Context, sink *magus.Sink, undeclaredOnly map[string][]string) {
 	if len(undeclaredOnly) == 0 {
 		return
 	}
-	if rw != nil {
-		_ = rw.RecordNotice("warn", types.UndeclaredSeedingFile, undeclaredSeedNotice(undeclaredOnly, true))
-		return
-	}
-	interactive.Emit(w, undeclaredSeedNotice(undeclaredOnly, true))
+	sink.Notice(ctx, "warn", types.UndeclaredSeedingFile, undeclaredSeedNotice(undeclaredOnly, true))
 }
 
 // undeclaredSeedNotice renders MGS1028 for the seed projects in undeclaredBySeed. With

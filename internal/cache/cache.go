@@ -57,6 +57,7 @@ type Cache struct {
 	logLevel        slog.Level // effective minimum level; used by captureRun
 	silent          bool       // silent output mode: bounded failure dumps + bubbled important lines
 	collapse        bool       // collapse-on-success: withhold live subprocess output, replay it only on failure
+	structured      bool       // -o jsonl: withhold subprocess output always; see WithStructuredLog
 	hits            atomic.Int64
 	misses          atomic.Int64
 	errs            atomic.Int64
@@ -296,7 +297,6 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 		mutable:  mutable,
 		log:      log,
 		logLevel: defaultLevel,
-		mtimes:   newMtimeStore(dir, log),
 		outputs:  NewOutputStore(dir),
 		// Annotations go to stderr alongside the failure dump they wrap.
 		annotator: annotate.Detect(),
@@ -305,8 +305,10 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	for _, o := range opts {
 		o(c)
 	}
+	// After the options, so its warnings reach the logger the caller chose.
+	c.mtimes = newMtimeStore(dir, c.log)
 	if c.machineAdmitter != nil {
-		c.machine = &machineGate{admit: c.machineAdmitter, noWait: c.machineNoWait, log: c.log}
+		c.machine = &machineGate{admit: c.machineAdmitter, noWait: c.machineNoWait, log: c.log, structured: c.structured}
 	}
 	if err := c.initSigning(); err != nil {
 		return nil, err
@@ -543,7 +545,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// Stderr, not stdout, matching captureRun's miss path: stdout is
 				// reserved for structured output (-o json|yaml|jsonl|template) and
 				// nothing else, so a replayed log on stdout corrupted it on a hit.
-				if c.logLevel < slog.LevelError && len(logData) > 0 {
+				if c.logLevel < slog.LevelError && !c.structured && len(logData) > 0 {
 					_, _ = os.Stderr.Write(logData)
 				}
 				// A hit regenerated nothing, so reuse the existing ref for this cache
@@ -777,7 +779,8 @@ const maxHintErrChars = 120
 // the cache key, so one line per key per process falls out with no state of its own,
 // and one `magus run` invocation is one process.
 func (c *Cache) emitUnchangedFailureHint(hash string) string {
-	if c.outputs == nil || !interactive.HintsEnabled() {
+	// A structured run carries the same pointer as run.target.result's next breadcrumbs.
+	if c.outputs == nil || !interactive.HintsEnabled() || c.structured {
 		return ""
 	}
 	d, err := c.outputs.newestDescriptor(hash)
@@ -1636,7 +1639,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// captured output replayed below. Silent has its own stricter rules, so it takes
 	// precedence and collapse stays off under it.
 	collapse := c.collapse && !c.silent && !quiet
-	withhold := quiet || collapse
+	// A structured run withholds in every mode: a raw line on either stream is one no
+	// JSONL reader can parse. The failure is carried by run.target.result and its ref.
+	withhold := quiet || collapse || c.structured
 
 	// A log-path failure fails the run outright rather than degrading silently:
 	// running fn without capture writers, journal step tagging, or failure-dump
@@ -1698,11 +1703,15 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// sole output for an otherwise-silent passing run.
 	if c.silent {
 		for _, msg := range extractNotices(logPath) {
+			if c.structured {
+				c.log.InfoContext(ctx, "cache.notice", slog.String("project", projectPath), slog.String("notice", msg))
+				continue
+			}
 			_, _ = fmt.Fprintf(os.Stderr, "notice: %s: %s\n", projectPath, msg)
 		}
 	}
 
-	if runErr != nil {
+	if runErr != nil && !c.structured {
 		// Under GitHub Actions, fold the dump into a collapsible section and
 		// raise the failure itself as an annotation. The dump is verbose and
 		// belongs behind a fold; the annotation is what reaches the pull

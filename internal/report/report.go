@@ -41,8 +41,10 @@ const (
 	TypeRunBase               = "run.base"
 	TypeRunStep               = "run.step"
 	TypeRunSummary            = "run.summary"
+	TypeRunRemote             = "run.remote"
 	TypeLockWait              = "lock.wait"
 	TypeLockReleased          = "lock.released"
+	TypeLockSuperseded        = "lock.superseded"
 	TypeNotice                = "run.notice"
 )
 
@@ -131,11 +133,16 @@ type OutputOverlapDetected struct {
 	Overlapping []string `json:"overlapping"`
 }
 
-// DeterminismMismatch records a project whose outputs differed between two consecutive runs (--race=replay).
+// DeterminismMismatch records a project whose outputs differed between two consecutive
+// runs (--race=replay), or whose byte-stability could not be checked at all: Globs is set
+// when the declared outputs matched nothing, Error when they could not be hashed. Either
+// fails the gate, like a difference does.
 type DeterminismMismatch struct {
 	Project        string   `json:"project"`
 	Target         string   `json:"target"`
 	DifferingPaths []string `json:"differing_paths"`
+	Globs          string   `json:"globs,omitempty"`
+	Error          string   `json:"error,omitempty"`
 }
 
 // MissingDependency records a likely missing graph edge: Consumer sources Path but didn't run; Producer wrote it.
@@ -179,21 +186,34 @@ type RunCache struct {
 }
 
 // RunBase reports what an affected run's change set was compared against, the
-// "base: ..." header.
+// "base: ..." header. Base already names the VCS ("git diff vs origin/main").
 type RunBase struct {
 	Base string `json:"base"`
-	VCS  string `json:"vcs,omitempty"`
 }
 
 // RunStep reports one sub-target progress line ("[pass] name (695ms)") as it
 // completes -- a magus.needs stage, or a dry-run target that never actually ran.
-// Status is "pass", "fail", "advisory", or "dry".
+// Status is "pass", "fail", "advisory", or "dry". Project is the workspace-relative
+// path, set on a dry step so its repro command can name it.
 type RunStep struct {
 	Label      string `json:"label"`
+	Project    string `json:"project,omitempty"`
 	Target     string `json:"target,omitempty"`
 	Status     string `json:"status"`
 	DurationMs int64  `json:"duration_ms,omitempty"`
 	Error      string `json:"error,omitempty"`
+}
+
+// RunRemote accounts for what the remote cache did this run, once, beside the summary.
+// It is emitted whenever a remote is configured, so all-zero counts mean the run never
+// reached it rather than that nothing was reported.
+type RunRemote struct {
+	Hits      int64 `json:"hits"`
+	Misses    int64 `json:"misses"`
+	Published int64 `json:"published"`
+	Failures  int64 `json:"failures"`
+	DownBytes int64 `json:"down_bytes"`
+	UpBytes   int64 `json:"up_bytes"`
 }
 
 // RunSummary is the end-of-run footer: hit/miss/error counts (or, for a dry run,
@@ -215,7 +235,11 @@ type LockWait struct {
 	Project   string `json:"project"`
 	HolderPID int    `json:"holder_pid,omitempty"`
 	Command   string `json:"command,omitempty"`
-	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
+	// Holder describes the holder for a reader: pid, command, how long it has run and
+	// where. Empty when nothing trustworthy is recorded.
+	Holder string `json:"holder,omitempty"`
+	// ElapsedMs is how long this run has waited; absent on the first event.
+	ElapsedMs int64 `json:"elapsed_ms,omitempty"`
 }
 
 // LockReleased reports that a previously-waited-on project lock freed and this
@@ -224,13 +248,27 @@ type LockReleased struct {
 	Project string `json:"project"`
 }
 
+// LockSuperseded reports that this gate stopped an earlier gate on the same tree and
+// took its project lock (MGS3014), or, with TimedOut, that the earlier gate did not stop
+// within BoundMs and this run is waiting for it instead.
+type LockSuperseded struct {
+	Project   string `json:"project"`
+	HolderPID int    `json:"holder_pid,omitempty"`
+	Command   string `json:"command,omitempty"`
+	Holder    string `json:"holder,omitempty"`
+	TimedOut  bool   `json:"timed_out,omitempty"`
+	BoundMs   int64  `json:"bound_ms,omitempty"`
+}
+
 // Notice is a free-form advisory line -- a hint, warning, or one-time banner --
 // that has no dedicated event type of its own. Code is the diagnostic code (e.g.
-// an MGS####) when the notice carries one.
+// an MGS####) when the notice carries one. Attrs carries the fields of a log record
+// no typed event converts (see [NewNoticeHandler]).
 type Notice struct {
-	Level   string `json:"level"` // "info" | "warn"
-	Code    string `json:"code,omitempty"`
-	Message string `json:"msg"`
+	Level   string         `json:"level"` // "debug" | "info" | "warn" | "error"
+	Code    string         `json:"code,omitempty"`
+	Message string         `json:"msg"`
+	Attrs   map[string]any `json:"attrs,omitempty"`
 }
 
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
@@ -253,6 +291,8 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
 	reflect.TypeOf(LockWait{}):              TypeLockWait,
 	reflect.TypeOf(LockReleased{}):          TypeLockReleased,
+	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
+	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }
 

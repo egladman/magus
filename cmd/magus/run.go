@@ -206,8 +206,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	// finalizeConfig already pointed globalCfg.Log.Format at "jsonl" for this
 	// invocation (before the workspace preload could build the cache logger from
-	// the old format); resolved again here so the header below can route through
-	// rw instead of the cache logger's prose lines.
+	// the old format); resolved again here to choose the invocation's one sink.
 	opts, optsErr := outputOptionsOrDefault()
 	if optsErr != nil {
 		return optsErr
@@ -223,6 +222,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return err
 	}
 	defer func() { _ = cleanupReport() }()
+	sink := m.Sink(rw)
 
 	// cwd is the caller's directory: for an adopted run it is the client's, carried on
 	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
@@ -248,11 +248,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
-	if rw != nil {
-		_ = rw.RecordRunScope(scopeLabel, source)
-	} else {
-		m.LogScope(ctx, scopeLabel, source)
-	}
+	sink.Scope(ctx, scopeLabel, source)
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
@@ -262,14 +258,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if targetName == "ci" {
 		charms = magus.CharmsForCI(charms)
 	}
-	if rw != nil {
-		_ = rw.RecordRunCharms(strings.Join(charms, ","))
-		tier, mode := m.CacheDescription()
-		_ = rw.RecordRunCache(tier, mode)
-	} else {
-		m.LogCharms(ctx, strings.Join(charms, ","))
-		m.LogCache(ctx)
-	}
+	sink.Charms(ctx, strings.Join(charms, ","))
+	sink.Cache(ctx)
 	if len(targets) == 0 {
 		// Zero targets here means the fan-out found no projects at all in the resolved
 		// workspace: a degenerate or wrong-workspace resolution, not "nothing to do".
@@ -318,9 +308,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if rf.NoCache {
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
-	if rw != nil {
-		runOpts = append(runOpts, magus.WithReport(rw))
-	}
+	runOpts = append(runOpts, magus.WithSink(sink))
 	if spellFilter != "" {
 		runOpts = append(runOpts, magus.WithSpellFilter(spellFilter))
 	}
