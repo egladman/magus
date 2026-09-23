@@ -2,6 +2,8 @@ package interp
 
 import (
 	"context"
+	"crypto/sha1" //nolint:gosec // G505: git names objects with it; see GitBlobID
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -29,6 +31,8 @@ type sourceCtxKey struct{}
 type projectPathCtxKey struct{}
 
 type overlayCtxKey struct{}
+
+type sourceReaderCtxKey struct{}
 
 // TargetContextGlobal is the session-global name under which the bindings layer
 // stashes the shared magus.Context value (see bindings.registerAllBuzz). A target
@@ -200,12 +204,102 @@ func WithOverlay(ctx context.Context, files map[string]string) context.Context {
 	return context.WithValue(ctx, overlayCtxKey{}, files)
 }
 
+// WithSourceReader has every magusfile source and every Buzz file import a load reads come
+// from read instead of the disk. The file search still decides which paths a load reads.
+//
+// It exists to evaluate the magusfile as a revision holds it without materializing that
+// revision: the agent guard judges a spawn by both the committed and the working-tree
+// magus\guard.spawn rule. An overlay entry still wins over it.
+func WithSourceReader(ctx context.Context, read func(path string) ([]byte, error)) context.Context {
+	return context.WithValue(ctx, sourceReaderCtxKey{}, read)
+}
+
+func sourceReaderFrom(ctx context.Context) func(path string) ([]byte, error) {
+	read, _ := ctx.Value(sourceReaderCtxKey{}).(func(path string) ([]byte, error))
+	return read
+}
+
+// SourceFile is one file a magusfile load read, named by the git blob id of the bytes it
+// read. The id is computed from the bytes rather than asked of a VCS, so recording it
+// costs no process and names the same object git would.
+type SourceFile struct {
+	Path   string
+	BlobID string
+}
+
+// SourceLog collects every file a load reads: its magusfile sources and every Buzz file
+// they import. Safe for concurrent use.
+type SourceLog struct {
+	mu    sync.Mutex
+	files map[string]string
+}
+
+// Files returns what the load read, sorted by path.
+func (l *SourceLog) Files() []SourceFile {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]SourceFile, 0, len(l.files))
+	for path, id := range l.files {
+		out = append(out, SourceFile{Path: path, BlobID: id})
+	}
+	slices.SortFunc(out, func(a, b SourceFile) int { return strings.Compare(a.Path, b.Path) })
+	return out
+}
+
+func (l *SourceLog) record(path string, data []byte) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.files == nil {
+		l.files = map[string]string{}
+	}
+	l.files[path] = GitBlobID(data)
+}
+
+type sourceLogCtxKey struct{}
+
+// WithSourceLog records every file a load under ctx reads into log.
+func WithSourceLog(ctx context.Context, log *SourceLog) context.Context {
+	return context.WithValue(ctx, sourceLogCtxKey{}, log)
+}
+
+// GitBlobID is the object id git assigns data as a blob in a SHA-1 repository.
+func GitBlobID(data []byte) string {
+	h := sha1.New() //nolint:gosec // G401: git's object naming, not a security primitive
+	fmt.Fprintf(h, "blob %d\x00", len(data))
+	_, _ = h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// loadReader is how a load reads a source file: the caller's reader or the disk, and
+// recorded into the load's SourceLog when it has one. Nil when neither applies, which
+// leaves a Buzz session on its own os.ReadFile.
+func loadReader(ctx context.Context) func(path string) ([]byte, error) {
+	read := sourceReaderFrom(ctx)
+	log, _ := ctx.Value(sourceLogCtxKey{}).(*SourceLog)
+	if log == nil {
+		return read
+	}
+	if read == nil {
+		read = os.ReadFile
+	}
+	return func(path string) ([]byte, error) {
+		data, err := read(path)
+		if err == nil {
+			log.record(path, data)
+		}
+		return data, err
+	}
+}
+
 // readSource reads path, preferring an overlay entry when the caller supplied one.
 func readSource(ctx context.Context, path string) ([]byte, error) {
 	if files, _ := ctx.Value(overlayCtxKey{}).(map[string]string); files != nil {
 		if content, ok := files[path]; ok {
 			return []byte(content), nil
 		}
+	}
+	if read := loadReader(ctx); read != nil {
+		return read(path)
 	}
 	return os.ReadFile(path)
 }
@@ -602,6 +696,9 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	// NewSession seeds includeDirs from BUZZ_INCLUDE_PATH; clear them so resolution
 	// stays limited to the magusfiles search paths above.
 	buzzSess.SetIncludeDirs(nil)
+	if read := loadReader(ctx); read != nil {
+		buzzSess.SetSourceReader(read)
+	}
 	// Magusfiles run as whole files, not incrementally, so a non-exported,
 	// non-captured top-level var is chunk-private and can use a fast stack slot
 	// instead of an Env binding. The cross-file/cross-target surface is `export`ed

@@ -98,6 +98,10 @@ type Session struct {
 	// on demand (e.g. a magus spell handle for `import "spells/hello"`). A false
 	// return falls through to the file search. Set via SetModuleResolver.
 	moduleResolver func(importPath string) (vmpackage.Value, bool)
+	// sourceReader, if set, reads an imported .buzz file in place of os.ReadFile.
+	// The file search still decides WHICH path an import names; this decides only
+	// what bytes that path holds. Set via SetSourceReader.
+	sourceReader func(path string) ([]byte, error)
 	// importedTypes accumulates the exported object/enum declarations of flat
 	// imported .buzz modules, so compileShared can hand them to the checker and
 	// the importing file can name those types in annotations and literals. The
@@ -232,6 +236,23 @@ func (s *Session) DeclareModuleTypes(boundName, src string) {
 // return leaves the import for the includeDirs file search.
 func (s *Session) SetModuleResolver(fn func(importPath string) (vmpackage.Value, bool)) {
 	s.moduleResolver = fn
+}
+
+// SetSourceReader installs fn to read the content of every file import this session and
+// its alias sub-sessions load, in place of os.ReadFile. A host uses it to evaluate
+// sources as a revision holds them without writing that revision to disk. nil restores
+// os.ReadFile. It changes no import semantics: resolution, binding and caching are the
+// same whichever reader supplies the bytes.
+func (s *Session) SetSourceReader(fn func(path string) ([]byte, error)) {
+	s.sourceReader = fn
+}
+
+// readImportSource reads one resolved import through the host's reader, if any.
+func (s *Session) readImportSource(path string) ([]byte, error) {
+	if s.sourceReader != nil {
+		return s.sourceReader(path)
+	}
+	return os.ReadFile(path)
 }
 
 // newSession is the raw embedding primitive: it defaults to embedded parsing
@@ -479,6 +500,7 @@ func (s *Session) NewChild() *Session {
 	c.includeDirs = s.includeDirs
 	c.nativeModules = s.nativeModules
 	c.moduleResolver = s.moduleResolver
+	c.sourceReader = s.sourceReader
 	return c
 }
 
@@ -1146,7 +1168,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (Impor
 	}
 	s.loadedPaths[abs] = true
 
-	data, err := os.ReadFile(path)
+	data, err := s.readImportSource(path)
 	if err != nil {
 		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 	}
@@ -1508,6 +1530,7 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.nativeModules = s.nativeModules
 	sub.moduleDecls = s.moduleDecls
 	sub.moduleResolver = s.moduleResolver
+	sub.sourceReader = s.sourceReader
 
 	// Inherit what the parent has already collected from its own flat imports.
 	// loadedPaths is shared (just above), so a module the parent imported returns

@@ -8,6 +8,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
@@ -24,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -55,6 +57,17 @@ type Dependencies struct {
 	// ShellDialect is the outer-parse dialect for Evaluate when a workspace
 	// declared one on its shell rules. Empty means bash.
 	ShellDialect Dialect
+	// SpawnRule is the working tree's magus\guard.spawn rule, nil when none is
+	// registered. It is called on every spawn and continuation and can only add to
+	// the built-in verdict.
+	SpawnRule workspace.SpawnRule
+	// ApprovedSpawnRule resolves the same rule as the approved sources register it, nil
+	// when those sources are the working tree's or register none. Resolved lazily because
+	// it can load the magusfile a second time, which only a spawn is worth.
+	ApprovedSpawnRule func(ctx context.Context) workspace.SpawnRule
+	// Policy describes the effective workspace rules for the lineage the trail keeps,
+	// nil when the caller cannot say. See RecordPolicy.
+	Policy func() PolicyState
 	// GraphStaleAdvice is what to say to a graph read about to answer from an index older
 	// than the tree, or "" when every built index is current.
 	GraphStaleAdvice func(ctx context.Context) string
@@ -212,6 +225,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if who.Event == "" {
 			who.Event = env.Who.Event
 		}
+		who.Agent = env.Who.Agent
 		if env.LoadedSkill != "" {
 			// Recorded, never judged. The gate is built here rather than reusing the one
 			// below because this arm returns before it: same cacheDir, same session.
@@ -230,38 +244,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if env.IsPath {
 			isPath = true
 		}
-		if env.IsSpawn {
-			// A spawn's PROMPT carries no verdict, so it returns the pass every other
-			// non-finding does. Handled here rather than beside the two guard arms
-			// because nothing judges the prose: a prompt that merely MENTIONS a denied
-			// command would otherwise block the spawn that describes it.
-			//
-			// The one question asked is about the SESSION, not the prompt: whether the
-			// multi-agent brief was read before work was handed out. That reads a marker
-			// file and no prose, which is what lets it live on this path.
-			spawnLocation := hookLocation(ctx, deps)
-			if reason := denySpawnWithoutBrief(hint.NewGate(spawnLocation.cacheDir, who.sessionKey()), req.ObservesSkillLoads, spawnLocation.workspace); reason != "" {
-				appendHookSpawn(ctx, deps, env, who)
-				return Verdict{
-					SchemaVersion: agent.GuardSchemaVersion,
-					Decision:      "deny",
-					Reason:        reason,
-					Rule:          string(denySpawnUnbriefed),
-				}
-			}
-			appendHookSpawn(ctx, deps, env, who)
-			// The second session-state question, asked the same way and for the same reason:
-			// whether this checkout is already somebody's. It reads the markers and the plan,
-			// never the prompt, so it lives on this path beside the brief rule.
-			if note := adviseSharedCheckoutSpawn(withJobStoreRows(ctx, spawnLocation), hint.NewGate(spawnLocation.cacheDir, who.callerKey()), spawnLocation); note != "" {
-				return Verdict{
-					SchemaVersion: agent.GuardSchemaVersion,
-					Decision:      "advise",
-					Context:       note,
-					Rule:          string(advisorySharedCheckout),
-				}
-			}
-			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+		if env.IsSpawn || env.IsContinue {
+			return judgeAgentEvent(ctx, deps, req, env, who)
 		}
 	}
 	// One gate for the whole invocation, holding each enrolled advisory to one firing per
@@ -272,6 +256,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
 	// two tiers cannot disagree about who is acting (see job.LeaseMarkerName).
 	location := hookLocation(ctx, deps)
+	policyDigest := recordPolicy(ctx, deps, location, false)
 	ctx = withJobStoreRows(ctx, location)
 	actingLease := req.Lease
 	if actingLease == "" {
@@ -633,7 +618,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, record)
+	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record)
 	return verdict
 }
 
@@ -663,7 +648,14 @@ type hookEnvelope struct {
 	// TranscriptPath is the host's own log of this session. Recorded as a pointer so a
 	// session id in the activity view leads somewhere; magus never reads the file.
 	TranscriptPath string `json:"transcript_path"`
-	ToolName       string `json:"tool_name"`
+	// AgentID is the subagent making this tool call, on a host that tells a subagent's
+	// calls from its root session's; "" for the root session and for hosts that do not.
+	AgentID  string `json:"agent_id"`
+	ToolName string `json:"tool_name"`
+	// ToolResponse is what a finished call returned, present only on an after-the-call
+	// event. Read as any so a host that reports it as a string costs this field rather than
+	// the decode of the whole envelope.
+	ToolResponse any `json:"tool_response"`
 	// ToolInput is read as a plain map, so a field arriving with a type this guard did
 	// not expect costs that field rather than the whole decode. Typed, a numeric `op`
 	// failed the unmarshal outright and the raw JSON was then judged as a shell line.
@@ -752,6 +744,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		Session:    envelopeSession(env),
 		Transcript: env.TranscriptPath,
 		Event:      env.HookEventName,
+		Agent:      env.AgentID,
 	}}
 	tool := magusToolCall(env.ToolName)
 	switch {
@@ -789,6 +782,18 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// takes no position on: it is recorded so the question can be asked at
 		// all, not so an answer can be graded.
 		req.DeclaredModel = envelopeString(env.ToolInput, "model")
+		req.Spawn = spawnFields{
+			AgentType:   cmp.Or(envelopeString(env.ToolInput, "subagent_type"), env.SubagentType),
+			Description: envelopeString(env.ToolInput, "description"),
+			Name:        envelopeString(env.ToolInput, "name"),
+			// Only an explicit true: a host whose default is to background agents still
+			// reports false here, because a default is not something the caller asked for.
+			Background: env.ToolInput["run_in_background"] == true,
+			// Any declared isolation mode means the child is not sharing this checkout.
+			Isolated: envelopeString(env.ToolInput, "isolation") != "",
+		}
+		req.AfterCall = env.ToolResponse != nil
+		req.SpawnedAgent = spawnedAgentID(env.ToolResponse)
 		if env.ParentConversationID != "" {
 			req.Who.Session = env.ParentConversationID
 		}
@@ -806,6 +811,15 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 				break
 			}
 		}
+	case envelopeString(env.ToolInput, "to") != "" && env.ToolInput["message"] != nil:
+		// A message addressed to an agent that already exists: the continuation of a
+		// subagent. Read by shape like every arm above, so a host's name for the tool
+		// stays in its own matcher. The message goes unjudged for the reason a spawn
+		// prompt does, and a structured message has no text to hand the rule.
+		req.IsContinue = true
+		req.Tool = env.ToolName
+		req.Target = envelopeString(env.ToolInput, "to")
+		req.Value = envelopeString(env.ToolInput, "message")
 	default:
 		// A payload that identifies itself as a host hook is an envelope even when its
 		// tool_input holds nothing this guard reads. Reporting "not an envelope" here sent
@@ -865,8 +879,20 @@ type hookRequest struct {
 	// Distinct from "not an envelope", which is judged as the literal text it is.
 	NothingToJudge bool
 	IsSpawn        bool
-	Tool           string
-	Child          string
+	// IsContinue is a message to an existing subagent; Target is the agent it addresses.
+	IsContinue bool
+	Target     string
+	// Spawn is what a spawn's tool_input said about the child, each field empty when the
+	// host sent none.
+	Spawn spawnFields
+	// AfterCall is a spawn call that has already run: its envelope carries the response.
+	// It is recorded and never judged, since there is no longer a call to stop.
+	AfterCall bool
+	// SpawnedAgent is the id the host gave the child of a spawn call that has already
+	// run, read from its response. "" before the call runs, or when the response names none.
+	SpawnedAgent string
+	Tool         string
+	Child        string
 	// DeclaredModel is the model the spawning tool_input named, or "" when it named
 	// none. Not called Model: that word already means the reply CHANNEL in this
 	// guard's coverage vocabulary (deny=model, advise=model), so a bare Model field
@@ -889,6 +915,9 @@ type hookAttribution struct {
 	Session    string
 	Transcript string
 	Event      string
+	// Agent is the subagent making the call, "" for a root session or a host that does
+	// not say.
+	Agent string
 }
 
 // callerKeyEscaper keeps the key's delimiter out of every part. '%' is escaped too, so a
@@ -990,11 +1019,13 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 // preauth is the `next` template that had already served this command, and it is recorded
 // because a clearance nobody counts is a clearance nobody can audit: uptake per template is
 // the number that decides whether a breadcrumb is reworded or deleted.
-func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef string, verdict Verdict) {
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict) {
 	if input == "" || location.cacheDir == "" {
 		return
 	}
 	command := trail.AgentCommand{
+		PolicyDigest:    policyDigest,
+		DecidedBy:       decidedBy(verdict),
 		Actor:           "agent",
 		Workspace:       location.workspace,
 		Host:            who.Host,
@@ -1022,7 +1053,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 // activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
 // spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
 // there is no verdict to record, because a spawn is not a guard surface.
-func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, who hookAttribution) {
+func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, who hookAttribution, policyDigest, by string) {
 	if req.Value == "" {
 		return
 	}
@@ -1031,6 +1062,8 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		return
 	}
 	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
+		PolicyDigest:  policyDigest,
+		DecidedBy:     by,
 		Actor:         "agent",
 		Workspace:     location.workspace,
 		Host:          who.Host,

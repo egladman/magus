@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -35,6 +36,8 @@ type WorkspaceRegistry struct {
 	// magus\guard.shell, in declaration order. They strengthen only: the guard
 	// merges them after compiled built-ins.
 	shellRules []ShellRule
+	// spawnRule is the function a magusfile registered via magus\guard.spawn, or nil.
+	spawnRule SpawnRule
 	// harnesses are the spell names a magusfile wired as agent harnesses (via
 	// magus\harness.provider), in wiring order. Many hosts, like workspace.provider;
 	// unlike cache.remote's one.
@@ -51,6 +54,13 @@ type ShellRule struct {
 	Reason   string
 	Dialect  string
 }
+
+// SpawnRule judges one agent spawn or continuation for magus\guard.spawn. facts is the
+// calling session's marker gate, which the rule's once and count helpers read and write.
+//
+// An error means the rule itself failed (it raised, returned something that is not a
+// verdict, or ran out of time), never that it denied: a deny is a verdict.
+type SpawnRule func(ctx context.Context, req types.SpawnRequest, facts hint.Gate) (types.SpawnVerdict, error)
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
 func NewWorkspaceRegistry() *WorkspaceRegistry {
@@ -145,6 +155,23 @@ func (r *WorkspaceRegistry) ShellRules() []ShellRule {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.shellRules)
+}
+
+// SetSpawnRule records the magus\guard.spawn rule, replacing one an earlier evaluation of
+// the same magusfile recorded. Refusing a second registration is the binding's job,
+// because only it can tell a second call from the same file run again. Safe to call
+// concurrently.
+func (r *WorkspaceRegistry) SetSpawnRule(rule SpawnRule) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.spawnRule = rule
+}
+
+// SpawnRule returns the magus\guard.spawn rule, or nil when none was registered.
+func (r *WorkspaceRegistry) SpawnRule() SpawnRule {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.spawnRule
 }
 
 // AddHarness records a spell name a magusfile wired as an agent harness,

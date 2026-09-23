@@ -106,6 +106,9 @@ type Magus struct {
 	probeCache     *cache.Cache
 
 	wsReg *WorkspaceRegistry
+	// policyLog is every file the root magusfile's load read, which is where a workspace
+	// guard rule can come from. Nil until preloadMagusfiles runs.
+	policyLog *interp.SourceLog
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
@@ -477,6 +480,10 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			continue
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
+		if filepath.Clean(p.Dir) == filepath.Clean(m.ws.Root) {
+			m.policyLog = &interp.SourceLog{}
+			pctx = interp.WithSourceLog(pctx, m.policyLog)
+		}
 		for _, src := range srcs {
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {
