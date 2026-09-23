@@ -412,14 +412,14 @@ test "stripGenerated keeps the mode header and drops nothing when nothing is gen
 }
 
 test "stripGenerated removes a real generated file and keeps a real hand-written one" {
-    final gen = "github.com/egladman/magus/types/enum_gen.go:1.1,2.2 1 1";
+    final gen = "github.com/egladman/magus/cmd/magus/gen/bind.go:1.1,2.2 1 1";
     final hand = "github.com/egladman/magus/coverage.buzz.go:1.1,2.2 1 1";
     final src = "github.com/egladman/magus/magus.go:1.1,2.2 1 1";
     final profile = "mode: atomic\n" + gen + "\n" + src + "\n" + hand + "\n";
 
     final got = stripGenerated(profile, prefix: "github.com/egladman/magus/");
 
-    assert\equal(got.indexOf("enum_gen.go") == null, want: true, message: "generated block dropped");
+    assert\equal(got.indexOf("gen/bind.go") == null, want: true, message: "generated block dropped");
     assert\equal(got.indexOf("magus.go") != null, want: true, message: "hand-written block kept");
     assert\equal(got.startsWith("mode: atomic\n"), want: true, message: "mode header preserved");
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 
 	"github.com/egladman/magus/types"
 )
@@ -147,10 +148,7 @@ func logSlogLevel(level string) (slog.Level, error) {
 	case types.LogError:
 		return slog.LevelError, nil
 	}
-	// The cases are spelled out rather than read from the generated
-	// types.LogLevel.Values(): the enums generator imports this package, so a
-	// reference to its own output here cannot compile until it has already run.
-	return 0, fmt.Errorf("log.at: unknown level %q (want trace|debug|info|warn|error)", level)
+	return 0, fmt.Errorf("log.at: unknown level %q (want %s)", level, strings.Join(types.LogLevel(level).Values(), "|"))
 }
 
 // logEmit forwards to the process-wide default logger, which is magus's own.
