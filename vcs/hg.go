@@ -687,6 +687,16 @@ func (v hgVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) 
 	return hgFamilyRemoteURL(ctx, "hg", dir, name)
 }
 
+// RangeFiles implements types.RangeReporter; see hgFamilyRangeFiles.
+func (v hgVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
+	return hgFamilyRangeFiles(ctx, "hg", dir, base, head, paths)
+}
+
+// RangeCommits implements types.RangeReporter; see hgFamilyRangeCommits.
+func (v hgVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
+	return hgFamilyRangeCommits(ctx, v, "hg", dir, base, head, paths)
+}
+
 // IsAncestor implements types.AncestryReporter; see hgFamilyIsAncestor.
 func (v hgVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
 	return hgFamilyIsAncestor(ctx, "hg", dir, ancestor, descendant)
