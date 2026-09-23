@@ -242,15 +242,33 @@ claude-code` installs this entry alongside the surfaces above:
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Agent|Task",
+        "matcher": "Agent|Task|SendMessage",
         "hooks": [
           { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --observes-skill-loads", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
         ]
       }
     ]
   }
 }
 ```
+
+`SendMessage` is the continuation of a subagent that already exists: a
+`tool_input` carrying `to` and `message`. It reaches the same verdict path as a
+spawn, so a workspace [`magus\guard.spawn`](../../../reference/guard-spawn.md)
+rule sees both. The `PostToolUse` entry judges nothing: the finished call's
+`tool_response.agentId` is the id the host gave the child, and recording it
+against the spawn's `description` is what lets that child's own spawns name
+their parent (`agent_id` on its later hook events). That response field is
+unverified against a live session, and a release that drops it leaves every
+parent empty rather than guessed.
 
 Same script as the MCP surface and for the same reason: a spawn's payload is a
 prompt, a `subagent_type`, and an optional `model`, not one string, so there is no

@@ -3,6 +3,7 @@ package hint
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -212,6 +213,73 @@ func (g Gate) MarkFired(kind MarkerKind) bool {
 		return false
 	}
 	return false
+}
+
+// Count adds one to kind's tally for this session and returns the new total.
+//
+// The tally is the marker's size: each call appends one byte, and the offset the append
+// lands at is this caller's own, so racing hook processes each see a distinct total
+// rather than all reading the same one.
+//
+// State magus cannot write answers 1, the same way MarkFired's failures speak: every
+// call then reads as the first, which errs toward the rule that nudges rather than the
+// one that escalates.
+func (g Gate) Count(kind MarkerKind) int {
+	if kind == "" || g.cacheDir == "" {
+		return 1
+	}
+	path := g.markerPath(kind)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return 1
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return 1
+	}
+	defer f.Close()
+	if _, err := f.Write([]byte{'.'}); err != nil {
+		return 1
+	}
+	end, err := f.Seek(0, io.SeekCurrent)
+	if err != nil || end < 1 {
+		return 1
+	}
+	if end == 1 {
+		sweepMarkers(filepath.Dir(path))
+	}
+	return int(end)
+}
+
+// LastSeen reports when kind was last touched in this session, and false when it never
+// was. It marks nothing.
+func (g Gate) LastSeen(kind MarkerKind) (time.Time, bool) {
+	if kind == "" || g.cacheDir == "" {
+		return time.Time{}, false
+	}
+	info, err := os.Stat(g.markerPath(kind))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return info.ModTime(), true
+}
+
+// Touch records now as the last time kind was seen in this session. A failure records
+// nothing, which LastSeen then reports as never seen.
+func (g Gate) Touch(kind MarkerKind) {
+	if kind == "" || g.cacheDir == "" {
+		return
+	}
+	path := g.markerPath(kind)
+	now := time.Now()
+	if err := os.Chtimes(path, now, now); err == nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	if err := os.WriteFile(path, nil, 0o644); err == nil {
+		sweepMarkers(filepath.Dir(path))
+	}
 }
 
 // MarkerPath names one marker file for session and kind under cacheDir.

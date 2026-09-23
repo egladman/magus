@@ -418,6 +418,7 @@ func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
 		trail.KindCredentialGrant,
 		trail.KindAgentSpawn,
 		trail.KindNotes,
+		trail.KindGuardPolicy,
 	} {
 		assert.NotEqual(t, activityv1.Kind_KIND_UNSPECIFIED, encodeKind(k),
 			"trail kind %q has no proto value, so the activity view cannot show or filter it", k)
