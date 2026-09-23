@@ -215,6 +215,15 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 	if opts.Magus != nil {
 		tel = opts.Magus.Telemetry()
 	}
+	if opts.Magus == nil && opts.Unavailable != nil {
+		unavailable := func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+			return mcplib.NewToolResultError(opts.Unavailable().Error()), nil
+		}
+		for _, d := range Registry {
+			srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, func(ctx context.Context) context.Context { return ctx }, tel, unavailable))
+		}
+		return
+	}
 	tools := allToolDrivers(opts)
 	// A function rather than the workspace itself: wrap needs one capability (put this
 	// workspace's secret resolver on a context so the trail writes are redacted) and

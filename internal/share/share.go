@@ -30,6 +30,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -409,7 +410,7 @@ func newSessionGuard(m *Manager) *sessionGuard {
 func (g *sessionGuard) admit(format httpx.ErrorFormat, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !g.bindDevice(remoteHost(r)) {
-			format.Refuse(w, r, httpx.Refusal{
+			format.Write(w, r, rpcerr.Error{
 				Code:    connect.CodePermissionDenied,
 				Reason:  types.ShareBoundToAnotherDevice,
 				Title:   "share link bound to another device",

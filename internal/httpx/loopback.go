@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -41,7 +42,7 @@ func RequireLoopbackPeer(next http.Handler) http.Handler {
 		if !isLoopbackAddr(r.RemoteAddr) {
 			// Every mux-level caller here is a plain JSON route; a Connect server checks
 			// loopback via its own interceptor instead of this middleware.
-			FormatJSON.Refuse(w, r, Refusal{
+			FormatJSON.Write(w, r, rpcerr.Error{
 				Code:    connect.CodePermissionDenied,
 				Reason:  types.LoopbackPeerRequired,
 				Title:   "local access only",

@@ -98,6 +98,7 @@ import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
+import { isServing } from "../../lib/workspace";
 import { attachHelpPopover } from "../../ui/help-popover";
 import { signal } from "../view";
 import { publishStatus } from "../status";
@@ -5276,9 +5277,9 @@ async function fetchLiveStatus() {
     const res = await client.getStatus({});
     const status = res.status;
     if (!status) return;
-    // Extract workspace name from the first loaded workspace.
-    if (status.pool && status.pool.workspaces.length > 0) {
-      liveWorkspaceName = status.pool.workspaces[0].root;
+    const loaded = status.pool?.workspaces.find(isServing);
+    if (loaded) {
+      liveWorkspaceName = loaded.root;
     }
     // No pool strip here: how many targets the daemon is running is session state the dashboard
     // owns. The affected set does not come from here either - StatusOutput.Affected is on the wire

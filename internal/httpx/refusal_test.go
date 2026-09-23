@@ -2,7 +2,6 @@ package httpx
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -158,13 +157,4 @@ func TestJSONMountIgnoresConnectLookingRequests(t *testing.T) {
 	BearerGuard(FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
 
 	assert.Equal(t, "UNAUTHENTICATED", decodeStatus(t, rr.Body.Bytes()).Error.Status)
-}
-
-func TestHTTPStatusMatchesConnect(t *testing.T) {
-	t.Parallel()
-	for c := connect.CodeCanceled; c <= connect.CodeUnauthenticated; c++ {
-		rr := httptest.NewRecorder()
-		_ = connect.NewErrorWriter().Write(rr, httptest.NewRequest(http.MethodPost, "/", nil), connect.NewError(c, errors.New("probe")))
-		assert.Equal(t, rr.Code, httpStatus(c), c.String())
-	}
 }

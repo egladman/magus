@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -50,11 +51,11 @@ func guard(format ErrorFormat, verify verifier, extract func(*http.Request) (str
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		presented, ok := extract(r)
 		if !ok {
-			format.Refuse(w, r, bearerMissing)
+			format.Write(w, r, bearerMissing)
 			return
 		}
 		if !verify(presented) {
-			format.Refuse(w, r, bearerRejected)
+			format.Write(w, r, bearerRejected)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -65,13 +66,13 @@ func guard(format ErrorFormat, verify verifier, extract func(*http.Request) (str
 // knows, whether it sent one. Wrong, expired, and revoked stay one answer, so a
 // caller cannot probe which tokens exist.
 var (
-	bearerMissing = Refusal{
+	bearerMissing = rpcerr.Error{
 		Code:    connect.CodeUnauthenticated,
 		Reason:  types.BearerMissing,
 		Title:   "no bearer token presented",
 		Message: "the request carried no bearer token; send one as `Authorization: Bearer <token>`. Mint or inspect a connector token with: magus config mcp connector",
 	}
-	bearerRejected = Refusal{
+	bearerRejected = rpcerr.Error{
 		Code:    connect.CodeUnauthenticated,
 		Reason:  types.BearerRejected,
 		Title:   "bearer token rejected",

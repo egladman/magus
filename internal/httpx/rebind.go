@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -35,13 +36,13 @@ type AllowedSet struct {
 func GuardRebind(format ErrorFormat, allowed AllowedSet, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isAllowedHost(r.Host, allowed) {
-			format.Refuse(w, r, hostNotAllowed)
+			format.Write(w, r, hostNotAllowed)
 			return
 		}
 		if orig := r.Header.Get("Origin"); orig != "" {
 			u, err := url.Parse(orig)
 			if err != nil || !isAllowedHost(u.Host, allowed) {
-				format.Refuse(w, r, hostNotAllowed)
+				format.Write(w, r, hostNotAllowed)
 				return
 			}
 		}
@@ -49,7 +50,7 @@ func GuardRebind(format ErrorFormat, allowed AllowedSet, next http.Handler) http
 	})
 }
 
-var hostNotAllowed = Refusal{
+var hostNotAllowed = rpcerr.Error{
 	Code:    connect.CodePermissionDenied,
 	Reason:  types.HostNotAllowed,
 	Title:   "host not allowed",

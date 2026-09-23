@@ -620,7 +620,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		}
 		if err := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) }); err != nil {
 			_ = buzzSess.Close()
-			return nil, fmt.Errorf("magusfile: exec %s: %w", rel, hint.ExplainImplicitMagus(err))
+			return nil, &ExecError{Path: path, rel: rel, Err: hint.ExplainImplicitMagus(err)}
 		}
 	}
 
@@ -876,3 +876,17 @@ func fiberDone(fiber vm.Value) (bool, vm.Value) {
 	}
 	return true, fib.Return()
 }
+
+// ExecError is a magusfile that failed to evaluate. It renders as it always has; it exists so
+// a caller reporting the failure elsewhere (the daemon's workspace status) can name the file
+// without parsing the sentence.
+type ExecError struct {
+	// Path is the magusfile's absolute path.
+	Path string
+	rel  string
+	Err  error
+}
+
+func (e *ExecError) Error() string { return fmt.Sprintf("magusfile: exec %s: %v", e.rel, e.Err) }
+
+func (e *ExecError) Unwrap() error { return e.Err }
