@@ -73,7 +73,7 @@ magus\project({
     // to it.
     "outputs": ["gen/**"],
     "targets": {
-        "preflight": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
+        "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         // build rebuilds the committed gen/ and gates on drift, so it must run every time.
         // Its own vcs\isDirty check is inert (see build below); skip_cache is what keeps
         // the rebuild honest.
@@ -89,11 +89,11 @@ magus\project({
     },
 });
 
-// preflight installs node_modules through the typescript spell's install. That install
-// keys itself on the lockfile, the pnpm settings and pnpm's own completion stamp, so an
-// unchanged tree forks nothing and an interrupted one reinstalls.
+// install installs node_modules through the typescript spell's pnpm-install op. That
+// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
+// stamp, so an unchanged tree forks nothing and an interrupted one reinstalls.
 // pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
-export fun preflight(ctx: magus\Context, args: [str]) > void !> any { typescript["install"](ctx); }
+export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests)
 // and holds the merged line coverage above a floor.
@@ -128,7 +128,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void !> any { typescript
 // only the first, Node reads the sourcemap for stack traces alone and every record stays
 // SF:.testcache/<bundle>.js - a coverage figure about the bundle rather than the source.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight, textsearch\test);
+    ctx.needs(install, textsearch\test);
     // coverage.txt is the merged figure, declared so a cache hit restores it for the
     // root's coverage-render, which publishes it and cannot import this project.
     ctx.writesFiles("coverage.plain.lcov", "coverage.dom.lcov", "coverage.txt");
@@ -179,7 +179,7 @@ export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     ctx.needs(diffdemo_generate);
     ctx.needs(root\graph_generate);
     // NOT drift.hashes: console/gen is gitignored, so there is nothing committed to drift
@@ -205,7 +205,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 
 // lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     // The Reference drawer imports the search grammar from the shared libs/textsearch
     // source, so gate its type-check + biome here: a lib edit fails console lint too.
     ctx.needs(textsearch\lint);
@@ -218,7 +218,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 
 // `format:rw` maintains declared source inputs.
 export fun format(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     ctx.modifiesExistingFiles(
         "src/**/*.ts", "src/**/*.css", "src/**/*.html", "scripts/**/*.mjs",
         "index.html", "manifest.webmanifest", "sw.js", "package.json",
@@ -242,13 +242,13 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 // KNOWN advisory, minimum-release-age keeps an unknown compromise out of the build for ten
 // days in the first place.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     advisories\audit();
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the
 // build-plus-drift-gate, and the advisory audit, all first-class ci steps.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(preflight);
+    ctx.needs(install);
     ctx.needs(lint, test, build, security);
 }

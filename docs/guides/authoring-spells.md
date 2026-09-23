@@ -161,14 +161,20 @@ needs no probe; anything that is just "whatever is on PATH" does.
 ### Installs
 
 A manifest's `installs` map says how each lockfile is materialized, keyed by the lockfile,
-since the lockfile is what names the package manager. magus registers the declarations as
-one `install` op; at run time it picks the entry for the project's live lockfile, the
-nearest one walking up to the workspace root.
+since the lockfile is what names the package manager. Each entry names the op magus
+registers it under: `name` is required, binary + capability (`pnpm-install`,
+`go-mod-download`), never the bare capability alone, so two ecosystems' installs never
+collide under one name and neither collides with the canonical top-level `install`
+target a magusfile composes them into. Entries that share a `name` (two lock candidates
+the same binary installs, such as `package-lock.json` and `npm-shrinkwrap.json` both
+running `npm ci`) register as ONE op, live for whichever of their lockfiles the project
+has, the nearest one walking up to the workspace root.
 
 ```buzz
 Manifest{value = "package.json",
          lockCandidates = ["pnpm-lock.yaml", "package-lock.json"],
          installs = {"pnpm-lock.yaml": Install{
+             name = "pnpm-install",
              command = Command{bin = "pnpm", args = ["install", "--frozen-lockfile", "--prefer-offline"],
                                charms = {"update": ...}},
              dir = "node_modules",
@@ -179,7 +185,7 @@ Manifest{value = "package.json",
 ```
 
 - `command` must never write the lockfile. Its `update` charm is the one that re-resolves
-  and rewrites it, and an `install:update` run is never replayed.
+  and rewrites it, and a run with that charm is never replayed.
 - `stamps` are files the tool writes when an install finishes. A recorded install replays
   only while each stamp reads as it did when that install finished, so a deleted or
   interrupted tree runs the tool again. A stamp the tool writes before it finishes serves
@@ -191,8 +197,15 @@ Manifest{value = "package.json",
   from another checkout of the repository before the command runs. Leave it off for a tree
   that records its own absolute path, such as a Python venv.
 
-A lockfile among `lockCandidates` with no `installs` entry makes `install` fail on a
+A lockfile among `lockCandidates` with no `installs` entry makes its op fail on a
 project that uses it, rather than run another manager's command against it.
+
+A project composes the op it actually needs into its own top-level `install` target
+(`build`/`test`/`lint` need `install`, not the spell op by name):
+
+```buzz
+export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
+```
 
 ### Declaring how a tool reports findings
 

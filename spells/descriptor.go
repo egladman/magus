@@ -121,8 +121,15 @@ type Manifest struct {
 }
 
 // Install declares how one lockfile's dependencies are materialized. magus synthesizes
-// an `install` op from these declarations; see [InstallOp].
+// an op from these declarations, named Name; see [OpKindInstall].
 type Install struct {
+	// Name is the op magus registers this install under (binary + capability, e.g.
+	// "pnpm-install", "go-mod-download"): one op per binary, never the bare capability
+	// alone, so two ecosystems' installs never collide under one name. Two lock
+	// candidates that install with the same binary (typescript's package-lock.json and
+	// npm-shrinkwrap.json both run "npm ci") share a Name and register as ONE op,
+	// scoped to just their own lock candidates.
+	Name string `json:"name"`
 	// Command materializes the dependencies WITHOUT changing the lockfile (pnpm install
 	// --frozen-lockfile, uv sync --locked). Its update charm re-resolves and rewrites the
 	// lockfile instead, the same split go-mod-tidy draws.

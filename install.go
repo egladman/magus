@@ -13,10 +13,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// isSpellInstall reports whether target on p is an install op a spell synthesized, as
-// opposed to a magusfile export that shadows the name.
+// isSpellInstall reports whether target on p is an install op a spell synthesized (one
+// of possibly several per spell, one per binary: pnpm-install, npm-ci, ...), as opposed
+// to a magusfile export that shadows the name.
 func isSpellInstall(p *types.Project, target string) bool {
-	if target != spells.InstallOp || magusfileOverride(p, p.ResolvedSpells, target) >= 0 {
+	if magusfileOverride(p, p.ResolvedSpells, target) >= 0 {
 		return false
 	}
 	for _, s := range p.ResolvedSpells {
@@ -42,7 +43,7 @@ type installKeying struct {
 // spell's install as its own cache step, so an unchanged install with its stamps in
 // place replays without forking the package manager.
 func (m *Magus) installRunner(k installKeying) types.InstallRunner {
-	return func(ctx context.Context, dir, spellName string, choice spells.InstallChoice, run func(context.Context) error) error {
+	return func(ctx context.Context, dir, spellName, target string, choice spells.InstallChoice, run func(context.Context) error) error {
 		p := m.projectByDir(dir)
 		if p == nil {
 			return run(ctx)
@@ -57,7 +58,7 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 		if err := checkToolWindows([]*types.Project{p}, windows); err != nil {
 			return err
 		}
-		step := m.installStep(p, spellName, choice, tv, types.CharmsFromContext(ctx))
+		step := m.installStep(p, spellName, target, choice, tv, types.CharmsFromContext(ctx))
 		step.ExtraArgs = project.ExtraArgs(ctx)
 		step.Revision, step.Dirty, step.VCSName = k.revision, k.dirty, k.vcsName
 		step.SkipReplay = k.skipReplay
@@ -84,7 +85,7 @@ func (m *Magus) prewarmInstallProbes(ctx context.Context, prober *toolProber, st
 				continue
 			}
 			for _, s := range p.ResolvedSpells {
-				op, ok := s.Op(spells.InstallOp)
+				op, ok := s.Op(st.target)
 				if !ok || op.Kind != spells.OpKindInstall {
 					continue
 				}
@@ -106,11 +107,11 @@ func (m *Magus) prewarmInstallProbes(ctx context.Context, prober *toolProber, st
 // the platform, which is forced on because a dependency tree can hold native binaries.
 // The tool's completion stamps gate the replay; with none declared the install always
 // runs, since nothing else could notice a deleted tree.
-func (m *Magus) installStep(p *types.Project, spellName string, choice spells.InstallChoice, toolVersions, charms []string) cache.Step {
+func (m *Magus) installStep(p *types.Project, spellName, target string, choice spells.InstallChoice, toolVersions, charms []string) cache.Step {
 	base := m.baseStep(p)
 	step := cache.Step{
 		ProjectPath:     p.Path,
-		Target:          spells.InstallOp,
+		Target:          target,
 		Spell:           spellName,
 		Sources:         []string{m.workspaceRel(choice.Manifest), m.workspaceRel(choice.Lock)},
 		IgnoreDirs:      base.IgnoreDirs,

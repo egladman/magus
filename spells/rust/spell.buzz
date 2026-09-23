@@ -53,6 +53,7 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "target", isDir 
 export fun mgs_listManifests() > [Manifest] {
     final args = ["fetch", "--locked"];
     return [Manifest{value = "Cargo.toml", lockCandidates = ["Cargo.lock"], installs = {"Cargo.lock": Install{
+        name = "cargo-fetch",
         command = Command{bin = "cargo", args = args, charms = {
             "update": Charm{ops = set(args, "fetch", "update").ops + drop(args, "--locked").ops},
         }},

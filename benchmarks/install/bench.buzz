@@ -1,0 +1,349 @@
+// bench.buzz: `magus run install` against a pnpm workspace, on the same four
+// projects this checkout already has, run with `magus buzz`.
+//
+// Usage (from the repository root, with a built ./magus):
+//
+//   ./magus buzz benchmarks/install/bench.buzz
+//
+// The contenders install the four JavaScript projects of THIS checkout:
+//
+//   pnpm   a scratch pnpm workspace holding copies of the four package.json and
+//          pnpm-lock.yaml files (sharedWorkspaceLockfile: false, so each keeps its own
+//          lock), installed with `pnpm install -r --frozen-lockfile --prefer-offline`
+//   magus  `magus run install <the four projects>` in this checkout
+//
+// Three cases, BENCH_RUNS times each (default 7), with the pnpm store warm:
+//
+//   fresh     no node_modules anywhere, as in a new worktree. magus may seed from a
+//             sibling checkout; the scratch workspace has none to seed from.
+//   noop      nothing changed since the last install
+//   lockfile  console/pnpm-lock.yaml changed (a comment toggled before every run)
+//
+// The fresh case DELETES this checkout's four node_modules and the lockfile case edits
+// console/pnpm-lock.yaml; both are restored before the script exits, success or failure.
+//
+// Every MAGUS_* variable is cleared from this process's environment before either
+// contender runs, so the magus binary this script execs is a top-level invocation, not
+// one nested inside the `magus buzz` that is running this file.
+//
+// Reports medians (seconds) and the host's load average as one JSON object on stdout.
+//
+// Env overrides:
+//   BENCH_RUNS=7   measured runs per case
+//
+// Required: pnpm, and a magus built from this checkout (./magus).
+
+import "std";
+import "fs";
+import "proc";
+import "os";
+import "env";
+import "encoding/json";
+import "strings";
+
+final PROJECTS = ["console", "docs", "docs/guides/integrations/agents", "libs/textsearch"];
+final LOCK = "console/pnpm-lock.yaml";
+final MAGUS_BIN = "./magus";
+
+// ---------------------------------------------------------------------------
+// Pure: fixture layout, parsing, statistics. Covered by the test blocks below.
+// ---------------------------------------------------------------------------
+
+// median returns the middle value of xs (the average of the two middles when the
+// count is even). xs is copied before sorting, so the caller's list is untouched.
+fun median(xs: [double]) > double {
+    final copy = mut [];
+    foreach (x in xs) { copy.append(x); }
+    final sorted = copy.sort(fun (a: double, b: double) > bool { return a < b; });
+    final n = sorted.len();
+    if (n % 2 == 1) {
+        return sorted[n / 2];
+    }
+    return (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0;
+}
+
+// pnpmWorkspaceYaml is the scratch workspace's pnpm-workspace.yaml: the same settings
+// each project's own pnpm-workspace.yaml sets (minimumReleaseAge, the msgpackr-extract
+// build exemption), with sharedWorkspaceLockfile off so each project keeps its own lock
+// rather than pnpm hoisting one for the scratch tree.
+fun pnpmWorkspaceYaml(projects: [str]) > str {
+    final lines = mut ["packages:"];
+    foreach (p in projects) {
+        lines.append("  - \"" + p + "\"");
+    }
+    lines.append("sharedWorkspaceLockfile: false");
+    lines.append("minimumReleaseAge: 14400");
+    lines.append("allowBuilds:");
+    lines.append("  msgpackr-extract: false");
+    return lines.join(separator: "\n") + "\n";
+}
+
+// joinPath joins parts with "/". A local helper rather than fs\join directly: that
+// host function is variadic, and this script runs strict (magus buzz with no
+// --embedded), where every call argument past the first must be labeled - which a
+// variadic has no single label for.
+fun joinPath(parts: [str]) > str {
+    return parts.join(separator: "/");
+}
+
+// magusInstallArgs is the argv `magus run install <projects>` takes, shared by the
+// timed calls and the final restore-the-checkout call in cleanup.
+fun magusInstallArgs(projects: [str]) > [str] {
+    final args = mut ["run", "-s", "install"];
+    foreach (p in projects) {
+        args.append(p);
+    }
+    return args;
+}
+
+// parseFloatOr decodes s as a JSON number, or returns fallback when s is not one.
+// json\parse is a convenient float parser: Buzz has no dedicated string-to-number
+// conversion, and every value this script parses (a run count, an uptime field) is
+// already valid JSON-number syntax.
+fun parseFloatOr(s: str, fallback: double) > double {
+    try {
+        final v: double = json\parse(s);
+        return v;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+// parseLoadAverage reads the three load-average numbers out of uptime's output.
+// macOS prints "load averages: A B C" (space-separated, plural); Linux prints
+// "load average: A, B, C" (comma-separated, singular). Locating the shared substring
+// "load average" and then filtering the trailing fields down to the ones that parse as
+// numbers covers both without a platform branch.
+fun parseLoadAverage(uptimeOutput: str) > [double] {
+    final marker = "load average";
+    final at = uptimeOutput.indexOf(marker);
+    if (at == null) {
+        return [];
+    }
+    final start = at! + marker.len();
+    final tail = uptimeOutput.sub(start, len: uptimeOutput.len() - start);
+    final nums = mut [];
+    foreach (f in strings\fields(tail)) {
+        final cleaned = strings\trimSuffix(strings\trimPrefix(f, prefix: ":"), suffix: ",");
+        if (cleaned == "" or cleaned == "s:") {
+            continue;
+        }
+        final n = parseFloatOr(cleaned, fallback: -1.0);
+        if (n >= 0.0) {
+            nums.append(n);
+        }
+    }
+    return nums;
+}
+
+test "median of an odd count is the middle value" {
+    std\assert(median([3.0, 1.0, 2.0]) == 2.0, message: "median of [3,1,2]");
+}
+
+test "median of an even count averages the two middles" {
+    std\assert(median([4.0, 1.0, 2.0, 3.0]) == 2.5, message: "median of [4,1,2,3]");
+}
+
+test "median does not mutate its argument" {
+    final xs = [3.0, 1.0, 2.0];
+    median(xs);
+    std\assert(xs[0] == 3.0 and xs[1] == 1.0 and xs[2] == 2.0, message: "xs order");
+}
+
+test "pnpm workspace yaml lists every project and disables the shared lock" {
+    final yaml = pnpmWorkspaceYaml(["a", "b/c"]);
+    std\assert(yaml.indexOf("  - \"a\"") != null, message: "names project a");
+    std\assert(yaml.indexOf("  - \"b/c\"") != null, message: "names project b/c");
+    std\assert(yaml.indexOf("sharedWorkspaceLockfile: false") != null, message: "shared lock disabled");
+    std\assert(yaml.indexOf("minimumReleaseAge: 14400") != null, message: "release-age gate carried over");
+}
+
+test "joinPath separates parts with a single slash" {
+    std\assert(joinPath(["a", "b", "c"]) == "a/b/c", message: "three parts");
+    std\assert(joinPath(["a"]) == "a", message: "one part");
+}
+
+test "magus install args name run, install, and every project" {
+    final args = magusInstallArgs(["a", "b"]);
+    std\assert(args[0] == "run" and args[2] == "install", message: "run install");
+    std\assert(args[3] == "a" and args[4] == "b", message: "both projects");
+}
+
+test "load average parses the macOS form" {
+    final xs = parseLoadAverage("22:50  up 24 days, 14:21, 2 users, load averages: 23.56 15.79 13.46");
+    std\assert(xs.len() == 3, message: "three numbers");
+    std\assert(xs[0] == 23.56 and xs[1] == 15.79 and xs[2] == 13.46, message: "values in order");
+}
+
+test "load average parses the Linux form" {
+    final xs = parseLoadAverage("22:50:01 up 10 days,  2:34,  3 users,  load average: 0.52, 0.58, 0.59");
+    std\assert(xs.len() == 3, message: "three numbers");
+    std\assert(xs[0] == 0.52 and xs[1] == 0.58 and xs[2] == 0.59, message: "values in order");
+}
+
+test "load average is empty text when uptime carries no marker" {
+    final xs = parseLoadAverage("uptime: command not found");
+    std\assert(xs.len() == 0, message: "no numbers");
+}
+
+// ---------------------------------------------------------------------------
+// Impure: the environment, the fixture on disk, and the timed subprocesses.
+// ---------------------------------------------------------------------------
+
+// clearMagusEnv removes every MAGUS_* variable from this process's environment. A
+// child this script proc\execs inherits whatever remains, so the magus binary it
+// launches sees none of them and is never mistaken for a nested invocation (which
+// would otherwise route it through the parent's concurrency budget and socket).
+fun clearMagusEnv() > void !> any {
+    foreach (name in env\list().keys()) {
+        if (name.startsWith("MAGUS_")) {
+            env\unset(name);
+        }
+    }
+}
+
+// buildFixture lays out the scratch pnpm workspace: one pnpm-workspace.yaml and
+// package.json at its root, and a copy of each project's own package.json and
+// pnpm-lock.yaml under it.
+fun buildFixture(root: str, scratch: str, projects: [str]) > void !> any {
+    fs\writeFile(joinPath([scratch, "pnpm-workspace.yaml"]), content: pnpmWorkspaceYaml(projects));
+    fs\writeFile(joinPath([scratch, "package.json"]), content: json\stringify({"name": "magus-install-bench", "private": true}) + "\n");
+    foreach (p in projects) {
+        final dir = joinPath([scratch, p]);
+        fs\mkdirAll(dir);
+        fs\copyFile(joinPath([root, p, "package.json"]), dst: joinPath([dir, "package.json"]));
+        fs\copyFile(joinPath([root, p, "pnpm-lock.yaml"]), dst: joinPath([dir, "pnpm-lock.yaml"]));
+    }
+}
+
+// cleanTrees removes every project's node_modules under base, the "no tree exists"
+// precondition the fresh case measures from.
+fun cleanTrees(base: str, projects: [str]) > void !> any {
+    foreach (p in projects) {
+        fs\removeAll(joinPath([base, p, "node_modules"]));
+    }
+    fs\removeAll(joinPath([base, "node_modules"]));
+}
+
+// toggleLock flips a trailing YAML-comment marker line on path: added if absent,
+// removed if present. Either way the file's bytes differ from what the last install
+// saw, without changing what the lock pins, which is what makes every call here force
+// a real lockfile-changed detection rather than only every other one.
+fun toggleLock(path: str) > void !> any {
+    final lines = fs\readLines(path);
+    if (lines.len() > 0 and lines[lines.len() - 1] == "# bench-toggle") {
+        final kept = mut [];
+        var i = 0;
+        while (i < lines.len() - 1) {
+            kept.append(lines[i]);
+            i = i + 1;
+        }
+        fs\writeLines(path, lines: kept);
+    } else {
+        fs\appendFile(path, content: "# bench-toggle\n");
+    }
+}
+
+// runOnce times one exec of bin, in milliseconds. Neither contender's own output is
+// wanted on this script's stdout, so both run quiet; a non-zero exit raises, which the
+// caller lets propagate rather than reporting a fast time for a run that failed.
+fun runOnce(bin: str, args: [str]) > double !> any {
+    final t0 = os\time();
+    proc\exec(bin, args: args, opts: {"quiet": true});
+    return os\time() - t0;
+}
+
+// timeRuns runs prepare() then times one exec, `runs` times, returning each duration
+// in milliseconds.
+fun timeRuns(bin: str, args: [str], runs: int, prepare: fun () > void !> any) > [double] !> any {
+    final samples = mut [];
+    var i = 0;
+    while (i < runs) {
+        prepare();
+        samples.append(runOnce(bin, args));
+        i = i + 1;
+    }
+    return samples;
+}
+
+// loadAverage shells out to `uptime` (present on every host this benchmark targets)
+// and parses its three numbers. allow_failure: a host with no `uptime` on PATH should
+// not fail the whole benchmark over one line of the report.
+fun loadAverage() > [double] !> any {
+    final res = proc\exec("uptime", args: [], opts: {"quiet": true, "allow_failure": true});
+    return parseLoadAverage(res.stdout);
+}
+
+// noPrepare is the "nothing changed" precondition the noop case measures from.
+fun noPrepare() > void !> any {}
+
+// run does the actual measuring: build the fixture, warm both contenders, then time
+// fresh / noop / lockfile for each, `runs` times per case. It never touches the
+// filesystem outside scratch and the checkout's own node_modules/lockfile, both of
+// which cleanup() restores regardless of how run() returns.
+fun run(root: str, scratch: str, runs: int) > {str: any} !> any {
+    buildFixture(root, scratch: scratch, projects: PROJECTS);
+    final pnpmArgs = ["-C", scratch, "install", "-r", "--frozen-lockfile", "--prefer-offline"];
+    final magusArgs = magusInstallArgs(PROJECTS);
+    final scratchLock = joinPath([scratch, "console", "pnpm-lock.yaml"]);
+
+    // Warm the pnpm store, the scratch trees, and magus's own install entries, so the
+    // measured runs are not paying for a cold store on top of what each case tests.
+    proc\exec("pnpm", args: pnpmArgs, opts: {"quiet": true});
+    proc\exec(MAGUS_BIN, args: magusArgs, opts: {"quiet": true});
+
+    final pnpmFresh = timeRuns("pnpm", args: pnpmArgs, runs: runs, prepare: fun () > void !> any { cleanTrees(scratch, projects: PROJECTS); });
+    final magusFresh = timeRuns(MAGUS_BIN, args: magusArgs, runs: runs, prepare: fun () > void !> any { cleanTrees(root, projects: PROJECTS); });
+
+    final pnpmNoop = timeRuns("pnpm", args: pnpmArgs, runs: runs, prepare: noPrepare);
+    final magusNoop = timeRuns(MAGUS_BIN, args: magusArgs, runs: runs, prepare: noPrepare);
+
+    final pnpmLockfile = timeRuns("pnpm", args: pnpmArgs, runs: runs, prepare: fun () > void !> any { toggleLock(scratchLock); });
+    final magusLockfile = timeRuns(MAGUS_BIN, args: magusArgs, runs: runs, prepare: fun () > void !> any { toggleLock(LOCK); });
+
+    return {
+        "runs": runs,
+        "projects": PROJECTS,
+        "unit": "seconds",
+        "fresh": {"pnpm": median(pnpmFresh) / 1000.0, "magus": median(magusFresh) / 1000.0},
+        "noop": {"pnpm": median(pnpmNoop) / 1000.0, "magus": median(magusNoop) / 1000.0},
+        "lockfile": {"pnpm": median(pnpmLockfile) / 1000.0, "magus": median(magusLockfile) / 1000.0},
+        "load_average": loadAverage(),
+    };
+}
+
+// cleanup restores everything run() may have left disturbed: the console lockfile's
+// exact original bytes, the scratch workspace gone, the checkout's node_modules gone,
+// then one more `magus run install` so the checkout is left installed, as bench.buzz
+// found it. Called whether run() succeeded or raised.
+fun cleanup(root: str, scratch: str, lockOriginal: str) > void !> any {
+    fs\writeFile(LOCK, content: lockOriginal);
+    fs\removeAll(scratch);
+    cleanTrees(root, projects: PROJECTS);
+    proc\exec(MAGUS_BIN, args: magusInstallArgs(PROJECTS), opts: {"quiet": true, "allow_failure": true});
+}
+
+fun main() > void !> any {
+    clearMagusEnv();
+    final root = ".";
+    final runs = std\toInt(parseFloatOr(env\getOr("BENCH_RUNS", def: "7"), fallback: 7.0));
+    final lockOriginal = fs\readFile(LOCK) catch "";
+    final scratch = fs\tempDir(prefix: "magus-install-bench-ws-") catch ".";
+    var report: {str: any} = {};
+    var failed = false;
+    try {
+        report = run(root, scratch: scratch, runs: runs);
+    } catch (e) {
+        failed = true;
+    }
+    try {
+        cleanup(root, scratch: scratch, lockOriginal: lockOriginal);
+    } catch (e) {
+        std\print("bench.buzz: cleanup failed; check the checkout by hand (node_modules, console/pnpm-lock.yaml)");
+    }
+    if (failed) {
+        report = {"error": "a timed run failed; the checkout has been restored"};
+    }
+    std\print(json\stringify(report, indent: "  "));
+}
+main() catch null;

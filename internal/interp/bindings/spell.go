@@ -425,7 +425,7 @@ func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
 		return err
 	}
 	if r := types.InstallRunnerFromContext(ctx); r != nil {
-		return r(ctx, dir, op.Install.Spell, choice, body)
+		return r(ctx, dir, op.Install.Spell, opts.op, choice, body)
 	}
 	return body(ctx)
 }

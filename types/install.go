@@ -6,12 +6,12 @@ import (
 	"github.com/egladman/magus/spells"
 )
 
-// InstallRunner runs one spell's install for the project at dir under that install's
-// own cache entry, calling run only when the entry does not replay. The run scheduler
-// installs one per invocation, so an install keys the same way however it was reached:
-// scheduled directly, composed through a magusfile's spell handle, or dispatched
-// across projects.
-type InstallRunner func(ctx context.Context, dir, spell string, choice spells.InstallChoice, run func(context.Context) error) error
+// InstallRunner runs one spell's install (target names the specific op: pnpm-install,
+// go-mod-download, ...) for the project at dir under that install's own cache entry,
+// calling run only when the entry does not replay. The run scheduler installs one per
+// invocation, so an install keys the same way however it was reached: scheduled
+// directly, composed through a magusfile's spell handle, or dispatched across projects.
+type InstallRunner func(ctx context.Context, dir, spell, target string, choice spells.InstallChoice, run func(context.Context) error) error
 
 type installRunnerKey struct{}
 

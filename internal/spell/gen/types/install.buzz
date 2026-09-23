@@ -6,6 +6,7 @@
 // `go generate`, never this file.
 
 export object Install {
+    name: str = "",
     command: Command = Command{},
     dir: str = "",
     relocatable: bool = false,

@@ -84,6 +84,33 @@ export fun clippy(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## cargo-fetch
+
+**Command:** `cargo fetch --locked`
+
+### update
+
+Replaces `fetch` with `update`, drops `--locked`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/0",
+    "value": "update"
+  },
+  {
+    "op": "remove",
+    "path": "/1"
+  }
+]
+```
+
+</details>
+
 ## cargo-fmt
 
 **Command:** `cargo fmt -- --check`
@@ -143,33 +170,6 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     rust["cargo-test"](ctx);
 }
 ```
-
-## install
-
-**Command:** `cargo fetch --locked`
-
-### update
-
-Replaces `fetch` with `update`, drops `--locked`.
-
-<details class="charm-patch">
-<summary>JSON Patch</summary>
-
-```json
-[
-  {
-    "op": "replace",
-    "path": "/0",
-    "value": "update"
-  },
-  {
-    "op": "remove",
-    "path": "/1"
-  }
-]
-```
-
-</details>
 
 ## scip
 

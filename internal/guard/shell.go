@@ -597,7 +597,7 @@ func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	for _, spell := range deps.spells() {
 		for _, operation := range spell.Targets() {
 			// Installs are advised, never denied: see installAdvised.
-			if operation == spells.InstallOp {
+			if op, ok := spell.Op(operation); ok && op.Kind == spells.OpKindInstall {
 				continue
 			}
 			for _, charms := range [][]string{nil, {"rw"}} {
@@ -1133,8 +1133,10 @@ var (
 		"update is the reserved charm for moving PINNED UPSTREAM state forward, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry or a vulnerability feed serves today is update. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
 	updateGuardContext = "magus workspace: " + updateAdvice
 
-	// Advice, not a deny: a raw install is correct, only uncached.
-	installGuardContext = "magus workspace: `" + hint.Run.With(spells.InstallOp, "<project>...") + "` runs the same install, keyed on the lockfile, and replays it when nothing changed."
+	// Advice, not a deny: a raw install is correct, only uncached. "install" is the
+	// project's own top-level target (magusfile convention, not a spell op name: a
+	// spell's install op is named per binary, pnpm-install/go-mod-download/...).
+	installGuardContext = "magus workspace: `" + hint.Run.With("install", "<project>...") + "` runs the same install, keyed on the lockfile, and replays it when nothing changed."
 
 	// Advice, not a deny: it wastes a line, it does not break anything.
 	echoOnSuccessAdvice = "Drop the `&& echo ...` and read the exit status: it already says the command passed, and a message that prints only on success adds nothing."

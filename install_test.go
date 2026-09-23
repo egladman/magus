@@ -32,8 +32,8 @@ func TestInstallStepKeysOnlyWhatDecidesTheInstall(t *testing.T) {
 	}
 	tools := []string{"typescript:node:v24.19.0", "typescript:pnpm:10.33.0", "typescript:tsc:UNPROBED", "go:go:1.26"}
 
-	step := m.installStep(p, "typescript", choice, tools, []string{"rw"})
-	assert.Equal(t, "install", step.Target)
+	step := m.installStep(p, "typescript", "pnpm-install", choice, tools, []string{"rw"})
+	assert.Equal(t, "pnpm-install", step.Target)
 	assert.Equal(t, "typescript", step.Spell)
 	assert.Equal(t, []string{"web/package.json", "pnpm-lock.yaml", "web/.npmrc"}, step.Sources)
 	assert.Equal(t, []string{"web/node_modules/.pnpm/lock.yaml"}, step.Stamps)
@@ -44,12 +44,12 @@ func TestInstallStepKeysOnlyWhatDecidesTheInstall(t *testing.T) {
 	assert.False(t, step.NoCache)
 	assert.Empty(t, step.Outputs)
 
-	update := m.installStep(p, "typescript", choice, tools, []string{"rw", types.CharmUpdate})
+	update := m.installStep(p, "typescript", "pnpm-install", choice, tools, []string{"rw", types.CharmUpdate})
 	assert.Equal(t, []string{types.CharmUpdate}, update.Charms)
 	assert.True(t, update.NoCache, "a replayed update is an update that never happened")
 	assert.Equal(t, []string{"web/package.json", "pnpm-lock.yaml"}, update.Updates)
 
 	choice.Install.Stamps = nil
-	assert.True(t, m.installStep(p, "typescript", choice, tools, nil).NoCache,
+	assert.True(t, m.installStep(p, "typescript", "pnpm-install", choice, tools, nil).NoCache,
 		"with no stamp nothing could notice a deleted tree, so the install always runs")
 }

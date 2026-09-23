@@ -217,7 +217,34 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-## install
+## npm-ci
+
+**Command:** `npm ci --prefer-offline`
+
+### update
+
+Replaces `ci` with `update`, drops `--prefer-offline`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/0",
+    "value": "update"
+  },
+  {
+    "op": "remove",
+    "path": "/1"
+  }
+]
+```
+
+</details>
+
+## pnpm-install
 
 **Command:** `pnpm install --frozen-lockfile --prefer-offline`
 

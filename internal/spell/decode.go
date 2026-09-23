@@ -100,18 +100,26 @@ func decodeInstalls(manifest string, locks []string, src obj) (map[string]spells
 		if !slices.Contains(locks, lock) {
 			return nil, fmt.Errorf("%s: %q is not one of this manifest's lockCandidates %v, so no project could ever select it", where, lock, locks)
 		}
+		name, _ := rec.Str("name")
+		if name == "" {
+			return nil, fmt.Errorf("%s: name is required, the op magus registers this install under", where)
+		}
+		if err := types.ValidateTargetName(name); err != nil {
+			return nil, fmt.Errorf("%s: name %q: %w", where, name, err)
+		}
+		name = types.Normalize(name)
 		cmdObj, ok := rec.Obj("command")
 		if !ok {
 			return nil, fmt.Errorf("%s: command is required", where)
 		}
-		cmd, err := decodeCommand("", spells.InstallOp, cmdObj)
+		cmd, err := decodeCommand("", name, cmdObj)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", where, err)
 		}
 		if cmd.Bin == "" {
 			return nil, fmt.Errorf("%s: command has no bin", where)
 		}
-		in := spells.Install{Command: cmd, Relocatable: rec.Bool("relocatable")}
+		in := spells.Install{Name: name, Command: cmd, Relocatable: rec.Bool("relocatable")}
 		in.Dir, _ = rec.Str("dir")
 		if in.Stamps, err = rec.Strs("stamps"); err != nil {
 			return nil, fmt.Errorf("%s: %w", where, err)
@@ -135,10 +143,14 @@ func decodeInstalls(manifest string, locks []string, src obj) (map[string]spells
 	return out, nil
 }
 
-// synthesizeInstall registers the install op from m's manifests, after checking each
-// install's tools against the ones the spell declares.
+// synthesizeInstall registers one install op per Name a spell's manifests declare,
+// after checking each install's tools against the ones the spell declares. Entries
+// sharing a Name (typescript's package-lock.json and npm-shrinkwrap.json both run
+// npm-ci) register as ONE op, scoped to just their own manifest and lock candidates,
+// so resolving it requires that op's own lockfile rather than any of the spell's.
 func synthesizeInstall(m *spells.Descriptor) error {
-	var first *spells.Install
+	var order []string
+	byName := map[string]*spells.Manifest{}
 	for _, man := range m.Manifests {
 		for _, lock := range man.LockCandidates {
 			in, ok := man.Installs[lock]
@@ -150,24 +162,35 @@ func synthesizeInstall(m *spells.Descriptor) error {
 					return fmt.Errorf("spell %q manifests[%q].installs[%q]: tool %q is not declared in mgs_getTools", m.Name, man.Value, lock, tool)
 				}
 			}
-			if first == nil {
-				first = &in
+			fm, ok := byName[in.Name]
+			if !ok {
+				fm = &spells.Manifest{Value: man.Value, Installs: map[string]spells.Install{}}
+				byName[in.Name] = fm
+				order = append(order, in.Name)
 			}
+			fm.LockCandidates = append(fm.LockCandidates, lock)
+			fm.Installs[lock] = in
 		}
 	}
-	if first == nil {
+	if len(order) == 0 {
 		return nil
 	}
-	if _, authored := m.Ops[spells.InstallOp]; authored {
-		return fmt.Errorf("spell %q declares an op named %q and manifest installs; magus registers the installs under that name, so drop the op", m.Name, spells.InstallOp)
+	for _, name := range order {
+		if _, authored := m.Ops[name]; authored {
+			return fmt.Errorf("spell %q declares an op named %q and manifest installs; magus registers the installs under that name, so drop the op", m.Name, name)
+		}
 	}
 	if m.Ops == nil {
 		m.Ops = map[string]spells.Op{}
 	}
-	m.Ops[spells.InstallOp] = spells.Op{
-		Kind:    spells.OpKindInstall,
-		Command: first.Command,
-		Install: &spells.InstallSpec{Spell: m.Name, Manifests: m.Manifests},
+	for _, name := range order {
+		fm := byName[name]
+		first := fm.Installs[fm.LockCandidates[0]]
+		m.Ops[name] = spells.Op{
+			Kind:    spells.OpKindInstall,
+			Command: first.Command,
+			Install: &spells.InstallSpec{Spell: m.Name, Manifests: []spells.Manifest{*fm}},
+		}
 	}
 	return nil
 }

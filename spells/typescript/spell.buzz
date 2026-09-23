@@ -162,9 +162,13 @@ final PACKAGE_MANAGER_HINTS = [
 // node_modules/.pnpm/lock.yaml, and npm writes its hidden lockfile at the end of reify.
 // npm is not relocatable because `npm ci` deletes node_modules first, so a seed would
 // be thrown away.
+// Named pnpm-install (binary + capability): the plain "install" name collides with
+// the canonical top-level target the same way go's bare op names once collided with
+// build/test (the reason the go spell is not named after its ops either).
 fun pnpmInstall() > Install {
     final args = ["install", "--frozen-lockfile", "--prefer-offline"];
     return Install{
+        name = "pnpm-install",
         command = Command{bin = "pnpm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
             "update": Charm{ops = set(args, "install", "update").ops
                                   + drop(args, "--prefer-offline").ops
@@ -177,9 +181,13 @@ fun pnpmInstall() > Install {
         tools = ["node", "pnpm"],
     };
 }
+// Named npm-ci after the subcommand it runs. Shared by package-lock.json and
+// npm-shrinkwrap.json below: both run `npm ci`, so both declare this same name and
+// magus registers them as the one op, live for whichever lockfile a project has.
 fun npmInstall() > Install {
     final args = ["ci", "--prefer-offline"];
     return Install{
+        name = "npm-ci",
         command = Command{bin = "npm", args = args, hints = PACKAGE_MANAGER_HINTS, charms = {
             "update": Charm{ops = set(args, "ci", "update").ops + drop(args, "--prefer-offline").ops},
         }},

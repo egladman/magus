@@ -177,15 +177,13 @@ const (
 	// the only kind a spell does not author directly, and the tag is what lets the
 	// runner recognize an index run without matching the op's NAME.
 	OpKindSymbolIndex = "symbol-index"
-	// OpKindInstall tags the op magus synthesizes from the Installs a spell's manifests
-	// declare. The runner picks the command from the project's live lockfile at run
-	// time, since an op handler resolves once for every project. It shares InstallOp's
-	// literal because magus registers the synthesized op under that exact name.
-	OpKindInstall = InstallOp
+	// OpKindInstall tags an op magus synthesizes from the Installs a spell's manifests
+	// declare. A spell may synthesize several (one per Install.Name: typescript
+	// registers both pnpm-install and npm-ci), each scoped to its own lock candidates,
+	// so the runner still resolves the live one from the project's lockfile at run time
+	// within that op's scope.
+	OpKindInstall = "install"
 )
-
-// InstallOp is the op name magus registers a spell's declared installs under.
-const InstallOp = "install"
 
 // InstallSpec is what an install op carries so it can run from the op alone, as a
 // magusfile's spell-handle call does.

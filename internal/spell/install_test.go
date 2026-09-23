@@ -16,6 +16,7 @@ import (
 // ships, with overrides applied to the install record.
 func installSpell(override func(in map[string]any)) mapObj {
 	in := map[string]any{
+		"name":        "pnpm-install",
 		"command":     map[string]any{"bin": "pnpm", "args": []string{"install", "--frozen-lockfile"}},
 		"dir":         "node_modules",
 		"relocatable": true,
@@ -41,9 +42,10 @@ func TestDecode_InstallSynthesizesTheOp(t *testing.T) {
 	m, err := Decode(installSpell(nil))
 	require.NoError(t, err)
 
-	op, ok := m.Ops[spells.InstallOp]
+	op, ok := m.Ops["pnpm-install"]
 	require.True(t, ok, "a declared install must reach the op table")
 	want := spells.Install{
+		Name:        "pnpm-install",
 		Command:     spells.Command{Bin: "pnpm", Args: []string{"install", "--frozen-lockfile"}},
 		Dir:         "node_modules",
 		Relocatable: true,
@@ -56,7 +58,7 @@ func TestDecode_InstallSynthesizesTheOp(t *testing.T) {
 		Command: want.Command,
 		Install: &spells.InstallSpec{Spell: "ts", Manifests: []spells.Manifest{{
 			Value:          "package.json",
-			LockCandidates: []string{"pnpm-lock.yaml", "package-lock.json"},
+			LockCandidates: []string{"pnpm-lock.yaml"},
 			Installs:       map[string]spells.Install{"pnpm-lock.yaml": want},
 		}}},
 	}, op)
@@ -80,9 +82,10 @@ func TestDecode_InstallMisdeclarationsAreErrors(t *testing.T) {
 		{"stamp outside the project", installSpell(func(in map[string]any) { in["stamps"] = []string{"../x"} }), "must be a path inside the project"},
 		{"undeclared tool", installSpell(func(in map[string]any) { in["tools"] = []string{"node"} }), `tool "node" is not declared`},
 		{"no command", installSpell(func(in map[string]any) { delete(in, "command") }), "command is required"},
+		{"no name", installSpell(func(in map[string]any) { delete(in, "name") }), "name is required"},
 		{"authored op collides", func() mapObj {
 			s := installSpell(nil)
-			s["ops"] = map[string]any{spells.InstallOp: map[string]any{"bin": "pnpm"}}
+			s["ops"] = map[string]any{"pnpm-install": map[string]any{"bin": "pnpm"}}
 			return s
 		}(), "drop the op"},
 	}
@@ -150,7 +153,7 @@ func TestResolveInstall(t *testing.T) {
 func TestBuiltinTypescriptInstall(t *testing.T) {
 	spec, ok := Builtins()["typescript"]
 	require.True(t, ok)
-	op, ok := spec.Ops[spells.InstallOp]
+	op, ok := spec.Ops["pnpm-install"]
 	require.True(t, ok)
 	require.Equal(t, spells.OpKindInstall, op.Kind)
 	in := op.Install.Manifests[0].Installs["pnpm-lock.yaml"]
@@ -161,6 +164,50 @@ func TestBuiltinTypescriptInstall(t *testing.T) {
 	assert.True(t, in.Relocatable)
 	assert.Equal(t, []string{"node_modules/.pnpm/lock.yaml", "node_modules/.modules.yaml"}, in.Stamps)
 	assert.Equal(t, []string{"node", "pnpm"}, in.Tools)
+}
+
+// TestBuiltinTypescriptInstallSplitsByBinary pins the naming rename: one op per
+// binary, not one "install" that resolves dynamically. npm-ci covers BOTH
+// package-lock.json and npm-shrinkwrap.json, since both run `npm ci`.
+func TestBuiltinTypescriptInstallSplitsByBinary(t *testing.T) {
+	spec, ok := Builtins()["typescript"]
+	require.True(t, ok)
+	_, hasInstall := spec.Ops["install"]
+	assert.False(t, hasInstall, "the plain name is retired; each binary gets its own op")
+
+	npm, ok := spec.Ops["npm-ci"]
+	require.True(t, ok)
+	require.Equal(t, spells.OpKindInstall, npm.Kind)
+	require.Equal(t, "npm", npm.Bin)
+	man := npm.Install.Manifests[0]
+	assert.ElementsMatch(t, []string{"package-lock.json", "npm-shrinkwrap.json"}, man.LockCandidates)
+	for _, lock := range man.LockCandidates {
+		assert.Equal(t, "npm-ci", man.Installs[lock].Name)
+	}
+}
+
+// TestDecode_InstallGroupsSharedNameOneOp pins the grouping rule two lock candidates
+// declaring the same Name (a shape only typescript's npm-ci exercises today) register
+// as ONE op scoped to both their lock candidates, not two.
+func TestDecode_InstallGroupsSharedNameOneOp(t *testing.T) {
+	s := installSpell(nil)
+	man := s["manifests"].([]any)[0].(map[string]any)
+	man["lockCandidates"] = []string{"pnpm-lock.yaml", "npm-lock.json"}
+	installs := man["installs"].(map[string]any)
+	other := map[string]any{}
+	for k, v := range installs["pnpm-lock.yaml"].(map[string]any) {
+		other[k] = v
+	}
+	other["name"] = "pnpm-install"
+	other["command"] = map[string]any{"bin": "npm-alias-of-pnpm", "args": []string{"install"}}
+	installs["npm-lock.json"] = other
+
+	m, err := Decode(s)
+	require.NoError(t, err)
+	require.Len(t, m.Ops, 1, "both lock candidates share a name and register as one op")
+	op, ok := m.Ops["pnpm-install"]
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{"pnpm-lock.yaml", "npm-lock.json"}, op.Install.Manifests[0].LockCandidates)
 }
 
 // fakeWorktrees lays out a primary checkout and one linked worktree the way git does,

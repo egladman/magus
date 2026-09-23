@@ -120,6 +120,7 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir 
 export fun mgs_listManifests() > [Manifest] {
     final args = ["mod", "download"];
     return [Manifest{value = "go.mod", lockCandidates = ["go.sum"], installs = {"go.sum": Install{
+        name = "go-mod-download",
         command = Command{bin = "go", args = args, charms = {
             "update": Charm{ops = set(args, "mod", "get").ops + set(args, "download", "-u").ops + after(args, "download", ["./..."]).ops},
         }},

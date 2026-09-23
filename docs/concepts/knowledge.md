@@ -139,8 +139,9 @@ tool: go
 14 nodes reach this
 
 used by (11)  op:go:go-build, op:go:go-clean, op:go:go-generate,
-              op:go:go-mod-edit, op:go:go-mod-json, op:go:go-mod-tidy,
-              op:go:go-run, op:go:go-test, op:go:go-vet, op:go:install, spell:go
+              op:go:go-mod-download, op:go:go-mod-edit, op:go:go-mod-json,
+              op:go:go-mod-tidy, op:go:go-run, op:go:go-test, op:go:go-vet,
+              spell:go
 
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago
 open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago&token=$(magus config token print)"

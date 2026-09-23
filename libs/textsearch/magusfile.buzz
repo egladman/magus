@@ -51,7 +51,7 @@ magus\project({
     // lib never fills, and an empty snapshot was an error. It no longer is for a glob the
     // target did not name itself; see cache.Step.OutputsDeclared.
     "targets": {
-        "preflight": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
+        "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
         // Regenerates MAGUS.md, which the engine drift-gates as a declared output.
         "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
         // index-generate renders `magus describe graph -o markdown`, so its output is a
@@ -67,18 +67,18 @@ magus\project({
     },
 });
 
-// preflight installs node_modules through the typescript spell's install. That install
-// keys itself on the lockfile, the pnpm settings and pnpm's own completion stamp, so an
-// unchanged tree forks nothing and an interrupted one reinstalls.
+// install installs node_modules through the typescript spell's pnpm-install op. That
+// install keys itself on the lockfile, the pnpm settings and pnpm's own completion
+// stamp, so an unchanged tree forks nothing and an interrupted one reinstalls.
 // pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
-export fun preflight(ctx: magus\Context, args: [str]) > void !> any { typescript["install"](ctx); }
+export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift is
 // measured by hashing MAGUS.md before and after (tools/drift.buzz), not by asking whether
 // it was clean, so the gate still fires when you already have it uncommitted. A
 // locally-regenerated MAGUS.md passes either way: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     ctx.needs(index_generate);
 }
 
@@ -103,7 +103,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).
 // proc.exec raises on a non-zero exit, so either gate fails lint.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
     proc\exec("pnpm", ["run", "biome"], ".", {});
 }
@@ -117,7 +117,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 // travel back through a sourcemap - hence --sourcemap here - or every record would
 // name a .testcache bundle instead of the src/*.ts someone wrote.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(install);
     // The TypeScript coverage figure is one across every TypeScript project, merged by
     // the console (the top of the TypeScript dependency graph) from this report and its
     // own. Declaring it keeps a cache hit restoring the report the console reads.

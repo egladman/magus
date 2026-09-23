@@ -48,6 +48,7 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "__pycache__", i
 fun uvSync() > Install {
     final args = ["sync", "--locked"];
     return Install{
+        name = "uv-sync",
         command = Command{bin = "uv", args = args, charms = {"update": set(args, "--locked", "--upgrade")}},
         dir = ".venv",
     };

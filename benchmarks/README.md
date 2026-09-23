@@ -137,11 +137,13 @@ Fixtures are generated on-demand (`gen.sh N`) into `fixtures/<fixture>/gen/`
 
 ## Dependency install
 
-`install/bench.sh` holds `magus run install` against `pnpm install -r` on this
-repository's four JavaScript projects, with a warm pnpm store, in three cases: a
-fresh tree, nothing changed, and one lockfile changed. It runs from a checkout with
-a built `./magus`, deletes and restores that checkout's `node_modules`, and prints
-hyperfine medians. See the script header for the setup and the overrides.
+`install/bench.buzz` (run with `./magus buzz benchmarks/install/bench.buzz`) holds
+`magus run install` against `pnpm install -r` on this repository's four JavaScript
+projects, with a warm pnpm store, in three cases: a fresh tree, nothing changed, and
+one lockfile changed. It runs from a checkout with a built `./magus`, deletes and
+restores that checkout's `node_modules` and `console/pnpm-lock.yaml`, and prints
+medians and the host's load average as one JSON object. See the script header for
+the setup and the `BENCH_RUNS` override.
 
 ---
 

@@ -27,29 +27,6 @@ Working directory and environment are NOT options: they ride the context, as `py
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
-## install
-
-**Command:** `uv sync --locked`
-
-### update
-
-Replaces `--locked` with `--upgrade`.
-
-<details class="charm-patch">
-<summary>JSON Patch</summary>
-
-```json
-[
-  {
-    "op": "replace",
-    "path": "/1",
-    "value": "--upgrade"
-  }
-]
-```
-
-</details>
-
 ## pytest
 
 **Command:** `uv run pytest`
@@ -248,4 +225,27 @@ export fun clean(ctx: magus\Context, args: [str]) > void {
     python["uv-clean"](ctx);
 }
 ```
+
+## uv-sync
+
+**Command:** `uv sync --locked`
+
+### update
+
+Replaces `--locked` with `--upgrade`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/1",
+    "value": "--upgrade"
+  }
+]
+```
+
+</details>
 

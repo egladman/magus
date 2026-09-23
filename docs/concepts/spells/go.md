@@ -126,6 +126,39 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## go-mod-download
+
+**Command:** `go mod download`
+
+### update
+
+Replaces `mod` with `get`, replaces `download` with `-u`, inserts `./...`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "replace",
+    "path": "/0",
+    "value": "get"
+  },
+  {
+    "op": "replace",
+    "path": "/1",
+    "value": "-u"
+  },
+  {
+    "op": "add",
+    "path": "/2",
+    "value": "./..."
+  }
+]
+```
+
+</details>
+
 ## go-mod-edit
 
 Edit is offline: it "reads only go.mod; it does not look up information about the modules involved" (go help mod edit), so the same tree always yields the same bytes. The write charm is therefore rw, not update.
@@ -388,39 +421,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     go["govulncheck"](ctx);
 }
 ```
-
-## install
-
-**Command:** `go mod download`
-
-### update
-
-Replaces `mod` with `get`, replaces `download` with `-u`, inserts `./...`.
-
-<details class="charm-patch">
-<summary>JSON Patch</summary>
-
-```json
-[
-  {
-    "op": "replace",
-    "path": "/0",
-    "value": "get"
-  },
-  {
-    "op": "replace",
-    "path": "/1",
-    "value": "-u"
-  },
-  {
-    "op": "add",
-    "path": "/2",
-    "value": "./..."
-  }
-]
-```
-
-</details>
 
 ## scip
 

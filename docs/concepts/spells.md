@@ -29,7 +29,7 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`podman`](spells/podman.md)         | OCI containers | 4   | Podman spell: image build, push, manifest assembly, and run for the podman runtime.                    |
 | [`python`](spells/python.md)         | Python         | 7   | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.                    |
 | [`rust`](spells/rust.md)             | Rust           | 7   | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.                          |
-| [`typescript`](spells/typescript.md) | TypeScript     | 12  | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
+| [`typescript`](spells/typescript.md) | TypeScript     | 13  | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
 <!-- END SPELL LIST -->
 
 ## Spells vs Targets
