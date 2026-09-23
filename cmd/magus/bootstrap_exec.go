@@ -143,8 +143,8 @@ func resolveBootstrapExecTarget(start, self string) (target string, ok bool) {
 	return resolved, true
 }
 
-// truthyEnv matches the 1/true/yes convention MAGUS_NO_WAIT (lock.go's noWaitLocks)
-// and MAGUS_SANDBOX_ENABLED already use for a boolean MAGUS_* env var.
+// truthyEnv matches the 1/true/yes convention MAGUS_SANDBOX_ENABLED already uses for a
+// boolean MAGUS_* env var.
 func truthyEnv(v string) bool {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "1", "true", "yes":

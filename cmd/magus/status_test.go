@@ -318,8 +318,6 @@ func TestPrintMachineStatusNamesEveryClaim(t *testing.T) {
 		BudgetMB: 48 << 10, HeldMB: 10 << 10, BudgetSlots: 8, HeldSlots: 6,
 		Holders: []types.MachineClaimant{
 			{Project: ".", Target: "test", PID: 41221, MemoryMB: 10 << 10, Dir: "/tree/polish", Since: time.Now().Add(-90 * time.Second)},
-		},
-		Waiters: []types.MachineClaimant{
 			{Project: "docs", Target: "ci", PID: 41999, Dir: "/tree/hardening"},
 		},
 	})
@@ -328,16 +326,16 @@ func TestPrintMachineStatusNamesEveryClaim(t *testing.T) {
 	assert.Contains(t, out, "slots   6 of 8 held")
 	assert.Contains(t, out, "held  . test  pid 41221  10.0 GiB")
 	assert.Contains(t, out, "in /tree/polish")
-	assert.Contains(t, out, "queued docs ci  pid 41999")
+	assert.Contains(t, out, "held  docs ci  pid 41999")
 	assert.Contains(t, out, "in /tree/hardening")
 }
 
-// An idle budget still prints. "Nothing is queued" is the answer to the question people
+// An idle budget still prints. "Nothing is held" is the answer to the question people
 // open this section to ask, and a silent section reads as a missing feature.
 func TestPrintMachineStatusIdleAndAbsent(t *testing.T) {
 	var idle bytes.Buffer
 	printMachineStatus(&idle, &types.MachineSnapshot{BudgetMB: 48 << 10, BudgetSlots: 8})
-	assert.Contains(t, idle.String(), "nothing is holding or waiting")
+	assert.Contains(t, idle.String(), "nothing is holding the machine budget")
 
 	// No daemon answered, so there is no machine budget to report on.
 	var absent bytes.Buffer

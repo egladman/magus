@@ -42,7 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **MGS3013: a slot pool that cannot free a slot is refused within seconds.** The refusal
   names every holder and what it waits on.
 - **MGS3014: a newer gate supersedes an older one on the same tree.** The earlier `ci` run
-  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs still wait.
+  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs are refused
+  immediately instead, like any other contention.
 - **Tools declare `observe` probes; ops declare external effects.** An observation keys
   only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
   `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
@@ -115,6 +116,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **magus never waits on another magus invocation.** A workspace lock or machine budget
+  held by another invocation refuses immediately (exit 75), naming the holder.
+  `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
+  other, as do the nested runs of one root invocation. `--watch` retries on the next
+  change.
 - **Enum case sets are hand-written; no `_gen.go` file remains.** Each closed string
   type declares its cases once, and the `magus-utils enums` generator is gone. A test
   holds the Buzz boundary registry to each type's set.
@@ -130,9 +136,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
 - **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
-  projects/charms/cache header, per-stage progress, the run summary and lock-wait
-  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
-  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
+  projects/charms/cache header, per-stage progress and the run summary are now typed
+  events (`run.scope`, `run.step`, `run.summary`, `run.notice`) on the same stream as
+  `run.target.result`; anything not
   yet converted falls back to a plain JSON line instead of prose.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination

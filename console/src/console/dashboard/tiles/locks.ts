@@ -5,7 +5,7 @@
 //
 // It exists because the failure it makes visible is otherwise invisible. An OS file lock carries no
 // identity of its own, and it lives for exactly as long as the process holding it, so a run nobody
-// remembers starting holds one indefinitely while every other run simply waits with no explanation.
+// remembers starting holds one indefinitely while every other run is refused by a holder nobody sees.
 // Age is the column that separates the two readings: seconds is a peer mid-run, days is abandoned.
 
 import { relTime, tsMillisOrNow, type DashboardState, type LockView } from "../state";
@@ -49,11 +49,6 @@ export function locksTile(): Tile {
       // The holder's directory is what settles an ambiguous case: a path that no longer
       // exists means the holder outlived its worktree and will never release on its own.
       if (l.dir) detail.push(l.dir);
-      // Surfaced next to the holder because a lock with nobody waiting costs nothing;
-      // the count is what turns "held" into "blocking".
-      if (l.waiters.length) {
-        detail.push(l.waiters.length + (l.waiters.length === 1 ? " waiter" : " waiters"));
-      }
       // The text goes in an inner span so the marquee has something to translate that is not the
       // clipping box (density.ts). The holder's directory is the reason: it is the longest value on
       // the row and the one that decides whether a lock is a peer mid-run or an abandoned process.

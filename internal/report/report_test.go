@@ -93,8 +93,6 @@ func TestRoundTripAllTypes(t *testing.T) {
 		RunBase{Base: "origin/main", VCS: "git"},
 		RunStep{Label: "magus", Target: "types-generate", Status: "pass", DurationMs: 695},
 		RunSummary{Hits: 1, Misses: 2, Errors: 0, DurationMs: 1600},
-		LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci"},
-		LockReleased{Project: "."},
 		Notice{Level: "warn", Code: "MGS1028", Message: "projects seeded by changed files nothing declares"},
 	}
 	for _, e := range events {
@@ -112,7 +110,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 		TypeVolatility, TypeShardTotal,
 		TypeRunScope, TypeRunCharms, TypeRunCache, TypeRunBase,
 		TypeRunStep, TypeRunSummary,
-		TypeLockWait, TypeLockReleased, TypeNotice,
+		TypeNotice,
 	}
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
@@ -516,8 +514,6 @@ func TestStructuredRunEventTypes(t *testing.T) {
 		{"RunStep fail", RunStep{Label: "magus", Target: "lint", Status: "fail", DurationMs: 40, Error: "exit status 1"}, TypeRunStep},
 		{"RunSummary", RunSummary{Hits: 3, Misses: 1, Errors: 0, DurationMs: 1600}, TypeRunSummary},
 		{"RunSummary dry", RunSummary{Dry: true, Planned: 4, DurationMs: 12}, TypeRunSummary},
-		{"LockWait", LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci", ElapsedMs: 15000}, TypeLockWait},
-		{"LockReleased", LockReleased{Project: "libs/gopherbuzz"}, TypeLockReleased},
 		{"Notice", Notice{Level: "warn", Code: "MGS1028", Message: "projects seeded by changed files nothing declares"}, TypeNotice},
 	}
 

@@ -60,7 +60,6 @@ func render() (map[string]string, error) {
 		fn   func(screen.Theme) (string, error)
 	}{
 		{"terminal-run-band.svg", runBand},
-		{"terminal-lock-waiting.svg", lockWaiting},
 		{"terminal-failure-prompt.svg", failurePrompt},
 		{"terminal-picker.svg", picker},
 	} {
@@ -107,25 +106,6 @@ func runBand(t screen.Theme) (string, error) {
 	if _, err := band.Set([]tty.Line{
 		{Text: "pool 6/8 running   6 ok", Style: tty.SGRDim},
 	}); err != nil {
-		return "", err
-	}
-	return s.SVG(screen.SVGOptions{Theme: t}), nil
-}
-
-// lockWaiting: the one run event that earns a notification. A pinned condition,
-// not a toast; it stays until the lock clears, because the wait is unbounded.
-func lockWaiting(t screen.Theme) (string, error) {
-	s := screen.New(cols, rows)
-	z := tty.NewZone(s, tty.FixedProbe(cols, rows))
-	n := tty.NewNotifier(z, 2)
-
-	fmt.Fprint(s, "$ magus run build api\n")
-	fmt.Fprint(s, "projects: api (vcs)\n")
-	// The status goes in the box's title, exactly as a run puts it there.
-	if _, err := z.SetTitle(cache.PoolGauge(0, 8)+"  0 ok", "12.4s"); err != nil {
-		return "", err
-	}
-	if err := n.Pin("lock", "waiting on the workspace lock held by pid 4211 - wait, or stop it", tty.SGRYellow); err != nil {
 		return "", err
 	}
 	return s.SVG(screen.SVGOptions{Theme: t}), nil

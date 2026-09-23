@@ -48,7 +48,6 @@ func TestPoolSaturated(t *testing.T) {
 	}{
 		{"nil snapshot fails open", nil, false},
 		{"idle", &types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2}, false},
-		{"waiters queued", &types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 2, Waiters: []types.MachineClaimant{{PID: 1}}}, true},
 		{"all slots held", &types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 8}, true},
 		{"all memory held", &types.MachineSnapshot{BudgetMB: 1000, HeldMB: 1000}, true},
 		{"unlimited axes never saturate", &types.MachineSnapshot{HeldSlots: 100, HeldMB: 100000}, false},

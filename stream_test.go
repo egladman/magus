@@ -5,6 +5,8 @@ import (
 	"context"
 	"io"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -117,4 +119,34 @@ func TestStream_EmptyBatchSkipped(t *testing.T) {
 	}()
 	require.NoError(t, m.Stream(context.Background(), pr, "build", func(error) { errCalled = true }), "Stream (empty input)")
 	assert.False(t, errCalled, "Stream (empty input): errFn called unexpectedly")
+}
+
+// TestStream_BatchErrorDoesNotStopTheLoop pins that a failed batch is reported through
+// errFn and skipped rather than ending the stream: the next change still gets a turn,
+// and Stream itself returns nil. Under --watch that is what turns a refused run (exit
+// 75, another invocation holding the lock) into a retry on the next change.
+//
+// A zero Magus has no workspace, so every batch fails in AffectedFromPaths; the loop's
+// handling of a failure is what this pins, whatever the cause.
+func TestStream_BatchErrorDoesNotStopTheLoop(t *testing.T) {
+	t.Parallel()
+	m := &Magus{}
+	var errs atomic.Int32
+	firstFailed := make(chan struct{})
+	var once sync.Once
+	pr, pw := io.Pipe()
+	go func() {
+		_, _ = io.WriteString(pw, "a\n\n")
+		// The next change arrives only after the first batch has failed, so it cannot be
+		// merged into the batch it is meant to follow.
+		<-firstFailed
+		_, _ = io.WriteString(pw, "b\n\n")
+		_ = pw.Close()
+	}()
+	err := m.Stream(context.Background(), pr, "build", func(error) {
+		errs.Add(1)
+		once.Do(func() { close(firstFailed) })
+	})
+	require.NoError(t, err, "a batch failure must never become Stream's own return value")
+	assert.Equal(t, int32(2), errs.Load(), "both the failing batch and the next change must be attempted")
 }

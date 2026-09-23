@@ -50,7 +50,6 @@ type slotPressure struct {
 	aggressiveWidth     int
 	explicitConcurrency bool
 	profile             types.ConcurrencyProfile
-	machineQueued       bool
 }
 
 // nudge returns the one line suggesting the aggressive profile, or "" when the run
@@ -59,9 +58,6 @@ func (p slotPressure) nudge() string {
 	switch {
 	case p.explicitConcurrency, p.profile == types.ProfileAggressive:
 		// The user chose a width; second-guessing that choice is noise.
-		return ""
-	case p.machineQueued:
-		// The machine budget throttled the run, so a wider local pool only moves the wait.
 		return ""
 	case p.aggressiveWidth <= p.width, p.waited < slotWaitFloor:
 		return ""
@@ -75,8 +71,7 @@ func (p slotPressure) nudge() string {
 // idle, and "" otherwise. The caller decides whether and how often to print it.
 //
 // Silent when concurrency was set explicitly, when the profile is already aggressive,
-// when any step waited on the machine budget, and in the daemon, whose limiter spans
-// every client's runs.
+// and in the daemon, whose limiter spans every client's runs.
 func (m *Magus) ConcurrencyNudge() string {
 	// Only the daemon hands its workspaces a machine admitter.
 	if m.cache == nil || m.machineAdmitter != nil {
@@ -89,6 +84,5 @@ func (m *Magus) ConcurrencyNudge() string {
 		aggressiveWidth:     aggressiveWidth,
 		explicitConcurrency: m.cfg.Concurrency > 0,
 		profile:             m.cfg.ConcurrencyProfile,
-		machineQueued:       m.cache.MachineQueued(),
 	}.nudge()
 }

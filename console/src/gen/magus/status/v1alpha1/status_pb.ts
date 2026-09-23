@@ -22,7 +22,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/status/v1alpha1/status.proto.
  */
 export const file_magus_status_v1alpha1_status: GenFile = /*@__PURE__*/
-  fileDesc("CiJtYWd1cy9zdGF0dXMvdjFhbHBoYTEvc3RhdHVzLnByb3RvEhVtYWd1cy5zdGF0dXMudjFhbHBoYTEisAIKBlN0YXR1cxItCgZoZWFsdGgYASABKA4yHS5tYWd1cy5zdGF0dXMudjFhbHBoYTEuSGVhbHRoEikKBHBvb2wYAiABKAsyGy5tYWd1cy5zdGF0dXMudjFhbHBoYTEuUG9vbBIoCgRydW5zGAQgAygLMhoubWFndXMuc3RhdHVzLnYxYWxwaGExLlJ1bhIwCghzZXJ2aWNlcxgFIAMoCzIeLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5TZXJ2aWNlEi8KBWJ1aWxkGAYgASgLMiAubWFndXMuc3RhdHVzLnYxYWxwaGExLkJ1aWxkSW5mbxIqCgVsb2NrcxgHIAMoCzIbLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5Mb2NrSgQIAxAEUg1tYWd1c192ZXJzaW9uIsUBCgRMb2NrEg8KB3Byb2plY3QYASABKAkSCwoDcGlkGAIgASgFEg8KB2NvbW1hbmQYAyABKAkSCwoDZGlyGAQgASgJEjAKDGFjcXVpcmVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoHd2FpdGVycxgGIAMoCzIhLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5Mb2NrV2FpdGVyEhsKE3N0YWxlX2FmdGVyX3NlY29uZHMYByABKAUidwoKTG9ja1dhaXRlchIPCgdwcm9qZWN0GAEgASgJEgsKA3BpZBgCIAEoBRIPCgdjb21tYW5kGAMgASgJEgsKA2RpchgEIAEoCRItCgl3YWl0X3RpbWUYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIk8KCUJ1aWxkSW5mbxIPCgd2ZXJzaW9uGAEgASgJEg4KBmNvbW1pdBgCIAEoCRIMCgRkYXRlGAMgASgJEhMKC2ZpbmdlcnByaW50GAQgASgJIoYBCgNSdW4SCwoDaW52GAEgASgJEg8KB3RyaWdnZXIYAiABKAkSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMQoHdGFyZ2V0cxgEIAMoCzIgLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5UYXJnZXRSdW4i5QIKCVRhcmdldFJ1bhIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRI1CgVzdGF0ZRgDIAEoDjImLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5UYXJnZXRSdW4uU3RhdGUSLgoKc3RhcnRfdGltZRgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCm91dHB1dF9yZWYYBiABKAkSEwoLZHVyYXRpb25fbXMYByABKAMieQoFU3RhdGUSFQoRU1RBVEVfVU5TUEVDSUZJRUQQABIQCgxTVEFURV9RVUVVRUQQARIRCg1TVEFURV9SVU5OSU5HEAISEAoMU1RBVEVfUEFTU0VEEAMSEAoMU1RBVEVfRkFJTEVEEAQSEAoMU1RBVEVfQ0FDSEVEEAUilwEKB1NlcnZpY2USCgoCaWQYASABKAkSDQoFbGFiZWwYAiABKAkSDwoHY29tbWFuZBgDIAEoCRINCgVwb3J0cxgEIAMoCRINCgVzdGF0ZRgFIAEoCRISCgpkZXBlbmRlbnRzGAYgASgFEi4KCnN0YXJ0X3RpbWUYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqcCCgRQb29sEhIKCnBhcmVudF9waWQYASABKAUSFgoOZGFlbW9uX3ZlcnNpb24YAiABKAkSDAoEbW9kZRgDIAEoCRIQCghjYXBhY2l0eRgEIAEoBRIPCgdydW5uaW5nGAUgASgFEg4KBnF1ZXVlZBgGIAEoBRI9Cg9ydW5uaW5nX3RhcmdldHMYByADKAsyJC5tYWd1cy5zdGF0dXMudjFhbHBoYTEuUnVubmluZ1RhcmdldBI0Cgp3b3Jrc3BhY2VzGAggAygLMiAubWFndXMuc3RhdHVzLnYxYWxwaGExLldvcmtzcGFjZRIQCghhZmZlY3RlZBgJIAMoCRIrCgVjYWNoZRgKIAEoCzIcLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5DYWNoZSKCAQoNUnVubmluZ1RhcmdldBIMCgRhcmdzGAEgAygJEhEKCXdvcmtzcGFjZRgCIAEoCRIuCgpzdGFydF90aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRzdGVwGAQgASgJEhIKCmludm9jYXRpb24YBSABKAki9QIKCVdvcmtzcGFjZRIMCgRyb290GAEgASgJEi0KCWxvYWRfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoQbGFzdF9hY2Nlc3NfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoFY2FjaGUYBCABKAsyHC5tYWd1cy5zdGF0dXMudjFhbHBoYTEuQ2FjaGUSFwoPc2VjcmV0X3Byb3ZpZGVyGAUgASgJEjUKBXN0YXRlGAYgASgOMiYubWFndXMuc3RhdHVzLnYxYWxwaGExLldvcmtzcGFjZS5TdGF0ZRIhCgVlcnJvchgHIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzIlUKBVN0YXRlEhUKEVNUQVRFX1VOU1BFQ0lGSUVEEAASEQoNU1RBVEVfTE9BRElORxABEhAKDFNUQVRFX0FDVElWRRACEhAKDFNUQVRFX0ZBSUxFRBADInAKBUNhY2hlEgwKBGhpdHMYASABKAMSDgoGbWlzc2VzGAIgASgDEg4KBmVycm9ycxgDIAEoAxISCgpzaXplX2J5dGVzGAQgASgDEhMKC3NpemVfY2FwX21iGAUgASgFEhAKCHNhdmVkX21zGAYgASgDIhIKEEdldFN0YXR1c1JlcXVlc3QiqQEKEUdldFN0YXR1c1Jlc3BvbnNlEi0KBnN0YXR1cxgBIAEoCzIdLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5TdGF0dXMSNgoSb2JzZXJ2ZV9zdGFydF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCgZjb25maWcYAyABKAsyHS5tYWd1cy5zdGF0dXMudjFhbHBoYTEuQ29uZmlnIkYKBkNvbmZpZxIWCg5kZWZhdWx0X2NoYXJtcxgBIAMoCRITCgtjb25jdXJyZW5jeRgCIAEoBRIPCgdzYW5kYm94GAMgASgIIhUKE1N0cmVhbVN0YXR1c1JlcXVlc3QiRQoUU3RyZWFtU3RhdHVzUmVzcG9uc2USLQoGc3RhdHVzGAEgASgLMh0ubWFndXMuc3RhdHVzLnYxYWxwaGExLlN0YXR1cypaCgZIZWFsdGgSFgoSSEVBTFRIX1VOU1BFQ0lGSUVEEAASEgoOSEVBTFRIX0hFQUxUSFkQARITCg9IRUFMVEhfREVHUkFERUQQAhIPCgtIRUFMVEhfRE9XThADMtoBCg1TdGF0dXNTZXJ2aWNlEl4KCUdldFN0YXR1cxInLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5HZXRTdGF0dXNSZXF1ZXN0GigubWFndXMuc3RhdHVzLnYxYWxwaGExLkdldFN0YXR1c1Jlc3BvbnNlEmkKDFN0cmVhbVN0YXR1cxIqLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5TdHJlYW1TdGF0dXNSZXF1ZXN0GisubWFndXMuc3RhdHVzLnYxYWxwaGExLlN0cmVhbVN0YXR1c1Jlc3BvbnNlMAFC6wEKGWNvbS5tYWd1cy5zdGF0dXMudjFhbHBoYTFCC1N0YXR1c1Byb3RvUAFaS2dpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL3N0YXR1cy92MWFscGhhMTtzdGF0dXN2MWFscGhhMaICA01TWKoCFU1hZ3VzLlN0YXR1cy5WMWFscGhhMcoCFU1hZ3VzXFN0YXR1c1xWMWFscGhhMeICIU1hZ3VzXFN0YXR1c1xWMWFscGhhMVxHUEJNZXRhZGF0YeoCF01hZ3VzOjpTdGF0dXM6OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp, file_google_rpc_status]);
+  fileDesc("CiJtYWd1cy9zdGF0dXMvdjFhbHBoYTEvc3RhdHVzLnByb3RvEhVtYWd1cy5zdGF0dXMudjFhbHBoYTEisAIKBlN0YXR1cxItCgZoZWFsdGgYASABKA4yHS5tYWd1cy5zdGF0dXMudjFhbHBoYTEuSGVhbHRoEikKBHBvb2wYAiABKAsyGy5tYWd1cy5zdGF0dXMudjFhbHBoYTEuUG9vbBIoCgRydW5zGAQgAygLMhoubWFndXMuc3RhdHVzLnYxYWxwaGExLlJ1bhIwCghzZXJ2aWNlcxgFIAMoCzIeLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5TZXJ2aWNlEi8KBWJ1aWxkGAYgASgLMiAubWFndXMuc3RhdHVzLnYxYWxwaGExLkJ1aWxkSW5mbxIqCgVsb2NrcxgHIAMoCzIbLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5Mb2NrSgQIAxAEUg1tYWd1c192ZXJzaW9uIqABCgRMb2NrEg8KB3Byb2plY3QYASABKAkSCwoDcGlkGAIgASgFEg8KB2NvbW1hbmQYAyABKAkSCwoDZGlyGAQgASgJEjAKDGFjcXVpcmVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGwoTc3RhbGVfYWZ0ZXJfc2Vjb25kcxgHIAEoBUoECAYQB1IHd2FpdGVycyJPCglCdWlsZEluZm8SDwoHdmVyc2lvbhgBIAEoCRIOCgZjb21taXQYAiABKAkSDAoEZGF0ZRgDIAEoCRITCgtmaW5nZXJwcmludBgEIAEoCSKGAQoDUnVuEgsKA2ludhgBIAEoCRIPCgd0cmlnZ2VyGAIgASgJEi4KCnN0YXJ0X3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjEKB3RhcmdldHMYBCADKAsyIC5tYWd1cy5zdGF0dXMudjFhbHBoYTEuVGFyZ2V0UnVuIuUCCglUYXJnZXRSdW4SDwoHcHJvamVjdBgBIAEoCRIOCgZ0YXJnZXQYAiABKAkSNQoFc3RhdGUYAyABKA4yJi5tYWd1cy5zdGF0dXMudjFhbHBoYTEuVGFyZ2V0UnVuLlN0YXRlEi4KCnN0YXJ0X3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiwKCGVuZF90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpvdXRwdXRfcmVmGAYgASgJEhMKC2R1cmF0aW9uX21zGAcgASgDInkKBVN0YXRlEhUKEVNUQVRFX1VOU1BFQ0lGSUVEEAASEAoMU1RBVEVfUVVFVUVEEAESEQoNU1RBVEVfUlVOTklORxACEhAKDFNUQVRFX1BBU1NFRBADEhAKDFNUQVRFX0ZBSUxFRBAEEhAKDFNUQVRFX0NBQ0hFRBAFIpcBCgdTZXJ2aWNlEgoKAmlkGAEgASgJEg0KBWxhYmVsGAIgASgJEg8KB2NvbW1hbmQYAyABKAkSDQoFcG9ydHMYBCADKAkSDQoFc3RhdGUYBSABKAkSEgoKZGVwZW5kZW50cxgGIAEoBRIuCgpzdGFydF90aW1lGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKnAgoEUG9vbBISCgpwYXJlbnRfcGlkGAEgASgFEhYKDmRhZW1vbl92ZXJzaW9uGAIgASgJEgwKBG1vZGUYAyABKAkSEAoIY2FwYWNpdHkYBCABKAUSDwoHcnVubmluZxgFIAEoBRIOCgZxdWV1ZWQYBiABKAUSPQoPcnVubmluZ190YXJnZXRzGAcgAygLMiQubWFndXMuc3RhdHVzLnYxYWxwaGExLlJ1bm5pbmdUYXJnZXQSNAoKd29ya3NwYWNlcxgIIAMoCzIgLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5Xb3Jrc3BhY2USEAoIYWZmZWN0ZWQYCSADKAkSKwoFY2FjaGUYCiABKAsyHC5tYWd1cy5zdGF0dXMudjFhbHBoYTEuQ2FjaGUiggEKDVJ1bm5pbmdUYXJnZXQSDAoEYXJncxgBIAMoCRIRCgl3b3Jrc3BhY2UYAiABKAkSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDAoEc3RlcBgEIAEoCRISCgppbnZvY2F0aW9uGAUgASgJIvUCCglXb3Jrc3BhY2USDAoEcm9vdBgBIAEoCRItCglsb2FkX3RpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKEGxhc3RfYWNjZXNzX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKBWNhY2hlGAQgASgLMhwubWFndXMuc3RhdHVzLnYxYWxwaGExLkNhY2hlEhcKD3NlY3JldF9wcm92aWRlchgFIAEoCRI1CgVzdGF0ZRgGIAEoDjImLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5Xb3Jrc3BhY2UuU3RhdGUSIQoFZXJyb3IYByABKAsyEi5nb29nbGUucnBjLlN0YXR1cyJVCgVTdGF0ZRIVChFTVEFURV9VTlNQRUNJRklFRBAAEhEKDVNUQVRFX0xPQURJTkcQARIQCgxTVEFURV9BQ1RJVkUQAhIQCgxTVEFURV9GQUlMRUQQAyJwCgVDYWNoZRIMCgRoaXRzGAEgASgDEg4KBm1pc3NlcxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSEgoKc2l6ZV9ieXRlcxgEIAEoAxITCgtzaXplX2NhcF9tYhgFIAEoBRIQCghzYXZlZF9tcxgGIAEoAyISChBHZXRTdGF0dXNSZXF1ZXN0IqkBChFHZXRTdGF0dXNSZXNwb25zZRItCgZzdGF0dXMYASABKAsyHS5tYWd1cy5zdGF0dXMudjFhbHBoYTEuU3RhdHVzEjYKEm9ic2VydmVfc3RhcnRfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLQoGY29uZmlnGAMgASgLMh0ubWFndXMuc3RhdHVzLnYxYWxwaGExLkNvbmZpZyJGCgZDb25maWcSFgoOZGVmYXVsdF9jaGFybXMYASADKAkSEwoLY29uY3VycmVuY3kYAiABKAUSDwoHc2FuZGJveBgDIAEoCCIVChNTdHJlYW1TdGF0dXNSZXF1ZXN0IkUKFFN0cmVhbVN0YXR1c1Jlc3BvbnNlEi0KBnN0YXR1cxgBIAEoCzIdLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5TdGF0dXMqWgoGSGVhbHRoEhYKEkhFQUxUSF9VTlNQRUNJRklFRBAAEhIKDkhFQUxUSF9IRUFMVEhZEAESEwoPSEVBTFRIX0RFR1JBREVEEAISDwoLSEVBTFRIX0RPV04QAzLaAQoNU3RhdHVzU2VydmljZRJeCglHZXRTdGF0dXMSJy5tYWd1cy5zdGF0dXMudjFhbHBoYTEuR2V0U3RhdHVzUmVxdWVzdBooLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5HZXRTdGF0dXNSZXNwb25zZRJpCgxTdHJlYW1TdGF0dXMSKi5tYWd1cy5zdGF0dXMudjFhbHBoYTEuU3RyZWFtU3RhdHVzUmVxdWVzdBorLm1hZ3VzLnN0YXR1cy52MWFscGhhMS5TdHJlYW1TdGF0dXNSZXNwb25zZTABQusBChljb20ubWFndXMuc3RhdHVzLnYxYWxwaGExQgtTdGF0dXNQcm90b1ABWktnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9zdGF0dXMvdjFhbHBoYTE7c3RhdHVzdjFhbHBoYTGiAgNNU1iqAhVNYWd1cy5TdGF0dXMuVjFhbHBoYTHKAhVNYWd1c1xTdGF0dXNcVjFhbHBoYTHiAiFNYWd1c1xTdGF0dXNcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhdNYWd1czo6U3RhdHVzOjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_google_rpc_status]);
 
 /**
  * Status is the live snapshot.
@@ -82,12 +82,11 @@ export const StatusSchema: GenMessage<Status> = /*@__PURE__*/
  * Lock is one held per-project workspace lock and the process holding it.
  *
  * A held lock is the NORMAL state of a mutating run, so this is state and never a
- * fault: it must not fail a readiness or liveness check, because a run queued behind
- * a peer is waiting correctly and restarting it only sends it to the back of the
- * queue. It is on the wire because an OS file lock carries no identity of its own, so
- * without the holder a blocked run is indistinguishable from a hung one - and a lock
- * is held for exactly as long as its holder lives, which means one held by a process
- * nobody remembers starting blocks everything else silently and forever.
+ * fault: it must not fail a readiness or liveness check. It is on the wire because an
+ * OS file lock carries no identity of its own, so without the holder a refused run
+ * cannot say who refused it - and a lock is held for exactly as long as its holder
+ * lives, which means one held by a process nobody remembers starting refuses every
+ * other run until someone finds it.
  *
  * @generated from message magus.status.v1alpha1.Lock
  */
@@ -128,13 +127,6 @@ export type Lock = Message<"magus.status.v1alpha1.Lock"> & {
   acquireTime?: Timestamp;
 
   /**
-   * processes blocked on this lock right now
-   *
-   * @generated from field: repeated magus.status.v1alpha1.LockWaiter waiters = 6;
-   */
-  waiters: LockWaiter[];
-
-  /**
    * when to read this holder as possibly abandoned rather than busy
    *
    * @generated from field: int32 stale_after_seconds = 7;
@@ -148,51 +140,6 @@ export type Lock = Message<"magus.status.v1alpha1.Lock"> & {
  */
 export const LockSchema: GenMessage<Lock> = /*@__PURE__*/
   messageDesc(file_magus_status_v1alpha1_status, 1);
-
-/**
- * LockWaiter is one process blocked on a lock. A holder answers "who is working"; a
- * waiter answers "who is stalled because of it", which is the question anyone looking
- * at a queue that is not moving is actually asking. Transient by nature, so a snapshot.
- *
- * @generated from message magus.status.v1alpha1.LockWaiter
- */
-export type LockWaiter = Message<"magus.status.v1alpha1.LockWaiter"> & {
-  /**
-   * reserved for a flattened view; empty inside Lock
-   *
-   * @generated from field: string project = 1;
-   */
-  project: string;
-
-  /**
-   * @generated from field: int32 pid = 2;
-   */
-  pid: number;
-
-  /**
-   * @generated from field: string command = 3;
-   */
-  command: string;
-
-  /**
-   * @generated from field: string dir = 4;
-   */
-  dir: string;
-
-  /**
-   * when it began waiting
-   *
-   * @generated from field: google.protobuf.Timestamp wait_time = 5;
-   */
-  waitTime?: Timestamp;
-};
-
-/**
- * Describes the message magus.status.v1alpha1.LockWaiter.
- * Use `create(LockWaiterSchema)` to create a new message.
- */
-export const LockWaiterSchema: GenMessage<LockWaiter> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 2);
 
 /**
  * BuildInfo identifies the running magus binary: the version tag, the commit it was built
@@ -237,7 +184,7 @@ export type BuildInfo = Message<"magus.status.v1alpha1.BuildInfo"> & {
  * Use `create(BuildInfoSchema)` to create a new message.
  */
 export const BuildInfoSchema: GenMessage<BuildInfo> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 3);
+  messageDesc(file_magus_status_v1alpha1_status, 2);
 
 /**
  * Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`
@@ -282,7 +229,7 @@ export type Run = Message<"magus.status.v1alpha1.Run"> & {
  * Use `create(RunSchema)` to create a new message.
  */
 export const RunSchema: GenMessage<Run> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 4);
+  messageDesc(file_magus_status_v1alpha1_status, 3);
 
 /**
  * TargetRun is the execution state of one target within a Run. It advances QUEUED ->
@@ -345,7 +292,7 @@ export type TargetRun = Message<"magus.status.v1alpha1.TargetRun"> & {
  * Use `create(TargetRunSchema)` to create a new message.
  */
 export const TargetRunSchema: GenMessage<TargetRun> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 5);
+  messageDesc(file_magus_status_v1alpha1_status, 4);
 
 /**
  * State is where a target sits in its lifecycle.
@@ -404,7 +351,7 @@ export enum TargetRun_State {
  * Describes the enum magus.status.v1alpha1.TargetRun.State.
  */
 export const TargetRun_StateSchema: GenEnum<TargetRun_State> = /*@__PURE__*/
-  enumDesc(file_magus_status_v1alpha1_status, 5, 0);
+  enumDesc(file_magus_status_v1alpha1_status, 4, 0);
 
 /**
  * Service is one long-running shared service the daemon is hosting right now, kept warm
@@ -469,7 +416,7 @@ export type Service = Message<"magus.status.v1alpha1.Service"> & {
  * Use `create(ServiceSchema)` to create a new message.
  */
 export const ServiceSchema: GenMessage<Service> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 6);
+  messageDesc(file_magus_status_v1alpha1_status, 5);
 
 /**
  * Pool is the live concurrency pool - the slots and the work occupying them.
@@ -545,7 +492,7 @@ export type Pool = Message<"magus.status.v1alpha1.Pool"> & {
  * Use `create(PoolSchema)` to create a new message.
  */
 export const PoolSchema: GenMessage<Pool> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 7);
+  messageDesc(file_magus_status_v1alpha1_status, 6);
 
 /**
  * RunningTarget is one running unit of work in the pool.
@@ -592,7 +539,7 @@ export type RunningTarget = Message<"magus.status.v1alpha1.RunningTarget"> & {
  * Use `create(RunningTargetSchema)` to create a new message.
  */
 export const RunningTargetSchema: GenMessage<RunningTarget> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 8);
+  messageDesc(file_magus_status_v1alpha1_status, 7);
 
 /**
  * Workspace is one workspace the daemon holds: loading, loaded, or failed to load.
@@ -655,7 +602,7 @@ export type Workspace = Message<"magus.status.v1alpha1.Workspace"> & {
  * Use `create(WorkspaceSchema)` to create a new message.
  */
 export const WorkspaceSchema: GenMessage<Workspace> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 9);
+  messageDesc(file_magus_status_v1alpha1_status, 8);
 
 /**
  * State is where the daemon's copy of this workspace sits. Output only; values may be added.
@@ -694,7 +641,7 @@ export enum Workspace_State {
  * Describes the enum magus.status.v1alpha1.Workspace.State.
  */
 export const Workspace_StateSchema: GenEnum<Workspace_State> = /*@__PURE__*/
-  enumDesc(file_magus_status_v1alpha1_status, 9, 0);
+  enumDesc(file_magus_status_v1alpha1_status, 8, 0);
 
 /**
  * Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this
@@ -752,7 +699,7 @@ export type Cache = Message<"magus.status.v1alpha1.Cache"> & {
  * Use `create(CacheSchema)` to create a new message.
  */
 export const CacheSchema: GenMessage<Cache> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 10);
+  messageDesc(file_magus_status_v1alpha1_status, 9);
 
 /**
  * @generated from message magus.status.v1alpha1.GetStatusRequest
@@ -765,7 +712,7 @@ export type GetStatusRequest = Message<"magus.status.v1alpha1.GetStatusRequest">
  * Use `create(GetStatusRequestSchema)` to create a new message.
  */
 export const GetStatusRequestSchema: GenMessage<GetStatusRequest> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 11);
+  messageDesc(file_magus_status_v1alpha1_status, 10);
 
 /**
  * @generated from message magus.status.v1alpha1.GetStatusResponse
@@ -801,7 +748,7 @@ export type GetStatusResponse = Message<"magus.status.v1alpha1.GetStatusResponse
  * Use `create(GetStatusResponseSchema)` to create a new message.
  */
 export const GetStatusResponseSchema: GenMessage<GetStatusResponse> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 12);
+  messageDesc(file_magus_status_v1alpha1_status, 11);
 
 /**
  * Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what
@@ -838,7 +785,7 @@ export type Config = Message<"magus.status.v1alpha1.Config"> & {
  * Use `create(ConfigSchema)` to create a new message.
  */
 export const ConfigSchema: GenMessage<Config> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 13);
+  messageDesc(file_magus_status_v1alpha1_status, 12);
 
 /**
  * @generated from message magus.status.v1alpha1.StreamStatusRequest
@@ -851,7 +798,7 @@ export type StreamStatusRequest = Message<"magus.status.v1alpha1.StreamStatusReq
  * Use `create(StreamStatusRequestSchema)` to create a new message.
  */
 export const StreamStatusRequestSchema: GenMessage<StreamStatusRequest> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 14);
+  messageDesc(file_magus_status_v1alpha1_status, 13);
 
 /**
  * @generated from message magus.status.v1alpha1.StreamStatusResponse
@@ -868,7 +815,7 @@ export type StreamStatusResponse = Message<"magus.status.v1alpha1.StreamStatusRe
  * Use `create(StreamStatusResponseSchema)` to create a new message.
  */
 export const StreamStatusResponseSchema: GenMessage<StreamStatusResponse> = /*@__PURE__*/
-  messageDesc(file_magus_status_v1alpha1_status, 15);
+  messageDesc(file_magus_status_v1alpha1_status, 14);
 
 /**
  * Health is the at-a-glance rollup a dashboard shows.

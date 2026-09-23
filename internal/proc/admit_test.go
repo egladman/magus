@@ -28,24 +28,33 @@ func TestBudgetRoundTrip(t *testing.T) {
 	require.NoError(t, srv.Start())
 
 	client := DaemonAdmitter{Addr: srv.Addr()}
-	self := os.Getpid()
+	// Two live pids, since the budget retires a claim whose process is gone.
+	self, other := os.Getpid(), os.Getppid()
 
-	first, err := client.Request(t.Context(), "w1", types.MachineClaim{
-		Project: ".", Target: "test", MemoryMB: 9000, Slots: 1, PID: self, Dir: "/tree/a",
+	first, err := client.Request(t.Context(), types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 9000, Slots: 1, PID: other, Dir: "/tree/a",
 	})
 	require.NoError(t, err)
 	require.True(t, first.Granted)
 
-	second, err := client.Request(t.Context(), "w2", types.MachineClaim{
+	second, err := client.Request(t.Context(), types.MachineClaim{
 		Project: "docs", Target: "ci", MemoryMB: 9000, Slots: 1, PID: self,
 	})
 	require.NoError(t, err)
 	assert.False(t, second.Granted, "the second invocation cannot be seated alongside the first")
-	require.Len(t, second.Holders, 1, "and it is told who to wait for")
+	assert.False(t, second.OwnRun, "a claim of another process and run is not this run's to wait on")
+	require.Len(t, second.Holders, 1, "and it is told who holds the budget")
 	assert.Equal(t, "/tree/a", second.Holders[0].Dir)
 
+	// The same process asking again is told to wait, and that answer has to cross the wire.
+	again, err := client.Request(t.Context(), types.MachineClaim{
+		Project: "docs", Target: "ci", MemoryMB: 9000, Slots: 1, PID: other,
+	})
+	require.NoError(t, err)
+	assert.True(t, again.OwnRun)
+
 	client.Release(t.Context(), first.ID)
-	third, err := client.Request(t.Context(), "w2", types.MachineClaim{
+	third, err := client.Request(t.Context(), types.MachineClaim{
 		Project: "docs", Target: "ci", MemoryMB: 9000, Slots: 1, PID: self,
 	})
 	require.NoError(t, err)
@@ -71,14 +80,14 @@ func TestBudgetExcusesAnAncestorAcrossTheSocket(t *testing.T) {
 	self := os.Getpid()
 
 	// The parent run fills the machine, exactly as the shard's own ci step did.
-	parent, err := client.Request(t.Context(), "parent", types.MachineClaim{
+	parent, err := client.Request(t.Context(), types.MachineClaim{
 		Project: ".", Target: "ci", MemoryMB: 10_000, Slots: 1, PID: self, Invocation: "3217:inv-parent",
 	})
 	require.NoError(t, err)
 	require.True(t, parent.Granted)
 
 	// A stranger is correctly refused: the machine really is full.
-	stranger, err := client.Request(t.Context(), "stranger", types.MachineClaim{
+	stranger, err := client.Request(t.Context(), types.MachineClaim{
 		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: self,
 	})
 	require.NoError(t, err)
@@ -86,7 +95,7 @@ func TestBudgetExcusesAnAncestorAcrossTheSocket(t *testing.T) {
 
 	// The parent's own descendant is not. Without this the pair deadlocks: the parent
 	// cannot release until the run it is waiting for finishes.
-	child, err := client.Request(t.Context(), "child", types.MachineClaim{
+	child, err := client.Request(t.Context(), types.MachineClaim{
 		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: self,
 		Ancestors: []string{"3217:inv-parent"},
 	})
@@ -104,7 +113,7 @@ func TestBudgetOnAServerWithNoBudget(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	_, err = DaemonAdmitter{Addr: srv.Addr()}.Request(t.Context(), "w1", types.MachineClaim{
+	_, err = DaemonAdmitter{Addr: srv.Addr()}.Request(t.Context(), types.MachineClaim{
 		Project: ".", Target: "test", PID: os.Getpid(),
 	})
 	require.Error(t, err)
@@ -125,14 +134,14 @@ func TestBudgetFramesRequireTheMagic(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	held := budget.Request("held", types.MachineClaim{
+	held := budget.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: os.Getpid(),
 	})
 	require.True(t, held.Granted)
 
 	// An acquire with no magic is answered as unrecognized rather than acted on.
 	reply, err := roundTrip[budgetAcquireReply](t.Context(), srv.Addr(),
-		budgetExchange(typeBudgetAcquire, typeBudgetAcquireReply), budgetAcquireRequest{Protocol: protocolV2, Waiter: "w1"})
+		budgetExchange(typeBudgetAcquire, typeBudgetAcquireReply), budgetAcquireRequest{Protocol: protocolV2})
 	require.NoError(t, err, "the server answers rather than hanging up")
 	assert.Equal(t, "unrecognized request", reply.Err)
 
@@ -141,41 +150,6 @@ func TestBudgetFramesRequireTheMagic(t *testing.T) {
 		budgetExchange(typeBudgetRelease, typeBudgetReleaseReply), budgetReleaseRequest{Protocol: protocolV2, ID: held.ID})
 	require.NoError(t, err)
 	assert.Len(t, budget.Snapshot().Holders, 1, "an unauthenticated release must not free a peer's claim")
-}
-
-// TestBudgetDropRetiresAWaiter covers the fail-fast teardown: a run that will not queue
-// must not leave a place in the queue behind, reserving room for a claim nobody wants.
-func TestBudgetDropRetiresAWaiter(t *testing.T) {
-	budget := cache.NewMachineBudget(10_000, 8)
-	srv, err := New(Options{
-		Handler:       func(context.Context, []string) error { return nil },
-		MachineBudget: budget,
-	})
-	require.NoError(t, err)
-	defer srv.Close()
-	require.NoError(t, srv.Start())
-
-	client := DaemonAdmitter{Addr: srv.Addr()}
-	self := os.Getpid()
-	held, err := client.Request(t.Context(), "held", types.MachineClaim{
-		Project: ".", Target: "test", MemoryMB: 9000, PID: self,
-	})
-	require.NoError(t, err)
-	require.True(t, held.Granted)
-
-	_, err = client.Request(t.Context(), "gone", types.MachineClaim{
-		Project: "docs", Target: "ci", MemoryMB: 9000, PID: self,
-	})
-	require.NoError(t, err)
-	client.Drop(t.Context(), "gone")
-	client.Release(t.Context(), held.ID)
-
-	assert.Empty(t, budget.Snapshot().Waiters)
-	small, err := client.Request(t.Context(), "small", types.MachineClaim{
-		Project: "docs", Target: "lint", MemoryMB: 500, PID: self,
-	})
-	require.NoError(t, err)
-	assert.True(t, small.Granted, "nothing is reserving room for the waiter that left")
 }
 
 // TestBudgetCallIsBoundedByItsTimeout is B3. A daemon whose accept queue is full is not
@@ -203,7 +177,7 @@ func TestBudgetCallIsBoundedByItsTimeout(t *testing.T) {
 	// whether it blocked in the dial or in the read.
 	for i := range 24 {
 		start := time.Now()
-		_, err := client.Request(t.Context(), "w1", types.MachineClaim{
+		_, err := client.Request(t.Context(), types.MachineClaim{
 			Project: ".", Target: "test", PID: os.Getpid(),
 		})
 		elapsed := time.Since(start)
@@ -225,7 +199,7 @@ func TestBudgetReportsTheBudgetInStatus(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	_, err = DaemonAdmitter{Addr: srv.Addr()}.Request(t.Context(), "w1", types.MachineClaim{
+	_, err = DaemonAdmitter{Addr: srv.Addr()}.Request(t.Context(), types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, Slots: 2, PID: os.Getpid(),
 	})
 	require.NoError(t, err)
@@ -271,7 +245,7 @@ func TestIdleForCountsHeldClaimsAsBusy(t *testing.T) {
 	assert.False(t, busy, "a daemon nobody is using is not busy")
 	assert.Greater(t, idle, 59*time.Minute, "and its idleness is measured from the last client")
 
-	held := budget.Request("w1", types.MachineClaim{
+	held := budget.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, PID: os.Getpid(),
 	})
 	require.True(t, held.Granted)

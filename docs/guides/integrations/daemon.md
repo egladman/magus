@@ -37,7 +37,7 @@ That limit is per process. The **machine budget** is the one that spans them: ev
 
 The daemon arbitrates that budget; it does not run your work. A top-level `magus run` executes in your own process and prints to your own terminal. Nested `magus` invocations still adopt into their parent's pool.
 
-`magus status` shows the live pool state, current slot usage, and the machine budget with every claim and waiter across worktrees.
+`magus status` shows the live pool state, current slot usage, and the machine budget with every claim across worktrees.
 
 ## Daemon
 
