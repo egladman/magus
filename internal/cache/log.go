@@ -751,6 +751,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			cause:   recordStr(r, "error"),
 			ref:     ref,
 			logPath: recordStr(r, "log"),
+			refused: recordBool(r, "refused"),
 		})
 		h.status.failed++
 		h.paintStatus()
@@ -1010,6 +1011,8 @@ type failureReport struct {
 	cause   string
 	ref     string
 	logPath string
+	// refused is a step that never started, so "(ran, 0s)" would be false.
+	refused bool
 }
 
 // causeKey identifies a failure by its project and by its cause with every
@@ -1075,7 +1078,11 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		// short-circuit printf and swallow the cause, output ref, and reproduce
 		// command below, which is the detail the user most needs on the one
 		// path where the terminal is already misbehaving.
-		h.printf("%s %s (ran, %s)\n", glyph(colorize, "fail", colRed), heading, fmtDur(dur))
+		if f.refused {
+			h.printf("%s %s (not started)\n", glyph(colorize, "fail", colRed), heading)
+		} else {
+			h.printf("%s %s (ran, %s)\n", glyph(colorize, "fail", colRed), heading, fmtDur(dur))
+		}
 	}
 	if cause != "" {
 		causes := failureCauses(cause)
@@ -1109,7 +1116,7 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		} else {
 			h.printf("  inspect: %s\n", full)
 		}
-	} else {
+	} else if !f.refused {
 		h.printf("  output: unavailable (no output was captured)\n")
 	}
 	if project == "" || target == "" {

@@ -143,6 +143,7 @@ a NotFound error rather than a third RPC.
 | `clear-cache`       | Invalidate cached build entries                                                   |
 | `check-review`      | Note when a review this tree took part in has merged                              |
 | `check-drift`       | Notice, without blocking, a commit that left generated output or formatting stale |
+| `regenerate-owed`   | Regenerate and stage the generated files a merge or rebase kept one side of       |
 
 Each submit is fire-and-forget and coalesced (an identical in-flight job is not
 started twice) and returns a metadata snapshot - the job's last run and the
