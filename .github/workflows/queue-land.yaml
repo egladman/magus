@@ -5,16 +5,18 @@ name: Queue land
 # every stage beneath it in its partition are green.
 #
 # workflow_run on `requested` rather than `completed`: this job starts beside validation
-# and follows it, downloading each stage's verdict artifact as the stage job uploads it,
-# so a green stage lands while slower stages are still running. `completed` would wait
-# for the slowest stage of the whole run. workflow_run always runs this file as main has
-# it, with its own token and secrets, which a pull request cannot reach.
+# and `mergequeue land --from-run` follows it, downloading each stage's verdict artifact
+# as the stage job uploads it, so a green stage lands while slower stages are still
+# running. `completed` would wait for the slowest stage of the whole run. workflow_run
+# always runs this file as main has it, with its own token and secrets, which a pull
+# request cannot reach.
 #
-# It never checks out or executes pull-request code and never builds magus: it builds
-# the mergequeue CLI from main, imports the validated commits from the artifacts as git
-# objects, and runs git plumbing and API calls. Before each merge it re-checks approval
-# at the validated head and that the tree it will land differs from the approved change
-# only in derived files; after each, it stops unless main carries the validated tree.
+# It never checks out or executes pull-request code: it builds magus and the mergequeue
+# CLI from main (magus only to run tools/queue.buzz), imports the validated commits from
+# the artifacts as git objects, and runs git plumbing and API calls. Before each merge
+# it re-checks approval at the validated head and that the tree it will land differs
+# from the approved change only in derived files; after each, it stops unless main
+# carries the validated tree.
 #
 # The write credential is this job's own Actions token, so no long-lived secret exists.
 # Its pushes and merges start no workflow, so once anything lands the job dispatches
@@ -61,72 +63,24 @@ jobs:
           version: '2026.4.8'
           env: false
 
+      # main's source, never the pull request's: this checkout is the default branch.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
       - name: Build mergequeue
-        run: |
-          "$(mise where go)/bin/go" -C libs/mergequeue build -o "$RUNNER_TEMP/bin/mergequeue" ./cmd/mergequeue
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+        env:
+          QUEUE_STEP: build
+        run: magus buzz tools/queue.buzz
 
-      # The committer of a regeneration pushed to a queued branch; its author is the
-      # branch head's author.
-      - name: Identify the queue as committer
-        run: |
-          git config user.name 'magus-queue'
-          git config user.email 'magus-queue@users.noreply.github.com'
-
+      # Also sets the queue as committer of a regeneration pushed to a queued branch, and
+      # dispatches main's runs once anything landed, even when landing then failed.
       - name: Land each stage as it goes green
         env:
+          QUEUE_STEP: land
           GH_TOKEN: ${{ github.token }}
           MERGEQUEUE_TOKEN: ${{ github.token }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
-        run: |
-          set -euo pipefail
-          q="$RUNNER_TEMP/queue"
-          mkdir -p "$q/verdicts"
-          # Reads the run's status BEFORE listing its artifacts, so the sweep that sees
-          # it completed has already seen every artifact it uploaded; only then .done.
-          follow() {
-            while :; do
-              status=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json status --jq .status)
-              for name in $(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/artifacts" --jq '.artifacts[].name'); do
-                case "$name" in
-                  magus-queue-plan)
-                    if [ ! -f "$q/plan.json" ]; then
-                      gh run download "$RUN" --repo "$GITHUB_REPOSITORY" -n "$name" -D "$q/.plan"
-                      mv "$q/.plan/plan.json" "$q/plan.json"
-                    fi ;;
-                  magus-queue-verdict-*)
-                    id=${name#magus-queue-verdict-}
-                    if [ ! -d "$q/verdicts/$id" ]; then
-                      gh run download "$RUN" --repo "$GITHUB_REPOSITORY" -n "$name" -D "$q/verdicts/.dl-$id"
-                      mv "$q/verdicts/.dl-$id" "$q/verdicts/$id"
-                    fi ;;
-                esac
-              done
-              if [ "$status" = completed ]; then
-                touch "$q/verdicts/.done"
-                return
-              fi
-              sleep 15
-            done
-          }
-          follow &
-          follower=$!
-          until [ -f "$q/plan.json" ] || [ -f "$q/verdicts/.done" ]; do sleep 5; done
-          if [ ! -f "$q/plan.json" ]; then
-            echo "the validation run planned nothing"
-            wait "$follower"
-            exit 0
-          fi
-          before=$(git ls-remote origin "refs/heads/$MAIN" | cut -f1)
-          # A failed land still dispatches main's runs for whatever landed before it.
-          rc=0
-          mergequeue land --plan "$q/plan.json" --verdicts "$q/verdicts" --provider github \
-            --status-context magus/queue --follow --interval 10s || rc=$?
-          wait "$follower"
-          if [ "$(git ls-remote origin "refs/heads/$MAIN" | cut -f1)" != "$before" ]; then
-            gh workflow run ci.yaml --repo "$GITHUB_REPOSITORY" --ref "$MAIN"
-            gh workflow run cd.yaml --repo "$GITHUB_REPOSITORY" --ref "$MAIN"
-            gh workflow run queue.yaml --repo "$GITHUB_REPOSITORY" --ref "$MAIN"
-          fi
-          exit "$rc"
+        run: magus buzz tools/queue.buzz

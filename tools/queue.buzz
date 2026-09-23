@@ -1,0 +1,235 @@
+// The merge queue's workflow steps, here so .github/workflows/queue.yaml and
+// queue-land.yaml carry no shell of their own. Each step is one invocation:
+//
+//	QUEUE_STEP=build     magus buzz tools/queue.buzz   compile mergequeue; put it and mise's Go on PATH
+//	QUEUE_STEP=plan      magus buzz tools/queue.buzz   plan the queue; write the stage matrix (DEPTH)
+//	QUEUE_STEP=validate  magus buzz tools/queue.buzz   validate one change of the plan (CHANGE)
+//	QUEUE_STEP=land      magus buzz tools/queue.buzz   land what validation run RUN uploads onto MAIN
+//
+// The step is an environment variable because `magus buzz` passes a script no
+// arguments; every input is one too. The decisions (which stages the matrix holds,
+// each command's argv, whether anything landed) are pure functions tested at the
+// bottom; the process calls are not, since exercising them means running the queue.
+//
+// Landing never checks out or runs pull-request code: the land step runs only
+// mergequeue, git and gh, from main's checkout.
+namespace queue;
+
+import "fs";
+import "os";
+import "proc";
+import "serialize";
+import "std";
+
+import "assert";
+
+// main's workflows the land step starts after a landing, since a merge made with the
+// job's Actions token starts none.
+final DISPATCH = ["ci.yaml", "cd.yaml", "queue.yaml"];
+
+fun env(name: str) > str { return os\env(name) ?? ""; }
+
+fun encode(doc: {str: any}) > str {
+    return serialize\jsonEncode(serialize\Boxed.init(doc));
+}
+
+fun need(name: str) > str !> any {
+    final v = env(name);
+    if (v == "") {
+        throw "queue: {name} is not set; the workflow step must pass it";
+    }
+    return v;
+}
+
+// stageIDs lists the changes the plan gives a stage job: the first `depth` of each
+// partition. The rest wait for the run the next landing starts.
+export fun stageIDs(plan: str) > [str] !> any {
+    final doc = serialize\jsonDecode(plan);
+    final depth = doc.q("depth").integerValue();
+    final ids = mut [<str>];
+    foreach (partition in doc.q("partitions").listValue()) {
+        final changes = partition.listValue();
+        var i = 0;
+        while (i < changes.len() and i < depth) {
+            ids.append(changes[i].q("id").stringValue());
+            i = i + 1;
+        }
+    }
+    return ids;
+}
+
+// outputs renders the plan job's $GITHUB_OUTPUT lines: the stage matrix and its size.
+export fun outputs(ids: [str]) > str {
+    final include = mut [<{str: str}>];
+    foreach (id in ids) {
+        include.append({"change": id});
+    }
+    return "matrix=" + encode({"include": include}) + "\ncount={ids.len()}\n";
+}
+
+export fun planArgs(dir: str, depth: str) > [str] {
+    return ["plan", "--changes", dir + "/changes.json", "--provider", "github", "--depth", depth,
+        "--affected", "magus affected ci --plan --stdin", "--out", dir + "/plan.json"];
+}
+
+// validateArgs keeps $MERGEQUEUE_ONTO literal: mergequeue sets it for each hook.
+export fun validateArgs(dir: str, change: str) > [str] {
+    return ["validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
+        "--gate", `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`,
+        "--regenerate", `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`];
+}
+
+// landArgs polls every 15s: each poll is two API requests on the job's Actions token,
+// which GitHub limits to 1,000 an hour per repository.
+export fun landArgs(dir: str, run: str, repo: str) > [str] {
+    return ["land", "--from-run", run, "--run-repo", repo, "--verdicts", dir + "/verdicts",
+        "--provider", "github", "--status-context", "magus/queue", "--interval", "15s"];
+}
+
+// tip reads the commit off `git ls-remote <remote> <ref>`; empty when the ref is absent.
+export fun tip(lsRemote: str) > str {
+    final line = lsRemote.trim().split("\n")[0];
+    return line.split("\t")[0];
+}
+
+// dispatches names the workflows to start on main: all of them when its tip moved,
+// none when nothing landed.
+export fun dispatches(before: str, after: str) > [str] {
+    if (before == after) {
+        return [<str>];
+    }
+    return DISPATCH;
+}
+
+// capture runs cmd without echoing its stdout, and raises with its stderr on failure.
+fun capture(cmd: str, args: [str]) > str !> any {
+    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    if (!res.ok) {
+        throw "queue: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
+    }
+    return res.stdout;
+}
+
+fun queueDir() > str !> any {
+    final dir = need("RUNNER_TEMP") + "/queue";
+    fs\mkdirAll(dir);
+    return dir;
+}
+
+fun build() > void !> any {
+    final goBin = capture("mise", args: ["where", "go"]) + "/bin";
+    final binDir = need("RUNNER_TEMP") + "/bin";
+    proc\exec(goBin + "/go", args: ["-C", "libs/mergequeue", "build", "-o", binDir + "/mergequeue", "./cmd/mergequeue"], opts: {});
+    fs\appendFile(need("GITHUB_PATH"), content: goBin + "\n" + binDir + "\n");
+}
+
+fun plan() > void !> any {
+    final dir = queueDir();
+    final changes = capture("mergequeue", args: ["list", "--provider", "github", "--base", "main"]);
+    fs\writeFile(dir + "/changes.json", content: changes + "\n");
+    proc\exec("mergequeue", args: planArgs(dir, depth: need("DEPTH")), opts: {});
+    final ids = stageIDs(fs\readFile(dir + "/plan.json"));
+    fs\appendFile(need("GITHUB_OUTPUT"), content: outputs(ids));
+}
+
+fun validate() > void !> any {
+    proc\exec("mergequeue", args: validateArgs(queueDir(), change: need("CHANGE")), opts: {});
+}
+
+fun mainTip(branch: str) > str !> any {
+    return tip(capture("git", args: ["ls-remote", "origin", "refs/heads/" + branch]));
+}
+
+fun land() > void !> any {
+    final branch = need("MAIN");
+    final repo = need("GITHUB_REPOSITORY");
+    final args = landArgs(queueDir(), run: need("RUN"), repo: repo);
+    // The committer of a regeneration pushed to a queued branch; its author is the
+    // branch head's author.
+    proc\exec("git", args: ["config", "user.name", "magus-queue"], opts: {});
+    proc\exec("git", args: ["config", "user.email", "magus-queue@users.noreply.github.com"], opts: {});
+    final before = mainTip(branch);
+    final landed = proc\exec("mergequeue", args: args, opts: {"allow_failure": true});
+    // A failed land still dispatches main's runs for whatever landed before it stopped.
+    foreach (workflow in dispatches(before, after: mainTip(branch))) {
+        proc\exec("gh", args: ["workflow", "run", workflow, "--repo", repo, "--ref", branch], opts: {});
+    }
+    if (!landed.ok) {
+        os\exit(landed.code);
+    }
+}
+
+export fun main() > void !> any {
+    final step = env("QUEUE_STEP");
+    if (step == "") {
+        std\print("queue: QUEUE_STEP is not set; nothing to run");
+        return;
+    }
+    if (step == "build") {
+        build();
+    } else if (step == "plan") {
+        plan();
+    } else if (step == "validate") {
+        validate();
+    } else if (step == "land") {
+        land();
+    } else {
+        throw "queue: QUEUE_STEP must be build, plan, validate or land; got \"" + step + "\"";
+    }
+}
+
+fun planDoc(depth: int, partitions: [[str]]) > str {
+    final groups = mut [<[{str: str}]>];
+    foreach (ids in partitions) {
+        final group = mut [<{str: str}>];
+        foreach (id in ids) {
+            group.append({"id": id, "head": "abc"});
+        }
+        groups.append(group);
+    }
+    return encode({"schema": "mergequeue.plan/v1", "depth": depth, "partitions": groups});
+}
+
+test "each partition gives its first depth changes a stage" {
+    final ids = stageIDs(planDoc(2, partitions: [["1", "2", "3"], ["4"]]));
+    assert\equal(ids, want: ["1", "2", "4"], message: "depth 2 over partitions of three and one");
+}
+
+test "a plan with no partitions stages nothing" {
+    assert\equal(stageIDs(`{"depth": 3, "partitions": null}`).len(), want: 0, message: "null partitions");
+    assert\equal(stageIDs(`{"depth": 3}`).len(), want: 0, message: "absent partitions");
+}
+
+test "outputs render a compact matrix and its count" {
+    assert\equal(outputs(["1", "4"]), want: `matrix={"include":[{"change":"1"},{"change":"4"}]}` + "\ncount=2\n", message: "two stages");
+    assert\equal(outputs([<str>]), want: `matrix={"include":[]}` + "\ncount=0\n", message: "no stages");
+}
+
+test "validation hooks see MERGEQUEUE_ONTO unexpanded" {
+    final args = validateArgs("/t/queue", change: "482");
+    assert\equal(args[4], want: "482", message: "--only names the change");
+    assert\equal(args[8], want: `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`, message: "gate");
+    assert\equal(args[10], want: `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`, message: "regenerate");
+}
+
+test "land follows the validation run into the queue's verdict directory" {
+    assert\equal(landArgs("/t/queue", run: "99", repo: "o/r"), want: ["land", "--from-run", "99", "--run-repo", "o/r",
+        "--verdicts", "/t/queue/verdicts", "--provider", "github", "--status-context", "magus/queue", "--interval", "15s"],
+        message: "argv");
+}
+
+test "plan args carry the depth and the affected hook" {
+    final args = planArgs("/t/queue", depth: "3");
+    assert\equal(args[6], want: "3", message: "depth");
+    assert\equal(args[8], want: "magus affected ci --plan --stdin", message: "affected hook");
+}
+
+test "tip reads the commit off ls-remote" {
+    assert\equal(tip("abc123\trefs/heads/main\n"), want: "abc123", message: "one ref");
+    assert\equal(tip(""), want: "", message: "absent ref");
+}
+
+test "main's runs are dispatched only when its tip moved" {
+    assert\equal(dispatches("a", after: "a").len(), want: 0, message: "nothing landed");
+    assert\equal(dispatches("a", after: "b"), want: ["ci.yaml", "cd.yaml", "queue.yaml"], message: "something landed");
+}

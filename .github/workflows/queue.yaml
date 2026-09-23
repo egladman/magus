@@ -78,28 +78,21 @@ jobs:
           installation-strategy: source
           source-path: .
 
+      # Every step's logic is tools/queue.buzz, selected by QUEUE_STEP.
       - name: Build mergequeue
-        run: |
-          echo "$(mise where go)/bin" >> "$GITHUB_PATH"
-          "$(mise where go)/bin/go" -C libs/mergequeue build -o "$RUNNER_TEMP/bin/mergequeue" ./cmd/mergequeue
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+        env:
+          QUEUE_STEP: build
+        run: magus buzz tools/queue.buzz
 
+      # Speculation depth: the first DEPTH changes of each partition get a stage job; the
+      # rest wait for the run the next landing starts.
       - id: plan
         name: Plan the queue
         env:
+          QUEUE_STEP: plan
           GITHUB_TOKEN: ${{ github.token }}
           DEPTH: '3'
-        run: |
-          q="$RUNNER_TEMP/queue"
-          mkdir -p "$q"
-          mergequeue list --provider github --base main > "$q/changes.json"
-          mergequeue plan --changes "$q/changes.json" --provider github --depth "$DEPTH" \
-            --affected 'magus affected ci --plan --stdin' --out "$q/plan.json"
-          # Speculation depth: the first DEPTH changes of each partition get a stage job;
-          # the rest wait for the run the next landing starts.
-          matrix=$(jq -c '{include: [.depth as $d | (.partitions // [])[] | .[:$d][] | {change: .id}]}' "$q/plan.json")
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "count=$(jq '.include | length' <<<"$matrix")" >> "$GITHUB_OUTPUT"
+        run: magus buzz tools/queue.buzz
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -137,10 +130,9 @@ jobs:
           source-path: .
 
       - name: Build mergequeue
-        run: |
-          echo "$(mise where go)/bin" >> "$GITHUB_PATH"
-          "$(mise where go)/bin/go" -C libs/mergequeue build -o "$RUNNER_TEMP/bin/mergequeue" ./cmd/mergequeue
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+        env:
+          QUEUE_STEP: build
+        run: magus buzz tools/queue.buzz
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -151,17 +143,12 @@ jobs:
       # credential; the repository is public, so the read needs none.
       - name: Validate #${{ matrix.change }}
         env:
+          QUEUE_STEP: validate
           CHANGE: ${{ matrix.change }}
           # Each stage is a worktree of its own; one cache lets a stage replay what the
           # stages below it already ran.
           MAGUS_CACHE_DIR: ${{ github.workspace }}/.magus
-        run: |
-          q="$RUNNER_TEMP/queue"
-          # The hooks' variables are for mergequeue to set, so they stay single-quoted.
-          # shellcheck disable=SC2016
-          mergequeue validate --plan "$q/plan.json" --only "$CHANGE" --verdicts "$q/verdicts" \
-            --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
-            --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'
+        run: magus buzz tools/queue.buzz
 
       # The directory's contents become the artifact's root: verdict.json and, for a green
       # change, stage.bundle.
