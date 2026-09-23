@@ -155,8 +155,12 @@ func serverStatus(ctx context.Context, args []string) error {
 	printMCPEndpointStatus(os.Stdout, report.MCPEndpoint)
 	printConsoleStatus(os.Stdout, report.Console)
 	if len(report.Pool.Workspaces) > 0 {
-		fmt.Printf("\nloaded workspaces (%d)\n", len(report.Pool.Workspaces))
+		fmt.Printf("\nworkspaces (%d)\n", len(report.Pool.Workspaces))
 		for _, ws := range report.Pool.Workspaces {
+			if !ws.Loaded() {
+				fmt.Printf("  %s  (%s)\n", ws.Root, ws.State)
+				continue
+			}
 			fmt.Printf("  %s  (idle %s)\n", ws.Root, time.Since(ws.LastAccess).Round(time.Second))
 		}
 	}

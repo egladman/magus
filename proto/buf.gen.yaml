@@ -8,6 +8,9 @@ managed:
   # dependency; its generated Go comes from the published module, not our tree.
   disable:
     - module: buf.build/bufbuild/protovalidate
+    # google.rpc's Go types ship in google.golang.org/genproto; a copy under our prefix
+    # would be a second google.rpc.Status that connect-go's details cannot decode into.
+    - module: buf.build/googleapis/googleapis
   override:
     - file_option: go_package_prefix
       value: github.com/egladman/magus/proto/gen/go

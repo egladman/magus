@@ -109,6 +109,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A daemon whose workspace fails to load keeps serving and says why.** The console,
+  `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
+  `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
+  `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
+  workspace reloads when a `.buzz` file or `magus.yaml` changes.
+- **The daemon refuses a request as `google.rpc.Status` JSON in the route's protocol.**
+  A Connect service answers Connect's envelope; every other route, `/mcp` included, answers
+  AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
+  `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
+  MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
+  console-file refusals gain MGS9007-9010.
 - **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
   and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
   and fails when the build does. The graph JSON is no longer committed.

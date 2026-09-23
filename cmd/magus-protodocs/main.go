@@ -397,7 +397,7 @@ func displayType(fd protoreflect.FieldDescriptor) (disp, ref string) {
 	switch fd.Kind() {
 	case protoreflect.MessageKind, protoreflect.GroupKind, protoreflect.EnumKind:
 		full := string(fieldTypeFullName(fd))
-		disp := leaf(full)
+		disp := localName(full)
 		if fd.IsList() {
 			disp = "repeated " + disp
 		}
@@ -749,11 +749,28 @@ func escapeMD(s string) string {
 	return strings.NewReplacer("|", `\|`, "_", `\_`).Replace(s)
 }
 
-func leaf(qualified string) string {
+// leafName is the last dot-separated segment of a qualified name: "Token" from
+// "magus.token.v1.Token". Compact display text where a collision between two same-named
+// nested types is only cosmetic; localName is the one anchors and headings need instead.
+func leafName(qualified string) string {
 	if i := strings.LastIndexByte(qualified, '.'); i >= 0 {
 		return qualified[i+1:]
 	}
 	return qualified
+}
+
+// localName is a type's name within its package, a nested type keeping its parent:
+// "magus.status.v1alpha1.Workspace.State" is "Workspace.State". leafName alone collides
+// when two messages each nest a State, and so would their headings and anchors. Package
+// segments are lowercase and type names are not, which is where the package ends.
+func localName(qualified string) string {
+	parts := strings.Split(qualified, ".")
+	for i, p := range parts {
+		if p != "" && p[0] >= 'A' && p[0] <= 'Z' {
+			return strings.Join(parts[i:], ".")
+		}
+	}
+	return leafName(qualified)
 }
 
 // anchor is the heading id goldmark's auto-heading-id extension would assign to a `### name`
@@ -762,7 +779,7 @@ func leaf(qualified string) string {
 // rendered HTML so a cross-reference can be built before the site ever renders this page.
 func anchor(name string) string {
 	var b strings.Builder
-	for _, r := range leaf(name) {
+	for _, r := range localName(name) {
 		switch {
 		case r >= 'A' && r <= 'Z':
 			b.WriteRune(r + ('a' - 'A'))
@@ -1156,8 +1173,8 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 		}
 		fmt.Fprintf(&b, "`POST /%s.%s/%s`: %s. Source: %s.\n\n", s.Package, s.Name, m.Name, m.kind(), sourceLink(s.File, m.Line))
 		fmt.Fprintf(&b, "Takes %s, returns %s.\n\n",
-			a.typeLink(leaf(m.Input), m.Input, s.Package, path),
-			a.typeLink(leaf(m.Output), m.Output, s.Package, path))
+			a.typeLink(leafName(m.Input), m.Input, s.Package, path),
+			a.typeLink(leafName(m.Output), m.Output, s.Package, path))
 	}
 
 	msgNames, enumNames := a.reachableFrom(s.Package, seedsOf(s))
@@ -1257,7 +1274,7 @@ func (a api) reachableFrom(pkg string, seeds []string) (msgs []string, enums []s
 }
 
 func writeMessage(b *strings.Builder, a api, m message, used []usage, fromPath string) {
-	fmt.Fprintf(b, "### %s\n\n", leaf(m.Name))
+	fmt.Fprintf(b, "### %s\n\n", localName(m.Name))
 	if m.Deprecated {
 		b.WriteString("**Deprecated.**\n\n")
 	}
@@ -1303,7 +1320,7 @@ func writeMessage(b *strings.Builder, a api, m message, used []usage, fromPath s
 }
 
 func writeEnum(b *strings.Builder, e enumType, used []usage, fromPath string) {
-	fmt.Fprintf(b, "### %s\n\n", leaf(e.Name))
+	fmt.Fprintf(b, "### %s\n\n", localName(e.Name))
 	if e.Deprecated {
 		b.WriteString("**Deprecated.**\n\n")
 	}

@@ -312,7 +312,7 @@ func TestUnauthenticatedCallRejected(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	path, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
 	// A fixed verifier standing in for auth.VerifyMCPBearer: accept exactly "good".
-	guarded := httpx.BearerGuard(func(presented string) bool { return presented == "good" }, h)
+	guarded := httpx.BearerGuard(httpx.FormatConnect, func(presented string) bool { return presented == "good" }, h)
 	srv := httptest.NewServer(guarded)
 	defer srv.Close()
 
@@ -333,7 +333,7 @@ func TestUnauthenticatedCallRejected(t *testing.T) {
 }
 
 // TestTierHierarchyAtGuard proves the three-tier policy the daemon mounts this
-// service behind: the guard is BearerGuard(auth.VerifyCLIBearer, ...), exactly
+// service behind: the guard is BearerGuard(FormatConnect, auth.VerifyCLIBearer, ...), exactly
 // the daemon's wiring, with a REAL cli token and a REAL non-expired connector
 // token on disk. The connector token, though valid on every data surface
 // (auth.VerifyMCPBearer accepts it), must be rejected on BOTH TokenService RPCs
@@ -362,7 +362,7 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	require.False(t, auth.VerifyCLIBearer(connSecret))
 
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
-	srv := httptest.NewServer(httpx.BearerGuard(auth.VerifyCLIBearer, h))
+	srv := httptest.NewServer(httpx.BearerGuard(httpx.FormatConnect, auth.VerifyCLIBearer, h))
 	defer srv.Close()
 
 	asConnector := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,

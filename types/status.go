@@ -356,11 +356,51 @@ type StatusRunningTarget struct {
 	Inv       string    `json:"inv,omitempty" yaml:"inv,omitempty"` // invocation id; deep-links to this running target's live log
 }
 
-// StatusWorkspace describes one workspace currently loaded by the daemon.
+// WorkspaceState is where the daemon's copy of a workspace sits.
+type WorkspaceState string
+
+const (
+	// WorkspaceLoading is a workspace whose magusfiles are being evaluated; it resolves on its own.
+	WorkspaceLoading WorkspaceState = "loading"
+	// WorkspaceActive is a loaded workspace; calls against it are served.
+	WorkspaceActive WorkspaceState = "active"
+	// WorkspaceFailed is a workspace whose load failed. It stays failed until one of its
+	// sources changes, since loading the same bytes again cannot succeed.
+	WorkspaceFailed WorkspaceState = "failed"
+)
+
+// WorkspaceFailure is why a workspace failed to load.
+type WorkspaceFailure struct {
+	// Message is the load error as the CLI renders it.
+	Message string `json:"message" yaml:"message"`
+	// Diagnostics are the positioned diagnostics the load stopped on; empty when the
+	// failure has no source position (an unreadable magus.yaml, say).
+	Diagnostics []SourceDiagnostic `json:"diagnostics,omitempty" yaml:"diagnostics,omitempty"`
+}
+
+// SourceDiagnostic is one diagnostic located in a workspace file.
+type SourceDiagnostic struct {
+	// Code is the BZZ or MGS code; empty for an uncoded parse error.
+	Code DiagnosticCode `json:"code,omitempty" yaml:"code,omitempty"`
+	// URL is the code's docs page, empty when Code is.
+	URL string `json:"url,omitempty" yaml:"url,omitempty"`
+	// File is relative to the workspace root.
+	File    string `json:"file" yaml:"file"`
+	Line    int    `json:"line" yaml:"line"`
+	Column  int    `json:"column" yaml:"column"`
+	Message string `json:"message" yaml:"message"`
+}
+
+// StatusWorkspace describes one workspace the daemon holds: loading, loaded, or failed.
 type StatusWorkspace struct {
-	Root       string    `json:"root" yaml:"root"`
-	LoadedAt   time.Time `json:"loaded_at" yaml:"loaded_at"`
-	LastAccess time.Time `json:"last_access" yaml:"last_access"`
+	Root string `json:"root" yaml:"root"`
+	// State is empty from a daemon that reports only loaded workspaces, which Loaded and
+	// every proto conversion treat as active; see Loaded's compat note.
+	State WorkspaceState `json:"state,omitempty" yaml:"state,omitempty"`
+	// Error is set only in WorkspaceFailed.
+	Error      *WorkspaceFailure `json:"error,omitempty" yaml:"error,omitempty"`
+	LoadedAt   time.Time         `json:"loaded_at" yaml:"loaded_at"`
+	LastAccess time.Time         `json:"last_access" yaml:"last_access"`
 	// Live cache activity for this workspace (daemon mode; zero otherwise).
 	CacheHit   int   `json:"cache_hit,omitempty" yaml:"cache_hit,omitempty"`
 	CacheMiss  int   `json:"cache_miss,omitempty" yaml:"cache_miss,omitempty"`
@@ -372,3 +412,10 @@ type StatusWorkspace struct {
 	// built-in environment provider. The NAME only, never a reference, never a value.
 	SecretProvider string `json:"secret_provider,omitempty" yaml:"secret_provider,omitempty"`
 }
+
+// Loaded reports whether w is serving: active, or from a daemon that reports no state.
+//
+// compat(until: no daemon that predates Workspace.State is still reachable): an empty
+// State came only from a daemon built before this field existed, so it is treated as
+// WorkspaceActive rather than as an unrecognized state.
+func (w StatusWorkspace) Loaded() bool { return w.State == "" || w.State == WorkspaceActive }
