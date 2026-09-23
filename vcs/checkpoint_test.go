@@ -40,7 +40,7 @@ func TestCheckpointCleanTree(t *testing.T) {
 	cp, err := Checkpoint(ctx, dir, res, false)
 	require.NoError(t, err)
 
-	head, err := vcsOutput(ctx, dir, "git", "rev-parse", "HEAD")
+	head, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "HEAD")
 	require.NoError(t, err)
 	assert.Equal(t, head, cp.Revision, "revision must be the full head id, feedable back to a VCS")
 	assert.Equal(t, "work", cp.Branch)
@@ -145,16 +145,16 @@ func TestCheckpointPreservesOnlyWhenAsked(t *testing.T) {
 	plain, err := Checkpoint(ctx, dir, res, false)
 	require.NoError(t, err)
 	assert.Empty(t, plain.Preserved, "a checkpoint minted a handle nobody asked for")
-	refs, err := vcsOutput(ctx, dir, "git", "for-each-ref", "refs/magus/preserved/")
+	refs, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref", "refs/magus/preserved/")
 	require.NoError(t, err)
 	assert.Empty(t, refs, "a checkpoint that preserved nothing still anchored a ref")
 
 	kept, err := Checkpoint(ctx, dir, res, true)
 	require.NoError(t, err)
 	require.NotEmpty(t, kept.Preserved, "preserve was asked for and produced no handle")
-	held, err := vcsOutput(ctx, dir, "git", "show", kept.Preserved+":scratch.txt")
+	held, err := gitOutput(ctx, dir, gitOpts{}, "show", kept.Preserved+":scratch.txt")
 	require.NoError(t, err, "the handle does not resolve")
-	// vcsOutput trims, so the stored newline is not in the comparison.
+	// gitOutput trims, so the stored newline is not in the comparison.
 	assert.Equal(t, "unfinished", held, "the handle does not hold the untracked work")
 
 	// The identity half of the record is unaffected by capturing: same tree, same digests.

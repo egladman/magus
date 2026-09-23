@@ -102,6 +102,7 @@ const (
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
 	denyRuleCd                denyRuleName = "cd"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
+	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 
@@ -353,6 +354,86 @@ func captureFilterFires(cmds []hint.Invocation, command string, d Dialect) bool 
 // its value-taking flags differently and no flag value looks like this path.
 func namesCapture(c hint.Invocation) bool {
 	return slices.ContainsFunc(c.Args, capturePathRe.MatchString)
+}
+
+// exitStatusEchoFires reports a line whose last statement prints the previous exit status
+// and nothing else. The host reports a nonzero exit on its own, and the echo exits 0, so
+// the line reads as passing whatever ran before it.
+//
+// Only the last top-level statement, after `;` or a newline, and only printed to the
+// console: anywhere earlier, after `&&`/`||`, redirected, or captured by `printf -v`, the
+// status can feed later logic, and the guard cannot prove it does not.
+func exitStatusEchoFires(command string, d Dialect) bool {
+	f, err := parseFile(command, d)
+	if err != nil || len(f.Stmts) < 2 {
+		return false
+	}
+	prev, last := f.Stmts[len(f.Stmts)-2], f.Stmts[len(f.Stmts)-1]
+	// After `&`, $? is the status of starting a job, not of the job.
+	if prev.Background || prev.Coprocess || prev.Disown {
+		return false
+	}
+	if last.Background || last.Coprocess || last.Disown || last.Negated || len(last.Redirs) > 0 {
+		return false
+	}
+	call, ok := last.Cmd.(*syntax.CallExpr)
+	if !ok || len(call.Assigns) > 0 || len(call.Args) < 2 {
+		return false
+	}
+	switch filepath.Base(literalWord(call.Args[0].Parts)) {
+	case "echo":
+	case "printf":
+		if slices.ContainsFunc(call.Args[1:], func(w *syntax.Word) bool { return strings.HasPrefix(w.Lit(), "-v") }) {
+			return false
+		}
+	default:
+		return false
+	}
+	printsStatus := false
+	for _, w := range call.Args[1:] {
+		status, only := onlyExitStatus(w.Parts, false)
+		if !only {
+			return false
+		}
+		printsStatus = printsStatus || status
+	}
+	return printsStatus
+}
+
+// onlyExitStatus reports whether parts expand to literal text and bare `$?` alone, and
+// whether a `$?` was among them. An unquoted glob or tilde is refused because it expands
+// to something other than the label it looks like.
+func onlyExitStatus(parts []syntax.WordPart, quoted bool) (status, only bool) {
+	for _, p := range parts {
+		switch p := p.(type) {
+		case *syntax.Lit:
+			if !quoted && strings.ContainsAny(p.Value, "*?[~") {
+				return false, false
+			}
+		case *syntax.SglQuoted:
+		case *syntax.DblQuoted:
+			s, ok := onlyExitStatus(p.Parts, true)
+			if !ok {
+				return false, false
+			}
+			status = status || s
+		case *syntax.ParamExp:
+			if !isBareExitStatus(p) {
+				return false, false
+			}
+			status = true
+		default:
+			return false, false
+		}
+	}
+	return status, true
+}
+
+func isBareExitStatus(p *syntax.ParamExp) bool {
+	return p.Param != nil && p.Param.Value == "?" && p.Flags == nil &&
+		!p.Excl && !p.Length && !p.Width && !p.IsSet &&
+		p.NestedParam == nil && p.Index == nil && len(p.Modifiers) == 0 &&
+		p.Slice == nil && p.Repl == nil && p.Names == 0 && p.Exp == nil
 }
 
 // throwawayDirRe matches a path under a temp root, or any path with a scratchpad
@@ -1009,7 +1090,11 @@ var (
 	// correction is the flag that returns that thing, not the prohibition.
 	// The exit-status fact is the half a reader cannot discover by trying again: the pipe
 	// SUCCEEDS, so a failing gate reads as exit 0 and nothing ever says so.
-	pipeExitNote      = "A pipe also takes the exit status from the last stage, so a failing magus reads as exit 0."
+	pipeExitNote = "A pipe also takes the exit status from the last stage, so a failing magus reads as exit 0."
+	// The exit-0 fact leads the second line: it is what turns the echo from noise into a
+	// wrong answer, and nothing on screen says so.
+	denyExitStatusEcho = "Drop the trailing `echo $?`: the harness already reports a nonzero exit, and success needs no confirmation.\n" +
+		"The echo exits 0, so the line reads as passing whatever ran before it. If a failure must not be masked, join with `&&` or make separate calls."
 	throwawayCopyDeny = "Run from the workspace and name the project: `" + hint.Run.With("<target>", "<project>") + "`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
 		"A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits."
 )
@@ -1513,6 +1598,10 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		return ShellVerdict{Deny: pipeDeny(pipedVerb, pipedFilter), Rule: denyRule{Name: denyRuleOutputPipe}}
 	case redirected:
 		return ShellVerdict{Deny: redirectDeny(redirVerb, redirDest), Rule: denyRule{Name: denyRuleOutputRedirect}}
+	// Below the rules that name the command itself: on `go test ./...; echo $?` the raw
+	// tool is the correction worth reading first.
+	case exitStatusEchoFires(command, d):
+		return ShellVerdict{Deny: denyExitStatusEcho, Rule: denyRule{Name: denyRuleExitStatusEcho}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
 		return ShellVerdict{Context: updateGuardContext}
 	case ruleFires(cmds, parsed, command, docSearchFires, docSearchRe):

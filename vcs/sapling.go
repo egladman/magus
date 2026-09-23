@@ -35,7 +35,7 @@ import (
 //
 // Sapling has no colocation story: `sl clone` of a git repo writes .sl and NO .git, so
 // unlike jj there is no repo that satisfies two claims at once.
-type saplingVCS struct{}
+type saplingVCS struct{ declines[saplingName] }
 
 // Name is the BINARY name, not the product name. std.vcsExe resolves the active VCS by
 // running exec.LookPath on it, so "sapling" would leave `vcs.cmd` looking for a binary
@@ -228,7 +228,7 @@ func (v saplingVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (
 	return out, nil
 }
 
-// RangeDiff implements types.RangeDiffReporter via `sl diff -r "ancestor(base,head)" -r
+// RangeDiff implements types.RangeReporter via `sl diff -r "ancestor(base,head)" -r
 // head`, the same Mercurial-inherited ancestor() revset hg's RangeDiff uses. Verified
 // separately against Sapling 0.2.20260811-150444, per this file's own rule about verifying
 // the two backends independently rather than porting one to the other: a repository forked
@@ -239,10 +239,7 @@ func (v saplingVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (
 // No --git flag: Sapling already emits a git-style diff by default (see DirtyDiff).
 func (v saplingVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
 	// checkRevsetRef, not checkRef: see hgVCS.RangeDiff, whose expression this mirrors.
-	if err := checkRevsetRef(base); err != nil {
-		return "", err
-	}
-	if err := checkRevsetRef(head); err != nil {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return "", err
 	}
 	args := []string{"diff", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
@@ -367,16 +364,15 @@ func (v saplingVCS) IgnoredFiles(ctx context.Context, dir string, paths []string
 	return out, nil
 }
 
-// RemoteURL implements types.RemoteReporter. `sl paths default` prints the default push/pull
-// URL, which for a git-backed clone is the git remote. A repository with none exits
-// non-zero with "not found!" on stderr, which is the ErrVCSUnsupported case callers degrade
-// on rather than a failure to report.
-func (v saplingVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
-	out, err := vcsOutput(ctx, dir, "sl", "paths", "default")
-	if err != nil || out == "" {
-		return "", types.ErrVCSUnsupported
-	}
-	return out, nil
+// RemoteURL implements types.RemoteReporter; see hgFamilyRemoteURL. For a git-backed
+// clone the default path is the git remote.
+func (v saplingVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
+	return hgFamilyRemoteURL(ctx, "sl", dir, name)
+}
+
+// IsAncestor implements types.AncestryReporter; see hgFamilyIsAncestor.
+func (v saplingVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
+	return hgFamilyIsAncestor(ctx, "sl", dir, ancestor, descendant)
 }
 
 // ConfiguredRemote implements types.RemoteConfigReporter by reading `[paths] default`
@@ -429,6 +425,9 @@ func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) 
 // never fetched this" answer, not a probe failure. The one error left is a date sl printed
 // that did not parse.
 func (v saplingVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return time.Time{}, false, err
+	}
 	out, _ := vcsOutput(ctx, dir, "sl", "log", "-r", rev, "--template", "{date|rfc3339date}")
 	if out == "" {
 		return time.Time{}, false, nil
@@ -635,6 +634,11 @@ func (v saplingVCS) writeMergeDriver(ctx context.Context, root string, outputGlo
 	})
 }
 
+// MergeDriverCommand implements types.MergeDriverInstaller; see hgFamilyMergeDriverCommand.
+func (v saplingVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
+	return hgFamilyMergeDriverCommand(ctx, "sl", root)
+}
+
 // CheckMergeDriver reports whether .sl/config holds the magus merge-driver section. A
 // torn section is an error.
 func (v saplingVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
@@ -690,34 +694,6 @@ func (v saplingVCS) InstallDriftHook(ctx context.Context, root, command string) 
 // ConflictResolver and MergeStarter for Sapling. The resolve state machine is Mercurial's,
 // so the mapping is close, but two behaviors differ from hg and the methods below note
 // where they bite.
-//
-// The assertions below cover every optional capability Sapling implements. They are
-// compile-time on purpose: each interface is reached by type assertion at its call site, so
-// dropping a method would not fail the build, it would silently demote Sapling to whatever
-// the caller's fallback answers ("resolve this merge by hand" for ConflictResolver, "assume
-// pushed" for PushStatusReporter, and so on).
-//
-// BranchChangeReporter is the one optional capability Sapling does not implement. As with
-// hg, that is not a technical wall: nothing here suggests a bookmark or ChangedFiles could
-// not answer it. It is simply unbuilt, and the caller (Magus.BranchChanges) reports a named
-// types.VCSCapabilityMissing diagnostic rather than silence for exactly this reason.
-var (
-	_ types.MergeDriverInstaller = saplingVCS{}
-	_ types.RefreshHookInstaller = saplingVCS{}
-	_ types.DriftHookInstaller   = saplingVCS{}
-	_ types.RemoteReporter       = saplingVCS{}
-	_ types.DefaultRefReporter   = saplingVCS{}
-	_ types.PushStatusReporter   = saplingVCS{}
-	_ types.RevTimeReporter      = saplingVCS{}
-	_ types.TrackedFileReporter  = saplingVCS{}
-	_ types.IgnoredFileReporter  = saplingVCS{}
-	_ types.ChurnReporter        = saplingVCS{}
-	_ types.RangeDiffReporter    = saplingVCS{}
-	_ types.ConflictResolver     = saplingVCS{}
-	_ types.RevisionFileReader   = saplingVCS{}
-	_ types.RevisionExporter     = saplingVCS{}
-	_ types.MergeStarter         = saplingVCS{}
-)
 
 func runSaplingBatched(ctx context.Context, root string, args []string, paths []string) error {
 	for _, chunk := range gitPathChunks(paths) {

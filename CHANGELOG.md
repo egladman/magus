@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A review covers a merge of the base into a change only when regeneration reproduces
   it.** A file marked generated gets no exemption of its own; validation regenerates it at
   that merge and records what the review covers.
+- **`AncestryReporter` answers whether one revision reaches another.** All four backends
+  implement `IsAncestor`.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
@@ -43,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the spawn's `description`, `model` and last observed `contextTokens`;
   `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
   grades the child under that job's lease and records its base.
+- **The guard denies a trailing exit-status echo (`exit-status-echo`).** `cmd; echo "rc=$?"`
+  and its `printf` forms are refused: the harness already reports a nonzero exit, and the
+  echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
+  fires; `rc=$?`, `exit $?`, `&&`/`||` chains and redirected echoes pass.
 - **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
   is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
   charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
@@ -130,6 +136,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
+  without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
+  matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
+  name, `RangeDiffReporter` is `RangeReporter`, and `Bisect` moves to `Bisector`.
 - **magus never waits on another magus invocation.** A workspace lock or machine budget
   held by another invocation refuses immediately (exit 75), naming the holder.
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
@@ -238,6 +248,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Every git call magus makes is hardened the same way.** `GIT_DIR`, `GIT_REPLACE_REF_BASE`,
+  `GIT_ATTR_SOURCE`, the shallow and pathspec variables and injected config never reach
+  git, including the shallow-clone deepening fetch, which re-added them. git never prompts
+  for credentials, and no signing, rerere or signature line changes what magus reads.
+- **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**
+  A conflicted merge there read as one that never started, and a file named `*.txt`
+  staged every `.txt` file. A merge already underway is now refused.
+- **`magus affected` rebuilds the project a renamed file left.** Under `diff.renames`,
+  git's default, only the new path was reported. Branch-change notices list both too.
+- **`magus bisect` names the culprit on current git.** Newer git writes
+  `# first 'bad' commit:` in the bisect log, which the parser did not read.
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
 - **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts

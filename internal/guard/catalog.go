@@ -77,6 +77,13 @@ var denyRuleDocs = []RuleDoc{
 			"It is also the second half of a duplicate, since a gate already run locally is the same command on the same tree, and waiting for CI to agree pays twice for one answer. " +
 			"`gh pr list --state open --json number,mergeable,statusCheckRollup` answers every open pull request in one call. " +
 			"Iterating on a run that is already RED is the case worth following, and polling that command serves it too."},
+	{Name: string(denyRuleExitStatusEcho), Decision: "deny",
+		Catches: "a trailing `echo $?`, which repeats an exit status the harness already reports",
+		Why: "The harness reports a nonzero exit on its own and success needs no confirmation, so `cmd; echo \"rc=$?\"` adds lines and no information. " +
+			"It also misreports: the echo exits 0, so the line as a whole passes whatever `cmd` did. " +
+			"It fires only on the LAST statement, joined by `;` or a newline, printing nothing but `$?` and literal text. " +
+			"`rc=$?`, `exit $?`, `[ $? -ne 0 ]`, an echo mid-script, one after `&&` or `||`, and one redirected to a file all keep the status for later logic and are untouched. " +
+			"Chain with `&&`, or make separate calls, when a failure must not be masked."},
 	{Name: string(denyRuleInterpreterRewrite), Decision: "deny",
 		Catches: "an inline interpreter rewriting a file this tree already carries",
 		Why: "A `python -c` or `node -e` that reads a tracked file, substitutes, and writes it back is an edit nobody reviewed: it lands before a diff exists, and the script that produced it is gone the moment the line ends. " +

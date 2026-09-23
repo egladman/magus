@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	semver "github.com/Masterminds/semver/v3"
 	"github.com/egladman/magus/types"
@@ -122,21 +124,32 @@ func lookupImpl(name string) (types.VCSDriver, bool) {
 func InstallableVCSes() []string {
 	var names []string
 	for _, v := range builtin {
-		if _, ok := v.(types.MergeDriverInstaller); ok {
+		if installsMergeDriver(v) {
 			names = append(names, v.Name())
 		}
 	}
 	return names
 }
 
-// Installer returns the merge-driver installer for the named VCS, or (nil, false).
+// Installer returns the merge-driver installer for the named VCS, or (nil, false) for an
+// unknown name or a backend that cannot install one.
 func Installer(name string) (types.MergeDriverInstaller, bool) {
 	v, ok := lookupImpl(name)
-	if !ok {
+	if !ok || !installsMergeDriver(v) {
 		return nil, false
 	}
-	inst, ok := v.(types.MergeDriverInstaller)
-	return inst, ok
+	return v, true
+}
+
+// installsMergeDriver asks v through a read, under a context already cancelled, so nothing
+// runs: a backend that declines answers with its *VCSUnsupportedError before looking at
+// the context, and one that installs fails to start its read.
+func installsMergeDriver(v types.VCSDriver) bool {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := v.MergeDriverCommand(ctx, "")
+	var declined *types.VCSUnsupportedError
+	return !errors.As(err, &declined)
 }
 
 func chooseBase(runtime, global, perVCS, def string) string {
@@ -164,6 +177,58 @@ func perVCSEnv(name, suffix string) string {
 func checkRef(ref string) error {
 	if strings.HasPrefix(ref, "-") {
 		return fmt.Errorf("vcs: refusing ref %q that looks like a flag", ref)
+	}
+	return nil
+}
+
+// checkRev is checkRef for git revisions, which also refuses what `fetch` or `push` would
+// read as a refspec: a leading "+", or a ":" anywhere. `+refs/heads/*:refs/heads/*` passed
+// where a revision belongs overwrites every local branch. A revision naming a commit or a
+// tree never needs either character. Empty passes, as with checkRef.
+func checkRev(revs ...string) error {
+	for _, rev := range revs {
+		if err := checkRef(rev); err != nil {
+			return err
+		}
+		if strings.HasPrefix(rev, "+") || strings.Contains(rev, ":") {
+			return fmt.Errorf("vcs: refusing revision %q that reads as a refspec", rev)
+		}
+	}
+	return nil
+}
+
+// checkRequiredRev is checkRev for a revision the call cannot do without.
+func checkRequiredRev(revs ...string) error {
+	for _, rev := range revs {
+		if rev == "" {
+			return errors.New("vcs: a revision is required")
+		}
+	}
+	return checkRev(revs...)
+}
+
+// checkRequiredRevsetRef is checkRevsetRef for revisions the call cannot do without.
+func checkRequiredRevsetRef(refs ...string) error {
+	for _, ref := range refs {
+		if ref == "" {
+			return errors.New("vcs: a revision is required")
+		}
+		if err := checkRevsetRef(ref); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkRemoteName accepts only what can name a configured remote: no leading "-" or ".",
+// no "/", "\", ":" or whitespace, so the value can never be read as an option, a URL or a
+// path ("." is the repository itself to git).
+func checkRemoteName(name string) error {
+	if name == "" || strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") ||
+		strings.ContainsFunc(name, func(r rune) bool {
+			return r == '/' || r == ':' || r == '\\' || unicode.IsSpace(r) || unicode.IsControl(r)
+		}) {
+		return fmt.Errorf("vcs: refusing remote %q: a remote is named by a configured name, never a URL or a path", name)
 	}
 	return nil
 }
@@ -280,11 +345,7 @@ func ConfiguredRemote(root string) string {
 		if !claimsExist(root, d.Claims()) {
 			continue
 		}
-		r, ok := d.(types.RemoteConfigReporter)
-		if !ok {
-			return ""
-		}
-		u, err := r.ConfiguredRemote(root)
+		u, err := d.ConfiguredRemote(root)
 		if err != nil {
 			return ""
 		}
