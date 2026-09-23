@@ -5,9 +5,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -305,4 +307,66 @@ func TestReadFileReportsAMissingFileAsVanishedNotSkipped(t *testing.T) {
 	assert.Empty(t, records)
 	assert.Zero(t, skipped)
 	assert.True(t, vanished)
+}
+
+// TestClaimStalePruneStampPrunesExactlyOnceUnderConcurrency pins the fix for a plain
+// Stat-then-write pair, which let every concurrent Open in the same window see the same
+// stale (or missing) stamp and each independently decide to prune, forking the 17ms scan
+// once per racing caller instead of once per interval. Racing many callers at a stale
+// stamp, only one may ever run prune.
+func TestClaimStalePruneStampPrunesExactlyOnceUnderConcurrency(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stamp := filepath.Join(dir, pruneStamp)
+	require.NoError(t, os.WriteFile(stamp, nil, 0o644))
+	stale := time.Now().Add(-2 * pruneInterval)
+	require.NoError(t, os.Chtimes(stamp, stale, stale))
+	// A session old enough to prune: exactly one delete of it proves exactly one prune ran.
+	writeAged(t, dir, "ancient", 400*24*time.Hour, []Record{
+		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
+	})
+
+	const callers = 50
+	var ready sync.WaitGroup
+	ready.Add(callers)
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ready.Done()
+			ready.Wait() // line every goroutine up before any of them races the claim
+			claimStalePruneStamp(dir, stamp, "")
+		}()
+	}
+	wg.Wait()
+
+	assert.Empty(t, storedSessions(t, dir), "the one ancient session must be gone: some caller pruned")
+	fi, err := os.Stat(stamp)
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now(), fi.ModTime(), time.Minute, "the winner must have refreshed the stamp")
+}
+
+// TestClaimStalePruneStampSkipsWhenAlreadyContended confirms a caller that loses the
+// TryLock race does nothing rather than blocking for its turn: with the lock already
+// held, a stale-looking stamp is left exactly as it was.
+func TestClaimStalePruneStampSkipsWhenAlreadyContended(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	stamp := filepath.Join(dir, pruneStamp)
+	require.NoError(t, os.WriteFile(stamp, nil, 0o644))
+	stale := time.Now().Add(-2 * pruneInterval)
+	require.NoError(t, os.Chtimes(stamp, stale, stale))
+
+	fl := flock.New(stamp + ".lock")
+	got, err := fl.TryLock()
+	require.NoError(t, err)
+	require.True(t, got)
+	defer func() { _ = fl.Unlock() }()
+
+	claimStalePruneStamp(dir, stamp, "")
+
+	fi, err := os.Stat(stamp)
+	require.NoError(t, err)
+	assert.True(t, fi.ModTime().Equal(stale), "a contended caller must not touch the stamp")
 }

@@ -227,10 +227,7 @@ func Open(dir, session string, start SessionStart) (*Writer, error) {
 	}
 	stamp := filepath.Join(dir, pruneStamp)
 	if fi, err := os.Stat(stamp); err != nil || time.Since(fi.ModTime()) >= pruneInterval {
-		prune(dir, DefaultRetention, session+fileExt)
-		_ = os.WriteFile(stamp, nil, 0o644)
-		now := time.Now()
-		_ = os.Chtimes(stamp, now, now)
+		claimStalePruneStamp(dir, stamp, session+fileExt)
 	}
 	w := &Writer{path: filepath.Join(dir, session+fileExt), session: session, start: start}
 	w.resume()
