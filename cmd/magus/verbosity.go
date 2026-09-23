@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/std"
 )
@@ -225,10 +226,11 @@ func applyDisplay() {
 	// finalizeConfig also points at "jsonl", for the CACHE logger -- see its
 	// comment): general diagnostics go through the process-wide default logger
 	// installed here, not the cache logger those convert, and must not print free
-	// text on stderr while a caller parses this run as JSONL.
+	// text on stderr while a caller parses this run as JSONL. They land as run.notice
+	// records on the stderr encoder a -o jsonl sink writes its notices through.
 	switch {
 	case global.output == string(FormatJSONL):
-		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
+		h = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), lvl))
 	case globalCfg.Log.Format == "json":
 		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
 	case globalCfg.Log.Format == "text":

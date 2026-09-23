@@ -136,11 +136,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
-- **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
-  projects/charms/cache header, per-stage progress and the run summary are now typed
-  events (`run.scope`, `run.step`, `run.summary`, `run.notice`) on the same stream as
-  `run.target.result`; anything not
-  yet converted falls back to a plain JSON line instead of prose.
+- **`-o jsonl` runs emit only records.** Headers, progress, summaries, race diagnostics
+  and lock decisions are typed events on stdout beside `run.target.result`; notices, other
+  log lines and output printed outside a target are `run.notice` records on stderr.
+  `magus x`, `affected --stdin` and `--detach` (`run.detach`) do the same. No record is
+  dropped; the schema is now 5.
+- **A target's `std\print` is captured with its output.** It is withheld, streamed and
+  stored under the target's ref like a subprocess's output, instead of bypassing both.
+- **Breaking: `log.format: jsonl` is refused** from `magus.yaml`, `MAGUS_LOG_FORMAT` and
+  `--log-format`. It withheld per-target results with no stream to carry them; `-o jsonl`
+  is the one way to select it.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination
   and confidence labels are gone. A human reads the evidence and decides.
@@ -216,9 +221,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
 - **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
   keeps `Magus.TailLog`.
+- **Breaking for SDK callers: `ReportWriter`, `NewReportWriter`, `WithReport`,
+  `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
+  `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
+  headers through it, pass it with `WithSink` and close it after the run.
 
 ### Fixed
 
+- **A failed spell import names its magusfile.** A workspace failure located no file for
+  an import error, and an error built without a relative path rendered `magusfile: exec :`.
+- **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts
+  merge.
+- **"Cannot check byte-stability" is recorded.** It fails the gate, and a `-o jsonl` run
+  now carries it as `race.determinism_unchecked` with its error.
 - **A broken working tree no longer switches off the approved spawn rule.** The committed
   `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
   it too slowly denies. A skipped rule says what applied. A workspace advise joins a

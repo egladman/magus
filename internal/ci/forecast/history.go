@@ -78,7 +78,7 @@ const hitColdStart = 5
 // observations, which is currently never: nothing in this tree calls Update with
 // shardSamples, so SetupP50Ms and AlphaMs stay these defaults forever. The raw
 // numbers Update would fit from exist: report.ShardTotal, written by
-// (*magus.ReportWriter).RecordShardTotal in a CI matrix run (see report.go). But
+// (*magus.Sink).EmitShardTotal in a CI matrix run (see sink.go). But
 // nothing reads that JSONL stream back into a History to close the loop.
 const (
 	DefaultSetupMs    Millis = 30_000
