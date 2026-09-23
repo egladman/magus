@@ -675,47 +675,29 @@ func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (m
 	return ignored, nil
 }
 
-// The capability ladder below brings hg level with git and sl. Every command was verified
+// The capabilities below bring hg level with git and sl. Every command was verified
 // against Mercurial 7.x rather than ported from sapling.go on the assumption that a fork
 // keeps its parent's behavior: Sapling and Mercurial diverge in both directions, and the
-// notes on the individual methods say where.
-//
-// BranchChangeReporter is the one optional capability hg does not implement. It is not a
-// technical wall the way jj's gaps are (see vcs/jj.go): a bookmark could stand in for git's
-// "other branch", and ChangedFiles already shows how to diff one hg revision against
-// another. It is simply unbuilt, and the caller (Magus.BranchChanges) reports a named
-// types.VCSCapabilityMissing diagnostic rather than silence for exactly this reason, so an
-// hg repository is told the report is missing rather than shown an empty one.
-//
-// Every assertion below is compile-time on purpose: each interface is reached by type
-// assertion at its call site, so dropping a method would not fail the build, it would
-// silently demote hg to whatever the caller's fallback answers.
-var (
-	_ types.MergeDriverInstaller = hgVCS{}
-	_ types.RefreshHookInstaller = hgVCS{}
-	_ types.DriftHookInstaller   = hgVCS{}
-	_ types.RemoteReporter       = hgVCS{}
-	_ types.DefaultRefReporter   = hgVCS{}
-	_ types.PushStatusReporter   = hgVCS{}
-	_ types.RevTimeReporter      = hgVCS{}
-	_ types.TrackedFileReporter  = hgVCS{}
-	_ types.IgnoredFileReporter  = hgVCS{}
-	_ types.ChurnReporter        = hgVCS{}
-	_ types.RangeDiffReporter    = hgVCS{}
-	_ types.RevisionExporter     = hgVCS{}
-	_ types.RevisionFileReader   = hgVCS{}
-	_ types.MergeStarter         = hgVCS{}
-)
+// notes on the individual methods say where. What hg declines is in unsupported.go.
 
-// RemoteURL implements types.RemoteReporter. `hg paths default` prints the default
-// pull/push URL; a repository with none exits non-zero with "not found!" on stderr, which
-// is the ErrVCSUnsupported case callers degrade on rather than a failure to report.
-func (v hgVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
-	out, err := vcsOutput(ctx, dir, "hg", "paths", "default")
-	if err != nil || out == "" {
-		return "", types.ErrVCSUnsupported
-	}
-	return out, nil
+// RemoteURL implements types.RemoteReporter; see hgFamilyRemoteURL.
+func (v hgVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
+	return hgFamilyRemoteURL(ctx, "hg", dir, name)
+}
+
+// RangeFiles implements types.RangeDiffReporter; see hgFamilyRangeFiles.
+func (v hgVCS) RangeFiles(ctx context.Context, dir, base, head string) ([]string, error) {
+	return hgFamilyRangeFiles(ctx, "hg", dir, base, head)
+}
+
+// RangeCommits implements types.RangeDiffReporter; see hgFamilyRangeCommits.
+func (v hgVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
+	return hgFamilyRangeCommits(ctx, v, "hg", dir, base, head, paths)
+}
+
+// IsAncestor implements types.AncestryReporter; see hgFamilyIsAncestor.
+func (v hgVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
+	return hgFamilyIsAncestor(ctx, "hg", dir, ancestor, descendant)
 }
 
 // ConfiguredRemote implements types.RemoteConfigReporter by reading `[paths] default`

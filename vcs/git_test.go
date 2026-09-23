@@ -514,13 +514,13 @@ func gitCloneShallow(t *testing.T, origin string, depth int) string {
 	require.NoError(t, err, "clone: %s", out)
 
 	wantShallow := strconv.FormatBool(depth > 0)
-	require.Equal(t, wantShallow, gitOutput(t, clone, "rev-parse", "--is-shallow-repository"),
+	require.Equal(t, wantShallow, gitTestOutput(t, clone, "rev-parse", "--is-shallow-repository"),
 		"the clone must start in the state the test is about, or it proves nothing")
 	return clone
 }
 
-// gitOutput returns the trimmed stdout of one git command in dir.
-func gitOutput(t *testing.T, dir string, args ...string) string {
+// gitTestOutput returns the trimmed stdout of one git command in dir.
+func gitTestOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = gitEnv()
@@ -537,7 +537,7 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 // depth assertion below is about.
 func gitCommitCount(t *testing.T, dir string) int {
 	t.Helper()
-	n, err := strconv.Atoi(gitOutput(t, dir, "rev-list", "--count", "HEAD"))
+	n, err := strconv.Atoi(gitTestOutput(t, dir, "rev-list", "--count", "HEAD"))
 	require.NoError(t, err)
 	return n
 }
@@ -564,7 +564,7 @@ func TestDiffRecoversMergeBaseInShallowClone(t *testing.T) {
 	// Bounded, not unshallowed: the ladder stops as soon as the ancestor is reachable. If
 	// this ever holds the whole history, the recovery has degenerated into `git fetch
 	// --unshallow` and is charging exactly the cost it exists to avoid.
-	assert.Equal(t, "true", gitOutput(t, clone, "rev-parse", "--is-shallow-repository"),
+	assert.Equal(t, "true", gitTestOutput(t, clone, "rev-parse", "--is-shallow-repository"),
 		"recovery must leave the clone shallow")
 	assert.Less(t, gitCommitCount(t, clone), full,
 		"recovery must fetch less than the full history")
@@ -595,11 +595,11 @@ func TestRecoverMergeBaseNeverShortens(t *testing.T) {
 func TestRecoverMergeBaseSkipsFullClone(t *testing.T) {
 	origin, _ := gitDivergedOrigin(t, 3)
 	clone := gitCloneShallow(t, origin, 0)
-	require.Empty(t, gitOutput(t, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
+	require.Empty(t, gitTestOutput(t, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
 		"single-branch clone must lack the base ref, so merge-base fails for a reason recovery could fix")
 
 	assert.Empty(t, gitVCS{}.recoverMergeBase(t.Context(), clone, "origin/main"))
-	assert.Empty(t, gitOutput(t, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
+	assert.Empty(t, gitTestOutput(t, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
 		"the guard must return before any ref is fetched")
 }
 
@@ -895,11 +895,13 @@ func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
 // absent, which is most CI machines for three of these four.
 //
 // git is the odd one out on purpose: it has no global --color flag (only a per-subcommand
-// one, which not every subcommand takes), so it gets the config override, which covers diff,
-// log and status alike. The other three accept --color=never before the subcommand.
+// one, which not every subcommand takes), so gitExec's pins carry the config override, which
+// covers diff, log and status alike. The other three accept --color=never before the
+// subcommand.
 func TestUncoloredUsesEachBackendsOwnSwitch(t *testing.T) {
-	assert.Equal(t, []string{"-c", "color.ui=false", "diff", "-U1", "HEAD"},
-		uncolored("git", []string{"diff", "-U1", "HEAD"}))
+	git := gitExec(t.Context(), "", gitOpts{}, "diff", "-U1", "HEAD").Args
+	assert.Equal(t, []string{"-c", "color.ui=false"}, git[1:3])
+	assert.Equal(t, []string{"diff", "-U1", "HEAD"}, git[len(git)-3:])
 	for _, name := range []string{"hg", "sl", "jj"} {
 		assert.Equal(t, []string{"--color=never", "diff"}, uncolored(name, []string{"diff"}), name)
 	}
@@ -1367,12 +1369,11 @@ func TestEnsureMergeDriverIgnoresAmbientGitDir(t *testing.T) {
 // GIT_DIR would otherwise answer about a different repository than the caller named.
 func gitConfigValue(t *testing.T, repo, key string) string {
 	t.Helper()
-	cmd := gitExec(t.Context(), "-C", repo, "config", "--get", key)
-	out, err := cmd.Output()
+	out, err := gitOutput(t.Context(), repo, gitOpts{}, "config", "--get", key)
 	if err != nil {
 		return "" // git exits 1 for an unset key; any real failure surfaces as an empty value
 	}
-	return strings.TrimSpace(string(out))
+	return out
 }
 
 // pathUnder decides whether a registration names a binary from THIS worktree, which is the
@@ -1430,7 +1431,8 @@ func TestRegisteredDriverReportsAbsence(t *testing.T) {
 	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
 	setDriver := func(value string) {
 		t.Helper()
-		require.NoError(t, gitExec(t.Context(), "-C", repo, "config", "merge.magus.driver", value).Run())
+		_, err := gitOutput(t.Context(), repo, gitOpts{}, "config", "merge.magus.driver", value)
+		require.NoError(t, err)
 	}
 
 	cmd, ok := gitVCS{}.registeredDriver(t.Context(), repo)

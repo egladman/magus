@@ -1,6 +1,7 @@
 package vcs
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -77,6 +78,81 @@ func hgFamilyGlobs(paths []string) []string {
 		out = append(out, "glob:"+p)
 	}
 	return out
+}
+
+// hgFamilyRemoteURL is RemoteURL for hg and Sapling: `paths <name>` prints the named
+// path, "default" when name is empty, and exits non-zero with "not found!" for one that
+// is not configured, the ErrVCSUnsupported case callers degrade on.
+func hgFamilyRemoteURL(ctx context.Context, prog, dir, name string) (string, error) {
+	name = cmp.Or(name, "default")
+	if err := checkRemoteName(name); err != nil {
+		return "", err
+	}
+	out, err := vcsOutput(ctx, dir, prog, "paths", name)
+	if err != nil || out == "" {
+		return "", types.ErrVCSUnsupported
+	}
+	return out, nil
+}
+
+// hgFamilyRangeFiles is RangeFiles for hg and Sapling: status between ancestor(), the
+// merge base RangeDiff also diffs from, and head. Without --copies a rename is a removal
+// and an add, which is the contract. extra carries sl's --root-relative.
+func hgFamilyRangeFiles(ctx context.Context, prog, dir, base, head string, extra ...string) ([]string, error) {
+	if err := checkRevsetRef(base); err != nil {
+		return nil, err
+	}
+	if err := checkRevsetRef(head); err != nil {
+		return nil, err
+	}
+	args := append([]string{"status"}, extra...)
+	args = append(args, "--no-status", "--added", "--modified", "--removed",
+		"--rev", "ancestor("+base+","+head+")", "--rev", head)
+	out, err := vcsOutput(ctx, dir, prog, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s status ancestor(%s,%s)-%s: %w", prog, base, head, head, err)
+	}
+	return splitLines([]byte(out)), nil
+}
+
+// hgFamilyRangeCommits is RangeCommits for hg and Sapling. only(head,base) is ascending,
+// and reverse() makes it newest first. "path:" makes each path literal and relative to the
+// repository root, as RangeFiles reports them.
+func hgFamilyRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, base, head string, paths []string) ([]types.Commit, error) {
+	if err := checkRevsetRef(base); err != nil {
+		return nil, err
+	}
+	if err := checkRevsetRef(head); err != nil {
+		return nil, err
+	}
+	args := []string{"log", "-r", "reverse(only(" + head + "," + base + "))", "--template", "{node}\n"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		for _, p := range paths {
+			args = append(args, "path:"+p)
+		}
+	}
+	out, err := vcsOutput(ctx, dir, prog, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s log only(%s,%s): %w", prog, head, base, err)
+	}
+	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+}
+
+// hgFamilyIsAncestor is IsAncestor for hg and Sapling: ancestors() includes the revision
+// itself, and an unknown revision aborts the log rather than matching nothing.
+func hgFamilyIsAncestor(ctx context.Context, prog, dir, ancestor, descendant string) (bool, error) {
+	if err := checkRevsetRef(ancestor); err != nil {
+		return false, err
+	}
+	if err := checkRevsetRef(descendant); err != nil {
+		return false, err
+	}
+	out, err := vcsOutput(ctx, dir, prog, "log", "-r", ancestor+" and ancestors("+descendant+")", "--template", "{node}")
+	if err != nil {
+		return false, fmt.Errorf("%s log %s and ancestors(%s): %w", prog, ancestor, descendant, err)
+	}
+	return out != "", nil
 }
 
 // hgFamilyChangesByCommit is ChangesByCommit for hg and Sapling, which share the revset

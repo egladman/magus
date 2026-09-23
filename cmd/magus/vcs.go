@@ -151,10 +151,10 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	if err != nil {
 		return fmt.Errorf("vcs resolve: no VCS resolved for this workspace: %w", err)
 	}
-	resolver, ok := res.VCS.(types.ConflictResolver)
-	if !ok {
-		return fmt.Errorf("vcs resolve: %s cannot report conflicts; resolve this merge by hand", res.Name)
+	if res.VCS == nil {
+		return errors.New("vcs resolve: version control is disabled for this workspace; resolve this merge by hand")
 	}
+	resolver := res.VCS
 
 	if rf.Against != "" {
 		undo, err := startMergeAgainst(ctx, m.Root(), res, rf.Against)
@@ -165,6 +165,9 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	}
 
 	conflicts, err := resolver.Conflicts(ctx, m.Root())
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		return fmt.Errorf("vcs resolve: %s cannot report conflicts; resolve this merge by hand", res.Name)
+	}
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
@@ -200,10 +203,6 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 // So a dry run merges for real and aborts, which is why a clean tree is required up
 // front: `git merge --abort` does not guarantee uncommitted work survives.
 func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution, ref string) (undo func(), err error) {
-	starter, ok := res.VCS.(types.MergeStarter)
-	if !ok {
-		return nil, fmt.Errorf("vcs resolve: %s cannot start a merge through magus; merge %q yourself, then run `"+hint.VCSResolve.String()+"`", res.Name, ref)
-	}
 	dirty, err := res.VCS.DirtyFiles(ctx, root, nil)
 	if err != nil {
 		return nil, fmt.Errorf("vcs resolve: read tree status: %w", err)
@@ -211,7 +210,9 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 	if len(dirty) > 0 {
 		return nil, fmt.Errorf("vcs resolve: --against needs a clean tree, and %d path(s) are uncommitted; commit or stash them first so backing the merge out cannot lose them", len(dirty))
 	}
-	if err := starter.StartMerge(ctx, root, ref); err != nil {
+	if err := res.VCS.StartMerge(ctx, root, ref); errors.Is(err, types.ErrVCSUnsupported) {
+		return nil, fmt.Errorf("vcs resolve: %s cannot start a merge through magus; merge %q yourself, then run `"+hint.VCSResolve.String()+"`", res.Name, ref)
+	} else if err != nil {
 		return nil, fmt.Errorf("vcs resolve: %w", err)
 	}
 	if !globalCfg.DryRun {
@@ -219,7 +220,7 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 		return func() {}, nil
 	}
 	return func() {
-		if err := starter.AbortMerge(ctx, root); err != nil {
+		if err := res.VCS.AbortMerge(ctx, root); err != nil {
 			// Reported, never swallowed: the tree is NOT as this dry run found it, and a
 			// caller told "nothing was touched" would go on to do something else in it.
 			fmt.Fprintf(os.Stderr, "vcs resolve: could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort): %v\n", err)
@@ -295,15 +296,7 @@ func committedMagusfiles(ctx context.Context, root string) map[string]string {
 	if err != nil || res.VCS == nil {
 		return nil
 	}
-	resolver, ok := res.VCS.(types.ConflictResolver)
-	if !ok {
-		return nil
-	}
-	reader, ok := res.VCS.(types.RevisionFileReader)
-	if !ok {
-		return nil
-	}
-	conflicts, err := resolver.Conflicts(ctx, root)
+	conflicts, err := res.VCS.Conflicts(ctx, root)
 	if err != nil {
 		return nil
 	}
@@ -314,7 +307,7 @@ func committedMagusfiles(ctx context.Context, root string) map[string]string {
 		}
 		// "" is the committed revision in whichever backend this is; naming HEAD here
 		// would be correct for git alone.
-		content, rerr := reader.ReadFileAt(ctx, root, "", c.Path)
+		content, rerr := res.VCS.ReadFileAt(ctx, root, "", c.Path)
 		if rerr != nil {
 			return nil
 		}
@@ -739,12 +732,9 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	if err != nil || res.VCS == nil {
 		return fmt.Errorf("vcs add: no VCS resolved for this workspace")
 	}
-	// The write goes through the capability `vcs resolve` uses, so a backend that cannot
-	// record paths is refused up front rather than part-way through.
-	recorder, ok := res.VCS.(types.ConflictResolver)
-	if !ok {
-		return fmt.Errorf("vcs add: %s cannot record paths through magus; stage with %s directly", res.Name, res.Name)
-	}
+	// The write goes through the capability `vcs resolve` uses, in one call, so a backend
+	// that cannot record paths refuses before anything is staged.
+	recorder := res.VCS
 
 	paths, err := workspaceRelPaths(root, pos)
 	if err != nil {
@@ -994,7 +984,9 @@ func stagePaths(ctx context.Context, root, vcsName string, recorder types.Confli
 	}
 	// MarkResolved batches the pathspecs, which matters here: `vcs add` over a whole
 	// dirty tree is the largest path list these commands hand to the VCS.
-	if err := recorder.MarkResolved(ctx, root, stageable); err != nil {
+	if err := recorder.MarkResolved(ctx, root, stageable); errors.Is(err, types.ErrVCSUnsupported) {
+		return nil, nil, fmt.Errorf("vcs add: %w; stage with %s directly", err, vcsName)
+	} else if err != nil {
 		return nil, nil, fmt.Errorf("vcs add: %w", err)
 	}
 	return stageable, dropped, nil

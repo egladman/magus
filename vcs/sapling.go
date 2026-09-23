@@ -367,16 +367,26 @@ func (v saplingVCS) IgnoredFiles(ctx context.Context, dir string, paths []string
 	return out, nil
 }
 
-// RemoteURL implements types.RemoteReporter. `sl paths default` prints the default push/pull
-// URL, which for a git-backed clone is the git remote. A repository with none exits
-// non-zero with "not found!" on stderr, which is the ErrVCSUnsupported case callers degrade
-// on rather than a failure to report.
-func (v saplingVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
-	out, err := vcsOutput(ctx, dir, "sl", "paths", "default")
-	if err != nil || out == "" {
-		return "", types.ErrVCSUnsupported
-	}
-	return out, nil
+// RemoteURL implements types.RemoteReporter; see hgFamilyRemoteURL. For a git-backed
+// clone the default path is the git remote.
+func (v saplingVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
+	return hgFamilyRemoteURL(ctx, "sl", dir, name)
+}
+
+// RangeFiles implements types.RangeDiffReporter; see hgFamilyRangeFiles. --root-relative
+// for the reason DirtyFiles passes it.
+func (v saplingVCS) RangeFiles(ctx context.Context, dir, base, head string) ([]string, error) {
+	return hgFamilyRangeFiles(ctx, "sl", dir, base, head, "--root-relative")
+}
+
+// RangeCommits implements types.RangeDiffReporter; see hgFamilyRangeCommits.
+func (v saplingVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
+	return hgFamilyRangeCommits(ctx, v, "sl", dir, base, head, paths)
+}
+
+// IsAncestor implements types.AncestryReporter; see hgFamilyIsAncestor.
+func (v saplingVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
+	return hgFamilyIsAncestor(ctx, "sl", dir, ancestor, descendant)
 }
 
 // ConfiguredRemote implements types.RemoteConfigReporter by reading `[paths] default`
@@ -690,34 +700,6 @@ func (v saplingVCS) InstallDriftHook(ctx context.Context, root, command string) 
 // ConflictResolver and MergeStarter for Sapling. The resolve state machine is Mercurial's,
 // so the mapping is close, but two behaviors differ from hg and the methods below note
 // where they bite.
-//
-// The assertions below cover every optional capability Sapling implements. They are
-// compile-time on purpose: each interface is reached by type assertion at its call site, so
-// dropping a method would not fail the build, it would silently demote Sapling to whatever
-// the caller's fallback answers ("resolve this merge by hand" for ConflictResolver, "assume
-// pushed" for PushStatusReporter, and so on).
-//
-// BranchChangeReporter is the one optional capability Sapling does not implement. As with
-// hg, that is not a technical wall: nothing here suggests a bookmark or ChangedFiles could
-// not answer it. It is simply unbuilt, and the caller (Magus.BranchChanges) reports a named
-// types.VCSCapabilityMissing diagnostic rather than silence for exactly this reason.
-var (
-	_ types.MergeDriverInstaller = saplingVCS{}
-	_ types.RefreshHookInstaller = saplingVCS{}
-	_ types.DriftHookInstaller   = saplingVCS{}
-	_ types.RemoteReporter       = saplingVCS{}
-	_ types.DefaultRefReporter   = saplingVCS{}
-	_ types.PushStatusReporter   = saplingVCS{}
-	_ types.RevTimeReporter      = saplingVCS{}
-	_ types.TrackedFileReporter  = saplingVCS{}
-	_ types.IgnoredFileReporter  = saplingVCS{}
-	_ types.ChurnReporter        = saplingVCS{}
-	_ types.RangeDiffReporter    = saplingVCS{}
-	_ types.ConflictResolver     = saplingVCS{}
-	_ types.RevisionFileReader   = saplingVCS{}
-	_ types.RevisionExporter     = saplingVCS{}
-	_ types.MergeStarter         = saplingVCS{}
-)
 
 func runSaplingBatched(ctx context.Context, root string, args []string, paths []string) error {
 	for _, chunk := range gitPathChunks(paths) {

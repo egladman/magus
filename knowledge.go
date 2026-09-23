@@ -924,12 +924,11 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *
 		log.DebugContext(ctx, "knowledge: vcs enabled but no version control resolved, skipping")
 		return nil
 	}
-	reporter, ok := res.VCS.(types.ChurnReporter)
-	if !ok {
+	changes, err := res.VCS.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
+	if errors.Is(err, types.ErrVCSUnsupported) {
 		log.DebugContext(ctx, "knowledge: vcs backend cannot report per-commit files, skipping", slog.String("vcs", res.Name))
 		return nil
 	}
-	changes, err := reporter.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
 	if err != nil {
 		log.WarnContext(ctx, "knowledge: vcs history scan failed, skipping", slog.String("error", err.Error()))
 		return nil

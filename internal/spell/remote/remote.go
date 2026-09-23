@@ -481,9 +481,10 @@ func (p Provenance) Annotations() map[string]string {
 	return out
 }
 
-// commitFinder is the one VCS call ReadProvenance needs.
-type commitFinder interface {
+// provenanceSource is what ReadProvenance reads of a VCS.
+type provenanceSource interface {
 	FindCommit(ctx context.Context, dir, rev string) (types.Commit, error)
+	types.RemoteReporter
 }
 
 // ReadProvenance describes the checked-out revision holding dir. Created is that
@@ -491,7 +492,7 @@ type commitFinder interface {
 // one digest; SOURCE_DATE_EPOCH, when set, overrides it the way reproducible-builds
 // tooling expects. Source is the default remote as a browsable https URL with any
 // userinfo dropped, empty when the backend reports none. Title is dir's base name.
-func ReadProvenance(ctx context.Context, vcs commitFinder, dir string) (Provenance, error) {
+func ReadProvenance(ctx context.Context, vcs provenanceSource, dir string) (Provenance, error) {
 	c, err := vcs.FindCommit(ctx, dir, "")
 	if err != nil {
 		return Provenance{}, fmt.Errorf("read revision of %s: %w", dir, err)
@@ -504,10 +505,8 @@ func ReadProvenance(ctx context.Context, vcs commitFinder, dir string) (Provenan
 		}
 		p.Created = time.Unix(secs, 0)
 	}
-	if r, ok := vcs.(types.RemoteReporter); ok {
-		if remote, err := r.RemoteURL(ctx, dir); err == nil {
-			p.Source = SourceURL(remote)
-		}
+	if remote, err := vcs.RemoteURL(ctx, dir, ""); err == nil {
+		p.Source = SourceURL(remote)
 	}
 	return p, nil
 }

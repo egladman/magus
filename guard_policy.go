@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -42,7 +43,6 @@ type headPolicy struct {
 	workspace string
 	repoRoot  string
 	driver    types.VCSDriver
-	reader    types.RevisionFileReader
 }
 
 // loadShapingFiles are the files besides Buzz sources whose edit can change what a load
@@ -76,7 +76,11 @@ func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {
 		// Outside the repository nothing is versioned, so both sides read the same bytes.
 		return os.ReadFile(path)
 	}
-	content, err := h.reader.ReadFileAt(ctx, h.repoRoot, "", filepath.ToSlash(rel))
+	content, err := h.driver.ReadFileAt(ctx, h.repoRoot, "", filepath.ToSlash(rel))
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		// A backend that cannot read a revision approves nothing beyond the working tree.
+		return os.ReadFile(path)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -84,16 +88,15 @@ func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {
 }
 
 // approvedPolicyAt is the loosening authority of the workspace at root, nil when it has
-// none: version control disabled, no repository, or a backend that cannot read a file at a
-// revision. Without one the working tree is the whole policy.
+// none: version control disabled or no repository. Without one the working tree is the whole
+// policy, and a backend that cannot read a file at a revision answers the same way file by
+// file.
 func approvedPolicyAt(ctx context.Context, root string, opts types.VCSOptions) (ApprovedPolicy, error) {
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil {
 		return nil, err
 	}
-	// A disabled backend resolves no driver, which fails the assertion too.
-	reader, ok := res.VCS.(types.RevisionFileReader)
-	if !ok {
+	if res.VCS == nil {
 		return nil, nil //nolint:nilnil // no authority is a documented answer, not a failure
 	}
 	repoRoot, err := res.VCS.Root(ctx, root)
@@ -104,7 +107,7 @@ func approvedPolicyAt(ctx context.Context, root string, opts types.VCSOptions) (
 	if resolved, err := filepath.EvalSymlinks(repoRoot); err == nil {
 		repoRoot = resolved
 	}
-	return headPolicy{workspace: root, repoRoot: repoRoot, driver: res.VCS, reader: reader}, nil
+	return headPolicy{workspace: root, repoRoot: repoRoot, driver: res.VCS}, nil
 }
 
 // SpawnRule returns the magus\guard.spawn rule the root magusfile registered, or nil.

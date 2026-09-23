@@ -2311,12 +2311,12 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	// A backend that cannot answer leaves the set alone rather than guessing. Guessing
 	// either way is worse than the question going unasked: assume tracked and every build
 	// artifact becomes a gate failure, assume untracked and the gate covers nothing.
-	if reporter, ok := res.VCS.(types.TrackedFileReporter); ok {
-		tracked, terr := reporter.TrackedFiles(ctx, dir, moved)
-		if terr != nil {
-			return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
-				dir, target, res.VCS.Name(), terr)
-		}
+	switch tracked, terr := res.VCS.TrackedFiles(ctx, dir, moved); {
+	case errors.Is(terr, types.ErrVCSUnsupported):
+	case terr != nil:
+		return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
+			dir, target, res.VCS.Name(), terr)
+	default:
 		moved = tracked
 	}
 	if len(moved) == 0 {

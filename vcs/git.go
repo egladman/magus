@@ -3,6 +3,7 @@ package vcs
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -63,13 +64,7 @@ func (v gitVCS) ConfiguredRemote(dir string) (string, error) {
 }
 
 func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
-	cmd := gitExec(ctx, "rev-parse", "--show-toplevel")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
+	return gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--show-toplevel")
 }
 
 // ChangedFiles lists the files changed against base, diffing the merge-base of base and
@@ -81,10 +76,10 @@ func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 // NOT purely a read: in a shallow clone whose merge base is missing it fetches more
 // history first (see recoverMergeBase). A full clone is never fetched into.
 func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, error) {
-	if err := checkRef(base); err != nil {
+	if err := checkRev(base); err != nil {
 		return nil, err
 	}
-	mergeBase, err := vcsOutput(ctx, dir, "git", "merge-base", base, "HEAD")
+	mergeBase, err := gitOutput(ctx, dir, gitOpts{}, "merge-base", base, "HEAD")
 	if err != nil {
 		recovered := v.recoverMergeBase(ctx, dir, base)
 		if recovered == "" {
@@ -94,13 +89,7 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 		}
 		mergeBase = recovered
 	}
-	// core.quotePath=false on BOTH probes, for the reason DirtyFiles sets it: git otherwise
-	// renders a path outside ASCII as a C-quoted, backslash-escaped literal
-	// ("uni/caf\303\251.md"). Omitting it on either probe fails silently in the worst way:
-	// project.normalizeFiles only trims and slash-converts, so the quoted string matches no
-	// source glob, and the project owning that file is simply never rebuilt. No diagnostic,
-	// no error; `magus affected` just under-builds forever.
-	out, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false", "diff", "--name-only", mergeBase)
+	out, err := gitOutput(ctx, dir, gitOpts{}, "diff", "--name-only", mergeBase)
 	if err != nil {
 		return nil, fmt.Errorf("git diff: %w", err)
 	}
@@ -109,7 +98,7 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 	// the working tree, but git diff omits them. List them explicitly so a brand-new
 	// file seeds its project the same way a modified one does. --exclude-standard
 	// honors .gitignore, so build artifacts stay out.
-	untracked, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard")
+	untracked, err := gitOutput(ctx, dir, gitOpts{}, "ls-files", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
@@ -132,7 +121,7 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 	if limit <= 0 {
 		return nil, nil
 	}
-	if err := checkRef(base); err != nil {
+	if err := checkRev(base); err != nil {
 		return nil, err
 	}
 	// Deliberately over-asked. FOUR kinds of ref are dropped below: <remote>/HEAD, the reader's
@@ -144,13 +133,13 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 	// Both ref spaces, and the FULL refname rather than the short one, because the short form
 	// throws away the single fact the caller needs to caption the answer: whether this branch is
 	// here or is a copy of somebody else's as of the last fetch.
-	refs, err := vcsOutput(ctx, dir, "git", "for-each-ref",
+	refs, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref",
 		"--sort=-committerdate", "--count", strconv.Itoa(limit*2+8),
 		"--format=%(refname)", "refs/heads/", "refs/remotes/")
 	if err != nil {
 		return nil, fmt.Errorf("git for-each-ref: %w", err)
 	}
-	mine, err := vcsOutput(ctx, dir, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	mine, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("git rev-parse: %w", err)
 	}
@@ -184,17 +173,13 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 			if short == strings.TrimSpace(mine) {
 				continue
 			}
-			if err := checkRef(ref); err != nil {
-				// A ref git itself listed, so this is not the caller-supplied case checkRef
+			if err := checkRev(ref); err != nil {
+				// A ref git itself listed, so this is not the caller-supplied case checkRev
 				// exists for, but a name that cannot be passed safely is skipped rather
 				// than trusted.
 				continue
 			}
-			// core.quotePath=false for the reason ChangedFiles sets it: a non-ASCII path
-			// otherwise arrives C-quoted, matches no source glob, and the overlap silently
-			// never reports.
-			paths, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false",
-				"diff", "--name-only", base+"..."+ref)
+			paths, err := gitOutput(ctx, dir, gitOpts{}, "diff", "--name-only", base+"..."+ref)
 			if err != nil {
 				// One unreachable branch is not a reason to report none: a ref can vanish
 				// between the listing and the diff, and the rest of the answer is still true.
@@ -249,28 +234,101 @@ func shortBranchName(ref string) (string, bool) {
 // fails because it holds many and the rest are still true; here the range IS the request, and a
 // caller handed "" would read it as a branch that changed nothing.
 func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
-	if err := checkRef(base); err != nil {
+	if err := checkRev(base, head); err != nil {
 		return "", err
 	}
-	if err := checkRef(head); err != nil {
-		return "", err
-	}
-	// core.quotePath=false for the reason ChangedFiles and BranchChanges set it: a non-ASCII path
-	// otherwise arrives C-quoted and matches no source glob.
-	//
 	// Histogram rather than the default myers because this patch is what remarks anchor into: myers
 	// reports a moved function as a delete plus an unrelated insert, while histogram anchors on
 	// lines unique to both sides and keeps the move legible as a move.
-	args := []string{"-c", "core.quotePath=false", "diff", "--histogram", base + "..." + head}
+	args := []string{"diff", "--histogram", base + "..." + head}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
 	}
-	out, err := vcsOutput(ctx, dir, "git", args...)
+	out, err := gitOutput(ctx, dir, gitOpts{}, args...)
 	if err != nil {
 		return "", fmt.Errorf("git diff %s...%s: %w", base, head, err)
 	}
 	return out, nil
+}
+
+// RangeFiles implements types.RangeDiffReporter with plumbing: `diff-tree` from the merge
+// base reads neither diff.renames nor diff.ignoreSubmodules, either of which would hide a
+// path from a porcelain `git diff`.
+func (v gitVCS) RangeFiles(ctx context.Context, dir, base, head string) ([]string, error) {
+	if err := checkRev(base, head); err != nil {
+		return nil, err
+	}
+	mb, err := gitOutput(ctx, dir, gitOpts{}, "merge-base", base, head)
+	if err != nil {
+		return nil, fmt.Errorf("git merge-base %s %s: %w", base, head, err)
+	}
+	return gitDiffTree(ctx, dir, mb, head)
+}
+
+// gitDiffTree lists the repo-relative paths whose content differs between two trees or
+// commits, a rename being its old path and its new one.
+func gitDiffTree(ctx context.Context, dir, a, b string) ([]string, error) {
+	out, err := gitOutput(ctx, dir, gitOpts{Raw: true}, "diff-tree", "-r", "--no-renames", "--name-only", "-z", a, b)
+	if err != nil {
+		return nil, fmt.Errorf("git diff-tree %s %s: %w", a, b, err)
+	}
+	return splitNUL(out), nil
+}
+
+// splitNUL splits -z output into its non-empty fields.
+func splitNUL(s string) []string {
+	var out []string
+	for f := range strings.SplitSeq(s, "\x00") {
+		if f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// RangeCommits implements types.RangeDiffReporter by listing ids with `rev-list` and
+// resolving each through FindCommit, the one commit parser.
+//
+// paths are literal and run from the top level, where diff-tree's repo-relative output is
+// rooted, so a path RangeFiles returned narrows to exactly that path.
+func (v gitVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
+	if err := checkRev(base, head); err != nil {
+		return nil, err
+	}
+	at := dir
+	args := []string{"rev-list", base + ".." + head}
+	if len(paths) > 0 {
+		top, err := v.Root(ctx, dir)
+		if err != nil {
+			return nil, fmt.Errorf("git rev-parse --show-toplevel: %w", err)
+		}
+		at = top
+		args = append(append(args, "--"), paths...)
+	}
+	out, err := gitOutput(ctx, at, gitOpts{Literal: true}, args...)
+	if err != nil {
+		return nil, fmt.Errorf("git rev-list %s..%s: %w", base, head, err)
+	}
+	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+}
+
+// IsAncestor implements types.AncestryReporter. merge-base's exit 1 is its answer "no";
+// every other failure is it declining to answer (an unknown revision, or a shallow clone
+// missing the history that would decide).
+func (v gitVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
+	if err := checkRev(ancestor, descendant); err != nil {
+		return false, err
+	}
+	_, err := gitOutput(ctx, dir, gitOpts{}, "merge-base", "--is-ancestor", ancestor, descendant)
+	switch {
+	case err == nil:
+		return true, nil
+	case gitExitCode(err) == 1:
+		return false, nil
+	default:
+		return false, fmt.Errorf("git merge-base --is-ancestor %s %s: %w", ancestor, descendant, err)
+	}
 }
 
 // recoverMergeBase fetches history until base and HEAD share an ancestor in a shallow
@@ -298,7 +356,7 @@ func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []s
 // Only a shallow repository is touched. A shallow developer checkout IS fetched into,
 // which only ever adds history, never removes it.
 func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
-	if shallow, err := vcsOutput(ctx, dir, "git", "rev-parse", "--is-shallow-repository"); err != nil || shallow != "true" {
+	if shallow, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--is-shallow-repository"); err != nil || shallow != "true" {
 		return ""
 	}
 	// base is a remote-tracking name ("origin/main") whose first segment must be a
@@ -311,14 +369,14 @@ func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 		slog.DebugContext(ctx, "cannot deepen: base ref is not a remote-tracking name", slog.String("base", base))
 		return ""
 	}
-	if _, err := vcsOutput(ctx, dir, "git", "config", "--get", "remote."+remote+".url"); err != nil {
+	if _, err := gitOutput(ctx, dir, gitOpts{}, "config", "--get", "remote."+remote+".url"); err != nil {
 		slog.DebugContext(ctx, "cannot deepen: base ref names no configured remote",
 			slog.String("base", base), slog.String("remote", remote))
 		return ""
 	}
 	tracking := fmt.Sprintf("refs/remotes/%s/%s", remote, branch)
 	refspec := fmt.Sprintf("+refs/heads/%s:%s", branch, tracking)
-	_, err := vcsOutput(ctx, dir, "git", "rev-parse", "--verify", "--quiet", tracking)
+	_, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--verify", "--quiet", tracking)
 	baseIsHere := err == nil
 
 	// Growing rungs: a branch cut a few commits ago lands on the first, while a long-lived
@@ -343,7 +401,7 @@ func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 				slog.String("base", base), slog.String("error", err.Error()))
 			return ""
 		}
-		if mergeBase, err := vcsOutput(ctx, dir, "git", "merge-base", base, "HEAD"); err == nil {
+		if mergeBase, err := gitOutput(ctx, dir, gitOpts{}, "merge-base", base, "HEAD"); err == nil {
 			// Info, not Debug: this quietly spent several network round trips, and the depth
 			// it settled on tells a reader whether their checkout depth is set too low.
 			slog.InfoContext(ctx, "deepened shallow clone to reach the merge base",
@@ -353,7 +411,7 @@ func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 		// Once the whole history is here, no larger depth can add a commit, so a still
 		// missing merge base means the two really are unrelated. Stop rather than spend
 		// three more round trips proving it.
-		if shallow, err := vcsOutput(ctx, dir, "git", "rev-parse", "--is-shallow-repository"); err == nil && shallow != "true" {
+		if shallow, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--is-shallow-repository"); err == nil && shallow != "true" {
 			break
 		}
 	}
@@ -361,29 +419,20 @@ func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 	return ""
 }
 
-// gitFetchQuiet runs one of recoverMergeBase's fetches.
-//
-// GIT_TERMINAL_PROMPT=0 is the load-bearing part: git and ssh read a credential prompt
-// from /dev/tty directly, not from the stdin vcsOutput hands them, so an auth-required
-// remote would hang a build tool forever on a prompt nobody can see, strictly worse than
-// the over-build this recovery exists to prevent. --no-recurse-submodules because
+// gitFetchQuiet runs one of recoverMergeBase's fetches. --no-recurse-submodules because
 // fetch.recurseSubmodules defaults to on-demand and the recovery wants commits in THIS
 // repository, never a submodule's contents.
 func gitFetchQuiet(ctx context.Context, dir, depthFlag, remote string, refspec ...string) error {
 	args := append([]string{"fetch", "--quiet", depthFlag, "--no-tags", "--no-recurse-submodules", remote}, refspec...)
-	cmd := gitExec(ctx, args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	_, err := cmd.Output()
+	_, err := gitOutput(ctx, dir, gitOpts{}, args...)
 	return err
 }
 
 func (v gitVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
-	out, err := gitExec(ctx, "-C", dir, "rev-parse", "HEAD").Output()
+	sha, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "HEAD")
 	if err != nil {
 		return types.DiffCommandHints{}, fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
-	sha := strings.TrimSpace(string(out))
 	return types.DiffCommandHints{
 		CLI: fmt.Sprintf("git diff %s...%s", base, sha),
 		GUI: fmt.Sprintf("git difftool %s...%s", base, sha),
@@ -391,10 +440,7 @@ func (v gitVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffC
 }
 
 func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions) (types.Culprit, error) {
-	if err := checkRef(opts.Good); err != nil {
-		return types.Culprit{}, err
-	}
-	if err := checkRef(opts.Bad); err != nil {
+	if err := checkRev(opts.Good, opts.Bad); err != nil {
 		return types.Culprit{}, err
 	}
 	if opts.Good == "" {
@@ -404,8 +450,12 @@ func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions
 		}
 		opts.Good = sha
 	}
-	if err := v.isAncestor(ctx, dir, opts.Good); err != nil {
-		return types.Culprit{}, fmt.Errorf("good commit %q is not an ancestor of HEAD: %w", opts.Good, err)
+	ok, err := v.IsAncestor(ctx, dir, opts.Good, "HEAD")
+	if err != nil {
+		return types.Culprit{}, fmt.Errorf("good commit %q: %w", opts.Good, err)
+	}
+	if !ok {
+		return types.Culprit{}, fmt.Errorf("good commit %q is not an ancestor of HEAD", opts.Good)
 	}
 	bad := opts.Bad
 	if bad == "" {
@@ -429,21 +479,13 @@ func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions
 	return types.Culprit{ID: sha, Info: info}, nil
 }
 
-// isAncestor, commitBeforeTime and commitInfo run via `git -C dir` so they target
-// the repository under bisect, not the process cwd: the dir-scoping the VCSDriver
-// contract requires for correctness under concurrent runs.
-func (v gitVCS) isAncestor(ctx context.Context, dir, sha string) error {
-	return gitExec(ctx, "-C", dir, "merge-base", "--is-ancestor", sha, "HEAD").Run()
-}
-
 func (v gitVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
-	out, err := gitExec(ctx, "-C", dir, "log",
+	sha, err := gitOutput(ctx, dir, gitOpts{}, "log",
 		"--before="+t.UTC().Format(time.RFC3339),
-		"-n", "1", "--format=%H").Output()
+		"-n", "1", "--format=%H")
 	if err != nil {
 		return "", fmt.Errorf("git log: %w", err)
 	}
-	sha := strings.TrimSpace(string(out))
 	if sha == "" {
 		return "", errors.New("no commit found before the last passing run")
 	}
@@ -451,45 +493,37 @@ func (v gitVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (
 }
 
 func (v gitVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
-	out, err := gitExec(ctx, "-C", dir, "log", "-1",
-		"--format=%s  (%an, %ad)", "--date=short", sha).Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
+	return gitOutput(ctx, dir, gitOpts{}, "log", "-1", "--format=%s  (%an, %ad)", "--date=short", sha)
+}
+
+// bisectStep runs one bisect subcommand with its progress on stderr, where the reader
+// running `magus bisect` watches it.
+func bisectStep(ctx context.Context, dir string, args ...string) error {
+	cmd := gitExec(ctx, dir, gitOpts{}, append([]string{"bisect"}, args...)...)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func (v gitVCS) start(ctx context.Context, dir, bad, good string) error {
-	cmd := gitExec(ctx, "bisect", "start", bad, good)
-	cmd.Dir = dir
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return bisectStep(ctx, dir, "start", bad, good)
 }
 
 func (v gitVCS) run(ctx context.Context, dir, shellCmd string) error {
-	cmd := gitExec(ctx, "bisect", "run", "sh", "-c", shellCmd)
-	cmd.Dir = dir
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return bisectStep(ctx, dir, "run", "sh", "-c", shellCmd)
 }
 
 func (v gitVCS) reset(ctx context.Context, dir string) error {
-	cmd := gitExec(ctx, "bisect", "reset")
-	cmd.Dir = dir
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return bisectStep(ctx, dir, "reset")
 }
 
 func (v gitVCS) culprit(ctx context.Context, dir string) (string, error) {
-	out, err := gitExec(ctx, "-C", dir, "bisect", "log").Output()
+	out, err := gitOutput(ctx, dir, gitOpts{}, "bisect", "log")
 	if err != nil {
 		return "", fmt.Errorf("git bisect log: %w", err)
 	}
-	for _, line := range bytes.Split(out, []byte("\n")) {
-		s := strings.TrimSpace(string(line))
+	for _, line := range strings.Split(out, "\n") {
+		s := strings.TrimSpace(line)
 		if strings.HasPrefix(s, "# first bad commit: [") {
 			after := strings.TrimPrefix(s, "# first bad commit: [")
 			sha := strings.SplitN(after, "]", 2)[0]
@@ -502,16 +536,16 @@ func (v gitVCS) culprit(ctx context.Context, dir string) (string, error) {
 }
 
 func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
-	shortHash, err := vcsOutput(ctx, dir, "git", "rev-parse", "--short", "HEAD")
+	shortHash, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--short", "HEAD")
 	if err != nil {
 		return types.VCSMeta{}, err
 	}
-	hash, _ := vcsOutput(ctx, dir, "git", "rev-parse", "HEAD")
-	branch, _ := vcsOutput(ctx, dir, "git", "rev-parse", "--abbrev-ref", "HEAD")
-	commitDate, _ := vcsOutput(ctx, dir, "git", "log", "-1", "--format=%ci")
+	hash, _ := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "HEAD")
+	branch, _ := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--abbrev-ref", "HEAD")
+	commitDate, _ := gitOutput(ctx, dir, gitOpts{}, "log", "-1", "--format=%ci")
 	// Don't swallow the dirty-probe error: a failed status must not be reported as
 	// a clean tree (that would stamp a dirty build as clean).
-	dirtyOut, err := vcsOutput(ctx, dir, "git", "status", "--porcelain")
+	dirtyOut, err := gitOutput(ctx, dir, gitOpts{}, "status", "--porcelain")
 	if err != nil {
 		return types.VCSMeta{}, fmt.Errorf("git status: %w", err)
 	}
@@ -534,7 +568,7 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 // error left is a %ct that did not parse, which means git answered something this code
 // does not understand.
 func (v gitVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
-	out, _ := vcsOutput(ctx, dir, "git", "log", "-1", "--format=%ct", rev, "--")
+	out, _ := gitOutput(ctx, dir, gitOpts{}, "log", "-1", "--format=%ct", rev, "--")
 	if out == "" {
 		return time.Time{}, false, nil
 	}
@@ -553,17 +587,13 @@ func (v gitVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, er
 }
 
 // DirtyFiles implements types.VCSDriver, returning repo-relative paths.
-//
-// core.quotePath=false: git otherwise renders a non-ASCII path as a C-quoted string
-// ("\303\251.md"), which the caller would have to unescape. Off, the bytes come through
-// literally and stripping the status columns is the whole parse.
 func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
-	args := []string{"-c", "core.quotePath=false", "status", "--porcelain"}
+	args := []string{"status", "--porcelain"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
 	}
-	out, err := vcsOutputRaw(ctx, dir, "git", args...)
+	out, err := gitOutput(ctx, dir, gitOpts{Raw: true}, args...)
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
 	}
@@ -610,7 +640,7 @@ func gitStatusPaths(lines []string) []string {
 // been bitten by: a probe whose failure becomes a false answer. Confining the error to one
 // named predicate makes "no commits yet" a fact rather than a swallowed failure.
 func (v gitVCS) hasCommits(ctx context.Context, dir string) bool {
-	_, err := vcsOutput(ctx, dir, "git", "rev-parse", "--verify", "HEAD")
+	_, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--verify", "HEAD")
 	return err == nil
 }
 
@@ -645,8 +675,6 @@ const gitTrackedBatch = 256
 //
 // -U1 keeps a multi-file diff readable in a CI log, where this is mostly read.
 func (v gitVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (string, error) {
-	// core.quotePath=false for the same reason DirtyFiles sets it: a non-ASCII path
-	// otherwise comes back C-quoted.
 	// A repository with no commits has no HEAD to diff against: `git diff HEAD` exits 128
 	// there, where a bare `git diff` returns empty. Nothing is committed for the working
 	// tree to differ FROM, so an empty diff is the answer.
@@ -660,12 +688,12 @@ func (v gitVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (stri
 	if !v.hasCommits(ctx, dir) {
 		return "", nil
 	}
-	args := []string{"-c", "core.quotePath=false", "diff", "-U1", "HEAD"}
+	args := []string{"diff", "-U1", "HEAD"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
 	}
-	out, err := vcsOutputRaw(ctx, dir, "git", args...)
+	out, err := gitOutput(ctx, dir, gitOpts{Raw: true}, args...)
 	if err != nil {
 		return "", fmt.Errorf("git diff: %w", err)
 	}
@@ -676,17 +704,12 @@ func (v gitVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (stri
 // subset of those pathspecs that are in the index, which is exactly "tracked": an ignored
 // path and an untracked-but-not-ignored path are both absent, and neither is distinguishable
 // through Dirty.
-//
-// core.quotePath=false for the same reason ChangesByCommit sets it: git otherwise renders a
-// non-ASCII path double-quoted with octal escapes, and the caller compares the result against
-// real paths, so a quoted name silently matches nothing.
 func (v gitVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
 	var tracked []string
 	for start := 0; start < len(paths); start += gitTrackedBatch {
 		end := min(start+gitTrackedBatch, len(paths))
-		args := []string{"-c", "core.quotePath=false", "ls-files", "--"}
-		args = append(args, paths[start:end]...)
-		out, err := vcsOutput(ctx, dir, "git", args...)
+		args := append([]string{"ls-files", "--"}, paths[start:end]...)
+		out, err := gitOutput(ctx, dir, gitOpts{}, args...)
 		if err != nil {
 			return nil, fmt.Errorf("git ls-files: %w", err)
 		}
@@ -728,7 +751,7 @@ func (v gitVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([
 // Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
 // short hash when no tag is reachable), with a -dirty suffix for a modified tree.
 func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
-	return vcsOutput(ctx, dir, "git", "describe", "--tags", "--always", "--dirty")
+	return gitOutput(ctx, dir, gitOpts{}, "describe", "--tags", "--always", "--dirty")
 }
 
 // Tags lists tags newest-first. creatordate is the sort key because it reads a
@@ -751,19 +774,27 @@ func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 func (v gitVCS) Tags(ctx context.Context, dir, pattern string) ([]types.VCSTag, error) {
 	const format = "%(refname:lstrip=2)\t%(creatordate:iso-strict)\t" +
 		"%(if)%(*objectname)%(then)%(*objectname)%(else)%(objectname)%(end)"
-	out, err := vcsOutput(ctx, dir, "git", "for-each-ref", "--sort=-creatordate", "--format="+format, "refs/tags")
+	out, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref", "--sort=-creatordate", "--format="+format, "refs/tags")
 	if err != nil {
 		return nil, err
 	}
 	return parseTags(out, pattern)
 }
 
-// RemoteURL returns the "origin" remote's fetch URL (types.RemoteReporter). A repo
-// with no origin configured yields ErrVCSUnsupported, so callers degrade to no link.
-func (v gitVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
-	out, err := vcsOutput(ctx, dir, "git", "remote", "get-url", "origin")
-	if err != nil || out == "" {
+// RemoteURL returns a remote's fetch URL (types.RemoteReporter), "origin" when name is
+// empty. `remote get-url` exits 2 for a remote that is not configured, which is
+// ErrVCSUnsupported, so callers degrade to no link.
+func (v gitVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
+	name = cmp.Or(name, "origin")
+	if err := checkRemoteName(name); err != nil {
+		return "", err
+	}
+	out, err := gitOutput(ctx, dir, gitOpts{}, "remote", "get-url", "--", name)
+	if gitExitCode(err) == 2 || (err == nil && out == "") {
 		return "", types.ErrVCSUnsupported
+	}
+	if err != nil {
+		return "", fmt.Errorf("git remote get-url %s: %w", name, err)
 	}
 	return out, nil
 }
@@ -774,39 +805,12 @@ func (v gitVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
 // yields "origin/main"; we strip the "origin/" prefix. Yields ErrVCSUnsupported when
 // origin/HEAD is unset (e.g. a repo cloned without it), so callers fall back.
 func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
-	out, err := vcsOutput(ctx, dir, "git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+	out, err := gitOutput(ctx, dir, gitOpts{}, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
 	if err != nil || out == "" {
 		return "", types.ErrVCSUnsupported
 	}
 	return strings.TrimPrefix(out, "origin/"), nil
 }
-
-// Compile-time on purpose: every one of these interfaces is reached by type assertion at
-// its call site, so dropping a method would not fail the build, it would silently demote
-// git to whatever the caller's fallback answers ("assume pushed" and no amend command from
-// the drift notice, a named diagnostic instead of a branch-competition report, and so on).
-// git implements all seventeen optional VCSDriver capabilities, so asserting the full set
-// here is what turns losing one of them into a build failure instead of a regression nobody
-// notices until a caller's fallback quietly fires.
-var (
-	_ types.MergeDriverInstaller = gitVCS{}
-	_ types.RefreshHookInstaller = gitVCS{}
-	_ types.DriftHookInstaller   = gitVCS{}
-	_ types.RegenHookInstaller   = gitVCS{}
-	_ types.RemoteReporter       = gitVCS{}
-	_ types.DefaultRefReporter   = gitVCS{}
-	_ types.PushStatusReporter   = gitVCS{}
-	_ types.RevTimeReporter      = gitVCS{}
-	_ types.TrackedFileReporter  = gitVCS{}
-	_ types.IgnoredFileReporter  = gitVCS{}
-	_ types.ChurnReporter        = gitVCS{}
-	_ types.BranchChangeReporter = gitVCS{}
-	_ types.RangeDiffReporter    = gitVCS{}
-	_ types.ConflictResolver     = gitVCS{}
-	_ types.RevisionFileReader   = gitVCS{}
-	_ types.RevisionExporter     = gitVCS{}
-	_ types.MergeStarter         = gitVCS{}
-)
 
 // CommitPushed implements types.PushStatusReporter: it asks whether id is an ancestor of
 // the current branch's upstream ("@{upstream}"), the same tracking ref `git status` and a
@@ -814,26 +818,20 @@ var (
 // that has never been pushed, or one left explicitly untracked): the caller treats that
 // as "assume pushed" rather than this driver claiming an answer it does not have.
 func (v gitVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
-	upstream, uerr := vcsOutput(ctx, dir, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	upstream, uerr := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
 	if uerr != nil || upstream == "" {
 		//nolint:nilerr // an unset upstream is a tree with no answer, not a failed lookup; ok=false already reports it
 		return false, false, nil
 	}
-	cmd := gitExec(ctx, "merge-base", "--is-ancestor", id, upstream)
-	cmd.Dir = dir
-	if runErr := cmd.Run(); runErr != nil {
-		// Exit 1 is merge-base's ANSWER: id is not an ancestor of upstream, so it has not
-		// reached the remote by this branch. Every other code is merge-base declining to
-		// answer, and a shallow clone is the ordinary case (git exits 128 because the
-		// history that would decide is not in the object store). Reading those as "not
-		// pushed" is what offers --amend on a commit the remote already carries.
-		var exitErr *exec.ExitError
-		if errors.As(runErr, &exitErr) && exitErr.ExitCode() == 1 {
-			return false, true, nil
-		}
-		return false, false, fmt.Errorf("git merge-base --is-ancestor: %w", runErr)
+	// Only merge-base's exit 1 is an answer. Every other code is it declining to answer, and
+	// a shallow clone is the ordinary case (git exits 128 because the history that would
+	// decide is not in the object store). Reading those as "not pushed" is what offers
+	// --amend on a commit the remote already carries.
+	pushed, err = v.IsAncestor(ctx, dir, id, upstream)
+	if err != nil {
+		return false, false, err
 	}
-	return true, true, nil
+	return pushed, true, nil
 }
 
 // gitCommitFormat emits the NUL-delimited fields parseCommit expects: id, short,
@@ -845,11 +843,11 @@ func (v gitVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, 
 	if rev == "" {
 		rev = "HEAD"
 	}
-	if err := checkRef(rev); err != nil {
+	if err := checkRev(rev); err != nil {
 		return types.Commit{}, err
 	}
 	// `--` keeps git from treating a path-like rev as a positional path arg.
-	out, err := vcsOutput(ctx, dir, "git", "log", "-1", "--format="+gitCommitFormat, rev, "--")
+	out, err := gitOutput(ctx, dir, gitOpts{}, "log", "-1", "--format="+gitCommitFormat, rev, "--")
 	if err != nil {
 		return types.Commit{}, fmt.Errorf("git log %s: %w", rev, err)
 	}
@@ -864,7 +862,7 @@ func (v gitVCS) History(ctx context.Context, dir string, limit int) ([]types.Com
 	if limit <= 0 {
 		limit = 1
 	}
-	out, err := vcsOutput(ctx, dir, "git", "log", fmt.Sprintf("-%d", limit), "--format=%H")
+	out, err := gitOutput(ctx, dir, gitOpts{}, "log", fmt.Sprintf("-%d", limit), "--format=%H")
 	if err != nil {
 		return nil, fmt.Errorf("git log: %w", err)
 	}
@@ -893,14 +891,12 @@ func (gitVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sinc
 	if commits <= 0 {
 		commits = 1
 	}
-	// core.quotePath=false keeps non-ASCII paths raw (git otherwise emits them
-	// double-quoted with octal escapes, which then match no file/project path).
-	args := []string{"-c", "core.quotePath=false", "log", fmt.Sprintf("-%d", commits), "--no-merges", "-M", "--name-status", "--format=" + gitChurnFormat}
+	args := []string{"log", fmt.Sprintf("-%d", commits), "--no-merges", "-M", "--name-status", "--format=" + gitChurnFormat}
 	if since != "" {
 		args = append(args, "--since="+since) // single token: a value can't be read as a flag
 	}
 	args = append(args, "--", ".")
-	out, err := vcsOutput(ctx, dir, "git", args...)
+	out, err := gitOutput(ctx, dir, gitOpts{}, args...)
 	if err != nil {
 		return nil, fmt.Errorf("git log: %w", err)
 	}
@@ -1051,11 +1047,10 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 // ok folds together the two states git spells identically: `config` exits non-zero with
 // no output for an absent key, and zero with no output for a key set to the empty value.
 func (v gitVCS) registeredDriver(ctx context.Context, root string) (cmd string, ok bool) {
-	out, err := gitExec(ctx, "-C", root, "config", "merge.magus.driver").Output()
+	cmd, err := gitOutput(ctx, root, gitOpts{}, "config", "merge.magus.driver")
 	if err != nil {
 		return "", false
 	}
-	cmd = strings.TrimSpace(string(out))
 	return cmd, cmd != ""
 }
 
@@ -1309,13 +1304,13 @@ func driverExeExists(registered string) bool {
 // this build, and a merge there silently resolves with the wrong tool. Reading stays
 // unscoped; `git config <key>` already prefers worktree config.
 func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
-	args := []string{"-C", root, "config"}
+	args := []string{"config"}
 	if v.worktreeConfigEnabled(ctx, root) {
 		args = append(args, "--worktree")
 	}
 	args = append(args, "merge.magus.driver", gitMergeDriverCommand(ctx, root))
-	if out, err := gitExec(ctx, args...).CombinedOutput(); err != nil {
-		return fmt.Errorf("git config merge.magus.driver: %w\n%s", err, out)
+	if _, err := gitOutput(ctx, root, gitOpts{}, args...); err != nil {
+		return fmt.Errorf("git config merge.magus.driver: %w", err)
 	}
 	return nil
 }
@@ -1323,8 +1318,8 @@ func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
 // worktreeConfigEnabled reports whether per-worktree config is available: without the
 // extension, `git config --worktree` is an error.
 func (v gitVCS) worktreeConfigEnabled(ctx context.Context, root string) bool {
-	out, err := gitExec(ctx, "-C", root, "config", "--get", "extensions.worktreeConfig").Output()
-	return err == nil && strings.TrimSpace(string(out)) == "true"
+	out, err := gitOutput(ctx, root, gitOpts{}, "config", "--get", "extensions.worktreeConfig")
+	return err == nil && out == "true"
 }
 
 // driverIsReachableHere reports whether the registered executable is one this process would
@@ -1411,9 +1406,8 @@ type gitRepoPaths struct {
 // gitRepoPathsOf resolves root's gitRepoPaths in one git call. ok is false when root is
 // not inside a git repository; any other failure, cancellation included, is an error.
 func gitRepoPathsOf(ctx context.Context, root string) (paths gitRepoPaths, ok bool, err error) {
-	cmd := gitExec(ctx, "-C", root, "rev-parse", "--git-path", "hooks", "--git-common-dir")
 	// The C locale keeps git's "not a git repository" wording what the test below reads.
-	cmd.Env = append(cmd.Env, "LC_ALL=C")
+	cmd := gitExec(ctx, root, gitOpts{Env: []string{"LC_ALL=C"}}, "rev-parse", "--git-path", "hooks", "--git-common-dir")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -1520,14 +1514,14 @@ func gitPathChunks(paths []string) [][]string {
 	return chunks
 }
 
-// runGitBatched runs `git -C root <args...> -- <paths>` in argv-sized batches.
+// runGitBatched runs `git <args...> -- <paths>` in root in argv-sized batches. The paths
+// are literal: every caller passes a file it was told about, and a name like "*.txt" must
+// not match its neighbors.
 func runGitBatched(ctx context.Context, root string, args []string, paths []string) error {
 	for _, chunk := range gitPathChunks(paths) {
-		argv := append([]string{"-C", root}, args...)
-		argv = append(argv, "--")
-		argv = append(argv, chunk...)
-		if out, err := gitExec(ctx, argv...).CombinedOutput(); err != nil {
-			return fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, out)
+		argv := slices.Concat(args, []string{"--"}, chunk)
+		if _, err := gitOutput(ctx, root, gitOpts{Literal: true}, argv...); err != nil {
+			return fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 		}
 	}
 	return nil
@@ -1537,7 +1531,7 @@ func runGitBatched(ctx context.Context, root string, args []string, paths []stri
 // slash, or "" when root is the top level. Porcelain paths are top-level-relative, so a
 // workspace rooted deeper needs this to translate them.
 func gitPathPrefix(ctx context.Context, root string) string {
-	out, err := vcsOutput(ctx, root, "git", "rev-parse", "--show-prefix")
+	out, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--show-prefix")
 	if err != nil {
 		return ""
 	}
@@ -1551,12 +1545,11 @@ func gitPathPrefix(ctx context.Context, root string) string {
 // --no-renames and -uno narrow what git emits. parseConflicts stays correct without them
 // (see its rename note), so these are a second line of defense.
 func (v gitVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, error) {
-	out, err := gitExec(ctx, "-C", root,
-		"status", "--porcelain=v1", "-z", "--no-renames", "-uno").Output()
+	out, err := gitOutput(ctx, root, gitOpts{Raw: true}, "status", "--porcelain=v1", "-z", "--no-renames", "-uno")
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
 	}
-	return parseConflicts(string(out), gitPathPrefix(ctx, root)), nil
+	return parseConflicts(out, gitPathPrefix(ctx, root)), nil
 }
 
 // parseConflicts turns `git status --porcelain=v1 -z` output into the unmerged paths.
@@ -1618,30 +1611,30 @@ func parseConflicts(out, prefix string) []types.Conflict {
 // than merge, leaving no operation in progress, no conflicts, and a caller that thinks it
 // settled something. --no-ff makes the outcome one shape regardless of topology.
 //
-// A ref beginning with "-" is refused rather than passed through, where git would read it
-// as a flag. `git merge` has no `--` separator for its ref argument, so rejecting it is
-// the only guard available.
+// A ref git could read as a flag is refused rather than passed through. `git merge` has no
+// `--` separator for its ref argument, so rejecting it is the only guard available.
 func (v gitVCS) StartMerge(ctx context.Context, root, ref string) error {
-	if err := checkRef(ref); err != nil {
+	if err := checkRev(ref); err != nil {
 		return err
 	}
-	out, err := gitExec(ctx, "-C", root, "merge", "--no-commit", "--no-ff", ref).CombinedOutput()
+	_, err := gitOutput(ctx, root, gitOpts{}, "merge", "--no-commit", "--no-ff", ref)
 	if err == nil {
 		return nil
 	}
 	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up;
 	// the conflicts are the payload, reported by Conflicts. Only a merge that never began
-	// is an error. git leaves MERGE_HEAD behind exactly when one is underway.
-	if _, statErr := os.Stat(filepath.Join(root, ".git", "MERGE_HEAD")); statErr == nil {
+	// is an error. git leaves MERGE_HEAD behind exactly when one is underway, and asking
+	// git for it finds it in a linked checkout too, where .git is a file.
+	if _, headErr := gitOutput(ctx, root, gitOpts{}, "rev-parse", "-q", "--verify", "MERGE_HEAD"); headErr == nil {
 		return nil
 	}
-	return fmt.Errorf("git merge %s: %w\n%s", ref, err, strings.TrimSpace(string(out)))
+	return fmt.Errorf("git merge %s: %w", ref, err)
 }
 
 // AbortMerge abandons the in-progress merge. See types.MergeStarter.
 func (v gitVCS) AbortMerge(ctx context.Context, root string) error {
-	if out, err := gitExec(ctx, "-C", root, "merge", "--abort").CombinedOutput(); err != nil {
-		return fmt.Errorf("git merge --abort: %w\n%s", err, strings.TrimSpace(string(out)))
+	if _, err := gitOutput(ctx, root, gitOpts{}, "merge", "--abort"); err != nil {
+		return fmt.Errorf("git merge --abort: %w", err)
 	}
 	return nil
 }
@@ -1695,14 +1688,12 @@ func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (
 		return ignored, nil
 	}
 	for _, chunk := range gitPathChunks(paths) {
-		cmd := gitExec(ctx, "-C", root, "check-ignore", "--no-index", "-z", "--stdin")
-		cmd.Stdin = strings.NewReader(strings.Join(chunk, "\x00") + "\x00")
-		out, err := cmd.Output()
-		var exitErr *exec.ExitError
-		if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
+		stdin := []byte(strings.Join(chunk, "\x00") + "\x00")
+		out, err := gitOutput(ctx, root, gitOpts{Stdin: stdin, Raw: true}, "check-ignore", "--no-index", "-z", "--stdin")
+		if err != nil && gitExitCode(err) != 1 {
 			return nil, fmt.Errorf("git check-ignore: %w", err)
 		}
-		for _, p := range strings.Split(string(out), "\x00") {
+		for _, p := range strings.Split(out, "\x00") {
 			if p != "" {
 				ignored[filepath.ToSlash(p)] = true
 			}
@@ -1720,11 +1711,18 @@ func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (
 // registration on workspace load, so before this scrub, running any magus command from a
 // pre-commit hook wrote `merge.magus.driver` into whatever repository was being committed
 // to. The others redirect the work tree, index, object store, or ref namespace the same
-// way, and GIT_CONFIG_* can inject config into a run that asked for none.
+// way, GIT_REPLACE_REF_BASE and the shallow and graft files change which objects a name
+// resolves to, GIT_ATTR_SOURCE which tree attributes come from, the pathspec variables how
+// a path argument is read, and GIT_CONFIG_* can inject config into a run that asked for
+// none.
 var gitRedirectVars = []string{
 	"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
 	"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
 	"GIT_NAMESPACE", "GIT_PREFIX", "GIT_CEILING_DIRECTORIES",
+	"GIT_SHALLOW_FILE", "GIT_GRAFT_FILE",
+	"GIT_REPLACE_REF_BASE", "GIT_NO_REPLACE_OBJECTS",
+	"GIT_ATTR_SOURCE",
+	"GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS",
 	"GIT_CONFIG", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS",
 }
 
@@ -1741,8 +1739,11 @@ var gitRedirectVars = []string{
 // find out why. The blanket rule is simpler to write and strictly worse to run.
 //
 // The maintenance rule, so this does not become guesswork: add a variable here only if it
-// changes which repository, work tree, index, object store, or ref namespace git acts on.
-// Anything governing transport, credentials, identity, or diagnostics stays inherited.
+// changes which repository, work tree, index, object store, or ref namespace git acts on,
+// which objects a name resolves to, where attributes are read from, or how a path argument
+// is read. Anything governing transport, credentials, identity, or diagnostics stays
+// inherited. GIT_CONFIG_GLOBAL and GIT_CONFIG_NOSYSTEM stay too: they pick a config FILE,
+// and the settings a parse depends on are pinned per call by gitExec.
 func gitEnviron() []string {
 	env := os.Environ()
 	out := env[:0:0]
@@ -1756,13 +1757,94 @@ func gitEnviron() []string {
 	return out
 }
 
-// gitExec builds a git subprocess whose environment cannot redirect it off the repository
-// the caller named. Use it instead of exec.CommandContext for every git invocation; the
-// caller still sets cmd.Dir or passes -C as before.
-func gitExec(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", uncolored("git", args)...)
-	cmd.Env = gitEnviron()
+// gitOpts is what one git call adds to the hardening gitExec always applies.
+type gitOpts struct {
+	// Env is appended after the scrub: a commit's identity and dates, a scratch index.
+	Env []string
+	// Stdin feeds a --stdin command.
+	Stdin []byte
+	// Literal makes every path after -- a literal path, never pathspec magic: a file
+	// named "*.txt" or ":x" means that file.
+	Literal bool
+	// NoHooks points core.hooksPath nowhere. Opt-in rather than global because Bisect and
+	// StartMerge run in the user's own checkout, where magus's hooks are part of what the
+	// user asked for.
+	NoHooks bool
+	// Raw keeps gitOutput's leading whitespace, where a status column starts a line.
+	Raw bool
+}
+
+// gitPins are the config settings every git call overrides, whatever the box configures,
+// because each would change bytes magus parses or a commit magus makes:
+//
+//	color.ui          ANSI in a parse; see uncolored
+//	core.quotePath    a C-quoted non-ASCII path, which matches no source glob, so
+//	                  `magus affected` silently never rebuilds its project
+//	log.showSignature extra lines in any log parse
+//	rerere.enabled    a recorded resolution settling a merge magus reads
+//	commit.gpgSign    a commit waiting on a key or an agent
+var gitPins = []string{
+	"-c", "color.ui=false",
+	"-c", "core.quotePath=false",
+	"-c", "log.showSignature=false",
+	"-c", "rerere.enabled=false",
+	"-c", "commit.gpgSign=false",
+}
+
+// gitWaitDelay bounds how long Wait blocks on a child of git (ssh, a credential helper)
+// still holding its pipes after git exits or ctx ends. Network deadlines are the caller's.
+const gitWaitDelay = 10 * time.Second
+
+// gitExec builds a git subprocess in dir that cannot be redirected off that repository,
+// cannot prompt for credentials, cannot hang on a child holding its pipes, and reads no
+// replacement objects. Every git invocation in this package goes through it. An empty dir
+// is the process working directory.
+//
+// GIT_TERMINAL_PROMPT=0 because git and ssh read a credential prompt from /dev/tty, not
+// from stdin, so an auth-required remote would hang a build forever on a prompt nobody
+// sees. GIT_NO_REPLACE_OBJECTS=1 because a refs/replace/ ref would otherwise substitute
+// one commit or tree for another under every read and merge.
+func gitExec(ctx context.Context, dir string, o gitOpts, args ...string) *exec.Cmd {
+	argv := slices.Clone(gitPins)
+	if o.NoHooks {
+		argv = append(argv, "-c", "core.hooksPath="+os.DevNull)
+	}
+	cmd := exec.CommandContext(ctx, "git", append(argv, args...)...)
+	cmd.Dir = dir
+	cmd.Env = append(gitEnviron(), "GIT_TERMINAL_PROMPT=0", "GIT_NO_REPLACE_OBJECTS=1")
+	if o.Literal {
+		cmd.Env = append(cmd.Env, "GIT_LITERAL_PATHSPECS=1")
+	}
+	cmd.Env = append(cmd.Env, o.Env...)
+	if o.Stdin != nil {
+		cmd.Stdin = bytes.NewReader(o.Stdin)
+	}
+	cmd.WaitDelay = gitWaitDelay
 	return cmd
+}
+
+// gitOutput runs gitExec and returns stdout without trailing newlines, and without leading
+// whitespace unless o.Raw. A failure carries what git said on stderr.
+func gitOutput(ctx context.Context, dir string, o gitOpts, args ...string) (string, error) {
+	out, err := gitExec(ctx, dir, o, args...).Output()
+	if err != nil {
+		return "", gitStderr(err)
+	}
+	if o.Raw {
+		return strings.TrimRight(string(out), "\n"), nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// gitExitCode is err's git exit status, or -1 when git did not exit normally. The callers
+// that read a status as an answer (merge-tree 1, check-ignore 1, remote get-url 2,
+// merge-base --is-ancestor 1) use it.
+func gitExitCode(err error) int {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 // uncolored prepends the switch that stops a backend emitting ANSI, so magus never parses
@@ -1776,8 +1858,8 @@ func gitExec(ctx context.Context, args ...string) *exec.Cmd {
 // the failure looked like a clean answer.
 //
 // hg, Sapling and jj all take a global `--color=never`. git is the exception: it has no such
-// top-level flag (only a per-subcommand `--color`, which not every subcommand accepts), so it
-// gets the config override, which covers diff, log and status alike.
+// top-level flag (only a per-subcommand `--color`, which not every subcommand accepts), so
+// gitPins carries the config override, which covers diff, log and status alike.
 //
 // Environment variables are NOT an option here, measured against all four with color forced
 // on in repository config: NO_COLOR, HGPLAIN and TERM=dumb each failed to suppress it. An
@@ -1787,8 +1869,6 @@ func gitExec(ctx context.Context, args ...string) *exec.Cmd {
 // The switch goes FIRST because each is a global option that must precede the subcommand.
 func uncolored(name string, args []string) []string {
 	switch name {
-	case "git":
-		return append([]string{"-c", "color.ui=false"}, args...)
 	case "hg", "sl", "jj":
 		return append([]string{"--color=never"}, args...)
 	default:
@@ -1797,20 +1877,24 @@ func uncolored(name string, args []string) []string {
 }
 
 // vcsExec builds a VCS subprocess with color already suppressed. Use it instead of
-// exec.CommandContext for every hg, Sapling, and jj invocation; git has gitExec, which also
-// scrubs the environment. The caller still sets cmd.Dir or passes the backend's -R/-C flag.
+// exec.CommandContext for every hg, Sapling, and jj invocation. git goes to gitExec, so no
+// path here runs an unhardened git. The caller still sets cmd.Dir or passes the backend's
+// -R/-C flag.
 func vcsExec(ctx context.Context, name string, args ...string) *exec.Cmd {
+	if name == "git" {
+		return gitExec(ctx, "", gitOpts{}, args...)
+	}
 	return exec.CommandContext(ctx, name, uncolored(name, args)...)
 }
 
 // vcsOutput runs a VCS subcommand in dir and returns its trimmed stdout.
 // An empty dir uses the process working directory (the exec.Cmd.Dir convention).
 func vcsOutput(ctx context.Context, dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, uncolored(name, args)...)
-	cmd.Dir = dir
 	if name == "git" {
-		cmd.Env = gitEnviron()
+		return gitOutput(ctx, dir, gitOpts{}, args...)
 	}
+	cmd := vcsExec(ctx, name, args...)
+	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -1823,11 +1907,11 @@ func vcsOutput(ctx context.Context, dir, name string, args ...string) (string, e
 // the first is a space for an unstaged edit (" M path"); TrimSpace ate it on the first
 // line only, so exactly one path per status came back missing its first character.
 func vcsOutputRaw(ctx context.Context, dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, uncolored(name, args)...)
-	cmd.Dir = dir
 	if name == "git" {
-		cmd.Env = gitEnviron()
+		return gitOutput(ctx, dir, gitOpts{Raw: true}, args...)
 	}
+	cmd := vcsExec(ctx, name, args...)
+	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -1870,10 +1954,10 @@ func (gitVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, e
 	if rev == "" {
 		rev = "HEAD"
 	}
-	if err := checkRef(rev); err != nil {
+	if err := checkRev(rev); err != nil {
 		return "", err
 	}
-	return revFileOutput(gitExec(ctx, "-C", root, "show", rev+":"+path),
+	return revFileOutput(gitExec(ctx, root, gitOpts{}, "show", rev+":"+path),
 		fmt.Sprintf("git show %s:%s", rev, path))
 }
 
@@ -1886,10 +1970,10 @@ func (gitVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error
 	if rev == "" {
 		rev = "HEAD"
 	}
-	if err := checkRef(rev); err != nil {
+	if err := checkRev(rev); err != nil {
 		return err
 	}
-	cmd := gitExec(ctx, "-C", dir, "archive", "--format=tar", rev, "--", ".")
+	cmd := gitExec(ctx, dir, gitOpts{}, "archive", "--format=tar", rev, "--", ".")
 	var errBuf bytes.Buffer
 	cmd.Stderr = &errBuf
 	stdout, err := cmd.StdoutPipe()
@@ -1998,16 +2082,9 @@ func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
 	defer os.RemoveAll(idxDir)
 	idxPath := filepath.Join(idxDir, "index")
 
+	env := append([]string{"GIT_INDEX_FILE=" + idxPath}, preserveIdentity...)
 	run := func(args ...string) (string, error) {
-		cmd := vcsExec(ctx, "git", args...)
-		cmd.Dir = dir
-		// gitEnviron, never os.Environ: it strips GIT_DIR, GIT_WORK_TREE and the rest, so
-		// cmd.Dir decides the repository. Inheriting them lets an exported GIT_DIR send every
-		// command here, and the ref, into a different repository.
-		cmd.Env = append(gitEnviron(), "GIT_INDEX_FILE="+idxPath)
-		cmd.Env = append(cmd.Env, preserveIdentity...)
-		out, err := cmd.Output()
-		return strings.TrimSpace(string(out)), gitStderr(err)
+		return gitOutput(ctx, dir, gitOpts{Env: env}, args...)
 	}
 	// Seed from HEAD where there is one, so the snapshot reads as a change against the
 	// checked-out commit rather than an initial import. An unborn HEAD has nothing to read
@@ -2091,11 +2168,7 @@ func gitStderr(err error) error {
 // is not grounds to delete a commit magus did not make.
 func (v gitVCS) PrunePreserved(ctx context.Context, dir string, before time.Time) ([]string, error) {
 	run := func(args ...string) (string, error) {
-		cmd := vcsExec(ctx, "git", args...)
-		cmd.Dir = dir
-		cmd.Env = gitEnviron()
-		out, err := cmd.Output()
-		return strings.TrimSpace(string(out)), gitStderr(err)
+		return gitOutput(ctx, dir, gitOpts{}, args...)
 	}
 	// The subject is LAST in the format because it is the only field that can hold a
 	// space, which is what makes the split unambiguous.

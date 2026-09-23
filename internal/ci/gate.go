@@ -30,6 +30,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"path"
 	"slices"
 	"strings"
@@ -336,6 +337,9 @@ func (c ChangeClassifier) commentOnly(ctx context.Context, p, green string, equa
 		return ClassCode, "the working tree copy is unreadable"
 	}
 	old, err := c.At(ctx, green, p)
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		return ClassCode, "this VCS backend cannot read the file at the green gate's revision"
+	}
 	if err != nil {
 		return ClassCode, "absent at the green gate's revision"
 	}

@@ -160,13 +160,18 @@ func (c fixedCommit) FindCommit(context.Context, string, string) (types.Commit, 
 	return types.Commit(c), nil
 }
 
+// RemoteURL answers as a checkout with no remote configured does.
+func (c fixedCommit) RemoteURL(context.Context, string, string) (string, error) {
+	return "", types.ErrVCSUnsupported
+}
+
 // withRemote adds a default remote to fixedCommit.
 type withRemote struct {
 	fixedCommit
 	remote string
 }
 
-func (w withRemote) RemoteURL(context.Context, string) (string, error) { return w.remote, nil }
+func (w withRemote) RemoteURL(context.Context, string, string) (string, error) { return w.remote, nil }
 
 func TestPinned(t *testing.T) {
 	t.Parallel()

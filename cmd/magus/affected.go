@@ -945,10 +945,6 @@ func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOpti
 	if err != nil || res.VCS == nil {
 		return nil
 	}
-	reporter, ok := res.VCS.(types.TrackedFileReporter)
-	if !ok {
-		return nil
-	}
 	// One pathspec for every seed's files: TrackedFiles is a subprocess per call, and a
 	// changeset spanning a dozen projects would otherwise fork a dozen times to answer
 	// one hint.
@@ -957,7 +953,7 @@ func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOpti
 		ask = append(ask, files...)
 	}
 	slices.Sort(ask)
-	known, err := reporter.TrackedFiles(ctx, root, slices.Compact(ask))
+	known, err := res.VCS.TrackedFiles(ctx, root, slices.Compact(ask))
 	if err != nil {
 		return nil
 	}

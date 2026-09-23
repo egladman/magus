@@ -1,12 +1,14 @@
 package vcs
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,10 +80,6 @@ func (v jjVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCo
 		CLI: fmt.Sprintf("jj diff --from %s --to %s", base, sha),
 		// GUI omitted: jj diff --tool requires a named tool we can't assume.
 	}, nil
-}
-
-func (v jjVCS) Bisect(_ context.Context, _ string, _ types.BisectOptions) (types.Culprit, error) {
-	return types.Culprit{}, types.ErrVCSUnsupported
 }
 
 // jjCommitTemplate emits the NUL-delimited fields parseCommit expects: commit_id
@@ -279,6 +277,66 @@ func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []st
 	return out, nil
 }
 
+// RangeFiles implements types.RangeDiffReporter: RangeDiff's fork point and range, names
+// only, run from the workspace root so the paths are repo-relative.
+func (v jjVCS) RangeFiles(ctx context.Context, dir, base, head string) ([]string, error) {
+	if err := checkRevsetRef(base); err != nil {
+		return nil, err
+	}
+	if err := checkRevsetRef(head); err != nil {
+		return nil, err
+	}
+	root, err := v.Root(ctx, dir)
+	if err != nil {
+		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
+	}
+	out, err := vcsOutput(ctx, root, "jj", "diff", "--name-only", "--from", "heads(::"+base+" & ::"+head+")", "--to", head)
+	if err != nil {
+		return nil, fmt.Errorf("jj diff --name-only --from %s --to %s: %w", base, head, err)
+	}
+	return splitLines([]byte(out)), nil
+}
+
+// RangeCommits implements types.RangeDiffReporter. jj's base..head is git's: ancestors of
+// head that are not ancestors of base, and `jj log` lists newest first. Each path is a
+// root: fileset, a literal repo-relative path however it is spelled.
+func (v jjVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
+	if err := checkRevsetRef(base); err != nil {
+		return nil, err
+	}
+	if err := checkRevsetRef(head); err != nil {
+		return nil, err
+	}
+	args := []string{"log", "-r", base + ".." + head, "--no-graph", "-T", `commit_id ++ "\n"`}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		for _, p := range paths {
+			args = append(args, "root:"+strconv.Quote(p))
+		}
+	}
+	out, err := vcsOutput(ctx, dir, "jj", args...)
+	if err != nil {
+		return nil, fmt.Errorf("jj log %s..%s: %w", base, head, err)
+	}
+	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
+}
+
+// IsAncestor implements types.AncestryReporter. `::descendant` includes descendant itself,
+// and an unknown revision fails the log rather than matching nothing.
+func (v jjVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
+	if err := checkRevsetRef(ancestor); err != nil {
+		return false, err
+	}
+	if err := checkRevsetRef(descendant); err != nil {
+		return false, err
+	}
+	out, err := vcsOutput(ctx, dir, "jj", "log", "-r", ancestor+" & ::"+descendant, "--no-graph", "-T", "commit_id")
+	if err != nil {
+		return false, fmt.Errorf("jj log %s & ::%s: %w", ancestor, descendant, err)
+	}
+	return out != "", nil
+}
+
 // ConflictResolver for jj. The mapping is NOT a transliteration of the git one, because
 // jj's conflict model differs at the root: an operation never pauses. `jj rebase` and a
 // merge both complete, recording conflicts INSIDE the resulting commit, and the working
@@ -416,58 +474,6 @@ func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string
 	return map[string]bool{}, nil
 }
 
-// The capability ladder below. jj implements ten of the seventeen optional VCSDriver
-// capabilities: ConflictResolver (asserted separately above) plus the nine listed in the
-// var block. The seven it does NOT implement are absent on purpose, and each is argued here
-// so a reader looking for one finds the reason rather than a silent gap:
-//
-//   - MergeDriverInstaller: the interface takes the workspace's declared output GLOBS, and
-//     jj has nowhere to put them. git maps a pattern to a driver in .gitattributes and hg
-//     maps one in [merge-patterns]; jj's merge-tools config carries only program,
-//     merge-args, edit-args and friends, one tool for the whole repository, with no
-//     per-path selection anywhere in its key set (checked against `jj config list
-//     --include-defaults`). Registering magus as that single tool would route EVERY
-//     conflicted file through it rather than the declared outputs, a much larger promise
-//     than the caller made. jj's supported path is the bulk one: ConflictResolver IS
-//     implemented, so `magus vcs resolve` settles a jj workspace with no driver at all.
-//   - RefreshHookInstaller: jj has no native hook mechanism, as types.RefreshHookInstaller
-//     itself records. types.DriftHookInstaller is the same gap for the same reason: there
-//     is nowhere in jj to register a post-commit/pre-push equivalent, and `jj git push`
-//     passes --no-verify deliberately, so even riding git's own hooks under the hood is
-//     not an option. A jj repo is simply uncovered by this notice, by jj's own design.
-//     types.RegenHookInstaller follows: with no merge driver there is nothing owed.
-//   - IgnoredFileReporter: jj exposes no ignore-RULES query; see IgnoredPaths above, which
-//     is the same gap reached from the other interface.
-//   - BranchChangeReporter: git's exclusion rule is "not the branch this checkout is on",
-//     which assumes one branch owns the working copy. jj's working-copy commit is usually
-//     anonymous (Metadata's Ref above is often ""), so there is ordinarily no branch to
-//     exclude, and every bookmark would report as "other", including the one the reader is
-//     themselves advancing. Not implemented rather than answered wrong; the caller
-//     (Magus.BranchChanges) reports a named types.VCSCapabilityMissing diagnostic for
-//     exactly this reason rather than an empty, falsely reassuring list.
-//   - PushStatusReporter: hg and Sapling answer this from a phase recorded on the commit
-//     itself (see hgFamilyCommitPushed); jj records no such fact. The nearest analogue,
-//     asking whether id is an ancestor of some bookmark's `@<remote>` tracking ref, is a
-//     git-shaped answer that resolves only for a git-backed jj repo, and jj runs on its own
-//     native backend too. Not implemented rather than answered only for the colocated case.
-//
-// Verified against jj 0.44.0.
-var (
-	_ types.RemoteReporter      = jjVCS{}
-	_ types.DefaultRefReporter  = jjVCS{}
-	_ types.RevTimeReporter     = jjVCS{}
-	_ types.TrackedFileReporter = jjVCS{}
-	_ types.ChurnReporter       = jjVCS{}
-	_ types.RangeDiffReporter   = jjVCS{}
-	_ types.RevisionExporter    = jjVCS{}
-	_ types.RevisionFileReader  = jjVCS{}
-	_ types.MergeStarter        = jjVCS{}
-)
-
-// RemoteURL implements types.RemoteReporter. `jj git remote list` prints one "<name> <url>"
-// line per remote; "origin" is the one git's implementation reports, so this matches it
-// rather than guessing at a single-remote repository. A repo with no origin (or no git
-// backend at all) yields ErrVCSUnsupported, and callers degrade to no link.
 // ConfiguredRemote implements types.RemoteConfigReporter for a COLOCATED workspace only,
 // where `jj git init` wrote a .git beside .jj and jj's remotes are that repository's.
 //
@@ -484,13 +490,21 @@ func (v jjVCS) ConfiguredRemote(dir string) (string, error) {
 	return "", types.ErrVCSUnsupported
 }
 
-func (v jjVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
+// RemoteURL implements types.RemoteReporter. `jj git remote list` prints one "<name> <url>"
+// line per remote; name defaults to "origin", matching git. A repository without the named
+// remote (or without a git backend at all) yields ErrVCSUnsupported, and callers degrade to
+// no link.
+func (v jjVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
+	name = cmp.Or(name, "origin")
+	if err := checkRemoteName(name); err != nil {
+		return "", err
+	}
 	out, err := vcsOutput(ctx, dir, "jj", "git", "remote", "list")
 	if err != nil {
 		return "", types.ErrVCSUnsupported
 	}
 	for _, line := range splitLines([]byte(out)) {
-		if name, url, ok := strings.Cut(line, " "); ok && name == "origin" {
+		if remote, url, ok := strings.Cut(line, " "); ok && remote == name {
 			if url = strings.TrimSpace(url); url != "" {
 				return url, nil
 			}

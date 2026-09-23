@@ -173,9 +173,8 @@ func gitConflictResolver(t *testing.T, dir string) types.ConflictResolver {
 	t.Helper()
 	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})
 	require.NoError(t, err)
-	cr, ok := res.VCS.(types.ConflictResolver)
-	require.True(t, ok, "the git driver must implement types.ConflictResolver")
-	return cr
+	require.NotNil(t, res.VCS, "no driver resolved for a git checkout")
+	return res.VCS
 }
 
 // TestWorkspaceRelPathsRejectsEmptyRoot pins the guard on a caller bug that read as a user
