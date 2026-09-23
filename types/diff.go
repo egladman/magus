@@ -161,6 +161,47 @@ type DiffSymbol struct {
 	// rendered no declaration.
 	Signature     string `json:"signature,omitempty"      yaml:"signature,omitempty"`
 	BaseSignature string `json:"base_signature,omitempty" yaml:"base_signature,omitempty"`
+	// Naming is how a symbol this change adds or re-signs sits against what the rest of the
+	// workspace calls the same shape of thing, best first. Empty when nothing disagrees.
+	Naming []DiffNaming `json:"naming,omitempty" yaml:"naming,omitempty"`
+}
+
+// The DiffNaming checks. Each is derived from the workspace's own symbol index and never
+// declared, so a finding is evidence for the author to weigh rather than a rule to satisfy.
+const (
+	// DiffNamingAffix is a name that misses a word run most declarations of its shape carry:
+	// EntryPointFrom where 33 of 35 context readers end in FromContext.
+	DiffNamingAffix = "affix"
+	// DiffNamingBinding is a name the workspace already gives another meaning: a target, spell or
+	// other entity of that exact name, or a head word its other carriers use differently.
+	DiffNamingBinding = "binding"
+	// DiffNamingSize is an interface with far more methods than those declared beside it.
+	DiffNamingSize = "size"
+)
+
+// DiffNaming is one observation about a changed symbol's name, with the evidence behind it.
+type DiffNaming struct {
+	// Check is one of the DiffNaming constants.
+	Check string `json:"check" yaml:"check"`
+	// Summary is the finding in one line.
+	Summary string `json:"summary" yaml:"summary"`
+	// Score is how strongly the workspace's own evidence disagrees with the name, from 0 to 1.
+	Score float64 `json:"score" yaml:"score"`
+	// Headline marks one of the few strongest findings of the change. The rest are ranked
+	// evidence, shown and never asserted.
+	Headline bool `json:"headline,omitempty" yaml:"headline,omitempty"`
+	// Pattern is the norm the evidence shows: `<X>FromContext`, `5 methods or fewer`, or the
+	// reused name.
+	Pattern string `json:"pattern" yaml:"pattern"`
+	// Shape is the declaration shape the norm was measured over, as the language's reader
+	// renders it; empty when the language reports none and families formed on kind alone.
+	Shape string `json:"shape,omitempty" yaml:"shape,omitempty"`
+	// Members of Cohort carry Pattern.
+	Members int `json:"members" yaml:"members"`
+	Cohort  int `json:"cohort"  yaml:"cohort"`
+	// Examples name a few that carry Pattern, Outliers a few that do not.
+	Examples []string `json:"examples,omitempty" yaml:"examples,omitempty"`
+	Outliers []string `json:"outliers,omitempty" yaml:"outliers,omitempty"`
 }
 
 // DiffChurn is how often this file has been changing, and whether that is accelerating.

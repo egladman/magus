@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`magus diff` flags a new name that breaks a convention the workspace already follows.**
+  Derived from the symbol index in any language: a two-word affix most same-shape
+  declarations share (`EntryPointFrom` beside 33 `<X>FromContext`), a type name already
+  meaning something else, an oversized interface. `DiffSymbol.naming` carries it to the
+  report, TUI, console, `--prompt` and the `conformance` advisor.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the

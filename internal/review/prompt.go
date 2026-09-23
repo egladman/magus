@@ -103,6 +103,10 @@ func Prompt(in PromptInput) string {
 		Items(promptFiles(in.Changeset.Files), promptFileLimit,
 			"Ask magus for the rest with `magus diff -o json`.")
 
+	b.Section("Names the workspace already spells differently").
+		Note("Derived from how the rest of the workspace names the same shape; weigh, do not enforce.").
+		Items(promptNaming(in.Changeset.Files), 0, "")
+
 	b.Section("What magus could not measure").
 		Note("Do not read any of these as evidence that there is nothing there.").
 		Items(in.Changeset.Notes, 0, "")
@@ -155,6 +159,22 @@ func promptFiles(files []types.DiffFile) []string {
 			line += " - " + strings.Join(facts, "; ")
 		}
 		out = append(out, line)
+	}
+	return out
+}
+
+// promptNaming is one line per headline naming finding. The change's headlines are already
+// capped, so no limit is needed here.
+func promptNaming(files []types.DiffFile) []string {
+	var out []string
+	for _, f := range files {
+		for _, s := range f.Symbols {
+			for _, n := range s.Naming {
+				if n.Headline {
+					out = append(out, n.Summary+" (`"+f.Path+"`)")
+				}
+			}
+		}
 	}
 	return out
 }

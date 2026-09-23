@@ -26,6 +26,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "DiffAPI", Zero: types.DiffAPI{}, Encode: func(v any) vm.Value { return ObjectDiffAPI(v.(types.DiffAPI)) }},
 	{Name: "DiffChurn", Zero: types.DiffChurn{}, Encode: func(v any) vm.Value { return ObjectDiffChurn(v.(types.DiffChurn)) }},
 	{Name: "DiffFile", Zero: types.DiffFile{}, Encode: func(v any) vm.Value { return ObjectDiffFile(v.(types.DiffFile)) }},
+	{Name: "DiffNaming", Zero: types.DiffNaming{}, Encode: func(v any) vm.Value { return ObjectDiffNaming(v.(types.DiffNaming)) }},
 	{Name: "DiffReviewed", Zero: types.DiffReviewed{}, Encode: func(v any) vm.Value { return ObjectDiffReviewed(v.(types.DiffReviewed)) }},
 	{Name: "DiffSymbol", Zero: types.DiffSymbol{}, Encode: func(v any) vm.Value { return ObjectDiffSymbol(v.(types.DiffSymbol)) }},
 	{Name: "DiffTouch", Zero: types.DiffTouch{}, Encode: func(v any) vm.Value { return ObjectDiffTouch(v.(types.DiffTouch)) }},

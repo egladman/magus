@@ -40,6 +40,22 @@ export interface DiffSymbol {
   readonly qualified?: string;
   readonly signature?: string;
   readonly base_signature?: string;
+  readonly naming?: readonly DiffNaming[];
+}
+
+// DiffNaming is how a symbol the change adds sits against what the rest of the workspace calls
+// the same shape of thing. Only a headline is shown; the rest is ranked evidence.
+export interface DiffNaming {
+  readonly check: string;
+  readonly summary: string;
+  readonly score: number;
+  readonly headline?: boolean;
+  readonly pattern: string;
+  readonly shape?: string;
+  readonly members: number;
+  readonly cohort: number;
+  readonly examples?: readonly string[];
+  readonly outliers?: readonly string[];
 }
 
 // DiffAPI is what the changeset did to the public API, present only when the review was

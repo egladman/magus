@@ -32,7 +32,12 @@
 // It never renames anything. Renaming a target breaks every caller, CI config, and
 // script outside the workspace, so this advises and stops.
 //
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, MIN_COHORT, MIN_SHARE.
+// The symbol half says the same thing about code: a name the change adds that differs from
+// what the rest of the workspace calls the same shape of declaration. magus\diff computes it
+// from the symbol index (one pass over every declaration, too large for a script) and hands
+// each changed symbol its findings; this renders the headlines, one table per check.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, MIN_COHORT, MIN_SHARE, BASELINE.
 import "proc";
 import "advice";
 import "magus";
@@ -165,7 +170,7 @@ export fun keepAdded(all: [{str: str}], added: [str], seeded: [str]) > [{str: st
     return kept;
 }
 
-fun body(items: [{str: str}]) > str {
+fun targetTable(items: [{str: str}]) > str {
     final parts = mut ["**This adds a target whose name differs from what the rest of the "
         + "workspace calls the same work.**\n\n"
         + "| target | runs | the rest of the workspace calls this |\n| --- | --- | --- |\n"];
@@ -174,16 +179,76 @@ fun body(items: [{str: str}]) > str {
             + (f["ops"] ?? "") + "` | `" + (f["majority"] ?? "") + "` ("
             + (f["evidence"] ?? "") + ") |\n");
     }
-    return parts.join("")
-        + "\nNobody wrote this convention down. magus derived it by grouping every target "
-        + "in the workspace by the ops it invokes and looking at what those targets are "
-        + "named, so the count above is what other teams already do, not a rule imposed "
-        + "on you.\n\n"
-        + "Renaming now is cheap. Later it means changing every caller, CI config, and "
-        + "script that names the target, across teams that each have to be persuaded "
+    return parts.join("") + "\n";
+}
+
+// namingChecks is one table per naming check, in the order the body renders them. A check
+// magus\diff adds later reaches the comment through a row here.
+final namingChecks = [
+    {"check": "affix", "heading": "This adds a name that misses the word pattern most declarations of its shape share"},
+    {"check": "binding", "heading": "This adds a name the workspace already uses for something else"},
+    {"check": "size", "heading": "This adds an interface far larger than those declared beside it"},
+];
+
+// namingRow flattens one finding to primitives, so the rendering is testable: a host object
+// cannot be built inside a test block.
+export fun namingRow(path: str, check: str, summary: str, members: int, cohort: int,
+    examples: [str], outliers: [str]) > {str: str} {
+    var evidence = "{members} of {cohort}";
+    if (examples.len() > 0) { evidence = evidence + ": " + examples.join(", "); }
+    if (outliers.len() > 0) { evidence = evidence + "; not: " + outliers.join(", "); }
+    return {"path": path, "check": check, "summary": summary, "evidence": evidence};
+}
+
+// namingTables renders a table for each check with rows, and "" when none has any. A row whose
+// check has no entry in namingChecks goes under a plain heading rather than disappearing.
+export fun namingTables(rows: [{str: str}]) > str {
+    final parts = mut [<str>];
+    var known = mut [<str>];
+    var checks = mut [<{str: str}>];
+    foreach (c in namingChecks) {
+        checks.append(c);
+        known.append(c["check"] ?? "");
+    }
+    foreach (r in rows) {
+        final check = r["check"] ?? "";
+        var listed = false;
+        foreach (k in known) {
+            if (k == check) { listed = true; }
+        }
+        if (!listed) {
+            known.append(check);
+            checks.append({"check": check, "heading": "This adds a name magus reports under `" + check + "`"});
+        }
+    }
+    foreach (c in checks) {
+        var lines = mut [<str>];
+        foreach (r in rows) {
+            if ((r["check"] ?? "") != (c["check"] ?? "")) { continue; }
+            lines.append("| `" + (r["path"] ?? "") + "` | " + cell(r["summary"] ?? "") + " | "
+                + cell(r["evidence"] ?? "") + " |\n");
+        }
+        if (lines.len() == 0) { continue; }
+        parts.append("**" + (c["heading"] ?? "") + ".**\n\n| file | finding | evidence |\n| --- | --- | --- |\n"
+            + lines.join("") + "\n");
+    }
+    return parts.join("");
+}
+
+fun cell(text: str) > str { return text.replace("|", with: "\\|"); }
+
+fun body(items: [{str: str}], rows: [{str: str}]) > str {
+    var text = "";
+    if (items.len() > 0) { text = targetTable(items); }
+    return text + namingTables(rows)
+        + "Nobody wrote these conventions down. magus derived them from the workspace: targets "
+        + "grouped by the ops they invoke, declarations by their shape. Each count above is "
+        + "what the rest of the code already does, not a rule imposed on you.\n\n"
+        + "Renaming now is cheap. Later it means changing every caller, and for a target every "
+        + "CI config and script that names it, across teams that each have to be persuaded "
         + "separately.\n\n"
-        + "If you diverged on purpose, because this target really is a different job that "
-        + "happens to run the same tool, then this finding is wrong and worth ignoring. "
+        + "If you diverged on purpose, because this really is a different thing that happens to "
+        + "look the same, then this finding is wrong and worth ignoring. "
         + "Add the `magus:silence:" + section + "` label to keep it quiet.\n";
 }
 
@@ -242,15 +307,35 @@ fun main() > void !> any {
 
     final items = keepAdded(findings(members, minCohort: minCohort, minShare: minShare),
         added: added, seeded: seeded);
-    if (items.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, title: "A target name diverges from the workspace", body: "");
+
+    // The same changeset api-surface reads: the range on the forge, the working tree locally.
+    var opts = mut {<str: any>};
+    final baseline = advice\env("BASELINE");
+    if (baseline != "") { opts["baseline"] = baseline; }
+    if (!advice\collecting()) { opts["rev"] = "origin/" + base + "..." + head; }
+    final review = magus\diff(opts);
+    var rows = mut [<{str: str}>];
+    foreach (f in review.files) {
+        foreach (sym in f.symbols) {
+            foreach (n in sym.naming) {
+                if (!n.headline) { continue; }
+                rows.append(namingRow(f.path, check: n.check, summary: n.summary,
+                    members: n.members, cohort: n.cohort, examples: n.examples, outliers: n.outliers));
+            }
+        }
+    }
+
+    final count = items.len() + rows.len();
+    if (count == 0) {
+        // An empty body retracts the section, so a name fixed on the next push stops being reported.
+        advice\publish(repo, pr: pr, name: section, title: "A name diverges from the workspace", body: "");
         std\print("conformance: nothing to say ({members.len()} targets, {added.len()} added by this change)");
         return;
     }
     advice\publish(repo, pr: pr, name: section,
-        title: "A target name diverges from the workspace ({items.len()})",
-        body: body(items));
-    std\print("conformance: advised on {items.len()} target(s)");
+        title: "A name diverges from the workspace ({count})",
+        body: body(items, rows: rows));
+    std\print("conformance: advised on {items.len()} target(s) and {rows.len()} symbol name(s)");
 }
 
 
@@ -342,9 +427,42 @@ test "keepAdded does not blame another project for a name it already had" {
 
 test "body shows the evidence and names the escape hatch" {
     final text = body([{"project": "apps/checkout", "name": "unit-test",
-        "majority": "test", "evidence": "47 of 48", "ops": "node:jest"}]);
+        "majority": "test", "evidence": "47 of 48", "ops": "node:jest"}], rows: []);
     std\assert(text.indexOf("47 of 48") != null, message: "the count is the argument");
     std\assert(text.indexOf("`unit-test` in `apps/checkout`") != null, message: "names the target");
     std\assert(text.indexOf("`magus:silence:conformance` label") != null,
         message: "declining must be easy and permanent, and the label is how");
+    std\assert(text.indexOf("| file | finding |") == null, message: "no symbol finding, no symbol table");
+}
+
+test "a naming finding carries its counts, its members, and the ones that differ" {
+    final row = namingRow("internal/trail/trail.go", check: "affix",
+        summary: "`EntryPointFrom`: 41 of 43 functions of its shape that say From or Context are named `<X>FromContext`",
+        members: 41, cohort: 43, examples: ["BaseFromContext", "CwdFromContext"], outliers: ["RecorderFrom", "StepReplFrom"]);
+    std\assert(row["evidence"] == "41 of 43: BaseFromContext, CwdFromContext; not: RecorderFrom, StepReplFrom",
+        message: "the family, its members and its outliers");
+
+    final text = body([], rows: [row]);
+    std\assert(text.indexOf("misses the word pattern") != null, message: "the affix table's heading");
+    std\assert(text.indexOf("| `internal/trail/trail.go` | `EntryPointFrom`: 41 of 43") != null, message: "one row");
+    std\assert(text.indexOf("This adds a target") == null, message: "no target finding, no target table");
+}
+
+test "each check gets its own table, and an unknown check still renders" {
+    final text = namingTables([
+        namingRow("types/vcs.go", check: "size", summary: "`Stager` has 13 methods",
+            members: 23, cohort: 28, examples: [], outliers: []),
+        namingRow("sink.go", check: "binding", summary: "`Format` is already the name of target `.:format`",
+            members: 1, cohort: 1, examples: [], outliers: []),
+        namingRow("a.go", check: "future", summary: "a | b", members: 5, cohort: 6, examples: [], outliers: []),
+    ]);
+    std\assert(text.indexOf("already uses for something else") != null, message: "binding table");
+    std\assert(text.indexOf("far larger than those declared beside it") != null, message: "size table");
+    std\assert(text.indexOf("magus reports under `future`") != null, message: "a newer check is never dropped");
+    std\assert(text.indexOf("a \\| b") != null, message: "a pipe cannot split the table");
+    std\assert(text.indexOf("already uses") < text.indexOf("far larger"), message: "namingChecks order");
+}
+
+test "no findings render nothing, which is what retracts a fixed name" {
+    std\assert(namingTables([]) == "", message: "an empty body retracts the section");
 }

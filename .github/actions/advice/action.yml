@@ -76,7 +76,8 @@ inputs:
     description: >
       Comment when the pull request adds a target whose name diverges from what the rest
       of the workspace already calls the same work, derived by grouping targets on the
-      ops they invoke. Silent unless a large cohort agrees overwhelmingly, so a workspace
+      ops they invoke, or a symbol whose name or size diverges from declarations of the
+      same shape. Silent unless a large cohort agrees overwhelmingly, so a workspace
       with no convention produces nothing.
     required: false
     default: 'true'
@@ -334,7 +335,7 @@ runs:
         PR_HEAD_SHA: ${{ inputs.head-sha }}
       run: magus buzz "$GITHUB_ACTION_PATH/skip-cache.buzz"
 
-    - name: Advise on a target name that diverges from the workspace
+    - name: Advise on a target or symbol name that diverges from the workspace
       if: inputs.conformance == 'true'
       shell: bash
       env:
@@ -347,6 +348,7 @@ runs:
         PR_HEAD_SHA: ${{ inputs.head-sha }}
         MIN_COHORT: ${{ inputs.conformance-min-cohort }}
         MIN_SHARE: ${{ inputs.conformance-min-share }}
+        BASELINE: ${{ inputs.baseline }}
       run: magus buzz "$GITHUB_ACTION_PATH/conformance.buzz"
 
     - name: Advise on a project missing a target its peers have

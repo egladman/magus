@@ -73,20 +73,21 @@ func hasMembers(id string, sides ...map[string]symbolDef) bool {
 type externalsFunc func(g *knowledge.Graph, symbolID, owner string) ([]string, int)
 
 // attachAPIDelta classifies every symbol the changeset's files define on either side against
-// base, attaches the public ones to their files, and sets out.API.
-func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) {
+// base, attaches the public ones to their files, and sets out.API. It returns every symbol's
+// DiffChange by ID, public or not, or nil when the baseline could not be compared.
+func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) map[string]string {
 	baseOut := *cfg.baseline
 	if baseOut.SchemaVersion < 14 {
 		out.Notes = append(out.Notes, fmt.Sprintf(
 			"API delta skipped: the baseline %s is knowledge schema %d, which predates recorded signatures; export it again with this magus",
 			cfg.baselineLabel, baseOut.SchemaVersion))
-		return
+		return nil
 	}
 	baseDefs := definedSymbols(baseOut.Nodes)
 	if len(baseDefs) == 0 {
 		out.Notes = append(out.Notes, "API delta skipped: the baseline "+cfg.baselineLabel+
 			" carries no symbols; export it with `magus graph export --symbols`")
-		return
+		return nil
 	}
 	base := knowledge.NewGraph()
 	base.Merge(baseOut.Nodes, baseOut.Links)
@@ -95,8 +96,10 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 	api := types.DiffAPI{Base: cfg.baselineLabel}
 	anyChange := false
 	unmeasured := 0
+	classified := map[string]string{}
 	record := func(f *types.DiffFile, graph *knowledge.Graph, def symbolDef, change, sig, baseSig string) {
 		anyChange = true
+		classified[def.node.ID] = change
 		label := def.node.Label
 		exported := exportedFromModule(def.path, label, def.node.ID)
 		external, externalFiles := externals(graph, def.node.ID, f.Project)
@@ -186,6 +189,107 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 		out.Notes = append(out.Notes, fmt.Sprintf(
 			"API delta: %d symbol(s) in changed files had no readable definition lines on one side, so an edit to their bodies is not counted",
 			unmeasured))
+	}
+	return classified
+}
+
+// attachNaming sets Naming on each symbol the change adds or re-signs, appending the symbol to
+// its file when the review did not list it: a new helper has no referents yet, and its name is
+// exactly what is worth a second look.
+//
+// changes is attachAPIDelta's classification. Without one, a symbol counts as added when the
+// committed copy of its file never mentions its name, and a re-signed symbol goes undetected.
+// A range review whose head is already committed therefore finds nothing new: silence, never a
+// finding about an established name.
+func attachNaming(byPath map[string]*types.DiffFile, head *knowledge.Graph, changes map[string]string,
+	committed func(path string) (string, bool), generated func(path string) bool,
+) {
+	defs := definedSymbols(head.Nodes())
+	type blob struct {
+		text string
+		ok   bool
+	}
+	blobs := map[string]blob{}
+	var subjects []string
+	introduced := map[string]bool{}
+	for _, id := range slices.Sorted(maps.Keys(defs)) {
+		def := defs[id]
+		f, ok := byPath[def.path]
+		if !ok || f.Generated() {
+			continue
+		}
+		change := changes[id]
+		if changes == nil {
+			b, seen := blobs[def.path]
+			if !seen {
+				b.text, b.ok = committed(def.path)
+				blobs[def.path] = b
+			}
+			if !b.ok || !mentions(b.text, def.node.Label) {
+				change = types.DiffChangeAdded
+			}
+		}
+		switch change {
+		case types.DiffChangeAdded:
+			introduced[id] = true
+			subjects = append(subjects, id)
+		case types.DiffChangeSignature:
+			subjects = append(subjects, id)
+		}
+	}
+	found := head.Naming(knowledge.NamingChange{
+		Subjects:   subjects,
+		Introduced: func(id string) bool { return introduced[id] },
+		Generated:  generated,
+	})
+	for _, id := range slices.Sorted(maps.Keys(found)) {
+		def := defs[id]
+		f := byPath[def.path]
+		i := slices.IndexFunc(f.Symbols, func(s types.DiffSymbol) bool { return s.ID == id })
+		if i < 0 {
+			f.Symbols = append(f.Symbols, types.DiffSymbol{
+				ID: id, Label: def.node.Label, Change: changes[id], Qualified: qualifiedName(id, def.node.Label),
+				Signature: def.node.Attrs[knowledge.AttrSignature],
+			})
+			i = len(f.Symbols) - 1
+		}
+		f.Symbols[i].Naming = found[id]
+	}
+}
+
+// declaredOutput returns a memoized test for whether a path is a declared target output, the
+// language-neutral mark of generated code.
+func (m *Magus) declaredOutput(ctx context.Context) func(path string) bool {
+	memo := map[string]bool{}
+	return func(path string) bool {
+		if v, ok := memo[path]; ok {
+			return v
+		}
+		entries, err := m.ClassifyFiles(ctx, []string{path})
+		v := err == nil && len(entries) == 1 && entries[0].Role == types.DiffRoleOutput
+		memo[path] = v
+		return v
+	}
+}
+
+// mentions reports whether text holds name as a whole identifier.
+func mentions(text, name string) bool {
+	if name == "" {
+		return false
+	}
+	identByte := func(b byte) bool {
+		return b == '_' || b == '$' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
+	}
+	for from := 0; ; {
+		i := strings.Index(text[from:], name)
+		if i < 0 {
+			return false
+		}
+		start, end := from+i, from+i+len(name)
+		if (start == 0 || !identByte(text[start-1])) && (end == len(text) || !identByte(text[end])) {
+			return true
+		}
+		from = start + 1
 	}
 }
 

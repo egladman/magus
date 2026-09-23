@@ -235,6 +235,44 @@ test("no churn data renders no churn chip", () => {
   assert.equal(chips.filter((c) => c.text.includes("commit")).length, 0);
 });
 
+// Ranked evidence stays in `magus diff -o json`; only a headline earns a chip.
+test("a naming headline earns a chip and weaker evidence does not", () => {
+  const naming = (headline: boolean, summary: string) => ({
+    check: "affix",
+    summary,
+    score: headline ? 0.67 : 0.3,
+    headline,
+    pattern: "<X>FromContext",
+    members: 8,
+    cohort: 9,
+  });
+  const chips = riskChips(
+    ann("trail.go", {
+      symbols: [
+        {
+          id: "s",
+          label: "EntryPointFrom",
+          ref_count: 0,
+          file_count: 0,
+          external_file_count: 0,
+          naming: [
+            naming(true, "`EntryPointFrom`: 8 of 9 functions are named `<X>FromContext`"),
+            naming(false, "a weaker guess"),
+          ],
+        },
+      ],
+    }),
+  );
+  const chip = chips.find((c) => c.text === "naming");
+  assert.ok(chip, "the headline is shown");
+  assert.match(chip.title, /^EntryPointFrom: 8 of 9 functions are named <X>FromContext\. /);
+  assert.doesNotMatch(chip.title, /weaker guess/);
+  assert.equal(
+    riskChips(ann("quiet.go", { symbols: [] })).find((c) => c.text === "naming"),
+    undefined,
+  );
+});
+
 test("no annotation yields no chips rather than empty placeholders", () => {
   assert.deepEqual(riskChips(undefined), []);
 });

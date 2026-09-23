@@ -151,6 +151,104 @@ func TestAttachAPIDeltaRefusesAnOlderSchema(t *testing.T) {
 	assert.Contains(t, out.Notes[0], "predates recorded signatures")
 }
 
+// namingHead assembles a head graph the way a workspace build does: nine context readers in
+// separate packages, eight named <X>FromContext, and whatever the test adds.
+func namingHead(extra ...types.KnowledgeSymbol) *knowledge.Graph {
+	var syms []types.KnowledgeSymbol
+	reader := func(pkg, name, file string) types.KnowledgeSymbol {
+		ns := "gomod example.com/m `example.com/m/" + pkg + "`/"
+		return types.KnowledgeSymbol{
+			Key: ns + name + "().", Label: name, Language: "go", SymbolKind: "Function", Namespace: ns,
+			Signature: "func " + name + "(ctx context.Context) *T", Source: file + ":3", Defs: []string{file},
+		}
+	}
+	for _, name := range []string{"Cwd", "Lease", "Root", "Base", "Charms", "Progress", "Runtime", "Writer"} {
+		syms = append(syms, reader("internal/"+name, name+"FromContext", "internal/"+name+"/ctx.go"))
+	}
+	syms = append(syms, reader("internal/obs", "RecorderFrom", "internal/obs/ctx.go"))
+	for _, s := range extra {
+		syms = append(syms, reader("internal/trail", s.Label, "internal/trail/trail.go"))
+	}
+	g := knowledge.NewGraph()
+	for _, sh := range knowledge.AssembleShards(knowledge.Inputs{
+		Graph:   types.TargetGraphOutput{Projects: []types.TargetGraphProject{{Path: "."}}},
+		Symbols: map[string][]types.KnowledgeSymbol{".": syms},
+	}) {
+		g.Merge(sh.Nodes, sh.Edges)
+	}
+	return g
+}
+
+func entryPointFromID() string {
+	return "symbol:gomod example.com/m `example.com/m/internal/trail`/EntryPointFrom()."
+}
+
+// Without a baseline, the committed copy of the file decides what is new. The symbol has no
+// referents yet, so the review never listed it; the finding is what puts it on the file.
+func TestAttachNamingFindsANewNameWithoutABaseline(t *testing.T) {
+	head := namingHead(types.KnowledgeSymbol{Label: "EntryPointFrom"}, types.KnowledgeSymbol{Label: "Trail"})
+	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
+	committed := func(path string) (string, bool) {
+		return "package trail\n\nfunc Trail(ctx context.Context) *T { return nil }\n", path == "internal/trail/trail.go"
+	}
+
+	attachNaming(byPath, head, nil, committed, func(string) bool { return false })
+
+	require.Len(t, out.Files[0].Symbols, 1, "Trail is committed already, so only EntryPointFrom is a subject")
+	got := out.Files[0].Symbols[0]
+	assert.Equal(t, entryPointFromID(), got.ID)
+	assert.Equal(t, "EntryPointFrom", got.Qualified)
+	assert.Empty(t, got.Change, "no baseline, so no claim about what the change did")
+	require.Len(t, got.Naming, 1)
+	assert.Equal(t, "<X>FromContext", got.Naming[0].Pattern)
+	assert.True(t, got.Naming[0].Headline)
+}
+
+func TestAttachNamingFollowsTheBaselineClassification(t *testing.T) {
+	head := namingHead(types.KnowledgeSymbol{Label: "EntryPointFrom"})
+	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
+	unread := func(string) (string, bool) {
+		t.Fatal("a baseline answers what is new; the committed file must not be read")
+		return "", false
+	}
+
+	attachNaming(byPath, head, map[string]string{entryPointFromID(): types.DiffChangeBody}, unread, nil)
+	assert.Empty(t, out.Files[0].Symbols, "a body edit is not a naming decision")
+
+	attachNaming(byPath, head, map[string]string{entryPointFromID(): types.DiffChangeAdded}, unread, nil)
+	require.Len(t, out.Files[0].Symbols, 1)
+	assert.Equal(t, types.DiffChangeAdded, out.Files[0].Symbols[0].Change)
+	assert.NotEmpty(t, out.Files[0].Symbols[0].Naming)
+}
+
+func TestAttachNamingSkipsGeneratedFiles(t *testing.T) {
+	head := namingHead(types.KnowledgeSymbol{Label: "EntryPointFrom"})
+	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: ".", Role: types.DiffRoleOutput}}}
+
+	attachNaming(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, nil,
+		func(string) (string, bool) { return "", false }, nil)
+
+	assert.Empty(t, out.Files[0].Symbols, "a regenerated file's names are the generator's decision")
+}
+
+func TestMentions(t *testing.T) {
+	for _, tc := range []struct {
+		text, name string
+		want       bool
+	}{
+		{"func EntryPoint() {}", "EntryPoint", true},
+		{"x := EntryPointFrom(ctx)", "EntryPoint", false},
+		{"myEntryPoint := 1", "EntryPoint", false},
+		{"EntryPoint", "EntryPoint", true},
+		{"a EntryPointFrom b EntryPoint.", "EntryPoint", true},
+		{"anything", "", false},
+	} {
+		assert.Equal(t, tc.want, mentions(tc.text, tc.name), "%q in %q", tc.name, tc.text)
+	}
+}
+
 func TestQualifiedName(t *testing.T) {
 	for _, tc := range []struct{ name, id, label, want string }{
 		{"function", goSymbol("api", "Open()."), "Open", "Open"},

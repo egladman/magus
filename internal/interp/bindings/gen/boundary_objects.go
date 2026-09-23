@@ -848,6 +848,29 @@ func ObjectFileReport(v types.FileReport) vm.Value {
 	return out
 }
 
+func ObjectDiffNaming(v types.DiffNaming) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("check", vm.StrValue(v.Check))
+	out.MapSet("summary", vm.StrValue(v.Summary))
+	out.MapSet("score", vm.FloatValue(float64(v.Score)))
+	out.MapSet("headline", vm.BoolValue(v.Headline))
+	out.MapSet("pattern", vm.StrValue(v.Pattern))
+	out.MapSet("shape", vm.StrValue(v.Shape))
+	out.MapSet("members", vm.IntValue(int64(v.Members)))
+	out.MapSet("cohort", vm.IntValue(int64(v.Cohort)))
+	itemsExamples := make([]vm.Value, len(v.Examples))
+	for indexExamples := range v.Examples {
+		itemsExamples[indexExamples] = vm.StrValue(v.Examples[indexExamples])
+	}
+	out.MapSet("examples", vm.ListValue(itemsExamples))
+	itemsOutliers := make([]vm.Value, len(v.Outliers))
+	for indexOutliers := range v.Outliers {
+		itemsOutliers[indexOutliers] = vm.StrValue(v.Outliers[indexOutliers])
+	}
+	out.MapSet("outliers", vm.ListValue(itemsOutliers))
+	return out
+}
+
 func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
@@ -865,6 +888,11 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out.MapSet("qualified", vm.StrValue(v.Qualified))
 	out.MapSet("signature", vm.StrValue(v.Signature))
 	out.MapSet("baseSignature", vm.StrValue(v.BaseSignature))
+	itemsNaming := make([]vm.Value, len(v.Naming))
+	for indexNaming := range v.Naming {
+		itemsNaming[indexNaming] = ObjectDiffNaming(v.Naming[indexNaming])
+	}
+	out.MapSet("naming", vm.ListValue(itemsNaming))
 	return out
 }
 

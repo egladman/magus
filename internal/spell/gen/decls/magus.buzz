@@ -124,6 +124,19 @@ export object DriftResult {
     files: [Path] = [],
 }
 
+export object DiffNaming {
+    check: str = "",
+    summary: str = "",
+    score: double = 0.0,
+    headline: bool = false,
+    pattern: str = "",
+    shape: str = "",
+    members: int = 0,
+    cohort: int = 0,
+    examples: [str] = [],
+    outliers: [str] = [],
+}
+
 export object DiffSymbol {
     id: str = "",
     label: str = "",
@@ -136,6 +149,7 @@ export object DiffSymbol {
     qualified: str = "",
     signature: str = "",
     baseSignature: str = "",
+    naming: [DiffNaming] = [],
 }
 
 export object DiffTouch {

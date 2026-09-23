@@ -1437,6 +1437,15 @@ func diffFileFacts(f types.DiffFile) []string {
 			}
 		}
 	}
+	// Headlines only: the ranked evidence below them is for `-o json`, and a report line that is
+	// usually a weak guess is a line readers learn to skip.
+	for _, s := range f.Symbols {
+		for _, n := range s.Naming {
+			if n.Headline {
+				facts = append(facts, "NAMING "+n.Summary)
+			}
+		}
+	}
 	if n := f.ReachOr(0); f.Reach != nil && n > 0 {
 		noun := "files"
 		if n == 1 {

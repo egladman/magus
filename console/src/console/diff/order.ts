@@ -250,6 +250,17 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
     }
   }
 
+  const naming = (a.symbols ?? []).flatMap((s) => (s.naming ?? []).filter((n) => n.headline));
+  if (naming.length > 0) {
+    chips.push({
+      text: naming.length === 1 ? "naming" : `${naming.length} naming`,
+      tone: "info",
+      title:
+        naming.map((n) => n.summary.replaceAll("`", "")).join(". ") +
+        ". Derived from how the rest of the workspace names the same shape: evidence, not a rule.",
+    });
+  }
+
   // An unmeasured reach shows no chip at all. A "0 referents" chip on an unindexed workspace
   // would be a measurement magus never took.
   const reach = a.reach;

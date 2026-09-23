@@ -1931,6 +1931,19 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 		assert.Equal(t, "PUBLIC SURFACE: exports Open, Close", facts[0])
 	})
 
+	t.Run("naming shows headlines and keeps ranked evidence out of the report", func(t *testing.T) {
+		facts := diffFileFacts(types.DiffFile{
+			Path: "a.go",
+			Symbols: []types.DiffSymbol{{Label: "EntryPointFrom", Naming: []types.DiffNaming{
+				{Summary: "`EntryPointFrom`: 8 of 9 functions of its shape that say From or Context are named `<X>FromContext`", Headline: true},
+				{Summary: "a weaker guess", Score: 0.3},
+			}}},
+		})
+		assert.Equal(t, []string{
+			"NAMING `EntryPointFrom`: 8 of 9 functions of its shape that say From or Context are named `<X>FromContext`",
+		}, facts)
+	})
+
 	t.Run("public surface falls back to the consuming projects", func(t *testing.T) {
 		facts := diffFileFacts(types.DiffFile{
 			Path:    "a.go",

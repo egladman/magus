@@ -1299,12 +1299,20 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			f.Coverage = &cov
 		}
 	}
+	var changes map[string]string
 	if cfg.baseline != nil {
 		if indexed {
-			attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
+			changes = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
 		} else {
 			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
 		}
+	}
+	if indexed {
+		committed := func(path string) (string, bool) {
+			text, err := m.FileAt(ctx, "", path)
+			return text, err == nil
+		}
+		attachNaming(byPath, graph, changes, committed, m.declaredOutput(ctx))
 	}
 
 	out.SortForReading()

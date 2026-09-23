@@ -96,6 +96,7 @@ var boundaryTypes = []boundaryType{
 	// magus.review's bundle, leaf-first. A Buzz advisor annotating `> Review` gets
 	// compile-checked field access on the same shape the console and the CLI read, which is
 	// what keeps one definition of review order serving all three.
+	{Name: "DiffNaming", Type: reflect.TypeFor[types.DiffNaming](), RuntimeObject: true},
 	{Name: "DiffSymbol", Type: reflect.TypeFor[types.DiffSymbol](), RuntimeObject: true},
 	{Name: "DiffChurn", Type: reflect.TypeFor[types.DiffChurn](), RuntimeObject: true},
 	{Name: "DiffTouch", Type: reflect.TypeFor[types.DiffTouch](), RuntimeObject: true},
