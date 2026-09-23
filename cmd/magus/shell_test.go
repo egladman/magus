@@ -414,7 +414,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentCommand,
 		Actor:     "agent",
-		Origin:    trail.StampOrigin(ctx, types.Origin{Transport: types.TransportHook, Host: "claude-code", Session: "abc123"}),
+		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "shell.command",
 		Outcome:   trail.OutcomeOK,
@@ -610,7 +610,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentSpawn,
 		Actor:     "agent",
-		Origin:    trail.StampOrigin(ctx, types.Origin{Transport: types.TransportHook, Host: "claude-code", Session: "abc123"}),
+		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "Explore",
 		Lease:     "notes-store-6b",

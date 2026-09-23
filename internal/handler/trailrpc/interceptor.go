@@ -121,7 +121,7 @@ func Interceptor(trailDir, actor string, kind trail.Kind, opts ...Option) connec
 					Ts:         start.UnixMilli(),
 					Kind:       kind,
 					Actor:      actor,
-					Origin:     types.Origin{Transport: types.TransportRPC},
+					Origin:     types.Origin{EntryPoint: types.EntryPointRPC},
 					Action:     method,
 					Outcome:    trail.OutcomeOK,
 					DurationMs: time.Since(start).Milliseconds(),

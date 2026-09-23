@@ -379,8 +379,9 @@ func OpenRequest(dir, agentSession string, open AttentionOpen, start SessionStar
 // Unresolvable refs surface as [ErrNoRequest] or [AmbiguousRequestError].
 //
 // The disposal writes its OWN session, because a disposal IS its own invocation: it is
-// what makes the store say which run of magus closed the request, and by extension which
-// person was at the keyboard. start describes it; its Command is set here.
+// what makes the store say which run of magus closed the request, and start's origin says
+// whose account it ran as and through which entry point. start describes it; its Command
+// is set here.
 //
 // The returned request is re-read from the store rather than patched in memory: the
 // disposal's timestamp and session are whatever landed on disk, and a hand-assembled

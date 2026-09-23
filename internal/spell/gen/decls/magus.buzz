@@ -535,7 +535,7 @@ export object JobUnattributedWrite {
 export object Origin {
     user: str = "",
     uid: str = "",
-    transport: str = "",
+    entryPoint: str = "",
     host: str = "",
     session: str = "",
     agent: str = "",

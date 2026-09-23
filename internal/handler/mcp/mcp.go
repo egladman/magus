@@ -282,7 +282,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 		toolName := req.Params.Name
 
 		ctx = origin.WithContext(ctx, o)
-		ctx = trail.WithTransport(ctx, types.TransportMCP)
+		ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointMCP)
 		// The workspace's secret resolver, so the trail writes below are redacted.
 		//
 		// This context is an ANCESTOR of any run a tool starts, never a descendant, so it
@@ -332,7 +332,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 			Ts:            start.UnixMilli(),
 			Kind:          trail.KindMCPToolCall,
 			Actor:         agentID,
-			Origin:        types.Origin{Transport: types.TransportMCP},
+			Origin:        types.Origin{EntryPoint: types.EntryPointMCP},
 			UserAgent:     o.UserAgent,
 			Action:        toolName,
 			Outcome:       trail.OutcomeOK,

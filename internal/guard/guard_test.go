@@ -12,6 +12,7 @@ import (
 	// catalog. See internal/interp/bindings/spell.go's init.
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -165,4 +166,25 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 	})
 	assert.Equal(t, two.ID, second.Lease, "session two is graded under its own row, in the same checkout")
 	assert.NotEqual(t, first.Lease, second.Lease)
+}
+
+// A command typed at a terminal is the CLI's: it records no session and is not an agent's,
+// while its terminal window still keys what the guard remembers for it.
+func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	dir := t.TempDir()
+	ctx := trail.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), types.EntryPointCLI)
+
+	Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "test-host", Window: "tty:w1"})
+
+	events := trailEvents(t, dir, trail.KindAgentCommand)
+	require.Len(t, events, 1)
+	assert.Equal(t, types.EntryPointCLI, events[0].EntryPoint)
+	assert.Empty(t, events[0].Session, "a terminal window is not a host session")
+	assert.Equal(t, "cli", events[0].Actor, "a person at a terminal is not recorded as an agent")
+
+	assert.Equal(t, "test-host/tty:w1", hookAttribution{Host: "test-host", Window: "tty:w1"}.sessionKey())
+	assert.Equal(t, "test-host/s1", hookAttribution{Host: "test-host", Session: "s1", Window: "tty:w1"}.sessionKey(),
+		"a host session wins over the window")
+	assert.Empty(t, hookAttribution{Host: "test-host"}.sessionKey(), "neither leaves the gate its anonymous window")
 }

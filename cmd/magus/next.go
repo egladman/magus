@@ -108,7 +108,7 @@ func emitConcurrencyNudge(w io.Writer, m *magus.Magus, args []string, rw *magus.
 		return
 	}
 	next := []hint.Next{hint.NextForSlotWait(string(types.ProfileAggressive), args)}
-	gate := hint.NewGate(m.CacheDir(), sessionOrTerminal(""))
+	gate := hint.NewGate(m.CacheDir(), terminalWindow())
 	if gate.MarkFired(hint.MarkerKind(next[0].ID)) {
 		return
 	}

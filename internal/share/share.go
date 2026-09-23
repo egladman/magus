@@ -484,7 +484,7 @@ func (g *sessionGuard) recordFirstUse(r *http.Request) {
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindTokenLifecycle,
 		Actor:     "share-guest",
-		Origin:    types.Origin{Transport: types.TransportRPC},
+		Origin:    types.Origin{EntryPoint: types.EntryPointRPC},
 		Action:    "share.open",
 		Outcome:   trail.OutcomeOK,
 		UserAgent: ua,

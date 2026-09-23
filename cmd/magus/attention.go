@@ -182,7 +182,7 @@ func attentionDispose(root string, args []string) error {
 		return err
 	}
 	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.SessionStart{
-		Origin:    localOrigin(types.TransportCLI),
+		Origin:    localOrigin(types.EntryPointCLI),
 		Workspace: root,
 		Version:   version,
 	})
@@ -279,7 +279,7 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		Message: ev.Message,
 	}
 	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.SessionStart{
-		Origin:    localOrigin(types.TransportHook),
+		Origin:    localOrigin(types.EntryPointHook),
 		Workspace: root,
 		Version:   version,
 	})

@@ -223,10 +223,10 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 type AgentCommand struct {
 	Actor     string
 	Workspace string
-	// Transport is the entry point the observation came through; empty records a hook.
-	Transport types.Transport
-	Host      string
-	Session   string
+	// EntryPoint is where the observation entered magus; empty records a hook.
+	EntryPoint types.EntryPoint
+	Host       string
+	Session    string
 	// Agent is the host's subagent id, empty for the main conversation.
 	Agent      string
 	Transcript string
@@ -346,7 +346,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentCommand,
 		Actor:         actor,
-		Origin:        hookOrigin(command.Transport, command.Host, command.Session, command.Agent),
+		Origin:        hookOrigin(command.EntryPoint, command.Host, command.Session, command.Agent),
 		Workspace:     command.Workspace,
 		Action:        action,
 		Lease:         lease,
@@ -503,7 +503,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Ts:           time.Now().UnixMilli(),
 		Kind:         KindAgentSpawn,
 		Actor:        actor,
-		Origin:       hookOrigin(types.TransportHook, spawn.Host, spawn.Session, spawn.Agent),
+		Origin:       hookOrigin(types.EntryPointHook, spawn.Host, spawn.Session, spawn.Agent),
 		Workspace:    spawn.Workspace,
 		Action:       action,
 		Lease:        lease,

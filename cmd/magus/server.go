@@ -179,7 +179,7 @@ const daemonDetachEnv = "MAGUS_DAEMON_DETACH"
 const daemonReadyTimeout = 60 * time.Second
 
 func serverStart(ctx context.Context, args []string) error {
-	ctx = trail.WithTransport(ctx, types.TransportDaemon)
+	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointDaemon)
 	var sf *gen.ServerStartFlags
 	_, err := cmdParse("server start", args, func(fs *flag.FlagSet) {
 		sf = gen.BindServerStart(fs)
@@ -1148,7 +1148,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
 			Actor:     "daemon",
-			Origin:    types.Origin{Transport: types.TransportDaemon},
+			Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
 			Workspace: m.Root(),
 			Action:    "review.said",
 			Outcome:   trail.OutcomeOK,
@@ -1172,7 +1172,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindJob,
 		Actor:     "daemon",
-		Origin:    types.Origin{Transport: types.TransportDaemon},
+		Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
 		Workspace: m.Root(),
 		Action:    "review.merged",
 		Outcome:   trail.OutcomeOK,

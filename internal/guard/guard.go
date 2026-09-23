@@ -172,6 +172,10 @@ type Request struct {
 	Session    string
 	Transcript string
 	Event      string
+	// Window names the terminal the call runs in, empty off a terminal. It keys what the
+	// guard remembers for a caller no host delivered a session for, and is never recorded
+	// as a session: a terminal window is not a host's conversation.
+	Window string
 	// ObservesSkillLoads is the one CAPABILITY on this struct rather than attribution: the
 	// host's wiring reports skill loads to magus, so a rule may require one. It is set by
 	// the wiring that provides the observation, never inferred from Host, because guard
@@ -223,7 +227,7 @@ type Verdict struct {
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	input := req.Input
 	hasInput := input != ""
-	who := hookAttribution{Host: req.Host, Transport: req.Transport, Session: req.Session, Transcript: req.Transcript, Event: req.Event}
+	who := hookAttribution{Host: req.Host, Transport: req.Transport, Session: req.Session, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	isPath := req.IsPath
 	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
 	// there to pin a location.
@@ -951,6 +955,16 @@ type hookAttribution struct {
 	// Agent is the subagent making the call, "" for a root session or a host that does
 	// not say.
 	Agent string
+	// Window is the terminal the call runs in; see [Request.Window].
+	Window string
+}
+
+// key is what a gate keys this caller on: the host's session, else the terminal window.
+func (who hookAttribution) key() string {
+	if s := strings.TrimSpace(who.Session); s != "" {
+		return s
+	}
+	return strings.TrimSpace(who.Window)
 }
 
 // callerKeyEscaper keeps the key's delimiter out of every part. '%' is escaped too, so a
@@ -960,9 +974,10 @@ var callerKeyEscaper = strings.NewReplacer("%", "%25", "/", "%2F")
 // sessionKey keys FACTS about a session, what a rule reads as "did this happen": a skill
 // load, the projects written. `<host>/<session>`, each part escaped, because two hosts may
 // present the same id. The transport is left out so a session wiring some surfaces as sh
-// and others as Buzz sees one set of facts. Empty without a session, so hint.Gate falls
-// back to its anonymous window rather than keying every unattributed caller together.
-func (who hookAttribution) sessionKey() string { return SessionKey(who.Host, who.Session) }
+// and others as Buzz sees one set of facts. A caller with no session is keyed on its
+// terminal window; with neither it is empty, so hint.Gate falls back to its anonymous
+// window rather than keying every unattributed caller together.
+func (who hookAttribution) sessionKey() string { return SessionKey(who.Host, who.key()) }
 
 // SessionKey is the marker key the guard files a session's facts under, for a reader
 // outside the package: `<host>/<session>` with each part escaped, or "" without a session.
@@ -976,10 +991,10 @@ func SessionKey(host, session string) string {
 
 // callerKey keys TEXT a caller has already rendered, a fire-once notice or a deny's full
 // reason: `<host>/<transport>/<session>`. The sh and Buzz forms of one hook are two
-// readers of their own replies, so each is told a rule in full once. Empty without a
-// session, like sessionKey.
+// readers of their own replies, so each is told a rule in full once. Keyed and empty like
+// sessionKey.
 func (who hookAttribution) callerKey() string {
-	session := strings.TrimSpace(who.Session)
+	session := who.key()
 	if session == "" {
 		return ""
 	}
@@ -1049,10 +1064,16 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	if input == "" || location.cacheDir == "" {
 		return
 	}
+	// A call typed at a terminal is the CLI's, not a hook's, and is not recorded as an agent.
+	entry, actor := trail.EntryPointFromContext(ctx), "agent"
+	if entry != "" && entry != types.EntryPointHook {
+		actor = string(entry)
+	}
 	command := trail.AgentCommand{
 		PolicyDigest:    policyDigest,
 		DecidedBy:       decidedBy(verdict),
-		Actor:           "agent",
+		Actor:           actor,
+		EntryPoint:      entry,
 		Workspace:       location.workspace,
 		Host:            who.Host,
 		Session:         who.Session,

@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Every record says which OS account wrote it, and through which entry point.** Trail
-  events, session records and job rows carry `user`, `uid` and `transport` (`cli`,
+  events, session records and job rows carry `user`, `uid` and `entry_point` (`cli`,
   `hook`, `mcp`, `rpc`, `daemon`), read by magus itself. `magus session` gains a USER
   column. A job row's `registered_by` is an `Origin`.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
@@ -127,6 +127,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A record with no host claim is unattributed, never "a person".** `magus shell` typed at
+  a terminal records `entry_point: cli`, no session, and no longer `actor: "agent"`; its
+  terminal window keys fire-once notices but is not recorded as a session. The OS user
+  says whose account acted.
 - **magus never waits on another magus invocation.** A workspace lock or machine budget
   held by another invocation refuses immediately (exit 75), naming the holder.
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each

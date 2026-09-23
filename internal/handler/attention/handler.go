@@ -131,7 +131,7 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req, err := sessions.DisposeRequest(dir, body.ID, body.Reason, sessions.SessionStart{
-		Origin:    trail.StampOrigin(r.Context(), types.Origin{Transport: types.TransportRPC, Host: consoleSessionHost}),
+		Origin:    trail.StampOrigin(r.Context(), types.Origin{EntryPoint: types.EntryPointRPC, Host: consoleSessionHost}),
 		Workspace: h.root,
 		Version:   h.version,
 	})

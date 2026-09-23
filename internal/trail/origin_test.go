@@ -17,10 +17,10 @@ import (
 func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	ctx := WithTransport(t.Context(), types.TransportCLI)
+	ctx := ContextWithEntryPoint(t.Context(), types.EntryPointCLI)
 
 	Append(ctx, dir, Event{Kind: KindJob, Action: "a", Origin: types.Origin{User: "forged", UID: "4242"}})
-	Append(ctx, dir, Event{Kind: KindJob, Action: "b", Origin: types.Origin{Transport: types.TransportDaemon}})
+	Append(ctx, dir, Event{Kind: KindJob, Action: "b", Origin: types.Origin{EntryPoint: types.EntryPointDaemon}})
 
 	events, err := ReadRecent(dir, 2)
 	require.NoError(t, err)
@@ -34,15 +34,15 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 	for _, e := range events {
 		byAction[e.Action] = e.Origin
 	}
-	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, Transport: types.TransportCLI}, byAction["a"],
+	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, EntryPoint: types.EntryPointCLI}, byAction["a"],
 		"the account is the OS's answer, never the producer's, and the entry point comes from ctx")
-	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, Transport: types.TransportDaemon}, byAction["b"],
+	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, EntryPoint: types.EntryPointDaemon}, byAction["b"],
 		"a producer that names its entry point keeps it")
 }
 
-func TestTransportFromIsEmptyUntilRecorded(t *testing.T) {
+func TestEntryPointFromContextIsEmptyUntilRecorded(t *testing.T) {
 	t.Parallel()
-	assert.Empty(t, TransportFrom(context.Background()))
-	ctx := WithTransport(context.Background(), types.TransportDaemon)
-	assert.Equal(t, types.TransportRPC, TransportFrom(WithTransport(ctx, types.TransportRPC)), "the innermost entry point wins")
+	assert.Empty(t, EntryPointFromContext(context.Background()))
+	ctx := ContextWithEntryPoint(context.Background(), types.EntryPointDaemon)
+	assert.Equal(t, types.EntryPointRPC, EntryPointFromContext(ContextWithEntryPoint(ctx, types.EntryPointRPC)), "the innermost entry point wins")
 }

@@ -23,19 +23,19 @@ var osAccount = sync.OnceValues(func() (name, uid string) {
 	return "", ""
 })
 
-type transportKey struct{}
+type entryPointKey struct{}
 
-// WithTransport returns ctx recording t as the entry point work under it arrived through.
-// The innermost call wins, so a daemon handling an RPC call stamps rpc over daemon.
-func WithTransport(ctx context.Context, t types.Transport) context.Context {
-	return context.WithValue(ctx, transportKey{}, t)
+// ContextWithEntryPoint returns ctx recording e as where work under it entered magus. The
+// innermost call wins, so a daemon handling an RPC call stamps rpc over daemon.
+func ContextWithEntryPoint(ctx context.Context, e types.EntryPoint) context.Context {
+	return context.WithValue(ctx, entryPointKey{}, e)
 }
 
-// TransportFrom returns the entry point [WithTransport] recorded on ctx, or "" when none
-// was.
-func TransportFrom(ctx context.Context) types.Transport {
-	t, _ := ctx.Value(transportKey{}).(types.Transport)
-	return t
+// EntryPointFromContext returns the entry point [ContextWithEntryPoint] recorded on ctx,
+// or "" when none was.
+func EntryPointFromContext(ctx context.Context) types.EntryPoint {
+	e, _ := ctx.Value(entryPointKey{}).(types.EntryPoint)
+	return e
 }
 
 // LocalOrigin is the part of an [types.Origin] this process can read for itself: the OS
@@ -43,16 +43,16 @@ func TransportFrom(ctx context.Context) types.Transport {
 // caller to fill from what the host delivered.
 func LocalOrigin(ctx context.Context) types.Origin {
 	name, uid := osAccount()
-	return types.Origin{User: name, UID: uid, Transport: TransportFrom(ctx)}
+	return types.Origin{User: name, UID: uid, EntryPoint: EntryPointFromContext(ctx)}
 }
 
 // hookOrigin is the origin of an observation a host's hook delivered. An observation
-// that names no transport came through the hook, the only producer that omits it.
-func hookOrigin(t types.Transport, host, session, agent string) types.Origin {
-	if t == "" {
-		t = types.TransportHook
+// that names no entry point came through the hook, the only producer that omits it.
+func hookOrigin(e types.EntryPoint, host, session, agent string) types.Origin {
+	if e == "" {
+		e = types.EntryPointHook
 	}
-	return types.Origin{Transport: t, Host: host, Session: session, Agent: agent}
+	return types.Origin{EntryPoint: e, Host: host, Session: session, Agent: agent}
 }
 
 // StampOrigin returns o with the OS account this process runs as and, when o names none,
@@ -61,8 +61,8 @@ func hookOrigin(t types.Transport, host, session, agent string) types.Origin {
 func StampOrigin(ctx context.Context, o types.Origin) types.Origin {
 	local := LocalOrigin(ctx)
 	o.User, o.UID = local.User, local.UID
-	if o.Transport == "" {
-		o.Transport = local.Transport
+	if o.EntryPoint == "" {
+		o.EntryPoint = local.EntryPoint
 	}
 	return o
 }

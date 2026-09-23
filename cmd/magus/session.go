@@ -381,10 +381,10 @@ func summarizeTargets(targets []sessions.TargetResult) string {
 	return strings.Join(out, ", ")
 }
 
-// localOrigin is this process's OS account, arriving through t, for a verb with no ctx to
+// localOrigin is this process's OS account, entering through e, for a verb with no ctx to
 // read the entry point from.
-func localOrigin(t types.Transport) types.Origin {
-	return trail.StampOrigin(context.Background(), types.Origin{Transport: t})
+func localOrigin(e types.EntryPoint) types.Origin {
+	return trail.StampOrigin(context.Background(), types.Origin{EntryPoint: e})
 }
 
 // orDash renders an empty or zero column as a dash, so a table reads "nothing here"
@@ -562,7 +562,7 @@ func sessionLoad(root string, args []string) error {
 	cacheDir, _ := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(cacheDir))
 	result, err := sessions.LoadEvents(dir, summary.Events, sessions.SessionStart{
-		Origin:    localOrigin(types.TransportCLI),
+		Origin:    localOrigin(types.EntryPointCLI),
 		Workspace: root,
 		Command:   "session load",
 		Version:   version,

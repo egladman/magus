@@ -1346,7 +1346,7 @@ func ObjectOrigin(v types.Origin) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("user", vm.StrValue(v.User))
 	out.MapSet("uid", vm.StrValue(v.UID))
-	out.MapSet("transport", vm.StrValue(string(v.Transport)))
+	out.MapSet("entryPoint", vm.StrValue(string(v.EntryPoint)))
 	out.MapSet("host", vm.StrValue(v.Host))
 	out.MapSet("session", vm.StrValue(v.Session))
 	out.MapSet("agent", vm.StrValue(v.Agent))
