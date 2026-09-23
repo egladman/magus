@@ -182,7 +182,12 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	var stream bytes.Buffer
-	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithReportWriter(&stream))
+	rw, err := NewReportWriter(&stream, nil)
+	require.NoError(t, err)
+	sink, err := m.JSONLSink(rw)
+	require.NoError(t, err)
+	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithSink(sink))
+	require.NoError(t, rw.Close(), "flush the stream before reading it")
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
 	var stated interface{ ExitCode() int }
 	require.ErrorAs(t, err, &stated, "the CLI and the daemon read the exit status off the error")
