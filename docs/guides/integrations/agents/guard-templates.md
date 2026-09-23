@@ -1010,7 +1010,7 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 import "std";
 import "flags";
 import "io";
-import "encoding/json" as json;
+import "encoding/json";
 import "env";
 import "fs";
 import "os";
@@ -1730,7 +1730,7 @@ The write guard, in Buzz. The deny arm, the advise arm and the ask arm are assem
 
 import "io";
 import "flags";
-import "encoding/json" as json;
+import "encoding/json";
 import "env";
 import "fs";
 import "path";
@@ -2054,7 +2054,7 @@ The observer, in Buzz. It prints nothing, always exits 0, and declares no covera
 
 import "io";
 import "flags";
-import "encoding/json" as json;
+import "encoding/json";
 import "env";
 import "fs";
 import "path";

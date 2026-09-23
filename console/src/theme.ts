@@ -27,7 +27,7 @@
     const plat = navigator.platform || navigator.userAgent || "";
     if (/Mac|iPhone|iPad|iPod/i.test(plat)) root.setAttribute("data-platform", "apple");
   } catch (e) {
-    /* ignore */
+    // not-a-failure: an unknown platform keeps the default corner radius
   }
 
   // Pre-paint for the same reason the theme is: the boot reveal and the graph's first camera glide
@@ -38,7 +38,7 @@
       root.setAttribute("data-motion", "reduced");
     }
   } catch (e) {
-    /* storage disabled or value corrupt: leave motion at its default */
+    // not-a-failure: storage disabled or value corrupt, so motion stays at its default
   }
 
   function get(): Theme {
@@ -94,14 +94,14 @@
       try {
         localStorage.removeItem("theme");
       } catch (e) {
-        /* ignore */
+        // not-a-failure: the theme still applies to this page; the Settings save path reports
       }
     } else {
       root.setAttribute("data-theme", t);
       try {
         localStorage.setItem("theme", t);
       } catch (e) {
-        /* ignore */
+        // not-a-failure: the theme still applies to this page; the Settings save path reports
       }
     }
     applyPfTheme(t);
@@ -132,7 +132,18 @@
         if (t === "auto") localStorage.removeItem("theme");
         else localStorage.setItem("theme", t);
       } catch (e) {
-        /* ignore */
+        // This IIFE has no imports, so it raises lib/notifications' NOTIFY_EVENT by name.
+        document.dispatchEvent(
+          new CustomEvent("magus:notify", {
+            detail: {
+              source: "Settings",
+              kind: "error",
+              toast: true,
+              key: "theme:save",
+              message: "Could not save the theme for the next load: " + String(e),
+            },
+          }),
+        );
       }
     } else {
       set(t);

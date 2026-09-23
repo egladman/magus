@@ -4,8 +4,9 @@
 // layout and a deep link all mount.
 
 import assert from "node:assert/strict";
-import { afterEach, describe, test } from "node:test";
+import { afterEach, beforeEach, describe, test } from "node:test";
 import { requireDaemon } from "./connectPrompt";
+import { signalAuthLost } from "../lib/daemon";
 import type { PageController, PageModule } from "./page";
 import { createTileView, type TileView } from "./tileView";
 import { rememberHost, setDefaultHost } from "../lib/settings";
@@ -73,8 +74,13 @@ function tileFor(
   return { tile, pane };
 }
 
+const TOKEN_KEY = "magus-live-token";
+
 describe("the shell connect page", () => {
   const tiles: TileView[] = [];
+
+  // Signed in: this suite is about the ADDRESS. The sign-in suite below covers the token.
+  beforeEach(() => sessionStorage.setItem(TOKEN_KEY, "test-token"));
 
   afterEach(() => {
     for (const t of tiles.splice(0)) {
@@ -84,6 +90,7 @@ describe("the shell connect page", () => {
     setDefaultHost("");
     rememberHost("");
     location.hash = "";
+    sessionStorage.clear();
   });
 
   test("a daemon surface opened with no address shows the page, not the surface", async () => {
@@ -186,5 +193,65 @@ describe("the shell connect page", () => {
     setDefaultHost(HOST);
     await settle();
     assert.equal(stub.activations, 0);
+  });
+});
+
+// Every daemon route needs a bearer token, so a page with an address and no token can show nothing
+// true. It shows one sign-in state naming the command that fixes it, and a token the daemon later
+// refuses brings it back there.
+describe("the shell sign-in gate", () => {
+  const tiles: TileView[] = [];
+
+  afterEach(() => {
+    for (const t of tiles.splice(0)) {
+      t.deactivate();
+      t.el.remove();
+    }
+    setDefaultHost("");
+    rememberHost("");
+    location.hash = "";
+    sessionStorage.clear();
+  });
+
+  test("an address with no token shows the sign-in state, not the surface", async () => {
+    setDefaultHost(HOST);
+    const stub = stubSurface("runs");
+    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    tiles.push(tile);
+    await settle();
+    assert.equal(stub.activations, 0, "an unauthenticated surface must not activate");
+    const page = pane().querySelector<HTMLElement>("[data-connect-page]");
+    assert.ok(page);
+    assert.match(page.textContent ?? "", /Sign in to this daemon/);
+    const cmd = page.querySelector("[data-sign-in-command]")?.textContent ?? "";
+    assert.match(cmd, /\/console\/runs\/#token=\$\(magus config token print\)"$/);
+    assert.doesNotMatch(cmd, /test-token/);
+  });
+
+  test("demo needs no token", async () => {
+    location.hash = "#demo";
+    const stub = stubSurface("runs");
+    const { tile } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    tiles.push(tile);
+    await settle();
+    assert.equal(stub.activations, 1);
+  });
+
+  test("a refused token tears the surface down and returns to sign-in with a notice", async () => {
+    setDefaultHost(HOST);
+    sessionStorage.setItem(TOKEN_KEY, "test-token");
+    const stub = stubSurface("runs");
+    const { tile, pane } = tileFor([requireDaemon(stub.module, { purpose: PURPOSE })], "runs");
+    tiles.push(tile);
+    await settle();
+    assert.equal(stub.activations, 1);
+
+    signalAuthLost(HOST);
+    await settle();
+    assert.equal(stub.deactivations, 1, "the surface is torn down");
+    assert.equal(sessionStorage.getItem(TOKEN_KEY), null, "the refused token is forgotten");
+    const text = pane().querySelector("[data-connect-page]")?.textContent ?? "";
+    assert.match(text, /Sign in to this daemon/);
+    assert.match(text, /expired or was revoked/);
   });
 });

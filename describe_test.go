@@ -22,7 +22,7 @@ func TestDeriveCrossProjectDeps(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
 		"gopherbuzz/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
-		"web/magusfile.buzz": `import "project/../gopherbuzz" as gopherbuzz;
+		"web/magusfile.buzz": `import "project/../gopherbuzz";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gopherbuzz.build);
 }
@@ -1062,7 +1062,7 @@ func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 func TestEvaluateTarget_ReportsTheChainInOrder(t *testing.T) {
 	t.Parallel()
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `import "project/api" as api;
+		"magusfile.buzz": `import "project/api";
 export fun generate(ctx: magus\Context, args: [str]) > void {}
 export fun build(ctx: magus\Context, args: [str]) > void {}
 export fun ci(ctx: magus\Context, args: [str]) > void {
@@ -1194,7 +1194,7 @@ func TestDescribeFileSeesCrossProjectReads(t *testing.T) {
 	files := map[string]string{
 		"skills/note.md":        "# a source another project renders\n",
 		"skills/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
-		"site/magusfile.buzz": `import "project/../skills" as skills;
+		"site/magusfile.buzz": `import "project/../skills";
 export fun render(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(skills.file("note.md"));
     ctx.writesFiles("gen/*.html");
@@ -1234,8 +1234,8 @@ func TestClassifyFiles_Claims(t *testing.T) {
 		"skills/note.md":        "# a source another project renders\n",
 		"skills/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
 		"dist/magusfile.buzz":   "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
-		"site/magusfile.buzz": `import "project/../skills" as skills;
-import "project/../dist" as dist;
+		"site/magusfile.buzz": `import "project/../skills";
+import "project/../dist";
 export fun render(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(skills.file("note.md"));
     ctx.writesFiles("gen/*.html");

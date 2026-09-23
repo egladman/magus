@@ -27,6 +27,7 @@ function alreadyAsked(): boolean {
   try {
     return sessionStorage.getItem(ASKED_KEY) === "1";
   } catch {
+    // not-a-failure: storage disabled means asking again, which is the safe answer
     return false;
   }
 }
@@ -35,7 +36,7 @@ function markAsked(): void {
   try {
     sessionStorage.setItem(ASKED_KEY, "1");
   } catch {
-    // Not durable; the in-memory guard still prevents a re-ask this session.
+    // not-a-failure: not durable; the in-memory guard still prevents a re-ask this session
   }
 }
 
@@ -43,6 +44,7 @@ function lastPick(): string {
   try {
     return localStorage.getItem(LAST_KEY) ?? "";
   } catch {
+    // not-a-failure: no remembered pick only means nothing is preselected
     return "";
   }
 }
@@ -51,7 +53,7 @@ function rememberPick(root: string): void {
   try {
     localStorage.setItem(LAST_KEY, root);
   } catch {
-    // A forgotten preselection costs one extra click next time.
+    // not-a-failure: a forgotten preselection costs one extra click next time
   }
 }
 

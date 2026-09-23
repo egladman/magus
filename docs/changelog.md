@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
+  `import "path" as alias;` errors when `alias` repeats the default binding, for
+  `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
+  alias isolates it, so it is exempt, as is `as _`. The root magusfile and built-in
+  harness spells dropped their redundant `as codex`, `as cursor`, `as opencode`.
 - **`magus\guard.spawn` registers a workspace spawn rule.** One Buzz function sees every
   subagent spawn and continuation and may deny or advise, never lift a built-in deny. An
   uncommitted loosening waits for a commit. Policy changes land on the trail as
@@ -112,6 +117,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A daemon whose workspace fails to load keeps serving and says why.** The console,
+  `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
+  `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
+  `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
+  workspace reloads when a `.buzz` file or `magus.yaml` changes.
+- **The daemon refuses a request as `google.rpc.Status` JSON in the route's protocol.**
+  A Connect service answers Connect's envelope; every other route, `/mcp` included, answers
+  AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
+  `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
+  MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
+  console-file refusals gain MGS9007-9010.
 - **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
   projects/charms/cache header, per-stage progress, the run summary and lock-wait
   notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
@@ -203,6 +219,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Console failures are always shown.** Every failed daemon call, stream or undecodable
+  frame raises a notification, and the console lint rejects a swallowed catch. A page with
+  no token shows one sign-in state with the command that opens it signed in, and a 401
+  returns there.
+- **The console dashboard connects on the daemon's own origin.** The token exchange sends
+  an expiry the daemon accepts, and a page from an older console build asks for a reload.
+- **Console links carry a runnable command.** `magus job fork`, `ls jobs` and the other
+  console hints print `open "<url>#token=$(magus config token print)"`, and
+  `magus_console_present` returns it as `open`. The job hint names a daemon running a
+  different build instead of claiming nothing serves the console.
+- **A fresh magus checkout can build its first binary.** The `raw-tool` rule advises
+  `go build -o magus ./cmd/magus` alone into a checkout root with no `magus` yet, and denies
+  it once one exists. `go -C <dir> <verb>` and `go <verb> -C <dir>` reach one verdict, and a
+  bare `cd <dir>` no longer trips the `cd` rule.
 - **Installs of magus-managed git, hg and Sapling sections are atomic.** They are
   serialized per repository and leave a hook executable. A torn section marker is an error.
 - **A `MAGUS_*` value that does not parse stops the load.** A bad number or duration was
@@ -235,6 +265,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+
+### Security
+
+- **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
+  built console file, including the demo graph JSON holding the whole knowledge graph and
+  its notes. Other files and directory listings now return 404, on loopback and on the LAN
+  share, and an attached graph explorer never falls back to that demo data.
 
 ## [v0.4.3] - 2026-09-06
 

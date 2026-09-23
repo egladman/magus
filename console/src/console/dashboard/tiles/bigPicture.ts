@@ -144,7 +144,7 @@ function bigPictureIcon(): SVGElement {
 // not a fullscreen was ever granted.
 function enterBigPicture(): void {
   setViewMode("bigPicture");
-  document.documentElement.requestFullscreen?.().catch(() => {});
+  document.documentElement.requestFullscreen?.().catch(() => {}); // not-a-failure: see above
 }
 
 function exitBigPicture(): void {
@@ -152,6 +152,7 @@ function exitBigPicture(): void {
   setViewMode("board");
   // Only when we actually hold one: calling exitFullscreen() otherwise rejects, and on some
   // browsers logs an unhandled-rejection warning for a no-op.
+  // not-a-failure: a fullscreen the browser already ended leaves nothing to exit
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
 }
 

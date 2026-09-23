@@ -123,6 +123,11 @@ type checker struct {
 	// from this file by exports-only import visibility; referencing one yields an
 	// "export it" hint rather than a bare "undefined". See session.importPrivate.
 	private map[string]bool
+	// embedded mirrors Session.embedded: true for gopherbuzz's own embedded use (the
+	// REPL, magus eval, magusfile loading), false for upstream-strict parsing. Gates
+	// magus-dialect-only checks that upstream's own suite would otherwise trip, such
+	// as RedundantImportAlias; see collectTopLevel.
+	embedded bool
 }
 
 // checkWithGlobals type-checks prog after pre-registering extraGlobals: as the typed
@@ -130,14 +135,16 @@ type checker struct {
 // allows callers to inject dynamically-defined names (e.g. from SetVal) so the
 // checker doesn't flag them as undefined. private names are hidden by exports-only
 // import visibility: referencing one is undefined here, but the checker points at
-// the missing `export` instead of a bare "undefined".
-func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool) (errs []typeError, warnings []typeError) {
+// the missing `export` instead of a bare "undefined". embedded mirrors
+// Session.embedded (see checker.embedded).
+func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool, embedded bool) (errs []typeError, warnings []typeError) {
 	c := &checker{
 		types:       map[string]types.Type{},
 		moduleFuncs: moduleFuncs,
 		moduleTypes: moduleTypes,
 		moduleVars:  moduleVars,
 		private:     private,
+		embedded:    embedded,
 	}
 	c.pushScope()
 	c.registerBuiltins()
@@ -291,6 +298,22 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// scheme stripped, which is the same bare name resolveImport binds under.
 			parts := strings.Split(strings.TrimPrefix(v.Path, "buzz:"), "/")
 			name := parts[len(parts)-1]
+			// An alias equal to the default binding has no effect ONLY for a path style
+			// resolveImport binds as a single VALUE regardless of aliasing (see
+			// importBindsByValue). A plain FILE import binds differently with an alias
+			// than without one -- isolated sub-session vs. flat merge into this scope
+			// (session.go's "Aliased import" vs. "Flat import" branches) -- so there the
+			// alias is never redundant even when it repeats the default name; it is what
+			// requests isolation. "_" is the flat import, not a bound name, so it is
+			// excluded rather than ever matching.
+			//
+			// Magus-dialect only: "spells/", "project/" and "magus/spell/" are magus's
+			// own import styles, unknown upstream, so c.embedded (never true for
+			// upstream-strict parsing) is what keeps this off upstream's own suite,
+			// where the same spelling is merely idiomatic rather than a no-op.
+			if c.embedded && v.Alias != "" && v.Alias != "_" && v.Alias == name && importBindsByValue(v.Path) {
+				c.errorfc(v.Pos, RedundantImportAlias, "import alias %q is redundant, drop `as %s`", v.Alias, v.Alias)
+			}
 			if v.Alias == "_" || len(v.Only) > 0 {
 				// A flat or selective import binds members UNPREFIXED, so their signatures
 				// have to be defined under their bare names. The session already splats the
@@ -380,6 +403,25 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			}
 		}
 	}
+}
+
+// importBindsByValue reports whether path is one resolveImport (session.go) binds
+// as a single VALUE under the bound name regardless of aliasing: a "project/" or
+// "spells/" path-style import (resolved by the host module resolver ahead of any
+// file search), a built-in "magus/spell/<name>" spell (a native module), or a
+// "buzz:"-scheme stdlib module (also native). None of these branches in
+// resolveImport reads imp.Alias to decide HOW to bind, only WHAT NAME to bind
+// under, so an alias spelling the default name there is a true no-op.
+//
+// Anything else may fall through to resolveImport's plain FILE import, whose two
+// branches differ by more than the bound name: an alias execs the file in an
+// isolated sub-session, while no alias flat-merges its globals into this scope.
+// A same-spelled alias there is not redundant, so collectTopLevel must not flag it.
+func importBindsByValue(path string) bool {
+	return strings.HasPrefix(path, "project/") ||
+		strings.HasPrefix(path, "spells/") ||
+		strings.HasPrefix(path, "magus/spell/") ||
+		strings.HasPrefix(path, "buzz:")
 }
 
 // registerTypeDecls records each object/enum declaration as a named type

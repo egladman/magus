@@ -37,8 +37,8 @@ stderr 'map has no entry for key "project"'
 concurrency: 1
 -- magusfile.buzz --
 import "magus";
-import "spells/acme" as acme;
-import "project/api" as api;
+import "spells/acme";
+import "project/api";
 magus.project({ "spells": [acme] });
 export fun generate(ctx: magus\Context, args: [str]) > void {}
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }

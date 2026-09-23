@@ -14,7 +14,7 @@ A `cd` before a magus command, when the project is an argument.
 
 ## Why
 
-magus is CWD-relative, so a leading `cd` is how the right command lands on the wrong project. The project is an argument and is written bare (`magus run build libs/foo`); a DIFFERENT workspace is `--root <path>`, and `magus where <name>` resolves a fuzzy name. A `cd` prefix also relocates every later command on the line and re-fires shell chpwd hooks, mise among them, which can fail on an empty command. A host shell tool that genuinely needs a different directory for one call has a working_directory field, which does not rewrite the command line.
+magus is CWD-relative, so a leading `cd` is how the right command lands on the wrong project. The project is an argument and is written bare (`magus run build libs/foo`); a DIFFERENT workspace is `--root <path>`, and `magus where <name>` resolves a fuzzy name. A `cd` prefix also relocates every later command on the line and re-fires shell chpwd hooks, mise among them, which can fail on an empty command. A `cd` alone on its line passes: it relocates nothing after it, and on a host whose shell persists it is how a session moves into its own checkout. A host shell tool that genuinely needs a different directory for one call has a working_directory field, which does not rewrite the command line.
 
 ## Seeing it
 

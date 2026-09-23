@@ -26,10 +26,14 @@ import (
 	"sync"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // defaultTTL is how long a share stays live before the listener closes and the
@@ -224,9 +228,15 @@ func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
 	return ttl
 }
 
+// Route is one data route a share serves, with the format its refusals are written in.
+type Route struct {
+	Handler http.Handler
+	Format  httpx.ErrorFormat
+}
+
 // Start mints a fresh read-only token and opens a new LAN listener serving the
 // console from consoleDir at /console/ (unauthenticated static assets) and every
-// handler in guarded behind the new token (path -> handler). Any previously
+// route in guarded behind the new token (path -> route). Any previously
 // active share is revoked first, so there is exactly one live token bound 1:1 to
 // exactly one live listener: a token from a prior session validates nowhere.
 // The listener closes and the token expires together after ttl (or on parent
@@ -236,7 +246,7 @@ func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
 // No ctx parameter on purpose: a share OUTLIVES the request that opened it, so accepting
 // the caller's context invites the wrong wiring: the HTTP handler passes r.Context(),
 // which would tear the share down the instant that POST returned.
-func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl time.Duration) (Session, error) {
+func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Duration) (Session, error) {
 	addr, err := m.selectAddr()
 	if err != nil {
 		return Session{}, err
@@ -289,8 +299,8 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	// Authorization header, so the token never needs to ride a URL here either. sg.admit
 	// runs after BearerGuard, so it only ever sees requests that already carry a valid
 	// token; it binds the first device and rejects the token replayed from any other.
-	for pattern, h := range guarded {
-		mux.Handle(pattern, httpx.BearerGuard(verify, sg.admit(h)))
+	for pattern, rt := range guarded {
+		mux.Handle(pattern, httpx.BearerGuard(rt.Format, verify, sg.admit(rt.Format, rt.Handler)))
 	}
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -397,10 +407,15 @@ func newSessionGuard(m *Manager) *sessionGuard {
 // device other than the one that first bound the share is rejected with 403 before the
 // handler runs; the bound device is served, and its first request records one trail
 // event.
-func (g *sessionGuard) admit(next http.Handler) http.Handler {
+func (g *sessionGuard) admit(format httpx.ErrorFormat, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !g.bindDevice(remoteHost(r)) {
-			http.Error(w, shareBoundOtherDeviceMsg, http.StatusForbidden)
+			format.Write(w, r, rpcerr.Error{
+				Code:    connect.CodePermissionDenied,
+				Reason:  types.ShareBoundToAnotherDevice,
+				Title:   "share link bound to another device",
+				Message: shareBoundOtherDeviceMsg,
+			})
 			return
 		}
 		g.recordFirstUse(r)
