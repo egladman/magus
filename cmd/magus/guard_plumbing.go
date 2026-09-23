@@ -94,51 +94,6 @@ func guardPolicyState(m *magus.Magus) guard.PolicyState {
 			return out
 		},
 	}
-	if m := loadedWorkspace(context.Background()); m != nil {
-		deps.SpawnRule = m.SpawnRule()
-		deps.ApprovedSpawnRule = m.ApprovedSpawnRule
-		deps.Policy = func() guard.PolicyState { return guardPolicyState(m) }
-	}
-	return deps
-}
-
-// loadedWorkspace is the memoized workspace the hook's rules read, nil when it does not
-// load. Unloadable is nil for the reason loadWorkspaceShellRules gives: a magusfile typo
-// must not take down every hook, so the built-ins run alone.
-func loadedWorkspace(ctx context.Context) *magus.Magus {
-	ws, err := inspectWorkspace(ctx, "")
-	if err != nil {
-		return nil
-	}
-	m, _ := ws.(*magus.Magus)
-	return m
-}
-
-// guardPolicyState describes the loaded workspace's guard rules for the trail's lineage.
-// The approved ids are left to a callback, since reading them runs a process per file and
-// the lineage asks only when the policy moved.
-func guardPolicyState(m *magus.Magus) guard.PolicyState {
-	policy := m.GuardPolicy()
-	return guard.PolicyState{
-		Digest:     policy.Digest,
-		ShellRules: policy.ShellRules,
-		SpawnRule:  policy.SpawnRule,
-		Sources: func(ctx context.Context) []guard.PolicySource {
-			paths := make([]string, len(policy.Sources))
-			for i, s := range policy.Sources {
-				paths[i] = s.Path
-			}
-			approved := m.ApprovedBlobIDs(ctx, paths)
-			if approved == nil {
-				return nil
-			}
-			out := make([]guard.PolicySource, len(policy.Sources))
-			for i, s := range policy.Sources {
-				out[i] = guard.PolicySource{Path: s.Path, Worktree: s.BlobID, Approved: approved[s.Path]}
-			}
-			return out
-		},
-	}
 }
 
 // headCommitForGuard answers this checkout's revision for the push gate, or "" when it
