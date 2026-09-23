@@ -10,16 +10,19 @@ func WithLogger(l *slog.Logger) Option {
 	return func(c *Cache) { c.log = l }
 }
 
-// WithMutable controls whether the cache writes new entries on a miss (default true).
-func WithMutable(mutable bool) Option {
-	return func(c *Cache) { c.mutable = mutable }
+// WithLocalWrite controls whether a run writes the local tier (default true). Off, the
+// cache replays hits and writes nothing, the remote tier included, and a remote-tier
+// hit replays from a staging directory rather than being promoted.
+func WithLocalWrite(enabled bool) Option {
+	return func(c *Cache) { c.localWrite = enabled }
 }
 
-// WithRemoteWrite controls whether a miss also writes the remote tier (default true).
-// The remote tier is written from the local one, so it has no effect while the cache
-// is read-only.
+// WithRemoteWrite declares whether a run writes the remote tier. Without it the remote
+// tier is written whenever the local tier is and a signed entry can be. Declared true,
+// it is a requirement: Open errors when it cannot be honored, and a failed remote write
+// fails the step. Declared false, the remote tier is only read.
 func WithRemoteWrite(enabled bool) Option {
-	return func(c *Cache) { c.remoteWrite = enabled }
+	return func(c *Cache) { c.remoteWrite = &enabled }
 }
 
 // WithSigningKey sets the Ed25519 seed (32 bytes) used to sign artifacts on push.

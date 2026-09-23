@@ -309,9 +309,10 @@ type CacheWrite struct {
 
 // CacheRemoteWrite gates writing the remote cache tier. Separate from CacheWrite so a
 // pull request writes its local tier for its next push and never the remote tier, by
-// setting rather than by a missing signing key.
+// setting rather than by a missing signing key. Declared true, remote writes are
+// required (see cache.WithRemoteWrite).
 type CacheRemoteWrite struct {
-	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = follow cache.write.enabled
+	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = written when the local tier is and a signing key is held
 }
 
 // CacheInclude selects which facts about the host enter every cache key.
@@ -338,8 +339,9 @@ type CacheIncludeFlag struct {
 // WriteEnabled reports whether this run may write the local cache tier.
 func (c Cache) WriteEnabled() bool { return c.Write.Enabled == nil || *c.Write.Enabled }
 
-// RemoteWriteEnabled reports whether this run may write the remote cache tier. It is
-// never true while WriteEnabled is false; [Validate] refuses an explicit true there.
+// RemoteWriteEnabled reports whether config allows writing the remote cache tier. The
+// cache also needs a signing key when a trust set is declared, which config cannot see.
+// It is never true while WriteEnabled is false; [Validate] refuses an explicit true there.
 func (c Cache) RemoteWriteEnabled() bool {
 	if !c.WriteEnabled() {
 		return false
@@ -763,7 +765,7 @@ func EnvVarDocs() []EnvVarDoc {
 	return []EnvVarDoc{
 		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
 		{"MAGUS_CACHE_WRITE_ENABLED", "cache.write.enabled", "true", "When false (or 0), replay cache hits but never write new entries, locally or to a remote"},
-		{"MAGUS_CACHE_REMOTE_WRITE_ENABLED", "cache.remote.write.enabled", "cache.write.enabled", "When false (or 0), write the local cache tier but never the remote tier; true while cache.write.enabled is false is a config error"},
+		{"MAGUS_CACHE_REMOTE_WRITE_ENABLED", "cache.remote.write.enabled", "cache.write.enabled", "When false (or 0), write the local cache tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required: an error without a signing key or with cache.write.enabled false, and a failed remote write fails the step"},
 		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "false", "When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "false", "When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},

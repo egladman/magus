@@ -450,21 +450,6 @@ func yamlKey(f reflect.StructField) string {
 	return name
 }
 
-// parseBoolEnv parses a boolean environment variable value using a
-// case-insensitive comparison. "true", "1", "yes" → true; "false", "0", "no"
-// → false. Any unrecognized value returns fallback unchanged.
-//
-//nolint:unused // canonical reference implementation that cmd/magus-utils config codegen mirrors into generated config loaders.
-func parseBoolEnv(v string, fallback bool) bool {
-	switch strings.ToLower(v) {
-	case "true", "1", "yes":
-		return true
-	case "false", "0", "no":
-		return false
-	}
-	return fallback
-}
-
 // LoadFile parses the config file at path on top of Defaults() and returns the
 // merged Config. A YAML syntax error and an unknown key are rejected either way;
 // strict additionally runs [Validate] on the result and returns its

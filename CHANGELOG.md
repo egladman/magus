@@ -8,11 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Each cache tier is written independently.** `cache.remote.write.enabled`
-  (`MAGUS_CACHE_REMOTE_WRITE_ENABLED`) gates the remote tier as `cache.write.enabled`
-  gates the local tier; unset, it follows the local tier, and remote on with local off is
-  a config error. CI pull requests write the local tier, carried between pushes by an
-  Actions cache step, and never the remote tier.
+- **The cache is two tiers under standard two-tier semantics.** Reads go local, then
+  remote; a remote hit is verified and promoted into the local tier; a build is stored in
+  both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
+  unset, it is written when a signing key is held; `true` makes remote writes required.
+- **A run that may write the remote tier backfills it.** A local hit whose key the remote
+  tier lacks is uploaded in the background, after a `has_artifact` lookup; the cache
+  contract gains that optional function.
+- **A failing remote tier degrades the run to the local tier.** The first failure is
+  reported and counted as failed, never missed, and the run stops asking.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
@@ -118,6 +122,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking (Go API): the cache's tiers share one shape.** `cache.WithMutable` is
+  `WithLocalWrite`, `WithRemoteStats` is `ContextWithRemoteStats`, `Cache.Remote()` is
+  `RemoteNamespace(ns)`, and `RemoteBackend` takes `(namespace, key)`, answers
+  `ErrRemoteMiss` and `ErrRemoteExists` instead of `(nil, nil)`, and gains `HasArtifact`.
+  `cache.Open` reads no environment.
+- **The `run.remote` record says `stored`, not `published`,** which names output bundles
+  only.
+- **`magus query output --publish` is refused when remote writes are off.**
 - **magus never waits on another magus invocation.** A workspace lock or machine budget
   held by another invocation refuses immediately (exit 75), naming the holder.
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
@@ -226,13 +238,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **The GitHub Actions remote tier stores what it publishes.** The spell read the signed
+- **The GitHub Actions remote tier stores what it uploads.** The spell read the signed
   URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
-  the empty URL for an existing entry: every push reported success, nothing was stored,
-  and every lookup missed. It reads either name and fails a refused reservation.
+  the empty URL for an existing entry: every upload reported success, nothing was stored,
+  and every lookup missed. It reads either name.
+- **A failing remote store reads as failed, not missed.** Both shipped cache spells throw
+  on a failed request; `false` means not stored (get) or already stored (put).
 - **A remote-tier miss is visible.** Each prints `<project> not in the remote cache
   (out...)` with the producing run's ref, the end-of-run line counts misses, and `-v`
   adds a digest per key-input class.
+- **A remote hit is one `cache.hit` record, counted once its replay succeeds.** A local
+  replay that fails tries the remote tier before rebuilding.
+- **Knowledge shards on the remote tier are signed and verified,** and a run that may not
+  write the remote tier stores none.
+- **An unrecognized boolean in a `MAGUS_*` variable is an error** instead of silently
+  keeping the previous value.
+- **Imported cache files are 0644, and a running target's crash record survives the same
+  target running twice at once.** Stale inflight temp files and staging directories are
+  collected.
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
 - **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts

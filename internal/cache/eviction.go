@@ -5,26 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
 )
-
-// parseSizeMB reads MAGUS_CACHE_SIZE_MB and returns the value as an int.
-// Returns 0 (disabled) when the variable is unset, zero, or unparsable.
-func parseSizeMB() int {
-	v := strings.TrimSpace(os.Getenv("MAGUS_CACHE_SIZE_MB"))
-	if v == "" {
-		return 0
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || n <= 0 {
-		return 0
-	}
-	return int(n)
-}
 
 type manifestEntry struct {
 	manifestPath string

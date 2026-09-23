@@ -6,6 +6,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -130,11 +131,8 @@ func TestSpellRemoteBackendRoundTrip(t *testing.T) {
 	entry := []byte{0x1f, 0x8b, 0x00, 0xff, 'g', 'z', 0x00, 0x7f, 0x80}
 
 	rc, err := rs.GetArtifact(ctx, "pkg/a", "deadbeef")
-	require.NoError(t, err, "GetArtifact(miss)")
-	if rc != nil {
-		_ = rc.Close()
-		t.Fatal("GetArtifact(miss): expected nil reader")
-	}
+	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact(miss)")
+	require.Nil(t, rc)
 
 	require.NoError(t, rs.PutArtifact(ctx, "pkg/a", "deadbeef", bytes.NewReader(entry)), "PutArtifact")
 	store.mu.Lock()
@@ -154,18 +152,31 @@ func TestSpellRemoteBackendRoundTrip(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "temp file %s not removed on Close (stat err %v)", tmpPath, err)
 }
 
-func TestSpellRemoteBackendPutFailureIsVisible(t *testing.T) {
+// The contract's three answers each reach Go distinctly: false from put_artifact is
+// "already present", a throw is a failure, and a spell with no has_artifact op cannot
+// answer rather than answering no.
+func TestSpellRemoteBackendAnswersAreDistinct(t *testing.T) {
 	src := `
-export fun mgs_getName() > str { return "refusing-cache"; }
+export fun mgs_getName() > str { return "answering-cache"; }
 export fun put_artifact(target: any, cb: fun(any)) > bool { return false; }
+export fun get_artifact(target: any, cb: fun(any)) > bool !> any { throw "store unreachable"; }
 `
-	path := filepath.Join(t.TempDir(), "refusing-cache.buzz")
+	path := filepath.Join(t.TempDir(), "answering-cache.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
 	drv, err := resolveBackendSpell(context.Background(), path)
 	require.NoError(t, err)
+	b := &spellRemoteBackend{drv: drv}
 
-	err = (&spellRemoteBackend{drv: drv}).PutArtifact(context.Background(), "pkg/a", "deadbeef", strings.NewReader("artifact"))
-	require.ErrorContains(t, err, "did not store artifact")
+	err = b.PutArtifact(context.Background(), "pkg/a", "deadbeef", strings.NewReader("artifact"))
+	require.ErrorIs(t, err, cache.ErrRemoteExists)
+
+	_, err = b.GetArtifact(context.Background(), "pkg/a", "deadbeef")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, cache.ErrRemoteMiss, "a throw read as a miss")
+	assert.ErrorContains(t, err, "store unreachable")
+
+	_, err = b.HasArtifact(context.Background(), "pkg/a", "deadbeef")
+	assert.ErrorIs(t, err, errors.ErrUnsupported)
 }
 
 func TestResolveBackendSpellMissingName(t *testing.T) {
@@ -233,8 +244,10 @@ type ghaEmulator struct {
 	// camelCase answers in lowerCamel JSON names. The service answers in protobuf names
 	// (signed_upload_url); the official toolkit's decoder accepts both, so the spell does too.
 	camelCase bool
-	// refuseCreate answers CreateCacheEntry with ok=false, a refused reservation.
+	// refuseCreate answers CreateCacheEntry with ok=false: another job holds the reservation.
 	refuseCreate bool
+	// failStatus, when set, is every Twirp call's answer: a service that is down.
+	failStatus int
 }
 
 // urlField names a response field the way this emulator is configured to.
@@ -290,6 +303,10 @@ func (e *ghaEmulator) handler() http.Handler {
 			e.mu.Lock()
 			e.twirpAuth = append(e.twirpAuth, r.Header.Get("Authorization"))
 			e.mu.Unlock()
+			if e.failStatus != 0 {
+				http.Error(w, "unavailable", e.failStatus)
+				return
+			}
 		}
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == ghaTwirp+"CreateCacheEntry":
@@ -448,13 +465,16 @@ func ghaRoundTrip(t *testing.T, emu *ghaEmulator) {
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff}, 10)
 
 	rc, err := store.GetArtifact(ctx, "pkg/a", "abc123")
-	require.NoError(t, err, "GetArtifact(miss)")
-	if rc != nil {
-		_ = rc.Close()
-		t.Fatal("expected miss, got reader")
-	}
+	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact(miss)")
+	require.Nil(t, rc)
+	has, err := store.HasArtifact(ctx, "pkg/a", "abc123")
+	require.NoError(t, err)
+	assert.False(t, has)
 
 	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader(entry)), "PutArtifact")
+	has, err = store.HasArtifact(ctx, "pkg/a", "abc123")
+	require.NoError(t, err)
+	assert.True(t, has, "has_artifact answers from the service without a download")
 	rc, err = store.GetArtifact(ctx, "pkg/a", "abc123")
 	require.NoError(t, err, "GetArtifact(hit)")
 	require.NotNil(t, rc, "expected hit after put, got miss")
@@ -474,43 +494,62 @@ func ghaRoundTrip(t *testing.T, emu *ghaEmulator) {
 	}
 }
 
-// A reservation the service refuses must fail the push. Reading it as "already stored"
-// reported every push as published while nothing reached the store.
-func TestGHACacheBackendRefusedReservationFailsThePush(t *testing.T) {
-	emu := newGHAEmulator()
-	emu.refuseCreate = true
+// ghaStore wires the spell to an emulator for one test.
+func ghaStore(t *testing.T, emu *ghaEmulator) (*spellRemoteBackend, context.Context) {
+	t.Helper()
 	srv := httptest.NewServer(emu.handler())
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 	t.Setenv("GITHUB_ACTIONS", "true")
 	t.Setenv("ACTIONS_RESULTS_URL", srv.URL+"/")
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
-
-	store := ghaBackend(t)
-	ctx := secret.ContextWithResolver(context.Background(), secret.New())
-	err := store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("entry")))
-	require.EqualError(t, err, `remote backend "github-actions" did not store artifact`)
-	emu.mu.Lock()
-	defer emu.mu.Unlock()
-	assert.Empty(t, emu.committed, "a refused reservation stores nothing")
+	return ghaBackend(t), secret.ContextWithResolver(context.Background(), secret.New())
 }
 
-// A second runner publishing the same key meets the service's 409, which is success:
-// the entry it would have written is already there.
-func TestGHACacheBackendExistingEntryIsStored(t *testing.T) {
+// ok=false from CreateCacheEntry means another job holds the reservation, which is not
+// a failure: the entry is being stored. It reaches the cache as ErrRemoteExists.
+func TestGHACacheBackendHeldReservationIsAlreadyPresent(t *testing.T) {
 	emu := newGHAEmulator()
-	srv := httptest.NewServer(emu.handler())
-	defer srv.Close()
-	t.Setenv("GITHUB_ACTIONS", "true")
-	t.Setenv("ACTIONS_RESULTS_URL", srv.URL+"/")
-	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
+	emu.refuseCreate = true
+	store, ctx := ghaStore(t, emu)
+	err := store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("entry")))
+	require.ErrorIs(t, err, cache.ErrRemoteExists)
+	emu.mu.Lock()
+	defer emu.mu.Unlock()
+	assert.Empty(t, emu.committed, "this job uploaded nothing")
+}
 
-	store := ghaBackend(t)
-	ctx := secret.ContextWithResolver(context.Background(), secret.New())
+// A second runner storing the same key meets the service's 409: already stored, which
+// is neither a failure nor an upload.
+func TestGHACacheBackendExistingEntryIsAlreadyPresent(t *testing.T) {
+	emu := newGHAEmulator()
+	store, ctx := ghaStore(t, emu)
 	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("first"))))
-	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("second"))))
+	err := store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("second")))
+	require.ErrorIs(t, err, cache.ErrRemoteExists)
 	emu.mu.Lock()
 	defer emu.mu.Unlock()
 	assert.Equal(t, map[string][]byte{"magus-abc123": []byte("first")}, emu.committed)
+}
+
+// A service failure throws in the spell and reaches the cache as an error, so a failing
+// remote reads as failed, never as a cold cache.
+func TestGHACacheBackendServiceFailureIsAnError(t *testing.T) {
+	emu := newGHAEmulator()
+	emu.failStatus = http.StatusServiceUnavailable
+	store, ctx := ghaStore(t, emu)
+
+	_, err := store.GetArtifact(ctx, "pkg/a", "abc123")
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, cache.ErrRemoteMiss)
+	assert.ErrorContains(t, err, "GetCacheEntryDownloadURL: status 503")
+
+	err = store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("entry")))
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, cache.ErrRemoteExists)
+	assert.ErrorContains(t, err, "CreateCacheEntry: status 503")
+
+	_, err = store.HasArtifact(ctx, "pkg/a", "abc123")
+	assert.ErrorContains(t, err, "status 503")
 }
 
 // Outside GitHub Actions the spell's enabled() op returns false, so the backend
@@ -520,11 +559,8 @@ func TestGHACacheBackendInactiveOutsideGHA(t *testing.T) {
 	store := ghaBackend(t)
 	require.False(t, store.Active(context.Background()), "Active() = true outside GitHub Actions, want false")
 	rc, err := store.GetArtifact(context.Background(), "pkg/a", "abc123")
-	require.NoError(t, err, "GetArtifact")
-	if rc != nil {
-		_ = rc.Close()
-		t.Fatal("expected miss when not running under GitHub Actions")
-	}
+	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact")
+	require.Nil(t, rc)
 }
 
 // TestCanonicalSpellModule verifies the embedded "magus/spell" declarations
@@ -709,10 +745,10 @@ func TestDedupStrings(t *testing.T) {
 
 func s3Backend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "magus", "spells", "aws", "aws-s3", "spell.buzz")
-	if _, err := os.Stat(path); err != nil {
-		t.Skipf("s3 spell not found at %s: %v", path, err)
-	}
+	path := filepath.Join(repoRoot(t), "spells", "aws", "s3-cache", "spell.buzz")
+	// NOT t.Skipf, for the reason ghaBackend gives: this path went stale with the repo
+	// flattening and every S3 test skipped silently until the tier rework found it.
+	require.FileExists(t, path, "s3 spell missing; this test must run, not skip")
 	drv, err := resolveBackendSpell(context.Background(), path)
 	require.NoError(t, err, "load s3 spell")
 	require.Equal(t, "aws-s3", drv.Name(), "spell name")
@@ -764,6 +800,15 @@ func (e *s3Emulator) handler() http.Handler {
 				return
 			}
 			_, _ = w.Write(data)
+		case http.MethodHead:
+			e.mu.Lock()
+			_, ok := e.objects[r.URL.Path]
+			e.mu.Unlock()
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
 		case http.MethodDelete:
 			e.mu.Lock()
 			delete(e.objects, r.URL.Path)
@@ -1026,13 +1071,16 @@ func TestS3CacheBackendRoundTrip(t *testing.T) {
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff, 'g', 'z'}, 8) // non-UTF-8 proves byte-exact transfer
 
 	rc, err := store.GetArtifact(ctx, "pkg/a", "abc123")
-	require.NoError(t, err, "GetArtifact(miss)")
-	if rc != nil {
-		_ = rc.Close()
-		t.Fatal("expected miss, got reader")
-	}
+	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact(miss)")
+	require.Nil(t, rc)
+	has, err := store.HasArtifact(ctx, "pkg/a", "abc123")
+	require.NoError(t, err)
+	assert.False(t, has)
 
 	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader(entry)), "PutArtifact")
+	has, err = store.HasArtifact(ctx, "pkg/a", "abc123")
+	require.NoError(t, err)
+	assert.True(t, has, "HEAD answers without a download")
 	rc, err = store.GetArtifact(ctx, "pkg/a", "abc123")
 	require.NoError(t, err, "GetArtifact(hit)")
 	require.NotNil(t, rc, "expected hit after put, got miss")
@@ -1048,9 +1096,6 @@ func TestS3CacheBackendInactiveWithoutCreds(t *testing.T) {
 	store := s3Backend(t)
 	require.False(t, store.Active(context.Background()), "Active() = true without credentials, want false")
 	rc, err := store.GetArtifact(context.Background(), "pkg/a", "abc123")
-	require.NoError(t, err, "GetArtifact")
-	if rc != nil {
-		_ = rc.Close()
-		t.Fatal("expected miss when not configured")
-	}
+	require.ErrorIs(t, err, cache.ErrRemoteMiss, "GetArtifact")
+	require.Nil(t, rc)
 }

@@ -38,10 +38,14 @@ env:
   MISE_SAFE: '1'
   GOEXPERIMENT: jsonv2
   # PRs read both cache tiers and write only the local tier, which the shard job carries
-  # to the PR's next push; the remote tier is written by main pushes alone. Stated here
-  # rather than left to the missing signing key, which only refuses a remote-tier write
-  # once a trust set is declared.
-  MAGUS_CACHE_REMOTE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
+  # to the PR's next push. Declared false rather than left to the missing signing key.
+  #
+  # main leaves it unset rather than declaring true: declared true makes a remote-tier
+  # write REQUIRED, so an Actions cache hiccup would fail main. Unset, main writes the
+  # remote tier because it holds the signing key, degrades to the local tier when the
+  # remote tier fails, and backfills the remote tier from local-tier hits whose key the
+  # remote tier lacks, so an entry a failed upload missed is stored by the next main run.
+  MAGUS_CACHE_REMOTE_WRITE_ENABLED: ${{ github.event_name == 'pull_request' && 'false' || '' }}
   # The trust set is what wires the shared cache (see the `if` at magusfile.buzz's
   # cache.remote block) AND what verifies it. MAGUS_CACHE_REMOTE_INSECURE used to be
   # set here too, which was the whole configuration doing two wrong things at once:
@@ -369,6 +373,11 @@ jobs:
       contents: read
     env:
       MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
+      # Caps the local tier, and so every saved store below, at 256 MiB: the saves share
+      # the repository's Actions cache quota with the remote tier's entries, and an
+      # unbounded one would evict them. A shard's entries uploaded 1.7 MiB at most on
+      # main (run 35882427621), so the cap binds only on something unexpected.
+      MAGUS_CACHE_SIZE_MB: '256'
     strategy:
       fail-fast: false
       max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
@@ -468,26 +477,34 @@ jobs:
             magus describe project "$p" -o 'template={{range .projects}}::notice title=affected::{{.path}}{{end}}'
           done
 
-      # The local cache tier, restored before the run and saved after it. magus looks up
-      # the local tier, then the remote tier, so this answers a pull request's rerun of
-      # what the remote tier has never seen, without the pull request writing to it.
+      # The local cache tier of a pull request, restored before the run and saved after
+      # it. magus reads the local tier, then the remote tier, so this answers a rerun of
+      # what only this pull request built, without the pull request writing the remote
+      # tier. What main built needs no save here: main writes it to the remote tier, which
+      # every pull request already reads.
       #
-      # The key reads general to specific so each restore-key drops a trailing part: this
-      # ref's newest save for the same shard, then for any shard. A pull request cannot
-      # read another pull request's saves, and Actions falls back to the default branch,
-      # which is how a first push starts from main's newest store. main never restores
-      # what a pull request saved.
+      # Pull requests only, so saves never compete with main's remote-tier entries for
+      # the Actions cache quota beyond the 256 MiB cap each. A save is scoped to its pull
+      # request's ref, so no other pull request, and not main, can restore it.
+      #
+      #   key:          CI-magus-store-v1-<os>-<shard label>-<run id>-<attempt>
+      #   restore-keys: CI-magus-store-v1-<os>-<shard label>-   (this shard's newest)
+      #                 CI-magus-store-v1-<os>-                 (any shard's newest)
+      #
+      # The attempt keeps a rerun's save from colliding with the first attempt's key,
+      # which Actions refuses to overwrite.
       #
       # cas, manifests and logs carry a hit (docs/concepts/cache.md). mtimes stays out:
       # it keys on file mtime, which a fresh checkout resets, so a restored memo only misses.
       - name: Restore the local cache tier
+        if: github.event_name == 'pull_request'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .magus/cas
             .magus/manifests
             .magus/logs
-          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-
             ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
@@ -508,14 +525,14 @@ jobs:
       # rerun, the run that most needs it. Not on cancel, where the store may be half
       # written.
       - name: Save the local cache tier
-        if: success() || failure()
+        if: github.event_name == 'pull_request' && (success() || failure())
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .magus/cas
             .magus/manifests
             .magus/logs
-          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The notes store's anchors, gated on the ONE finding worth blocking a merge for.
       #

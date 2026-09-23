@@ -76,6 +76,7 @@ type sigEnvelope struct {
 const (
 	domainArtifact = "magus-cache-artifact-v1\x00"
 	domainBundle   = "magus-output-bundle-v1\x00"
+	domainObject   = "magus-remote-object-v1\x00" // a RemoteNamespace object, e.g. a knowledge shard
 )
 
 // signedPayload renders the exact bytes a signature covers: the domain tag, the

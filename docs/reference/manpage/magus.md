@@ -157,7 +157,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : When false (or 0), replay cache hits but never write new entries, locally or to a remote (default: true). Equivalent magus.yaml key: **cache.write.enabled**.
 
 **MAGUS_CACHE_REMOTE_WRITE_ENABLED**
-: When false (or 0), write the local cache tier but never the remote tier; true while cache.write.enabled is false is a config error (default: cache.write.enabled). Equivalent magus.yaml key: **cache.remote.write.enabled**.
+: When false (or 0), write the local cache tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required: an error without a signing key or with cache.write.enabled false, and a failed remote write fails the step (default: cache.write.enabled). Equivalent magus.yaml key: **cache.remote.write.enabled**.
 
 **MAGUS_CACHE_INCLUDE_OS_ENABLED**
 : When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay (default: false). Equivalent magus.yaml key: **cache.include.os.enabled**.

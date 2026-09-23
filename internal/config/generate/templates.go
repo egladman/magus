@@ -150,7 +150,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	}
 {{- else if eq .Kind "bool"}}
 	if v := getenv("{{.EnvVar}}"); v != "" {
-		{{.GoPath}} = parseBoolEnv(v, {{.GoPath}})
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("{{.EnvVar}}: %w", err))
+		} else {
+			{{.GoPath}} = b
+		}
 	}
 {{- else if eq .Kind "float64"}}
 	if v := getenv("{{.EnvVar}}"); v != "" {
@@ -176,8 +180,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	}
 {{- else if eq .Kind "boolptr"}}
 	if v := getenv("{{.EnvVar}}"); v != "" {
-		b := parseBoolEnv(v, {{.GoPath}} != nil && *{{.GoPath}})
-		{{.GoPath}} = &b
+		if b, err := parseBoolEnv(v); err != nil {
+			errs = append(errs, fmt.Errorf("{{.EnvVar}}: %w", err))
+		} else {
+			{{.GoPath}} = &b
+		}
 	}
 {{- else if eq .Kind "stringslice"}}
 	if v := getenv("{{.EnvVar}}"); v != "" {
@@ -195,15 +202,16 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	return errors.Join(errs...)
 }
 
-// parseBoolEnv mirrors the helper in package config so this generated file
-// has no back-import into config (which would create a cycle).
-func parseBoolEnv(v string, fallback bool) bool {
+// parseBoolEnv accepts true/1/yes and false/0/no in any case. Anything else is an
+// error rather than the previous value: a typo like "ture" silently keeping a
+// default is the misconfiguration nobody notices.
+func parseBoolEnv(v string) (bool, error) {
 	switch strings.ToLower(v) {
 	case "true", "1", "yes":
-		return true
+		return true, nil
 	case "false", "0", "no":
-		return false
+		return false, nil
 	}
-	return fallback
+	return false, fmt.Errorf("%q is not a boolean; use true or false", v)
 }
 `))

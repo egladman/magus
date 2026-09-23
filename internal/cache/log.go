@@ -678,7 +678,11 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// Cached: passed without running. Dimmed green so a cache hit reads as
 		// low-signal next to work that actually ran. Cache state lives in the parens,
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
-		h.printf("%s %s (cached, %s%s)\n", Glyph(colorize, "pass", colDimGreen), label, FormatDuration(dur), remote)
+		from := ""
+		if tier := recordStr(r, "remote"); tier != "" {
+			from = " from " + tier + ", " + FormatBytes(recordInt(r, "bytes"))
+		}
+		h.printf("%s %s (cached%s, %s%s)\n", Glyph(colorize, "pass", colDimGreen), label, from, FormatDuration(dur), remote)
 		h.printRepro(project, recordStr(r, "target"))
 		h.printRef(ref)
 		h.status.cached++
@@ -735,17 +739,12 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 		h.printf("remote: %s (%s, verify %s, sign %s)\n", recordStr(r, "backend"), state,
 			onOff(recordBool(r, "verify")), onOff(recordBool(r, "sign")))
-	case "cache.remote.hit":
-		h.printf("  restored %s from the remote cache (%s)\n",
-			displayProjectLabel(label, project), FormatBytes(recordInt(r, "bytes")))
 	case "cache.remote.miss":
 		h.printf("  %s not in the remote cache (%s)\n",
 			displayProjectLabel(label, project), recordStr(r, "ref"))
-	case "cache.remote.push":
-		h.printf("  published %s to the remote cache (%s)\n",
+	case "cache.remote.store":
+		h.printf("  stored %s in the remote cache (%s)\n",
 			displayProjectLabel(label, project), FormatBytes(recordInt(r, "bytes")))
-	case "cache.remote.readonly":
-		h.printf("remote: read-only - a trust set is declared but this machine has no signing key, so nothing is published\n")
 	case "run.exec":
 		// Every subprocess magus spawns (proc.exec, fork spells) logs through this event
 		// in run.Exec. Rendered as a shell-style echo, indented under the owning
