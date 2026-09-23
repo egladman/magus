@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -18,6 +19,41 @@ const (
 	SpawnKindContinue SpawnKind = "continue"
 )
 
+// Values lists the kinds a caller may name, excluding the zero value.
+func (k SpawnKind) Values() []string {
+	return []string{string(SpawnKindSpawn), string(SpawnKindContinue)}
+}
+
+// Valid reports whether k is a declared kind or unset.
+func (k SpawnKind) Valid() bool {
+	switch k {
+	case "", SpawnKindSpawn, SpawnKindContinue:
+		return true
+	}
+	return false
+}
+
+// String renders k for an error message: the value, or "unset" when empty.
+func (k SpawnKind) String() string {
+	if k == "" {
+		return "unset"
+	}
+	return string(k)
+}
+
+// MarshalText writes the name as given.
+func (k SpawnKind) MarshalText() ([]byte, error) { return []byte(k), nil }
+
+// UnmarshalText sets k from a name, refusing one outside Values.
+func (k *SpawnKind) UnmarshalText(text []byte) error {
+	v := SpawnKind(text)
+	if !v.Valid() {
+		return fmt.Errorf("unknown spawn kind %q (want one of %v)", text, v.Values())
+	}
+	*k = v
+	return nil
+}
+
 // SpawnRole is where the caller of a spawn stands, computed from the job store rather than
 // declared by anyone.
 type SpawnRole string
@@ -28,6 +64,41 @@ const (
 	// SpawnRoleWorker is a session a lease binds in this checkout.
 	SpawnRoleWorker SpawnRole = "worker"
 )
+
+// Values lists the roles a caller may name, excluding the zero value.
+func (r SpawnRole) Values() []string {
+	return []string{string(SpawnRoleRoot), string(SpawnRoleWorker)}
+}
+
+// Valid reports whether r is a declared role or unset.
+func (r SpawnRole) Valid() bool {
+	switch r {
+	case "", SpawnRoleRoot, SpawnRoleWorker:
+		return true
+	}
+	return false
+}
+
+// String renders r for an error message: the value, or "unset" when empty.
+func (r SpawnRole) String() string {
+	if r == "" {
+		return "unset"
+	}
+	return string(r)
+}
+
+// MarshalText writes the name as given.
+func (r SpawnRole) MarshalText() ([]byte, error) { return []byte(r), nil }
+
+// UnmarshalText sets r from a name, refusing one outside Values.
+func (r *SpawnRole) UnmarshalText(text []byte) error {
+	v := SpawnRole(text)
+	if !v.Valid() {
+		return fmt.Errorf("unknown spawn role %q (want one of %v)", text, v.Values())
+	}
+	*r = v
+	return nil
+}
 
 // SpawnDecision is what a magus\guard.spawn rule answers. The zero value allows, so an
 // empty SpawnVerdict{} is the pass a rule returns when it has nothing to say.
@@ -41,6 +112,41 @@ const (
 	// SpawnDeny blocks the call.
 	SpawnDeny SpawnDecision = "deny"
 )
+
+// Values lists the decisions a rule may return, excluding the zero value.
+func (d SpawnDecision) Values() []string {
+	return []string{string(SpawnAllow), string(SpawnAdvise), string(SpawnDeny)}
+}
+
+// Valid reports whether d is a declared decision or unset.
+func (d SpawnDecision) Valid() bool {
+	switch d {
+	case "", SpawnAllow, SpawnAdvise, SpawnDeny:
+		return true
+	}
+	return false
+}
+
+// String renders d for an error message: the value, or "unset" when empty.
+func (d SpawnDecision) String() string {
+	if d == "" {
+		return "unset"
+	}
+	return string(d)
+}
+
+// MarshalText writes the name as given.
+func (d SpawnDecision) MarshalText() ([]byte, error) { return []byte(d), nil }
+
+// UnmarshalText sets d from a name, refusing one outside Values.
+func (d *SpawnDecision) UnmarshalText(text []byte) error {
+	v := SpawnDecision(text)
+	if !v.Valid() {
+		return fmt.Errorf("unknown spawn decision %q (want one of %v)", text, v.Values())
+	}
+	*d = v
+	return nil
+}
 
 // rank orders decisions by strictness, so merging two verdicts keeps the stricter. An
 // undeclared decision ranks as deny: a verdict nobody can read must not pass as allow.

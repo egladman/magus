@@ -304,40 +304,12 @@ var boundaryEnums = []boundaryEnum{
 		Type:  reflect.TypeFor[spells.External](),
 		Cases: []enumCase{{"none", ""}, {"reads", "reads-external"}, {"mutates", "mutates-external"}},
 	},
-	// magus\guard.spawn's enums. GoOnly: a rule sees these as str, as the surface shipped;
-	// mirroring them as enums would retype fields rules already read.
-	{
-		Name:   "SpawnKind",
-		Type:   reflect.TypeFor[types.SpawnKind](),
-		Cases:  []enumCase{{"spawn", "spawn"}, {"continue", "continue"}},
-		Noun:   "spawn kind",
-		GoOnly: true,
-	},
-	{
-		Name:   "SpawnRole",
-		Type:   reflect.TypeFor[types.SpawnRole](),
-		Cases:  []enumCase{{"root", "root"}, {"worker", "worker"}},
-		Noun:   "spawn role",
-		GoOnly: true,
-	},
-	{
-		Name:   "SpawnDecision",
-		Type:   reflect.TypeFor[types.SpawnDecision](),
-		Cases:  []enumCase{{"allow", "allow"}, {"advise", "advise"}, {"deny", "deny"}},
-		Noun:   "spawn decision",
-		GoOnly: true,
-	},
 }
 
 type boundaryEnum struct {
 	Name  string
 	Type  reflect.Type
 	Cases []enumCase
-	// Noun names the enum in UnmarshalText's refusal ("unknown spawn kind"); set, it
-	// also generates MarshalText/UnmarshalText, for an enum decoded from JSON or YAML.
-	Noun string
-	// GoOnly generates the Go method set and leaves the Buzz mirror a bare str.
-	GoOnly bool
 }
 
 // enumCase is one case: the Buzz identifier and the string it carries.
@@ -349,7 +321,7 @@ type enumCase struct {
 // buzzEnum returns the enum a Go type mirrors as, if any.
 func buzzEnum(rt reflect.Type) (boundaryEnum, bool) {
 	for _, e := range boundaryEnums {
-		if e.Type == rt && !e.GoOnly {
+		if e.Type == rt {
 			return e, true
 		}
 	}
@@ -390,7 +362,7 @@ func boundaryTypeNamed(name string) (boundaryType, bool) {
 // references.
 func boundaryEnumNamed(name string) (boundaryEnum, bool) {
 	for _, e := range boundaryEnums {
-		if e.Name == name && !e.GoOnly {
+		if e.Name == name {
 			return e, true
 		}
 	}
