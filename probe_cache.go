@@ -20,6 +20,13 @@ import (
 // that binary reads to decide which version it is, and the environment. probeCacheKey
 // fingerprints all of them, so a hit replays the answer without a fork and any change
 // misses. A tool whose inputs cannot be enumerated with confidence is never cached.
+//
+// This is a second content-addressed store beside internal/cache, deliberately: that one
+// keys a cache.Step (sources, tools, charms, deps, ...) to a manifest describing a whole
+// target run, with replay, remote push/pull, locking and GC built for that shape. A probe
+// answer is one short string keyed by one hash, looked up before ANY step exists to key
+// against, so building a Step just to hold it would be a heavier write path for the
+// common case (a plain os.ReadFile) than the read it exists to save.
 
 // probeInputs are the files a probed tool reads to pick its version, searched in the
 // probe's directory and every ancestor. Only these tools are cached: go switches
@@ -71,9 +78,10 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n%s %q\n%s\n%s\n", probeCacheFormat, probe.Bin, probe.Args, dir, found)
-	if !writeBinaryIdentity(&b, target) {
+	if !binaryCacheable(target) {
 		return "", false
 	}
+	writeBinaryIdentity(&b, target)
 	writeEnv(&b)
 	names := selectors
 	switch base := filepath.Base(target); {
@@ -97,10 +105,11 @@ func probeCacheKey(probe spells.Command, dir string) (string, bool) {
 	return hex.EncodeToString(sum[:]), true
 }
 
-// writeBinaryIdentity records the executable a probe runs, refusing a script: a shell
-// or node wrapper decides what to run at run time, from inputs nothing here can list.
-// So does a multi-call binary reached through a hard link, which is how rustup proxies.
-func writeBinaryIdentity(b *strings.Builder, path string) bool {
+// binaryCacheable reports whether a probe of path may be cached at all: not a script,
+// since a shell or node wrapper decides what to run at run time, from inputs nothing
+// here can list, and not a multi-call binary reached through a hard link, which is how
+// rustup proxies.
+func binaryCacheable(path string) bool {
 	fi, err := os.Stat(path)
 	if err != nil || !fi.Mode().IsRegular() {
 		return false
@@ -116,11 +125,13 @@ func writeBinaryIdentity(b *strings.Builder, path string) bool {
 	head := make([]byte, 2)
 	_, err = io.ReadFull(f, head)
 	_ = f.Close()
-	if err != nil || bytes.Equal(head, []byte("#!")) {
-		return false
-	}
+	return err == nil && !bytes.Equal(head, []byte("#!"))
+}
+
+// writeBinaryIdentity records the executable a probe runs. Call it only after
+// binaryCacheable confirms path is worth keying on.
+func writeBinaryIdentity(b *strings.Builder, path string) {
 	writeFileIdentity(b, path)
-	return true
 }
 
 // writeFileIdentity records whether path exists and, when it does, what would change
@@ -230,7 +241,6 @@ func writeMiseGlobals(b *strings.Builder) {
 	writeDirEntries(b, filepath.Join(data, "installs"))
 }
 
-// cachedProbe reads a cached probe answer.
 func (m *Magus) cachedProbe(key string) (string, bool) {
 	if m.cache == nil {
 		return "", false
