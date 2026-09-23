@@ -42,3 +42,18 @@ func TestApplyUnionSandboxReportsAMalformedWorkspaceConfig(t *testing.T) {
 
 	assert.Error(t, ApplyUnionSandbox(context.Background(), []string{root}))
 }
+
+// TestApplyUnionSandboxIsInertWithoutAnOptIn: the daemon applies a kernel policy
+// only when some workspace asked for one. No roots, or roots that never enable
+// sandboxing, must leave the process unconfined: applying a policy nobody
+// requested would break every other workspace the daemon serves.
+func TestApplyUnionSandboxIsInertWithoutAnOptIn(t *testing.T) {
+	ctx := context.Background()
+
+	assert.NoError(t, ApplyUnionSandbox(ctx, nil))
+	assert.NoError(t, ApplyUnionSandbox(ctx, []string{}))
+
+	root := writeWorkspace(t, map[string]string{"magusfile.buzz": ""})
+	assert.NoError(t, ApplyUnionSandbox(ctx, []string{root}),
+		"a workspace with no sandbox block requests nothing")
+}

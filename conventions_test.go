@@ -1,3 +1,5 @@
+// cross-cutting: repo-wide conventions scanned across the whole tree, owned by no one file
+
 package magus
 
 // Source-level convention guards: assertions about the SHAPE of this repository
@@ -1934,7 +1936,7 @@ var wholeTreeFootprints = map[string][]string{
 // ctx.readsFiles REPLACES a target's footprint rather than adding to it: buildStep keeps
 // the magusfiles and the target's spell sources, drops the project and spell globs, then
 // folds the declared refs in. So a call added to key four files the project does not
-// claim (the console palette that types/kind_palette_drift_test.go reads) silently
+// claim (the console palette that TestNodeKindPaletteDrift reads) silently
 // deleted **/*.go from the key of the target that runs every Go test. It held long enough
 // for ~8,400 new lines of *_test.go to land and replay against the cached verdict with the
 // coverage profile untouched; only --no-cache re-measured. `magus affected` still selected

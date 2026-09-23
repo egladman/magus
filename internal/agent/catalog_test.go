@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	assert.Contains(t, string(body), "license: "+skillLicense)
 	assert.Contains(t, string(body), "skill-content: "+catalog.SkillDigest("magus-query"))
 
-	statuses := catalog.CheckStatuses(dir)
+	statuses := catalog.CheckStatuses(context.Background(), dir, "test-host")
 	require.Len(t, statuses, 1)
 	assert.Equal(t, ".agents/skills", statuses[0].Location)
 	assert.True(t, statuses[0].Installed)
@@ -84,7 +85,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 
 	stale := strings.Replace(string(body), "skill-content: "+catalog.SkillDigest("magus-query"), "skill-content: 000000000000", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents/skills", anchorSkillRel), []byte(stale), 0o644))
-	assert.True(t, catalog.CheckStatuses(dir)[0].Stale)
+	assert.True(t, catalog.CheckStatuses(context.Background(), dir, "test-host")[0].Stale)
 }
 
 func TestCheckStatusesDoesNotTreatHandAuthoredSkillDirAsInstall(t *testing.T) {
@@ -96,13 +97,13 @@ func TestCheckStatusesDoesNotTreatHandAuthoredSkillDirAsInstall(t *testing.T) {
 	require.NoError(t, os.MkdirAll(local, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(local, "SKILL.md"), []byte("---\nname: "+LocalSkillName+"\n---\nour rules\n"), 0o644))
 
-	assert.Empty(t, catalog.CheckStatuses(dir), "a descriptor path with only hand-authored skills is not an installed generated tree")
+	assert.Empty(t, catalog.CheckStatuses(context.Background(), dir, "test-host"), "a descriptor path with only hand-authored skills is not an installed generated tree")
 
 	oldInstall := filepath.Join(dir, ".agents/skills", "magus-run")
 	require.NoError(t, os.MkdirAll(oldInstall, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(oldInstall, "SKILL.md"), []byte("---\nname: magus-run\n---\nold generated install\n"), 0o644))
 
-	statuses := catalog.CheckStatuses(dir)
+	statuses := catalog.CheckStatuses(context.Background(), dir, "test-host")
 	require.Len(t, statuses, 1)
 	assert.Equal(t, ".agents/skills", statuses[0].Location)
 	assert.True(t, statuses[0].Stale)
@@ -120,13 +121,13 @@ func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
 	writeTestHarness(t, dir)
 	_, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
 	require.NoError(t, err)
-	require.False(t, catalog.CheckStatuses(dir)[0].Stale)
+	require.False(t, catalog.CheckStatuses(context.Background(), dir, "test-host")[0].Stale)
 
 	local := filepath.Join(dir, ".agents/skills", LocalSkillName)
 	require.NoError(t, os.MkdirAll(local, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(local, "SKILL.md"), []byte("---\nname: "+LocalSkillName+"\n---\nour rules\n"), 0o644))
 
-	statuses := catalog.CheckStatuses(dir)
+	statuses := catalog.CheckStatuses(context.Background(), dir, "test-host")
 	require.Len(t, statuses, 1)
 	assert.False(t, statuses[0].Stale, "a hand-authored skill has no stamp to grade: %s", statuses[0].Detail)
 
@@ -134,7 +135,7 @@ func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
 	// no footer either, and must still read as stale.
 	shippedNoFooter := filepath.Join(dir, ".agents/skills", "magus-query")
 	require.NoError(t, os.WriteFile(filepath.Join(shippedNoFooter, "SKILL.md"), []byte("---\nname: magus-query\n---\nold body\n"), 0o644))
-	assert.True(t, catalog.CheckStatuses(dir)[0].Stale, "a shipped skill with no stamp predates versioning and is stale")
+	assert.True(t, catalog.CheckStatuses(context.Background(), dir, "test-host")[0].Stale, "a shipped skill with no stamp predates versioning and is stale")
 }
 
 // TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote pins the deletion half of the
@@ -239,7 +240,7 @@ func TestCatalogAgentsBlockIsSelfDelimitedAndStable(t *testing.T) {
 	// it through a hand-owned AGENTS.md and it must read as current, not stale.
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Local rules\n\nkeep this\n\n"+block), 0o644))
-	statuses := catalog.CheckStatuses(dir)
+	statuses := catalog.CheckStatuses(context.Background(), dir)
 	require.Len(t, statuses, 1)
 	assert.Equal(t, "AGENTS.md", statuses[0].Location)
 	assert.False(t, statuses[0].Stale, statuses[0].Detail)

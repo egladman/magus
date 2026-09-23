@@ -130,7 +130,7 @@ it is correct. magus did not author this data and cannot verify it.
 The surviving design is a version range you declare, compared against a version
 magus already probes. It never learns which versions exist upstream and never
 picks one. To find out when your range has gone stale, write that in your own
-repo with `http`, `json`, and `semver`, the way `tools/audit.buzz` wraps the
+repo with `http`, `json`, and `semver`, the way `tools/advisories.buzz` wraps the
 advisory scanner. The binary supplies primitives. You supply knowledge about the
 world.
 
@@ -469,30 +469,30 @@ rather than a coined one.
 | reference monitor                                | Anderson, 1972                                                        | the design goal a PEP aims at: complete mediation, tamperproof, small enough to verify. A hook is neither tamperproof nor non-bypassable, so this names a goal, not a claim about the guard |
 | shield                                           | Alshiekh et al., Safe Reinforcement Learning via Shielding, AAAI 2018 | a monitor that vetoes a learning agent's proposed actions against a spec                                                                                                                    |
 
-Sources: https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf
-and https://cdn.aaai.org/ojs/11797/11797-13-15325-1-2-20201228.pdf.
+Sources: <https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf>
+and <https://cdn.aaai.org/ojs/11797/11797-13-15325-1-2-20201228.pdf>.
 
 Not "guardrails". The OpenAI Agents SDK, AWS Bedrock Guardrails, NVIDIA NeMo
 Guardrails, Invariant, and Lakera all use that word for content-safety
 filtering of model input and output: what a model said or was asked, checked
 against a policy about language. magus's guard judges actions, not language,
 from facts a model never produces: declared outputs, the cache, the graph, VCS
-state, job leases. See https://openai.github.io/openai-agents-python/guardrails/,
-https://aws.amazon.com/bedrock/guardrails/, and
-https://github.com/NVIDIA-NeMo/Guardrails.
+state, job leases. See <https://openai.github.io/openai-agents-python/guardrails/>,
+<https://aws.amazon.com/bedrock/guardrails/>, and
+<https://github.com/NVIDIA-NeMo/Guardrails>.
 
 Not "harness" either. Anthropic and OpenAI both use that word for the host's
 own agent loop, the code that reads a model's tool call and decides what runs
 next. magus is not that loop. Martin Bockeler's "outer harness"
-(https://martinfowler.com/articles/harness-engineering.html, 2026-04-02) is the
+(<https://martinfowler.com/articles/harness-engineering.html>, 2026-04-02) is the
 nearest framing for where magus sits: deterministic guides and sensors placed
 around the loop, not the loop itself.
 
-Two projects sit closest as peers. Cupcake (https://cupcake.eqtylab.io/) is
+Two projects sit closest as peers. Cupcake (<https://cupcake.eqtylab.io/>) is
 repo-versioned Rego policy applied at the same hook points across Claude Code,
 Cursor, OpenCode, and Factory, and calls itself a policy enforcement layer.
 Google's Agent Gateway
-(https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/gateways/agent-gateway-overview)
+(<https://docs.cloud.google.com/gemini-enterprise-agent-platform/govern/gateways/agent-gateway-overview>)
 names itself a policy enforcement point directly. Both judge an action at a
 hook the way the guard does. What differs: the guard's decisions read the
 build tool's own record rather than a general policy language, and on Linux a

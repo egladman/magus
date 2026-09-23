@@ -62,7 +62,6 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 	if err != nil {
 		return fmt.Errorf("magus agent harness install: %w", err)
 	}
-	reportHarnessProblems(ctx, root)
 	for _, harnessID := range ids {
 		skills, err := agent.LoadHarnessSkills(ctx, root, harnessID)
 		if err != nil {
@@ -130,23 +129,6 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 	return nil
 }
 
-// reportHarnessProblems prints every descriptor that disqualified itself, by name and
-// with its reason, and returns them. Printed on every harness subcommand, not only where
-// it changes a verdict: a descriptor magus skipped is a misconfiguration, and a skip
-// nobody prints looks exactly like a host nobody installed.
-func reportHarnessProblems(ctx context.Context, root string) []agent.HarnessProblem {
-	problems, err := agent.HarnessProblems(ctx, root)
-	if err != nil {
-		slog.ErrorContext(ctx, "agent harness: harness descriptors could not be read", slog.String("error", err.Error()))
-		return nil
-	}
-	for _, p := range problems {
-		slog.ErrorContext(ctx, "agent harness: descriptor disqualified itself and was not loaded",
-			slog.String("descriptor", p.Source), slog.String("reason", p.Reason))
-	}
-	return problems
-}
-
 func agentHarnessApplyCmd(ctx context.Context, rootOverride string, args []string) error {
 	return runHarnessChange(ctx, rootOverride, args, "apply", func(ctx context.Context, root, id string) (agent.HarnessUpdate, error) {
 		return agent.ApplyHarness(ctx, agent.HarnessApplyOptions{
@@ -192,7 +174,6 @@ func runHarnessChange(ctx context.Context, rootOverride string, args []string, v
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
-	reportHarnessProblems(ctx, root)
 	for _, harnessID := range ids {
 		update, err := change(ctx, root, harnessID)
 		if err != nil {
@@ -248,11 +229,6 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		return fmt.Errorf("magus agent harness verify: %w", err)
 	}
 	var firstFail error
-	// A descriptor that disqualified itself is a coverage gap on this machine, and
-	// verify is the surface whose exit code says so.
-	if problems := reportHarnessProblems(ctx, root); len(problems) > 0 {
-		firstFail = fmt.Errorf("magus agent harness verify: %d harness descriptor(s) disqualified themselves; the first is %s", len(problems), problems[0])
-	}
 	for _, harnessID := range ids {
 		result, err := agent.VerifyHarness(ctx, root, harnessID)
 		if err != nil {
@@ -381,6 +357,5 @@ func agentHarnessUsage(w io.Writer) {
 	fmt.Fprintln(w, "It does not ask for confirmation; pass --dry-run to preview one first.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Omit --id to act on every wired provider (several hosts are fine when you bounce")
-	fmt.Fprintln(w, "between LLM tools). Or pass --id for one spell / JSON descriptor under harnesses/,")
-	fmt.Fprintln(w, ".magus/harnesses/, or $XDG_CONFIG_HOME/magus/harnesses.")
+	fmt.Fprintln(w, "between LLM tools). Or pass --id for one spell.")
 }

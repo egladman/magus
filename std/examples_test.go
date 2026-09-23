@@ -1,3 +1,5 @@
+// cross-cutting: compiles the examples of every module in std/examples
+
 package std
 
 import (

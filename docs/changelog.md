@@ -15,10 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **`magus\guard.spawn` registers a workspace spawn rule.** One Buzz function sees every
-  subagent spawn and continuation and may deny or advise, never lift a built-in deny. An
-  uncommitted loosening waits for a commit. Policy changes land on the trail as
-  `guard_policy`; MGS1045 refuses a bad registration. magus ships no rule.
 - **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
   is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
   charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
@@ -149,7 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A deny on a multi-command line says nothing on it ran.**
 - **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
   wired with `magus\harness.provider`. Adapt one by forking it and changing the import
-  path. JSON under `harnesses/` remains the unwired fallback.
+  path.
 - **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
   runs it anyway.
 - **A failing `magus doctor` no longer cancels CI shards.** The final gate carries its
@@ -181,6 +177,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
+  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
+  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
+  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
+  forking its spell's import path instead.
 - **Breaking: the `exclusive` target and project option, with no replacement.** A
   magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
