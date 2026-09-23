@@ -210,11 +210,10 @@ func TestBuiltinSpellVersionProbeIsDataDriven(t *testing.T) {
 	}
 }
 
-// TestRunWithReportWriter verifies the public WithReportWriter option: an
-// embedder passing a plain io.Writer receives JSONL run events without
-// importing any internal package, and the engine flushes/closes the writer it
-// owns by the time Run returns.
-func TestRunWithReportWriter(t *testing.T) {
+// TestRunWithJSONLSink verifies the public JSONL sink: an embedder passing a plain
+// io.Writer receives JSONL run events without importing any internal package, once it
+// closes the sink.
+func TestRunWithJSONLSink(t *testing.T) {
 	root := t.TempDir()
 	writeProject(t, root, "svc", "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
 
@@ -225,10 +224,13 @@ func TestRunWithReportWriter(t *testing.T) {
 
 	targets, err := m.ExpandPath(types.Target{Name: "build"})
 	require.NoError(t, err, "ExpandPath")
-	var buf bytes.Buffer
-	require.NoError(t, m.Run(ctx, targets, magus.WithReportWriter(&buf)), "Run")
+	var buf, notices bytes.Buffer
+	sink, err := magus.NewSink(magus.FormatJSONL, &buf, &notices)
+	require.NoError(t, err, "NewSink")
+	require.NoError(t, m.Run(ctx, targets, magus.WithSink(sink)), "Run")
+	require.NoError(t, sink.Close(), "Close")
 	out := buf.String()
-	require.NotEmpty(t, out, "WithReportWriter produced no output (writer not wired or not flushed)")
+	require.NotEmpty(t, out, "the JSONL sink produced no output (writer not wired or not flushed)")
 	assert.Contains(t, out, "svc", "report output missing project")
 }
 

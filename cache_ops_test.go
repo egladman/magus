@@ -24,8 +24,8 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
-	workspace.LogScope(t.Context(), "test", "unit")
-	workspace.LogCharms(t.Context(), "rw")
+	tier, mode := workspace.CacheDescription()
+	assert.Empty(t, tier+mode, "an Inspect workspace has no cache to describe")
 	_, _, err = workspace.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
 	assert.ErrorIs(t, workspace.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)
@@ -76,22 +76,6 @@ func TestResolveCacheDir_DoesNotNeedWorkspaceLoad(t *testing.T) {
 	got, err = ResolveCacheDir(root, WithLoadedConfig(config.Config{Cache: config.Cache{Dir: "cache"}}))
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, "cache"), got)
-}
-
-// TestCacheHeadersOnAnOpenWorkspace: the four header emitters are no-ops on an
-// Inspect workspace and reach the cache logger on an opened one. Nothing observable
-// comes back, so what this pins is that the live-cache path runs at all: the
-// Inspect path is covered by TestCacheOperationsWithoutOpenCache.
-func TestCacheHeadersOnAnOpenWorkspace(t *testing.T) {
-	m, _ := openTempWorkspace(t, "api", nil)
-	ctx := t.Context()
-
-	assert.NotPanics(t, func() {
-		m.LogScope(ctx, "api", "magusfile")
-		m.LogCharms(ctx, "rw")
-		m.LogCache(ctx)
-		m.LogBase(ctx, "main", "git")
-	})
 }
 
 func TestCacheDirIsUnderTheWorkspaceRoot(t *testing.T) {

@@ -32,6 +32,8 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc"
+	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -45,9 +47,33 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
+// isJSONLLog reports a -o jsonl invocation, the one format config validation refuses
+// from magus.yaml and the CLI sets after it.
+func isJSONLLog(l config.Log) bool { return strings.EqualFold(l.Format, "jsonl") }
+
+// withRecordedOutput routes output written outside a target's capture, a magusfile's
+// print at load or a target body a dry run evaluates, to records when this is a -o
+// jsonl invocation. ctx already carrying writers is returned as is.
+func (m *Magus) withRecordedOutput(ctx context.Context) context.Context {
+	if m.records == nil {
+		return ctx
+	}
+	if _, _, ok := procrun.CapturedOutput(ctx); ok {
+		return ctx
+	}
+	return procrun.WithOutputWriters(ctx,
+		report.NewLineNotices(ctx, m.records, "stdout"),
+		report.NewLineNotices(ctx, m.records, "stderr"))
+}
+
 // collapseOnSuccess decides whether per-project subprocess output is withheld until a
-// failure. It is the default for human output; -v streams live.
+// failure. It is the default for human output; -v streams live. A structured run always
+// withholds, whatever -s or -vv say: a raw line on either stream breaks the one contract
+// it has, and the stage observer this attaches is what emits run.step.
 func collapseOnSuccess(l config.Log) bool {
+	if isJSONLLog(l) {
+		return true
+	}
 	switch strings.ToLower(l.Format) {
 	case "pretty", "plain", "":
 		// human formats can collapse
@@ -80,6 +106,9 @@ type Magus struct {
 	// a workspace-load failure can say what this binary IS: the one thing an
 	// out-of-date binary can state about itself. See explainStale.
 	version string
+	// records receives a -o jsonl invocation's stderr records: the cache's log and any
+	// output that runs outside a target's capture. Nil for every other format.
+	records slog.Handler
 
 	limOnce   sync.Once
 	lim       *cache.Limiter
@@ -265,21 +294,20 @@ func (m *Magus) explainStale(err error) error {
 // one. A position outside root keeps its absolute path.
 func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
 	f := &types.WorkspaceFailure{Message: err.Error()}
-	for _, branch := range joinedBranches(err) {
-		d, ok := buzz.DiagnosticOf(branch)
+	for _, branch := range joinedBranches(err, "") {
+		d, ok := buzz.DiagnosticOf(branch.err)
 		if !ok {
 			continue
 		}
 		sd := types.SourceDiagnostic{Code: d.Code, Line: d.Line, Column: d.Col, Message: d.Msg}
 		// A BZZ code's error carries its docs URL; an outer MGS wrapper must not lend its own.
 		var de *types.DiagnosticError
-		if d.Code != "" && errors.As(branch, &de) && de.Code == d.Code {
+		if d.Code != "" && errors.As(branch.err, &de) && de.Code == d.Code {
 			sd.URL = de.BuzzError()["url"]
 		}
-		var exec *interp.ExecError
-		if errors.As(branch, &exec) {
-			sd.File = exec.Path
-			if rel, rerr := filepath.Rel(root, exec.Path); rerr == nil && !strings.HasPrefix(rel, "..") {
+		if branch.file != "" {
+			sd.File = branch.file
+			if rel, rerr := filepath.Rel(root, branch.file); rerr == nil && !strings.HasPrefix(rel, "..") {
 				sd.File = filepath.ToSlash(rel)
 			}
 		}
@@ -288,19 +316,33 @@ func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
 	return f
 }
 
-// joinedBranches splits err at the first errors.Join in its chain: a load joins one error
-// per failing file, and errors.As would only ever find the first.
-func joinedBranches(err error) []error {
+// locatedBranch is one leaf of a load error and the innermost file that encloses it.
+type locatedBranch struct {
+	err  error
+	file string
+}
+
+// joinedBranches splits err at every errors.Join in its chain: a load joins one error per
+// failing file, and one file's imports join one error per import, and errors.As would only
+// ever find the first. file is the location inherited from above the split, since a join
+// under an ImportError leaves the file on the wrapper rather than on each branch.
+func joinedBranches(err error, file string) []locatedBranch {
 	for e := err; e != nil; e = errors.Unwrap(e) {
+		switch l := e.(type) { //nolint:errorlint // one link at a time; As would skip past the innermost file
+		case *interp.ExecError:
+			file = l.Path
+		case *interp.ImportError:
+			file = l.Path
+		}
 		if j, ok := e.(interface{ Unwrap() []error }); ok {
-			var out []error
+			var out []locatedBranch
 			for _, b := range j.Unwrap() {
-				out = append(out, joinedBranches(b)...)
+				out = append(out, joinedBranches(b, file)...)
 			}
 			return out
 		}
 	}
-	return []error{err}
+	return []locatedBranch{{err: err, file: file}}
 }
 
 // load completes workspace setup shared by Inspect and Open: magusfile preloading,
@@ -311,6 +353,7 @@ func (m *Magus) load(ctx context.Context) error {
 	// root is only present on the run path (Magus.Run), so preload-time resolution
 	// (describe, affected, ls) could not walk spell imports up to the root.
 	ctx = types.WithWorkspace(ctx, m)
+	ctx = m.withRecordedOutput(ctx)
 	// Remote spells resolve before any Buzz loads, from magus.lock alone: a load never
 	// asks a registry what a tag means.
 	imports, err := remotespell.LoadImports(ctx, m.ws.Root, m.cfg.Spells, remotespell.LoadOptions{
@@ -447,6 +490,9 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// validated but never reached a resolution.
 	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version}
+	if isJSONLLog(cfg.Log) {
+		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), cfg.Log.SlogLevel()))
+	}
 	var o workspace.Load
 	for _, fn := range opts {
 		fn(&o)
@@ -693,7 +739,11 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if m.cfg.Cache.SizeMB != 0 {
 		cfgOpts = append(cfgOpts, cache.WithSizeMB(m.cfg.Cache.SizeMB))
 	}
-	cfgOpts = append(cfgOpts, cache.WithLog(m.cfg.Log.Format, m.cfg.Log.SlogLevel()))
+	if m.records != nil {
+		cfgOpts = append(cfgOpts, cache.WithRecordOnlyOutput(m.records))
+	} else {
+		cfgOpts = append(cfgOpts, cache.WithLog(m.cfg.Log.Format, m.cfg.Log.SlogLevel()))
+	}
 	cfgOpts = append(cfgOpts, cache.WithSilent(m.cfg.Log.IsSilent()))
 	cfgOpts = append(cfgOpts, cache.WithCollapse(collapseOnSuccess(m.cfg.Log)))
 	// Build the telemetry provider before the cache so a wired remote backend can
