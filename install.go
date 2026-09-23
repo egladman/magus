@@ -80,7 +80,7 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 func (m *Magus) prewarmInstallProbes(ctx context.Context, prober *toolProber, stages []stage) {
 	for _, st := range stages {
 		for _, p := range st.projects {
-			if !spellInstall(p, st.target) {
+			if !isSpellInstall(p, st.target) {
 				continue
 			}
 			for _, s := range p.ResolvedSpells {

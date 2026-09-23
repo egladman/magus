@@ -761,7 +761,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 // keysTools reports whether target's step on p keys on tool versions. A spell install's
 // step only dispatches, and each install keys on its own tools (installStep).
 func keysTools(p *types.Project, target string) bool {
-	return !spellInstall(p, target)
+	return !isSpellInstall(p, target)
 }
 
 // applyRunKeying stamps the key-relevant fields the RUN SCHEDULER adds on top of
