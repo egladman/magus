@@ -19,8 +19,9 @@ const (
 	// existing spawn rule records as this too: under stricter-of evaluation only its
 	// tightening takes effect before approval.
 	PolicyTightened = "tightened"
-	// PolicyLoosenPending is an unapproved edit that removes a rule, which has no effect
-	// on a spawn until it is approved.
+	// PolicyLoosenPending is an unapproved edit that removes the spawn rule, which has no
+	// effect on a spawn until it is approved. A removed shell rule has no approved twin to
+	// wait on, so it records as committed.
 	PolicyLoosenPending = "loosen_pending"
 	// PolicyCommitted is a rule set whose sources match the approved ones again, so what
 	// was pending now applies in full.
@@ -138,8 +139,11 @@ func classifyPolicy(prev policyMarker, seen bool, now PolicyState, pending bool)
 		return PolicyRemoved
 	case !pending:
 		return PolicyCommitted
-	case (prev.SpawnRule && !now.SpawnRule) || now.ShellRules < prev.ShellRules:
+	case prev.SpawnRule && !now.SpawnRule:
 		return PolicyLoosenPending
+	case now.ShellRules < prev.ShellRules:
+		// Shell rules have no approved twin, so a dropped one is in effect at once.
+		return PolicyCommitted
 	}
 	return PolicyTightened
 }
