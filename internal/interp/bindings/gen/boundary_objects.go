@@ -988,6 +988,14 @@ func ObjectDiffReviewed(v types.DiffReviewed) vm.Value {
 	return out
 }
 
+func ObjectDiagnostic(v types.Diagnostic) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("code", vm.StrValue(v.Code))
+	out.MapSet("message", vm.StrValue(v.Message))
+	out.MapSet("url", vm.StrValue(v.URL))
+	return out
+}
+
 func ObjectDiff(v types.Diff) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
@@ -1017,6 +1025,11 @@ func ObjectDiff(v types.Diff) vm.Value {
 	}
 	out.MapSet("api", optAPI)
 	out.MapSet("reviewed", ObjectDiffReviewed(v.Reviewed))
+	optConformanceError := vm.Null
+	if v.ConformanceError != nil {
+		optConformanceError = ObjectDiagnostic((*v.ConformanceError))
+	}
+	out.MapSet("conformanceError", optConformanceError)
 	return out
 }
 

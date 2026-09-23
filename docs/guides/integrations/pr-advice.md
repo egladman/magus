@@ -139,14 +139,21 @@ own new names toward a norm, and states a fact with its counts rather than a rul
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `naming-affix`    | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry |
 | `name-collision`  | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                               |
-| `interface-size`  | an interface, added or grown, with far more methods than those declared beside it                                           |
 | `rename-leftover` | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                             |
 | `param-order`     | a function taking two parameters in the reverse of the order most functions in its scope that take both do                  |
 
 The checks read what every language's index holds (names, kinds, scopes, references) and,
-where a language reports it, the declaration's shape: `interface-size` needs a language
-whose index reports interface members, and `param-order` one whose index renders parameter
-names (Go and TypeScript today).
+where a language reports it, the declaration's shape: `param-order` needs a language whose
+index renders parameter names (Go and TypeScript today).
+
+Before the checks run, `magus diff` brings the symbol index of every project the change
+touched up to date through that project's `scip` target, so a current index replays and a
+stale one rebuilds only itself. When it cannot (the indexer is missing or fails, or cache
+writes are off so nothing vouches for the rebuilt index), the review carries
+[MGS7003](../../reference/codes/knowledge/MGS7003.md) in place of findings, and this section
+says so and fails its step. It never reads as a change with nothing to report. The job running
+the advisors therefore needs cache writes on (`MAGUS_CACHE_WRITE_ENABLED: 'true'`); without a
+signing key that still publishes nothing to a shared cache.
 
 A `baseline` sharpens this half as it sharpens `api-surface`. With one, what the change
 adds, renames and re-signs is read from the two indexes. Without one it is read from the

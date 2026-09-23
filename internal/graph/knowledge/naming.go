@@ -54,8 +54,7 @@ type ConformanceChange struct {
 }
 
 // Conformance runs every conformance check over the change and returns what clears the bar,
-// keyed by the symbol ID each finding is about: a subject, or the interface a subject method
-// grows. At most conformanceMaxFindings are returned across the change, strongest first, ties
+// keyed by the subject each finding is about. At most conformanceMaxFindings are returned across the change, strongest first, ties
 // broken by check name, message and subject so two runs over one graph agree byte for byte.
 //
 // Each finding is a [types.Check] with Status advice and Evidence inferred: a fact about the
@@ -102,8 +101,7 @@ type conformanceCheck interface {
 }
 
 var conformanceChecks = []conformanceCheck{
-	affixCheck{}, collisionCheck{}, sizeCheck{},
-	renameCheck{}, orderCheck{},
+	affixCheck{}, collisionCheck{}, renameCheck{}, orderCheck{},
 }
 
 // finding is one scored observation about the declaration subject names.
@@ -120,14 +118,11 @@ type namingDecl struct {
 	id, label, language, source string
 	// scope is the namespace node ID; owner names the enclosing type of a member.
 	scope, owner string
-	ownerDecl    *namingDecl
 	shape        declShape
 	words        []word
 	folded       []string
 	// affixes caches the name's two-word runs: every subject of a shape scans the same members.
 	affixes []affix
-	// methods counts a type's method members.
-	methods int
 }
 
 // word is one token of a name: its folded form for comparison and its byte span in the name.
@@ -183,11 +178,6 @@ func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
 		byID:   map[string]*namingDecl{},
 		groups: map[string][]*namingDecl{},
 	}
-	// Members meet their owner on (scope, owner name) rather than on a rebuilt ID, which would
-	// have to reproduce every indexer's escaping and method disambiguators exactly.
-	type ownerKey struct{ scope, name string }
-	owners := map[ownerKey]*namingDecl{}
-	var members []*namingDecl
 	for id, n := range g.nodes {
 		switch n.Kind {
 		case types.KindSymbol:
@@ -235,23 +225,12 @@ func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
 		x.byID[id] = d
 		if len(local) == 2 {
 			d.owner = local[0].Name
-			members = append(members, d)
-		} else {
-			owners[ownerKey{d.scope, d.label}] = d
 		}
 		if d.shape.Visible {
 			x.groups[d.group()] = append(x.groups[d.group()], d)
 		}
 		if d.callable() {
 			x.callables = append(x.callables, d)
-		}
-	}
-	for _, m := range members {
-		if o, ok := owners[ownerKey{m.scope, m.owner}]; ok {
-			m.ownerDecl = o
-			if m.shape.Kind == declMethod {
-				o.methods++
-			}
 		}
 	}
 	// Deterministic order: the graph is a map, and examples must not change between runs.
@@ -532,70 +511,6 @@ func (collisionCheck) run(x *namingIndex) []finding {
 			message: fmt.Sprintf("`%s` is also the name of %s in this workspace",
 				subj.label, strings.Join(capList(hits, conformanceExamples), ", ")),
 			details: hits,
-		})
-	}
-	return out
-}
-
-// sizeCheck compares an interface's method count with the interfaces declared beside it, for an
-// interface the change adds or grows. The bound is the smallest count MinShare of them stay
-// within, so one large aggregate among many small capabilities does not set it. Only a language
-// whose index reports interface members has counts to compare.
-type sizeCheck struct{}
-
-func (sizeCheck) name() string { return types.CheckInterfaceSize }
-
-func (sizeCheck) run(x *namingIndex) []finding {
-	var ifaces []*namingDecl
-	for _, subj := range x.subjects {
-		d := subj
-		if d.shape.Kind == declMethod && d.ownerDecl != nil {
-			d = d.ownerDecl
-		}
-		if d.shape.Kind == declInterface && d.shape.Visible && !slices.Contains(ifaces, d) {
-			ifaces = append(ifaces, d)
-		}
-	}
-	var out []finding
-	for _, subj := range ifaces {
-		peers := x.peers(x.groups[subj.group()], subj)
-		if len(peers) < x.cohort {
-			continue
-		}
-		counts := make([]int, len(peers))
-		for i, p := range peers {
-			counts[i] = p.methods
-		}
-		slices.Sort(counts)
-		within := (len(counts)*int(x.share*100) + 99) / 100
-		bound := counts[within-1]
-		if subj.methods <= bound {
-			continue
-		}
-		var small, large []*namingDecl
-		for _, p := range peers {
-			if p.methods <= bound {
-				small = append(small, p)
-			} else {
-				large = append(large, p)
-			}
-		}
-		pattern := fmt.Sprintf("%d methods or fewer", bound)
-		if bound == 1 {
-			pattern = "1 method"
-		}
-		details := []string{pattern + ": " + strings.Join(labels(small), ", ")}
-		if len(large) > 0 {
-			details = append(details, "larger: "+strings.Join(labels(large), ", "))
-		}
-		// Full weight only at twice the bound past it (or six methods past a small bound), so one
-		// or two methods over stays below the bar.
-		out = append(out, finding{
-			subject: subj.id,
-			score:   float64(len(small)) / float64(len(peers)) * min(1, float64(subj.methods-bound)/float64(2*max(bound, 3))),
-			message: fmt.Sprintf("`%s` has %d methods; %d of %d interfaces declared beside it have %s",
-				subj.label, subj.methods, len(small), len(peers), pattern),
-			details: details,
 		})
 	}
 	return out

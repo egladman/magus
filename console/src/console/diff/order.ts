@@ -33,7 +33,7 @@ export function modeChange(file: DiffFile): string | null {
   if (oldMode === undefined || newMode === undefined || oldMode === newMode) return null;
   return `mode ${oldMode} -> ${newMode}`;
 }
-import type { DiffAnnotation, DiffSession, ReviewChange } from "./session";
+import type { Diff, DiffAnnotation, DiffSession, ReviewChange } from "./session";
 
 export interface OrderedFile {
   readonly file: DiffFile;
@@ -167,6 +167,15 @@ export interface Chip {
   readonly text: string;
   readonly tone: "neutral" | "info" | "warn" | "danger" | "ok";
   readonly title: string;
+}
+
+// conformanceUnchecked is the line to show, in place of findings, when magus could not run the
+// conformance checks on this changeset; undefined when it ran them.
+export function conformanceUnchecked(diff: Diff | undefined): string | undefined {
+  const e = diff?.conformance_error;
+  if (!e) return undefined;
+  const code = e.code ? `[${e.code}] ` : "";
+  return `Conformance could not check this change: ${code}${e.message}`;
 }
 
 export function riskChips(a: DiffAnnotation | undefined): Chip[] {

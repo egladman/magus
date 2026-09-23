@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { order, visibleFiles, settled, stats, riskChips } from "./order";
+import { conformanceUnchecked, order, visibleFiles, settled, stats, riskChips } from "./order";
 import type { DiffFile } from "./parse";
 import type { DiffAnnotation, DiffSession, DiffSymbol } from "./session";
 
@@ -269,6 +269,20 @@ test("conformance checks on a symbol earn one chip carrying each message", () =>
     riskChips(ann("quiet.go", { symbols: [] })).find((c) => c.text.endsWith("conformance")),
     undefined,
   );
+});
+
+test("a changeset conformance could not check says so, with its code", () => {
+  assert.equal(
+    conformanceUnchecked({
+      base: "working",
+      conformance_error: {
+        code: "MGS7003",
+        message: "the symbol index could not be brought current",
+      },
+    }),
+    "Conformance could not check this change: [MGS7003] the symbol index could not be brought current",
+  );
+  assert.equal(conformanceUnchecked({ base: "working" }), undefined, "checked, so nothing to say");
 });
 
 test("no annotation yields no chips rather than empty placeholders", () => {

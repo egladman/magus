@@ -16,10 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **`magus diff` reports where a changed symbol departs from how the workspace declares the
-  same kind of thing:** a missed naming pattern, a name a target already has, an oversized
-  interface, a rename's leftover old name, or reversed parameters. Each is a `Check` on
+  same kind of thing:** a missed naming pattern, a name a target already has, a rename's
+  leftover old name, or reversed parameters. Each is a `Check` on
   `DiffSymbol.checks` stating the workspace's own counts, gated by
   `--conformance-min-cohort` and `--conformance-min-share`.
+- **`magus diff` brings the symbol index current before it reads it.** Each touched
+  project's `scip` target replays or rebuilds; when it cannot (a missing indexer, cache
+  writes off), the review carries `MGS7003` in place of conformance findings, and the PR
+  section fails its step instead of reading as clean.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
@@ -38,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the spawn's `description`, `model` and last observed `contextTokens`;
   `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
   grades the child under that job's lease and records its base.
+- **The guard denies a trailing exit-status echo (`exit-status-echo`).** `cmd; echo "rc=$?"`
+  and its `printf` forms are refused: the harness already reports a nonzero exit, and the
+  echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
+  fires; `rc=$?`, `exit $?`, `&&`/`||` chains and redirected echoes pass.
 - **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
   is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
   charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an

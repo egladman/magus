@@ -23,6 +23,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "CompletionGate", Zero: types.CompletionGate{}, Encode: func(v any) vm.Value { return ObjectCompletionGate(v.(types.CompletionGate)) }},
 	{Name: "CompressResult", Zero: types.CompressResult{}, Encode: func(v any) vm.Value { return ObjectCompressResult(v.(types.CompressResult)) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
+	{Name: "Diagnostic", Zero: types.Diagnostic{}, Encode: func(v any) vm.Value { return ObjectDiagnostic(v.(types.Diagnostic)) }},
 	{Name: "Diff", Zero: types.Diff{}, Encode: func(v any) vm.Value { return ObjectDiff(v.(types.Diff)) }},
 	{Name: "DiffAPI", Zero: types.DiffAPI{}, Encode: func(v any) vm.Value { return ObjectDiffAPI(v.(types.DiffAPI)) }},
 	{Name: "DiffChurn", Zero: types.DiffChurn{}, Encode: func(v any) vm.Value { return ObjectDiffChurn(v.(types.DiffChurn)) }},

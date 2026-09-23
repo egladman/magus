@@ -105,9 +105,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "DiffReviewed", Type: reflect.TypeFor[types.DiffReviewed](), RuntimeObject: true},
 	{Name: "DiffAPI", Type: reflect.TypeFor[types.DiffAPI](), RuntimeObject: true},
 	{Name: "VCSCheckpoint", Type: reflect.TypeFor[types.VCSCheckpoint](), RuntimeObject: true},
+	// A thrown error's shape, and also returned: Diff.conformanceError is one.
+	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic](), RuntimeObject: true},
 	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
-	// Not a RuntimeObject: it reaches Buzz through a thrown error, not a return.
-	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic]()},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
 	// magus.insight's bundle, leaf-first. Element names are not uniform on purpose:

@@ -270,40 +270,6 @@ func capability(name string, n int) []types.KnowledgeSymbol {
 	return out
 }
 
-func capabilities() []types.KnowledgeSymbol {
-	var syms []types.KnowledgeSymbol
-	for i, n := range []int{1, 1, 1, 2, 3, 5} {
-		syms = append(syms, capability("Cap"+greek[i]+"Reporter", n)...)
-	}
-	return syms
-}
-
-func TestConformanceReportsAnOversizedInterface(t *testing.T) {
-	stager := capability("Stager", 13)
-	modest := capability("Merger", 4)
-	g := namingGraph(t, append(append(capabilities(), stager...), modest...))
-
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(stager[0], modest[0])})
-
-	assert.Equal(t, map[string][]types.Check{symID(stager[0]): {advice(types.CheckInterfaceSize,
-		"`Stager` has 13 methods; 6 of 7 interfaces declared beside it have 4 methods or fewer",
-		"4 methods or fewer: CapAlphaReporter, CapBetaReporter, CapDeltaReporter",
-		"larger: CapZetaReporter",
-	)}}, got, "one method past the bound is not a finding")
-}
-
-// An interface that already existed grows through the methods the change adds to it, and the
-// finding lands on the interface.
-func TestConformanceReportsAnInterfaceTheChangeGrows(t *testing.T) {
-	stager := capability("Stager", 13)
-	g := namingGraph(t, append(capabilities(), stager...))
-
-	got := g.Conformance(ConformanceChange{Subjects: subjectIDs(stager[12], stager[13]), Introduced: introduced(stager[12:]...)})
-
-	require.Len(t, got[symID(stager[0])], 1)
-	assert.Equal(t, types.CheckInterfaceSize, got[symID(stager[0])][0].Name)
-}
-
 // The checks read no language: a TypeScript tree, whose signatures no reader here parses, forms
 // families from the descriptor grammar and the name alone.
 func TestConformanceFindsDriftInAnIndexWithNoSignatures(t *testing.T) {

@@ -124,6 +124,13 @@ export interface Diff {
   readonly affected_projects?: readonly { path: string; seed: boolean }[];
   readonly notes?: readonly string[];
   readonly api?: DiffAPI;
+  // Why the conformance checks could not run. When set, no symbol carries checks, and that
+  // absence means nothing was checked.
+  readonly conformance_error?: {
+    readonly code: string;
+    readonly message: string;
+    readonly url?: string;
+  };
 }
 
 export interface DiffComment {

@@ -204,6 +204,12 @@ export object DiffReviewed {
     files: int = 0,
 }
 
+export object Diagnostic {
+    code: str = "",
+    message: str = "",
+    url: str = "",
+}
+
 export object Diff {
     base: str = "",
     files: [DiffFile] = [],
@@ -212,6 +218,7 @@ export object Diff {
     notes: [str] = [],
     api: DiffAPI? = null,
     reviewed: DiffReviewed = DiffReviewed{},
+    conformanceError: Diagnostic? = null,
 }
 
 export object DoctorSummary {

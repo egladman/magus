@@ -193,9 +193,6 @@ const (
 	// CheckNameCollision is a top-level name that a target, spell, op, charm or diagnostic of
 	// the workspace already carries.
 	CheckNameCollision = "name-collision"
-	// CheckInterfaceSize is an interface with far more methods than those declared beside it.
-	// It needs a language whose index reports interface members.
-	CheckInterfaceSize = "interface-size"
 	// CheckRenameLeftover is a renamed symbol whose former name still appears in the files
 	// that reference it.
 	CheckRenameLeftover = "rename-leftover"
@@ -382,6 +379,11 @@ type Diff struct {
 	API *DiffAPI `json:"api,omitempty" yaml:"api,omitempty"`
 	// Reviewed is the earlier pass this reader already made over these files, when there was one.
 	Reviewed DiffReviewed `json:"reviewed,omitzero" yaml:"reviewed,omitzero"`
+	// ConformanceError is why the conformance checks could not run, with its MGS code: the
+	// symbol index could not be brought current for a project the change touched. When set,
+	// no symbol carries Checks, and that absence says nothing was checked, never that nothing
+	// was found.
+	ConformanceError *Diagnostic `json:"conformance_error,omitempty" yaml:"conformance_error,omitempty"`
 }
 
 // DiffReviewed is what a reader already got through on an earlier pass over this changeset.

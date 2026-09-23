@@ -1224,6 +1224,18 @@ func diffUsage(w io.Writer) {
 		"Both apply to the printed report, not the viewer.")
 }
 
+// diagnosticLine renders a Diagnostic the way a coded error prints: "[CODE] message (url)".
+func diagnosticLine(d types.Diagnostic) string {
+	line := d.Message
+	if d.Code != "" {
+		line = "[" + d.Code + "] " + line
+	}
+	if d.URL != "" {
+		line += " (" + d.URL + ")"
+	}
+	return line
+}
+
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
 // daemon's insight scan uses, so the CLI and the console rank the same files the same way:
 // two different windows would report two different "hottest file" answers for one tree.
@@ -1314,6 +1326,9 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 		}
 	}
 
+	if e := rev.ConformanceError; e != nil {
+		fmt.Printf("\nerror: conformance could not check this change: %s\n", diagnosticLine(*e))
+	}
 	// Notes name what could NOT be measured. Surfaced rather than swallowed, so an empty
 	// column reads as "nothing was measured" rather than as "nothing depends on this".
 	for _, n := range rev.Notes {

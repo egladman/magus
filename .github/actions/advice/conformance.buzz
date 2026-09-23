@@ -189,7 +189,6 @@ fun targetTable(items: [{str: str}]) > str {
 final symbolChecks = [
     {"check": "naming-affix", "heading": "This adds a name missing the word pattern most declarations of its shape share"},
     {"check": "name-collision", "heading": "This adds a name a workspace entity already carries"},
-    {"check": "interface-size", "heading": "This adds or grows an interface far larger than those declared beside it"},
     {"check": "rename-leftover", "heading": "This renames a symbol whose old name still appears where it is used"},
     {"check": "param-order", "heading": "This takes parameters in the reverse of the order its neighbors take them"},
 ];
@@ -232,6 +231,16 @@ fun parseGate(name: str, fallback: double) > double !> str {
     final v = std\parseDouble(raw);
     if (v == null) { throw "conformance: {name}={raw} is not a number"; }
     return v!;
+}
+
+// uncheckedBody is the section when magus could not run the symbol checks at all, which must
+// never read like a change with nothing to report.
+export fun uncheckedBody(code: str, message: str, url: str) > str {
+    var link = "";
+    if (url != "") { link = " ([{code}]({url}))"; }
+    return "**magus could not check this change's symbols against the workspace's conventions.** "
+        + "No finding below means nothing was checked, not that nothing was found.\n\n"
+        + "`" + code + "`" + link + ": " + cell(message) + "\n";
 }
 
 fun body(items: [{str: str}], rows: [{str: str}], caveats: [str]) > str {
@@ -300,6 +309,14 @@ fun main() > void !> any {
     // working tree locally. Its seed projects are the ones the author edited, which is what
     // keepAdded needs to place a name.
     final review = advice\review(base, head: head);
+    if (review.conformanceError != null) {
+        // Could not check is never published as nothing found: the section says so, and the
+        // step fails.
+        final e = review.conformanceError!;
+        advice\publish(repo, pr: pr, name: section, title: "Conformance could not check this change",
+            body: uncheckedBody(e.code, message: e.message, url: e.url));
+        throw "conformance: [{e.code}] {e.message}";
+    }
     final items = keepAdded(findings(members, minCohort: std\toInt(minCohort), minShare: minShare),
         added: added, seeded: review.seedProjects);
 
@@ -447,15 +464,22 @@ test "a symbol finding carries its counts and its exemplars" {
 
 test "each check gets its own table, in symbolChecks order" {
     final text = symbolTables([
-        symbolRow("types/vcs.go", check: "interface-size", message: "`Stager` has 13 methods", details: []),
-        symbolRow("sink.go", check: "name-collision", message: "`Format` is also the name of target `.:format`", details: []),
         symbolRow("run.go", check: "rename-leftover", message: "a | b", details: ["run.go:3"]),
+        symbolRow("sink.go", check: "name-collision", message: "`Format` is also the name of target `.:format`", details: []),
     ]);
     std\assert(text.indexOf("a workspace entity already carries") != null, message: "collision table");
-    std\assert(text.indexOf("far larger than those declared beside it") != null, message: "size table");
     std\assert(text.indexOf("old name still appears") != null, message: "rename table");
     std\assert(text.indexOf("a \\| b") != null, message: "a pipe cannot split the table");
-    std\assert(text.indexOf("already carries") < text.indexOf("far larger"), message: "symbolChecks order");
+    std\assert(text.indexOf("already carries") < text.indexOf("old name still appears"), message: "symbolChecks order");
+}
+
+test "a change that could not be checked never reads as one with nothing to report" {
+    final text = uncheckedBody("MGS7003", message: "the symbol index could not be brought current",
+        url: "https://eli.gladman.cc/magus/reference/codes/knowledge/MGS7003/");
+    std\assert(text.indexOf("could not check") != null, message: "says it could not check");
+    std\assert(text.indexOf("`MGS7003`") != null, message: "carries the code");
+    std\assert(text.indexOf("not that nothing was found") != null, message: "names the misreading it prevents");
+    std\assert(text != "", message: "an empty body would retract the section, which reads as clean");
 }
 
 test "a cell holds whatever a path or message contains" {

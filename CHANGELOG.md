@@ -9,10 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **`magus diff` reports where a changed symbol departs from how the workspace declares the
-  same kind of thing:** a missed naming pattern, a name a target already has, an oversized
-  interface, a rename's leftover old name, or reversed parameters. Each is a `Check` on
+  same kind of thing:** a missed naming pattern, a name a target already has, a rename's
+  leftover old name, or reversed parameters. Each is a `Check` on
   `DiffSymbol.checks` stating the workspace's own counts, gated by
   `--conformance-min-cohort` and `--conformance-min-share`.
+- **`magus diff` brings the symbol index current before it reads it.** Each touched
+  project's `scip` target replays or rebuilds; when it cannot (a missing indexer, cache
+  writes off), the review carries `MGS7003` in place of conformance findings, and the PR
+  section fails its step instead of reading as clean.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the

@@ -103,9 +103,15 @@ func Prompt(in PromptInput) string {
 		Items(promptFiles(in.Changeset.Files), promptFileLimit,
 			"Ask magus for the rest with `magus diff -o json`.")
 
-	b.Section("Conformance").
-		Note("Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.").
-		Items(promptConformance(in.Changeset.Files), 0, "")
+	if e := in.Changeset.ConformanceError; e != nil {
+		b.Section("Conformance").
+			Note("magus could not check this change against the workspace's conventions. Nothing below means nothing was found.").
+			Items([]string{"[" + e.Code + "] " + e.Message}, 0, "")
+	} else {
+		b.Section("Conformance").
+			Note("Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.").
+			Items(promptConformance(in.Changeset.Files), 0, "")
+	}
 
 	b.Section("What magus could not measure").
 		Note("Do not read any of these as evidence that there is nothing there.").

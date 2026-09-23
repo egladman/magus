@@ -542,6 +542,120 @@ func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 	return done, errors.Join(errs...)
 }
 
+// symbolCapableIn is the symbol-capable projects among paths, by path.
+func (m *Magus) symbolCapableIn(paths []string) []string {
+	var out []string
+	for _, c := range m.symbolCapableProjects() {
+		if slices.Contains(paths, c.path) {
+			out = append(out, c.path)
+		}
+	}
+	return out
+}
+
+// freshenSymbolIndexes brings the symbol index of every symbol-capable project among paths up
+// to date before a review reads it, by running that project's scip target: through the run
+// scheduler and the cache, so a current index replays and a stale one rebuilds only itself.
+//
+// It returns an MGS7003 error naming each project whose index could not be made current: the
+// indexer is missing or failed, or the run left the cache nothing to vouch for the result by.
+// A review never reads a stale index as if it were current.
+func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error {
+	var touched []*types.Project
+	capable, langs := m.symbolCapableWithLanguage()
+	for _, p := range capable {
+		if slices.Contains(paths, p.Path) {
+			touched = append(touched, p)
+		}
+	}
+	if len(touched) == 0 {
+		return nil
+	}
+	c := m.freshnessCache(ctx)
+	if c == nil {
+		return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
+			"the cache that records whether a symbol index is current could not be opened, so the index of %s cannot be vouched for",
+			projectList(touched))
+	}
+	probe := func(ps []*types.Project) map[string]bool {
+		toolVersions := m.toolVersionsByProject(ctx, ps)
+		observations := m.probeObservations(ctx, ps, nil)
+		out := map[string]bool{}
+		for _, p := range ps {
+			ok, err := c.IsCached(ctx, m.symbolIndexStep(p, toolVersions[p.Path], observations[p.Path]))
+			out[p.Path] = err == nil && ok
+		}
+		return out
+	}
+	return freshenIndexes(touched, langs, probe, func(p *types.Project) error {
+		return m.Run(ctx, []types.Target{{Path: p.Path, Name: spells.SymbolIndexOp}})
+	}, m.cfg.Cache.WriteEnabled())
+}
+
+// freshenIndexes is freshenSymbolIndexes' policy: probe, build what is stale, and probe again,
+// because a build the cache could not record is one nothing can vouch for.
+func freshenIndexes(touched []*types.Project, langs map[string]string, probe func([]*types.Project) map[string]bool,
+	build func(*types.Project) error, writable bool,
+) error {
+	fresh := probe(touched)
+	var stale []*types.Project
+	for _, p := range touched {
+		if !fresh[p.Path] {
+			stale = append(stale, p)
+		}
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	var problems []string
+	var built []*types.Project
+	for _, p := range stale {
+		if err := build(p); err != nil {
+			problems = append(problems, symbolRunError(types.NewProjectRef(p.Path, p.Dir), langs[p.Path], err).Error())
+			continue
+		}
+		built = append(built, p)
+	}
+	if len(built) > 0 {
+		after := probe(built)
+		for _, p := range built {
+			if after[p.Path] {
+				continue
+			}
+			why := "the cache recorded no run to vouch for the index it wrote"
+			if !writable {
+				why = "cache writes are off (cache.write.enabled: false), so the cache recorded no run to vouch for the index it wrote; enable them for this run, which publishes nothing without a signing key"
+			}
+			problems = append(problems, types.NewProjectRef(p.Path, p.Dir).Display()+": "+why)
+		}
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
+		"the symbol index could not be brought current, so the conformance checks did not run: %s; fix that, then `magus graph build`",
+		strings.Join(problems, "; "))
+}
+
+// diagnosticOf is err as a Diagnostic: its MGS code, message and docs link when err carries a
+// code, and the bare message otherwise.
+func diagnosticOf(err error) types.Diagnostic {
+	var d *types.DiagnosticError
+	if errors.As(err, &d) {
+		f := d.BuzzError()
+		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"]}
+	}
+	return types.Diagnostic{Message: err.Error()}
+}
+
+func projectList(ps []*types.Project) string {
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = types.NewProjectRef(p.Path, p.Dir).Display()
+	}
+	return strings.Join(names, ", ")
+}
+
 // symbolRunError wraps a failed scip run with the project (by its display name, so the
 // workspace root reads as its repo name, not ".") and, when known, an actionable hint
 // naming the language's indexer and where to install it.

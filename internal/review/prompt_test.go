@@ -101,6 +101,12 @@ func TestPromptCarriesConformanceChecks(t *testing.T) {
 	assert.Contains(t, out, "## Conformance")
 	assert.Contains(t, out, "- `EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext` (`internal/trail/trail.go`)")
 	assert.NotContains(t, renderPrompt(t, types.Diff{Base: "main"}, nil), "## Conformance", "no finding, no section")
+
+	unchecked := renderPrompt(t, types.Diff{Base: "main", ConformanceError: &types.Diagnostic{
+		Code: string(types.SymbolIndexNotCurrent), Message: "the symbol index could not be brought current",
+	}}, nil)
+	assert.Contains(t, unchecked, "## Conformance", "could not check is said, never left as silence")
+	assert.Contains(t, unchecked, "- [MGS7003] the symbol index could not be brought current")
 }
 
 // TestPromptCarriesWhatCouldNotBeMeasured: magus's own caveats are the difference between

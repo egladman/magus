@@ -1201,6 +1201,14 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		out.SortForReading()
 		return out, nil //nolint:nilerr // reported as a Note, see above
 	}
+	// Before the graph loads, so the symbols it merges describe the tree under review.
+	var touched []string
+	for _, f := range out.Files {
+		if f.Project != "" && !slices.Contains(touched, f.Project) {
+			touched = append(touched, f.Project)
+		}
+	}
+	freshErr := m.freshenSymbolIndexes(ctx, touched)
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
@@ -1307,7 +1315,16 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
 		}
 	}
-	if indexed {
+	switch {
+	case freshErr != nil:
+		d := diagnosticOf(freshErr)
+		out.ConformanceError = &d
+	case !indexed && len(m.symbolCapableIn(touched)) > 0:
+		d := diagnosticOf(types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
+			"no symbol index loaded for %s, so the conformance checks could not run; build it with `magus graph build`",
+			strings.Join(m.symbolCapableIn(touched), ", ")))
+		out.ConformanceError = &d
+	case indexed:
 		m.conformance(ctx, &out, byPath, graph, paths, cfg, in)
 	}
 
@@ -1315,11 +1332,15 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	return out, nil
 }
 
-// conformance runs the conformance checks for diff, reporting in out.Notes whatever kept them
-// from running, and what they fell back to.
+// conformance runs the conformance checks for diff. Whatever keeps them from running is set as
+// out.ConformanceError, in place of findings; a weaker input they fall back to is a Note.
 func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[string]*types.DiffFile,
 	graph *knowledge.Graph, paths []string, cfg diffConfig, in conformanceInput,
 ) {
+	fail := func(msg string, err error) {
+		d := types.Diagnostic{Message: "the conformance checks could not run: " + msg + ": " + err.Error()}
+		out.ConformanceError = &d
+	}
 	if in.changes == nil {
 		if cfg.baseline != nil {
 			out.Notes = append(out.Notes, "conformance: the baseline could not be compared, so what the change adds was read from its patch, which cannot tell a re-signed symbol from an unchanged one")
@@ -1327,7 +1348,7 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 		if !cfg.patchGiven {
 			patch, err := m.WorkingDiff(ctx, paths)
 			if err != nil {
-				out.Notes = append(out.Notes, "conformance checks skipped: the working tree's patch could not be read: "+err.Error())
+				fail("the working tree's patch could not be read", err)
 				return
 			}
 			in.patch = patch
@@ -1335,7 +1356,7 @@ func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[str
 	}
 	generated, err := m.generatedFiles(ctx, graph)
 	if err != nil {
-		out.Notes = append(out.Notes, "conformance checks skipped: generated files could not be classified: "+err.Error())
+		fail("generated files could not be classified", err)
 		return
 	}
 	in.generated = generated
