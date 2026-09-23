@@ -1,14 +1,16 @@
 // Package verdicts carries verdicts from validation to landing through a directory,
 // which a CI system can ship between jobs as artifacts.
 //
-// The layout: one subdirectory per decided change, named by its id, holding VerdictFile
-// and, for a green change, BundleFile. DoneFile beside them says no more will arrive.
+// The layout: PlanFile, the plan the verdicts were decided against, and one subdirectory
+// per decided change, named by its id, holding VerdictFile and, for a green change,
+// BundleFile. DoneFile beside them says no more will arrive.
 // Every entry appears by rename, so a reader never sees a partial one; a name starting
 // with "." is in progress, which is why [mergequeue.CheckID] refuses ids that start
 // with one.
 package verdicts
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,11 +18,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/libs/mergequeue"
 )
 
 const (
+	PlanFile    = "plan.json"
 	VerdictFile = "verdict.json"
 	BundleFile  = "stage.bundle"
 	DoneFile    = ".done"
@@ -38,8 +42,110 @@ type Dir struct {
 	// Follow keeps polling until DoneFile appears; without it the directory is read once
 	// and taken as complete.
 	Follow bool
+	// Interval is how long [Dir.Plan] waits between reads while following.
+	Interval time.Duration
 
 	seen map[string]bool
+}
+
+// WritePlan records p as the plan the directory's verdicts are decided against. Several
+// processes may write the same plan at once; a directory already holding a different
+// one is an error, since its verdicts would be checked against the wrong plan.
+func (d *Dir) WritePlan(p mergequeue.Plan) error {
+	var want bytes.Buffer
+	if err := mergequeue.WritePlan(&want, p); err != nil {
+		return err
+	}
+	file := filepath.Join(d.Path, PlanFile)
+	switch got, err := os.ReadFile(file); {
+	case err == nil && bytes.Equal(got, want.Bytes()):
+		return nil
+	case err == nil:
+		return fmt.Errorf("%s holds a different plan; validate each plan into a directory of its own", file)
+	case !errors.Is(err, fs.ErrNotExist):
+		return err
+	}
+	if err := os.MkdirAll(d.Path, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(d.Path, "."+PlanFile+"-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // a no-op once renamed into place
+	if _, err := tmp.Write(want.Bytes()); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), file)
+}
+
+// Plan returns the plan [Dir.WritePlan] recorded, waiting for it while following. It
+// returns false, and no error, when the directory is complete without one or, without
+// Follow, holds none yet.
+func (d *Dir) Plan(ctx context.Context) (mergequeue.Plan, bool, error) {
+	return awaitPlan(ctx, filepath.Join(d.Path, PlanFile), d.Interval, func(context.Context) (bool, error) {
+		if !d.Follow {
+			return true, nil
+		}
+		return d.done()
+	})
+}
+
+// awaitPlan reads file until it exists or sync reports that nothing more will arrive.
+// sync runs before each read, so a read after the last sync sees everything.
+func awaitPlan(ctx context.Context, file string, interval time.Duration, sync func(context.Context) (bool, error)) (mergequeue.Plan, bool, error) {
+	for {
+		complete, err := sync(ctx)
+		if err != nil {
+			return mergequeue.Plan{}, false, err
+		}
+		p, err := readPlan(file)
+		switch {
+		case err == nil:
+			return p, true, nil
+		case !errors.Is(err, fs.ErrNotExist):
+			return mergequeue.Plan{}, false, err
+		case complete:
+			return mergequeue.Plan{}, false, nil
+		}
+		select {
+		case <-ctx.Done():
+			return mergequeue.Plan{}, false, ctx.Err()
+		case <-time.After(max(interval, 10*time.Millisecond)):
+		}
+	}
+}
+
+func readPlan(file string) (mergequeue.Plan, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return mergequeue.Plan{}, err
+	}
+	defer f.Close()
+	p, err := mergequeue.ReadPlan(f)
+	if err != nil {
+		return mergequeue.Plan{}, fmt.Errorf("%s: %w", file, err)
+	}
+	return p, nil
+}
+
+func (d *Dir) done() (bool, error) {
+	_, err := os.Stat(filepath.Join(d.Path, DoneFile))
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	}
+	return false, err
 }
 
 var (
@@ -106,9 +212,8 @@ func (d *Dir) MarkDone() error {
 func (d *Dir) Poll(context.Context) ([]mergequeue.Verdict, bool, error) {
 	done := !d.Follow
 	if !done {
-		if _, err := os.Stat(filepath.Join(d.Path, DoneFile)); err == nil {
-			done = true
-		} else if !errors.Is(err, fs.ErrNotExist) {
+		var err error
+		if done, err = d.done(); err != nil {
 			return nil, false, err
 		}
 	}

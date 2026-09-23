@@ -66,6 +66,13 @@ type Script struct {
 
 var _ mergequeue.Provider = (*Script)(nil)
 
+// IsBuiltin reports whether [Open] reads spec as a built-in provider's name rather than
+// a script's path, which is what a caller resolving relative paths needs to know.
+func IsBuiltin(spec string) bool {
+	_, ok := builtin[spec]
+	return ok
+}
+
 // Open opens a built-in provider by name ("github") or a script by path. The caller
 // owns Close.
 func Open(ctx context.Context, spec string) (*Script, error) {

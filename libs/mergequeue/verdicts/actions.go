@@ -19,12 +19,11 @@ import (
 	"github.com/egladman/magus/libs/mergequeue"
 )
 
-// The artifact names a validation run uploads under, and the file the plan artifact
-// carries at its root.
+// The artifact names a validation run uploads under. The plan artifact carries
+// [PlanFile] at its root.
 const (
 	PlanArtifact          = "magus-queue-plan"
 	VerdictArtifactPrefix = "magus-queue-verdict-"
-	PlanFile              = "plan.json"
 )
 
 // DefaultAPI is the GitHub REST API an [ActionsRun] reads when API is empty.
@@ -39,17 +38,20 @@ const artifactPage = 100
 // [mergequeue.VerdictSource], so a Lander lands a green change while slower stages of
 // the same run are still going.
 //
-// It reads the run's status before listing its artifacts, and reports done only after a
-// poll that saw the run completed, so that poll's listing held every artifact the run
-// uploaded. Methods must not be called concurrently, and an ActionsRun must not be
-// copied after first use.
+// While following, it reads the run's status before listing its artifacts, and reports
+// done only after a poll that saw the run completed, so that poll's listing held every
+// artifact the run uploaded. Methods must not be called concurrently, and an ActionsRun
+// must not be copied after first use.
 type ActionsRun struct {
 	API   string // REST base URL; empty means DefaultAPI
 	Repo  string // owner/name
 	RunID string
 	Token string
 	Path  string
-	// Interval is how long [ActionsRun.Plan] waits between polls.
+	// Follow keeps reading until the run completes. Without it, one listing is taken as
+	// everything the run will upload.
+	Follow bool
+	// Interval is how long [ActionsRun.Plan] waits between polls while following.
 	Interval time.Duration
 	// Client makes every request; nil uses one with a 60 second timeout. Go's client
 	// drops Authorization on a redirect to another host, which is what keeps the token
@@ -64,47 +66,15 @@ var _ mergequeue.VerdictSource = (*ActionsRun)(nil)
 
 var defaultClient = &http.Client{Timeout: 60 * time.Second}
 
-// Plan waits for the run's plan artifact and returns the plan it carries. It returns
-// false, and no error, when the run completed without uploading one.
+// Plan returns the plan the run's [PlanArtifact] carries, waiting for it while following.
+// It returns false, and no error, when the run completed without uploading one or,
+// without Follow, has not uploaded one yet.
 func (r *ActionsRun) Plan(ctx context.Context) (mergequeue.Plan, bool, error) {
-	file := filepath.Join(r.Path, PlanFile)
-	for {
-		completed, err := r.sync(ctx)
-		if err != nil {
-			return mergequeue.Plan{}, false, err
-		}
-		p, err := readPlan(file)
-		switch {
-		case err == nil:
-			return p, true, nil
-		case !errors.Is(err, fs.ErrNotExist):
-			return mergequeue.Plan{}, false, err
-		case completed:
-			return mergequeue.Plan{}, false, nil
-		}
-		select {
-		case <-ctx.Done():
-			return mergequeue.Plan{}, false, ctx.Err()
-		case <-time.After(max(r.Interval, 10*time.Millisecond)):
-		}
-	}
-}
-
-func readPlan(file string) (mergequeue.Plan, error) {
-	f, err := os.Open(file)
-	if err != nil {
-		return mergequeue.Plan{}, err
-	}
-	defer f.Close()
-	p, err := mergequeue.ReadPlan(f)
-	if err != nil {
-		return mergequeue.Plan{}, fmt.Errorf("%s: %w", file, err)
-	}
-	return p, nil
+	return awaitPlan(ctx, filepath.Join(r.Path, PlanFile), r.Interval, r.sync)
 }
 
 // Poll unpacks what the run uploaded since the last call and returns the verdicts among
-// it; done once the run has completed.
+// it; done once the run has completed, or at once without Follow.
 func (r *ActionsRun) Poll(ctx context.Context) ([]mergequeue.Verdict, bool, error) {
 	completed, err := r.sync(ctx)
 	if err != nil {
@@ -118,8 +88,8 @@ func (r *ActionsRun) Poll(ctx context.Context) ([]mergequeue.Verdict, bool, erro
 	return r.dir.Poll(ctx)
 }
 
-// sync unpacks every artifact not yet on disk and reports whether the run had completed
-// before the listing began.
+// sync unpacks every artifact not yet on disk and reports whether the listing is the
+// last this source reads: the run had completed before it began, or r does not follow.
 func (r *ActionsRun) sync(ctx context.Context) (bool, error) {
 	if r.Repo == "" || r.RunID == "" || r.Path == "" {
 		return false, errors.New("an ActionsRun needs a Repo, a RunID and a Path")
@@ -150,7 +120,7 @@ func (r *ActionsRun) sync(ctx context.Context) (bool, error) {
 			}
 		}
 	}
-	return run.Status == "completed", nil
+	return run.Status == "completed" || !r.Follow, nil
 }
 
 type artifact struct {

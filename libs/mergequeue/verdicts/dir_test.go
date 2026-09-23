@@ -1,11 +1,13 @@
 package verdicts
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,4 +65,54 @@ func TestPollRefusesAVerdictFiledUnderAnotherID(t *testing.T) {
 	require.NoError(t, os.Rename(filepath.Join(path, "1"), filepath.Join(path, "2")))
 	_, _, err := (&Dir{Path: path}).Poll(context.Background())
 	require.ErrorContains(t, err, `holds the verdict on "1"`)
+}
+
+func planOf(t *testing.T, ids ...string) mergequeue.Plan {
+	t.Helper()
+	p, err := mergequeue.ReadPlan(bytes.NewReader(planBytes(t, ids...)))
+	require.NoError(t, err)
+	return p
+}
+
+func TestWritePlanIsIdempotentAndRefusesADifferentPlan(t *testing.T) {
+	d := &Dir{Path: filepath.Join(t.TempDir(), "verdicts")}
+	require.NoError(t, d.WritePlan(planOf(t, "1", "2")))
+	require.NoError(t, d.WritePlan(planOf(t, "1", "2")), "every --only job of one run writes the same plan")
+	require.ErrorContains(t, d.WritePlan(planOf(t, "3")), "holds a different plan")
+
+	got, ok, err := d.Plan(context.Background())
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, planOf(t, "1", "2"), got)
+	entries, err := os.ReadDir(d.Path)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "no temporary file left behind")
+}
+
+func TestPlanWithoutFollowReadsOnce(t *testing.T) {
+	_, ok, err := (&Dir{Path: t.TempDir()}).Plan(context.Background())
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestPlanWhileFollowingWaitsForThePlanOrTheDoneMarker(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir()
+	plan := planOf(t, "1")
+	written := make(chan error, 1)
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		written <- (&Dir{Path: path}).WritePlan(plan)
+	}()
+	got, ok, err := (&Dir{Path: path, Follow: true, Interval: time.Millisecond}).Plan(ctx)
+	require.NoError(t, err)
+	require.NoError(t, <-written)
+	require.True(t, ok)
+	assert.Equal(t, plan, got)
+
+	empty := t.TempDir()
+	require.NoError(t, (&Dir{Path: empty}).MarkDone())
+	_, ok, err = (&Dir{Path: empty, Follow: true, Interval: time.Millisecond}).Plan(ctx)
+	require.NoError(t, err)
+	assert.False(t, ok, "complete without a plan")
 }

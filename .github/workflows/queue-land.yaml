@@ -5,9 +5,9 @@ name: Queue land
 # every stage beneath it in its partition are green.
 #
 # workflow_run on `requested` rather than `completed`: this job starts beside validation
-# and `mergequeue land --from-run` follows it, downloading each stage's verdict artifact
-# as the stage job uploads it, so a green stage lands while slower stages are still
-# running. `completed` would wait for the slowest stage of the whole run. workflow_run
+# and `mergequeue apply github-actions:<owner>/<name>/runs/<id>` follows it, downloading
+# each stage's verdict artifact as the stage job uploads it, so a green stage lands while
+# slower stages are still running. `completed` would wait for the slowest stage of the whole run. workflow_run
 # always runs this file as main has it, with its own token and secrets, which a pull
 # request cannot reach.
 #
@@ -78,7 +78,7 @@ jobs:
       # dispatches main's runs once anything landed, even when landing then failed.
       - name: Land each stage as it goes green
         env:
-          QUEUE_STEP: land
+          QUEUE_STEP: apply
           GH_TOKEN: ${{ github.token }}
           MERGEQUEUE_TOKEN: ${{ github.token }}
           RUN: ${{ github.event.workflow_run.id }}

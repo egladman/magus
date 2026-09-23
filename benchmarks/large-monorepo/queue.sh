@@ -11,8 +11,8 @@
 #       gating on the platform test suites, at --depth 1 (each stage after the one
 #       below, cache warm) and --depth 3 (all three at once). Per-stage gate times come
 #       from the verdicts.
-#   Q3  land as each stage goes green: validation at --depth 3 and `mergequeue land
-#       --follow` run side by side, and each merge's time since validation started is
+#   Q3  land as each stage goes green: validation at --depth 3 and `mergequeue apply`
+#       run side by side, and each merge's time since validation started is
 #       read from the landing events. A green stage should land before the stages
 #       above it finish.
 #
@@ -83,13 +83,13 @@ for n in $SIZES; do
     g checkout -q "$BASE"
     changes_json > "$OUT/q1-$n-changes.json"
     hyperfine --runs "$RUNS" --warmup 1 --export-json "$OUT/q1a-$n.json" \
-        "'$MQ' plan --repo '$REPO' --remote . --changes '$OUT/q1-$n-changes.json' --affected \"$AFFECTED\" --out '$OUT/q1-$n-plan.json'" >/dev/null
+        "'$MQ' -C '$REPO' plan --remote . --changes '$OUT/q1-$n-changes.json' --affected \"$AFFECTED\" --out '$OUT/q1-$n-plan.json'" >/dev/null
     # The plan's admitted changes carry the sets the hook answered: the same queue, with
     # nothing left to ask.
     jq --arg base "$BASE" '{schema: "mergequeue.changes/v1", base: $base, changes: [.partitions[][]]}' \
         "$OUT/q1-$n-plan.json" > "$OUT/q1-$n-affected.json"
     hyperfine --runs "$RUNS" --warmup 1 --export-json "$OUT/q1b-$n.json" \
-        "'$MQ' plan --repo '$REPO' --remote . --changes '$OUT/q1-$n-affected.json' --out '$OUT/q1b-$n-plan.json'" >/dev/null
+        "'$MQ' -C '$REPO' plan --remote . --changes '$OUT/q1-$n-affected.json' --out '$OUT/q1b-$n-plan.json'" >/dev/null
     printf 'Q1 n=%-4s with hook mean %7.3fs  queue alone mean %6.3fs  partitions %s\n' "$n" \
         "$(jq '.results[0].mean' "$OUT/q1a-$n.json")" "$(jq '.results[0].mean' "$OUT/q1b-$n.json")" \
         "$(jq '.partitions | length' "$OUT/q1-$n-plan.json")"
@@ -103,7 +103,7 @@ platform_changes() {
     change 3 packages/platform/metrics/index.mjs "// queue change 3"
     g checkout -q "$BASE"
     changes_json > "$OUT/q2-changes.json"
-    "$MQ" plan --repo "$REPO" --remote . --changes "$OUT/q2-changes.json" --affected "$AFFECTED" \
+    "$MQ" -C "$REPO" plan --remote . --changes "$OUT/q2-changes.json" --affected "$AFFECTED" \
         --depth "$1" --out "$OUT/q2-plan-d$1.json" > /dev/null
 }
 
@@ -111,13 +111,13 @@ echo "==> Q2 speculative stages"
 # One discarded pass first: the first stage checkout of 80k files otherwise pays for a
 # cold filesystem cache, which is not the queue's cost.
 platform_changes 3
-"$MQ" validate --repo "$REPO" --remote . --plan "$OUT/q2-plan-d3.json" --gate "$GATE" \
+"$MQ" -C "$REPO" validate --remote . --plan "$OUT/q2-plan-d3.json" --gate "$GATE" \
     --verdicts "$OUT/q2-warmup" > "$OUT/q2-warmup.jsonl" 2> "$OUT/q2-warmup.log"
 for depth in 1 3; do
     rm -rf "$REPO/.magus/cache" "$OUT/q2-d$depth"
     platform_changes "$depth"
     start=$(now)
-    "$MQ" validate --repo "$REPO" --remote . --plan "$OUT/q2-plan-d$depth.json" --gate "$GATE" \
+    "$MQ" -C "$REPO" validate --remote . --plan "$OUT/q2-plan-d$depth.json" --gate "$GATE" \
         --verdicts "$OUT/q2-d$depth" > "$OUT/q2-d$depth.jsonl" 2> "$OUT/q2-d$depth.log"
     end=$(now)
     printf 'Q2 depth=%s  wall %.2fs\n' "$depth" "$(echo "$end - $start" | bc)"
@@ -133,11 +133,11 @@ land_base="bench/queue-land"
 g branch -f "$land_base" "$BASE"
 jq --arg b "$land_base" '.base = $b' "$OUT/q2-plan-d3.json" > "$OUT/q3-plan.json"
 start=$(now)
-"$MQ" validate --repo "$REPO" --remote . --plan "$OUT/q3-plan.json" --gate "$GATE" \
+"$MQ" -C "$REPO" validate --remote . --plan "$OUT/q3-plan.json" --gate "$GATE" \
     --verdicts "$OUT/q3" > "$OUT/q3-validate.jsonl" 2> "$OUT/q3-validate.log" &
 validator=$!
-QUEUE_REPO="$REPO" QUEUE_BASE="$land_base" "$MQ" land --repo "$REPO" --remote . --plan "$OUT/q3-plan.json" \
-    --verdicts "$OUT/q3" --provider "$DIR/queue-local.buzz" --follow --interval 200ms > "$OUT/q3-land.jsonl" 2> "$OUT/q3-land.log"
+QUEUE_REPO="$REPO" QUEUE_BASE="$land_base" "$MQ" -C "$REPO" apply --remote . \
+    --provider "$DIR/queue-local.buzz" --interval 200ms "$OUT/q3" > "$OUT/q3-land.jsonl" 2> "$OUT/q3-land.log"
 wait "$validator"
 start_iso=$(jq -rn --argjson s "$start" '$s | todate')
 jq -r --argjson s "$start" 'select(.kind == "merged" or .kind == "decided")

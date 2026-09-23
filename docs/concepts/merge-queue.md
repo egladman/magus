@@ -49,22 +49,28 @@ run and leaves the change queued.
 Every command writes JSONL events (`mergequeue.event/v1`) on stdout. Hook output and
 errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 1.
 
-| Command    | Reads                                  | Writes                                 | Rights                       |
-| ---------- | -------------------------------------- | -------------------------------------- | ---------------------------- |
-| `list`     | the provider                           | a `mergequeue.changes/v1` document     | read                         |
-| `plan`     | changes (stdin or `--changes`)         | a `mergequeue.plan/v1` file            | read                         |
-| `validate` | the plan                               | one `mergequeue.verdict/v1` per change | read; runs the changes' code |
-| `land`     | the plan and the verdicts as they come | merges through the provider            | write; runs no change's code |
+| Command    | Reads                                             | Writes                                              | Rights                       |
+| ---------- | ------------------------------------------------- | --------------------------------------------------- | ---------------------------- |
+| `ls`       | the provider                                      | a `mergequeue.changes/v1` document                  | read                         |
+| `plan`     | changes (stdin or `--changes`)                    | a `mergequeue.plan/v1` file                         | read                         |
+| `validate` | the plan                                          | the plan and one `mergequeue.verdict/v1` per change | read; runs the changes' code |
+| `apply`    | a source: the plan, then verdicts as they come    | merges through the provider                         | write; runs no change's code |
 
 ```sh
-mergequeue list --provider github --base main > changes.json
+mergequeue ls --provider github --base main > changes.json
 mergequeue plan --changes changes.json --provider github --out plan.json \
   --affected 'magus affected ci --plan --stdin'
 mergequeue validate --plan plan.json --verdicts verdicts \
   --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
   --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'
-mergequeue land --plan plan.json --verdicts verdicts --provider github --follow
+mergequeue apply --provider github verdicts
 ```
+
+`-C <path>`, the one global flag, goes before the command, as with git: the command
+runs as if started in `<path>`, which is the git checkout the queue works in and what
+every relative path resolves against. Every other flag belongs to the commands that use
+it, and a flag a command does not take is a usage error. `validate` takes no
+`--provider`: it runs the changes' code, so it never talks to the forge.
 
 `plan` checks each change's approval at its exact head, drops what conflicts with main on
 its own (kicked back with the conflicting files and the commits that touched them), and
@@ -74,13 +80,28 @@ plan over separate jobs; a red there waits rather than kicks back, since it may 
 change beneath it that failed. `validate --parallel` caps the stages built or gated at
 once across every partition.
 
-`land --from-run <id>` takes the plan and the verdicts from a GitHub Actions run instead
-of `--plan` and a directory another process fills: it downloads the run's
-`magus-queue-plan` artifact, then each `magus-queue-verdict-<id>` artifact as the run
-uploads it, and lands while slower stages are still going. It reads the run's status
-before each listing, so it stops following only after a listing made once the run had
-completed. It reads with `MERGEQUEUE_TOKEN`, else `GITHUB_TOKEN`, and `--run-repo`
-defaults to `$GITHUB_REPOSITORY`.
+`apply <source>` reads the plan and the verdicts from one source, which carries both:
+
+| Source                                    | What it reads                                   |
+| ----------------------------------------- | ----------------------------------------------- |
+| `<dir>`                                   | the directory `validate --verdicts` writes      |
+| `github-actions:<owner>/<name>/runs/<id>` | the artifacts GitHub Actions run `<id>` uploads |
+
+When the text before the first `:` reads as a URL scheme of two or more characters, the
+source is a scheme, and a scheme other than `github-actions` is a usage error. Write
+`./x:y` for a directory whose name would read as one; a one-letter scheme is a Windows
+drive, so `C:\queue` is a directory.
+
+`apply` follows its source until the source is complete: a directory once `.done`
+appears in it, a run once it has completed. `--once` applies what the source holds now
+and stops, leaving the rest queued; `--interval` sets how often a follow reads the source
+and is refused with `--once`.
+
+A run source downloads the run's `magus-queue-plan` artifact, then each
+`magus-queue-verdict-<id>` artifact as the run uploads it, and lands while slower stages
+are still going. It reads the run's status before each listing, so it stops following
+only after a listing made once the run had completed. It reads with `MERGEQUEUE_TOKEN`,
+else `GITHUB_TOKEN`.
 
 ## Input: `mergequeue.changes/v1`
 
@@ -166,11 +187,12 @@ on.
 
 ## Verdicts: `mergequeue.verdict/v1`
 
-`validate --verdicts <dir>` writes one directory per decided change, named by its id,
-holding `verdict.json` and, for a green change, `stage.bundle` (the staging commits as a
-git bundle). Each appears by rename the moment its change is decided, so a reader never
-sees a partial one. `.done` beside them says the run finished, and a full run writes it
-even when it stopped early.
+`validate --verdicts <dir>` first writes the plan there as `plan.json`, then one
+directory per decided change, named by its id, holding `verdict.json` and, for a green
+change, `stage.bundle` (the staging commits as a git bundle). Each appears by rename the
+moment its change is decided, so a reader never sees a partial one. `.done` beside them
+says the run finished, and a full run writes it even when it stopped early. Validating a
+different plan into a directory that already holds one is an error.
 
 ```json
 {
@@ -189,7 +211,7 @@ even when it stopped early.
 
 `decision` is `land`, `kick` (with a `report` for the author) or `wait` (with a
 `reason`). `after` is the change validated beneath this one and `onto` its stage.
-`land --follow` polls the directory, and lands a change once its own verdict is green and
+`apply` polls the directory, and lands a change once its own verdict is green and
 `after` has landed. It trusts a verdict only as far as the plan vouches for it: a head,
 an `after` or an `onto` the plan does not match lands nothing.
 
@@ -204,9 +226,9 @@ time:
    uploads its verdict as an artifact the moment it finishes.
 2. `queue-land.yaml` starts when validation is requested (`workflow_run: requested`), from
    main's definition with a write-scoped Actions token, and downloads each verdict
-   artifact as it appears, while validation is still running. `land --follow` lands each
-   change whose predecessors have landed; `.done` is written once the validation run
-   completes.
+   artifact as it appears, while validation is still running: `apply` with the run as its
+   source lands each change whose predecessors have landed, and stops once the
+   validation run completes.
 
 The landing token is the job's own, so no long-lived secret exists. A merge made with
 the Actions token starts no workflow, so once anything lands the job dispatches main's

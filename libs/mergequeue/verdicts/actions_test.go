@@ -139,7 +139,7 @@ func newRun(t *testing.T, f *fakeActions) *ActionsRun {
 	f.t = t
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	return &ActionsRun{API: srv.URL + "/", Repo: "acme/widgets", RunID: "7", Token: "tok", Path: filepath.Join(t.TempDir(), "verdicts"), Interval: 1}
+	return &ActionsRun{API: srv.URL + "/", Repo: "acme/widgets", RunID: "7", Token: "tok", Path: filepath.Join(t.TempDir(), "verdicts"), Follow: true, Interval: 1}
 }
 
 func ids(vs []mergequeue.Verdict) []string {
@@ -218,6 +218,26 @@ func TestActionsRunPagesThroughTheListing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, fresh, artifactPage+2)
 	assert.True(t, done)
+}
+
+func TestActionsRunWithoutFollowReadsOneListingOfARunInProgress(t *testing.T) {
+	ctx := context.Background()
+	f := &fakeActions{status: "in_progress"}
+	r := newRun(t, f)
+	r.Follow = false
+	_, ok, err := r.Plan(ctx)
+	require.NoError(t, err)
+	assert.False(t, ok, "no plan uploaded yet, and nothing waits for one")
+
+	f.add(PlanArtifact, map[string][]byte{PlanFile: planBytes(t, "1", "2")})
+	f.add(VerdictArtifactPrefix+"1", verdictFiles(t, "1", false))
+	_, ok, err = r.Plan(ctx)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	fresh, done, err := r.Poll(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1"}, ids(fresh))
+	assert.True(t, done, "a run still going is complete as far as one pass reads")
 }
 
 func TestActionsRunWithNoPlanArtifactPlansNothing(t *testing.T) {

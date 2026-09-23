@@ -4,14 +4,14 @@
 //	QUEUE_STEP=build     magus buzz tools/queue.buzz   compile mergequeue; put it and mise's Go on PATH
 //	QUEUE_STEP=plan      magus buzz tools/queue.buzz   plan the queue; write the stage matrix (DEPTH)
 //	QUEUE_STEP=validate  magus buzz tools/queue.buzz   validate one change of the plan (CHANGE)
-//	QUEUE_STEP=land      magus buzz tools/queue.buzz   land what validation run RUN uploads onto MAIN
+//	QUEUE_STEP=apply     magus buzz tools/queue.buzz   land what validation run RUN uploads onto MAIN
 //
 // The step is an environment variable because `magus buzz` passes a script no
 // arguments; every input is one too. The decisions (which stages the matrix holds,
 // each command's argv, whether anything landed) are pure functions tested at the
 // bottom; the process calls are not, since exercising them means running the queue.
 //
-// Landing never checks out or runs pull-request code: the land step runs only
+// Landing never checks out or runs pull-request code: the apply step runs only
 // mergequeue, git and gh, from main's checkout.
 namespace queue;
 
@@ -23,7 +23,7 @@ import "std";
 
 import "assert";
 
-// main's workflows the land step starts after a landing, since a merge made with the
+// main's workflows the apply step starts after a landing, since a merge made with the
 // job's Actions token starts none.
 final DISPATCH = ["ci.yaml", "cd.yaml", "queue.yaml"];
 
@@ -79,11 +79,11 @@ export fun validateArgs(dir: str, change: str) > [str] {
         "--regenerate", `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`];
 }
 
-// landArgs polls every 15s: each poll is two API requests on the job's Actions token,
+// applyArgs polls every 15s: each poll is two API requests on the job's Actions token,
 // which GitHub limits to 1,000 an hour per repository.
-export fun landArgs(dir: str, run: str, repo: str) > [str] {
-    return ["land", "--from-run", run, "--run-repo", repo, "--verdicts", dir + "/verdicts",
-        "--provider", "github", "--status-context", "magus/queue", "--interval", "15s"];
+export fun applyArgs(run: str, repo: str) > [str] {
+    return ["apply", "--provider", "github", "--status-context", "magus/queue", "--interval", "15s",
+        "github-actions:{repo}/runs/{run}"];
 }
 
 // tip reads the commit off `git ls-remote <remote> <ref>`; empty when the ref is absent.
@@ -125,7 +125,7 @@ fun build() > void !> any {
 
 fun plan() > void !> any {
     final dir = queueDir();
-    final changes = capture("mergequeue", args: ["list", "--provider", "github", "--base", "main"]);
+    final changes = capture("mergequeue", args: ["ls", "--provider", "github", "--base", "main"]);
     fs\writeFile(dir + "/changes.json", content: changes + "\n");
     proc\exec("mergequeue", args: planArgs(dir, depth: need("DEPTH")), opts: {});
     final ids = stageIDs(fs\readFile(dir + "/plan.json"));
@@ -140,17 +140,17 @@ fun mainTip(branch: str) > str !> any {
     return tip(capture("git", args: ["ls-remote", "origin", "refs/heads/" + branch]));
 }
 
-fun land() > void !> any {
+fun apply() > void !> any {
     final branch = need("MAIN");
     final repo = need("GITHUB_REPOSITORY");
-    final args = landArgs(queueDir(), run: need("RUN"), repo: repo);
+    final args = applyArgs(need("RUN"), repo: repo);
     // The committer of a regeneration pushed to a queued branch; its author is the
     // branch head's author.
     proc\exec("git", args: ["config", "user.name", "magus-queue"], opts: {});
     proc\exec("git", args: ["config", "user.email", "magus-queue@users.noreply.github.com"], opts: {});
     final before = mainTip(branch);
     final landed = proc\exec("mergequeue", args: args, opts: {"allow_failure": true});
-    // A failed land still dispatches main's runs for whatever landed before it stopped.
+    // A failed apply still dispatches main's runs for whatever landed before it stopped.
     foreach (workflow in dispatches(before, after: mainTip(branch))) {
         proc\exec("gh", args: ["workflow", "run", workflow, "--repo", repo, "--ref", branch], opts: {});
     }
@@ -171,10 +171,10 @@ export fun main() > void !> any {
         plan();
     } else if (step == "validate") {
         validate();
-    } else if (step == "land") {
-        land();
+    } else if (step == "apply") {
+        apply();
     } else {
-        throw "queue: QUEUE_STEP must be build, plan, validate or land; got \"" + step + "\"";
+        throw "queue: QUEUE_STEP must be build, plan, validate or apply; got \"" + step + "\"";
     }
 }
 
@@ -212,10 +212,9 @@ test "validation hooks see MERGEQUEUE_ONTO unexpanded" {
     assert\equal(args[10], want: `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`, message: "regenerate");
 }
 
-test "land follows the validation run into the queue's verdict directory" {
-    assert\equal(landArgs("/t/queue", run: "99", repo: "o/r"), want: ["land", "--from-run", "99", "--run-repo", "o/r",
-        "--verdicts", "/t/queue/verdicts", "--provider", "github", "--status-context", "magus/queue", "--interval", "15s"],
-        message: "argv");
+test "apply follows the validation run as its source" {
+    assert\equal(applyArgs("99", repo: "o/r"), want: ["apply", "--provider", "github", "--status-context", "magus/queue",
+        "--interval", "15s", "github-actions:o/r/runs/99"], message: "argv");
 }
 
 test "plan args carry the depth and the affected hook" {
