@@ -9,7 +9,7 @@ tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 ## What the guard is
 
 The name follows established access-control terms (NIST SP 800-162,
-https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf).
+<https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf>).
 Each agent host's hook is the policy enforcement point: it intercepts the tool
 call and applies the verdict it gets back. magus's guard, `magus session
 hook`, is the policy decision point: it decides allow, advise, or deny from
@@ -18,7 +18,7 @@ the graph, VCS state, and job leases. The workspace's rules, built in plus
 anything declared in the root magusfile, are its policy. One sentence may
 borrow "shield" as an analogy (Alshiekh et al., Safe Reinforcement Learning
 via Shielding, AAAI 2018,
-https://cdn.aaai.org/ojs/11797/11797-13-15325-1-2-20201228.pdf): a shield is a
+<https://cdn.aaai.org/ojs/11797/11797-13-15325-1-2-20201228.pdf>): a shield is a
 monitor that vetoes a learning agent's proposed actions against a spec, and
 the guard plays that role for magus, never choosing an action itself. magus
 never calls a model and never owns the host's loop; see
@@ -746,23 +746,6 @@ touching Magus source:
 That is the ownership switch: Magus ships the default spell; the declaration in
 `magus.yaml` chooses which tree apply reads, and it is the one line a reviewer sees.
 See the magus-workspace-rules skill section "Adapting a Buzz harness".
-
-### JSON descriptors (`harness apply`)
-
-For hosts still described by `harnesses/<id>.json`, a human may apply
-Magus-owned fragment merges:
-
-```sh
-magus agent harness apply --id claude-code
-magus agent harness apply --id codex
-```
-
-`harness apply` is the explicit authorization to write. It updates only Magus-owned
-host `PreToolUse` entries in the workspace-local JSON configuration for the
-selected host and preserves all other settings. It never creates or changes a
-user-level host config, compiled guard rules, installed skills, `AGENTS.md`, or
-memory. Review the resulting ordinary config diff; commit it only when that
-workspace keeps its harness in version control.
 
 A later `magus run` request in the same host session is shown as a follow-up,
 not a success: pre-tool hooks cannot observe execution or an exit status. After

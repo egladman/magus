@@ -1,5 +1,6 @@
-// mem_test.go deliberately has no mem.go beside it. Both readings it covers are
-// platform-split across total_{darwin,linux,other}.go and available_*.go, and what
+// cross-cutting: asserts how total_*.go and available_*.go relate, owned by neither
+//
+// Both readings it covers are platform-split across total_{darwin,linux,other}.go and available_*.go, and what
 // these tests assert is the RELATIONSHIP between the two, which belongs to neither
 // file. Splitting it per reader would lose the only assertion worth making on an
 // arbitrary host.

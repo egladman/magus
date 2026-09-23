@@ -31,13 +31,32 @@ stdout 'no sessions recorded yet'
 concurrency: 2
 -- magusfile.buzz --
 import "magus";
+import "spells/brief-host" as briefhost;
+magus\harness.provider(briefhost);
 magus.project({"sources": ["*.md"]});
 -- AGENTS.md --
 # rules
 
 The workspace's own instructions live here.
--- harnesses/brief-host.json --
-{"schema_version":2,"id":"brief-host","display":{"name":"Brief Host"},"config":{"path":"host/hooks.json"},"skills":{"paths":[".agents/skills"],"form":"both"},"managed_entries":[{"path":["hooks","before"],"entries":[{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}]}]}
+-- spells/brief-host/spell.buzz --
+import "magus/spell";
+
+export fun mgs_getName() > str { return "brief-host"; }
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return {"path": "host/hooks.json"};
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return {"paths": [".agents/skills"], "form": "both"};
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return [{
+        "path": ["hooks", "before"],
+        "entries": [{"match": "run", "commands": [{"type": "command", "command": "sh magus-command.sh"}]}],
+    }];
+}
 -- host/hooks.json --
 {"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}]}}
 -- magus-command.sh --

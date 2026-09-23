@@ -11,6 +11,7 @@ import (
 	// nothing ever populated, and every raw-tool test would match against an empty
 	// catalog. See internal/interp/bindings/spell.go's init.
 	_ "github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -130,4 +131,38 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__magus__magus_job","tool_input":{"op":123,"id":"a/b"}}`)
 	require.True(t, ok)
 	assert.Equal(t, "magus_job op=123 id=a/b", req.Value)
+}
+
+// TestGuardGradesTwoSessionsInOneCheckoutSeparately is the enforcement half of the
+// per-session binding: each session's own marker decides which write paths its writes are graded
+// against, so two workers sharing a checkout are each denied outside their own paths
+// rather than both running ungraded.
+func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
+	one := types.Job{
+		ID: "wave/one", Criteria: "the store", WritePaths: []string{"internal/job/**"},
+		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
+	}
+	two := types.Job{
+		ID: "wave/two", Criteria: "the guard", WritePaths: []string{"internal/guard/**"},
+		State: types.StateRunning, Checkpoint: "rev", ReportedBase: "rev", BaseVerdict: types.BaseMatch, Registered: 1,
+	}
+	ctx, _ := fleetFixture(t, one, two)
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+
+	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-one"}.Bind(one.ID))
+	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-two"}.Bind(two.ID))
+
+	assert.Equal(t, one.ID, job.Checkout{CacheDir: cacheDir, Session: "session-one"}.ActingLease())
+	assert.Equal(t, two.ID, job.Checkout{CacheDir: cacheDir, Session: "session-two"}.ActingLease())
+
+	first := Judge(ctx, Dependencies{}, Request{
+		Input: "internal/guard/spawn.go", IsPath: true, Session: "session-one", Host: "test-host",
+	})
+	assert.Equal(t, one.ID, first.Lease, "session one is graded under its own row")
+
+	second := Judge(ctx, Dependencies{}, Request{
+		Input: "internal/guard/spawn.go", IsPath: true, Session: "session-two", Host: "test-host",
+	})
+	assert.Equal(t, two.ID, second.Lease, "session two is graded under its own row, in the same checkout")
+	assert.NotEqual(t, first.Lease, second.Lease)
 }
