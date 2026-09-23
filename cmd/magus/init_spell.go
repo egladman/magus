@@ -83,7 +83,7 @@ const spellScaffoldTemplate = `// spells/SPELLNAME/spell.buzz - a magus spell fo
 //
 // Bind it from a magusfile (a directory import resolves to this spell.buzz):
 //
-//     import "spells/SPELLNAME" as SPELLNAME;
+//     import "spells/SPELLNAME";
 //     magus.project({ "spells": [SPELLNAME] });
 //
 // then compose an op into a target:

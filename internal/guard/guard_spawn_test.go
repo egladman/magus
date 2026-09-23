@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -320,4 +323,260 @@ func trailEvents(t *testing.T, base string, kind trail.Kind) []trail.Event {
 		}
 	}
 	return out
+}
+
+// hookJSON renders an envelope the way a host writes it to the hook's stdin.
+func hookJSON(t *testing.T, env map[string]any) string {
+	t.Helper()
+	body, err := json.Marshal(env)
+	require.NoError(t, err)
+	return string(body)
+}
+
+// finishedSpawn is Claude Code's PostToolUse for a background Agent call: the same
+// tool_input the PreToolUse carried, and a response naming the child's id.
+func finishedSpawn(t *testing.T, description, name, model, isolation, agentID string) string {
+	t.Helper()
+	input := map[string]any{"description": description, "prompt": "Carry the job to its done-when.", "subagent_type": "general-purpose", "run_in_background": true}
+	for key, value := range map[string]string{"name": name, "model": model, "isolation": isolation} {
+		if value != "" {
+			input[key] = value
+		}
+	}
+	response := map[string]any{"status": "async_launched", "agentId": agentID, "description": description}
+	return hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "transcript_path": "/Users/dev/.claude/projects/p/8f2c6a1e.jsonl", "cwd": "/Users/dev/repo", "permission_mode": "default", "hook_event_name": "PostToolUse", "tool_name": "Agent", "tool_input": input, "tool_use_id": "toolu_01", "tool_response": response})
+}
+
+// subagentStop is Claude Code's SubagentStop: no tool call, and the path of the
+// subagent's own transcript.
+func subagentStop(t *testing.T, agentID, transcript string) string {
+	t.Helper()
+	return hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "transcript_path": "/Users/dev/.claude/projects/p/8f2c6a1e.jsonl", "cwd": "/Users/dev/repo", "permission_mode": "default", "hook_event_name": "SubagentStop", "stop_hook_active": false, "agent_id": agentID, "agent_type": "general-purpose", "agent_transcript_path": transcript})
+}
+
+// Transcript records shaped like a Claude Code subagent log: a user turn, two assistant
+// turns carrying usage, then a tool result carrying none.
+const (
+	transcriptUser      = `{"parentUuid":null,"isSidechain":true,"agentId":"a1b2c3","type":"user","message":{"role":"user","content":"Carry the job to its done-when."},"uuid":"u1","timestamp":"2026-09-22T10:00:00.000Z"}`
+	transcriptFirstTurn = `{"parentUuid":"u1","isSidechain":true,"agentId":"a1b2c3","type":"assistant","message":{"model":"claude-sonnet-4-5","id":"msg_01","type":"message","role":"assistant","content":[{"type":"text","text":"Reading the seam."}],"usage":{"input_tokens":3,"cache_creation_input_tokens":5120,"cache_read_input_tokens":14000,"output_tokens":42,"service_tier":"standard"}},"uuid":"a1","timestamp":"2026-09-22T10:00:04.000Z"}`
+	transcriptLastTurn  = `{"parentUuid":"a1","isSidechain":true,"agentId":"a1b2c3","type":"assistant","message":{"model":"claude-sonnet-4-5","id":"msg_02","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_9","name":"Read","input":{"file_path":"/Users/dev/repo/types/spawn.go"}}],"usage":{"input_tokens":5,"cache_creation_input_tokens":800,"cache_read_input_tokens":19120,"output_tokens":210,"service_tier":"standard"}},"uuid":"a2","timestamp":"2026-09-22T10:00:09.000Z"}`
+	transcriptToolReply = `{"parentUuid":"a2","isSidechain":true,"agentId":"a1b2c3","type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_9","content":"package types"}]},"uuid":"u2","timestamp":"2026-09-22T10:00:09.500Z"}`
+	// transcriptLastTokens is transcriptLastTurn's input + cache read + cache write.
+	transcriptLastTokens = int64(5 + 19120 + 800)
+)
+
+func writeTranscript(t *testing.T, lines ...string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "agent-a1b2c3.jsonl")
+	require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644))
+	return path
+}
+
+func TestLastContextTokens(t *testing.T) {
+	// A record bigger than the tail, so the only usage before it is out of reach.
+	filler := `{"type":"user","message":{"role":"user","content":"` + strings.Repeat("x", agentUsageTail+1024) + `"}}`
+	cases := []struct {
+		name string
+		path func(t *testing.T) string
+		want int64
+		ok   bool
+	}{
+		{"the last usage record wins", func(t *testing.T) string {
+			return writeTranscript(t, transcriptUser, transcriptFirstTurn, transcriptLastTurn, transcriptToolReply)
+		}, transcriptLastTokens, true},
+		{"a usage record after a cut first line", func(t *testing.T) string {
+			return writeTranscript(t, transcriptFirstTurn, filler, transcriptLastTurn)
+		}, transcriptLastTokens, true},
+		{"usage only before the tail is not read", func(t *testing.T) string {
+			return writeTranscript(t, transcriptFirstTurn, filler, transcriptToolReply)
+		}, 0, false},
+		{"no usage at all", func(t *testing.T) string {
+			return writeTranscript(t, transcriptUser, transcriptToolReply)
+		}, 0, false},
+		{"a malformed line is skipped", func(t *testing.T) string {
+			return writeTranscript(t, transcriptLastTurn, `{"type":"assistant","message":`)
+		}, transcriptLastTokens, true},
+		{"an empty file", func(t *testing.T) string { return writeTranscript(t) }, 0, false},
+		{"a missing file", func(t *testing.T) string { return filepath.Join(t.TempDir(), "gone.jsonl") }, 0, false},
+		{"a relative path", func(*testing.T) string { return "agent-a1b2c3.jsonl" }, 0, false},
+		{"a directory", func(t *testing.T) string { return t.TempDir() }, 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := lastContextTokens(tc.path(t))
+			assert.Equal(t, tc.ok, ok)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// A continue carries what magus recorded about its target: the title and model its spawn
+// named, and the context size its host last reported. Addressed by name or by id alike.
+func TestContinueTargetCarriesTheTargetsSpawnFacts(t *testing.T) {
+	continueTo := func(to string) string {
+		return `{"session_id":"8f2c6a1e","cwd":"/Users/dev/repo","hook_event_name":"PreToolUse",` +
+			`"tool_name":"SendMessage","tool_input":{"to":"` + to + `","message":"Now fix the review comments."},"tool_use_id":"toolu_02"}`
+	}
+	tokens := transcriptLastTokens
+	const title = "orchestrator/integrator guard-facts"
+	// Positional: spawned, stopped, stopFirst, the address, the target wanted, whether the
+	// idle clock is running.
+	cases := []struct {
+		name      string
+		spawned   bool
+		stopped   bool
+		stopFirst bool
+		to        string
+		want      types.SpawnTarget
+		wantIdle  bool
+	}{
+		{"by name, after the spawn and a stop", true, true, false, "brisk-heron",
+			types.SpawnTarget{Agent: "brisk-heron", Description: title, Model: "sonnet", ContextTokens: &tokens}, true},
+		{"by id, after the spawn and a stop", true, true, false, "a1b2c3",
+			types.SpawnTarget{Agent: "a1b2c3", Description: title, Model: "sonnet", ContextTokens: &tokens}, true},
+		{"before the host reported any usage", true, false, false, "brisk-heron",
+			types.SpawnTarget{Agent: "brisk-heron", Description: title, Model: "sonnet"}, true},
+		// A foreground spawn returns after its child stopped, so the stop is filed first.
+		{"a stop filed before the spawn record", true, true, true, "a1b2c3",
+			types.SpawnTarget{Agent: "a1b2c3", Description: title, Model: "sonnet", ContextTokens: &tokens}, true},
+		{"an agent magus never saw", false, false, false, "ghost", types.SpawnTarget{Agent: "ghost"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, _ := spawnFixture(t)
+			probe := &spawnRuleProbe{}
+			deps := Dependencies{SpawnRule: probe.rule()}
+			transcript := writeTranscript(t, transcriptUser, transcriptFirstTurn, transcriptLastTurn, transcriptToolReply)
+			stop := func() {
+				assert.Equal(t, "pass", Judge(ctx, deps, Request{Input: subagentStop(t, "a1b2c3", transcript), Host: "claude-code"}).Decision)
+			}
+			if tc.stopped && tc.stopFirst {
+				stop()
+			}
+			if tc.spawned {
+				Judge(ctx, deps, Request{Input: finishedSpawn(t, title, "brisk-heron", "sonnet", "", "a1b2c3"), Host: "claude-code"})
+			}
+			if tc.stopped && !tc.stopFirst {
+				stop()
+			}
+			require.Empty(t, probe.asked, "neither the stop nor the finished spawn is judged")
+
+			Judge(ctx, deps, Request{Input: continueTo(tc.to), Host: "claude-code"})
+			require.Len(t, probe.asked, 1)
+			got := probe.asked[0].Target
+			require.NotNil(t, got)
+			if tc.wantIdle {
+				require.NotNil(t, got.IdleMs, "the finished spawn started the clock")
+				tc.want.IdleMs = got.IdleMs
+			}
+			assert.Equal(t, tc.want, *got)
+		})
+	}
+}
+
+// A stop for an agent magus never saw spawned still records its size, and a transcript
+// with no usage records nothing rather than a zero.
+func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	facts := hint.NewGate(cacheDir, SessionKey("claude-code", "8f2c6a1e"))
+
+	Judge(ctx, Dependencies{}, Request{Input: subagentStop(t, "a1b2c3", writeTranscript(t, transcriptUser)), Host: "claude-code"})
+	_, ok := readSpawnedAgent(facts, "a1b2c3")
+	assert.False(t, ok, "no usage, no record")
+
+	Judge(ctx, Dependencies{}, Request{Input: subagentStop(t, "a1b2c3", writeTranscript(t, transcriptFirstTurn, transcriptLastTurn)), Host: "claude-code"})
+	rec, ok := readSpawnedAgent(facts, "a1b2c3")
+	require.True(t, ok)
+	tokens := transcriptLastTokens
+	assert.Equal(t, spawnedAgent{ContextTokens: &tokens}, rec)
+}
+
+// The rule reads the same job rows the guard graded the call against, through the
+// snapshot magus\job.list answers from.
+func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
+	row := types.Job{ID: "guard-facts", Criteria: "the seam", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	ctx, _ := fleetFixture(t, row)
+	var seen []types.JobSnapshot
+	rule := func(ctx context.Context, _ types.SpawnRequest, _ hint.Gate) (types.SpawnVerdict, error) {
+		snap, ok := types.JobSnapshotFromContext(ctx)
+		require.True(t, ok, "the rule runs under the guard's rows")
+		seen = append(seen, snap)
+		return types.SpawnVerdict{}, nil
+	}
+	Judge(ctx, Dependencies{SpawnRule: rule}, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
+	require.Len(t, seen, 1)
+	require.NoError(t, seen[0].Err)
+	require.Len(t, seen[0].Rows, 1)
+	assert.Equal(t, row.ID, seen[0].Rows[0].ID)
+	assert.Equal(t, row.WritePaths, seen[0].Rows[0].WritePaths)
+}
+
+// A spawn titled `<parent>/<role> <job>` naming a live job attributes the child to it:
+// the child's later calls are graded under that lease, and a child sharing this checkout
+// has this checkout's base recorded for a job that never reported one.
+func TestSpawnTitleAttributesTheChildToItsJob(t *testing.T) {
+	const base = "4f1c2e9+0d3b7a51"
+	type outcome struct {
+		Lease        string
+		Denied       bool
+		ReportedBase string
+		Registered   bool
+	}
+	const title = "orchestrator/integrator guard-facts"
+	running := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
+	reported := types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}, ReportedBase: "77aa01c", Registered: 1}
+	finished := types.Job{ID: "guard-facts", State: types.StatePass, WritePaths: []string{"internal/guard/**"}}
+	// Positional: the spawn title, its isolation, an explicit --lease, the stored row, and
+	// what the child's write then meets.
+	cases := []struct {
+		name, title, isolation, lease string
+		row                           types.Job
+		want                          outcome
+	}{
+		{"a live job, shared checkout", title, "", "", running, outcome{Lease: "guard-facts", ReportedBase: base, Registered: true}},
+		{"an isolated child reports its own base", title, "worktree", "", running, outcome{Lease: "guard-facts", Denied: true}},
+		{"a base already reported is kept", title, "", "", reported, outcome{Lease: "guard-facts", ReportedBase: "77aa01c", Registered: true}},
+		{"a finished job attributes nothing", title, "", "", finished, outcome{}},
+		{"a title in another form attributes nothing", "orchestrator/brisk-heron/implement adr 0002", "", "", running, outcome{}},
+		{"a title naming no role attributes nothing", "orchestrator guard-facts", "", "", running, outcome{}},
+		{"an explicit lease outranks the attribution", title, "", "other", running, outcome{Lease: "other", Denied: true, ReportedBase: base, Registered: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, root := fleetFixture(t, tc.row)
+			at := hookLocation(ctx, Dependencies{})
+			deps := Dependencies{CheckoutBase: func(_ context.Context, got string) string {
+				assert.Equal(t, root, got, "the base is read from the spawning checkout")
+				return base
+			}}
+			target := filepath.Join(root, "internal", "guard", "guard.go")
+			require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+			require.NoError(t, os.WriteFile(target, []byte("package guard\n"), 0o644))
+
+			Judge(ctx, deps, Request{Input: finishedSpawn(t, tc.title, "brisk-heron", "sonnet", tc.isolation, "a1b2c3"), Host: "claude-code"})
+			edit := map[string]any{"file_path": target, "old_string": "package guard", "new_string": "package guard // edited"}
+			write := hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "agent_id": "a1b2c3", "agent_type": "general-purpose", "cwd": "/Users/dev/repo", "permission_mode": "default", "hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit})
+			v := Judge(ctx, deps, Request{Input: write, Host: "claude-code", Lease: tc.lease})
+
+			rows, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			assert.Equal(t, tc.want, outcome{
+				Lease:        v.Lease,
+				Denied:       v.Decision == "deny",
+				ReportedBase: rows[0].ReportedBase,
+				Registered:   rows[0].Registered != 0,
+			})
+		})
+	}
+}
+
+// The attribution is the agent's own: its parent, calling with no agent id, is not
+// graded under the job it handed out.
+func TestAttributionDoesNotReachTheParent(t *testing.T) {
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	ctx, _ := fleetFixture(t, row)
+	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
+	v := Judge(ctx, Dependencies{}, Request{Input: `{"session_id":"8f2c6a1e","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`, Host: "claude-code"})
+	assert.Empty(t, v.Lease)
 }

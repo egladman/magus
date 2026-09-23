@@ -62,7 +62,7 @@ body
 concurrency: 2
 -- magusfile.buzz --
 import "magus";
-import "spells/acme" as acme;
+import "spells/acme";
 import "spells/script-host" as scripthost;
 magus\harness.provider(scripthost);
 magus.project({ "spells": [acme] });

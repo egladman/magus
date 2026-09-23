@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"time"
 )
 
@@ -20,9 +21,10 @@ import (
 // hand-rolled by callers that need a single loopback port with a few mounted
 // routes and graceful, ctx-driven shutdown.
 type Server struct {
-	ln  net.Listener
-	srv *http.Server
-	mux *http.ServeMux
+	ln       net.Listener
+	srv      *http.Server
+	mux      *http.ServeMux
+	patterns []string
 }
 
 // NewServer binds a loopback listener on the given address's port (0 = first
@@ -45,6 +47,14 @@ func NewServer(addr netip.AddrPort) (*Server, error) {
 // Handle mounts h at pattern on the server's mux.
 func (s *Server) Handle(pattern string, h http.Handler) {
 	s.mux.Handle(pattern, h)
+	s.patterns = append(s.patterns, pattern)
+}
+
+// Patterns returns every pattern mounted with Handle, in mount order. ServeMux cannot
+// list its own routes, so this is what lets a test prove no route is left unguarded.
+// Not safe to call concurrently with Handle.
+func (s *Server) Patterns() []string {
+	return slices.Clone(s.patterns)
 }
 
 // Serve runs the HTTP server until ctx is cancelled or the server fails. On

@@ -184,3 +184,58 @@ final told = magus\guard.once("x");
 `)
 	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn rule")
 }
+
+// A rule reads the job rows the guard pinned and the facts magus recorded about a
+// continue's target, and cannot write the store it reads.
+func TestSpawnRuleReadsJobsAndTargetFacts(t *testing.T) {
+	rule, err := loadSpawnRule(t, `
+import "magus";
+
+magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
+    final list = magus\job\list();
+    var ids = "";
+    foreach (row in list.jobs) { ids = ids + row.id + ";"; }
+    var wrote = "refused";
+    if (req.kind == "spawn") {
+        magus\job\put("smuggled", opts: {"criteria": "from a rule"});
+        wrote = "written";
+    }
+    var target = "";
+    if (req.target != null) {
+        var tokens = "none";
+        if (req.target!.contextTokens != null) { tokens = "{req.target!.contextTokens!}"; }
+        target = "{req.target!.description}|{req.target!.model}|{tokens}";
+    }
+    return magus\guard.advise("{ids}|{wrote}|{target}");
+});
+`)
+	require.NoError(t, err)
+	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
+	rows := []types.Job{{ID: "guard-facts", State: types.StateRunning}, {ID: "guard-docs", State: types.StateDeclared}}
+	ctx := types.WithJobSnapshot(t.Context(), types.JobSnapshot{Rows: rows})
+	tokens := int64(19925)
+
+	cases := []struct {
+		name    string
+		req     types.SpawnRequest
+		want    types.SpawnVerdict
+		wantErr string
+	}{
+		{"a continue sees its target", types.SpawnRequest{Kind: types.SpawnKindContinue, Target: &types.SpawnTarget{Agent: "brisk-heron", Description: "orchestrator/integrator guard-facts", Model: "sonnet", ContextTokens: &tokens}},
+			types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "guard-facts;guard-docs;|refused|orchestrator/integrator guard-facts|sonnet|19925"}, ""},
+		{"a target the host reported no usage for", types.SpawnRequest{Kind: types.SpawnKindContinue, Target: &types.SpawnTarget{Agent: "ghost"}},
+			types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "guard-facts;guard-docs;|refused|||none"}, ""},
+		{"a write raises", types.SpawnRequest{Kind: types.SpawnKindSpawn}, types.SpawnVerdict{}, "read-only"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := rule(ctx, tc.req, facts)
+			if tc.wantErr != "" {
+				assert.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

@@ -43,7 +43,7 @@ stderr 'bare workspace-relative path'
 concurrency: 2
 -- ws/magusfile.buzz --
 import "magus";
-import "spells/acme" as acme;
+import "spells/acme";
 magus.project({ "spells": [acme] });
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- ws/api/magusfile.buzz --

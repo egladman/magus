@@ -108,6 +108,7 @@ function getThemePref(): ThemePref {
     const v = localStorage.getItem("theme");
     return v === "light" || v === "dark" ? v : "auto";
   } catch {
+    // not-a-failure: with storage disabled no preference was saved, so "auto" is the truth
     return "auto";
   }
 }

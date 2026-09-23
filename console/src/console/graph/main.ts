@@ -46,9 +46,12 @@ import {
   authHeaders,
   isRemembered,
   setRemembered,
+  mayLoadBundledDemo,
   wantsDemo,
   createDaemonTransport,
   parseHash,
+  reportFetchFailure,
+  reportHttpStatus,
 } from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
@@ -97,6 +100,7 @@ import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
+import { isServing } from "../../lib/workspace";
 import { attachHelpPopover } from "../../ui/help-popover";
 import { signal } from "../view";
 import { publishStatus } from "../status";
@@ -523,7 +527,8 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   // A BARE /graph/ (no directive at all) is the cold visit that gets the empty state instead,
   // deferring the graph.json download until the visitor asks. Loading via a reload into boot
   // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
-  if (wantsDemo(params) || params.view || params.q || params.node) {
+  // The daemon refuses to serve these files too; this keeps an attached surface from asking.
+  if (mayLoadBundledDemo(params) && (wantsDemo(params) || params.view || params.q || params.node)) {
     try {
       // Two demos ship, both generated from THIS workspace by the root graph-generate
       // target: the knowledge graph and the target graph. Selected by the same fragment
@@ -1914,6 +1919,7 @@ function safeUrl(u: string) {
     const p = new URL(u, location.href);
     return p.protocol === "http:" || p.protocol === "https:" ? u : null;
   } catch {
+    // not-a-failure: an unparseable url is an unsafe one, and it renders as plain text
     return null;
   }
 }
@@ -2879,7 +2885,7 @@ let graphEpoch = 0;
 let affectedFallback = "";
 
 // Re-asked on every live graph load rather than fetched once: the diff moves with the tree, not the
-// graph. Failure is silent - the view is supplementary, and a banner would talk over the reader.
+// graph. A failure gets the daemon transport's toast and no banner: the view is supplementary.
 async function refreshAffectedFromServer() {
   const client = graphClient();
   if (!client) return;
@@ -2896,7 +2902,7 @@ async function refreshAffectedFromServer() {
     // refuses the view while no set exists - so neither took effect the first time.
     if (activeView === "affected" || hashParams().view === "affected") activateView("affected");
   } catch {
-    /* network error; the chip keeps whatever it had */
+    // reported: by the daemon transport; the chip keeps whatever it had
   }
 }
 
@@ -2924,7 +2930,7 @@ async function refineBlastFromServer(nodeId: string, gen: number) {
     syncOverview();
     draw();
   } catch {
-    // Local answer stands, which is the offline behavior and already on screen.
+    // reported: by the daemon transport; the local answer on screen stands
   }
 }
 // refineTraceFromServer replaces the traced path with the daemon's.
@@ -2968,7 +2974,7 @@ async function refineTraceFromServer(from: string, to: string, gen: number) {
     syncOverview(); // the match set just changed under the panel that reports its size
     draw();
   } catch {
-    // Local answer stands.
+    // reported: by the daemon transport; the local answer stands
   }
 }
 
@@ -2994,6 +3000,7 @@ async function suggestNodes(prefix: string, gen: number) {
       .map((m) => '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.label) + "</option>")
       .join("");
   } catch {
+    // reported: by the daemon transport; no suggestions is the honest list
     list.innerHTML = "";
   }
 }
@@ -3036,8 +3043,7 @@ async function refineQueryFromServer(q: string, gen: number) {
     syncOverview(); // the match set just changed under the panel that reports its size
     draw();
   } catch {
-    // A refinement that cannot reach the daemon leaves the local answer standing, which is
-    // the offline behavior and already on screen. Nothing to report.
+    // reported: by the daemon transport. The local answer on screen stands, as it does offline.
   }
 }
 
@@ -5133,16 +5139,21 @@ async function liveRefetchGraph() {
   let resp;
   try {
     resp = await fetch(url, { headers });
-  } catch {
-    return; // network error on refetch; SSE reconnect will handle it
+  } catch (e) {
+    reportFetchFailure(liveHost, "the live graph", e); // the SSE reconnect retries
+    return;
   }
   if (resp.status === 304) return; // graph unchanged; ETag matched
-  if (!resp.ok) return;
+  if (!resp.ok) {
+    reportHttpStatus(liveHost, "the live graph", resp.status);
+    return;
+  }
   liveETag = resp.headers.get("ETag") || null;
   let data;
   try {
     data = await resp.json();
-  } catch {
+  } catch (e) {
+    reportFetchFailure(liveHost, "the live graph", e);
     return;
   }
   liveApplyGraphUpdate(data);
@@ -5274,9 +5285,9 @@ async function fetchLiveStatus() {
     const res = await client.getStatus({});
     const status = res.status;
     if (!status) return;
-    // Extract workspace name from the first loaded workspace.
-    if (status.pool && status.pool.workspaces.length > 0) {
-      liveWorkspaceName = status.pool.workspaces[0].root;
+    const loaded = status.pool?.workspaces.find(isServing);
+    if (loaded) {
+      liveWorkspaceName = loaded.root;
     }
     // No pool strip here: how many targets the daemon is running is session state the dashboard
     // owns. The affected set does not come from here either - StatusOutput.Affected is on the wire
@@ -5284,7 +5295,7 @@ async function fetchLiveStatus() {
     // GraphService.FindAffected answers instead (refreshAffectedFromServer).
     publishLiveStatus();
   } catch {
-    /* network error; badge stays */
+    // reported: by the daemon transport; the badge stays
   }
 }
 

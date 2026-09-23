@@ -112,14 +112,31 @@ func consoleJobLine(id string) string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	if !daemonServing() {
+	serving, daemonVersion := probeConsoleDaemon()
+	if !serving {
 		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
 	}
 	host := mcpAddrString()
+	link := console.JobLink(host, id)
 	if id == "" {
-		return "console: " + console.Link(console.LinkOpts{Host: host, Surface: console.JobSurface})
+		link = console.Link(console.LinkOpts{Host: host, Surface: console.JobSurface})
 	}
-	return "console: " + console.JobLink(host, id)
+	line := "console: " + link + "\n  " + authHint(link)
+	if skew := consoleSkew(daemonVersion, version); skew != "" {
+		line += "\n  " + skew
+	}
+	return line
+}
+
+// consoleSkew names a daemon serving a different build from this binary, or "" when they
+// match or either side is unstamped. The console that daemon serves is its own build, so
+// what the link opens may not know what this binary just wrote.
+func consoleSkew(daemonVersion, cliVersion string) string {
+	if daemonVersion == "" || cliVersion == "" || daemonVersion == cliVersion {
+		return ""
+	}
+	return fmt.Sprintf("that console is daemon %s, this binary is %s; `%s && %s` serves this build",
+		daemonVersion, cliVersion, hint.ServerStop, hint.ServerStart)
 }
 
 // printConsoleJobLine writes that line, and nothing at all when the console is off: a
@@ -130,23 +147,26 @@ func printConsoleJobLine(out io.Writer, id string) {
 	}
 }
 
-// daemonServing reports whether a PERSISTENT daemon is up. It is the two-step check
-// jobRunCatalog makes and for the same reason: a per-process proc server answers the socket
-// and serves no console, so its address would build a link to a page that never loads.
+// probeConsoleDaemon reports whether a PERSISTENT daemon is up, and its version. A
+// per-process proc server answers a socket too and serves no console, so only a "daemon"
+// mode counts.
+//
+// It probes the daemon's own address, never MAGUS_DAEMON_SOCKET: when the daemon refuses a
+// mismatched build, startup points that variable at this process's own proc server, and
+// asking it reported "nothing is serving" with the daemon up.
 //
 // It makes its OWN bounded context rather than taking the command's. The probe is a local
 // socket round trip on the way to printing one line, `magus ls jobs` reaches it through a
 // caller that has no context to pass, and a link nobody can build is not worth widening four
 // signatures for.
-func daemonServing() bool {
+func probeConsoleDaemon() (serving bool, daemonVersion string) {
 	ctx, cancel := context.WithTimeout(context.Background(), consoleProbeTimeout)
 	defer cancel()
-	addr, err := resolveDaemonAddr(ctx, "")
-	if err != nil || addr == "" {
-		return false
+	st, err := proc.QueryStatus(ctx, admissionDaemonAddr(globalCfg))
+	if err != nil || st == nil || st.Mode != "daemon" {
+		return false, ""
 	}
-	st, err := proc.QueryStatus(ctx, addr)
-	return err == nil && st != nil && st.Mode == "daemon"
+	return true, st.DaemonVersion
 }
 
 // consoleProbeTimeout bounds that probe. A daemon on the same machine answers in

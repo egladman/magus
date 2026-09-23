@@ -13,6 +13,7 @@ import {
   type Run,
   type TargetRun,
 } from "@wire/status/v1alpha1/status_pb";
+import { isServing } from "../../lib/workspace";
 import type {
   Snapshot,
   Latency,
@@ -292,7 +293,7 @@ export function mapStatus(st: Status): StatusView {
       workspace: c.workspace || "",
     })),
     runs: (st.runs || []).map(mapRun),
-    workspaces: ((pool && pool.workspaces) || []).map((w) => ({
+    workspaces: ((pool && pool.workspaces) || []).filter(isServing).map((w) => ({
       root: w.root,
       hits: w.cache ? Number(w.cache.hits) : undefined,
       misses: w.cache ? Number(w.cache.misses) : undefined,

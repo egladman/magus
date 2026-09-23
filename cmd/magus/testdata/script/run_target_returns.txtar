@@ -77,7 +77,7 @@ stderr 'got a bool'
 concurrency: 2
 -- magusfile.buzz --
 import "magus";
-import "spells/acme" as acme;
+import "spells/acme";
 magus.project({ "spells": [acme] });
 export fun describe(ctx: magus\Context, args: [str]) > str { return "v1.2.3"; }
 export fun listy(ctx: magus\Context, args: [str]) > [str] { return ["alpha", "beta"]; }

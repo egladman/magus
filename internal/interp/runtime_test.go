@@ -171,7 +171,7 @@ func TestCheckRemoteSpellImports(t *testing.T) {
 	require.NoError(t, err)
 	declared := types.WithWorkspace(t.Context(), importsWorkspace{rootWorkspace{root: root}, im})
 
-	assert.NoError(t, checkRemoteSpellImports(t.Context(), `import "spells/local" as local;`))
+	assert.NoError(t, checkRemoteSpellImports(t.Context(), `import "spells/local";`))
 	assert.NoError(t, checkRemoteSpellImports(declared, `import "`+lint+`";`))
 	assert.NoError(t, checkRemoteSpellImports(t.Context(), `// import "ghcr.io/team/spells/fmt";`+"\n"), "a comment imports nothing")
 

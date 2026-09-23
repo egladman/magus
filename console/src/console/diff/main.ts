@@ -77,6 +77,7 @@ import {
   type ReviewVerdict,
   type ReviewRole,
   type BranchChange,
+  reportSessionFailure,
 } from "./session";
 import { setMarkdown } from "./markdown";
 import { fetchSessionActivity, renderAgentSession } from "./agent";
@@ -1418,8 +1419,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     try {
       const next = await fetchReviewSession(hp, controller.signal);
       if (!disposed) applySession(next);
-    } catch {
-      if (!disposed) setCollaboration("degraded");
+    } catch (e) {
+      if (disposed) return;
+      setCollaboration("degraded");
+      reportSessionFailure(hp, "the review session", e);
     } finally {
       polling = false;
       schedulePoll();
@@ -3167,10 +3170,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
       // Beside it, for the same reason: it forks once per branch, so it arrives rather than
       // being waited on.
       void loadBranches();
-    } catch {
+    } catch (e) {
       // Keep the reader available, but never imply that comments, read marks, or suggestions are
       // synchronized when the pairing step did not complete.
       setCollaboration("degraded");
+      reportSessionFailure(hp, "the diff annotations", e);
     }
   };
 

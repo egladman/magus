@@ -101,3 +101,53 @@ func TestRedirectNormalizesAndCannotEchoTheRequestPath(t *testing.T) {
 	assert.Equal(t, http.StatusFound, w.Code)
 	assert.Equal(t, "/console/diff/", w.Header().Get("Location"))
 }
+
+// The handler is unauthenticated and the console dir is not all shell: the build copies the
+// hosted demo's graph JSON (a whole workspace's knowledge graph, notes included) in beside it.
+func TestStaticHandlerServesOnlyTheShell(t *testing.T) {
+	dir := consoleDir(t)
+	for name, body := range map[string]string{
+		"sw.js":                         "self",
+		"manifest.webmanifest":          "{}",
+		"assets/icon.svg":               "<svg/>",
+		"assets/icon-192.png":           "png",
+		"graph/explorer.js":             "js",
+		"graph/scaffold.html":           "<html></html>",
+		"graph/knowledge-graph.json":    `{"nodes":[{"kind":"note"}]}`,
+		"graph/target-graph.json":       `{"projects":[]}`,
+		"console.js.map":                "{}",
+		".env":                          "SECRET=1",
+		"nested/.hidden/leak.js":        "js",
+		"listing/only-a-data-file.json": "{}",
+	} {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
+	}
+	h := StaticHandler(dir)
+
+	for _, p := range []string{
+		"/console/", "/console/console.css", "/console/sw.js", "/console/manifest.webmanifest",
+		"/console/assets/icon.svg", "/console/assets/icon-192.png",
+		"/console/graph/explorer.js", "/console/graph/scaffold.html", "/console/graph/",
+	} {
+		assert.Equal(t, http.StatusOK, get(t, h, p).Code, "shell file %s", p)
+	}
+	for _, p := range []string{
+		"/console/graph/knowledge-graph.json",
+		"/console/graph/target-graph.json",
+		"/console/graph/KNOWLEDGE-GRAPH.JSON",
+		"/console/graph/knowledge-graph.json/",
+		"/console/assets/../graph/knowledge-graph.json",
+		"/console/console.js.map",
+		"/console/.env",
+		"/console/nested/.hidden/leak.js",
+		"/console/assets/",
+		"/console/listing/",
+		"/console/assets",
+	} {
+		w := get(t, h, p)
+		assert.Equal(t, http.StatusNotFound, w.Code, "%s must be refused", p)
+		assert.NotContains(t, w.Body.String(), "note", p)
+	}
+}

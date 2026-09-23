@@ -10,7 +10,7 @@
 // review. Pairing therefore needs no setup step anyone has to remember: opening the surface is
 // joining.
 
-import { authHeaders } from "../../lib/daemon";
+import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/daemon";
 
 // The wire shapes, mirroring types.Review and types.DiffSession. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
@@ -328,9 +328,13 @@ export async function mutate(
       body: JSON.stringify(op),
       signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      reportHttpStatus(host, "the review session", res.status);
+      return null;
+    }
     return (await res.json()) as DiffSession;
-  } catch {
+  } catch (e) {
+    reportFetchFailure(host, "the review session", e);
     return null;
   }
 }
@@ -349,9 +353,13 @@ export async function fetchReview(host: string, signal: AbortSignal): Promise<Re
       headers: authHeaders(),
       signal,
     });
-    if (!res.ok) return { id: "", reason: `daemon answered ${res.status}`, threads: [] };
+    if (!res.ok) {
+      reportHttpStatus(host, "the open review", res.status);
+      return { id: "", reason: `daemon answered ${res.status}`, threads: [] };
+    }
     return (await res.json()) as ReviewInfo;
-  } catch {
+  } catch (e) {
+    reportFetchFailure(host, "the open review", e);
     return { id: "", reason: "the daemon could not be reached", threads: [] };
   }
 }
@@ -472,14 +480,18 @@ export async function runTarget(
           `${url}?target=${encodeURIComponent(target)}&project=${encodeURIComponent(project)}`,
           { headers: authHeaders(), signal },
         );
-    if (!res.ok) return { state: "unknown" };
+    if (!res.ok) {
+      reportHttpStatus(host, "the run of " + target, res.status);
+      return { state: "unknown" };
+    }
     const body = (await res.json()) as RunVerdict;
     const state = body?.state;
     if (state !== "running" && state !== "passed" && state !== "failed") {
       return { state: "unknown", undeclared: body?.undeclared, available: body?.available };
     }
     return body;
-  } catch {
+  } catch (e) {
+    reportFetchFailure(host, "the run of " + target, e);
     return { state: "unknown" };
   }
 }
@@ -493,7 +505,10 @@ export async function fetchBranches(
       headers: authHeaders(),
       signal,
     });
-    if (!res.ok) return { branches: [], unsupported: "" };
+    if (!res.ok) {
+      reportHttpStatus(host, "the branch list", res.status);
+      return { branches: [], unsupported: "" };
+    }
     const body = (await res.json()) as { branches?: BranchChange[]; unsupported?: string };
     const got = body.branches ?? [];
     // Shape-checked, not just cast. `Paths []string` on the Go side has no omitempty, so a nil
@@ -503,7 +518,8 @@ export async function fetchBranches(
       branches: got.filter((b) => typeof b?.ref === "string" && Array.isArray(b.paths)),
       unsupported: typeof body.unsupported === "string" ? body.unsupported : "",
     };
-  } catch {
+  } catch (e) {
+    reportFetchFailure(host, "the branch list", e);
     return { branches: [], unsupported: "" };
   }
 }
@@ -516,4 +532,11 @@ export class HttpError extends Error {
     super(`daemon answered ${status}`);
     this.status = status;
   }
+}
+
+// reportSessionFailure reports what a throwing read here (fetchSession, fetchReviewSession) failed
+// with, since those leave the reporting to the caller.
+export function reportSessionFailure(host: string, what: string, e: unknown): void {
+  if (e instanceof HttpError) reportHttpStatus(host, what, e.status);
+  else reportFetchFailure(host, what, e);
 }

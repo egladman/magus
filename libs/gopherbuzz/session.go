@@ -801,7 +801,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 		globals = append(globals, name)
 	}
 	checkStart := time.Now()
-	errs, checkWarnings := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint())
+	errs, checkWarnings := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
@@ -901,6 +901,31 @@ func (s *Session) Diagnostics(code string) []Diagnostic {
 		out = append(out, Diagnostic{Line: w.Line, Col: w.Col, Code: w.Code, Msg: w.Msg, Severity: w.Severity})
 	}
 	return out
+}
+
+// DiagnosticOf locates err, an Exec or Compile failure, as a positioned Diagnostic, so an
+// embedder can report where a load stopped without parsing the rendered sentence. A type
+// error keeps its code; a parse error has none. ok is false when err carries no position.
+// File is left for the caller, which is the only one that knows it.
+func DiagnosticOf(err error) (d Diagnostic, ok bool) {
+	var te typeError
+	if errors.As(err, &te) {
+		return Diagnostic{Line: te.Line, Col: te.Col, Code: te.Code, Msg: te.Msg, Severity: te.Severity}, true
+	}
+	if err == nil {
+		return Diagnostic{}, false
+	}
+	s := err.Error()
+	i := strings.Index(s, "buzz: line ")
+	if i < 0 {
+		return Diagnostic{}, false
+	}
+	s, _, _ = strings.Cut(s[i:], "\n")
+	line, col, msg := splitBuzzPos(s)
+	if line == 0 {
+		return Diagnostic{}, false
+	}
+	return Diagnostic{Line: line, Col: col, Msg: msg}, true
 }
 
 // splitBuzzPos parses the "buzz: line L:C: message" shape the parser and checker

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { ensureScopedToken } from "./token-exchange";
+import { CONSOLE_TOKEN_TTL_MS, ensureScopedToken, exchangeOperatorToken } from "./token-exchange";
 import { getLiveToken, hasScopedToken } from "./daemon";
 
 // withStorage stubs the two Web Storage objects the exchange reads and writes, seeded with
@@ -100,5 +100,35 @@ test("an empty secret is treated as a failure, not stored", async () => {
     assert.equal(out, "failed");
     assert.equal(getLiveToken(), "mgs_operator");
     assert.equal(hasScopedToken(), false);
+  });
+});
+
+// The daemon refuses a console mint with no expiry (400, InvalidArgument), which is what every console
+// load hit before this sent one. Pinned on the wire: the request carries an expiry at the daemon's
+// ceiling, and the minted secret replaces the operator token.
+test("the real exchange asks for an expiring console token", async () => {
+  await withStorage({ "magus-live-token": "mgs_operator" }, async () => {
+    const realFetch = globalThis.fetch;
+    let body: Record<string, unknown> = {};
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const raw = init?.body;
+      body = JSON.parse(
+        typeof raw === "string" ? raw : new TextDecoder().decode(raw as Uint8Array),
+      );
+      return new Response(JSON.stringify({ secret: "mgs_console" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+    try {
+      const now = Date.UTC(2026, 8, 22);
+      const out = await exchangeOperatorToken("127.0.0.1:7391", now);
+      assert.equal(out, "exchanged");
+      assert.equal(body.scope, "TOKEN_SCOPE_CONSOLE");
+      assert.equal(Date.parse(String(body.expireTime)), now + CONSOLE_TOKEN_TTL_MS);
+      assert.equal(getLiveToken(), "mgs_console");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

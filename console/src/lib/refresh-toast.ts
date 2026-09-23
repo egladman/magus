@@ -9,6 +9,7 @@
 // different tab is active; the source chip tells you where it came from in the moment, and it rides into
 // the notification history for the same reason. See lib/notifications.ts.
 import { notify, type NotifyLink } from "./notifications";
+import { renderTransientToast, sourceChip } from "./toast";
 
 export function showRefreshToast(source: string, message: string): void {
   if (document.querySelector(".console-shell-toast")) return;
@@ -126,47 +127,8 @@ export function showToast(
   kind: "ok" | "warn" | "error" = "ok",
   opts: ToastOptions = {},
 ): void {
-  const ms = opts.ms ?? (kind === "ok" ? 2600 : 6000);
-  document.querySelector(".console-shell-toast--transient")?.remove();
-  const toast = document.createElement("div");
-  toast.className = "console-shell-toast console-shell-toast--transient";
-  toast.dataset.kind = kind;
-  // Only a hard error is assertive; a warn is a passive status the operator can read at leisure.
-  toast.setAttribute("role", kind === "error" ? "alert" : "status");
-  toast.append(sourceChip(source));
-  const msg = document.createElement("span");
-  msg.textContent = message;
-  toast.appendChild(msg);
-  // A deep link becomes an action button on the transient toast; clicking navigates (location.assign).
-  const link = normalizeLink(opts.link);
-  if (link) {
-    const action = document.createElement("button");
-    action.type = "button";
-    action.textContent = link.label;
-    action.addEventListener("click", () => {
-      if (link.run) void link.run();
-      else if (link.href) location.assign(link.href);
-    });
-    toast.appendChild(action);
-  }
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), ms);
-
+  const link = typeof opts.link === "string" ? { label: "Open", href: opts.link } : opts.link;
+  renderTransientToast(source, message, kind, link, opts.ms);
   // Record it in the history. Toasts are the transient face of a signal; the bell is its scrollback.
   notify({ source, message, kind, link: opts.link, key: opts.key });
-}
-
-// sourceChip builds the quiet, tag-like source label prepended to a toast (lower-case, not all-caps,
-// muted) - matching the console's chip style and the same source shown on the history entry.
-function sourceChip(source: string): HTMLElement {
-  const chip = document.createElement("span");
-  chip.className = "console-shell-toast__source";
-  chip.textContent = source;
-  return chip;
-}
-
-function normalizeLink(link: NotifyLink | string | undefined): NotifyLink | undefined {
-  if (!link) return undefined;
-  if (typeof link === "string") return link ? { label: "Open", href: link } : undefined;
-  return link.href ? { label: link.label || "Open", href: link.href } : undefined;
 }

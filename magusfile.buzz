@@ -43,18 +43,20 @@ import "lcov";
 // Version-selection rules for the `release` target below. ALIASED deliberately:
 // an unaliased import flat-merges the module's exports into this file's scope,
 // where magus reads every exported fun as a target and rejects the ones without a
-// magus\Context first parameter (MGS1008). Aliasing keeps them namespaced, which
+// magus\Context first parameter (MGS1008). Aliasing keeps it namespaced, which
 // is the same reason docs/magusfile.buzz aliases its renderer.
 import "releaser" as releaser;
-import "spells/golang/gomod" as gomod;
+// A "spells/" path is resolved by the workspace spell resolver, not a file import,
+// so unlike releaser above there is no flat-merge to guard against.
+import "spells/golang/gomod";
 
 // gopherbuzz is embedded (require + replace); binds its targets as cross-project handles.
-import "project/libs/gopherbuzz" as gopherbuzz;
+import "project/libs/gopherbuzz";
 // diagnostics is the other embedded module; the coverage badge reads its profile, and
 // the two lint-library modules' profiles beside it.
-import "project/libs/diagnostics" as diagnostics;
-import "project/libs/coldread" as coldread;
-import "project/libs/testlayout" as testlayout;
+import "project/libs/diagnostics";
+import "project/libs/coldread";
+import "project/libs/testlayout";
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
 //
@@ -74,10 +76,10 @@ import "spells/github/actions" as github;
 // declared in magus.yaml and pinned by spell-lock:update) once cd has published them and
 // the GHCR packages are public (docs/reference/remote-spells.md). Until then a switch
 // would leave magus.lock with nothing to pin and every load of this magusfile failing.
-import "spells/harness/cursor" as cursor;
-import "spells/harness/codex" as codex;
+import "spells/harness/cursor";
+import "spells/harness/codex";
 import "spells/harness/claude-code" as claude;
-import "spells/harness/opencode" as opencode;
+import "spells/harness/opencode";
 final cache_trusted = os\env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
 final cache_insecure = os\env("MAGUS_CACHE_REMOTE_INSECURE");
 if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" or cache_insecure == "1") {
