@@ -23,14 +23,15 @@ import (
 // outside a target run (a `magus buzz` script) go through here so a script and a target
 // are confined by the same policy; Run calls it too, so there is one condition rather
 // than a copy per entry point. The write grant is narrowed to the acting lease's row,
-// resolved by job.ActingLease exactly as the guard hook resolves it.
+// resolved by job.ActingLease in the order the guard hook resolves it.
 func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	if !m.cfg.Sandbox.Enabled {
 		return ctx, nil
 	}
 	loc := job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
 	p := sandboxapply.FromConfig(ctx, m.ws.Root, m.cfg)
-	p = sandboxapply.NarrowToLease(ctx, p, loc, job.ActingLease(loc.CacheDir))
+	lease, _ := job.ActingLease(loc.CacheDir)
+	p = sandboxapply.NarrowToLease(ctx, p, loc, lease)
 	return sandboxapply.Apply(ctx, p, m.ws.Root)
 }
 

@@ -174,11 +174,64 @@ func TestASessionWithNoMarkerFallsBackToTheCheckout(t *testing.T) {
 	cacheDir := t.TempDir()
 	require.NoError(t, BindLease(cacheDir, "wave/checkout-wide"))
 
-	assert.Equal(t, "wave/checkout-wide", ActingLease(cacheDir), "no session reported")
+	wide := Checkout{CacheDir: cacheDir}
+	assert.Equal(t, "wave/checkout-wide", wide.Marker(), "no session reported")
 	assert.Equal(t, "wave/checkout-wide", Checkout{CacheDir: cacheDir, Session: "unbound"}.Marker())
 
 	require.NoError(t, Checkout{CacheDir: cacheDir, Session: "mine"}.Bind("wave/mine"))
 	assert.Equal(t, "wave/mine", Checkout{CacheDir: cacheDir, Session: "mine"}.Marker(),
 		"a session that has its own marker never reads the checkout's")
-	assert.Equal(t, "wave/checkout-wide", ActingLease(cacheDir), "the checkout-wide binding is untouched")
+	assert.Equal(t, "wave/checkout-wide", wide.Marker(), "the checkout-wide binding is untouched")
+}
+
+// TestLeaseQueryResolvesInOneOrder pins the order every caller grades by. The claim ranks
+// last: it is the one answer a worker can rewrite from its own shell, so a claim that
+// outranked a record would let a worker bound to one job act under another's write paths.
+func TestLeaseQueryResolvesInOneOrder(t *testing.T) {
+	t.Parallel()
+
+	bound := t.TempDir()
+	require.NoError(t, BindLease(bound, "wave/marker"))
+	unbound := t.TempDir()
+
+	type answer struct {
+		Lease string
+		From  types.LeaseSource
+	}
+	for name, tc := range map[string]struct {
+		query LeaseQuery
+		want  answer
+	}{
+		"nothing answers": {LeaseQuery{Checkout: Checkout{CacheDir: unbound}}, answer{}},
+		"the claim alone": {
+			LeaseQuery{Checkout: Checkout{CacheDir: unbound}, Claim: "wave/claim"},
+			answer{"wave/claim", types.LeaseSourceEnv},
+		},
+		"the marker alone": {
+			LeaseQuery{Checkout: Checkout{CacheDir: bound}},
+			answer{"wave/marker", types.LeaseSourceMarker},
+		},
+		"a claim that agrees with the marker": {
+			LeaseQuery{Checkout: Checkout{CacheDir: bound}, Claim: "wave/marker"},
+			answer{"wave/marker", types.LeaseSourceMarker},
+		},
+		"the marker over a different claim": {
+			LeaseQuery{Checkout: Checkout{CacheDir: bound}, Claim: "wave/claim"},
+			answer{"wave/marker", types.LeaseSourceContested},
+		},
+		"the agent's job over the marker and the claim": {
+			LeaseQuery{Checkout: Checkout{CacheDir: bound}, AgentJob: "wave/agent", Claim: "wave/claim"},
+			answer{"wave/agent", types.LeaseSourceAgent},
+		},
+		"the flag over everything": {
+			LeaseQuery{Checkout: Checkout{CacheDir: bound}, Flag: "wave/flag", AgentJob: "wave/agent", Claim: "wave/claim"},
+			answer{"wave/flag", types.LeaseSourceFlag},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			lease, from := tc.query.Resolve()
+			assert.Equal(t, tc.want, answer{lease, from})
+		})
+	}
 }

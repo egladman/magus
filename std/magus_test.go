@@ -479,6 +479,19 @@ func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 	assert.Equal(t, "fleet/captured", store.Actor().Lease)
 }
 
+// The captured lease is the process's claim, so a checkout bound by `magus job exec`
+// outranks it here exactly as it does for `magus job` and the guard.
+func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	require.NoError(t, job.BindLease(workspace.cacheDir, "fleet/bound"))
+	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+
+	store, err := jobStoreFromContext(ctx, "job.put")
+	require.NoError(t, err)
+	assert.Equal(t, "fleet/bound", store.Actor().Lease)
+}
+
 // TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_job MCP
 // tool are two doors onto the same file: a row put through one is visible through the
 // other, and internal/job.Store's own path derivation (CacheDir/ledger/leases.json)

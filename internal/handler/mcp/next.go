@@ -36,7 +36,7 @@ func (f nextFilter) served(next []hint.Next) []hint.Next {
 
 // role reads the acting job's row off this checkout's job store.
 func (f nextFilter) role() (hint.Role, []string) {
-	id := job.ActingLease(f.cacheDir)
+	id, _ := job.ActingLease(f.cacheDir)
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}

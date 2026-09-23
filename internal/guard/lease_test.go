@@ -282,14 +282,18 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 func TestActingLeaseFromMarker(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	base := hookLocation(ctx, Dependencies{}).cacheDir
+	acting := func() string {
+		lease, _ := job.ActingLease(base)
+		return lease
+	}
 
-	assert.Empty(t, job.ActingLease(base), "no marker, no lease")
+	assert.Empty(t, acting(), "no marker, no lease")
 
 	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
-	assert.Equal(t, "harness/lease-scoped-deny", job.ActingLease(base))
+	assert.Equal(t, "harness/lease-scoped-deny", acting())
 
 	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
-	assert.Empty(t, job.ActingLease(base), "a malformed marker binds nothing rather than something")
+	assert.Empty(t, acting(), "a malformed marker binds nothing rather than something")
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the

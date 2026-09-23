@@ -75,6 +75,15 @@ type Spawn struct {
 	Spawner string
 }
 
+// LeaseFrom is the source of Lease: the environment when there is one, else none. A
+// forwarded client's lease is its own environment's claim, so it answers the same.
+func (s Spawn) LeaseFrom() types.LeaseSource {
+	if s.Lease == "" {
+		return ""
+	}
+	return types.LeaseSourceEnv
+}
+
 // traceparentNoteOnce and baggageNoteOnce hold each malformed-value note to one per process. The
 // environment does not change under a running worker, so the same bad value would otherwise be
 // reported once per event and drown the run in one repeated fact.

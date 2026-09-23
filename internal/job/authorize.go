@@ -31,7 +31,8 @@ type Actor struct {
 // cacheDir: the bound lease from [ActingLease]. A process with no lease is the unbound
 // actor.
 func ActingActor(cacheDir string) Actor {
-	return Actor{Lease: ActingLease(cacheDir)}
+	lease, _ := ActingLease(cacheDir)
+	return Actor{Lease: lease}
 }
 
 // Bound reports whether this actor is a worker acting under a lease.

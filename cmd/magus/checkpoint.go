@@ -95,6 +95,7 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 		Workspace: wsRoot,
 		Version:   version,
 		Lease:     spawn.Lease,
+		LeaseFrom: spawn.LeaseFrom(),
 		TraceID:   spawn.TraceID,
 		SpanID:    trail.NewSpanID(),
 		Spawner:   spawn.Spawner,

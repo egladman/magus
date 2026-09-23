@@ -446,6 +446,26 @@ func JobWriteProofs() []JobWriteProof {
 	return []JobWriteProof{WriteProofAlone, WriteProofDisjoint, WriteProofOverlapping}
 }
 
+// LeaseSource is which channel answered the lease a call acts under. Every source but
+// [LeaseSourceEnv] is a record magus wrote or a flag the caller's wiring passed; the
+// environment is the process's claim about itself, so it answers only when nothing else
+// does.
+type LeaseSource string
+
+const (
+	// LeaseSourceFlag is an explicit --lease on the call.
+	LeaseSourceFlag LeaseSource = "flag"
+	// LeaseSourceAgent is the job magus recorded the calling subagent was spawned for.
+	LeaseSourceAgent LeaseSource = "agent"
+	// LeaseSourceMarker is the binding `magus job exec` wrote into the checkout.
+	LeaseSourceMarker LeaseSource = "marker"
+	// LeaseSourceContested is the marker answering while the environment claimed a
+	// different lease. The marker's lease is the one graded; the claim is ignored.
+	LeaseSourceContested LeaseSource = "contested"
+	// LeaseSourceEnv is magus.lease in the process's BAGGAGE.
+	LeaseSourceEnv LeaseSource = "env"
+)
+
 // JobResult is the result a holder files for a job.
 type JobResult struct {
 	SchemaVersion   int                 `json:"schema_version" yaml:"schema_version"`

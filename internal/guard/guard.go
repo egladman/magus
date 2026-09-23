@@ -162,7 +162,7 @@ type Request struct {
 	IsPath bool
 	// Observe records the input as a path the agent REACHED and judges nothing.
 	Observe bool
-	// Lease is the job row this call acts as; empty falls back to the bound marker.
+	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
 	// The attribution the caller knows about itself. No verdict reads any of it.
 	Host string
@@ -220,6 +220,8 @@ type Verdict struct {
 	// An added optional field is not a schema bump: a glue that does not read it is
 	// unaffected, which is the rule agent.GuardSchemaVersion states.
 	Lease string `json:"lease,omitempty"`
+	// LeaseFrom is which source answered Lease; see types.LeaseSource.
+	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
 }
 
 // Judge evaluates one request against this workspace's rules and reports the verdict.
@@ -288,14 +290,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// inside the payload would otherwise be graded as having reported none, and every
 	// session on that host would share the anonymous bucket. The acting lease is resolved
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
-	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
-	// two tiers cannot disagree about who is acting (see job.LeaseMarkerName).
 	location := hookLocation(ctx, deps)
 	policyDigest := recordPolicy(ctx, deps, location, false)
 	ctx = withJobStoreRows(ctx, location)
 	markers := hint.NewGate(location.cacheDir, who.callerKey())
 	facts := hint.NewGate(location.cacheDir, who.sessionKey())
-	actingLease := actingLeaseFor(who, location, facts, req.Lease)
+	actingLease, leaseFrom := actingLeaseFor(who, location, facts, req.Lease)
 	tool := hookToolCommand
 	switch {
 	case req.Observe:
@@ -303,7 +303,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	case isPath:
 		tool = hookToolWrite
 	}
-	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease}
+	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease, LeaseFrom: leaseFrom}
 	// Where the acting lease STANDS, read once and before any rule. An id the job store does
 	// not carry is refused, because every lease-scoped rule below reads that row and
 	// finding nothing is how they all fall silent at once: the call would be graded by
@@ -1082,6 +1082,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Event:           who.Event,
 		Tool:            tool,
 		Lease:           lease,
+		LeaseFrom:       verdict.LeaseFrom,
 		PreauthorizedBy: preauth,
 		Decision:        verdict.Decision,
 		Reason:          verdict.Reason,

@@ -123,6 +123,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A `BAGGAGE` lease claim ranks below every record.** `magus shell --lease` no longer
+  defaults to it, so the subagent's spawn record and the checkout's `magus job exec`
+  binding answer first, for magusfile job writes too. Verdicts, hook trail events and
+  session target results record `lease_from`: `flag`, `agent`, `marker`, `env` or
+  `contested`.
 - **The trail names the credential, not "operator", and drops `actor`.** Each event records
   `credential` (the verified token's name: `cli`, a connector or console token's name,
   `share`) and the MCP client as `host`; the wire's `actor` is a label rendered from them.

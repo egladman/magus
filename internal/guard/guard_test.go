@@ -153,9 +153,6 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-one"}.Bind(one.ID))
 	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "session-two"}.Bind(two.ID))
 
-	assert.Equal(t, one.ID, job.Checkout{CacheDir: cacheDir, Session: "session-one"}.ActingLease())
-	assert.Equal(t, two.ID, job.Checkout{CacheDir: cacheDir, Session: "session-two"}.ActingLease())
-
 	first := Judge(ctx, Dependencies{}, Request{
 		Input: "internal/guard/spawn.go", IsPath: true, Session: "session-one", Host: "test-host",
 	})

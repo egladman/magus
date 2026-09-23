@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -158,6 +159,7 @@ func TestWithSessionJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 			assert.Equal(t, "fleet/f3", summaries[0].Lease)
 			require.Len(t, summaries[0].Targets, 1)
 			assert.Equal(t, "fleet/f3", summaries[0].Targets[0].Lease)
+			assert.Equal(t, types.LeaseSourceEnv, summaries[0].Targets[0].LeaseFrom, "a BAGGAGE lease records as the claim it is")
 		})
 	}
 }

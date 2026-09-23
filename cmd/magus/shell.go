@@ -117,16 +117,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// host. A wrapper that cannot extract a session id must still get a verdict;
 	// erroring here would block a tool call over metadata.
 	sf := gen.BindShell(fset)
-	// The environment supplies the DEFAULT, so an explicit --lease still wins: a shell
-	// that exported the variable for a whole session must not outrank a per-call
-	// override. Same shape `magus run` uses for MAGUS_SHARD.
-	// trail.LeaseFromEnv, never a raw Getenv: the journal producers read the variable
-	// through the same helper, and two readers with different trimming rules split one
-	// exported lease into a journal identity and an unguarded write.
-	// Discarded, unlike `magus run`'s shard pair: --lease is a plain string flag whose
-	// Set cannot fail, and a guard that refused to answer over a malformed lease would
-	// block the tool call this comment's first line says must always get a verdict.
-	_ = envDefault(fset, gen.FlagShellLease, trail.LeaseFromEnv())
+	// --lease has no environment default: the guard reads BAGGAGE itself and ranks it below
+	// the spawn record and the marker, and a default here would pass that claim in as a
+	// flag that outranks both.
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule: a flag accepted on most commands teaches

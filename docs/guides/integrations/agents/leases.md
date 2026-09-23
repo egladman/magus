@@ -330,8 +330,8 @@ Exporting it is the ORCHESTRATOR's job today. The shipped
 are attribution, and nothing that names a job, so a worker whose orchestrator
 never exported the variable is graded as an editor magus cannot attribute, which
 is an advisory rather than a deny and leaves every rule above it inert. A
-wrapper that builds its own argv can pass `magus session hook --lease <id>`
-instead; an explicit flag wins over the environment.
+wrapper that builds its own argv can pass `magus shell --lease <id>` instead;
+an explicit flag outranks every other source.
 
 ## What the guard enforces under a lease
 
@@ -416,10 +416,17 @@ cache directory and `$TMPDIR` alone, which is the sandbox's reading of the guard
 refusing every write under such a job.
 
 Both tiers resolve the acting lease the same way, in this order: an explicit
-`--lease`, the `BAGGAGE` a worker inherited, then the job `magus job exec` took
-in the checkout. A host runs its hooks from wherever it likes, so the guard
-locates that checkout from the `cwd` its hook envelope reports and falls back to
-the hook process's own directory only when the envelope carries none.
+`--lease`, the job magus recorded the calling subagent was spawned for, the job
+`magus job exec` took in the checkout, then the `BAGGAGE` a worker inherited.
+Every tier but the last is a record; `BAGGAGE` is the worker's claim about
+itself, so it answers only when no record does, and a checkout whose binding
+disagrees with it grades under the binding. The verdict names the tier that
+answered as `lease_from`: `flag`, `agent`, `marker`, `env`, or `contested` for a
+binding that overruled a different claim.
+
+A host runs its hooks from wherever it likes, so the guard locates that checkout
+from the `cwd` its hook envelope reports and falls back to the hook process's
+own directory only when the envelope carries none.
 
 A deny path inside a write path is refused, and it costs the directory holding
 it as well: both this policy and landlock are allowlists with no deny rule, so

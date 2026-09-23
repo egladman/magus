@@ -284,7 +284,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
-	if id := actingLeaseFor(who, at, facts, explicitLease); id != "" {
+	if id, _ := actingLeaseFor(who, at, facts, explicitLease); id != "" {
 		req.Role = types.SpawnRoleWorker
 		req.Lease = &types.Job{ID: id}
 		if rows, err := leaseRows(ctx, at); err == nil {
@@ -433,23 +433,25 @@ func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, b
 	return types.Job{}, false
 }
 
-// actingLeaseFor is the lease a call acts under: an explicit --lease, then the job the
-// calling subagent was spawned for, then the session's binding in this checkout.
+// actingLeaseFor is the lease a call acts under, resolved by job.LeaseQuery with the
+// answers only the guard holds: the calling subagent's spawn record and the session.
 //
 // The subagent's job outranks the session's marker because a host that reports subagents
 // hands them their parent's session id, so the marker cannot tell them apart and the
 // agent id can. The marker is keyed on the session, so several sessions sharing one
 // checkout each resolve their own; a host that reports none reads the checkout-wide one.
-func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit string) string {
-	if explicit != "" {
-		return explicit
+func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit string) (string, types.LeaseSource) {
+	q := job.LeaseQuery{
+		Checkout: job.Checkout{CacheDir: at.cacheDir, Session: who.Session},
+		Flag:     explicit,
+		Claim:    trail.LeaseFromEnv(),
 	}
 	if who.Agent != "" {
-		if rec, ok := readSpawnedAgent(facts, who.Agent); ok && rec.Job != "" {
-			return rec.Job
+		if rec, ok := readSpawnedAgent(facts, who.Agent); ok {
+			q.AgentJob = rec.Job
 		}
 	}
-	return job.Checkout{CacheDir: at.cacheDir, Session: who.Session}.ActingLease()
+	return q.Resolve()
 }
 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id

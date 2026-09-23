@@ -278,7 +278,7 @@ type NextServer func(next []hint.Next) []hint.Next
 func ServedIn(cacheDir, root string) NextServer {
 	return func(next []hint.Next) []hint.Next {
 		role, writePaths := hint.RoleUnbound, []string(nil)
-		if id := job.ActingLease(cacheDir); id != "" {
+		if id, _ := job.ActingLease(cacheDir); id != "" {
 			role = hint.RoleWorker
 			if rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List(); err == nil {
 				role, writePaths = hint.LeaseRole(rows, id)

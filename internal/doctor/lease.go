@@ -79,21 +79,19 @@ func (r *runner) checkBoundLease() types.DoctorCheck {
 func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string) types.DoctorCheck {
 	const name = "bound-lease"
 
-	id := job.ActingLease(cacheDir)
+	id, from := job.ActingLease(cacheDir)
 	if id == "" {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no lease bound; the guard advises only"}
 	}
-	// Asked through job.LeaseConflict rather than compared here: since the marker WINS,
-	// a comparison against the resolved id can never differ from the marker, so a second
-	// copy of this rule in this file would be one that silently stopped firing.
-	if marker, claimed, conflicted := job.LeaseConflict(cacheDir); conflicted {
+	if from == types.LeaseSourceContested {
+		claimed := trail.LeaseFromEnv()
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
-			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", marker, claimed),
+			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", id, claimed),
 			Details: []string{
 				"the marker is what `" + hint.JobExec.String() + "` wrote here, so magus grades every write under " +
-					marker + " and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
+					id + " and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
 				"unset " + trail.EnvBaggage + ", or take the lease you mean here with `" + hint.JobExec.With(claimed) + "`",
 			},
 		}

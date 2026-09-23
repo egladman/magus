@@ -20,7 +20,7 @@ import (
 // carry a lease into a hook: a host runs its hooks with its own environment, so a worker
 // exporting BAGGAGE for its shell is invisible to the guard judging its commands. A file
 // in the checkout is the one channel the worker's shell, the host's hook and the sandbox
-// all read. BAGGAGE and an explicit --lease still win; the marker is the last resort.
+// all read. See [LeaseQuery.Resolve] for where it ranks.
 const LeaseMarkerName = "lease"
 
 // leaseMarkerDir holds the per-session markers, one file each.
@@ -78,34 +78,46 @@ func (c Checkout) Marker() string {
 	return readMarker(Checkout{CacheDir: c.CacheDir}.marker())
 }
 
-// ActingLease is the lease this session acts under in this checkout: the marker Bind
-// wrote, else the W3C baggage the process inherited, else "". The guard hook and the
-// sandbox both resolve through this one method so the two enforcement tiers cannot
-// disagree about who is acting.
-func (c Checkout) ActingLease() string {
-	// The MARKER wins. It is written by `magus job exec` into the checkout that took the
-	// lease, so it is a fact about where the work is happening; the env member is a claim
-	// the worker makes about itself, and letting a claim override the record meant a
-	// worker bound to one job could be graded against another job's write paths by exporting
-	// its id.
-	//
-	// Not a fail-open case: a checkout with neither answer is a question magus cannot ask
-	// and stays advisory, which is unchanged. This is the case where magus CAN ask and got
-	// two answers, and preferring the one nobody can rewrite from a shell is the whole of
-	// the fix. Conflict reports the disagreement so a caller can say so.
-	if marker := c.Marker(); marker != "" {
-		return marker
-	}
-	return trail.LeaseFromEnv()
+// LeaseQuery is what a caller knows about itself when it asks which lease it acts under.
+// Checkout is where the call runs; the other fields are the answers only the caller can
+// bring, each empty when it has none.
+type LeaseQuery struct {
+	Checkout
+	// Flag is an explicit --lease the caller's wiring passed.
+	Flag string
+	// AgentJob is the job magus recorded the calling subagent was spawned for.
+	AgentJob string
+	// Claim is the lease the process says it acts under, from its BAGGAGE or from the
+	// client an adopted run was forwarded from.
+	Claim string
 }
 
-// Conflict names the two ids when this session's marker and the environment disagree, or
-// returns false. The env member is ignored in that case (see ActingLease); this is how a
-// surface tells the reader that, rather than grading against one and never mentioning the
-// other.
-func (c Checkout) Conflict() (marker, claimed string, conflicted bool) {
-	marker, claimed = c.Marker(), trail.LeaseFromEnv()
-	return marker, claimed, marker != "" && claimed != "" && marker != claimed
+// Resolve returns the lease the caller acts under and which source answered, or "" and
+// no source when none did. It is the one order the guard, the job store, doctor and the
+// sandbox all grade by: an explicit flag, the subagent's spawn record, the checkout's
+// marker, and only then the claim.
+//
+// A record outranks the claim because the claim is the one answer a worker can rewrite
+// from its own shell: a worker bound to one job that could export another's id would be
+// graded against that job's write paths. A marker that disagrees with the claim answers
+// [types.LeaseSourceContested], so a surface can say the claim was ignored.
+func (q LeaseQuery) Resolve() (string, types.LeaseSource) {
+	if q.Flag != "" {
+		return q.Flag, types.LeaseSourceFlag
+	}
+	if q.AgentJob != "" {
+		return q.AgentJob, types.LeaseSourceAgent
+	}
+	if marker := q.Marker(); marker != "" {
+		if q.Claim != "" && q.Claim != marker {
+			return marker, types.LeaseSourceContested
+		}
+		return marker, types.LeaseSourceMarker
+	}
+	if q.Claim != "" {
+		return q.Claim, types.LeaseSourceEnv
+	}
+	return "", ""
 }
 
 // Bind writes the marker binding lease id to this session in this checkout, creating the
@@ -222,13 +234,11 @@ func BoundLeases(cacheDir string) []string {
 	return out
 }
 
-// ActingLease is the checkout-wide resolution, for a caller that reports no session. See
-// [Checkout.ActingLease].
-func ActingLease(cacheDir string) string { return Checkout{CacheDir: cacheDir}.ActingLease() }
-
-// LeaseConflict is the checkout-wide reading. See [Checkout.Conflict].
-func LeaseConflict(cacheDir string) (marker, claimed string, conflicted bool) {
-	return Checkout{CacheDir: cacheDir}.Conflict()
+// ActingLease resolves the lease for a caller that reports no session and no subagent:
+// this checkout's checkout-wide marker, else the process's BAGGAGE claim. See
+// [LeaseQuery.Resolve].
+func ActingLease(cacheDir string) (string, types.LeaseSource) {
+	return LeaseQuery{Checkout: Checkout{CacheDir: cacheDir}, Claim: trail.LeaseFromEnv()}.Resolve()
 }
 
 // LeaseFromMarker is the checkout-wide marker. See [Checkout.Marker].

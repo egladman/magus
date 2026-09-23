@@ -717,6 +717,57 @@ func TestAgentFlagAttributesAnExtractedCommandToTheSubagentsJob(t *testing.T) {
 	assert.Empty(t, parent.Lease, "the same command with no agent id is the parent's")
 }
 
+// BAGGAGE reaches a hook from the host's environment, so it is the one lease answer a
+// worker, or the orchestrator that spawned it, can rewrite from a shell. A spawn record
+// and a checkout's binding are records, and each outranks it; the claim answers only
+// when neither does. The trail records which source answered.
+func TestARecordOutranksTheBaggageClaim(t *testing.T) {
+	running := func(id string) types.Job {
+		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	}
+	ctx, _ := fleetFixture(t, running("agent-job"), running("bound-job"), running("claimed-job"))
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "bound-session"}.Bind("bound-job"))
+	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator agent-job", "", "", "", "a1b2c3"), Host: "claude-code"})
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=claimed-job")
+
+	type answer struct {
+		Lease string
+		From  types.LeaseSource
+	}
+	for name, tc := range map[string]struct {
+		req  Request
+		want answer
+	}{
+		"the claim, when no record answers": {
+			Request{Input: "ls", Host: "claude-code", Session: "free-session"},
+			answer{"claimed-job", types.LeaseSourceEnv},
+		},
+		"the checkout's binding over the claim": {
+			Request{Input: "ls", Host: "claude-code", Session: "bound-session"},
+			answer{"bound-job", types.LeaseSourceContested},
+		},
+		"the subagent's job over the claim": {
+			Request{Input: "ls", Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"},
+			answer{"agent-job", types.LeaseSourceAgent},
+		},
+		"an explicit flag over every record": {
+			Request{Input: "ls", Host: "claude-code", Session: "bound-session", Lease: "agent-job"},
+			answer{"agent-job", types.LeaseSourceFlag},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			v := Judge(ctx, Dependencies{}, tc.req)
+			assert.Equal(t, tc.want, answer{v.Lease, v.LeaseFrom})
+
+			events := trailEvents(t, cacheDir, trail.KindAgentCommand)
+			require.NotEmpty(t, events)
+			last := events[len(events)-1]
+			assert.Equal(t, tc.want, answer{last.Lease, last.LeaseFrom}, "the trail records the same answer")
+		})
+	}
+}
+
 // denyEverySpawn is a magusfile whose spawn rule denies every spawn.
 const denyEverySpawn = `import "magus";
 

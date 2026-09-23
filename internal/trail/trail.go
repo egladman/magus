@@ -152,15 +152,17 @@ type Event struct {
 	// Lease is the lease this action belongs to, when the producer could
 	// correlate one (a marker line, or the BAGGAGE channel); ""
 	// when uncorrelated.
-	Lease         string `json:"lease,omitempty"`
-	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
-	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
-	DurationMs    int64  `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions
-	RequestRef    string `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
-	ResponseRef   string `json:"response_ref,omitempty"`  // blob ref for the response body
-	Preview       string `json:"preview,omitempty"`       // opening characters of the response, for list views
-	RequestBytes  int64  `json:"request_bytes,omitempty"` // full request length
-	ResponseBytes int64  `json:"response_bytes,omitempty"`
+	Lease string `json:"lease,omitempty"`
+	// LeaseFrom is which source answered Lease, on the events whose producer resolved one.
+	LeaseFrom     types.LeaseSource `json:"lease_from,omitempty"`
+	Outcome       string            `json:"outcome"`                 // one of the Outcome* constants
+	Error         string            `json:"error,omitempty"`         // error text when Outcome is OutcomeError
+	DurationMs    int64             `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions
+	RequestRef    string            `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
+	ResponseRef   string            `json:"response_ref,omitempty"`  // blob ref for the response body
+	Preview       string            `json:"preview,omitempty"`       // opening characters of the response, for list views
+	RequestBytes  int64             `json:"request_bytes,omitempty"` // full request length
+	ResponseBytes int64             `json:"response_bytes,omitempty"`
 	// VerdictRef is the grd blob holding a guard deny in full, when the reader was shown
 	// the short repeat form instead. Named here so rotation keeps the blob the deny cites.
 	VerdictRef string `json:"verdict_ref,omitempty"`
@@ -238,8 +240,9 @@ type AgentCommand struct {
 	Context    string
 	// Rule is the guard's stable denial identifier. It is empty for a pass,
 	// advisory, or a deny whose producer cannot identify a single rule.
-	Rule  string
-	Lease string
+	Rule      string
+	Lease     string
+	LeaseFrom types.LeaseSource
 	// PreauthorizedBy is the `next` template that had already served this exact command to
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
@@ -324,9 +327,12 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
 	// line and a guard's reason, not a lease prompt, and a "lease:" line inside either is
 	// quoted prose rather than an orchestrator's assertion.
-	lease := command.Lease
+	lease, leaseFrom := command.Lease, command.LeaseFrom
 	if !types.ValidJobID(lease) {
-		lease = LeaseFromEnv()
+		lease, leaseFrom = LeaseFromEnv(), ""
+		if lease != "" {
+			leaseFrom = types.LeaseSourceEnv
+		}
 	}
 
 	action := command.Tool
@@ -344,6 +350,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Workspace:     command.Workspace,
 		Action:        action,
 		Lease:         lease,
+		LeaseFrom:     leaseFrom,
 		Outcome:       OutcomeOK,
 		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
@@ -507,10 +514,9 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 // none: the magus.lease member of the W3C BAGGAGE channel. See [SpawnFromEnv], which
 // reads the rest of what that environment claimed.
 //
-// This is the second of the two lease channels, and the two say different things. The
-// lease marker (see leaseFromContext) is the ORCHESTRATOR's assertion about a spawn it
-// is making; the environment is the WORKER's own claim about itself. The ENVIRONMENT
-// wins where both are available, because this is what [job.ActingLease] reads first.
+// It is the worker's own claim about itself, unlike a prompt's lease line (see
+// leaseFromContext), which is the orchestrator's assertion about a spawn it is making.
+// Grading ranks it last, below every record; see job.LeaseQuery.Resolve.
 func LeaseFromEnv() string { return SpawnFromEnv().Lease }
 
 // leaseScanBytes bounds the head of the handed context the marker may appear in. The marker

@@ -33,10 +33,9 @@ func withSessionJournal(ctx context.Context, handlers []slog.Handler, root, verb
 	// On an ADOPTED run the environment belongs to the DAEMON, not to whoever asked for the
 	// run, so the environment channel alone leaves every forwarded run unattributed. proc
 	// carries the client's lease on the request and lands it on ctx, and that wins here:
-	// it is the claim of the process that asked, which is the same precedence trail documents
-	// between a lease marker and the environment. The trace context does not cross that
-	// socket, so a forwarded run records the client's lease and no ancestry rather than
-	// borrowing the daemon's. A plain CLI run carries none on ctx and reads its own environment.
+	// it is the environment claim of the process that asked, so it records as one. The
+	// trace context does not cross that socket, so a forwarded run records the client's
+	// lease and no ancestry rather than borrowing the daemon's. A plain CLI run carries none on ctx and reads its own environment.
 	spawn := trail.SpawnFromEnv()
 	if forwarded := proc.LeaseFromContext(ctx); forwarded != "" {
 		spawn = trail.Spawn{Lease: forwarded}
@@ -47,6 +46,7 @@ func withSessionJournal(ctx context.Context, handlers []slog.Handler, root, verb
 		Command:      strings.Join(append([]string{verb}, args...), " "),
 		Version:      version,
 		Lease:        spawn.Lease,
+		LeaseFrom:    spawn.LeaseFrom(),
 		TraceID:      spawn.TraceID,
 		ParentSpanID: spawn.ParentSpanID,
 		SpanID:       trail.NewSpanID(),

@@ -1178,10 +1178,18 @@ func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), &leased,
 		[]string{"--lease", narrowLease().ID, "-o", "json"}))
 	assert.Contains(t, leased.String(), `"lease": "harness/lease-scoped-deny"`)
+	assert.Contains(t, leased.String(), `"lease_from": "flag"`)
 
 	var unbound bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), &unbound, []string{"-o", "json"}))
-	assert.NotContains(t, unbound.String(), `"lease"`, "a session nobody leased names no row")
+	assert.NotContains(t, unbound.String(), `"lease`, "a session nobody leased names no row and no source")
+
+	// --lease takes no default from the environment, so a BAGGAGE claim reaches the verdict
+	// as the claim it is rather than as a flag that would outrank every record.
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+narrowLease().ID)
+	var claimed bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), &claimed, []string{"-o", "json"}))
+	assert.Contains(t, claimed.String(), `"lease_from": "env"`)
 }
 
 // TestHookCmdAdvisesAnInvalidLeaseOnEverySurface: the notice lived inside gradeLeasedWrite,
@@ -1319,7 +1327,7 @@ func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 // flag reaches the rule, a denial exits with the blocking status, and the flag outranks
 // the environment.
 func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
-	ctx, root, _ := fleetFixture(t, fleetLeases()...)
+	ctx, root, cacheDir := fleetFixture(t, fleetLeases()...)
 	run := func(stdin string, args ...string) (string, error) {
 		global = globalFlags{}
 		var out strings.Builder
@@ -1336,7 +1344,7 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		assert.Equal(t, "deny\n", got)
 	})
 
-	t.Run("the baggage member supplies the default", func(t *testing.T) {
+	t.Run("the baggage claim answers when no record does", func(t *testing.T) {
 		t.Setenv(trail.EnvBaggage, "userId=alice,"+trail.BaggageLease+"=lease-b")
 		_, err := run(owned, "--path", "-o", "name")
 		var silent errSilent
@@ -1359,6 +1367,32 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
 		_, err := run(owned, "--path", "--lease", "lease-a", "-o", "name")
 		require.NoError(t, err, "acting as the owner must not be denied")
+	})
+
+	// The claim ranks below every record. Before, --lease defaulted to BAGGAGE, so the
+	// hook's inherited lease-b was passed in as a flag and outranked both of these.
+	t.Run("the session's binding outranks the baggage claim", func(t *testing.T) {
+		t.Setenv(trail.EnvBaggage, "")
+		require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "bound-session"}.Bind("lease-a"))
+		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+		got, err := run(owned, "--path", "--session", "bound-session", "-o", "json")
+		require.NoError(t, err, "graded under the binding's lease-a, whose ground this is")
+		assert.Contains(t, got, `"lease": "lease-a"`)
+		assert.Contains(t, got, `"lease_from": "contested"`)
+	})
+
+	t.Run("a subagent's spawn record outranks the baggage claim", func(t *testing.T) {
+		t.Setenv(trail.EnvBaggage, "")
+		spawned := `{"session_id":"spawn-session","hook_event_name":"PostToolUse","tool_name":"Agent",` +
+			`"tool_input":{"description":"orchestrator/integrator lease-a","prompt":"Carry the job."},` +
+			`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
+		_, err := run(spawned, "--agent-name", "claude-code", "-o", "name")
+		require.NoError(t, err)
+		t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-b")
+		got, err := run(owned, "--path", "--agent-name", "claude-code", "--session", "spawn-session", "--agent", "a1b2c3", "-o", "json")
+		require.NoError(t, err, "graded under the spawn's lease-a, whose ground this is")
+		assert.Contains(t, got, `"lease": "lease-a"`)
+		assert.Contains(t, got, `"lease_from": "agent"`)
 	})
 }
 

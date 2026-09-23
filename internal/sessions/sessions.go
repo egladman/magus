@@ -100,7 +100,7 @@ type Record struct {
 // magus, and against what. Its origin's Session is the host's conversation, when a host
 // delivered one.
 //
-// The origin's User, UID and Transport are read by the writing process itself. Host is
+// The origin's User, UID and EntryPoint are read by the writing process itself. Host is
 // the agent host that drove the session, as its wiring named itself, and is EMPTY from the
 // CLI today: agent identity reaches magus only through the hook payloads internal/trail
 // records, and joining the two stores is later work. An empty Host means "not known",
@@ -121,10 +121,12 @@ type InvocationStart struct {
 	Command      string `json:"command,omitempty"`
 	Version      string `json:"version,omitempty"`
 	Lease        string `json:"lease,omitempty"`
-	TraceID      string `json:"trace_id,omitempty"`
-	SpanID       string `json:"span_id,omitempty"`
-	ParentSpanID string `json:"parent_span_id,omitempty"`
-	Spawner      string `json:"spawner,omitempty"`
+	// LeaseFrom is which source answered Lease; see types.LeaseSource.
+	LeaseFrom    types.LeaseSource `json:"lease_from,omitempty"`
+	TraceID      string            `json:"trace_id,omitempty"`
+	SpanID       string            `json:"span_id,omitempty"`
+	ParentSpanID string            `json:"parent_span_id,omitempty"`
+	Spawner      string            `json:"spawner,omitempty"`
 }
 
 // TargetResult is the payload of one target finishing. Replayed distinguishes a
@@ -142,6 +144,8 @@ type TargetResult struct {
 	Replayed   bool   `json:"replayed,omitempty"`
 	Ref        string `json:"ref,omitempty"`
 	Lease      string `json:"lease,omitempty"`
+	// LeaseFrom repeats the start's, for the reason Lease does.
+	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
 }
 
 // UnmarshalJSON decodes a result, reading a duration written under either spelling.
