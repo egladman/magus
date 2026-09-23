@@ -5,7 +5,7 @@ name: Queue
 # checks approval at each head and partitions it by the affected sets
 # `magus affected ci --plan --stdin` reports; each stage job then validates one change on
 # main plus the changes ahead of it in its partition, gated with `magus affected ci`
-# against the stage below. Every stage uploads its verdict the moment it finishes, and
+# against the stage it was built onto. Every stage uploads its verdict the moment it finishes, and
 # queue-land.yaml, already running, lands it.
 #
 # This workflow executes pull-request code, so its token reads and nothing more. Nothing
@@ -158,15 +158,15 @@ jobs:
           q="$RUNNER_TEMP/queue"
           # The hooks' variables are for mergequeue to set, so they stay single-quoted.
           # shellcheck disable=SC2016
-          mergequeue validate --plan "$q/plan.json" --only "$CHANGE" --out "$q/stages" \
-            --gate 'magus affected ci --base "$MERGEQUEUE_BELOW" --no-default-charms' \
-            --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_BELOW"'
+          mergequeue validate --plan "$q/plan.json" --only "$CHANGE" --verdicts "$q/verdicts" \
+            --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
+            --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'
 
-      # The directory's contents become the artifact's root: stage.json and, for a green
+      # The directory's contents become the artifact's root: verdict.json and, for a green
       # change, stage.bundle.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: magus-queue-stage-${{ matrix.change }}
-          path: ${{ runner.temp }}/queue/stages/${{ matrix.change }}
+          name: magus-queue-verdict-${{ matrix.change }}
+          path: ${{ runner.temp }}/queue/verdicts/${{ matrix.change }}
           if-no-files-found: error
           retention-days: 1

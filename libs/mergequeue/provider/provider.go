@@ -3,16 +3,16 @@
 //
 // A provider script exports five functions, each taking one record and returning one:
 //
-//	list_queue({base, remote})                         > [change]
-//	approval_at(change + {sha})                        > {approved, head, required, approvals, reason}
-//	post_status(change + {sha, context, state, description}) > bool
-//	merge_change(change + {sha, message})              > {merged, reason}
-//	kick_back(change + {sha, body})                    > bool
+//	list_changes({base, remote})                                > [change]
+//	approval_at(change + {commit})                              > {approved, head, reason}
+//	post_status(change + {commit, context, state, description}) > bool
+//	merge_change(change + {commit, message})                    > {merged, reason}
+//	kick_back(change + {commit, report})                        > bool
 //
-// A change record carries the fields of [mergequeue.Change]. The two reads run in
-// planning and landing; the three writes run only in landing, so a script should read
-// its write credential under its own name, letting a job that does not hold it fail
-// rather than write.
+// A change record carries the fields of [mergequeue.Change]; a returned record's other
+// keys are ignored. The two reads run in planning and landing; the three writes run
+// only in landing, so a script should read its write credential under its own name,
+// letting a job that does not hold it fail rather than write.
 //
 // Scripts see Buzz's standard library (std, os, serialize, ...) and one host module,
 // "mergequeue", whose request(method, url, body, headers) makes an HTTP request and
@@ -38,49 +38,51 @@ import (
 //go:embed github.buzz
 var githubSource string
 
-// Builtin maps each provider compiled into this package to its source.
-var Builtin = map[string]string{"github": githubSource}
+// builtin maps each provider compiled into this package to its source.
+var builtin = map[string]string{"github": githubSource}
 
 // Contract op names.
 const (
-	OpList       = "list_queue"
-	OpApprovalAt = "approval_at"
-	OpPostStatus = "post_status"
-	OpMerge      = "merge_change"
-	OpKickBack   = "kick_back"
+	opListChanges = "list_changes"
+	opApprovalAt  = "approval_at"
+	opPostStatus  = "post_status"
+	opMergeChange = "merge_change"
+	opKickBack    = "kick_back"
 )
 
 // Every op is required: branch protection requires the queue's status once it is
 // wired, so a provider that can list changes but not merge them would hold every
 // change forever.
-var ops = []string{OpList, OpApprovalAt, OpPostStatus, OpMerge, OpKickBack}
+var ops = []string{opListChanges, opApprovalAt, opPostStatus, opMergeChange, opKickBack}
 
-// Buzz is a [mergequeue.Provider] backed by a Buzz script. Calls are serialized: one
+// Script is a [mergequeue.Provider] backed by a Buzz script. Calls are serialized: one
 // VM session answers them all.
-type Buzz struct {
+type Script struct {
 	name string
 	mu   sync.Mutex
 	sess *buzz.Session
 	fns  map[string]vm.Value
 }
 
-var _ mergequeue.Provider = (*Buzz)(nil)
+var _ mergequeue.Provider = (*Script)(nil)
 
-// Load opens a built-in provider by name ("github") or a script by path.
-func Load(ctx context.Context, spec string) (*Buzz, error) {
-	if src, ok := Builtin[spec]; ok {
-		return Open(ctx, spec, src)
+// Open opens a built-in provider by name ("github") or a script by path. The caller
+// owns Close.
+func Open(ctx context.Context, spec string) (*Script, error) {
+	if src, ok := builtin[spec]; ok {
+		return New(ctx, spec, src)
 	}
 	src, err := os.ReadFile(spec)
 	if err != nil {
 		return nil, fmt.Errorf("provider %q: not built in, and %w", spec, err)
 	}
-	return Open(ctx, strings.TrimSuffix(filepath.Base(spec), ".buzz"), string(src))
+	return New(ctx, strings.TrimSuffix(filepath.Base(spec), ".buzz"), string(src))
 }
 
-// Open runs source and checks it exports every contract op. The caller owns Close.
-func Open(ctx context.Context, name, source string) (*Buzz, error) {
-	sess, err := NewSession(ctx)
+// New runs source and checks it exports every contract op. name labels its errors. The
+// caller owns Close.
+func New(ctx context.Context, name, source string) (*Script, error) {
+	sess, err := newSession(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +91,7 @@ func Open(ctx context.Context, name, source string) (*Buzz, error) {
 		return nil, fmt.Errorf("provider %q: %w", name, err)
 	}
 	exports := sess.Exports()
-	p := &Buzz{name: name, sess: sess, fns: map[string]vm.Value{}}
+	p := &Script{name: name, sess: sess, fns: map[string]vm.Value{}}
 	var missing []string
 	for _, op := range ops {
 		fn, ok := exports[op]
@@ -106,9 +108,8 @@ func Open(ctx context.Context, name, source string) (*Buzz, error) {
 	return p, nil
 }
 
-// NewSession is a session with the modules a provider script may import. Exposed so a
-// provider's own `test` blocks run against the same surface.
-func NewSession(ctx context.Context) (*buzz.Session, error) {
+// newSession is a session with the modules a provider script may import.
+func newSession(ctx context.Context) (*buzz.Session, error) {
 	sess := buzz.NewSession(ctx)
 	buzzstd.RegisterWithOutput(sess, os.Stderr)
 	if err := sess.Provide(buzz.ModuleEnv{Ctx: ctx, Out: os.Stderr}, hostModule); err != nil {
@@ -119,21 +120,23 @@ func NewSession(ctx context.Context) (*buzz.Session, error) {
 }
 
 // Close releases the VM session.
-func (p *Buzz) Close() error { return p.sess.Close() }
+func (p *Script) Close() error { return p.sess.Close() }
 
-func (p *Buzz) Name() string { return p.name }
-
-func (p *Buzz) call(ctx context.Context, op string, params map[string]any) (any, error) {
+func (p *Script) call(ctx context.Context, op string, params map[string]any) (any, error) {
+	arg, err := toValue(params)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", p.where(op), err)
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	v, err := p.sess.CallValue(ctx, p.fns[op], []vm.Value{toValue(params)})
+	v, err := p.sess.CallValue(ctx, p.fns[op], []vm.Value{arg})
 	if err != nil {
-		return nil, fmt.Errorf("provider %q: %s: %w", p.name, op, err)
+		return nil, fmt.Errorf("%s: %w", p.where(op), err)
 	}
 	return fromValue(v), nil
 }
 
-func (p *Buzz) where(op string) string { return fmt.Sprintf("provider %q: %s", p.name, op) }
+func (p *Script) where(op string) string { return fmt.Sprintf("provider %q: %s", p.name, op) }
 
 func changeParams(c mergequeue.Change) map[string]any {
 	return map[string]any{
@@ -142,18 +145,19 @@ func changeParams(c mergequeue.Change) map[string]any {
 	}
 }
 
-func (p *Buzz) List(ctx context.Context, q mergequeue.ListQuery) ([]mergequeue.Change, error) {
-	data, err := p.call(ctx, OpList, map[string]any{"base": q.Base, "remote": q.Remote})
+// ListChanges calls list_changes and checks every change it returns.
+func (p *Script) ListChanges(ctx context.Context, q mergequeue.ListQuery) ([]mergequeue.Change, error) {
+	data, err := p.call(ctx, opListChanges, map[string]any{"base": q.Base, "remote": q.Remote})
 	if err != nil {
 		return nil, err
 	}
 	rows, ok := data.([]any)
 	if !ok {
-		return nil, fmt.Errorf("%s returned %T, want a list", p.where(OpList), data)
+		return nil, fmt.Errorf("%s returned %T, want a list", p.where(opListChanges), data)
 	}
 	out := make([]mergequeue.Change, 0, len(rows))
 	for i, row := range rows {
-		c, err := decodeChange(row, fmt.Sprintf("%s[%d]", p.where(OpList), i))
+		c, err := decodeChange(row, fmt.Sprintf("%s[%d]", p.where(opListChanges), i))
 		if err != nil {
 			return nil, err
 		}
@@ -162,8 +166,8 @@ func (p *Buzz) List(ctx context.Context, q mergequeue.ListQuery) ([]mergequeue.C
 	return out, nil
 }
 
-// decodeChange refuses a record without an id or head: the queue would stage and post
-// against nothing.
+// decodeChange refuses a record [mergequeue.Change.Check] refuses: the queue would stage
+// and post against nothing, or hand git an option.
 func decodeChange(row any, where string) (mergequeue.Change, error) {
 	m, ok := row.(map[string]any)
 	if !ok {
@@ -188,20 +192,21 @@ func decodeChange(row any, where string) (mergequeue.Change, error) {
 		return mergequeue.Change{}, err
 	}
 	c.Fork = fork
-	if c.ID == "" || c.Head == "" {
-		return mergequeue.Change{}, fmt.Errorf("%s: a change needs both id and head", where)
+	if err := c.Check(); err != nil {
+		return mergequeue.Change{}, fmt.Errorf("%s: %w", where, err)
 	}
 	return c, nil
 }
 
-func (p *Buzz) ApprovalAt(ctx context.Context, c mergequeue.Change, sha string) (mergequeue.Approval, error) {
+// ApprovalAt calls approval_at. A record without a head is an error.
+func (p *Script) ApprovalAt(ctx context.Context, c mergequeue.Change, commit string) (mergequeue.Approval, error) {
 	params := changeParams(c)
-	params["sha"] = sha
-	data, err := p.call(ctx, OpApprovalAt, params)
+	params["commit"] = commit
+	data, err := p.call(ctx, opApprovalAt, params)
 	if err != nil {
 		return mergequeue.Approval{}, err
 	}
-	where := p.where(OpApprovalAt)
+	where := p.where(opApprovalAt)
 	m, ok := data.(map[string]any)
 	if !ok {
 		return mergequeue.Approval{}, fmt.Errorf("%s returned %T, want a record", where, data)
@@ -213,36 +218,37 @@ func (p *Buzz) ApprovalAt(ctx context.Context, c mergequeue.Change, sha string) 
 	if a.Head, err = str(m, "head", where); err != nil {
 		return mergequeue.Approval{}, err
 	}
-	if a.Required, err = integer(m, "required", where); err != nil {
-		return mergequeue.Approval{}, err
-	}
-	if a.Approvals, err = integer(m, "approvals", where); err != nil {
-		return mergequeue.Approval{}, err
-	}
 	if a.Reason, err = str(m, "reason", where); err != nil {
 		return mergequeue.Approval{}, err
+	}
+	moved := c
+	moved.Head = a.Head
+	if err := moved.Check(); err != nil {
+		return mergequeue.Approval{}, fmt.Errorf("%s: head: %w", where, err)
 	}
 	return a, nil
 }
 
-func (p *Buzz) PostStatus(ctx context.Context, c mergequeue.Change, sha string, s mergequeue.Status) error {
+// PostStatus calls post_status.
+func (p *Script) PostStatus(ctx context.Context, c mergequeue.Change, commit string, s mergequeue.CommitStatus) error {
 	params := changeParams(c)
-	params["sha"] = sha
+	params["commit"] = commit
 	params["context"] = s.Context
 	params["state"] = string(s.State)
 	params["description"] = s.Description
-	return p.acknowledged(ctx, OpPostStatus, params)
+	return p.acknowledged(ctx, opPostStatus, params)
 }
 
-func (p *Buzz) Merge(ctx context.Context, c mergequeue.Change, sha, message string) error {
+// MergeChange calls merge_change.
+func (p *Script) MergeChange(ctx context.Context, c mergequeue.Change, commit, message string) error {
 	params := changeParams(c)
-	params["sha"] = sha
+	params["commit"] = commit
 	params["message"] = message
-	data, err := p.call(ctx, OpMerge, params)
+	data, err := p.call(ctx, opMergeChange, params)
 	if err != nil {
 		return err
 	}
-	where := p.where(OpMerge)
+	where := p.where(opMergeChange)
 	m, ok := data.(map[string]any)
 	if !ok {
 		return fmt.Errorf("%s returned %T, want a record", where, data)
@@ -252,7 +258,10 @@ func (p *Buzz) Merge(ctx context.Context, c mergequeue.Change, sha, message stri
 		return err
 	}
 	if !merged {
-		reason, _ := str(m, "reason", where)
+		reason, err := str(m, "reason", where)
+		if err != nil {
+			return err
+		}
 		if reason == "" {
 			reason = "no reason given"
 		}
@@ -261,16 +270,17 @@ func (p *Buzz) Merge(ctx context.Context, c mergequeue.Change, sha, message stri
 	return nil
 }
 
-func (p *Buzz) KickBack(ctx context.Context, c mergequeue.Change, sha, report string) error {
+// KickBack calls kick_back.
+func (p *Script) KickBack(ctx context.Context, c mergequeue.Change, commit, report string) error {
 	params := changeParams(c)
-	params["sha"] = sha
-	params["body"] = report
-	return p.acknowledged(ctx, OpKickBack, params)
+	params["commit"] = commit
+	params["report"] = report
+	return p.acknowledged(ctx, opKickBack, params)
 }
 
 // acknowledged invokes an op answering a bool, reading anything but true as a refusal:
 // a caller told a status posted when it did not would merge around its own gate.
-func (p *Buzz) acknowledged(ctx context.Context, op string, params map[string]any) error {
+func (p *Script) acknowledged(ctx context.Context, op string, params map[string]any) error {
 	data, err := p.call(ctx, op, params)
 	if err != nil {
 		return err
@@ -309,51 +319,21 @@ func boolean(m map[string]any, key, where string) (bool, error) {
 	return b, nil
 }
 
-func integer(m map[string]any, key, where string) (int, error) {
-	v, present := m[key]
-	if !present || v == nil {
-		return 0, nil
-	}
-	n, ok := v.(int64)
-	if !ok {
-		return 0, fmt.Errorf("%s: field %q is %T, want int", where, key, v)
-	}
-	return int(n), nil
-}
-
-// toValue converts the plain records the bridge builds into Buzz values.
-func toValue(v any) vm.Value {
-	switch x := v.(type) {
-	case nil:
-		return vm.Null
-	case bool:
-		return vm.BoolValue(x)
-	case int:
-		return vm.IntValue(int64(x))
-	case int64:
-		return vm.IntValue(x)
-	case string:
-		return vm.StrValue(x)
-	case []any:
-		items := make([]vm.Value, len(x))
-		for i, it := range x {
-			items[i] = toValue(it)
+// toValue converts the records the bridge builds, whose values are strings and bools,
+// into Buzz values.
+func toValue(params map[string]any) (vm.Value, error) {
+	m := vm.NewMap()
+	for k, v := range params {
+		switch x := v.(type) {
+		case string:
+			m.MapSet(k, vm.StrValue(x))
+		case bool:
+			m.MapSet(k, vm.BoolValue(x))
+		default:
+			return vm.Null, fmt.Errorf("field %q is %T, which the bridge does not pass", k, v)
 		}
-		return vm.ListValue(items)
-	case map[string]string:
-		m := vm.NewMap()
-		for k, val := range x {
-			m.MapSet(k, vm.StrValue(val))
-		}
-		return m
-	case map[string]any:
-		m := vm.NewMap()
-		for k, val := range x {
-			m.MapSet(k, toValue(val))
-		}
-		return m
 	}
-	return vm.StrValue(fmt.Sprint(v))
+	return m, nil
 }
 
 // fromValue converts a Buzz value a script returned into plain Go values.

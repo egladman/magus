@@ -27,33 +27,52 @@ there the queue:
   regeneration to the change's branch with the change's author as author;
 - refuses pull requests from forks.
 
+It kicks an author back only for what their own change did: a real conflict, a red gate
+on a stage whose every change beneath is validated, or a regeneration their code broke.
+A machine failure (a gate killed by a signal, a lock held past its retries) stops the
+run and leaves the change queued.
+
+## Vocabulary
+
+| Term        | Meaning                                                               |
+| ----------- | --------------------------------------------------------------------- |
+| base        | the branch the queue merges into                                      |
+| base commit | the base's tip when the plan was made; every partition starts on it   |
+| stage       | a staging commit: one change merged onto the stage beneath it         |
+| onto        | the commit a stage was built onto: the base commit or the stage below |
+| tip         | the base's commit at landing                                          |
+| head        | a change's own commit                                                 |
+| verdict     | what the queue decided for one change: `land`, `kick` or `wait`       |
+
 ## Commands
 
 Every command writes JSONL events (`mergequeue.event/v1`) on stdout. Hook output and
 errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 1.
 
-| Command    | Reads                                  | Writes                              | Rights                      |
-| ---------- | -------------------------------------- | ----------------------------------- | --------------------------- |
-| `list`     | the provider                           | a `mergequeue.changes/v1` document  | read                        |
-| `plan`     | changes (stdin or `--changes`)         | a `mergequeue.plan/v1` file         | read                        |
-| `validate` | the plan                               | one `mergequeue.stage/v1` per change | read; runs the changes' code |
-| `land`     | the plan and the verdicts as they come | merges through the provider         | write; runs no change's code |
+| Command    | Reads                                  | Writes                                 | Rights                       |
+| ---------- | -------------------------------------- | -------------------------------------- | ---------------------------- |
+| `list`     | the provider                           | a `mergequeue.changes/v1` document     | read                         |
+| `plan`     | changes (stdin or `--changes`)         | a `mergequeue.plan/v1` file            | read                         |
+| `validate` | the plan                               | one `mergequeue.verdict/v1` per change | read; runs the changes' code |
+| `land`     | the plan and the verdicts as they come | merges through the provider            | write; runs no change's code |
 
 ```sh
 mergequeue list --provider github --base main > changes.json
 mergequeue plan --changes changes.json --provider github --out plan.json \
   --affected 'magus affected ci --plan --stdin'
-mergequeue validate --plan plan.json --out stages \
-  --gate 'magus affected ci --base "$MERGEQUEUE_BELOW" --no-default-charms' \
-  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_BELOW"'
-mergequeue land --plan plan.json --stages stages --provider github --follow
+mergequeue validate --plan plan.json --verdicts verdicts \
+  --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
+  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'
+mergequeue land --plan plan.json --verdicts verdicts --provider github --follow
 ```
 
 `plan` checks each change's approval at its exact head, drops what conflicts with main on
 its own (kicked back with the conflicting files and the commits that touched them), and
 partitions the rest. `validate --only <id>` validates one change: the changes beneath it
 in its partition are staged under it but not gated, which is how a CI system spreads one
-plan over separate jobs.
+plan over separate jobs; a red there waits rather than kicks back, since it may be a
+change beneath it that failed. `validate --parallel` caps the stages built or gated at
+once across every partition.
 
 ## Input: `mergequeue.changes/v1`
 
@@ -73,73 +92,86 @@ plan over separate jobs.
       "author": "priya",
       "fork": false,
       "affected": ["libs/parser", "apps/web"],
-      "unbounded": ""
+      "unbounded_by": ""
     }
   ]
 }
 ```
 
-`id` and `head` are required. Changes are in queue order. `affected` is the set of units
-(projects, packages, anything the caller partitions by) the change can reach. Omitted or
-`null` means unknown, and `unbounded` names why a set is not a proof; either one puts
-the change in one partition with everything. An empty list is a proof that the change
-reaches nothing.
+`id` and `head` are required. An id is letters, digits, `.`, `_` and `-`, not starting
+with `.` or `-`, since it names a directory; `head` is a full commit id, and `ref` and
+`branch` must be names git accepts. Changes are in queue order. `affected` is the set of
+units (projects, packages, anything the caller partitions by) the change can reach.
+Omitted or `null` means unknown, and `unbounded_by` names why a set is not a proof;
+either one puts the change in one partition with everything. An empty list is a proof
+that the change reaches nothing.
 
 ## The affected hook
 
 A change without an `affected` set is asked about with `--affected <command>`: the
 command runs in the checkout with the change's paths on stdin, one per line, and prints a
-JSON object with `affected` and optionally `unbounded`. Other keys are ignored, so magus's
-plan output is the answer as it stands:
+JSON object with `affected` and optionally `unbounded_by`. Other keys are ignored, so
+magus's plan output is the answer as it stands:
 
 ```sh
 printf 'libs/parser/lex.go\n' | magus affected ci --plan --stdin
-# {"count": 1, ..., "affected": ["apps/web", "libs/parser"], "unbounded": ""}
+# {"count": 1, ..., "affected": ["apps/web", "libs/parser"]}
 ```
 
-Magus sets `unbounded` when the paths edit the declarations the closure was computed
-from (any `.buzz` file, `magus.yaml`, `magus.lock`), when no project claims them, or when
-it could not diff and fell back to every project.
+Magus sets `unbounded_by` when any path is one no project claims, when a path can move
+the graph's edges or every project's build without seeding what it reaches (any `.buzz`
+file, `magus.yaml` or `.magus.yaml`, `magus.lock`, a dependency manifest or lockfile a
+spell declares, a workspace provider's declared inputs, a toolchain pin or a rule set),
+and when it could not diff and fell back to every project.
 
 ## Hooks on each staging commit
 
-`--gate` and `--regenerate` run with `sh -c` in the staging commit's checkout, with:
+`--gate` and `--regenerate` run with `sh -c`, in a process group of their own, in the
+staging commit's checkout, with:
 
-| Variable              | Value                                   |
-| --------------------- | --------------------------------------- |
-| `MERGEQUEUE_CHANGE`   | the change's id                         |
-| `MERGEQUEUE_HEAD`     | the change's head commit                |
-| `MERGEQUEUE_BASE`     | the branch the queue merges into        |
-| `MERGEQUEUE_BASE_SHA` | the commit every stage is built on      |
-| `MERGEQUEUE_BELOW`    | the commit this stage was built on      |
-| `MERGEQUEUE_STAGE`    | the staging commit (gate only)          |
+| Variable                 | Value                                   |
+| ------------------------ | --------------------------------------- |
+| `MERGEQUEUE_CHANGE`      | the change's id                         |
+| `MERGEQUEUE_HEAD`        | the change's head commit                |
+| `MERGEQUEUE_BASE`        | the branch the queue merges into        |
+| `MERGEQUEUE_BASE_COMMIT` | the commit every partition starts on    |
+| `MERGEQUEUE_ONTO`        | the commit this stage was built onto    |
+| `MERGEQUEUE_STAGE`       | the staging commit (gate only)          |
 
-The gate is green on exit 0 and red on any other exit except 75 (`EX_TEMPFAIL`, which
-magus returns when a lock or the machine budget is busy): that one is run again, twice,
-and then stops the run rather than kicking the author back. Gating against `$MERGEQUEUE_BELOW` runs only what the top
-change adds, and the magus cache replays what the stage below already ran. Each stage is
-a worktree of its own, so export one `MAGUS_CACHE_DIR` for all of them.
+Hooks never see `MERGEQUEUE_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN` or the Actions runtime
+tokens: a gate runs the changes' code.
+
+The gate is green on exit 0 and red on any other normal exit. Exit 75 (`EX_TEMPFAIL`,
+which magus returns when a lock or the machine budget is busy) is run again, twice, and
+then stops the run rather than kicking the author back; so does a gate killed by a
+signal, or exiting 130, 137 or 143, a shell's report of one. Gating against
+`$MERGEQUEUE_ONTO` runs only what the top change adds, and the magus cache replays what
+the stage below already ran. Each stage is a worktree of its own, so export one
+`MAGUS_CACHE_DIR` for all of them.
 
 A file is derived when main's `.gitattributes` sets `linguist-generated` on it (change it
 with `--attribute`); magus writes those lines for every declared output. Attributes are
 read at the base commit, never from a change. A derived-file conflict takes the change's
-side and `--regenerate` rewrites it, with the derived paths on stdin; the stage refuses a
-regeneration that writes anything not derived.
+side and `--regenerate` rewrites it, with the derived paths on stdin. A regeneration that
+exits non-zero, or writes anything not derived, kicks that change back and the run goes
+on.
 
-## Verdicts: `mergequeue.stage/v1`
+## Verdicts: `mergequeue.verdict/v1`
 
-`validate --out <dir>` writes one directory per decided change, named by its escaped id,
-holding `stage.json` and, for a green change, `stage.bundle` (the staging commits as a git
-bundle). Each appears by rename the moment its change is decided, so a reader never sees a
-partial one. `.done` beside them says the run finished.
+`validate --verdicts <dir>` writes one directory per decided change, named by its id,
+holding `verdict.json` and, for a green change, `stage.bundle` (the staging commits as a
+git bundle). Each appears by rename the moment its change is decided, so a reader never
+sees a partial one. `.done` beside them says the run finished, and a full run writes it
+even when it stopped early.
 
 ```json
 {
-  "schema": "mergequeue.stage/v1",
-  "base_sha": "9f2e...",
+  "schema": "mergequeue.verdict/v1",
+  "base_commit": "9f2e...",
   "change": {"id": "483", "head": "c0de...", "title": "feat: lexer"},
   "decision": "land",
   "after": "482",
+  "onto": "5e1a...",
   "stage": "77aa...",
   "message": "* add lexer",
   "depth": 2,
@@ -148,8 +180,10 @@ partial one. `.done` beside them says the run finished.
 ```
 
 `decision` is `land`, `kick` (with a `report` for the author) or `wait` (with a
-`reason`). `after` is the change validated beneath this one. `land --follow` polls the
-directory, and lands a change once its own verdict is green and `after` has landed.
+`reason`). `after` is the change validated beneath this one and `onto` its stage.
+`land --follow` polls the directory, and lands a change once its own verdict is green and
+`after` has landed. It trusts a verdict only as far as the plan vouches for it: a head,
+an `after` or an `onto` the plan does not match lands nothing.
 
 ## Landing as each stage goes green
 
@@ -165,6 +199,16 @@ time:
    appears, while validation is still running. `land --follow` lands each change whose
    predecessors have landed; `.done` is written once the validation run completes.
 
+Before each merge, landing predicts the tree main will carry. A file that both the stage
+and something landed since the stage was built changed, such as a root index two
+disjoint partitions both regenerate, is a combination nobody validated: the change waits
+and is restaged on the next run.
+
+The queue's status reads `pending` while it asks for a merge and `success` only once the
+change has merged. A required status that went green first would let anyone merge the
+change onto whatever main had become, so branch protection must let the landing
+credential bypass that status; nothing else can satisfy it.
+
 Why not have validation post a `magus/queue` status per stage and trigger landing on
 the status event? Posting a status needs `statuses: write` in the job that runs
 pull-request code, and branch protection requires exactly that status, so a pull
@@ -174,18 +218,24 @@ would wait for the slowest stage. Artifacts are readable through the API as soon
 are uploaded, which is what lets the write side follow the read side stage by stage
 without either one holding the other's rights.
 
+When landing has to push a regeneration, it pushes a landing commit onto the change's
+branch with a lease on the validated head, so a branch that moved or was deleted is
+left alone. If the merge then fails, the landing commit is the branch's head; a review
+of the commit beneath it still covers it, because it adds only main and regenerated
+files. The same holds for main merged into a change by its author.
+
 ## Providers
 
 A provider is a Buzz script run on an embedded gopherbuzz VM. It exports five functions,
 each taking one record:
 
-| Function       | Receives                                         | Returns                                               |
-| -------------- | ------------------------------------------------ | ----------------------------------------------------- |
-| `list_queue`   | `{base, remote}`                                 | a list of change records                              |
-| `approval_at`  | the change plus `{sha}`                          | `{approved, head, required, approvals, reason}`       |
-| `post_status`  | the change plus `{sha, context, state, description}` | `true` when recorded                              |
-| `merge_change` | the change plus `{sha, message}`                 | `{merged, reason}`                                    |
-| `kick_back`    | the change plus `{sha, body}`                    | `true` when both the comment and the removal happened |
+| Function       | Receives                                                 | Returns                                               |
+| -------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| `list_changes` | `{base, remote}`                                         | a list of change records                              |
+| `approval_at`  | the change plus `{commit}`                               | `{approved, head, reason}`; `head` is required        |
+| `post_status`  | the change plus `{commit, context, state, description}`  | `true` when recorded                                  |
+| `merge_change` | the change plus `{commit, message}`                      | `{merged, reason}`                                    |
+| `kick_back`    | the change plus `{commit, report}`                       | `true` when both the comment and the removal happened |
 
 All five are required. Scripts see Buzz's standard library and a `mergequeue` module
 whose `request(method, url: .., body: .., headers: ..)` returns `{status, body}`.

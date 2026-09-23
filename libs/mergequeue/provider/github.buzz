@@ -1,5 +1,5 @@
 // GitHub provider for the merge queue: `mergequeue --provider github`. It carries the
-// provider contract (see the provider package): list_queue, approval_at, post_status,
+// provider contract (see the provider package): list_changes, approval_at, post_status,
 // merge_change, kick_back. The queue decides what to stage, validate and merge; this
 // file only speaks GitHub's REST and GraphQL APIs.
 //
@@ -11,13 +11,17 @@
 //
 // # Credentials
 //
-// Two environment variables. The two reads (list_queue, approval_at) use
+// Two environment variables. The two reads (list_changes, approval_at) use
 // MERGEQUEUE_TOKEN when the environment carries it, else GITHUB_TOKEN: the validation
 // side runs pull-request code and holds only a read-only Actions token. The three writes
 // use MERGEQUEUE_TOKEN and nothing else, so a job that does not hold the write
 // credential cannot write by accident. It is a GitHub App installation token or a
 // fine-grained token with contents, pull requests and commit statuses write; unlike the
 // Actions token, its merges start the workflows on the base branch.
+//
+// The queue posts success on its status only after a merge, so its credential must be
+// a bypass actor for that required status. Nothing else can satisfy it, which is what
+// keeps the queue the only way to the base branch.
 //
 // # What is NOT verified here
 //
@@ -183,10 +187,10 @@ fun changesFrom(body: str, repo: str) > [any] !> any {
     return queued;
 }
 
-// list_queue returns the pull requests with auto-merge enabled against the base branch,
+// list_changes returns the pull requests with auto-merge enabled against the base branch,
 // oldest first. Paged; changes past the thirtieth page wait for a later run.
-export fun list_queue(io: {str: any}) > [any] !> any {
-    final hdrs = reading("list_queue");
+export fun list_changes(io: {str: any}) > [any] !> any {
+    final hdrs = reading("list_changes");
     final base = apiBase();
     final remote = "{io["remote"] ?? ""}";
     final repo = slug(remote, host: apiHost(base));
@@ -226,13 +230,14 @@ fun requiredFrom(body: str) > int !> any {
     return need;
 }
 
-// approvalFrom decides approval AT sha from a GraphQL pull-request answer.
+// approvalFrom decides approval AT commit from a GraphQL pull-request answer. The record
+// carries required and approvals beside the contract's keys; the queue ignores them.
 //
 // Each reviewer's latest decisive review counts, as on GitHub, but an approval counts only
-// when it was given on sha itself: approving an older commit does not approve what the
+// when it was given on commit itself: approving an older commit does not approve what the
 // queue tested. reviewDecision covers what rulesets do not show (classic protection, code
-// owners), so any requirement it signals needs at least one approval at sha.
-fun approvalFrom(body: str, sha: str, required: int) > any !> any {
+// owners), so any requirement it signals needs at least one approval at commit.
+fun approvalFrom(body: str, commit: str, required: int) > any !> any {
     final pr = serialize\jsonDecode(body).q("data").q("repository").q("pullRequest");
     final head = pr.q("headRefOid").stringValue();
     if (head == "") {
@@ -256,7 +261,7 @@ fun approvalFrom(body: str, sha: str, required: int) > any !> any {
         if (state == "CHANGES_REQUESTED") {
             changes = true;
         }
-        if (state == "APPROVED" and commits[who] == sha) {
+        if (state == "APPROVED" and commits[who] == commit) {
             approvals = approvals + 1;
         }
     }
@@ -303,7 +308,7 @@ export fun approval_at(io: {str: any}) > any !> any {
     if (res["status"] != 200) {
         throw "github: approval_at: HTTP {res["status"]}: {res["body"]}";
     }
-    return approvalFrom("{res["body"]}", sha: "{io["sha"] ?? ""}", required: required);
+    return approvalFrom("{res["body"]}", commit: "{io["commit"] ?? ""}", required: required);
 }
 
 // statusBody is GitHub's commit-status payload. GitHub rejects a description over 140
@@ -318,7 +323,7 @@ fun statusBody(state: str, context: str, description: str) > any {
 
 export fun post_status(io: {str: any}) > bool !> any {
     final hdrs = writing("post_status");
-    final url = apiBase() + "/repos/{io["repo"] ?? ""}/statuses/{io["sha"] ?? ""}";
+    final url = apiBase() + "/repos/{io["repo"] ?? ""}/statuses/{io["commit"] ?? ""}";
     final payload = statusBody("{io["state"] ?? ""}", context: "{io["context"] ?? ""}", description: "{io["description"] ?? ""}");
     final res = post(url, body: serialize\jsonEncode(payload), hdrs: hdrs);
     if (res["status"] != 201) {
@@ -328,13 +333,13 @@ export fun post_status(io: {str: any}) > bool !> any {
 }
 
 // mergeBody builds the merge payload from the pull request, honoring the method, title
-// and message its author chose when enabling auto-merge. Pinned to sha, so GitHub refuses
-// when the head moved.
+// and message its author chose when enabling auto-merge. Pinned to commit, so GitHub
+// refuses when the head moved.
 //
 // A squash always carries an explicit title and message. GitHub's default message lists
 // every commit on the branch, which would include a regeneration the queue pushed and
 // credit its author as a co-author; message is the change's own commits instead.
-fun mergeBody(pr: str, sha: str, message: str) > any !> any {
+fun mergeBody(pr: str, commit: str, message: str) > any !> any {
     final decoded = serialize\jsonDecode(pr);
     final am = decoded.q("auto_merge");
     var method = am.q("merge_method").stringValue();
@@ -342,7 +347,7 @@ fun mergeBody(pr: str, sha: str, message: str) > any !> any {
         method = "squash";
     }
     final body = mut {<str: any>};
-    body["sha"] = sha;
+    body["sha"] = commit;
     body["merge_method"] = method;
     var title = am.q("commit_title").stringValue();
     var text = am.q("commit_message").stringValue();
@@ -368,22 +373,22 @@ fun mergeBody(pr: str, sha: str, message: str) > any !> any {
 export fun merge_change(io: {str: any}) > any !> any {
     final hdrs = writing("merge_change");
     final url = apiBase() + "/repos/{io["repo"] ?? ""}/pulls/{io["id"] ?? ""}";
-    final sha = "{io["sha"] ?? ""}";
+    final commit = "{io["commit"] ?? ""}";
     final pr = get(url, hdrs: hdrs);
     if (pr["status"] != 200) {
         throw "github: merge_change: read the pull request: HTTP {pr["status"]}: {pr["body"]}";
     }
-    final payload = mergeBody("{pr["body"]}", sha: sha, message: "{io["message"] ?? ""}");
+    final payload = mergeBody("{pr["body"]}", commit: commit, message: "{io["message"] ?? ""}");
     final res = mergequeue\request("PUT", url: url + "/merge", body: serialize\jsonEncode(payload), headers: hdrs);
     if (res["status"] == 200) {
         return {"merged": true, "reason": ""};
     }
-    // The success status this queue posted can trigger GitHub's own auto-merge first. A
-    // pull request already merged at sha is this merge, not a refusal.
+    // A pull request already merged at commit is this merge, whose answer was lost to a
+    // retried request, not a refusal.
     final after = get(url, hdrs: hdrs);
     if (after["status"] == 200) {
         final now = serialize\jsonDecode("{after["body"]}");
-        if (now.q("merged").booleanValue() and now.q("head").q("sha").stringValue() == sha) {
+        if (now.q("merged").booleanValue() and now.q("head").q("sha").stringValue() == commit) {
             return {"merged": true, "reason": ""};
         }
     }
@@ -399,7 +404,7 @@ export fun kick_back(io: {str: any}) > bool !> any {
     final repo = "{io["repo"] ?? ""}";
     final id = "{io["id"] ?? ""}";
     final comment = post(apiBase() + "/repos/" + repo + "/issues/" + id + "/comments",
-        body: serialize\jsonEncode({"body": "{io["body"] ?? ""}"}), hdrs: hdrs);
+        body: serialize\jsonEncode({"body": "{io["report"] ?? ""}"}), hdrs: hdrs);
     if (comment["status"] != 201) {
         throw "github: kick_back: comment: HTTP {comment["status"]}: {comment["body"]}";
     }
@@ -445,8 +450,8 @@ test "a fork is listed as one, with no branch to push to" {
 test "an approval counts only at the commit asked about" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "new", "reviewDecision": "APPROVED",
         "reviews": {"nodes": [{"state": "APPROVED", "author": {"login": "a"}, "commit": {"oid": "old"}}]}}}}}`;
-    assert\equal(approvalFrom(body, sha: "old", required: 1)["approved"], want: true, message: "approved at old");
-    final atNew = approvalFrom(body, sha: "new", required: 1);
+    assert\equal(approvalFrom(body, commit: "old", required: 1)["approved"], want: true, message: "approved at old");
+    final atNew = approvalFrom(body, commit: "new", required: 1);
     assert\equal(atNew["approved"], want: false, message: "not approved at a commit nobody reviewed");
     assert\equal(atNew["head"], want: "new", message: "the current head rides along");
     assert\equal(atNew["reason"], want: "0 of 1 approvals at this commit", message: "says why");
@@ -459,7 +464,7 @@ test "a reviewer's latest decisive review wins, and changes requested blocks" {
             {"state": "COMMENTED", "author": {"login": "a"}, "commit": {"oid": "abc"}},
             {"state": "CHANGES_REQUESTED", "author": {"login": "b"}, "commit": {"oid": "abc"}}
         ]}}}}}`;
-    final got = approvalFrom(body, sha: "abc", required: 1);
+    final got = approvalFrom(body, commit: "abc", required: 1);
     assert\equal(got["approved"], want: false, message: "changes requested blocks");
     assert\equal(got["approvals"], want: 1, message: "a comment does not undo an approval");
 }
@@ -467,7 +472,7 @@ test "a reviewer's latest decisive review wins, and changes requested blocks" {
 test "no review requirement approves with no reviews" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": null,
         "reviews": {"nodes": []}}}}}`;
-    final got = approvalFrom(body, sha: "abc", required: 0);
+    final got = approvalFrom(body, commit: "abc", required: 0);
     assert\equal(got["approved"], want: true, message: "nothing is required");
     assert\equal(got["required"], want: 0, message: "and nothing is reported as required");
 }
@@ -475,7 +480,7 @@ test "no review requirement approves with no reviews" {
 test "a requirement the rulesets do not show still needs one approval at the commit" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "REVIEW_REQUIRED",
         "reviews": {"nodes": []}}}}}`;
-    final got = approvalFrom(body, sha: "abc", required: 0);
+    final got = approvalFrom(body, commit: "abc", required: 0);
     assert\equal(got["approved"], want: false, message: "classic protection or code owners");
     assert\equal(got["required"], want: 1, message: "at least one");
 }
@@ -490,7 +495,7 @@ test "required approvals come from the strictest pull_request rule" {
 }
 
 test "the merge honors the author's auto-merge choice and pins the sha" {
-    final body = mergeBody(`{"auto_merge": {"merge_method": "rebase", "commit_title": "feat: x (#7)", "commit_message": ""}}`, sha: "abc", message: "* x");
+    final body = mergeBody(`{"auto_merge": {"merge_method": "rebase", "commit_title": "feat: x (#7)", "commit_message": ""}}`, commit: "abc", message: "* x");
     assert\equal(body["merge_method"], want: "rebase", message: "the author's method");
     assert\equal(body["sha"], want: "abc", message: "pinned to the tested commit");
     assert\equal(body["commit_title"], want: "feat: x (#7)", message: "the author's title");
@@ -498,14 +503,14 @@ test "the merge honors the author's auto-merge choice and pins the sha" {
 }
 
 test "a squash carries the pull request title and the change's own commits" {
-    final body = mergeBody(`{"number": 7, "title": "feat: add x", "auto_merge": {"merge_method": "squash"}}`, sha: "abc", message: "* add x\n\n* fix typo");
+    final body = mergeBody(`{"number": 7, "title": "feat: add x", "auto_merge": {"merge_method": "squash"}}`, commit: "abc", message: "* add x\n\n* fix typo");
     assert\equal(body["merge_method"], want: "squash", message: "squash");
     assert\equal(body["commit_title"], want: "feat: add x (#7)", message: "the title as subject, GitHub's shape");
     assert\equal(body["commit_message"], want: "* add x\n\n* fix typo", message: "no queue commit, no co-author trailer");
-    final authored = mergeBody(`{"number": 7, "title": "t", "auto_merge": {"merge_method": "squash", "commit_title": "mine", "commit_message": "my body"}}`, sha: "abc", message: "* x");
+    final authored = mergeBody(`{"number": 7, "title": "t", "auto_merge": {"merge_method": "squash", "commit_title": "mine", "commit_message": "my body"}}`, commit: "abc", message: "* x");
     assert\equal(authored["commit_title"], want: "mine", message: "the author's own title wins");
     assert\equal(authored["commit_message"], want: "my body", message: "the author's own body wins");
-    assert\equal(mergeBody(`{"number": 1, "title": "t", "auto_merge": null}`, sha: "abc", message: "")["merge_method"], want: "squash", message: "squash by default");
+    assert\equal(mergeBody(`{"number": 1, "title": "t", "auto_merge": null}`, commit: "abc", message: "")["merge_method"], want: "squash", message: "squash by default");
 }
 
 test "a long status description is cut to what GitHub accepts" {

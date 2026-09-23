@@ -19,6 +19,8 @@ name: Queue land
 # MAGUS_QUEUE_TOKEN is the write credential: a fine-grained token (or a GitHub App
 # installation token) with contents, pull requests and commit statuses write on this
 # repository. Its merges start ci.yaml and cd.yaml on main; the Actions token's would not.
+# The queue posts success on magus/queue only after a merge, so this credential must be
+# a bypass actor for that required status; nothing else can satisfy it.
 
 on:
   workflow_run:
@@ -77,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           q="$RUNNER_TEMP/queue"
-          mkdir -p "$q/stages"
+          mkdir -p "$q/verdicts"
           # Reads the run's status BEFORE listing its artifacts, so the sweep that sees
           # it completed has already seen every artifact it uploaded; only then .done.
           follow() {
@@ -90,16 +92,16 @@ jobs:
                       gh run download "$RUN" --repo "$GITHUB_REPOSITORY" -n "$name" -D "$q/.plan"
                       mv "$q/.plan/plan.json" "$q/plan.json"
                     fi ;;
-                  magus-queue-stage-*)
-                    id=${name#magus-queue-stage-}
-                    if [ ! -d "$q/stages/$id" ]; then
-                      gh run download "$RUN" --repo "$GITHUB_REPOSITORY" -n "$name" -D "$q/stages/.dl-$id"
-                      mv "$q/stages/.dl-$id" "$q/stages/$id"
+                  magus-queue-verdict-*)
+                    id=${name#magus-queue-verdict-}
+                    if [ ! -d "$q/verdicts/$id" ]; then
+                      gh run download "$RUN" --repo "$GITHUB_REPOSITORY" -n "$name" -D "$q/verdicts/.dl-$id"
+                      mv "$q/verdicts/.dl-$id" "$q/verdicts/$id"
                     fi ;;
                 esac
               done
               if [ "$status" = completed ]; then
-                touch "$q/stages/.done"
+                touch "$q/verdicts/.done"
                 return
               fi
               sleep 15
@@ -107,12 +109,12 @@ jobs:
           }
           follow &
           follower=$!
-          until [ -f "$q/plan.json" ] || [ -f "$q/stages/.done" ]; do sleep 5; done
+          until [ -f "$q/plan.json" ] || [ -f "$q/verdicts/.done" ]; do sleep 5; done
           if [ ! -f "$q/plan.json" ]; then
             echo "the validation run planned nothing"
             wait "$follower"
             exit 0
           fi
-          mergequeue land --plan "$q/plan.json" --stages "$q/stages" --provider github \
+          mergequeue land --plan "$q/plan.json" --verdicts "$q/verdicts" --provider github \
             --status-context magus/queue --follow --interval 10s
           wait "$follower"

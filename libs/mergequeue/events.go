@@ -7,22 +7,24 @@ import (
 	"time"
 )
 
-// Event kinds.
+// EventKind names what an [Event] reports.
+type EventKind string
+
 const (
-	EventPartition = "partition" // planning grouped Changes into Partition
-	EventDecided   = "decided"   // planning or validation settled Change
-	EventGate      = "gate"      // a gate started on Change's stage Commit at Depth
-	EventMerged    = "merged"    // landing merged Change at Commit
-	EventKicked    = "kicked"    // landing kicked Change back
-	EventWaiting   = "waiting"   // landing left Change queued for a later run
-	EventNotice    = "notice"    // anything else worth a line, in Reason
+	EventPartition EventKind = "partition" // planning grouped Changes into Partition
+	EventDecided   EventKind = "decided"   // planning or validation settled Change
+	EventGate      EventKind = "gate"      // a gate started on Change's stage Commit at Depth
+	EventMerged    EventKind = "merged"    // a Lander merged Change at Commit
+	EventKicked    EventKind = "kicked"    // a Lander kicked Change back
+	EventWaiting   EventKind = "waiting"   // a Lander left Change queued for a later run
+	EventNotice    EventKind = "notice"    // anything else worth a line, in Reason
 )
 
 // Event is one JSONL record. Every command reports through these alone, one per line.
 type Event struct {
 	Schema     string    `json:"schema"`
 	Time       time.Time `json:"time"`
-	Event      string    `json:"event"`
+	Kind       EventKind `json:"kind"`
 	Change     string    `json:"change,omitempty"`
 	Partition  *int      `json:"partition,omitempty"`
 	Changes    []string  `json:"changes,omitempty"`
@@ -33,26 +35,24 @@ type Event struct {
 	DurationMS int64     `json:"duration_ms,omitempty"`
 }
 
-// Events writes [Event] records as JSONL. The zero value and a nil *Events discard.
-// Safe for concurrent use.
+// Events writes [Event] records as JSONL. A nil *Events discards. Safe for concurrent
+// use.
 type Events struct {
-	mu  sync.Mutex
-	w   io.Writer
-	now func() time.Time
+	mu sync.Mutex
+	w  io.Writer
 }
 
 // NewEvents writes to w.
-func NewEvents(w io.Writer) *Events { return &Events{w: w, now: time.Now} }
+func NewEvents(w io.Writer) *Events { return &Events{w: w} }
 
-// Emit writes e, stamping its schema and time.
+// Emit writes ev, stamping its schema and time. A write error is dropped: events report
+// the run and never steer it.
 func (e *Events) Emit(ev Event) {
 	if e == nil || e.w == nil {
 		return
 	}
 	ev.Schema = SchemaEvent
-	if e.now != nil {
-		ev.Time = e.now().UTC()
-	}
+	ev.Time = time.Now().UTC()
 	line, err := json.Marshal(ev)
 	if err != nil {
 		return

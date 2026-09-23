@@ -32,13 +32,13 @@ func TestPartitionJoinsGroupsThroughAChangeThatReachesBoth(t *testing.T) {
 func TestPartitionNeverAssumesIndependenceItCannotProve(t *testing.T) {
 	unknown := change("2")
 	unbounded := change("4", "d")
-	unbounded.Unbounded = "edits the declarations"
+	unbounded.UnboundedBy = "edits the declarations"
 	assert.Equal(t, [][]string{{"1", "2", "3"}}, ids(Partition([]Change{change("1", "a"), unknown, change("3", "c")})))
 	assert.Equal(t, [][]string{{"1", "4"}}, ids(Partition([]Change{change("1", "a"), unbounded})))
 }
 
 func TestPartitionOfAChangeAffectingNothingStandsAlone(t *testing.T) {
-	empty := Change{ID: "2", Head: "sha-2", Affected: []string{}}
+	empty := Change{ID: "2", Head: head("2"), Affected: []string{}}
 	assert.Equal(t, [][]string{{"1"}, {"2"}}, ids(Partition([]Change{change("1", "a"), empty})))
 }
 
