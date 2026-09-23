@@ -14,7 +14,7 @@ import (
 //
 // A review thread lives in internal/diff and dies with the session that held it: the store
 // keeps which hunks were read and nothing else, so the comments are gone when the process
-// is. That is the whole motivation, and it is also why this type is not types.DiffSession.
+// is. That is the whole motivation, and it is also why this type is not types.DiffReview.
 // A capture is prose plus provenance; the caller that HAS a session is the one that knows
 // how to describe it, and keeping that mapping outside this package leaves room for a second
 // source (a forge's review thread, say) without the notes store gaining a second opinion

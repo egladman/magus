@@ -114,7 +114,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 		handler.WriteJSON(w, h.sessions.Attach(h.root, out.Base, out, asOf))
 		return
 	}
-	handler.WriteJSON(w, types.DiffSession{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})
+	handler.WriteJSON(w, types.DiffReview{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})
 }
 
 // PatchHandler serves GET /api/v1/diff/patch: the working tree's uncommitted changes as one unified
@@ -317,7 +317,7 @@ func scopePaths(r *http.Request) []string {
 	return paths
 }
 
-// SessionHandler serves the live paired-review session.
+// ReviewHandler serves the live paired review (a [types.DiffReview]) on the review route.
 //
 // Every write here is stamped DiffAuthorUnattributed with the request's origin: the OS
 // account and the credential the bearer guard verified. The agent's half lives on the MCP
@@ -329,16 +329,16 @@ func scopePaths(r *http.Request) []string {
 // It is one route with an `op` rather than five, because these are all small mutations of one
 // object and a client applies them from one place: a keypress handler. Five routes would be
 // five fetch wrappers for no gain in clarity.
-type SessionHandler struct {
+type ReviewHandler struct {
 	handler.Base
-	SessionOptions
+	ReviewOptions
 }
 
-// SessionOptions is what both review routes need from the daemon.
+// ReviewOptions is what both review routes need from the daemon.
 //
 // A struct because the alternative was five positional arguments with Root and CacheDir
 // adjacent and both string.
-type SessionOptions struct {
+type ReviewOptions struct {
 	Sessions *changeset.Store
 	// Workspace answers where this tree's changes are discussed and reads the working patch.
 	// Nil serves everything except the review.
@@ -358,9 +358,9 @@ type reviewSource interface {
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 }
 
-// NewSessionHandler returns the paired-review handler.
-func NewSessionHandler(opts SessionOptions, log *slog.Logger) *SessionHandler {
-	h := &SessionHandler{SessionOptions: opts}
+// NewReviewHandler returns the paired-review handler.
+func NewReviewHandler(opts ReviewOptions, log *slog.Logger) *ReviewHandler {
+	h := &ReviewHandler{ReviewOptions: opts}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -409,7 +409,7 @@ type reviewSessionRequest struct {
 // A draft with no line stays a draft. A provider anchors an inline comment to a line and drops
 // one that has none, so including it would mark it published against a send that never
 // happened, and publish only considers unpublished drafts, so it could never go again.
-func (h *SessionHandler) publish(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
+func (h *ReviewHandler) publish(ctx context.Context, req reviewSessionRequest) (*types.DiffReview, error) {
 	sess := h.Sessions.Get(h.Root)
 	if sess == nil {
 		return nil, errors.New("no review session attached")
@@ -472,7 +472,7 @@ func (h *SessionHandler) publish(ctx context.Context, req reviewSessionRequest) 
 
 // reply answers one thread on the host's review. It writes no session state: the reply belongs
 // to the host's record, and the client re-reads the review to see it.
-func (h *SessionHandler) reply(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
+func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*types.DiffReview, error) {
 	at, err := h.findReview(ctx)
 	if err != nil {
 		return nil, err
@@ -486,13 +486,13 @@ func (h *SessionHandler) reply(ctx context.Context, req reviewSessionRequest) (*
 	if sess := h.Sessions.Get(h.Root); sess != nil {
 		return sess, nil
 	}
-	return &types.DiffSession{Cursor: types.DiffCursor{Hunk: -1}}, nil
+	return &types.DiffReview{Cursor: types.DiffCursor{Hunk: -1}}, nil
 }
 
 // findReview resolves the review publish and reply both need, or the reason there is none.
 // The reason travels, because "no provider wired" and "no pull request for this branch" send
 // the reader to different places.
-func (h *SessionHandler) findReview(ctx context.Context) (types.ReviewTarget, error) {
+func (h *ReviewHandler) findReview(ctx context.Context) (types.ReviewTarget, error) {
 	if h.Workspace == nil {
 		return types.ReviewTarget{}, errors.New("this daemon has no workspace to publish from")
 	}
@@ -509,7 +509,7 @@ func (h *SessionHandler) findReview(ctx context.Context) (types.ReviewTarget, er
 	return at, nil
 }
 
-func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -534,7 +534,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var sess *types.DiffSession
+	var sess *types.DiffReview
 	switch req.Op {
 	case "cursor":
 		sess = h.Sessions.SetCursor(h.Root, types.DiffCursor{Path: req.Path, Hunk: req.Hunk})
@@ -620,7 +620,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 // file should not meet an error about bookkeeping on their next keypress. A path that cannot
 // be fingerprinted (deleted since the patch was read) records nothing rather than recording
 // a receipt against no content.
-func (h *SessionHandler) mintReceipt(ctx context.Context, path string) {
+func (h *ReviewHandler) mintReceipt(ctx context.Context, path string) {
 	if path == "" || h.CacheDir == "" || h.Root == "" {
 		return
 	}
@@ -638,10 +638,10 @@ func (h *SessionHandler) mintReceipt(ctx context.Context, path string) {
 	}
 }
 
-// ReviewHandler serves GET /api/v1/diff/review: which review is open for this tree, and
-// the comment threads already on it.
+// ReviewLookupHandler serves GET /api/v1/diff/review: which review is open for this tree,
+// and the comment threads already on it.
 //
-// Beside the session handler because they are two halves of one conversation, but a SEPARATE
+// Beside [ReviewHandler] because they are two halves of one conversation, but a SEPARATE
 // route because they cost different amounts: the session is local state and returns in
 // microseconds, while this one crosses the network to a forge and can hang for as long as that
 // forge feels like taking. Serving them together would hold the diff behind somebody else's
@@ -650,7 +650,7 @@ func (h *SessionHandler) mintReceipt(ctx context.Context, path string) {
 // It never fails. No provider wired, no pull request, an unreachable host: all of them are a
 // closed target with a reason, because the reader's options are identical in every case and a
 // surface that rendered them as errors would be accusing them of something they did not do.
-type ReviewHandler struct {
+type ReviewLookupHandler struct {
 	handler.Base
 	workspace reviewSource
 	// Sessions and Root are OPTIONAL, set by the daemon wiring after construction: with them the
@@ -661,10 +661,10 @@ type ReviewHandler struct {
 	Root     string
 }
 
-// NewReviewHandler returns the review-lookup handler. A nil workspace reports no review,
-// which is what a daemon with no workspace has.
-func NewReviewHandler(workspace reviewSource, log *slog.Logger) *ReviewHandler {
-	h := &ReviewHandler{workspace: workspace}
+// NewReviewLookupHandler returns the review-lookup handler. A nil workspace reports no
+// review, which is what a daemon with no workspace has.
+func NewReviewLookupHandler(workspace reviewSource, log *slog.Logger) *ReviewLookupHandler {
+	h := &ReviewLookupHandler{workspace: workspace}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -672,7 +672,7 @@ func NewReviewHandler(workspace reviewSource, log *slog.Logger) *ReviewHandler {
 // place resolves each thread onto the hunk holding its line, so both surfaces read one answer
 // instead of computing it twice. An unreadable patch leaves them at -1, which renders against
 // the file rather than against the wrong hunk.
-func (h *ReviewHandler) place(ctx context.Context, threads []types.ReviewThread) []types.ReviewThread {
+func (h *ReviewLookupHandler) place(ctx context.Context, threads []types.ReviewThread) []types.ReviewThread {
 	if len(threads) == 0 {
 		return threads
 	}
@@ -732,7 +732,7 @@ func remoteHost(remote string) string {
 	return s
 }
 
-func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *ReviewLookupHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if !handler.AllowGet(w, r) {
 		return
 	}
@@ -770,7 +770,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 // mid-flight, or a second tab silently consumed the marks, and the notification with them, since
 // the job that raises it compares against this same watermark. The surface says when it has shown
 // them, through the session's `seen` op; until it does, the same threads keep arriving marked.
-func (h *ReviewHandler) markNew(threads []types.ReviewThread) {
+func (h *ReviewLookupHandler) markNew(threads []types.ReviewThread) {
 	if h.Sessions == nil || len(threads) == 0 {
 		return
 	}
@@ -793,7 +793,7 @@ func (h *ReviewHandler) markNew(threads []types.ReviewThread) {
 	}
 }
 
-func (h *ReviewHandler) lookup(ctx context.Context) types.ReviewTarget {
+func (h *ReviewLookupHandler) lookup(ctx context.Context) types.ReviewTarget {
 	if h.workspace == nil {
 		return types.ReviewTarget{Reason: "no workspace"}
 	}

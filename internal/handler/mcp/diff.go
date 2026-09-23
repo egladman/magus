@@ -70,7 +70,7 @@ type workspaceSource interface {
 // what its own description promises ("it tells you what they have already seen, so you can
 // skip it").
 type diffState struct {
-	*types.DiffSession
+	*types.DiffReview
 	// Patch is the unified diff the hunks below index into.
 	Patch string `json:"patch"`
 	// Hunks are the addressable coordinates, with the same content digests Viewed holds.
@@ -312,23 +312,23 @@ func wantsThreads(projection string) bool {
 	return projection == "" || projection == "full" || projection == "conversation"
 }
 
-func (t *diffTool) state(ctx context.Context, sess *types.DiffSession, withThreads bool) (diffState, error) {
+func (t *diffTool) state(ctx context.Context, sess *types.DiffReview, withThreads bool) (diffState, error) {
 	if t.src == nil {
 		// No recompute source: serve what is held rather than nothing, and say the change
 		// itself is unavailable rather than implying there is none.
-		return diffState{DiffSession: sess}, nil
+		return diffState{DiffReview: sess}, nil
 	}
 	patch, err := t.src.WorkingDiff(ctx, nil)
 	if err != nil {
 		return diffState{}, err
 	}
-	st := diffState{DiffSession: sess, Patch: patch, Hunks: changeset.ParseHunks(patch)}
+	st := diffState{DiffReview: sess, Patch: patch, Hunks: changeset.ParseHunks(patch)}
 	if now := changeset.PatchDigest(patch); now != sess.AsOf {
 		rev, rerr := t.src.Diff(ctx, changedPaths(st.Hunks))
 		if rerr != nil {
 			return diffState{}, rerr
 		}
-		st.DiffSession = t.sessions.Attach(t.root, rev.Base, rev, now)
+		st.DiffReview = t.sessions.Attach(t.root, rev.Base, rev, now)
 		st.Recomputed = true
 	}
 	if withThreads {

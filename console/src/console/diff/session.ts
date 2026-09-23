@@ -12,7 +12,7 @@
 
 import { authHeaders, reportFetchFailure, reportHttpStatus } from "../../lib/daemon";
 
-// The wire shapes, mirroring types.Review and types.DiffSession. Hand-written rather than
+// The wire shapes, mirroring types.Review and types.DiffReview. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
 // same as the insight and outputs readers beside them.
 
@@ -209,7 +209,7 @@ export interface DiffSuggestion {
   readonly declined: boolean;
 }
 
-export interface DiffSession {
+export interface DiffReview {
   readonly id: string;
   readonly base: string;
   // The patch identity the daemon used to compute this session. Context requests carry it back
@@ -284,18 +284,18 @@ export async function fetchSession(
   host: string,
   paths: readonly string[],
   signal: AbortSignal,
-): Promise<DiffSession> {
+): Promise<DiffReview> {
   const q = paths.map((p) => `path=${encodeURIComponent(p)}`).join("&");
   const res = await fetch(`http://${host}/api/v1/diff?${q}`, { headers: authHeaders(), signal });
   if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as DiffSession;
+  return (await res.json()) as DiffReview;
 }
 
 // Fetches the live session without replacing the review snapshot.
-export async function fetchReviewSession(host: string, signal: AbortSignal): Promise<DiffSession> {
+export async function fetchReviewSession(host: string, signal: AbortSignal): Promise<DiffReview> {
   const res = await fetch(`http://${host}/api/v1/diff/session`, { headers: authHeaders(), signal });
   if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as DiffSession;
+  return (await res.json()) as DiffReview;
 }
 
 // SessionOp is one mutation of the human's half of the session. Every one of these is stamped
@@ -332,7 +332,7 @@ export async function mutate(
   host: string,
   op: SessionOp,
   signal: AbortSignal,
-): Promise<DiffSession | null> {
+): Promise<DiffReview | null> {
   try {
     const res = await fetch(`http://${host}/api/v1/diff/session`, {
       method: "POST",
@@ -344,7 +344,7 @@ export async function mutate(
       reportHttpStatus(host, "the review session", res.status);
       return null;
     }
-    return (await res.json()) as DiffSession;
+    return (await res.json()) as DiffReview;
   } catch (e) {
     reportFetchFailure(host, "the review session", e);
     return null;
@@ -391,7 +391,7 @@ export async function publish(
   summary: string,
   verdict: ReviewVerdict,
   signal: AbortSignal,
-): Promise<DiffSession> {
+): Promise<DiffReview> {
   const res = await fetch(`http://${host}/api/v1/diff/session`, {
     method: "POST",
     headers: { ...authHeaders(), "Content-Type": "application/json" },
@@ -404,7 +404,7 @@ export async function publish(
     // several unrelated situations they are in.
     throw new Error((await res.text()).trim() || `daemon answered ${res.status}`);
   }
-  return (await res.json()) as DiffSession;
+  return (await res.json()) as DiffReview;
 }
 
 // reply answers one thread on the host's review.

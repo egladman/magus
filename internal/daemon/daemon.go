@@ -284,19 +284,19 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 			diffRoot := opts.Magus.Root()
 			diffH := diffhandler.NewHandler(svc, diffSessions, diffRoot, log)
-			diffOpts := diffhandler.SessionOptions{
+			diffOpts := diffhandler.ReviewOptions{
 				Sessions:  diffSessions,
 				Workspace: svc,
 				Root:      diffRoot,
 				CacheDir:  opts.Magus.CacheDir(),
 				Telemetry: opts.Magus.Telemetry(),
 			}
-			diffSessionH := diffhandler.NewSessionHandler(diffOpts, log)
-			diffReviewH := diffhandler.NewReviewHandler(svc, log)
-			// The session store lets the review response say which threads the reader has not
+			diffReviewH := diffhandler.NewReviewHandler(diffOpts, log)
+			diffLookupH := diffhandler.NewReviewLookupHandler(svc, log)
+			// The review store lets the lookup response say which threads the reader has not
 			// seen before; without it the conversation still serves, just unmarked.
-			diffReviewH.Sessions = diffSessions
-			diffReviewH.Root = opts.Magus.Root()
+			diffLookupH.Sessions = diffSessions
+			diffLookupH.Root = opts.Magus.Root()
 			diffBranchesH := diffhandler.NewBranchesHandler(svc, log)
 			diffRunH := diffhandler.NewRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
@@ -329,14 +329,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
 			// from /api/v1/diff/patch because it is far more expensive; see Handler.
 			bridgeMux.Handle("/api/v1/diff", f.cors(diffH))
-			// The human's half of a paired review. Reachable only from the console and the
-			// CLI, which is what lets it stamp every write as human without trusting the
-			// payload: an agent reaches the session through MCP, never through here.
-			bridgeMux.Handle("/api/v1/diff/session", f.cors(diffSessionH))
+			// The review route's half of a paired review. Reachable only from the console and the
+			// CLI, which is what lets it stamp every write as unattributed without trusting the
+			// payload: an agent reaches the review through MCP, never through here.
+			bridgeMux.Handle("/api/v1/diff/session", f.cors(diffReviewH))
 			// Which review this branch has open, and what colleagues have already said on it.
 			// Its own route because it crosses the network to a forge: a reader must never wait
 			// on somebody else's outage to see their own diff.
-			bridgeMux.Handle("/api/v1/diff/review", f.cors(diffReviewH))
+			bridgeMux.Handle("/api/v1/diff/review", f.cors(diffLookupH))
 			// The other branches changing these files. Its own route because it forks per branch:
 			// a reader must not wait on it to see their own diff, and it reads only what has
 			// already been fetched rather than going to the network for more.

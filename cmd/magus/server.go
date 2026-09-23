@@ -1142,8 +1142,8 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
-	// The watermark is the READER's; see DiffSession.SeenThreads for why it cannot be the job's.
-	if unseen := (types.DiffSession{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
+	// The watermark is the READER's; see DiffReview.SeenThreads for why it cannot be the job's.
+	if unseen := (types.DiffReview{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,

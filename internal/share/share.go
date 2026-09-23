@@ -127,8 +127,8 @@ func SelectLANIPv4() (netip.Addr, error) {
 	return netip.Addr{}, fmt.Errorf("share: no up, non-loopback, private-range IPv4 interface found; connect to a LAN or Wi-Fi network and try again")
 }
 
-// Session is the public description of an active share, returned to the console.
-type Session struct {
+// Link is the public description of an active share link, returned to the console.
+type Link struct {
 	// URL is the full link (with the token in the fragment) a phone loads.
 	URL string
 	// ExpiresAt is when the listener closes and the token dies.
@@ -172,7 +172,7 @@ type Manager struct {
 	selectAddr func() (netip.Addr, error)
 
 	// trailDir is the activity-trail base (the workspace cache dir). When set, the
-	// first authenticated request from each remote device in a session records one
+	// first authenticated request from each remote device on a link records one
 	// "share link opened" event there. Empty disables recording (the trail is never
 	// a precondition for serving a share).
 	trailDir string
@@ -238,7 +238,7 @@ type Route struct {
 // console from consoleDir at /console/ (unauthenticated static assets) and every
 // route in guarded behind the new token (path -> route). Any previously
 // active share is revoked first, so there is exactly one live token bound 1:1 to
-// exactly one live listener: a token from a prior session validates nowhere.
+// exactly one live listener: a token from a prior link validates nowhere.
 // The listener closes and the token expires together after ttl (or on parent
 // cancellation / Close). ttl is the caller-requested lifetime: a non-positive value
 // uses the manager's configured default, and any other value is clamped to
@@ -246,25 +246,25 @@ type Route struct {
 // No ctx parameter on purpose: a share OUTLIVES the request that opened it, so accepting
 // the caller's context invites the wrong wiring: the HTTP handler passes r.Context(),
 // which would tear the share down the instant that POST returned.
-func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Duration) (Session, error) {
+func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Duration) (Link, error) {
 	addr, err := m.selectAddr()
 	if err != nil {
-		return Session{}, err
+		return Link{}, err
 	}
 
 	ttl = m.resolveTTL(ttl)
 	secret, tok, err := auth.MintShareToken(ttl)
 	if err != nil {
-		return Session{}, err
+		return Link{}, err
 	}
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(addr.String(), "0"))
 	if err != nil {
-		return Session{}, fmt.Errorf("share: bind LAN listener on %s: %w", addr, err)
+		return Link{}, fmt.Errorf("share: bind LAN listener on %s: %w", addr, err)
 	}
 	tcp, ok := ln.Addr().(*net.TCPAddr)
 	if !ok {
-		return Session{}, fmt.Errorf("share: LAN listener address is not TCP")
+		return Link{}, fmt.Errorf("share: LAN listener address is not TCP")
 	}
 	port := tcp.Port
 	// The token rides the fragment (#token=), never the path or query, so it is
@@ -272,7 +272,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 	// access log; the console reads it client-side and replays it as a bearer.
 	url := fmt.Sprintf("http://%s:%d/console/#token=%s", addr, port, secret)
 
-	// The verifier is bound to THIS session's token only. A new session builds a
+	// The verifier is bound to THIS link's token only. A new link builds a
 	// new closure over a new token, so an old link cannot authenticate here.
 	verify := func(presented string) (string, bool) {
 		return auth.ShareCredential, tok.Verify(presented, time.Now())
@@ -292,10 +292,10 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 		}
 		http.NotFound(w, r)
 	})
-	// sg is this share's per-session guard: the first-device binding plus the first-use
+	// sg is this link's guard: the first-device binding plus the first-use
 	// trail dedupe, both scoped to a single share. It is built per-Start, so a supersede
 	// (which rebuilds Start) begins unbound with an empty seen-set.
-	sg := newSessionGuard(m)
+	sg := newLinkGuard(m)
 	// Every data route requires the session token. Header-only: the console reads
 	// live data over fetch()-based SSE and Connect, both of which set an
 	// Authorization header, so the token never needs to ride a URL here either. sg.admit
@@ -322,7 +322,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 	// Supersede any current share and publish this one under the lock BEFORE starting
 	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if
 	// the parent context is already cancelled (daemon shutting down), the watcher below
-	// must find m.cur pointing at THIS session so Close/CloseIf can tear it down: a
+	// must find m.cur pointing at THIS link so Close/CloseIf can tear it down: a
 	// listener published only after the goroutines start could serve on an address no
 	// management surface knows to revoke. There is still exactly one live share:
 	// superseding cancels the previous one before this replaces it.
@@ -356,7 +356,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 		slog.String("addr", fmt.Sprintf("%s:%d", addr, port)),
 		slog.Time("expires", tok.Expires),
 	)
-	return Session{URL: url, ExpiresAt: tok.Expires, Superseded: superseded}, nil
+	return Link{URL: url, ExpiresAt: tok.Expires, Superseded: superseded}, nil
 }
 
 // Active returns secret-free metadata for the currently live share token, or
@@ -382,14 +382,14 @@ func (m *Manager) Active() (TokenInfo, bool) {
 // LAN sniffer). Plain ASCII, no trailing period, so it reads cleanly as an HTTP body.
 const shareBoundOtherDeviceMsg = "share link is bound to another device"
 
-// sessionGuard is the per-Start post-verification guard for one live share. It runs
+// linkGuard is the per-Start post-verification guard for one live share. It runs
 // only after BearerGuard admits a request (so it only ever sees a valid token) and
-// enforces two things that must be scoped to a single share session: it binds the
+// enforces two things that must be scoped to a single share link: it binds the
 // share to the first remote device and rejects the token replayed from any other, and
 // it records the first-use trail event once per device. Both pieces of state are
 // per-Start, so a supersede (which rebuilds Start) begins unbound with an empty
 // seen-set.
-type sessionGuard struct {
+type linkGuard struct {
 	m *Manager
 
 	bindMu    sync.Mutex
@@ -399,9 +399,9 @@ type sessionGuard struct {
 	seen   map[string]struct{}
 }
 
-// newSessionGuard builds an unbound guard for one share session.
-func newSessionGuard(m *Manager) *sessionGuard {
-	return &sessionGuard{m: m, seen: make(map[string]struct{})}
+// newLinkGuard builds an unbound guard for one share link.
+func newLinkGuard(m *Manager) *linkGuard {
+	return &linkGuard{m: m, seen: make(map[string]struct{})}
 }
 
 // admit wraps a guarded handler so device binding and first-use recording run only on
@@ -409,7 +409,7 @@ func newSessionGuard(m *Manager) *sessionGuard {
 // device other than the one that first bound the share is rejected with 403 before the
 // handler runs; the bound device is served, and its first request records one trail
 // event.
-func (g *sessionGuard) admit(format rpcerr.Format, next http.Handler) http.Handler {
+func (g *linkGuard) admit(format rpcerr.Format, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !g.bindDevice(remoteHost(r)) {
 			format.Write(w, r, rpcerr.Error{
@@ -437,7 +437,7 @@ func (g *sessionGuard) admit(format rpcerr.Format, next http.Handler) http.Handl
 // Wi-Fi-to-cellular handoff. A phone that changes IP mid-session gets 403 and the
 // operator must re-share, the accepted cost of making a sniffed plaintext token
 // useless from another device. A rejected device never tears the share down.
-func (g *sessionGuard) bindDevice(host string) bool {
+func (g *linkGuard) bindDevice(host string) bool {
 	g.bindMu.Lock()
 	defer g.bindMu.Unlock()
 	if g.boundHost == "" {
@@ -458,7 +458,7 @@ func (g *sessionGuard) bindDevice(host string) bool {
 // even when several requests race), but the disk write is spawned in a goroutine so
 // recording genuinely never blocks the response the phone is waiting on, the reason
 // the request fields are copied out before the goroutine starts.
-func (g *sessionGuard) recordFirstUse(r *http.Request) {
+func (g *linkGuard) recordFirstUse(r *http.Request) {
 	if g.m.trailDir == "" {
 		return
 	}

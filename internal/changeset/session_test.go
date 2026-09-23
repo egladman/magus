@@ -397,7 +397,7 @@ func TestMarkThreadsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
 // A thread with no id cannot be tracked, and calling it new forever would mark the conversation
 // unread on every render.
 func TestUnseenThreadsIgnoresAnUnidentifiedThread(t *testing.T) {
-	var sess types.DiffSession
+	var sess types.DiffReview
 	assert.Empty(t, sess.UnseenThreads([]types.ReviewThread{{ID: ""}}))
 }
 

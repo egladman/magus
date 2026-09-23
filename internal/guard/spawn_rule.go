@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -498,7 +499,32 @@ func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit 
 // would otherwise grade the call as nobody's while the checkout says it is somebody's.
 func denyUnresolvedLease(err error) string {
 	return "magus workspace: this checkout's lease binding does not read, so no call here can be graded. " +
-		leaseActorClause("clear or rebind it") + "\n" + err.Error()
+		"Clear it with `" + hint.JobExec.With("--vacate") + "`, the one command this state lets through beside help.\n" +
+		err.Error()
+}
+
+// repairsUnreadableMarker reports whether every command on the line is one a checkout with
+// an unreadable binding must still allow: `magus job exec --vacate`, which clears the
+// marker, or a magus help read. Anything chained beside them makes the line ordinary.
+func repairsUnreadableMarker(command string) bool {
+	cmds, ok := ParseCommands(command)
+	if !ok || len(cmds) == 0 {
+		return false
+	}
+	for _, c := range cmds {
+		if path.Base(c.Name) != "magus" {
+			return false
+		}
+		words := magusSubcommandWords(c.Args)
+		switch {
+		case hint.JobExec.MatchedBy(words) && len(words) == 2 && magusFlag(c.Args, "vacate"):
+		case magusFlag(c.Args, "h") || magusFlag(c.Args, "help"):
+		case len(words) > 0 && words[0] == "help":
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id

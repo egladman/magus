@@ -306,7 +306,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	}
 	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease, LeaseFrom: leaseFrom}
 	if leaseErr != nil && !req.Observe {
-		verdict.Decision, verdict.Reason = "deny", denyUnresolvedLease(leaseErr)
+		// The repair and a help read stay open, or a checkout with a bad marker would be one
+		// no agent could recover.
+		if !isPath && repairsUnreadableMarker(input) {
+			verdict.Decision, verdict.Context = "advise", leaseErr.Error()
+		} else {
+			verdict.Decision, verdict.Reason = "deny", denyUnresolvedLease(leaseErr)
+		}
 		appendHookActivity(ctx, location, input, who, tool, actingLease, "", "", policyDigest, verdict)
 		return verdict
 	}

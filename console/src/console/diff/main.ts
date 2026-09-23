@@ -69,7 +69,7 @@ import {
   reply,
   HttpError,
   type DiffComment,
-  type DiffSession,
+  type DiffReview,
   type DiffAnnotation,
   type DiffTouch,
   type ReviewInfo,
@@ -188,7 +188,7 @@ interface State {
   fileOf: number[];
   mode: ViewMode;
   cursor: number;
-  session: DiffSession | null;
+  session: DiffReview | null;
   // review is which pull request this branch has open and what has been said on it, or a
   // closed target carrying the reason. Null until the lookup lands - and it lands LAST, after
   // the patch and the annotations, because it is the only one that leaves the machine.
@@ -1353,7 +1353,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     renderAgentSession(sessionBody, touch, result);
   };
 
-  const sync = async (op: Parameters<typeof mutate>[1]): Promise<DiffSession | null> => {
+  const sync = async (op: Parameters<typeof mutate>[1]): Promise<DiffReview | null> => {
     // In the showcase the store is in memory: the reader's marks, comments and answers have to
     // land somewhere or the affordances read as broken, and there is no daemon to land them in.
     if (demo) {
@@ -1381,7 +1381,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // applySession takes the daemon's copy as authoritative and re-lays the stream, because a
   // comment - the human's or an agent's - is a ROW, so it changes the scroll geometry. Only
   // repainting would leave the new remark invisible until the next unrelated rebuild.
-  const applySession = (s: DiffSession, relayout = true): boolean => {
+  const applySession = (s: DiffReview, relayout = true): boolean => {
     if (state.session?.as_of && s.as_of && state.session.as_of !== s.as_of) {
       setCollaboration("stale");
       return false;

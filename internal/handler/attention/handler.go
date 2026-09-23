@@ -40,7 +40,7 @@ const consoleHost = "console"
 // clear the queue without reading it.
 //
 // Authorship rides the ROUTE and the verified credential, never the payload, the same rule
-// DiffSessionHandler states: a write that lands here is stamped [consoleHost] and the
+// diff.ReviewHandler states: a write that lands here is stamped [consoleHost] and the
 // credential's name without trusting anything the caller sent.
 type Handler struct {
 	handler.Base

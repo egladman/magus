@@ -20,7 +20,7 @@
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.
 
-import type { DiffSession, ReviewInfo, SessionOp } from "./session";
+import type { DiffReview, ReviewInfo, SessionOp } from "./session";
 
 // The patch is an array of lines rather than one template literal because Go struct tags are
 // backtick-quoted: a template literal would need every one of them escaped, and an escaped
@@ -50,7 +50,7 @@ const AGENT = {
 // contract change first because it is what everything else here is a consequence of, then the
 // two consumers it broke, then the new and deleted files, then the test and the doc. The
 // generated three sort out of the reading order entirely by role.
-export function demoSession(): DiffSession {
+export function demoSession(): DiffReview {
   return {
     id: "rev-3f1c8a2e",
     base: "working",
@@ -404,7 +404,7 @@ export function demoReview(): ReviewInfo {
 // It marks rather than removes, because that is what publishing does - the remark is still
 // yours and still beside the code, it has simply also left. A showcase that deleted them would
 // teach the reader that sending loses their work.
-export function applyDemoPublish(session: DiffSession): DiffSession {
+export function applyDemoPublish(session: DiffReview): DiffReview {
   return {
     ...session,
     comments: (session.comments ?? []).map((c) =>
@@ -466,7 +466,7 @@ export const DEMO_RUN_MS = 900;
 // posting a comment, resolving one and skipping a suggestion all have to WORK, or the reader
 // meets a rail whose buttons do nothing and concludes the feature is broken. Pure, so
 // demo.test.ts can pin each op without a DOM.
-export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
+export function applyDemoOp(session: DiffReview, op: SessionOp): DiffReview {
   switch (op.op) {
     case "cursor":
       return { ...session, cursor: { path: op.path, hunk: op.hunk } };

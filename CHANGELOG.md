@@ -149,7 +149,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   deletes a file this build cannot read.
 - **A lease binding that does not read is an error.** A marker holding anything but a lease
   id no longer reads as unbound: the guard denies with the path, the CLI commands that
-  resolve a lease fail, and `magus job exec --vacate` clears it.
+  resolve a lease fail, and `magus job exec --vacate` clears it. The guard lets that
+  command and help through, so an agent can recover.
 - **A record with no host claim is unattributed, never "a person".** `magus shell` typed at
   a terminal records `entry_point: cli`, no session, and no longer `actor: "agent"`; its
   terminal window keys fire-once notices but is not recorded as a session. The OS user

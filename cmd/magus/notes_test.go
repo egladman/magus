@@ -127,7 +127,7 @@ func TestNotePathReportsTheFileNotTheId(t *testing.T) {
 // not a transcript of the review: what was decided is nearly always in what somebody said
 // back, and that half lives on the forge rather than in the session.
 func TestCaptureKeepsWhatColleaguesSaid(t *testing.T) {
-	sess := &types.DiffSession{
+	sess := &types.DiffReview{
 		ID:   "rev-1",
 		AsOf: "patch-1",
 		Comments: []types.DiffComment{
@@ -157,7 +157,7 @@ func TestCaptureKeepsWhatColleaguesSaid(t *testing.T) {
 // A review with no forge behind it is the ordinary case, and the local conversation is worth
 // keeping on its own.
 func TestCaptureWithNoThreadsIsStillATranscript(t *testing.T) {
-	sess := &types.DiffSession{
+	sess := &types.DiffReview{
 		ID: "rev-1",
 		Comments: []types.DiffComment{
 			{Path: "a.go", Author: types.DiffAuthorUnattributed, Body: "mine"},
@@ -178,10 +178,10 @@ func TestCaptureReadsTheStoreWhenNoDaemonIsRunning(t *testing.T) {
 	written.Attach(root, "main", types.Diff{Base: "main"}, "asof")
 	written.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorUnattributed)
 
-	sess := storedDiffSession(cache, "diff --git a/a.go b/a.go\n")
+	sess := storedDiffReview(cache, "diff --git a/a.go b/a.go\n")
 	require.Len(t, sess.Comments, 1, "the drafts the store persisted are the transcript")
 	assert.Equal(t, "mine", sess.Comments[0].Body)
-	// Digested from the patch exactly as attachDiffSession digests it, so a capture taken with
+	// Digested from the patch exactly as attachDiffReview digests it, so a capture taken with
 	// no daemon names the note a daemon-attached one would have named.
 	assert.Equal(t, changeset.PatchDigest("diff --git a/a.go b/a.go\n"), sess.AsOf)
 	assert.Equal(t, "review-"+sess.AsOf[:12], captureName(sess))
@@ -190,7 +190,7 @@ func TestCaptureReadsTheStoreWhenNoDaemonIsRunning(t *testing.T) {
 // An unreadable patch must not name every such capture the same note: the second one would
 // collide with the first and be refused, which is the transcript lost.
 func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
-	sess := storedDiffSession(t.TempDir(), "")
+	sess := storedDiffReview(t.TempDir(), "")
 	assert.Empty(t, sess.AsOf)
 	assert.Equal(t, "review-thread", captureName(sess))
 }

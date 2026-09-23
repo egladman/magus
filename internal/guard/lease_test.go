@@ -302,6 +302,39 @@ func TestActingLeaseFromMarker(t *testing.T) {
 	v := Judge(ctx, Dependencies{}, Request{Input: "ls"})
 	assert.Equal(t, "deny", v.Decision)
 	assert.Contains(t, v.Reason, "does not read")
+	assert.Contains(t, v.Reason, filepath.Join(base, job.LeaseMarkerName), "the deny names the file")
+}
+
+// A deny that also refused its own repair would be a lockout: no agent in the checkout
+// could clear the marker. `magus job exec --vacate` and a help read pass with the error as
+// advice; anything else, including the repair chained with another command, is denied.
+func TestAnUnreadableMarkerLetsItsRepairThrough(t *testing.T) {
+	t.Setenv("BAGGAGE", "")
+	ctx, _ := fleetFixture(t, narrowLease())
+	base := hookLocation(ctx, Dependencies{}).cacheDir
+	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+
+	for _, command := range []string{
+		"magus job exec --vacate",
+		"./magus --root . job exec --vacate",
+		"magus job exec --help",
+		"magus -h",
+		"magus help job",
+	} {
+		v := Judge(ctx, Dependencies{}, Request{Input: command})
+		assert.Equal(t, "advise", v.Decision, "%q", command)
+		assert.Contains(t, v.Context, "not a lease id", "%q", command)
+	}
+	for _, command := range []string{
+		"magus job exec other-job",
+		"magus job exec --vacate && rm -rf .",
+		"rm .magus/lease",
+		"magus run test .",
+	} {
+		assert.Equal(t, "deny", Judge(ctx, Dependencies{}, Request{Input: command}).Decision, "%q", command)
+	}
+	assert.Equal(t, "deny", Judge(ctx, Dependencies{}, Request{Input: "magus job exec --vacate", IsPath: true}).Decision,
+		"a write is never the repair, whatever its path says")
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
