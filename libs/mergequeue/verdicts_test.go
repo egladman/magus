@@ -10,61 +10,62 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/mergequeue/types"
 )
 
 func TestPollSeesOnlyFinishedVerdictsEachOnceAndTheDoneMarker(t *testing.T) {
 	path := t.TempDir()
 	ctx := context.Background()
 	reader := &VerdictDir{Path: path, Follow: true}
-	fresh, done, err := reader.Poll(ctx)
+	batch, err := reader.Poll(ctx)
 	require.NoError(t, err)
-	assert.Empty(t, fresh)
-	assert.False(t, done)
+	assert.Empty(t, batch.Verdicts)
+	assert.False(t, batch.Done)
 
-	exported := ""
-	writer := &VerdictDir{Path: path, Export: func(_ context.Context, file, _, cand string) error {
-		exported = cand
-		return os.WriteFile(file, []byte("candidate"), 0o644)
-	}}
-	require.NoError(t, writer.Record(ctx, Verdict{Change: change("pr-1"), Decision: DecisionMerge, Candidate: "s1"}))
+	writer := &VerdictDir{Path: path}
+	require.NoError(t, writer.Record(green("pr-1")))
 	require.NoError(t, os.Mkdir(filepath.Join(path, ".pr-3-123"), 0o755)) // a Record in progress
-	fresh, done, err = reader.Poll(ctx)
+	batch, err = reader.Poll(ctx)
 	require.NoError(t, err)
-	assert.False(t, done)
-	require.Len(t, fresh, 1)
-	assert.Equal(t, "s1", exported, "a green verdict carries its candidate")
-	assert.Equal(t, filepath.Join(path, "pr-1", CandidateFile), fresh[0].CandidateFile)
+	assert.False(t, batch.Done)
+	assert.Equal(t, []string{"pr-1"}, idsOf(batch.Verdicts))
 
-	require.NoError(t, writer.Record(ctx, waiting("2")))
+	require.NoError(t, writer.Record(waiting("2")))
 	require.NoError(t, writer.MarkDone())
-	fresh, done, err = reader.Poll(ctx)
+	batch, err = reader.Poll(ctx)
 	require.NoError(t, err)
-	assert.True(t, done)
-	require.Len(t, fresh, 1, "only what appeared since the last poll")
-	assert.Equal(t, "2", fresh[0].Change.ID)
-	assert.Empty(t, fresh[0].CandidateFile)
-}
-
-func waiting(id string) Verdict {
-	return Verdict{Change: change(id), Decision: DecisionWait, Code: CodeBehind, Reason: "r"}
+	assert.True(t, batch.Done)
+	assert.Equal(t, []string{"2"}, idsOf(batch.Verdicts), "only what appeared since the last poll")
 }
 
 func TestRecordRefusesAnIDThatEscapesTheDirectory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "verdicts")
-	err := (&VerdictDir{Path: path}).Record(context.Background(), waiting(".."))
+	err := (&VerdictDir{Path: path}).Record(waiting(".."))
 	require.ErrorContains(t, err, `change id ".."`)
 	assert.DirExists(t, filepath.Dir(path), "the parent survives")
 }
 
-func TestPollRefusesAVerdictFiledUnderAnotherID(t *testing.T) {
+// One unreadable entry holds its own change; before, it stopped applying for every
+// change in the run.
+func TestPollRejectsAnUnreadableVerdictForItsChangeAlone(t *testing.T) {
 	path := t.TempDir()
-	require.NoError(t, (&VerdictDir{Path: path}).Record(context.Background(), waiting("1")))
+	d := &VerdictDir{Path: path}
+	require.NoError(t, d.Record(waiting("1")))
 	require.NoError(t, os.Rename(filepath.Join(path, "1"), filepath.Join(path, "2")))
-	_, _, err := (&VerdictDir{Path: path}).Poll(context.Background())
-	require.ErrorContains(t, err, `holds the verdict on "1"`)
+	require.NoError(t, d.Record(waiting("3")))
+	require.NoError(t, os.MkdirAll(filepath.Join(path, "4"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(path, "4", VerdictFile), []byte("{"), 0o644))
+	batch, err := (&VerdictDir{Path: path}).Poll(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"3"}, idsOf(batch.Verdicts))
+	require.Len(t, batch.Rejected, 2)
+	assert.Equal(t, "2", batch.Rejected[0].Change)
+	assert.Contains(t, batch.Rejected[0].Reason, `holds the verdict on "1"`)
+	assert.Equal(t, "4", batch.Rejected[1].Change)
 }
 
-func planWith(t *testing.T, ids ...string) Plan {
+func planWith(t *testing.T, ids ...string) types.Plan {
 	t.Helper()
 	p, err := ReadPlan(bytes.NewReader(planBytes(t, ids...)))
 	require.NoError(t, err)

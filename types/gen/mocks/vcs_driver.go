@@ -4034,16 +4034,16 @@ func (_c *MockVCSDriver_Root_Call) RunAndReturn(run func(ctx context.Context, di
 }
 
 // StartMerge provides a mock function for the type MockVCSDriver
-func (_mock *MockVCSDriver) StartMerge(ctx context.Context, root string, ref string) error {
-	ret := _mock.Called(ctx, root, ref)
+func (_mock *MockVCSDriver) StartMerge(ctx context.Context, root string, ref string, as types.Person) error {
+	ret := _mock.Called(ctx, root, ref, as)
 
 	if len(ret) == 0 {
 		panic("no return value specified for StartMerge")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, root, ref)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, types.Person) error); ok {
+		r0 = returnFunc(ctx, root, ref, as)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -4059,11 +4059,12 @@ type MockVCSDriver_StartMerge_Call struct {
 //   - ctx context.Context
 //   - root string
 //   - ref string
-func (_e *MockVCSDriver_Expecter) StartMerge(ctx interface{}, root interface{}, ref interface{}) *MockVCSDriver_StartMerge_Call {
-	return &MockVCSDriver_StartMerge_Call{Call: _e.mock.On("StartMerge", ctx, root, ref)}
+//   - as types.Person
+func (_e *MockVCSDriver_Expecter) StartMerge(ctx interface{}, root interface{}, ref interface{}, as interface{}) *MockVCSDriver_StartMerge_Call {
+	return &MockVCSDriver_StartMerge_Call{Call: _e.mock.On("StartMerge", ctx, root, ref, as)}
 }
 
-func (_c *MockVCSDriver_StartMerge_Call) Run(run func(ctx context.Context, root string, ref string)) *MockVCSDriver_StartMerge_Call {
+func (_c *MockVCSDriver_StartMerge_Call) Run(run func(ctx context.Context, root string, ref string, as types.Person)) *MockVCSDriver_StartMerge_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -4077,10 +4078,15 @@ func (_c *MockVCSDriver_StartMerge_Call) Run(run func(ctx context.Context, root 
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 types.Person
+		if args[3] != nil {
+			arg3 = args[3].(types.Person)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -4091,7 +4097,7 @@ func (_c *MockVCSDriver_StartMerge_Call) Return(err error) *MockVCSDriver_StartM
 	return _c
 }
 
-func (_c *MockVCSDriver_StartMerge_Call) RunAndReturn(run func(ctx context.Context, root string, ref string) error) *MockVCSDriver_StartMerge_Call {
+func (_c *MockVCSDriver_StartMerge_Call) RunAndReturn(run func(ctx context.Context, root string, ref string, as types.Person) error) *MockVCSDriver_StartMerge_Call {
 	_c.Call.Return(run)
 	return _c
 }

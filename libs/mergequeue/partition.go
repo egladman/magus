@@ -1,6 +1,8 @@
 package mergequeue
 
-// Partition splits changes into groups with pairwise disjoint affected sets, keeping a
+import "github.com/egladman/magus/libs/mergequeue/types"
+
+// partition splits changes into groups with pairwise disjoint affected sets, keeping a
 // stacked change in the group of the change beneath it, preserving queue order inside
 // each group and ordering groups by their first change.
 //
@@ -11,13 +13,13 @@ package mergequeue
 //
 // Soundness: one unproven change puts every change in one group, because independence
 // nobody can prove is never assumed.
-func Partition(changes []Change) [][]Change {
+func partition(changes []types.Change) [][]types.Change {
 	if len(changes) == 0 {
 		return nil
 	}
 	for _, c := range changes {
-		if !c.Proven() {
-			return [][]Change{changes}
+		if !proven(c) {
+			return [][]types.Change{changes}
 		}
 	}
 
@@ -56,7 +58,7 @@ func Partition(changes []Change) [][]Change {
 			owner[u] = i
 		}
 	}
-	// A stacked change lands after the one beneath it whatever their keys say.
+	// A stacked change merges after the one beneath it whatever their keys say.
 	for i, c := range changes {
 		if j, ok := byID[c.Below]; ok {
 			union(j, i)
@@ -64,7 +66,7 @@ func Partition(changes []Change) [][]Change {
 	}
 
 	index := make(map[int]int)
-	var groups [][]Change
+	var groups [][]types.Change
 	for i, c := range changes {
 		r := find(i)
 		gi, ok := index[r]

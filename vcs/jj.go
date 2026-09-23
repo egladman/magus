@@ -754,9 +754,12 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 //
 // A working copy that is ALREADY a merge is refused, for the same reason the other backends
 // refuse one: its conflicts would otherwise be mistaken for this merge's.
-func (v jjVCS) StartMerge(ctx context.Context, root, ref string) error {
+func (v jjVCS) StartMerge(ctx context.Context, root, ref string, as types.Person) error {
 	if err := checkRef(ref); err != nil {
 		return err
+	}
+	if as != (types.Person{}) && (as.Name == "" || as.Email == "") {
+		return errors.New("vcs: acting as someone needs a name and an email")
 	}
 	underway, err := v.mergeInProgress(ctx, root)
 	if err != nil {
@@ -767,6 +770,9 @@ func (v jjVCS) StartMerge(ctx context.Context, root, ref string) error {
 	}
 	cmd := vcsExec(ctx, "jj", "new", "@", ref)
 	cmd.Dir = root
+	if as != (types.Person{}) {
+		cmd.Env = append(os.Environ(), "JJ_USER="+as.Name, "JJ_EMAIL="+as.Email)
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("jj new @ %s: %w\n%s", ref, err, strings.TrimSpace(string(out)))
 	}

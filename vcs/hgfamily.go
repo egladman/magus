@@ -25,6 +25,17 @@ import (
 // and sl 0.2.x.
 var hgFamilyDriftHooks = []string{"commit", "outgoing"}
 
+// hgUsername is the global option naming as as the acting user, none for the zero Person.
+func hgUsername(as types.Person) ([]string, error) {
+	if as == (types.Person{}) {
+		return nil, nil
+	}
+	if as.Name == "" || as.Email == "" {
+		return nil, errors.New("vcs: acting as someone needs a name and an email")
+	}
+	return []string{"--config", "ui.username=" + as.Name + " <" + as.Email + ">"}, nil
+}
+
 // writeHgFamilyMergeDriverSection routes outputGlobs to the magus merge tool in the
 // hg-family config at path. The caller holds withRepoLock.
 func writeHgFamilyMergeDriverSection(path string, outputGlobs []string) (bool, error) {

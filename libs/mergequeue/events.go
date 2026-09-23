@@ -1,10 +1,12 @@
 package mergequeue
 
 import (
-	"encoding/json"
 	"io"
 	"sync"
 	"time"
+
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/mergequeue/types"
 )
 
 // EventKind names what an [Event] reports.
@@ -20,20 +22,23 @@ const (
 	EventNotice    EventKind = "notice"    // anything else worth a line, in Reason
 )
 
+// SchemaEvent names the schema every [Event] record carries.
+const SchemaEvent = "mergequeue.event/v1"
+
 // Event is one JSONL record. Every command reports through these alone, one per line.
 type Event struct {
-	Schema     string    `json:"schema"`
-	Time       time.Time `json:"time"`
-	Kind       EventKind `json:"kind"`
-	Change     string    `json:"change,omitempty"`
-	Partition  *int      `json:"partition,omitempty"`
-	Changes    []string  `json:"changes,omitempty"`
-	Decision   Decision  `json:"decision,omitempty"`
-	Code       Code      `json:"code,omitempty"`
-	Reason     string    `json:"reason,omitempty"`
-	Commit     string    `json:"commit,omitempty"`
-	Depth      int       `json:"depth,omitempty"`
-	DurationMS int64     `json:"duration_ms,omitempty"`
+	Schema     string         `json:"schema"`
+	Time       time.Time      `json:"time"`
+	Kind       EventKind      `json:"kind"`
+	Change     string         `json:"change,omitempty"`
+	Partition  *int           `json:"partition,omitempty"`
+	Changes    []string       `json:"changes,omitempty"`
+	Decision   types.Decision `json:"decision,omitempty"`
+	Code       types.Code     `json:"code,omitempty"`
+	Reason     string         `json:"reason,omitempty"`
+	Commit     string         `json:"commit,omitempty"`
+	Depth      int            `json:"depth,omitempty"`
+	DurationMS int64          `json:"duration_ms,omitempty"`
 }
 
 // Events writes [Event] records as JSONL. A nil *Events discards. Safe for concurrent

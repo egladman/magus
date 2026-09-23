@@ -2,155 +2,251 @@ package mergequeue
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
-	"slices"
-	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/mergequeue/types"
+	magustypes "github.com/egladman/magus/types"
 )
 
-func TestPlanHoldsTheUnapprovedAndKicksBackForksAndBaseConflicts(t *testing.T) {
-	w := newWorld(t, map[string]string{"app/a": "a\n", "lib/b": "b\n"})
-	w.push(w.commit(w.base, "main moves lib/b", map[string]*string{"lib/b": str("main\n")}))
-	unapproved := w.open("1", w.commit(w.base, "one", map[string]*string{"app/a": str("1\n")}))
-	conflicting := w.open("2", w.commit(w.base, "two", map[string]*string{"lib/b": str("2\n")}))
-	moved := w.open("3", w.commit(w.base, "three", map[string]*string{"web/c": str("3\n")}))
-	w.open("4", w.commit(w.base, "four", map[string]*string{"api/d": str("4\n")}))
-	w.open("5", w.commit(w.base, "five", map[string]*string{"x/e": str("5\n")}), func(c *Change) { c.Fork, c.Branch = true, "" })
-	w.p.approvedAt["1"] = w.base
-	in := w.changes()
-	newHead := w.commit(moved.Head, "three again", map[string]*string{"web/c": str("33\n")})
-	w.m.set(branchRef("pr3"), newHead)
-
-	p, err := w.planner(0).Run(context.Background(), in)
+func planner(t *testing.T, d doubles) *Planner {
+	t.Helper()
+	p, err := NewPlanner(d.vcs, clone, d.provider, d.facts)
 	require.NoError(t, err)
-	assert.Equal(t, w.main(), p.BaseCommit)
-	assert.Equal(t, 1, p.Depth, "depth 0 means 1")
-	assert.Equal(t, [][]string{{"4"}}, ids(p.Partitions))
-	assert.Equal(t, []string{"1", "2", "3", "5"}, idsOf(p.Verdicts), "verdicts keep queue order though admission runs side by side")
-	v := verdictsByID(p)
-	assert.Equal(t, Verdict{Change: unapproved, Decision: DecisionWait, Code: CodeNotApproved,
-		Reason: "not approved at " + short(unapproved.Head) + ": 0 of 1 approvals at this commit"}, v["1"])
-	assert.Equal(t, DecisionKick, v["2"].Decision)
-	assert.Equal(t, CodeConflict, v["2"].Code)
-	assert.Equal(t, []string{"lib/b"}, v["2"].Paths)
-	assert.Contains(t, v["2"].Report, "`lib/b`")
-	assert.Equal(t, []string{short(w.main()) + " main moves lib/b"}, v["2"].With, "the base commits that touched it")
-	assert.Equal(t, conflicting.Head, v["2"].Change.Head)
-	assert.Equal(t, newHead, v["3"].Change.Head, "the wait is reported on the new head")
-	assert.Equal(t, CodeHeadMoved, v["3"].Code)
-	assert.Equal(t, CodeRefused, v["5"].Code)
-	assert.Equal(t, forkReport, v["5"].Report)
+	p.Parallel = 1
+	return p
 }
 
-func TestPlanAsksTheAffectedHookOnlyForChangesWithoutASet(t *testing.T) {
-	w := newWorld(t, map[string]string{"app/a.go": "a\n"})
-	w.open("1", w.commit(w.base, "one", map[string]*string{"app/a.go": str("1\n")}), func(c *Change) { c.Affected = nil })
-	w.open("2", w.commit(w.base, "two", map[string]*string{"lib/b.go": str("2\n")}), func(c *Change) { c.Affected = []string{"lib"} })
-	w.open("3", w.commit(w.base, "three", map[string]*string{"magusfile.buzz": str("3\n")}), func(c *Change) { c.Affected = nil })
-	var (
-		mu    sync.Mutex
-		asked []string
-	)
-	affected := func(_ context.Context, c Change, paths []string) ([]string, string, error) {
-		mu.Lock()
-		asked = append(asked, c.ID+":"+strings.Join(paths, ","))
-		mu.Unlock()
-		if c.ID == "3" {
-			return []string{"."}, "magusfile.buzz changes the declarations", nil
-		}
-		return []string{strings.Split(paths[0], "/")[0]}, "", nil
+func changes(cs ...types.Change) types.Changes {
+	return types.Changes{Base: "main", Changes: cs}
+}
+
+func TestNewPlannerRefusesAMissingPart(t *testing.T) {
+	d := newDoubles(t)
+	for name, tc := range map[string]struct {
+		vcs  types.ReadVCS
+		p    types.Provider
+		f    types.BuildFacts
+		cl   Clone
+		want string
+	}{
+		"vcs":      {nil, d.provider, d.facts, clone, "planner needs a VCS, a provider and build facts"},
+		"provider": {d.vcs, nil, d.facts, clone, "planner needs a VCS, a provider and build facts"},
+		"facts":    {d.vcs, d.provider, nil, clone, "planner needs a VCS, a provider and build facts"},
+		"clone":    {d.vcs, d.provider, d.facts, Clone{Root: "/clone"}, "clone needs a root and a remote"},
+	} {
+		_, err := NewPlanner(tc.vcs, tc.cl, tc.p, tc.f)
+		require.EqualError(t, err, tc.want, name)
 	}
-	var events bytes.Buffer
-	pl := w.planner(2)
-	pl.Facts, pl.Events = factsFunc(affected), NewEvents(&events)
-	p, err := pl.Run(context.Background(), w.changes())
-	require.NoError(t, err)
-	slices.Sort(asked)
-	assert.Equal(t, []string{"1:app/a.go", "3:magusfile.buzz"}, asked)
-	assert.Equal(t, [][]string{{"1", "2", "3"}}, ids(p.Partitions), "an unbounded change overlaps everything")
-	assert.Equal(t, []string{"app"}, p.Partitions[0][0].Affected)
-
-	var ev Event
-	require.NoError(t, json.Unmarshal(bytes.TrimSpace(events.Bytes()), &ev))
-	assert.Equal(t, SchemaEvent, ev.Schema)
-	assert.Equal(t, EventPartition, ev.Kind)
-	assert.Equal(t, []string{"1", "2", "3"}, ev.Changes)
 }
 
-func TestPlanStopsWhenTheAffectedHookFails(t *testing.T) {
-	w := newWorld(t, map[string]string{"a": "a\n"})
-	w.open("1", w.commit(w.base, "one", map[string]*string{"a": str("1\n")}), func(c *Change) { c.Affected = nil })
-	pl := w.planner(1)
-	pl.Facts = factsFunc(func(context.Context, Change, []string) ([]string, string, error) {
-		return nil, "", errors.New("exit status 2")
-	})
-	_, err := pl.Run(context.Background(), w.changes())
-	require.EqualError(t, err, "affected set of #1 (change 1): exit status 2", "misconfiguration is an error, never an unbounded guess")
-}
-
-// noHead is a provider that omits where a change's head is.
-type noHead struct{ *modelProvider }
-
-func (n noHead) ApprovalAt(ctx context.Context, c Change, commit string) (Approval, error) {
-	a, err := n.modelProvider.ApprovalAt(ctx, c, commit)
-	a.Head = ""
-	return a, err
-}
-
-// noMethod is a provider that omits how a change lands.
-type noMethod struct{ *modelProvider }
-
-func (n noMethod) ApprovalAt(ctx context.Context, c Change, commit string) (Approval, error) {
-	a, err := n.modelProvider.ApprovalAt(ctx, c, commit)
-	a.Method = ""
-	return a, err
-}
-
-func TestPlanRefusesAProviderThatReportsNoHeadOrNoMethod(t *testing.T) {
-	w := newWorld(t, map[string]string{"a": "a\n"})
-	w.open("1", w.commit(w.base, "one", map[string]*string{"a": str("1\n")}))
-	pl := w.planner(1)
-	pl.Provider = noHead{w.p}
-	_, err := pl.Run(context.Background(), w.changes())
-	require.EqualError(t, err, "approval of #1 (change 1): the provider reported no head")
-	pl.Provider = noMethod{w.p}
-	_, err = pl.Run(context.Background(), w.changes())
-	require.EqualError(t, err, `approval of #1 (change 1): the provider reported base "main" and merge method ""; both are required`)
-}
-
-func TestPlanRefusesInputGitCouldReadAsAnOption(t *testing.T) {
+// Input that could reach a command line as an option is refused before anything is
+// fetched: the mocks expect no call.
+func TestPlanRefusesBadInputBeforeCallingAnything(t *testing.T) {
+	d := newDoubles(t)
+	p := planner(t, d)
 	bad := change("1", "a")
-	bad.Branch = "--delete"
-	_, err := NewPlanner(newModel()).Run(context.Background(), Changes{Schema: SchemaChanges, Base: "main", Changes: []Change{bad}})
-	require.EqualError(t, err, `changes[0]: #1: branch: "--delete" starts with '-'`)
+	bad.Ref = "refs/heads/a b"
+	_, err := p.Run(t.Context(), changes(bad))
+	require.ErrorContains(t, err, "ref:")
+	bad = change("1", "a")
+	bad.Branch = "--force"
+	_, err = p.Run(t.Context(), changes(bad))
+	require.ErrorContains(t, err, "branch:")
+	_, err = p.Run(t.Context(), types.Changes{Base: "-main"})
+	require.ErrorContains(t, err, "base:")
+	p.Depth = -1
+	_, err = p.Run(t.Context(), changes(change("1", "a")))
+	require.EqualError(t, err, "depth -1 and parallel 1 must not be negative")
 }
 
-func TestPlanRefusesAMethodTheRepositoryDoesNotAllowAndWaitsOnWhatAlreadyLanded(t *testing.T) {
-	w := newWorld(t, map[string]string{"a": "a\n"})
-	w.p.caps.Methods = []MergeMethod{MethodSquash}
-	w.open("1", w.commit(w.base, "one", map[string]*string{"a": str("1\n")}), func(c *Change) { c.Method = MethodRebase })
-	landed := w.commit(w.base, "two", map[string]*string{"b": str("2\n")})
-	w.push(landed)
-	w.open("2", landed)
-	v := verdictsByID(w.plan(1))
-	assert.Equal(t, CodeRefused, v["1"].Code)
-	assert.Contains(t, v["1"].Reason, "does not allow the rebase merge method")
-	assert.Equal(t, CodeMerged, v["2"].Code)
+func TestPlanStopsOnAProviderThatCannotSayWhatItSupports(t *testing.T) {
+	for name, tc := range map[string]struct {
+		caps types.Capabilities
+		err  error
+		want string
+	}{
+		"describe fails":    {err: errors.New("401"), want: "describe the provider: 401"},
+		"no method allowed": {caps: types.Capabilities{StackMerge: types.StackMergeSequential}, want: "provider allows no merge method"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			d.tip(base)
+			d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main"}).Return(tc.caps, tc.err)
+			_, err := planner(t, d).Run(t.Context(), changes(change("1", "a")))
+			require.EqualError(t, err, tc.want)
+		})
+	}
 }
 
-// A provider that describes itself wrongly is misconfigured, and planning stops there.
-func TestPlanRefusesAProviderThatAllowsNoMethod(t *testing.T) {
-	w := newWorld(t, map[string]string{"a": "a\n"})
-	w.p.caps.Methods = nil
-	_, err := w.planner(1).Run(context.Background(), w.changes())
-	require.EqualError(t, err, "the provider allows no merge method")
-	w.p.caps = Capabilities{StackMerge: "sometimes", Methods: []MergeMethod{MethodSquash}}
-	_, err = w.planner(1).Run(context.Background(), w.changes())
-	require.ErrorContains(t, err, `describes stack merging as "sometimes"`)
+// The provider is wrong about what merged, and a stack base read from it would be too.
+func TestPlanRefusesAMergedChangeTheBaseDoesNotCarry(t *testing.T) {
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	m := types.MergedChange{ID: "9", Head: head("9"), Commit: head("m9"), Method: types.MethodSquash}
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, m.Commit).Return(nil)
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, m.Commit, base).Return(false, nil)
+	in := changes(change("1", "a"))
+	in.Merged = []types.MergedChange{m}
+	_, err := planner(t, d).Run(t.Context(), in)
+	require.EqualError(t, err, "provider lists #9 as merged at "+head("m9")[:12]+", which main does not carry")
+}
+
+func TestPlanOfNoChangesSaysSo(t *testing.T) {
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	var out bytes.Buffer
+	p := planner(t, d)
+	p.Events = NewEvents(&out)
+	plan, err := p.Run(t.Context(), changes())
+	require.NoError(t, err)
+	assert.Equal(t, types.Plan{Schema: types.SchemaPlan, Base: "main", BaseCommit: base, Depth: 1}, plan)
+	assert.Contains(t, out.String(), "no change carries merge intent against main")
+}
+
+// admitting is one change's way through admission as far as want says it gets.
+type admitting struct {
+	onBase    bool
+	approval  *types.Approval
+	conflicts []magustypes.Conflict
+	outputs   map[string]bool
+	affected  []string
+	factsErr  error
+}
+
+func (d doubles) admit(c types.Change, a admitting) {
+	d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil)
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, c.Head, base).Return(a.onBase, nil)
+	if a.onBase {
+		return
+	}
+	d.plain(c.Head)
+	approved := types.Approval{Approved: true, Head: c.Head, Base: "main", Method: c.Method, Queued: true}
+	if a.approval != nil {
+		approved = *a.approval
+	}
+	d.provider.EXPECT().ApprovalAt(mock.Anything, c, c.Head).Return(approved, nil)
+	if !approved.Approved || !approved.Queued || approved.Head != c.Head {
+		return
+	}
+	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: base, Theirs: c.Head}).
+		Return(magustypes.TreeMergeResult{Tree: "t", Conflicts: a.conflicts}, nil)
+	if len(a.conflicts) > 0 {
+		d.facts.EXPECT().Outputs(mock.Anything, conflictPaths(a.conflicts)).Return(a.outputs, nil)
+	}
+	if len(a.conflicts) > len(a.outputs) {
+		d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, c.Head, base, mock.Anything).
+			Return([]magustypes.Commit{{ID: head("x"), Subject: "change a/x.go", Parents: []string{base}}}, nil)
+		return
+	}
+	if c.Affected == nil {
+		d.facts.EXPECT().Affected(mock.Anything, c, []string{"a/x.go"}).Return(a.affected, "", a.factsErr)
+	}
+}
+
+func TestPlanAdmission(t *testing.T) {
+	unknown := change("1")
+	for name, tc := range map[string]struct {
+		c        types.Change
+		admit    *admitting
+		wantErr  string
+		want     types.Decision
+		wantCode types.Code
+		wantSet  []string
+	}{
+		// Planning never fetches a fork's head: nothing from it reaches the queue's clones.
+		"a fork is kicked back unfetched": {c: types.Change{ID: "1", Head: head("1"), Base: "main", Method: types.MethodSquash, Fork: true},
+			want: types.DecisionKick, wantCode: types.CodeKickRefused},
+		"a head on the base has merged": {c: change("1", "a"), admit: &admitting{onBase: true}, want: types.DecisionMerged},
+		"an unapproved change waits": {c: change("1", "a"), admit: &admitting{approval: &types.Approval{Head: head("1"), Base: "main", Method: types.MethodSquash, Queued: true}},
+			want: types.DecisionWait, wantCode: types.CodeWaitNotApproved},
+		"a conflict in source is kicked back": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/x.go"}}, outputs: map[string]bool{}},
+			want: types.DecisionKick, wantCode: types.CodeKickConflict},
+		"a conflict in a declared output is regeneration's": {c: change("1", "a"), admit: &admitting{conflicts: []magustypes.Conflict{{Path: "a/gen.go"}}, outputs: map[string]bool{"a/gen.go": true}},
+			wantSet: []string{"a"}},
+		"the build tool is asked only for a change without a set": {c: unknown, admit: &admitting{affected: []string{"a", "b"}}, wantSet: []string{"a", "b"}},
+		"a failing build tool stops planning":                     {c: unknown, admit: &admitting{factsErr: errors.New("exit 1")}, wantErr: "affected set of #1: exit 1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			d.tip(base)
+			d.caps()
+			if tc.admit != nil {
+				d.admit(tc.c, *tc.admit)
+			}
+			plan, err := planner(t, d).Run(t.Context(), changes(tc.c))
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if tc.want == "" {
+				require.Empty(t, plan.Verdicts)
+				require.Len(t, plan.Partitions, 1)
+				assert.Equal(t, tc.wantSet, plan.Partitions[0][0].Affected)
+				return
+			}
+			require.Len(t, plan.Verdicts, 1)
+			v := plan.Verdicts[0]
+			assert.Equal(t, tc.want, v.Decision)
+			assert.Equal(t, tc.wantCode, v.Code)
+			if v.Code == types.CodeKickConflict {
+				assert.Equal(t, []string{"a/x.go"}, v.Paths)
+				assert.Equal(t, []string{head("x")[:12] + " change a/x.go"}, v.With)
+				assert.Contains(t, v.Report, "Merge `main` into this branch, resolve these by hand")
+			}
+		})
+	}
+}
+
+// A change stacked on another before a merge of the base into that one carries its top,
+// not its head; planning peels the merge off to find it, reading each head's own
+// commits once stacks are possible.
+func TestPlanPeelsAMergeOfTheBaseOffTheChangeBeneath(t *testing.T) {
+	d := newDoubles(t)
+	d.tip(base)
+	d.caps()
+	parent, child := change("1", "a"), change("2", "b")
+	top := head("top1")
+	for _, c := range []types.Change{parent, child} {
+		d.vcs.EXPECT().FetchCommit(mock.Anything, clone.Root, clone.Remote, c.Head).Return(nil)
+	}
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, parent.Head, []string(nil)).
+		Return([]magustypes.Commit{{ID: parent.Head, Parents: []string{top, head("b1")}}, {ID: top, Parents: []string{base}}}, nil)
+	d.vcs.EXPECT().RangeCommits(mock.Anything, clone.Root, base, child.Head, []string(nil)).
+		Return([]magustypes.Commit{{ID: child.Head, Parents: []string{top}}, {ID: top, Parents: []string{base}}}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, parent.Head).Return(magustypes.Commit{ID: parent.Head, Parents: []string{top, head("b1")}}, nil)
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, head("b1"), base).Return(true, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, top).Return(magustypes.Commit{ID: top, Parents: []string{base}}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, child.Head).Return(magustypes.Commit{ID: child.Head, Parents: []string{top}}, nil)
+	// The child, stacked on an unmerged change, is approved at its head and not merged
+	// onto the base alone: that would report the parent's conflicts as its own.
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, child.Head, base).Return(false, nil)
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, child.Head).Return(types.Approval{Approved: true, Head: child.Head, Base: "main", Method: types.MethodSquash, Queued: true}, nil)
+	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, child.Head, []string(nil)).Return([]string{"b/y.go"}, nil)
+	// The parent's merge of the base adds nothing, so its review covers its top, where
+	// nobody approved it.
+	d.vcs.EXPECT().IsAncestor(mock.Anything, clone.Root, parent.Head, base).Return(false, nil)
+	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, parent.Head).Return("t", nil)
+	d.vcs.EXPECT().MergeTrees(mock.Anything, clone.Root, magustypes.TreeMerge{Ours: head("b1"), Theirs: top}).Return(magustypes.TreeMergeResult{Tree: "t"}, nil)
+	d.provider.EXPECT().ApprovalAt(mock.Anything, parent, top).Return(types.Approval{Head: parent.Head, Base: "main", Method: types.MethodSquash, Queued: true, Reason: "no review"}, nil)
+
+	plan, err := planner(t, d).Run(t.Context(), changes(child, parent))
+	require.NoError(t, err)
+	require.Len(t, plan.Verdicts, 2)
+	byID := map[string]types.Verdict{}
+	for _, v := range plan.Verdicts {
+		byID[v.Change.ID] = v
+	}
+	assert.Equal(t, types.CodeWaitNotApproved, byID["1"].Code)
+	assert.Equal(t, types.CodeWaitBelow, byID["2"].Code, "held on the change beneath, never blamed")
+	assert.Equal(t, top, byID["2"].Change.StackBase)
+	assert.Equal(t, "1", byID["2"].Change.Below)
 }

@@ -876,8 +876,12 @@ func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 // A merge already underway is refused BEFORE starting, because it cannot be detected
 // afterwards: the leftover merge's own conflicts would satisfy any "did conflicts appear"
 // test, and the caller would resolve against a merge of a ref it never asked for.
-func (v hgVCS) StartMerge(ctx context.Context, root, ref string) error {
+func (v hgVCS) StartMerge(ctx context.Context, root, ref string, as types.Person) error {
 	if err := checkRef(ref); err != nil {
+		return err
+	}
+	username, err := hgUsername(as)
+	if err != nil {
 		return err
 	}
 	if underway, err := v.mergeInProgress(ctx, root); err != nil {
@@ -885,7 +889,7 @@ func (v hgVCS) StartMerge(ctx context.Context, root, ref string) error {
 	} else if underway {
 		return fmt.Errorf("hg merge %s: a merge is already in progress; conclude or abandon it first", ref)
 	}
-	cmd := vcsExec(ctx, "hg", "--noninteractive", "merge", "--tool", "internal:merge", ref)
+	cmd := vcsExec(ctx, "hg", append(username, "--noninteractive", "merge", "--tool", "internal:merge", ref)...)
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err == nil {

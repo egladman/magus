@@ -1,28 +1,31 @@
-// Package provider runs a merge-queue [mergequeue.Provider] written in Buzz, on an
+// Package provider runs a merge-queue [types.Provider] written in Buzz, on an
 // embedded gopherbuzz VM.
 //
 // A provider script exports these functions, each taking one record and returning one:
 //
-//	describe({base, remote})                                   > {stack_merge, linear_stacks, methods}
-//	list_changes({base, remote})                               > {changes: [change], landed: [landed]}
-//	approval_at(change + {commit})                             > {approved, head, reason, base, method, approved_at}
+//	describe({base, remote_url})                   > {stack_merge, linear_stacks, methods}
+//	list_changes({base, remote_url})               > {changes: [change], merged: [merged], unqueued: [unqueued]}
+//	approval_at(change + {commit})                 > {approved, head, base, method, queued, shared_with, reason?, approved_commit?}
 //	post_status(change + {commit, context, state, description}) > bool
-//	retarget(change + {base})                                  > bool
-//	merge_change(change + {commit, message, through})          > {merged, reason}
-//	kick_back(change + {commit, code, report, paths, with, candidate}) > bool
-//	run_artifacts({run})                                       > {completed, headers, artifacts: [{name, url}]}
+//	retarget(change + {base})                      > bool
+//	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, reason?}
+//	kick_back(change + {commit, code, report, paths, with, candidate_commit}) > bool
+//	list_artifacts({source})                       > {complete, artifacts: [{name, url}], headers?}
 //
-// Every op but run_artifacts is required; run_artifacts is required of a provider apply
-// follows a validation run through. A change record carries the fields of
-// [mergequeue.Change]; a landed record those of [mergequeue.Landed]; a returned
-// record's other keys are ignored. The reads run in planning and apply; the writes run
-// only in apply, so a script should read its write credential under its own name,
-// letting a job that does not hold it fail rather than write.
+// Every op but list_artifacts is required; list_artifacts is required of a provider
+// apply follows a validation run through. A change record carries the fields of
+// [types.Change], a merged record those of [types.MergedChange] and an
+// unqueued record those of [types.UnqueuedChange]. Every key the contract lists
+// without a "?" is required: a missing one is an error, never a zero value, since a
+// missing "fork" or "queued" read as false would admit what the provider meant to
+// refuse. Other keys a record carries are ignored. The reads run in planning and apply;
+// the writes run only in apply, so a script should read its write credential under its
+// own name, letting a job that does not hold it fail rather than write.
 //
-// The records a script receives hold strings, bools, and lists of strings (paths, with).
-// Scripts see Buzz's standard library (std, os, serialize, ...) and one host module,
-// "mergequeue", whose request(method, url, body, headers) makes an HTTP request and
-// returns {status, body}.
+// The records a script receives hold strings, bools, lists of strings (paths, with) and
+// lists of records (through). Scripts see Buzz's standard library (std, os, serialize,
+// ...) and one host module, "mergequeue", whose request(method, url, body, headers)
+// makes an HTTP request and returns {status, body}.
 package provider
 
 import (
@@ -39,7 +42,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	"github.com/egladman/magus/libs/mergequeue"
+	"github.com/egladman/magus/libs/mergequeue/types"
 )
 
 //go:embed github.buzz
@@ -50,24 +53,24 @@ var builtin = map[string]string{"github": githubSource}
 
 // Contract op names.
 const (
-	opDescribe     = "describe"
-	opListChanges  = "list_changes"
-	opApprovalAt   = "approval_at"
-	opPostStatus   = "post_status"
-	opRetarget     = "retarget"
-	opMergeChange  = "merge_change"
-	opKickBack     = "kick_back"
-	opRunArtifacts = "run_artifacts"
+	opDescribe      = "describe"
+	opListChanges   = "list_changes"
+	opApprovalAt    = "approval_at"
+	opPostStatus    = "post_status"
+	opRetarget      = "retarget"
+	opMergeChange   = "merge_change"
+	opKickBack      = "kick_back"
+	opListArtifacts = "list_artifacts"
 )
 
-// Every op but run_artifacts is required: branch protection requires the queue's status once it is
-// wired, so a provider that can list changes but not merge them would hold every change
-// forever.
+// Every op but list_artifacts is required: branch protection requires the queue's status
+// once it is wired, so a provider that can list changes but not merge them would hold
+// every change forever.
 var ops = []string{opDescribe, opListChanges, opApprovalAt, opPostStatus, opRetarget, opMergeChange, opKickBack}
 
-// Script is a [mergequeue.Provider] backed by a Buzz script, and a
-// [mergequeue.RunReader] when it exports run_artifacts. Calls are serialized: one VM
-// session answers them all.
+// Script is a [types.Provider] backed by a Buzz script, and a
+// [types.ArtifactLister] when it exports list_artifacts. Calls are serialized: one
+// VM session answers them all.
 type Script struct {
 	name string
 	mu   sync.Mutex
@@ -76,8 +79,8 @@ type Script struct {
 }
 
 var (
-	_ mergequeue.Provider  = (*Script)(nil)
-	_ mergequeue.RunReader = (*Script)(nil)
+	_ types.Provider       = (*Script)(nil)
+	_ types.ArtifactLister = (*Script)(nil)
 )
 
 // IsBuiltin reports whether [Open] reads spec as a built-in provider's name rather than
@@ -91,18 +94,18 @@ func IsBuiltin(spec string) bool {
 // owns Close.
 func Open(ctx context.Context, spec string) (*Script, error) {
 	if src, ok := builtin[spec]; ok {
-		return New(ctx, spec, src)
+		return newScript(ctx, spec, src)
 	}
 	src, err := os.ReadFile(spec)
 	if err != nil {
 		return nil, fmt.Errorf("provider %q: not built in, and %w", spec, err)
 	}
-	return New(ctx, strings.TrimSuffix(filepath.Base(spec), ".buzz"), string(src))
+	return newScript(ctx, strings.TrimSuffix(filepath.Base(spec), ".buzz"), string(src))
 }
 
-// New runs source and checks it exports every required op. name labels its errors. The
-// caller owns Close.
-func New(ctx context.Context, name, source string) (*Script, error) {
+// newScript runs source and checks it exports every required op. name labels its
+// errors.
+func newScript(ctx context.Context, name, source string) (*Script, error) {
 	sess, err := newSession(ctx)
 	if err != nil {
 		return nil, err
@@ -114,12 +117,12 @@ func New(ctx context.Context, name, source string) (*Script, error) {
 	exports := sess.Exports()
 	p := &Script{name: name, sess: sess, fns: map[string]vm.Value{}}
 	var missing []string
-	for _, op := range slices.Concat(ops, []string{opRunArtifacts}) {
+	for _, op := range slices.Concat(ops, []string{opListArtifacts}) {
 		fn, ok := exports[op]
 		switch {
 		case ok && fn.IsFun():
 			p.fns[op] = fn
-		case op != opRunArtifacts:
+		case op != opListArtifacts:
 			missing = append(missing, op)
 		}
 	}
@@ -130,10 +133,10 @@ func New(ctx context.Context, name, source string) (*Script, error) {
 	return p, nil
 }
 
-// ReadsRuns reports whether the script exports run_artifacts, which following a
+// ListsArtifacts reports whether the script exports list_artifacts, which following a
 // validation run needs.
-func (p *Script) ReadsRuns() bool {
-	_, ok := p.fns[opRunArtifacts]
+func (p *Script) ListsArtifacts() bool {
+	_, ok := p.fns[opListArtifacts]
 	return ok
 }
 
@@ -170,167 +173,136 @@ func (p *Script) call(ctx context.Context, op string, params map[string]any) (an
 }
 
 // callRecord invokes an op answering one record.
-func (p *Script) callRecord(ctx context.Context, op string, params map[string]any) (map[string]any, error) {
+func (p *Script) callRecord(ctx context.Context, op string, params map[string]any) (record, error) {
 	data, err := p.call(ctx, op, params)
 	if err != nil {
-		return nil, err
+		return record{}, err
 	}
 	m, ok := data.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%s returned %T, want a record", p.where(op), data)
+		return record{}, fmt.Errorf("%s returned %T, want a record", p.where(op), data)
 	}
-	return m, nil
+	return record{m: m, where: p.where(op)}, nil
 }
 
 func (p *Script) where(op string) string { return fmt.Sprintf("provider %q: %s", p.name, op) }
 
-func changeParams(c mergequeue.Change) map[string]any {
+func changeParams(c types.Change) map[string]any {
 	return map[string]any{
 		"id": c.ID, "repo": c.Repo, "head": c.Head, "ref": c.Ref, "branch": c.Branch,
-		"base": c.Base, "title": c.Title, "author": c.Author, "fork": c.Fork,
-		"method": string(c.Method), "parent": c.Parent,
+		"base": c.Base, "title": c.Title, "fork": c.Fork, "method": string(c.Method), "parent": c.Parent,
 	}
 }
 
-// Describe calls describe and checks the capabilities it reports.
-func (p *Script) Describe(ctx context.Context, q mergequeue.ListQuery) (mergequeue.Capabilities, error) {
-	m, err := p.callRecord(ctx, opDescribe, map[string]any{"base": q.Base, "remote": q.Remote})
+// Describe calls describe. The queue checks what it reports before relying on it.
+func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabilities, error) {
+	r, err := p.callRecord(ctx, opDescribe, map[string]any{"base": q.Base, "remote_url": q.RemoteURL})
 	if err != nil {
-		return mergequeue.Capabilities{}, err
+		return types.Capabilities{}, err
 	}
-	where := p.where(opDescribe)
-	var c mergequeue.Capabilities
-	sm, err := str(m, "stack_merge", where)
-	if err != nil {
-		return mergequeue.Capabilities{}, err
+	var c types.Capabilities
+	var sm string
+	var methods []string
+	if err := r.decode(required("stack_merge", &sm), required("linear_stacks", &c.LinearStacks), required("methods", &methods)); err != nil {
+		return types.Capabilities{}, err
 	}
-	c.StackMerge = mergequeue.StackMerge(sm)
-	if c.LinearStacks, err = boolean(m, "linear_stacks", where); err != nil {
-		return mergequeue.Capabilities{}, err
-	}
-	methods, err := strs(m, "methods", where)
-	if err != nil {
-		return mergequeue.Capabilities{}, err
-	}
+	c.StackMerge = types.StackMerge(sm)
 	for _, s := range methods {
-		c.Methods = append(c.Methods, mergequeue.MergeMethod(s))
+		c.Methods = append(c.Methods, types.MergeMethod(s))
 	}
 	return c, nil
 }
 
 // ListChanges calls list_changes and checks every record it returns.
-func (p *Script) ListChanges(ctx context.Context, q mergequeue.ListQuery) (mergequeue.Changes, error) {
-	m, err := p.callRecord(ctx, opListChanges, map[string]any{"base": q.Base, "remote": q.Remote})
+func (p *Script) ListChanges(ctx context.Context, q types.ListQuery) (types.Changes, error) {
+	r, err := p.callRecord(ctx, opListChanges, map[string]any{"base": q.Base, "remote_url": q.RemoteURL})
 	if err != nil {
-		return mergequeue.Changes{}, err
+		return types.Changes{}, err
 	}
-	where := p.where(opListChanges)
-	out := mergequeue.Changes{Schema: mergequeue.SchemaChanges, Base: q.Base, Remote: q.Remote}
-	changes, err := records(m, "changes", where)
-	if err != nil {
-		return mergequeue.Changes{}, err
+	out := types.Changes{Schema: types.SchemaChanges, Base: q.Base, RemoteURL: q.RemoteURL}
+	var changes, merged, unqueued []record
+	if err := r.decode(required("changes", &changes), required("merged", &merged), required("unqueued", &unqueued)); err != nil {
+		return types.Changes{}, err
 	}
-	for i, row := range changes {
-		c, err := decodeChange(row, fmt.Sprintf("%s: changes[%d]", where, i))
+	for _, row := range changes {
+		c, err := decodeChange(row)
 		if err != nil {
-			return mergequeue.Changes{}, err
+			return types.Changes{}, err
 		}
 		out.Changes = append(out.Changes, c)
 	}
-	landed, err := records(m, "landed", where)
-	if err != nil {
-		return mergequeue.Changes{}, err
-	}
-	for i, row := range landed {
-		l, err := decodeLanded(row, fmt.Sprintf("%s: landed[%d]", where, i))
-		if err != nil {
-			return mergequeue.Changes{}, err
+	for _, row := range merged {
+		var m types.MergedChange
+		var method string
+		if err := row.decode(required("id", &m.ID), required("head", &m.Head), required("commit", &m.Commit), required("method", &method)); err != nil {
+			return types.Changes{}, err
 		}
-		out.Landed = append(out.Landed, l)
+		m.Method = types.MergeMethod(method)
+		out.Merged = append(out.Merged, m)
+	}
+	for _, row := range unqueued {
+		var u types.UnqueuedChange
+		if err := row.decode(required("id", &u.ID), required("head", &u.Head)); err != nil {
+			return types.Changes{}, err
+		}
+		out.Unqueued = append(out.Unqueued, u)
+	}
+	// The same checks the document gets when it is read back, here where the script
+	// that broke them can be named.
+	if err := out.Check(); err != nil {
+		return types.Changes{}, fmt.Errorf("%s: %s: %w", r.where, types.SchemaChanges, err)
 	}
 	return out, nil
 }
 
-// decodeChange refuses a record [mergequeue.Change.Check] refuses: the queue would build
-// and post against nothing, or hand the version control an option.
-func decodeChange(m map[string]any, where string) (mergequeue.Change, error) {
-	var c mergequeue.Change
+// decodeChange refuses a record missing a required field, or one [types.Change.Check]
+// refuses: the queue would build and post against nothing, or hand the version control
+// an option.
+func decodeChange(r record) (types.Change, error) {
+	var c types.Change
 	var method string
-	for _, f := range []struct {
-		key string
-		dst *string
-	}{
-		{"id", &c.ID}, {"repo", &c.Repo}, {"head", &c.Head}, {"ref", &c.Ref}, {"branch", &c.Branch},
-		{"base", &c.Base}, {"title", &c.Title}, {"author", &c.Author}, {"method", &method}, {"parent", &c.Parent},
-	} {
-		v, err := str(m, f.key, where)
-		if err != nil {
-			return mergequeue.Change{}, err
-		}
-		*f.dst = v
+	if err := r.decode(
+		required("id", &c.ID), required("repo", &c.Repo), required("head", &c.Head), required("base", &c.Base),
+		required("method", &method), required("fork", &c.Fork),
+		optional("ref", &c.Ref), optional("branch", &c.Branch), optional("title", &c.Title), optional("parent", &c.Parent),
+	); err != nil {
+		return types.Change{}, err
 	}
-	c.Method = mergequeue.MergeMethod(method)
-	fork, err := boolean(m, "fork", where)
-	if err != nil {
-		return mergequeue.Change{}, err
-	}
-	c.Fork = fork
+	c.Method = types.MergeMethod(method)
 	if err := c.Check(); err != nil {
-		return mergequeue.Change{}, fmt.Errorf("%s: %w", where, err)
+		return types.Change{}, fmt.Errorf("%s: %w", r.where, err)
 	}
 	return c, nil
 }
 
-func decodeLanded(m map[string]any, where string) (mergequeue.Landed, error) {
-	var l mergequeue.Landed
-	var method string
-	for _, f := range []struct {
-		key string
-		dst *string
-	}{{"id", &l.ID}, {"head", &l.Head}, {"commit", &l.Commit}, {"method", &method}} {
-		v, err := str(m, f.key, where)
-		if err != nil {
-			return mergequeue.Landed{}, err
-		}
-		*f.dst = v
-	}
-	l.Method = mergequeue.MergeMethod(method)
-	return l, nil
-}
-
 // ApprovalAt calls approval_at. A record without a head is an error.
-func (p *Script) ApprovalAt(ctx context.Context, c mergequeue.Change, commit string) (mergequeue.Approval, error) {
+func (p *Script) ApprovalAt(ctx context.Context, c types.Change, commit string) (types.Approval, error) {
 	params := changeParams(c)
 	params["commit"] = commit
-	m, err := p.callRecord(ctx, opApprovalAt, params)
+	r, err := p.callRecord(ctx, opApprovalAt, params)
 	if err != nil {
-		return mergequeue.Approval{}, err
+		return types.Approval{}, err
 	}
-	where := p.where(opApprovalAt)
-	var a mergequeue.Approval
-	if a.Approved, err = boolean(m, "approved", where); err != nil {
-		return mergequeue.Approval{}, err
-	}
+	var a types.Approval
 	var method string
-	for _, f := range []struct {
-		key string
-		dst *string
-	}{{"head", &a.Head}, {"reason", &a.Reason}, {"base", &a.Base}, {"method", &method}, {"approved_at", &a.ApprovedAt}} {
-		if *f.dst, err = str(m, f.key, where); err != nil {
-			return mergequeue.Approval{}, err
-		}
+	if err := r.decode(
+		required("approved", &a.Approved), required("head", &a.Head), required("base", &a.Base), required("method", &method),
+		required("queued", &a.Queued), required("shared_with", &a.BranchSharedWith),
+		optional("reason", &a.Reason), optional("approved_commit", &a.ApprovedCommit),
+	); err != nil {
+		return types.Approval{}, err
 	}
-	a.Method = mergequeue.MergeMethod(method)
+	a.Method = types.MergeMethod(method)
 	moved := c
 	moved.Head = a.Head
 	if err := moved.Check(); err != nil {
-		return mergequeue.Approval{}, fmt.Errorf("%s: head: %w", where, err)
+		return types.Approval{}, fmt.Errorf("%s: head: %w", r.where, err)
 	}
 	return a, nil
 }
 
 // PostStatus calls post_status.
-func (p *Script) PostStatus(ctx context.Context, c mergequeue.Change, commit string, s mergequeue.CommitStatus) error {
+func (p *Script) PostStatus(ctx context.Context, c types.Change, commit string, s types.CommitStatus) error {
 	params := changeParams(c)
 	params["commit"] = commit
 	params["context"] = s.Context
@@ -340,89 +312,67 @@ func (p *Script) PostStatus(ctx context.Context, c mergequeue.Change, commit str
 }
 
 // Retarget calls retarget.
-func (p *Script) Retarget(ctx context.Context, c mergequeue.Change, base string) error {
+func (p *Script) Retarget(ctx context.Context, c types.Change, base string) error {
 	params := changeParams(c)
 	params["base"] = base
 	return p.acknowledged(ctx, opRetarget, params)
 }
 
 // MergeChange calls merge_change.
-func (p *Script) MergeChange(ctx context.Context, c mergequeue.Change, req mergequeue.MergeRequest) error {
+func (p *Script) MergeChange(ctx context.Context, c types.Change, opts types.MergeOptions) error {
 	params := changeParams(c)
-	params["commit"] = req.Commit
-	params["message"] = req.Message
-	params["through"] = req.Through
-	m, err := p.callRecord(ctx, opMergeChange, params)
+	params["commit"] = opts.Commit
+	params["message"] = opts.Message
+	through := make([]map[string]string, len(opts.Through))
+	for i, pin := range opts.Through {
+		through[i] = map[string]string{"id": pin.ID, "commit": pin.Commit}
+	}
+	params["through"] = through
+	r, err := p.callRecord(ctx, opMergeChange, params)
 	if err != nil {
 		return err
 	}
-	where := p.where(opMergeChange)
-	merged, err := boolean(m, "merged", where)
-	if err != nil {
+	var merged bool
+	var reason string
+	if err := r.decode(required("merged", &merged), optional("reason", &reason)); err != nil {
 		return err
 	}
 	if !merged {
-		reason, err := str(m, "reason", where)
-		if err != nil {
-			return err
-		}
 		if reason == "" {
 			reason = "no reason given"
 		}
-		return fmt.Errorf("%s: not merged: %s", where, reason)
+		return fmt.Errorf("%s: not merged: %s", r.where, reason)
 	}
 	return nil
 }
 
 // KickBack calls kick_back.
-func (p *Script) KickBack(ctx context.Context, c mergequeue.Change, commit string, k mergequeue.Kick) error {
+func (p *Script) KickBack(ctx context.Context, c types.Change, commit string, k types.Kick) error {
 	params := changeParams(c)
 	params["commit"] = commit
 	params["code"] = string(k.Code)
 	params["report"] = k.Report
 	params["paths"] = k.Paths
 	params["with"] = k.With
-	params["candidate"] = k.Candidate
+	params["candidate_commit"] = k.CandidateCommit
 	return p.acknowledged(ctx, opKickBack, params)
 }
 
-// RunArtifacts calls run_artifacts.
-func (p *Script) RunArtifacts(ctx context.Context, run string) (mergequeue.RunArtifacts, error) {
-	m, err := p.callRecord(ctx, opRunArtifacts, map[string]any{"run": run})
+// ListArtifacts calls list_artifacts.
+func (p *Script) ListArtifacts(ctx context.Context, source string) (types.ArtifactListing, error) {
+	r, err := p.callRecord(ctx, opListArtifacts, map[string]any{"source": source})
 	if err != nil {
-		return mergequeue.RunArtifacts{}, err
+		return types.ArtifactListing{}, err
 	}
-	where := p.where(opRunArtifacts)
-	var out mergequeue.RunArtifacts
-	if out.Completed, err = boolean(m, "completed", where); err != nil {
-		return mergequeue.RunArtifacts{}, err
+	var out types.ArtifactListing
+	var rows []record
+	if err := r.decode(required("complete", &out.Complete), required("artifacts", &rows), optional("headers", &out.Headers)); err != nil {
+		return types.ArtifactListing{}, err
 	}
-	switch h := m["headers"].(type) {
-	case nil:
-	case map[string]any:
-		out.Headers = make(map[string]string, len(h))
-		for k, v := range h {
-			s, ok := v.(string)
-			if !ok {
-				return mergequeue.RunArtifacts{}, fmt.Errorf("%s: header %q is %T, want str", where, k, v)
-			}
-			out.Headers[k] = s
-		}
-	default:
-		return mergequeue.RunArtifacts{}, fmt.Errorf("%s: field \"headers\" is %T, want a record", where, h)
-	}
-	rows, err := records(m, "artifacts", where)
-	if err != nil {
-		return mergequeue.RunArtifacts{}, err
-	}
-	for i, row := range rows {
-		at := fmt.Sprintf("%s: artifacts[%d]", where, i)
-		var a mergequeue.Artifact
-		if a.Name, err = str(row, "name", at); err != nil {
-			return mergequeue.RunArtifacts{}, err
-		}
-		if a.URL, err = str(row, "url", at); err != nil {
-			return mergequeue.RunArtifacts{}, err
+	for _, row := range rows {
+		var a types.Artifact
+		if err := row.decode(required("name", &a.Name), required("url", &a.URL)); err != nil {
+			return types.ArtifactListing{}, err
 		}
 		out.Artifacts = append(out.Artifacts, a)
 	}
@@ -441,77 +391,109 @@ func (p *Script) acknowledged(ctx context.Context, op string, params map[string]
 		return fmt.Errorf("%s returned %T, want bool", p.where(op), data)
 	}
 	if !ok {
-		return fmt.Errorf("%s: the host refused", p.where(op))
+		return fmt.Errorf("%s: provider refused", p.where(op))
 	}
 	return nil
 }
 
-func str(m map[string]any, key, where string) (string, error) {
-	v, present := m[key]
-	if !present || v == nil {
-		return "", nil
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("%s: field %q is %T, want str", where, key, v)
-	}
-	return s, nil
+// record is one record a script returned, and where it came from for errors.
+type record struct {
+	m     map[string]any
+	where string
 }
 
-func boolean(m map[string]any, key, where string) (bool, error) {
-	v, present := m[key]
-	if !present || v == nil {
-		return false, nil
-	}
-	b, ok := v.(bool)
-	if !ok {
-		return false, fmt.Errorf("%s: field %q is %T, want bool", where, key, v)
-	}
-	return b, nil
+// field is one key of a record and where its value goes.
+type field struct {
+	key      string
+	dst      any // *string, *bool, *[]string, *[]record or *map[string]string
+	required bool
 }
 
-func strs(m map[string]any, key, where string) ([]string, error) {
-	v, present := m[key]
-	if !present || v == nil {
-		return nil, nil
-	}
-	items, ok := v.([]any)
-	if !ok {
-		return nil, fmt.Errorf("%s: field %q is %T, want [str]", where, key, v)
-	}
-	out := make([]string, len(items))
-	for i, it := range items {
-		s, ok := it.(string)
-		if !ok {
-			return nil, fmt.Errorf("%s: %s[%d] is %T, want str", where, key, i, it)
+func required(key string, dst any) field { return field{key: key, dst: dst, required: true} }
+func optional(key string, dst any) field { return field{key: key, dst: dst} }
+
+// decode reads fields out of r. A required key that is missing or null is an error.
+func (r record) decode(fields ...field) error {
+	for _, f := range fields {
+		v, present := r.m[f.key]
+		if !present || v == nil {
+			if f.required {
+				return fmt.Errorf("%s: field %q is missing", r.where, f.key)
+			}
+			continue
 		}
-		out[i] = s
-	}
-	return out, nil
-}
-
-func records(m map[string]any, key, where string) ([]map[string]any, error) {
-	v, present := m[key]
-	if !present || v == nil {
-		return nil, nil
-	}
-	items, ok := v.([]any)
-	if !ok {
-		return nil, fmt.Errorf("%s: field %q is %T, want a list", where, key, v)
-	}
-	out := make([]map[string]any, len(items))
-	for i, it := range items {
-		r, ok := it.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s: %s[%d] is %T, want a record", where, key, i, it)
+		if err := r.set(f, v); err != nil {
+			return err
 		}
-		out[i] = r
 	}
-	return out, nil
+	return nil
 }
 
-// toValue converts the records the bridge builds, whose values are strings, bools and
-// lists of strings, into Buzz values.
+func (r record) set(f field, v any) error {
+	wrong := func(want string) error { return fmt.Errorf("%s: field %q is %T, want %s", r.where, f.key, v, want) }
+	switch dst := f.dst.(type) {
+	case *string:
+		s, ok := v.(string)
+		if !ok {
+			return wrong("str")
+		}
+		*dst = s
+	case *bool:
+		b, ok := v.(bool)
+		if !ok {
+			return wrong("bool")
+		}
+		*dst = b
+	case *[]string:
+		items, ok := v.([]any)
+		if !ok {
+			return wrong("[str]")
+		}
+		out := make([]string, len(items))
+		for i, it := range items {
+			s, ok := it.(string)
+			if !ok {
+				return fmt.Errorf("%s: %s[%d] is %T, want str", r.where, f.key, i, it)
+			}
+			out[i] = s
+		}
+		*dst = out
+	case *[]record:
+		items, ok := v.([]any)
+		if !ok {
+			return wrong("a list")
+		}
+		out := make([]record, len(items))
+		for i, it := range items {
+			m, ok := it.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%s: %s[%d] is %T, want a record", r.where, f.key, i, it)
+			}
+			out[i] = record{m: m, where: fmt.Sprintf("%s: %s[%d]", r.where, f.key, i)}
+		}
+		*dst = out
+	case *map[string]string:
+		m, ok := v.(map[string]any)
+		if !ok {
+			return wrong("a record")
+		}
+		out := make(map[string]string, len(m))
+		for k, x := range m {
+			s, ok := x.(string)
+			if !ok {
+				return fmt.Errorf("%s: %s[%q] is %T, want str", r.where, f.key, k, x)
+			}
+			out[k] = s
+		}
+		*dst = out
+	default:
+		return fmt.Errorf("%s: field %q decodes into %T, which the bridge does not read", r.where, f.key, f.dst)
+	}
+	return nil
+}
+
+// toValue converts the records the bridge builds, whose values are strings, bools, lists
+// of strings and lists of string records, into Buzz values.
 func toValue(params map[string]any) (vm.Value, error) {
 	m := vm.NewMap()
 	for k, v := range params {
@@ -524,6 +506,16 @@ func toValue(params map[string]any) (vm.Value, error) {
 			items := make([]vm.Value, len(x))
 			for i, s := range x {
 				items[i] = vm.StrValue(s)
+			}
+			m.MapSet(k, vm.ListValue(items))
+		case []map[string]string:
+			items := make([]vm.Value, len(x))
+			for i, rec := range x {
+				rm := vm.NewMap()
+				for rk, rv := range rec {
+					rm.MapSet(rk, vm.StrValue(rv))
+				}
+				items[i] = rm
 			}
 			m.MapSet(k, vm.ListValue(items))
 		default:

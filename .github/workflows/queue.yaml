@@ -1,6 +1,6 @@
 name: Queue
 
-# The merge queue's validation half, run by the mergequeue CLI (libs/mergequeue). A pull
+# The merge queue's validation half, run by `magus queue` (libs/mergequeue). A pull
 # request joins the queue when auto-merge is enabled on it, or, for a stack, when a
 # "queue: <method>" label is on its top. The plan job lists the queue, checks approval at
 # each head and partitions it by the affected sets the magus workspace reports through
@@ -81,11 +81,6 @@ jobs:
           source-path: .
 
       # Every step's logic is tools/queue.buzz, selected by QUEUE_STEP.
-      - name: Build mergequeue
-        env:
-          QUEUE_STEP: build
-        run: magus buzz tools/queue.buzz
-
       # Speculation depth: the first DEPTH changes of each partition get a validate job;
       # the rest wait for the run the next merge starts.
       - id: plan
@@ -98,7 +93,7 @@ jobs:
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: magus-queue-plan
+          name: mergequeue-plan
           path: ${{ runner.temp }}/queue/plan.json
           retention-days: 1
 
@@ -131,32 +126,26 @@ jobs:
           installation-strategy: source
           source-path: .
 
-      - name: Build mergequeue
-        env:
-          QUEUE_STEP: build
-        run: magus buzz tools/queue.buzz
-
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: magus-queue-plan
+          name: mergequeue-plan
           path: ${{ runner.temp }}/queue
 
       # Pull request refs are fetched over the checkout's remote, which carries no
       # credential; the repository is public, so the read needs none.
+      # Every hook keeps its caches in its own candidate's scratch directory
+      # (tools/queue.buzz), so no change beneath this one can plant a cache entry its
+      # gate replays as green.
       - name: Validate #${{ matrix.change }}
         env:
           QUEUE_STEP: validate
           CHANGE: ${{ matrix.change }}
-          # Each candidate is a worktree of its own; one cache lets a candidate replay
-          # what the candidates below it already ran.
-          MAGUS_CACHE_DIR: ${{ github.workspace }}/.magus
         run: magus buzz tools/queue.buzz
 
-      # The directory's contents become the artifact's root: verdict.json and, for a green
-      # change, candidate.export.
+      # The directory's contents become the artifact's root: verdict.json.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: magus-queue-verdict-${{ matrix.change }}
+          name: mergequeue-verdict-${{ matrix.change }}
           path: ${{ runner.temp }}/queue/verdicts/${{ matrix.change }}
           if-no-files-found: error
           retention-days: 1

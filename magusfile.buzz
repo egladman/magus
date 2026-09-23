@@ -447,7 +447,9 @@ fun ld_flags() > str !> any {
 
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(gopherbuzz\build);
+    // The merge queue is compiled in as `magus queue`, and its sources are a project of
+    // their own, which this target's globs stop at.
+    ctx.needs(gopherbuzz\build, mergequeue\build);
     // The compiled built-in spells are go:embed'd into this binary, so the link has to
     // happen AFTER they are regenerated. The cache key cannot express that on its own:
     // spells/**/*.buzz is a project source, so editing a spell does invalidate this
@@ -2741,6 +2743,10 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // this key unmoved and the suite replays a pass computed against the old table.
     // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
     ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
+    // libs/mergequeue likewise: a project, and packages of this module that magus
+    // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
+    // test inputs.
+    ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
@@ -2879,7 +2885,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // write Go files. Left unordered, a reader waiting for those writers while holding
     // its slot stalled a gate for fifteen minutes with nothing running (2026-09-10).
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, coldread\test,
-        testlayout\test, mergequeue\test, buzz_test);
+        testlayout\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
     if (!fs\exists("gen/site/index.html")) {
@@ -2899,7 +2905,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final tables = cov\staticBlockTables();
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
-         "libs/coldread/coverage.out", "libs/testlayout/coverage.out", "libs/mergequeue/coverage.out"]));
+         "libs/coldread/coverage.out", "libs/testlayout/coverage.out"]));
     final go_pct = cov\percentOf(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -3147,7 +3153,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/coldread/**/*.go",
                    // A project, so the tree globs below stop at its directory, but also a
                    // package of this module that golangci-lint and go vet both compile.
-                   "libs/pricing/**/*.go", "libs/pricing/pricing.json");
+                   "libs/pricing/**/*.go", "libs/pricing/pricing.json",
+                   "libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz");
     // The tree this target analyzes, restated for the reason the same block on `test`
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this

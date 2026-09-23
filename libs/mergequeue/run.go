@@ -6,132 +6,138 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/libs/mergequeue/types"
 )
 
 // The artifact names a validation run uploads under. The plan artifact carries
 // [PlanFile] at its root.
 const (
-	PlanArtifact          = "magus-queue-plan"
-	VerdictArtifactPrefix = "magus-queue-verdict-"
+	PlanArtifact          = "mergequeue-plan"
+	VerdictArtifactPrefix = "mergequeue-verdict-"
 )
 
-// RunReader is the CI system's side of the queue: what one validation run has uploaded.
-type RunReader interface {
-	// RunArtifacts lists the artifacts run has uploaded so far. Completed must be read
-	// before the listing, so a listing that says completed holds everything.
-	RunArtifacts(ctx context.Context, run string) (RunArtifacts, error)
-}
+// Bounds on what an [ArtifactFollower] downloads and unpacks. A verdict artifact holds
+// one small JSON document, so anything near these is not one.
+const (
+	maxArtifactBytes = 32 << 20
+	maxUnpackedBytes = 64 << 20
+	maxArtifactFiles = 64
+	maxRedirects     = 10
+)
 
-// RunArtifacts is one listing of a run's artifacts.
-type RunArtifacts struct {
-	Completed bool
-	// Headers are what a download needs, its credential included. They are sent to each
-	// artifact's URL and dropped on a redirect to another host.
-	Headers   map[string]string
-	Artifacts []Artifact
-}
-
-// Artifact is one uploaded zip archive.
-type Artifact struct {
-	Name string
-	URL  string // http or https
-}
-
-// RunFollower follows one validation run through a [RunReader] and unpacks its artifacts
-// into the verdict directory Path as the run uploads them: [PlanArtifact] becomes
-// Path/[PlanFile] and each [VerdictArtifactPrefix]<id> becomes the entry for change
-// <id>. It is a [VerdictSource], so an Applier merges a green change while slower
-// candidates of the same run are still going.
+// ArtifactFollower follows one validation run through an [types.ArtifactLister] and unpacks its
+// artifacts into the verdict directory Path as the run uploads them: [PlanArtifact]
+// becomes Path/[PlanFile] and each [VerdictArtifactPrefix]<id> becomes the entry for
+// change <id>. It is a [types.VerdictSource], so an Applier merges a green change while slower
+// candidates of the same run are still going. An artifact it cannot fetch or unpack is
+// rejected for its change alone.
 //
-// It reports done only after a listing that said the run had completed. Methods must
-// not be called concurrently, and a RunFollower must not be copied after first use.
-type RunFollower struct {
-	Reader RunReader
-	Run    string // the run, as Reader names it
+// It reports done only after a listing that said the run was complete. Methods must
+// not be called concurrently, and an ArtifactFollower must not be copied after first
+// use.
+type ArtifactFollower struct {
+	Lister types.ArtifactLister
+	Source string // the run, as Lister names it
 	Path   string
 	// Follow keeps reading until the run completes. Without it, one listing is taken as
 	// everything the run will upload.
 	Follow bool
-	// Interval is how long [RunFollower.Plan] waits between listings while following.
+	// Interval is how long [ArtifactFollower.Plan] waits between listings while
+	// following.
 	Interval time.Duration
 	// Client makes every download; nil uses one with a 60 second timeout. Its
 	// CheckRedirect is replaced: a redirect to another host, such as the storage host a
-	// download redirects to, carries none of the listing's headers.
+	// download redirects to, carries none of the listing's headers, and a redirect away
+	// from https is refused.
 	Client *http.Client
 	Events *Events
 
-	dir VerdictDir
+	dir      VerdictDir
+	rejected []types.RejectedVerdict // not yet handed out by Poll
+	failed   map[string]bool         // artifact names that could not be unpacked
 }
 
-var _ VerdictSource = (*RunFollower)(nil)
+var _ types.VerdictSource = (*ArtifactFollower)(nil)
 
 var defaultClient = &http.Client{Timeout: 60 * time.Second}
 
 // Plan returns the plan the run's [PlanArtifact] carries, waiting for it while following.
 // It returns false, and no error, when the run completed without uploading one or,
 // without Follow, has not uploaded one yet.
-func (r *RunFollower) Plan(ctx context.Context) (Plan, bool, error) {
-	return awaitPlan(ctx, filepath.Join(r.Path, PlanFile), r.Interval, r.sync)
+func (f *ArtifactFollower) Plan(ctx context.Context) (types.Plan, bool, error) {
+	return awaitPlan(ctx, filepath.Join(f.Path, PlanFile), f.Interval, f.sync)
 }
 
 // Poll unpacks what the run uploaded since the last call and returns the verdicts among
-// it; done once the run has completed, or at once without Follow.
-func (r *RunFollower) Poll(ctx context.Context) ([]Verdict, bool, error) {
-	completed, err := r.sync(ctx)
+// it; done once the run is complete, or at once without Follow.
+func (f *ArtifactFollower) Poll(ctx context.Context) (types.VerdictBatch, error) {
+	complete, err := f.sync(ctx)
 	if err != nil {
-		return nil, false, err
+		return types.VerdictBatch{}, err
 	}
-	if completed {
-		if err := r.dir.MarkDone(); err != nil {
-			return nil, false, err
+	if complete {
+		if err := f.dir.MarkDone(); err != nil {
+			return types.VerdictBatch{}, err
 		}
 	}
-	return r.dir.Poll(ctx)
+	batch, err := f.dir.Poll(ctx)
+	if err != nil {
+		return types.VerdictBatch{}, err
+	}
+	batch.Rejected = append(f.rejected, batch.Rejected...)
+	f.rejected = nil
+	return batch, nil
 }
 
 // sync unpacks every artifact not yet on disk and reports whether the listing is the
 // last this source reads.
-func (r *RunFollower) sync(ctx context.Context) (bool, error) {
-	if r.Reader == nil || r.Run == "" || r.Path == "" {
-		return false, errors.New("a RunFollower needs a Reader, a Run and a Path")
+func (f *ArtifactFollower) sync(ctx context.Context) (bool, error) {
+	if f.Lister == nil || f.Source == "" || f.Path == "" {
+		return false, errors.New("artifact follower needs a lister, a source and a path")
 	}
-	r.dir.Path, r.dir.Follow = r.Path, true
-	list, err := r.Reader.RunArtifacts(ctx, r.Run)
+	f.dir.Path, f.dir.Follow = f.Path, true
+	list, err := f.Lister.ListArtifacts(ctx, f.Source)
 	if err != nil {
-		return false, fmt.Errorf("run %s: %w", r.Run, err)
+		return false, fmt.Errorf("run %s: %w", f.Source, err)
 	}
-	if err := os.MkdirAll(r.Path, 0o755); err != nil {
+	if err := os.MkdirAll(f.Path, 0o755); err != nil {
 		return false, err
 	}
 	for _, a := range list.Artifacts {
 		switch {
 		case a.Name == PlanArtifact:
-			if err := r.unpackPlan(ctx, a, list.Headers); err != nil {
+			if err := f.unpackPlan(ctx, a, list.Headers); err != nil {
 				return false, err
 			}
-		case strings.HasPrefix(a.Name, VerdictArtifactPrefix):
-			if err := r.unpackVerdict(ctx, a, list.Headers, strings.TrimPrefix(a.Name, VerdictArtifactPrefix)); err != nil {
-				return false, err
+		case strings.HasPrefix(a.Name, VerdictArtifactPrefix) && !f.failed[a.Name]:
+			change := strings.TrimPrefix(a.Name, VerdictArtifactPrefix)
+			if err := f.unpackVerdict(ctx, a, list.Headers, change); err != nil {
+				// Not tried again: its change already waits.
+				if f.failed == nil {
+					f.failed = map[string]bool{}
+				}
+				f.failed[a.Name] = true
+				f.rejected = append(f.rejected, types.RejectedVerdict{Change: change, Reason: err.Error()})
+				f.notice("rejected " + a.Name + ": " + err.Error())
 			}
 		}
 	}
-	return list.Completed || !r.Follow, nil
+	return list.Complete || !f.Follow, nil
 }
 
-func (r *RunFollower) unpackPlan(ctx context.Context, a Artifact, headers map[string]string) error {
-	final := filepath.Join(r.Path, PlanFile)
+func (f *ArtifactFollower) unpackPlan(ctx context.Context, a types.Artifact, headers map[string]string) error {
+	final := filepath.Join(f.Path, PlanFile)
 	if exists(final) {
 		return nil
 	}
-	tmp, err := r.download(ctx, a, headers)
+	tmp, err := f.download(ctx, a, headers)
 	if err != nil {
 		return err
 	}
@@ -139,19 +145,19 @@ func (r *RunFollower) unpackPlan(ctx context.Context, a Artifact, headers map[st
 	if err := os.Rename(filepath.Join(tmp, PlanFile), final); err != nil {
 		return fmt.Errorf("artifact %s: %w", a.Name, err)
 	}
-	r.notice("unpacked " + a.Name)
+	f.notice("unpacked " + a.Name)
 	return nil
 }
 
-func (r *RunFollower) unpackVerdict(ctx context.Context, a Artifact, headers map[string]string, change string) error {
-	if err := CheckID(change); err != nil {
-		return fmt.Errorf("artifact %s: %w", a.Name, err)
+func (f *ArtifactFollower) unpackVerdict(ctx context.Context, a types.Artifact, headers map[string]string, change string) error {
+	if err := types.CheckID(change); err != nil {
+		return err
 	}
-	final := filepath.Join(r.Path, change)
+	final := filepath.Join(f.Path, change)
 	if exists(final) {
 		return nil
 	}
-	tmp, err := r.download(ctx, a, headers)
+	tmp, err := f.download(ctx, a, headers)
 	if err != nil {
 		return err
 	}
@@ -159,23 +165,23 @@ func (r *RunFollower) unpackVerdict(ctx context.Context, a Artifact, headers map
 	if err := os.Rename(tmp, final); err != nil {
 		return fmt.Errorf("artifact %s: %w", a.Name, err)
 	}
-	r.notice("unpacked " + a.Name)
+	f.notice("unpacked " + a.Name)
 	return nil
 }
 
 // download extracts a into a new directory under Path whose name starts with ".", which
 // [VerdictDir.Poll] skips until it is renamed into place. The caller owns it.
-func (r *RunFollower) download(ctx context.Context, a Artifact, headers map[string]string) (string, error) {
-	archive, err := os.CreateTemp(r.Path, ".zip-")
+func (f *ArtifactFollower) download(ctx context.Context, a types.Artifact, headers map[string]string) (string, error) {
+	archive, err := os.CreateTemp(f.Path, ".zip-")
 	if err != nil {
 		return "", err
 	}
 	defer os.Remove(archive.Name())
 	defer archive.Close()
-	if err := r.get(ctx, a.URL, headers, archive); err != nil {
+	if err := f.get(ctx, a.URL, headers, archive); err != nil {
 		return "", fmt.Errorf("artifact %s: %w", a.Name, err)
 	}
-	tmp, err := os.MkdirTemp(r.Path, ".dl-")
+	tmp, err := os.MkdirTemp(f.Path, ".dl-")
 	if err != nil {
 		return "", err
 	}
@@ -186,13 +192,13 @@ func (r *RunFollower) download(ctx context.Context, a Artifact, headers map[stri
 	return tmp, nil
 }
 
-func (r *RunFollower) get(ctx context.Context, raw string, headers map[string]string, w io.Writer) error {
+func (f *ArtifactFollower) get(ctx context.Context, raw string, headers map[string]string, w io.Writer) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err
 	}
-	if u.Scheme != "https" && u.Scheme != "http" {
-		return fmt.Errorf("%q is not an http or https URL", raw)
+	if u.Scheme != "https" {
+		return fmt.Errorf("%q is not an https URL", raw)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
@@ -202,16 +208,18 @@ func (r *RunFollower) get(ctx context.Context, raw string, headers map[string]st
 		req.Header.Set(k, v)
 	}
 	client := *defaultClient
-	if r.Client != nil {
-		client = *r.Client
+	if f.Client != nil {
+		client = *f.Client
 	}
 	// Go's client forwards every header but Authorization and Cookie across hosts, and a
 	// provider may carry its credential in any of them.
 	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return errors.New("stopped after 10 redirects")
-		}
-		if next.URL.Host != via[0].URL.Host {
+		switch {
+		case len(via) >= maxRedirects:
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
+		case next.URL.Scheme != "https":
+			return fmt.Errorf("refused a redirect to %s, which is not https", next.URL.Redacted())
+		case next.URL.Host != via[0].URL.Host:
 			for k := range headers {
 				next.Header.Del(k)
 			}
@@ -227,24 +235,33 @@ func (r *RunFollower) get(ctx context.Context, raw string, headers map[string]st
 		msg, _ := io.ReadAll(io.LimitReader(res.Body, 512))
 		return fmt.Errorf("GET %s: %s: %s", u.Path, res.Status, strings.TrimSpace(string(msg)))
 	}
-	_, err = io.Copy(w, res.Body)
-	return err
+	n, err := io.Copy(w, io.LimitReader(res.Body, maxArtifactBytes+1))
+	if err != nil {
+		return err
+	}
+	if n > maxArtifactBytes {
+		return fmt.Errorf("GET %s: larger than %d bytes", u.Path, maxArtifactBytes)
+	}
+	return nil
 }
 
 // extract unzips file into dir, refusing any entry that is not a regular file or
-// directory inside dir.
+// directory inside dir, and more than the bounds allow.
 func extract(file, dir string) error {
 	zr, err := zip.OpenReader(file)
 	if err != nil {
 		return err
 	}
 	defer zr.Close()
+	if len(zr.File) > maxArtifactFiles {
+		return fmt.Errorf("%d entries, more than %d", len(zr.File), maxArtifactFiles)
+	}
+	budget := int64(maxUnpackedBytes)
 	for _, e := range zr.File {
-		name := path.Clean(e.Name)
-		if !fs.ValidPath(name) || name == "." {
+		if !filepath.IsLocal(e.Name) {
 			return fmt.Errorf("entry %q escapes the artifact", e.Name)
 		}
-		dst := filepath.Join(dir, filepath.FromSlash(name))
+		dst := filepath.Join(dir, e.Name) //nolint:gosec // G305: filepath.IsLocal above refuses every entry that would leave dir
 		mode := e.Mode()
 		switch {
 		case mode.IsDir():
@@ -252,9 +269,11 @@ func extract(file, dir string) error {
 				return err
 			}
 		case mode.IsRegular():
-			if err := writeEntry(e, dst); err != nil {
+			n, err := writeEntry(e, dst, budget)
+			if err != nil {
 				return err
 			}
+			budget -= n
 		default:
 			return fmt.Errorf("entry %q is not a regular file", e.Name)
 		}
@@ -262,28 +281,34 @@ func extract(file, dir string) error {
 	return nil
 }
 
-func writeEntry(e *zip.File, dst string) error {
+// writeEntry writes e to dst, at most budget bytes of it.
+func writeEntry(e *zip.File, dst string, budget int64) (int64, error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
+		return 0, err
 	}
 	src, err := e.Open()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer src.Close()
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if _, err := io.Copy(out, src); err != nil {
+	n, err := io.Copy(out, io.LimitReader(src, budget+1))
+	if err != nil {
 		_ = out.Close()
-		return err
+		return n, err
 	}
-	return out.Close()
+	if n > budget {
+		_ = out.Close()
+		return n, fmt.Errorf("unpacks to more than %d bytes", maxUnpackedBytes)
+	}
+	return n, out.Close()
 }
 
-func (r *RunFollower) notice(reason string) {
-	r.Events.Emit(Event{Kind: EventNotice, Reason: reason})
+func (f *ArtifactFollower) notice(reason string) {
+	f.Events.Emit(Event{Kind: EventNotice, Reason: reason})
 }
 
 func exists(p string) bool {

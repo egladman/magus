@@ -932,8 +932,12 @@ func (v saplingVCS) IgnoredPaths(ctx context.Context, root string, paths []strin
 //
 // A ref beginning with "-" is refused rather than passed through, where Sapling would read
 // it as a flag; `sl merge` has no `--` separator for its ref argument.
-func (v saplingVCS) StartMerge(ctx context.Context, root, ref string) error {
+func (v saplingVCS) StartMerge(ctx context.Context, root, ref string, as types.Person) error {
 	if err := checkRef(ref); err != nil {
+		return err
+	}
+	username, err := hgUsername(as)
+	if err != nil {
 		return err
 	}
 	// Refuse BEFORE starting when an operation is already underway. types.MergeStarter
@@ -945,7 +949,7 @@ func (v saplingVCS) StartMerge(ctx context.Context, root, ref string) error {
 	} else if underway {
 		return fmt.Errorf("sl merge %s: a merge is already in progress; conclude or abandon it first", ref)
 	}
-	cmd := vcsExec(ctx, "sl", "--noninteractive", "merge", ref)
+	cmd := vcsExec(ctx, "sl", append(username, "--noninteractive", "merge", ref)...)
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err == nil {

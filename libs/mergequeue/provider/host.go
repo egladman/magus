@@ -58,9 +58,13 @@ func request(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.Null, fmt.Errorf("mergequeue.request: %s %s: %w", req.Method, req.URL.Redacted(), err)
 	}
 	defer res.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(res.Body, maxBody))
+	data, err := io.ReadAll(io.LimitReader(res.Body, maxBody+1))
 	if err != nil {
 		return vm.Null, fmt.Errorf("mergequeue.request: read %s: %w", req.URL.Redacted(), err)
+	}
+	// A cut body would read as a shorter, valid answer: fewer pull requests, fewer reviews.
+	if len(data) > maxBody {
+		return vm.Null, fmt.Errorf("mergequeue.request: %s %s: response larger than %d bytes", req.Method, req.URL.Redacted(), maxBody)
 	}
 	out := vm.NewMap()
 	out.MapSet("status", vm.IntValue(int64(res.StatusCode)))

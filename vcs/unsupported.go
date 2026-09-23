@@ -164,7 +164,7 @@ func (declines[N]) ExportRevision(context.Context, string, string, string) error
 	return decline[N](types.CapRevisionExporter)
 }
 
-func (declines[N]) StartMerge(context.Context, string, string) error {
+func (declines[N]) StartMerge(context.Context, string, string, types.Person) error {
 	return decline[N](types.CapMergeStarter)
 }
 

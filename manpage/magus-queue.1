@@ -1,0 +1,232 @@
+.TH MAGUS-QUEUE 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-queue \- Merge approved changes through a speculative, partitioned merge queue
+.SH SYNOPSIS
+.B magus
+.RI "queue <ls|plan|validate|apply> [flags]"
+.SH DESCRIPTION
+A speculative, partitioned merge queue. A queue run has three steps, each with
+the rights it needs and no more.
+.PP
+plan reads the changes carrying merge intent (a mergequeue.changes/v1 document on
+stdin or \-\-changes, as ls prints it), checks each one's approval at its head,
+finds which changes are stacked on which, drops what conflicts with the base on
+its own, and splits the rest into partitions whose affected sets are disjoint.
+It writes a mergequeue.plan/v1 document.
+.PP
+validate runs the changes' code and needs read access only. Per partition it
+builds candidates base+A, base+A+B and so on onto each other, regenerates
+generated files on each, runs \-\-gate on them, and writes a mergequeue.verdict/v1
+per change to \-\-verdicts the moment that change is decided.
+.PP
+apply holds the write credential and runs no change's code. It rebuilds each
+green change's candidate itself and merges it through the provider, with the
+change's own merge method, as soon as everything beneath it has merged. Its
+<source> is the directory validate wrote, or run:<run>, the artifacts of a
+validation run as the provider names it (github: <owner>/<name>/runs/<id>).
+.PP
+The checkout is the one at the global \-\-root (default: the current directory),
+and every relative path resolves against it. The provider is a built\-in name
+(github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
+on stdout; ls prints the changes document instead. The global \-\-dry\-run makes
+apply report what would merge and call nothing on the provider.
+.SS queue ls options
+.RS
+.TP
+\fB\-\-base\fR \fIbranch\fR
+`branch` the queue merges into
+.TP
+\fB\-\-provider\fR \fIprovider\fR
+`provider`: a built\-in name (github) or a .buzz file
+.TP
+\fB\-\-remote\fR \fIremote\fR (default: origin)
+Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-vcs\fR \fIbackend\fR (default: git)
+Version control `backend` of the checkout at \-\-root
+.RE
+.SS queue plan options
+.RS
+.TP
+\fB\-\-changes\fR \fIdocument\fR (default: \-)
+The mergequeue.changes/v1 `document`, or \- for stdin
+.TP
+\fB\-\-depth\fR \fIint\fR (default: 3)
+Candidates of one partition that validate at once
+.TP
+\fB\-\-facts\fR \fIcommand\fR
+`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
+.TP
+\fB\-\-out\fR \fIfile\fR
+`file` the mergequeue.plan/v1 document is written to
+.TP
+\fB\-\-parallel\fR \fIint\fR
+Changes admitted at once; 0 is one per CPU
+.TP
+\fB\-\-provider\fR \fIprovider\fR
+`provider` approval at each head is checked with
+.TP
+\fB\-\-remote\fR \fIremote\fR (default: origin)
+Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-target\fR \fItarget\fR (default: ci)
+magus `target` the affected set is computed for; not with \-\-facts
+.TP
+\fB\-\-vcs\fR \fIbackend\fR (default: git)
+Version control `backend` of the checkout at \-\-root
+.RE
+.SS queue validate options
+.RS
+.TP
+\fB\-\-facts\fR \fIcommand\fR
+`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
+.TP
+\fB\-\-gate\fR \fIcommand\fR
+`command` run in each candidate's checkout; exit 0 is green
+.TP
+\fB\-\-only\fR \fIchange\fR
+Validate this one `change`; the changes beneath it in its partition are merged under it but not gated
+.TP
+\fB\-\-parallel\fR \fIint\fR
+Candidates built or gated at once across every partition; 0 is one per CPU
+.TP
+\fB\-\-plan\fR \fIfile\fR
+The mergequeue.plan/v1 `file`
+.TP
+\fB\-\-regenerate\fR \fIcommand\fR
+`command` run in a candidate with the generated files to rewrite listed on stdin
+.TP
+\fB\-\-remote\fR \fIremote\fR (default: origin)
+Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-target\fR \fItarget\fR (default: ci)
+magus `target` the affected set is computed for; not with \-\-facts
+.TP
+\fB\-\-vcs\fR \fIbackend\fR (default: git)
+Version control `backend` of the checkout at \-\-root
+.TP
+\fB\-\-verdicts\fR \fIdirectory\fR
+`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>
+.RE
+.SS queue apply options
+.RS
+.TP
+\fB\-\-committer\fR \fIstring\fR
+"Name <email>" making each update commit; empty is the queue's own
+.TP
+\fB\-\-facts\fR \fIcommand\fR
+`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at \-\-root answers
+.TP
+\fB\-\-interval\fR \fIduration\fR (default: 10s)
+How often <source> is read while following it
+.TP
+\fB\-\-once\fR
+Apply what <source> holds now and stop, rather than following it until it is complete
+.TP
+\fB\-\-provider\fR \fIprovider\fR
+`provider`: a built\-in name (github) or a .buzz file
+.TP
+\fB\-\-regenerate\fR \fIcommand\fR
+The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it
+.TP
+\fB\-\-remote\fR \fIremote\fR (default: origin)
+Name of the configured `remote` changes and the base are fetched from
+.TP
+\fB\-\-status\-context\fR \fIstring\fR (default: merge\-queue)
+Commit status the queue posts; branch protection requires it
+.TP
+\fB\-\-target\fR \fItarget\fR (default: ci)
+magus `target` the affected set is computed for; not with \-\-facts
+.TP
+\fB\-\-vcs\fR \fIbackend\fR (default: git)
+Version control `backend` of the checkout at \-\-root
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBls\fR
+Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document
+.TP
+\fBplan\fR
+Check approval, find stacks, drop what conflicts with the base, and partition by affected set
+.TP
+\fBvalidate\fR
+Build and gate a candidate per change, writing each verdict the moment it is decided (read access only)
+.TP
+\fBapply\fR
+Rebuild and merge the green verdicts <source> holds as they arrive (holds the write credential; runs no change's code)
+.RE
+.SH EXAMPLES
+\fIList what carries merge intent\fR
+.PP
+.EX
+magus queue ls --provider github --base main > changes.json
+.EE
+.PP
+\fIPlan it\fR
+.PP
+.EX
+magus queue plan --provider github --out plan.json < changes.json
+.EE
+.PP
+\fIValidate every candidate\fR
+.PP
+.EX
+magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'
+.EE
+.PP
+\fIMerge the green ones as they arrive\fR
+.PP
+.EX
+magus queue apply --provider github verdicts
+.EE
+.PP
+\fIMerge from a validation run's artifacts\fR
+.PP
+.EX
+magus queue apply --provider github run:acme/widgets/runs/7
+.EE
+.PP
+\fIPlan with a provider of your own\fR
+.PP
+.EX
+magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-events\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-job\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-spell\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

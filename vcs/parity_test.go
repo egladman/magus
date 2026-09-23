@@ -1163,7 +1163,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapRevisionExporter, "ExportRevision", func(d types.VCSDriver, dir string) error {
 			return d.ExportRevision(ctx, dir, "-x", filepath.Join(dir, "out"))
 		}},
-		{types.CapMergeStarter, "StartMerge", func(d types.VCSDriver, dir string) error { return d.StartMerge(ctx, dir, "-x") }},
+		{types.CapMergeStarter, "StartMerge", func(d types.VCSDriver, dir string) error { return d.StartMerge(ctx, dir, "-x", types.Person{}) }},
 		{types.CapMergeStarter, "AbortMerge", func(d types.VCSDriver, dir string) error { return d.AbortMerge(ctx, dir) }},
 		{types.CapCommitWriter, "Commit", func(d types.VCSDriver, dir string) error { return errOf(d.Commit(ctx, dir, types.CheckoutCommit{})) }},
 		{types.CapCommitWriter, "CommitTree", func(d types.VCSDriver, dir string) error { return errOf(d.CommitTree(ctx, dir, types.TreeCommit{})) }},

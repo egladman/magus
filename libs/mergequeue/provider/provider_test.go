@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/libs/mergequeue"
+	"github.com/egladman/magus/libs/mergequeue/types"
 )
 
 // The GitHub provider's own `test` blocks, run on the same VM surface the queue gives it.
@@ -28,10 +28,10 @@ func TestGitHubProviderBuzzTests(t *testing.T) {
 	}
 }
 
-func TestTheGitHubProviderOpensByNameAndReadsRuns(t *testing.T) {
+func TestTheGitHubProviderOpensByNameAndListsArtifacts(t *testing.T) {
 	p, err := Open(context.Background(), "github")
 	require.NoError(t, err)
-	assert.True(t, p.ReadsRuns())
+	assert.True(t, p.ListsArtifacts())
 	require.NoError(t, p.Close())
 }
 
@@ -39,12 +39,14 @@ var (
 	headA = strings.Repeat("a", 40)
 	headD = strings.Repeat("d", 40)
 	headE = strings.Repeat("e", 40)
+	headF = strings.Repeat("f", 40)
 )
 
 // script is a provider whose ops echo what they were handed, so a test reads the
 // bridge's encoding from the answers.
 var script = `
 import "std";
+import "serialize";
 
 export fun describe(io: {str: any}) > any {
     return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "{io["base"]}"]};
@@ -54,16 +56,18 @@ export fun list_changes(io: {str: any}) > any {
     return {
         "changes": [{
             "id": "7", "repo": "acme/acme", "head": "` + headA + `", "ref": "refs/pull/7/head",
-            "branch": "feat", "base": "{io["base"]}", "title": "{io["remote"]}", "author": "priya", "fork": true,
+            "branch": "feat", "base": "{io["base"]}", "title": "{io["remote_url"]}", "fork": true,
             "method": "squash", "parent": "6",
         }],
-        "landed": [{"id": "6", "head": "` + headD + `", "commit": "` + headE + `", "method": "squash"}],
+        "merged": [{"id": "6", "head": "` + headD + `", "commit": "` + headE + `", "method": "squash"}],
+        "unqueued": [{"id": "9", "head": "` + headF + `"}],
     };
 }
 
 export fun approval_at(io: {str: any}) > any {
-    return {"approved": io["id"] == "7", "head": io["commit"], "required": 1, "reason": "{io["title"]}",
-        "base": "main", "method": io["method"], "approved_at": "` + headD + `"};
+    return {"approved": io["id"] == "7", "head": io["commit"], "reason": "{io["title"]}",
+        "base": "main", "method": io["method"], "approved_commit": "` + headD + `",
+        "queued": true, "shared_with": ["40"]};
 }
 
 export fun post_status(io: {str: any}) > bool {
@@ -75,73 +79,106 @@ export fun retarget(io: {str: any}) > bool {
 }
 
 export fun merge_change(io: {str: any}) > any {
-    return {"merged": io["message"] == "* body" and io["through"] == "5", "reason": "head moved"};
+    final through = serialize\Boxed.init(io["through"]).listValue();
+    final pinned = through.len() == 1 and through[0].q("id").stringValue() == "5" and through[0].q("commit").stringValue() == "` + headE + `";
+    return {"merged": io["message"] == "* body" and pinned, "reason": "head moved"};
 }
 
 export fun kick_back(io: {str: any}) > bool {
     final paths = io["paths"] ?? [<str>];
-    return io["report"] == "report" and io["code"] == "KICK_CONFLICT" and "{paths}" == "{["a.go", "b.go"]}";
+    return io["report"] == "report" and io["code"] == "KICK_CONFLICT" and "{paths}" == "{["a.go", "b.go"]}" and io["candidate_commit"] == "c";
 }
 
-export fun run_artifacts(io: {str: any}) > any {
-    return {"completed": io["run"] == "done", "headers": {"Authorization": "Bearer tok"},
-        "artifacts": [{"name": "magus-queue-plan", "url": "https://example.invalid/1.zip"}]};
+export fun list_artifacts(io: {str: any}) > any {
+    return {"complete": io["source"] == "done", "headers": {"Authorization": "Bearer tok"},
+        "artifacts": [{"name": "mergequeue-plan", "url": "https://example.invalid/1.zip"}]};
 }
 `
 
 func open(t *testing.T, src string) *Script {
 	t.Helper()
-	p, err := New(context.Background(), "echo", src)
+	p, err := newScript(context.Background(), "echo", src)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
 	return p
 }
 
-var change = mergequeue.Change{ID: "7", Repo: "acme/acme", Head: headA, Base: "main", Title: "add x", Method: mergequeue.MethodSquash}
+var change = types.Change{ID: "7", Repo: "acme/acme", Head: headA, Base: "main", Title: "add x", Method: types.MethodSquash}
 
 func TestDescribeDecodesWhatTheProviderSupports(t *testing.T) {
-	got, err := open(t, script).Describe(context.Background(), mergequeue.ListQuery{Base: "merge"})
+	got, err := open(t, script).Describe(context.Background(), types.ListQuery{Base: "merge"})
 	require.NoError(t, err)
-	assert.Equal(t, mergequeue.Capabilities{StackMerge: mergequeue.StackMergeAtomic, LinearStacks: true,
-		Methods: []mergequeue.MergeMethod{mergequeue.MethodSquash, mergequeue.MethodMerge}}, got)
+	assert.Equal(t, types.Capabilities{StackMerge: types.StackMergeAtomic, LinearStacks: true,
+		Methods: []types.MergeMethod{types.MethodSquash, types.MethodMerge}}, got)
 }
 
-func TestListChangesDecodesEveryFieldAndTheLandedChanges(t *testing.T) {
-	got, err := open(t, script).ListChanges(context.Background(), mergequeue.ListQuery{Base: "main", Remote: "git@github.com:acme/acme.git"})
+func TestListChangesDecodesEveryFieldAndTheMergedAndUnqueuedChanges(t *testing.T) {
+	got, err := open(t, script).ListChanges(context.Background(), types.ListQuery{Base: "main", RemoteURL: "git@github.com:acme/acme.git"})
 	require.NoError(t, err)
-	assert.Equal(t, mergequeue.Changes{
-		Schema: mergequeue.SchemaChanges, Base: "main", Remote: "git@github.com:acme/acme.git",
-		Changes: []mergequeue.Change{{
+	assert.Equal(t, types.Changes{
+		Schema: types.SchemaChanges, Base: "main", RemoteURL: "git@github.com:acme/acme.git",
+		Changes: []types.Change{{
 			ID: "7", Repo: "acme/acme", Head: headA, Ref: "refs/pull/7/head", Branch: "feat",
-			Base: "main", Title: "git@github.com:acme/acme.git", Author: "priya", Fork: true,
-			Method: mergequeue.MethodSquash, Parent: "6",
+			Base: "main", Title: "git@github.com:acme/acme.git", Fork: true,
+			Method: types.MethodSquash, Parent: "6",
 		}},
-		Landed: []mergequeue.Landed{{ID: "6", Head: headD, Commit: headE, Method: mergequeue.MethodSquash}},
+		Merged:   []types.MergedChange{{ID: "6", Head: headD, Commit: headE, Method: types.MethodSquash}},
+		Unqueued: []types.UnqueuedChange{{ID: "9", Head: headF}},
 	}, got)
 }
 
 func TestListChangesRefusesWhatGitCouldReadAsAnOption(t *testing.T) {
 	for _, tc := range []struct{ from, to, want string }{
-		{`"head": "` + headA + `", `, "", `head "" is not a full commit id`},
+		{`"head": "` + headA + `", `, `"head": "", `, `head "" is not a full commit id`},
 		{`"id": "7"`, `"id": ".."`, `change id ".."`},
 		{`"branch": "feat"`, `"branch": "--upload-pack=x"`, `starts with '-'`},
 		{`"ref": "refs/pull/7/head"`, `"ref": "refs/pull/7/head:refs/heads/main"`, `holds ':'`},
 		{`"method": "squash", "parent"`, `"method": "", "parent"`, `merge method ""`},
+		{`"commit": "` + headE + `"`, `"commit": "e"`, `must be full commit ids`},
 	} {
-		_, err := open(t, strings.Replace(script, tc.from, tc.to, 1)).ListChanges(context.Background(), mergequeue.ListQuery{Base: "main"})
+		_, err := open(t, strings.Replace(script, tc.from, tc.to, 1)).ListChanges(context.Background(), types.ListQuery{Base: "main"})
 		require.ErrorContains(t, err, tc.want, tc.to)
 	}
+}
+
+// A field a record leaves out is an error, never its zero value. Before, a change
+// record without "fork" read as a change from this repository.
+func TestAMissingRequiredFieldIsAnError(t *testing.T) {
+	for _, tc := range []struct{ from, want string }{
+		{`, "fork": true`, `list_changes: changes[0]: field "fork" is missing`},
+		{`"repo": "acme/acme", `, `list_changes: changes[0]: field "repo" is missing`},
+		{`"base": "{io["base"]}", `, `list_changes: changes[0]: field "base" is missing`},
+		{`"unqueued": [{"id": "9", "head": "` + headF + `"}],`, `list_changes: field "unqueued" is missing`},
+		{`, "method": "squash"}]`, `list_changes: merged[0]: field "method" is missing`},
+	} {
+		to := ""
+		if strings.HasSuffix(tc.from, "}]") {
+			to = "}]"
+		}
+		_, err := open(t, strings.Replace(script, tc.from, to, 1)).ListChanges(context.Background(), types.ListQuery{Base: "main"})
+		require.ErrorContains(t, err, tc.want, tc.from)
+	}
+	for _, tc := range []struct{ from, want string }{
+		{`"queued": true, `, `field "queued" is missing`},
+		{`"shared_with": ["40"]`, `field "shared_with" is missing`},
+		{`"base": "main", `, `field "base" is missing`},
+	} {
+		_, err := open(t, strings.Replace(script, tc.from, "", 1)).ApprovalAt(context.Background(), change, headD)
+		require.ErrorContains(t, err, tc.want, tc.from)
+	}
+	_, err := open(t, strings.Replace(script, `"linear_stacks": true, `, "", 1)).Describe(context.Background(), types.ListQuery{Base: "main"})
+	require.ErrorContains(t, err, `field "linear_stacks" is missing`)
 }
 
 func TestApprovalDecodesAtTheCommitAsked(t *testing.T) {
 	got, err := open(t, script).ApprovalAt(context.Background(), change, headD)
 	require.NoError(t, err)
-	assert.Equal(t, mergequeue.Approval{Approved: true, Head: headD, Reason: "add x", Base: "main",
-		Method: mergequeue.MethodSquash, ApprovedAt: headD}, got)
+	assert.Equal(t, types.Approval{Approved: true, Head: headD, Reason: "add x", Base: "main",
+		Method: types.MethodSquash, ApprovedCommit: headD, Queued: true, BranchSharedWith: []string{"40"}}, got)
 }
 
 func TestApprovalWithoutAHeadIsAnError(t *testing.T) {
-	p := open(t, strings.Replace(script, `"head": io["commit"], `, "", 1))
+	p := open(t, strings.Replace(script, `"head": io["commit"], `, `"head": "", `, 1))
 	_, err := p.ApprovalAt(context.Background(), change, headD)
 	require.ErrorContains(t, err, `approval_at: head: #7 (add x): head "" is not a full commit id`)
 }
@@ -154,33 +191,34 @@ func TestApprovalOfTheWrongTypeNamesTheField(t *testing.T) {
 
 func TestWritesCarryTheirParametersAndARefusalIsAnError(t *testing.T) {
 	p, ctx := open(t, script), context.Background()
-	require.NoError(t, p.PostStatus(ctx, change, headA, mergequeue.CommitStatus{Context: "merge-queue", State: mergequeue.StateSuccess}))
-	require.ErrorContains(t, p.PostStatus(ctx, change, headA, mergequeue.CommitStatus{Context: "other", State: mergequeue.StateSuccess}), "the host refused")
+	require.NoError(t, p.PostStatus(ctx, change, headA, types.CommitStatus{Context: "merge-queue", State: types.StateSuccess}))
+	require.ErrorContains(t, p.PostStatus(ctx, change, headA, types.CommitStatus{Context: "other", State: types.StateSuccess}), "provider refused")
 	require.NoError(t, p.Retarget(ctx, change, "main"))
-	require.ErrorContains(t, p.Retarget(ctx, change, "dev"), "the host refused")
-	require.NoError(t, p.MergeChange(ctx, change, mergequeue.MergeRequest{Commit: headA, Message: "* body", Through: "5"}))
-	require.ErrorContains(t, p.MergeChange(ctx, change, mergequeue.MergeRequest{Commit: headA, Message: "* other"}), "not merged: head moved")
-	kick := mergequeue.Kick{Code: mergequeue.CodeConflict, Report: "report", Paths: []string{"a.go", "b.go"}}
+	require.ErrorContains(t, p.Retarget(ctx, change, "dev"), "provider refused")
+	require.NoError(t, p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* body",
+		Through: []types.PinnedChange{{ID: "5", Commit: headE}}}))
+	require.ErrorContains(t, p.MergeChange(ctx, change, types.MergeOptions{Commit: headA, Message: "* other"}), "not merged: head moved")
+	kick := types.Kick{Code: types.CodeKickConflict, Report: "report", Paths: []string{"a.go", "b.go"}, CandidateCommit: "c"}
 	require.NoError(t, p.KickBack(ctx, change, headA, kick))
 	kick.Paths = nil
-	require.ErrorContains(t, p.KickBack(ctx, change, headA, kick), "the host refused")
+	require.ErrorContains(t, p.KickBack(ctx, change, headA, kick), "provider refused")
 }
 
-func TestRunArtifactsDecodesTheListing(t *testing.T) {
-	got, err := open(t, script).RunArtifacts(context.Background(), "done")
+func TestListArtifactsDecodesTheListing(t *testing.T) {
+	got, err := open(t, script).ListArtifacts(context.Background(), "done")
 	require.NoError(t, err)
-	assert.Equal(t, mergequeue.RunArtifacts{Completed: true, Headers: map[string]string{"Authorization": "Bearer tok"},
-		Artifacts: []mergequeue.Artifact{{Name: "magus-queue-plan", URL: "https://example.invalid/1.zip"}}}, got)
+	assert.Equal(t, types.ArtifactListing{Complete: true, Headers: map[string]string{"Authorization": "Bearer tok"},
+		Artifacts: []types.Artifact{{Name: "mergequeue-plan", URL: "https://example.invalid/1.zip"}}}, got)
 }
 
-func TestAScriptMissingAnOpIsRefusedAndRunArtifactsIsOptional(t *testing.T) {
-	_, err := New(context.Background(), "half", `export fun list_changes(io: {str: any}) > any { return {}; }`)
+func TestAScriptMissingAnOpIsRefusedAndListArtifactsIsOptional(t *testing.T) {
+	_, err := newScript(context.Background(), "half", `export fun list_changes(io: {str: any}) > any { return {}; }`)
 	require.EqualError(t, err, `provider "half" does not export describe, approval_at, post_status, retarget, merge_change, kick_back`)
 
-	noRuns := open(t, strings.Split(script, "export fun run_artifacts")[0])
-	assert.False(t, noRuns.ReadsRuns())
-	_, err = noRuns.RunArtifacts(context.Background(), "done")
-	require.EqualError(t, err, `provider "echo" does not export run_artifacts`)
+	noRuns := open(t, strings.Split(script, "export fun list_artifacts")[0])
+	assert.False(t, noRuns.ListsArtifacts())
+	_, err = noRuns.ListArtifacts(context.Background(), "done")
+	require.EqualError(t, err, `provider "echo" does not export list_artifacts`)
 }
 
 func TestAnUnknownProviderNamesBothPlacesItLooked(t *testing.T) {

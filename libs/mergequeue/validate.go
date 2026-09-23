@@ -4,18 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/egladman/magus/libs/mergequeue/types"
 )
 
 // Validator is the read-only step of a queue run. It executes the changes' code (the
 // gate and the regeneration run on candidates) and so must never hold a credential that
-// can write. It calls no [Provider] at all.
+// can write. It calls no [types.Provider] at all, and nothing it produces is trusted further:
+// an [Applier] rebuilds each candidate itself before merging it.
 type Validator struct {
 	// Only, when set, validates that one change: the changes beneath it in its
 	// partition are merged under it but not gated, since their own runs gate them.
@@ -26,40 +28,43 @@ type Validator struct {
 	// runtime.NumCPU().
 	Parallel int
 	// Regenerate rewrites the generated files a change touches or conflicts in on each
-	// candidate, and proves that a merge of the base into a change reproduces its
-	// generated files. Nil leaves them as merged, which is only right when nothing
-	// generates them.
-	Regenerate RegenerateFunc
-	// Scratch is the directory candidates are checked out under. Required, and outside
-	// the repository, where a checkout would be discovered as a second copy of it.
-	Scratch string
-	Events  *Events
+	// candidate. Nil leaves them as merged, which is only right when nothing generates
+	// them.
+	Regenerate types.RegenerateFunc
+	Events     *Events
 
-	vcs  VCS
-	gate Gate
-	sink VerdictSink
+	vcs     types.BuildVCS
+	clone   Clone
+	gate    types.Gate
+	dir     *VerdictDir
+	facts   types.BuildFacts
+	scratch string
 }
 
-// NewValidator builds candidates with v, gates them with gate, and hands each verdict
-// to sink the moment it is decided, so an Applier can start on it while later
-// candidates still run.
-func NewValidator(v VCS, gate Gate, sink VerdictSink) *Validator {
-	return &Validator{vcs: v, gate: gate, sink: sink}
+// NewValidator builds candidates in cl with v under scratch, gates them with gate, and
+// records each verdict in dir the moment it is decided, so an Applier can start on it
+// while later candidates still run. scratch must be absolute and outside cl.Root, where
+// a checkout would be discovered as a second copy of the repository.
+func NewValidator(v types.BuildVCS, cl Clone, gate types.Gate, dir *VerdictDir, f types.BuildFacts, scratch string) (*Validator, error) {
+	switch {
+	case v == nil || gate == nil || dir == nil || f == nil:
+		return nil, errors.New("validator needs a VCS, a gate, a verdict directory and build facts")
+	case cl.check() != nil:
+		return nil, cl.check()
+	case !filepath.IsAbs(scratch):
+		return nil, fmt.Errorf("scratch directory %q is not absolute", scratch)
+	}
+	return &Validator{vcs: v, clone: cl, gate: gate, dir: dir, facts: f, scratch: scratch}, nil
 }
 
 // Run validates plan's admitted changes, or only v.Only. Partitions run side by side,
 // and an error in one stops that partition alone: the verdicts the others reach are
 // still sound, and what no verdict reached waits for the next run.
-func (v *Validator) Run(ctx context.Context, plan Plan) error {
-	switch {
-	case v.vcs == nil || v.gate == nil || v.sink == nil:
-		return errors.New("a Validator needs a VCS, a Gate and a VerdictSink; build it with NewValidator")
-	case v.Scratch == "":
-		return errors.New("a Validator needs a Scratch directory to check candidates out in")
-	case v.Parallel < 0:
+func (v *Validator) Run(ctx context.Context, plan types.Plan) error {
+	if v.Parallel < 0 {
 		return fmt.Errorf("parallel %d must not be negative", v.Parallel)
 	}
-	if err := plan.check(); err != nil {
+	if err := plan.Check(); err != nil {
 		return err
 	}
 	n := v.Parallel
@@ -67,6 +72,11 @@ func (v *Validator) Run(ctx context.Context, plan Plan) error {
 		n = runtime.NumCPU()
 	}
 	r := &validation{Validator: v, plan: plan, slots: make(chan struct{}, n)}
+	defer func() {
+		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), v.vcs, v.clone.Root, v.scratch); err != nil {
+			v.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkouts under " + v.scratch + ": " + err.Error()})
+		}
+	}()
 	if v.Only != "" {
 		return r.only(ctx)
 	}
@@ -81,27 +91,36 @@ func (v *Validator) Run(ctx context.Context, plan Plan) error {
 
 type validation struct {
 	*Validator
-	plan  Plan
+	plan  types.Plan
 	slots chan struct{} // one per candidate being built or gated
 }
 
 type flight struct {
-	change   Change
-	cand     Candidate // zero when building it was refused
-	onto     string
-	after    string // change beneath it, "" at the bottom
-	reviewed string // what a review of its head covers, when proving that took regeneration
-	depth    int
-	cancel   context.CancelFunc
-	done     chan outcome
+	change types.Change
+	cand   types.Candidate // zero when building it was refused
+	onto   string
+	after  string // change beneath it, "" at the bottom
+	depth  int
+	cancel context.CancelFunc
+	done   chan outcome
 }
 
 type outcome struct {
 	green   bool
 	summary string
-	refused *RefusedError // building the candidate refused the change rather than a red gate
+	refused *types.RefusedError // building the candidate refused the change rather than a red gate
 	err     error
 	took    time.Duration
+}
+
+// stackHold is the wait of a change stacked on one that is not green this run.
+type stackHold struct {
+	code   types.Code
+	reason string
+}
+
+func waitingBelow(id string) stackHold {
+	return stackHold{code: types.CodeWaitBelow, reason: "stacked on #" + id + ", which did not validate this run"}
 }
 
 // pipeline runs one partition's speculative candidates. Up to Depth are in flight, each
@@ -110,9 +129,9 @@ type outcome struct {
 // red its change is the culprit (everything beneath it validated), so it is kicked back
 // and every candidate above, all built onto it, is rebuilt onto what did validate. A
 // refused candidate is red the same way, and is attributed only once it is lowest. A
-// change stacked on one that is not green this run waits, and is never built onto what
-// lacks the change beneath it.
-func (r *validation) pipeline(ctx context.Context, group int, pending []Change) error {
+// change stacked on one that is not green this run, or whose candidate did not build,
+// waits, and is never built onto what lacks the change beneath it.
+func (r *validation) pipeline(ctx context.Context, group int, pending []types.Change) error {
 	onto, ontoID := r.plan.BaseCommit, ""
 	held := map[string]stackHold{} // changes not green this run: what their stacks wait with
 	var inflight []*flight
@@ -125,9 +144,12 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []Change) 
 		for len(inflight) < r.plan.Depth && len(pending) > 0 {
 			c := pending[0]
 			pending = pending[1:]
-			if h, ok := held[c.Below]; ok && c.Below != "" {
-				held[c.ID] = h.above(c.ID)
-				if err := r.decide(ctx, Verdict{Change: c, Decision: DecisionWait, Code: h.code, Reason: h.reason}); err != nil {
+			if h, ok := r.holdFor(c, held, inflight); ok {
+				held[c.ID] = h
+				if h.code != types.CodeWaitBelowKicked {
+					held[c.ID] = waitingBelow(c.ID)
+				}
+				if err := r.decide(types.Verdict{Change: c, Decision: types.DecisionWait, Code: h.code, Reason: h.reason}); err != nil {
 					return err
 				}
 				continue
@@ -165,13 +187,13 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []Change) 
 			return err
 		}
 		if !green {
-			held[head.change.ID] = stackHold{code: CodeParentKicked, reason: kickedBelow(head.change.ID)}
+			held[head.change.ID] = stackHold{code: types.CodeWaitBelowKicked, reason: kickedBelow(head.change.ID)}
 		}
 		if !green && head.cand.Commit == "" {
 			continue // nothing above was built onto a refused candidate
 		}
 		if !green {
-			requeue := make([]Change, 0, len(inflight)+len(pending))
+			requeue := make([]types.Change, 0, len(inflight)+len(pending))
 			for _, f := range inflight {
 				r.ground(ctx, f)
 				requeue = append(requeue, f.change)
@@ -184,23 +206,24 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []Change) 
 	}
 }
 
-// stackHold is the wait of a change stacked on one that is not green this run.
-type stackHold struct {
-	code   Code
-	reason string
-}
-
-func waitingBelow(id string) stackHold {
-	return stackHold{code: CodeParent, reason: "stacked on #" + id + ", which did not validate this run"}
-}
-
-// above is the wait of what is stacked on id, which waits with h: a kick-back further
-// down stays the reason, anything else names id.
-func (h stackHold) above(id string) stackHold {
-	if h.code == CodeParentKicked {
-		return h
+// holdFor is the wait of c when the change it is stacked on is held this run, or is in
+// flight with no candidate to build c onto.
+func (r *validation) holdFor(c types.Change, held map[string]stackHold, inflight []*flight) (stackHold, bool) {
+	if c.Below == "" {
+		return stackHold{}, false
 	}
-	return waitingBelow(id)
+	if h, ok := held[c.Below]; ok {
+		if h.code == types.CodeWaitBelowKicked {
+			return h, true
+		}
+		return waitingBelow(c.Below), true
+	}
+	for _, f := range inflight {
+		if f.change.ID == c.Below && f.cand.Commit == "" {
+			return waitingBelow(c.Below), true
+		}
+	}
+	return stackHold{}, false
 }
 
 // launch builds f's candidate and starts its gate, reporting whether f joined the
@@ -210,34 +233,34 @@ func (r *validation) launch(ctx context.Context, group int, f *flight) (bool, er
 	if err := r.acquire(ctx); err != nil {
 		return false, err
 	}
-	cand, reviewed, err := r.candidate(ctx, f.onto, f.change)
+	cand, err := r.candidate(ctx, f.onto, f.change)
 	if err == nil {
-		f.cand, f.reviewed = cand, reviewed
+		f.cand = cand
 		r.start(ctx, group, f)
 		return true, nil
 	}
 	r.release()
-	var refused *RefusedError
+	var refused *types.RefusedError
 	if errors.As(err, &refused) {
 		f.cancel = func() {}
 		f.done <- outcome{refused: refused, summary: refused.Reason}
 		return true, nil
 	}
-	return false, r.hold(ctx, f, err)
+	return false, r.hold(f, err)
 }
 
 // hold decides a wait for a build error that says nothing against the change, and
 // returns the error as it stands when it is the machine's.
-func (r *validation) hold(ctx context.Context, f *flight, err error) error {
-	var wait *WaitError
+func (r *validation) hold(f *flight, err error) error {
+	var wait *waitError
 	switch conf, ok := asConflict(err); {
 	case ok:
 		// Planning proved it merges onto the base alone, so it conflicts with a change
 		// ahead of it. The next run sees that change merged.
-		return r.decide(ctx, Verdict{Change: f.change, Decision: DecisionWait, Code: CodeConflictAhead,
-			Reason: conflictAhead(f.after, conf), Paths: conf.Paths})
+		return r.decide(types.Verdict{Change: f.change, Decision: types.DecisionWait, Code: types.CodeWaitConflictAhead,
+			Reason: conflictAhead(f.after, conf), Paths: conf.paths})
 	case errors.As(err, &wait):
-		return r.decide(ctx, Verdict{Change: f.change, Decision: DecisionWait, Code: wait.Code, Reason: wait.Reason})
+		return r.decide(types.Verdict{Change: f.change, Decision: types.DecisionWait, Code: wait.code, Reason: wait.reason})
 	}
 	return fmt.Errorf("build the candidate of %s onto %s: %w", f.change.Label(), short(f.onto), err)
 }
@@ -246,12 +269,12 @@ func (r *validation) hold(ctx context.Context, f *flight, err error) error {
 // red on top of changes this run did not gate cannot be pinned on the top change, so it
 // waits for a run where they are validated rather than kicking its author back.
 func (r *validation) only(ctx context.Context) error {
-	gi, pos, ok := r.plan.Find(r.Only)
+	gi, pos, ok := find(r.plan, r.Only)
 	if !ok {
 		return fmt.Errorf("%s is not an admitted change of the plan", r.Only)
 	}
 	onto, after := r.plan.BaseCommit, ""
-	var built []Candidate
+	var built []types.Candidate
 	defer func() {
 		for _, cand := range built {
 			r.discard(ctx, cand)
@@ -266,27 +289,27 @@ func (r *validation) only(ctx context.Context) error {
 				continue
 			}
 			h := waitingBelow(c.Below)
-			return r.decide(ctx, Verdict{Change: c, Decision: DecisionWait, Code: h.code, Reason: h.reason})
+			return r.decide(types.Verdict{Change: c, Decision: types.DecisionWait, Code: h.code, Reason: h.reason})
 		}
-		cand, reviewed, err := r.candidate(ctx, onto, c)
+		cand, err := r.candidate(ctx, onto, c)
 		if err != nil {
 			if i < pos {
 				skipped[c.ID] = true
 				continue // its own run decides it; the chain skips it, as the pipeline does
 			}
-			var refused *RefusedError
+			var refused *types.RefusedError
 			if errors.As(err, &refused) {
 				_, err := r.verdict(ctx, f, outcome{refused: refused, summary: refused.Reason}, len(built) == 0)
 				return err
 			}
-			return r.hold(ctx, f, err)
+			return r.hold(f, err)
 		}
 		built = append(built, cand)
 		if i < pos {
 			onto, after = cand.Commit, c.ID
 			continue
 		}
-		f.cand, f.reviewed = cand, reviewed
+		f.cand = cand
 		if err := r.acquire(ctx); err != nil {
 			return err
 		}
@@ -302,61 +325,21 @@ func (r *validation) only(ctx context.Context) error {
 	return nil
 }
 
-// candidate proves what a review of c's head covers, then builds c's candidate onto
-// onto. It returns the review target when proving it took regeneration.
-func (r *validation) candidate(ctx context.Context, onto string, c Change) (Candidate, string, error) {
-	if err := fetchHead(ctx, r.vcs, c); err != nil {
-		return Candidate{}, "", fmt.Errorf("fetch %s: %w", c.Label(), err)
+// candidate builds c's candidate onto onto, regenerated with v.Regenerate.
+func (r *validation) candidate(ctx context.Context, onto string, c types.Change) (types.Candidate, error) {
+	if err := fetchHead(ctx, r.vcs, r.clone, c); err != nil {
+		return types.Candidate{}, fmt.Errorf("fetch %s: %w", c.Label(), err)
 	}
-	reviewed, err := r.proveReview(ctx, c)
-	if err != nil {
-		return Candidate{}, "", err
+	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch}
+	b, err := buildMerge(ctx, r.vcs, s)
+	if err != nil || r.Regenerate == nil {
+		return b.Candidate, err
 	}
-	cand, err := buildCandidate(ctx, r.vcs, candidateSpec{baseCommit: r.plan.BaseCommit, onto: onto, change: c,
-		scratch: r.Scratch, regenerate: r.Regenerate})
-	return cand, reviewed, err
-}
-
-// proveReview regenerates, in a checkout of each merge of the base into c that differs
-// from the plain merge only in generated files, the files it differs in. A merge whose
-// regeneration rewrites nothing adds nothing a reviewer did not see; any other leaves c
-// waiting for an approval at its head.
-func (r *validation) proveReview(ctx context.Context, c Change) (string, error) {
-	target, owed, err := reviewTarget(ctx, r.vcs, r.plan.BaseCommit, r.plan.BaseCommit, c.Head, c.StackBase)
-	if err != nil || len(owed) == 0 {
-		return "", err
+	if b.Commit, err = regenerateIn(ctx, r.vcs, s, b, r.Regenerate, nil); err != nil {
+		r.discard(ctx, b.Candidate)
+		return types.Candidate{}, err
 	}
-	if r.Regenerate == nil {
-		return "", &WaitError{Code: CodeNotApproved, Reason: "not approved at " + short(owed[0].Commit) + ": it differs from its merge in generated files, " +
-			"and proving regeneration reproduces them needs a regenerate hook"}
-	}
-	for _, ob := range owed {
-		written, err := r.regenerateAt(ctx, c, ob)
-		if err != nil {
-			return "", err
-		}
-		if len(written) > 0 {
-			return "", &WaitError{Code: CodeNotApproved, Reason: "not approved at " + short(ob.Commit) + ": " + joinPaths(written) +
-				" are marked generated, but regeneration does not reproduce them, so no review covers them"}
-		}
-	}
-	return target, nil
-}
-
-func (r *validation) regenerateAt(ctx context.Context, c Change, ob regenerationProof) ([]string, error) {
-	dir := filepath.Join(r.Scratch, fmt.Sprintf("review-%d-%d-%s", os.Getpid(), checkoutSeq.Add(1), c.ID))
-	if err := r.vcs.CreateCheckout(ctx, dir, ob.Commit); err != nil {
-		return nil, err
-	}
-	defer r.discard(ctx, Candidate{Dir: dir})
-	if err := r.Regenerate(ctx, dir, ob.Onto, c, ob.Paths); err != nil {
-		var refused *RefusedError
-		if errors.As(err, &refused) {
-			return nil, &WaitError{Code: CodeNotApproved, Reason: "not approved at " + short(ob.Commit) + ": regenerating its generated files failed: " + refused.Reason}
-		}
-		return nil, err
-	}
-	return r.vcs.DirtyFiles(ctx, dir)
+	return b.Candidate, nil
 }
 
 func (r *validation) acquire(ctx context.Context) error {
@@ -388,41 +371,45 @@ func (r *validation) start(ctx context.Context, group int, f *flight) {
 // attributable says everything beneath the candidate is validated, so a red is the
 // change's own.
 func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attributable bool) (bool, error) {
-	v := Verdict{Change: f.change, After: f.after, Onto: f.onto, Candidate: f.cand.Commit, Method: f.change.Method,
+	v := types.Verdict{Change: f.change, After: f.after, Onto: f.onto, CandidateCommit: f.cand.Commit, Method: f.change.Method,
 		Depth: f.depth, DurationMS: out.took.Milliseconds()}
 	if !out.green {
 		what := "the gate failed"
-		v.Code = CodeRed
+		v.Code = types.CodeKickRed
 		if out.refused != nil {
-			what, v.Code, v.Paths = "building its candidate failed", CodeRefused, out.refused.Paths
+			what, v.Code, v.Paths = "building its candidate failed", types.CodeKickRefused, out.refused.Paths
 		}
 		if !attributable {
-			v.Decision, v.Code, v.Paths = DecisionWait, CodeBehind, nil
+			v.Decision, v.Code, v.Paths = types.DecisionWait, types.CodeWaitBehind, nil
 			v.Reason = what + " on top of #" + f.after + ", which this run did not validate; retried once it is"
-			return false, r.decide(ctx, v)
+			return false, r.decide(v)
 		}
-		v.Decision = DecisionKick
+		v.Decision = types.DecisionKick
 		v.Reason = what + ": " + out.summary
-		v.Report = failureReport(r.plan.Base, f.change.Head, what, out.summary)
-		return false, r.decide(ctx, v)
+		detail := out.summary
+		if out.refused != nil && out.refused.Remedy != "" {
+			detail += ". " + out.refused.Remedy
+		}
+		v.Report = failureReport(r.plan.Base, f.change.Head, what, detail)
+		return false, r.decide(v)
 	}
-	msg, err := squashMessage(ctx, r.vcs, r.plan.BaseCommit, f.change)
+	msg, err := squashMessage(ctx, r.vcs, r.clone.Root, r.plan.BaseCommit, f.change)
 	if err != nil {
 		return false, fmt.Errorf("squash message of %s: %w", f.change.Label(), err)
 	}
-	v.Decision, v.Message, v.Reviewed = DecisionMerge, msg, f.reviewed
-	return true, r.decide(ctx, v)
+	v.Decision, v.Message = types.DecisionMerge, msg
+	return true, r.decide(v)
 }
 
 // squashMessage is GitHub's default squash body for c's own commits: one "* subject"
 // paragraph each, oldest first, merges left out. A stacked change's own commits start
 // at its stack base.
-func squashMessage(ctx context.Context, v VCS, baseCommit string, c Change) (string, error) {
+func squashMessage(ctx context.Context, v types.ReadVCS, root, baseCommit string, c types.Change) (string, error) {
 	from := baseCommit
 	if c.StackBase != "" {
 		from = c.StackBase
 	}
-	commits, err := v.RangeCommits(ctx, from, c.Head, nil)
+	commits, err := v.RangeCommits(ctx, root, from, c.Head, nil)
 	if err != nil {
 		return "", err
 	}
@@ -442,34 +429,43 @@ func (r *validation) ground(ctx context.Context, f *flight) {
 	r.discard(ctx, f.cand)
 }
 
-func (r *validation) discard(ctx context.Context, cand Candidate) {
-	if cand.Dir == "" {
-		return
-	}
-	if err := r.vcs.RemoveCheckout(context.WithoutCancel(ctx), cand.Dir); err != nil {
+func (r *validation) discard(ctx context.Context, cand types.Candidate) {
+	if err := discard(ctx, r.vcs, r.clone.Root, cand); err != nil {
 		r.Events.Emit(Event{Kind: EventNotice, Reason: "remove checkout " + cand.Dir + ": " + err.Error()})
 	}
 }
 
-func (r *validation) decide(ctx context.Context, v Verdict) error {
+// decide records v. A verdict the Applier would refuse to read is refused here, where
+// the step that wrote it can say so.
+func (r *validation) decide(v types.Verdict) error {
 	v.BaseCommit = r.plan.BaseCommit
+	if err := v.Check(); err != nil {
+		return err
+	}
 	r.Events.Emit(Event{Kind: EventDecided, Change: v.Change.ID, Decision: v.Decision, Code: v.Code, Reason: v.Reason,
-		Commit: v.Candidate, Depth: v.Depth, DurationMS: v.DurationMS})
-	if err := r.sink.Record(ctx, v); err != nil {
+		Commit: v.CandidateCommit, Depth: v.Depth, DurationMS: v.DurationMS})
+	if err := r.dir.Record(v); err != nil {
 		return fmt.Errorf("record the verdict on %s: %w", v.Change.Label(), err)
 	}
 	return nil
 }
 
-func conflictAhead(after string, conf Conflict) string {
+func conflictAhead(after string, conf sourceConflict) string {
 	with := "the commit it was merged onto"
 	if after != "" {
 		with = "#" + after + " ahead of it"
 	}
-	return "conflicts with " + with + " in " + joinPaths(conf.Paths) + "; retried once it merges"
+	return "conflicts with " + with + " in " + joinPaths(conf.paths) + "; retried once it merges"
 }
 
 func failureReport(base, head, what, summary string) string {
 	return fmt.Sprintf("The merge queue validated this change at `%s` on `%s`, and %s.\n\n%s\n\nPush a fix and queue the change again.\n",
 		short(head), base, what, summary)
+}
+
+func joinPaths(paths []string) string {
+	if len(paths) > 5 {
+		return fmt.Sprintf("%s and %d more", strings.Join(paths[:5], ", "), len(paths)-5)
+	}
+	return strings.Join(paths, ", ")
 }

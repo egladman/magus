@@ -205,7 +205,8 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 	if len(dirty) > 0 {
 		return nil, fmt.Errorf("vcs resolve: --against needs a clean tree, and %d path(s) are uncommitted; commit or stash them first so backing the merge out cannot lose them", len(dirty))
 	}
-	if err := res.VCS.StartMerge(ctx, root, ref); err != nil {
+	// The person resolving, as the box knows them: the merge is theirs to conclude.
+	if err := res.VCS.StartMerge(ctx, root, ref, types.Person{}); err != nil {
 		return nil, fmt.Errorf("vcs resolve: %w", err)
 	}
 	if !globalCfg.DryRun {
