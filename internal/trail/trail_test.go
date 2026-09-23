@@ -12,6 +12,7 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,6 +122,7 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	// page of observations by host without a blob fetch per row.
 	require.Equal(t, "codex", event.Host)
 	require.Equal(t, "abc123", event.Session)
+	require.Equal(t, types.TransportHook, event.Transport, "an observation naming no transport came through the hook")
 	require.Equal(t, "/repo/magus", event.Workspace)
 	require.Equal(t, "Bash", event.Action)
 	require.Equal(t, OutcomeOK, event.Outcome)
@@ -211,8 +213,7 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	require.Equal(t, Event{
 		Kind:      KindAgentSpawn,
 		Actor:     "agent",
-		Host:      "claude-code",
-		Session:   "abc123",
+		Origin:    StampOrigin(t.Context(), types.Origin{Transport: types.TransportHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "Explore",
 		Lease:     "notes-store-6b",

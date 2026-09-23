@@ -36,6 +36,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // mutatingVerbs and readVerbs are the leading-word buckets every Connect method name falls into. They are
@@ -120,6 +121,7 @@ func Interceptor(trailDir, actor string, kind trail.Kind, opts ...Option) connec
 					Ts:         start.UnixMilli(),
 					Kind:       kind,
 					Actor:      actor,
+					Origin:     types.Origin{Transport: types.TransportRPC},
 					Action:     method,
 					Outcome:    trail.OutcomeOK,
 					DurationMs: time.Since(start).Milliseconds(),

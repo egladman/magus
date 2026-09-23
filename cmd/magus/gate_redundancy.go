@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -344,7 +345,7 @@ func (g *gateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 	if err != nil {
 		return
 	}
-	err = sessions.RecordGate(dir, rec, sessions.SessionStart{Workspace: g.root, Command: "gate", Version: version})
+	err = sessions.RecordGate(dir, rec, sessions.SessionStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: version})
 	if err != nil {
 		slog.DebugContext(ctx, "gate redundancy: record not written",
 			slog.String("store", dir), slog.String("error", err.Error()))

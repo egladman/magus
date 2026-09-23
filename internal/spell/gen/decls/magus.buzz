@@ -532,9 +532,13 @@ export object JobUnattributedWrite {
     at: int = 0,
 }
 
-export object JobActor {
-    session: str = "",
+export object Origin {
+    user: str = "",
+    uid: str = "",
+    transport: str = "",
     host: str = "",
+    session: str = "",
+    agent: str = "",
 }
 
 export object JobResultValidation {
@@ -604,7 +608,7 @@ export object Job {
     writeProof: str = "",
     reportedBase: str = "",
     baseVerdict: str = "",
-    registeredBy: JobActor = JobActor{},
+    registeredBy: Origin = Origin{},
     registered: int = 0,
     created: int = 0,
     updated: int = 0,

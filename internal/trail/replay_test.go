@@ -292,7 +292,7 @@ func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
 	assert.Equal(t, "s1", got.Session)
 
 	stamped := t.TempDir()
-	Append(t.Context(), stamped, Event{Kind: KindAgentCommand, Session: "s1"})
+	Append(t.Context(), stamped, Event{Kind: KindAgentCommand, Origin: types.Origin{Session: "s1"}})
 	_, ok = LastAgentActivity(stamped)
 	assert.False(t, ok, "an observation with no timestamp has no age to report")
 }

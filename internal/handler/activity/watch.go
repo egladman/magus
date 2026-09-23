@@ -227,12 +227,12 @@ func matchWire(e *activityv1.ActivityEvent, q *activityv1.ActivityQuery) bool {
 // carried: this exists to answer a predicate, not to round-trip an event.
 func fromWire(e *activityv1.ActivityEvent) trail.Event {
 	return trail.Event{
-		Ts:      e.GetTime().AsTime().UnixMilli(),
-		Actor:   e.GetActor(),
-		Action:  e.GetAction(),
-		Session: e.GetSession(),
-		Lease:   e.GetUnit(),
-		Kind:    decodeKind(e.GetKind()),
+		Ts:     e.GetTime().AsTime().UnixMilli(),
+		Actor:  e.GetActor(),
+		Origin: types.Origin{Session: e.GetSession()},
+		Action: e.GetAction(),
+		Lease:  e.GetUnit(),
+		Kind:   decodeKind(e.GetKind()),
 	}
 }
 

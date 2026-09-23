@@ -279,9 +279,12 @@ func TestRowRecordsTheSessionThatDeclaredIt(t *testing.T) {
 	t.Parallel()
 
 	loc := tmpLoc(t, t.TempDir())
-	loc.Actor = &Actor{Session: "orchestrator-1", Host: "claude-code"}
+	loc.Actor = &Actor{Origin: types.Origin{Session: "orchestrator-1", Host: "claude-code"}}
 	stored := seed(t, NewStore(loc), workerRow())
-	assert.Equal(t, types.JobActor{Session: "orchestrator-1", Host: "claude-code"}, stored.RegisteredBy)
+	want := trail.LocalOrigin(t.Context())
+	want.Session, want.Host = "orchestrator-1", "claude-code"
+	require.NotEmpty(t, want.UID, "the OS always answers with a uid")
+	assert.Equal(t, want, stored.RegisteredBy, "the host's facts, plus the OS account the store read itself")
 
 	after, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) {
 		u.State = types.StateFail

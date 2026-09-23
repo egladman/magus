@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ func tmpLoc(t *testing.T, root string) Location {
 
 // boundStore is a Store acting as the worker leased to id, sharing loc's ledger file.
 func boundStore(loc Location, id string) *Store {
-	loc.Actor = &Actor{Lease: id, Session: "s-" + id, Host: "test-host"}
+	loc.Actor = &Actor{Lease: id, Origin: types.Origin{Session: "s-" + id, Host: "test-host"}}
 	return NewStore(loc)
 }
 
@@ -120,7 +121,8 @@ func TestStoreRoundTrip(t *testing.T) {
 				// Timestamps and the schema stamp are the store's, not the fixture's;
 				// assert them separately and compare the declared facts here.
 				assert.Equal(t, types.JobSchemaVersion, got[i].SchemaVersion, "the store stamps the row shape")
-				w.Created, w.Updated, w.SchemaVersion = got[i].Created, got[i].Updated, got[i].SchemaVersion
+				assert.Equal(t, trail.LocalOrigin(t.Context()), got[i].RegisteredBy, "the store records the OS account that created the row")
+				w.Created, w.Updated, w.SchemaVersion, w.RegisteredBy = got[i].Created, got[i].Updated, got[i].SchemaVersion, got[i].RegisteredBy
 				require.Len(t, got[i].Releases, len(w.Releases))
 				for j := range w.Releases {
 					w.Releases[j].ReleasedAt = got[i].Releases[j].ReleasedAt

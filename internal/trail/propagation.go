@@ -54,8 +54,8 @@ const MaxSpawnerLen = 128
 // internal/guard/write.go). ParentSpanID is read in one more place and for teaching only:
 // adviseUnleasedWorker turns silence into an advisory when a process claiming a spawner writes
 // while no lease exists to grade it, which can never deny and never changes a verdict another
-// rule reached. The human is never a claim: a run carrying no trace context IS a
-// person, and that root is inferred from the transport rather than asserted by anyone.
+// rule reached. A run carrying no trace context is unattributed, never "a person": whose
+// account ran it is the OS fact every record carries (see [LocalOrigin]).
 type Spawn struct {
 	// TraceID and ParentSpanID are the trace this process was spawned into and the span that
 	// spawned it, from TRACEPARENT: 32 and 16 lowercase hex characters, or "" when nothing was

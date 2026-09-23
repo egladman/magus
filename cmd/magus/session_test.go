@@ -53,9 +53,9 @@ func sessionsLeaseCell(t *testing.T, out, session string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		// SESSION, date, time, HOST, LEASE, SPAWNER, PARENT, FACTS, EVENTS, TARGETS...
-		if len(fields) > 4 && fields[0] == session {
-			return fields[4]
+		// SESSION, date, time, USER, HOST, LEASE, SPAWNER, PARENT, FACTS, EVENTS, TARGETS...
+		if len(fields) > 5 && fields[0] == session {
+			return fields[5]
 		}
 	}
 	t.Fatalf("no row for session %q in:\n%s", session, out)

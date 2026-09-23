@@ -72,7 +72,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	agentResp, _ := trail.WriteBlob(t.Context(), dir, "agent", agentRespBody)
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 4, Kind: trail.KindAgentCommand, Actor: "session:abc", Workspace: "/ws/a",
-		Host: "codex", Session: "abc",
+		Origin: types.Origin{Host: "codex", Session: "abc"},
 		Action: "Bash", Outcome: trail.OutcomeOK, RequestRef: agentReq, ResponseRef: agentResp,
 		RequestBytes: int64(len(agentReqBody)), ResponseBytes: int64(len(agentRespBody)), Preview: "guard: deny",
 	})
@@ -120,10 +120,10 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 }
 
 func TestEncodeHost_RecordedHostWinsAndMCPFallsBackToUserAgent(t *testing.T) {
-	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindAgentCommand, Host: "codex"}))
+	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindAgentCommand, Origin: types.Origin{Host: "codex"}}))
 	assert.Equal(t, "claude-code/1.2.3", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, UserAgent: "claude-code/1.2.3"}))
 	// A recorded host is what its producer observed, so it wins over the header reading.
-	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, Host: "codex", UserAgent: "curl/8"}))
+	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, Origin: types.Origin{Host: "codex"}, UserAgent: "curl/8"}))
 	// Only an MCP call's User-Agent stands in for a host; no other kind borrows one.
 	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindJob, UserAgent: "curl/8"}))
 	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindAgentCommand}))
@@ -548,12 +548,12 @@ func TestWatchActivityEventsMergesThreeProducersForOneJob(t *testing.T) {
 	dir := t.TempDir()
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 10, Kind: trail.KindAgentCommand, Actor: "agent", Action: "edit",
-		Lease: "pwa/job-watch", Session: "s1", Host: "claude-code",
+		Lease: "pwa/job-watch", Origin: types.Origin{Session: "s1", Host: "claude-code"},
 		Outcome: trail.OutcomeOK, Preview: "guard: deny",
 	})
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 11, Kind: trail.KindAgentCommand, Actor: "agent", Action: "edit",
-		Lease: "pwa/elsewhere", Session: "s2", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Lease: "pwa/elsewhere", Origin: types.Origin{Session: "s2"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	rows := []types.Job{{
 		ID: "pwa/job-watch", State: types.StateRunning, WritePaths: []string{"internal/trail"},
@@ -602,7 +602,7 @@ func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 	dir := t.TempDir()
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 1, Kind: trail.KindAgentCommand, Actor: "agent",
-		Action: "already-here", Session: "s1", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Action: "already-here", Origin: types.Origin{Session: "s1"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	files := make(chan job.FeedEvent)
 	client := watchClient(t, dir, nil, files)
@@ -619,7 +619,7 @@ func TestWatchActivityEventsFollowsTheTrailForward(t *testing.T) {
 
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 2, Kind: trail.KindAgentCommand, Actor: "agent",
-		Action: "landed-while-watching", Session: "s1", Outcome: trail.OutcomeOK, Preview: "guard: pass",
+		Action: "landed-while-watching", Origin: types.Origin{Session: "s1"}, Outcome: trail.OutcomeOK, Preview: "guard: pass",
 	})
 	require.True(t, stream.Receive())
 	assert.Equal(t, "landed-while-watching", stream.Msg().GetAction())

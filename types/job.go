@@ -446,18 +446,6 @@ func JobWriteProofs() []JobWriteProof {
 	return []JobWriteProof{WriteProofAlone, WriteProofDisjoint, WriteProofOverlapping}
 }
 
-// JobActor identifies the session that wrote a row: the same pair the trail records
-// for an agent's actions, so a row and the actions that followed it join on one identity.
-//
-// Both halves are often empty, and that is a fact rather than a gap: a person writing a
-// row from a terminal carries no session id and no host.
-type JobActor struct {
-	// Session is the acting session's id, as the host or the W3C trace channel names it.
-	Session string `json:"session,omitempty" yaml:"session,omitempty"`
-	// Host is the agent host that produced the write, as its own wrapper named itself.
-	Host string `json:"host,omitempty" yaml:"host,omitempty"`
-}
-
 // JobResult is the result a holder files for a job.
 type JobResult struct {
 	SchemaVersion   int                 `json:"schema_version" yaml:"schema_version"`
@@ -662,13 +650,14 @@ type Job struct {
 	// why there is no vocabulary member for "never registered": an absent verdict is not
 	// a judgment, and inventing one would be the mistake StateNoReturn exists to avoid.
 	BaseVerdict JobBaseVerdict `json:"base_verdict,omitempty" yaml:"base_verdict,omitempty"`
-	// RegisteredBy is the session that CREATED this row, stamped by the store on the
-	// first write and carried unchanged afterwards. It is the row's provenance, and the
-	// store names it when it refuses a mutation from somebody else's worker.
+	// RegisteredBy is where the write that CREATED this row came from, stamped by the
+	// store on the first write and carried unchanged afterwards. It is the row's
+	// provenance, the same record the trail keeps for an action, so a row and the actions
+	// that followed it join on one identity.
 	//
 	// Distinct from Registered below, which is when a WORKER reported the base it landed
 	// on: one says who declared the work, the other when somebody turned up to do it.
-	RegisteredBy JobActor `json:"registered_by,omitempty" yaml:"registered_by,omitempty"`
+	RegisteredBy Origin `json:"registered_by,omitempty" yaml:"registered_by,omitempty"`
 	// Registered is unix seconds, stamped by the store on the write that recorded
 	// ReportedBase, off the same clock read as Updated. No write door accepts it from a
 	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a

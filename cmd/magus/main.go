@@ -93,6 +93,8 @@ func runCLI() int {
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
 	rootCtx = proc.WithLease(rootCtx, trail.LeaseFromEnv())
+	// The verbs that are another entry point (the hook, the daemon) restamp this.
+	rootCtx = trail.WithTransport(rootCtx, types.TransportCLI)
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)

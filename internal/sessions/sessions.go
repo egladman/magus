@@ -56,6 +56,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -94,22 +95,23 @@ type Record struct {
 // SessionStart is the payload of the first fact a session writes: who is running
 // magus, and against what.
 //
-// Host is the agent host that drove the session ("claude", "cursor", ...) and is
-// EMPTY from the CLI today. Nothing in the run path knows it: agent identity
-// reaches magus only through the hook payloads internal/trail records, and joining
-// the two stores is later work. An empty Host means "not known", never "a human".
+// The origin's User, UID and Transport are read by the writing process itself. Host is
+// the agent host that drove the session, as its wiring named itself, and is EMPTY from the
+// CLI today: agent identity reaches magus only through the hook payloads internal/trail
+// records, and joining the two stores is later work. An empty Host means "not known",
+// never "a human".
 //
 // Lease, TraceID, ParentSpanID and Spawner are what the spawning tool CLAIMED, recorded
 // verbatim off the environment (trail.SpawnFromEnv); nothing here corroborates one and no
-// verdict reads one. Attribution is cooperative, so empty means the session claimed nothing,
-// which is the designed outcome for anything a person started by hand.
+// verdict reads one. Attribution is cooperative, so empty means the session claimed
+// nothing: it is unattributed, and User still says whose account ran it.
 //
 // SpanID is the exception and the one identity magus asserts: this session mints it
 // (trail.NewSpanID). A child that reports this value as its ParentSpanID is what makes
 // ancestry readable across sessions, so no chain of ancestors is stored anywhere: the
 // relation is derived from records, the way a process tree is derived from PPIDs.
 type SessionStart struct {
-	Host         string `json:"host,omitempty"`
+	types.Origin `json:",inline"`
 	Workspace    string `json:"workspace,omitempty"`
 	Command      string `json:"command,omitempty"`
 	Version      string `json:"version,omitempty"`
@@ -461,6 +463,7 @@ func readLine(br *bufio.Reader, limit int) ([]byte, bool, error) {
 // Summary is one session as a reader meets it: who, when, and what it ran.
 type Summary struct {
 	Session      string         `json:"session"`
+	User         string         `json:"user,omitempty"`
 	Host         string         `json:"host,omitempty"`
 	Lease        string         `json:"lease,omitempty"`
 	TraceID      string         `json:"trace_id,omitempty"`
@@ -501,7 +504,7 @@ func Summarize(fold Fold) []Summary {
 		case KindSessionStart:
 			var start SessionStart
 			if json.Unmarshal(rec.Payload, &start) == nil {
-				s.Host, s.Workspace, s.Command, s.Lease = start.Host, start.Workspace, start.Command, start.Lease
+				s.User, s.Host, s.Workspace, s.Command, s.Lease = start.User, start.Host, start.Workspace, start.Command, start.Lease
 				s.TraceID, s.SpanID, s.ParentSpanID, s.Spawner = start.TraceID, start.SpanID, start.ParentSpanID, start.Spawner
 			}
 		case KindTargetResult:
@@ -682,7 +685,7 @@ func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult,
 		w := writers[ev.Session]
 		if w == nil {
 			sessionStart := start
-			sessionStart.Host = ev.Event.Host
+			sessionStart.Host, sessionStart.Session = ev.Event.Host, ev.Session
 			if w, err = Open(dir, ev.Session, sessionStart); err != nil {
 				return result, err
 			}

@@ -137,18 +137,18 @@ const (
 // body never bloats the line. Field names are snake_case and match the journal's Event where
 // they overlap (Ts, DurationMs).
 //
-// Host and Session duplicate what an agent-hook event also records in its request blob, and that
-// duplication is deliberate: a reader grouping a page of 200 rows by agent host must not have to
-// fetch 200 blobs to do it. They stay short, so the "lines stay small" invariant holds.
+// The origin's Host and Session duplicate what an agent-hook event also records in its
+// request blob, and that duplication is deliberate: a reader grouping a page of 200 rows by
+// agent host must not have to fetch 200 blobs to do it. They stay short, so the "lines stay
+// small" invariant holds. [Append] stamps the OS account on every event.
 type Event struct {
-	Ts        int64  `json:"ts"`                   // unix milliseconds at the action's start
-	Kind      Kind   `json:"kind"`                 // one of the Kind* constants
-	Actor     string `json:"actor"`                // who: an agent id, "daemon", a user
-	UserAgent string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
-	Host      string `json:"host,omitempty"`       // the agent host that produced the action, as its own wrapper named itself; "" when the producer could not know
-	Session   string `json:"session,omitempty"`    // the host's own session id, when its event carried one
-	Workspace string `json:"workspace,omitempty"`  // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
-	Action    string `json:"action"`               // the specific action: a tool name, a job command, "connector.create"
+	Ts           int64  `json:"ts"`                   // unix milliseconds at the action's start
+	Kind         Kind   `json:"kind"`                 // one of the Kind* constants
+	Actor        string `json:"actor"`                // who: an agent id, "daemon", a user
+	UserAgent    string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
+	types.Origin `json:",inline"`
+	Workspace    string `json:"workspace,omitempty"` // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
+	Action       string `json:"action"`              // the specific action: a tool name, a job command, "connector.create"
 	// Lease is the lease this action belongs to, when the producer could
 	// correlate one (a marker line, or the BAGGAGE channel); ""
 	// when uncorrelated.
@@ -221,10 +221,14 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 // usually empty: a hook observes a command, not a lease, so nothing in the host event names
 // one and [AppendAgentCommand] falls back to the environment channel.
 type AgentCommand struct {
-	Actor      string
-	Workspace  string
-	Host       string
-	Session    string
+	Actor     string
+	Workspace string
+	// Transport is the entry point the observation came through; empty records a hook.
+	Transport types.Transport
+	Host      string
+	Session   string
+	// Agent is the host's subagent id, empty for the main conversation.
+	Agent      string
 	Transcript string
 	Event      string
 	Tool       string
@@ -342,8 +346,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentCommand,
 		Actor:         actor,
-		Host:          command.Host,
-		Session:       command.Session,
+		Origin:        hookOrigin(command.Transport, command.Host, command.Session, command.Agent),
 		Workspace:     command.Workspace,
 		Action:        action,
 		Lease:         lease,
@@ -376,10 +379,13 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // its coverage vocabulary (deny=model, advise=model, pass=none), and a bare Model field here
 // would read as one more of those instead of a spawn's own claim.
 type AgentSpawn struct {
-	Actor         string
-	Workspace     string
-	Host          string
-	Session       string
+	Actor     string
+	Workspace string
+	Host      string
+	Session   string
+	// Agent is the host's id for the subagent that spawned, empty for the main
+	// conversation.
+	Agent         string
 	Event         string
 	Tool          string
 	Child         string
@@ -497,8 +503,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Ts:           time.Now().UnixMilli(),
 		Kind:         KindAgentSpawn,
 		Actor:        actor,
-		Host:         spawn.Host,
-		Session:      spawn.Session,
+		Origin:       hookOrigin(types.TransportHook, spawn.Host, spawn.Session, spawn.Agent),
 		Workspace:    spawn.Workspace,
 		Action:       action,
 		Lease:        lease,
@@ -586,6 +591,7 @@ func Append(ctx context.Context, base string, e Event) {
 		return
 	}
 	e = redactEvent(ctx, e)
+	e.Origin = StampOrigin(ctx, e.Origin)
 	line, err := json.Marshal(e)
 	if err != nil {
 		return

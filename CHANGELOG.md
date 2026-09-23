@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Every record says which OS account wrote it, and through which entry point.** Trail
+  events, session records and job rows carry `user`, `uid` and `transport` (`cli`,
+  `hook`, `mcp`, `rpc`, `daemon`), read by magus itself. `magus session` gains a USER
+  column. A job row's `registered_by` is an `Origin`.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the

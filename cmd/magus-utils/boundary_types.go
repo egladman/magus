@@ -154,10 +154,10 @@ var boundaryTypes = []boundaryType{
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
 	// magus\job's bundle (put/list), leaf-first: Job.releases and
 	// JobList.overlaps are each a list of the other two, and Job.registeredBy is
-	// one of the actor.
+	// an Origin.
 	{Name: "JobRelease", Type: reflect.TypeFor[types.JobRelease](), RuntimeObject: true},
 	{Name: "JobUnattributedWrite", Type: reflect.TypeFor[types.JobUnattributedWrite](), RuntimeObject: true},
-	{Name: "JobActor", Type: reflect.TypeFor[types.JobActor](), RuntimeObject: true},
+	{Name: "Origin", Type: reflect.TypeFor[types.Origin](), RuntimeObject: true},
 	{Name: "LeaseCheck", Type: reflect.TypeFor[types.LeaseCheck](), RuntimeObject: true},
 	{Name: "CompletionGate", Type: reflect.TypeFor[types.CompletionGate](), RuntimeObject: true},
 	{Name: "GateEvidence", Type: reflect.TypeFor[types.GateEvidence](), RuntimeObject: true},

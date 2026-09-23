@@ -88,8 +88,10 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 		return err
 	}
 	spawn := trail.SpawnFromEnv()
+	origin := trail.LocalOrigin(ctx)
+	origin.Host, origin.Session = c.Host, c.HostSession
 	stored, recorded, err := sessions.RecordCheckpoint(dir, c, sessions.SessionStart{
-		Host:      c.Host,
+		Origin:    origin,
 		Workspace: wsRoot,
 		Version:   version,
 		Lease:     spawn.Lease,

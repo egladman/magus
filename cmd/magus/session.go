@@ -208,11 +208,12 @@ func renderSessionsText(ctx context.Context, root string, summaries []sessions.S
 			bySpan[s.SpanID] = s.Session
 		}
 	}
-	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tLEASE\tSPAWNER\tPARENT\tFACTS\tEVENTS\tTARGETS")
+	fmt.Fprintln(tw, "SESSION\tLAST\tUSER\tHOST\tLEASE\tSPAWNER\tPARENT\tFACTS\tEVENTS\tTARGETS")
 	for _, s := range summaries {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			s.Session,
 			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"),
+			orDash(s.User),
 			orDash(s.Host),
 			orDash(s.Lease),
 			orDash(s.Spawner),
@@ -378,6 +379,12 @@ func summarizeTargets(targets []sessions.TargetResult) string {
 		out = append(out, label)
 	}
 	return strings.Join(out, ", ")
+}
+
+// localOrigin is this process's OS account, arriving through t, for a verb with no ctx to
+// read the entry point from.
+func localOrigin(t types.Transport) types.Origin {
+	return trail.StampOrigin(context.Background(), types.Origin{Transport: t})
 }
 
 // orDash renders an empty or zero column as a dash, so a table reads "nothing here"
@@ -555,6 +562,7 @@ func sessionLoad(root string, args []string) error {
 	cacheDir, _ := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(cacheDir))
 	result, err := sessions.LoadEvents(dir, summary.Events, sessions.SessionStart{
+		Origin:    localOrigin(types.TransportCLI),
 		Workspace: root,
 		Command:   "session load",
 		Version:   version,

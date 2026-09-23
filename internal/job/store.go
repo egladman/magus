@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -378,7 +379,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.RegisteredBy = prev.RegisteredBy
 			f.Jobs[i] = row
 		} else {
-			row.RegisteredBy = actor.leaseActor()
+			row.RegisteredBy = trail.StampOrigin(ctx, actor.Origin)
 			f.Jobs = append(f.Jobs, row)
 		}
 		if werr := s.write(f, rawByID); werr != nil {

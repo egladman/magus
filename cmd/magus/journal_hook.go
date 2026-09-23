@@ -42,6 +42,7 @@ func withSessionJournal(ctx context.Context, handlers []slog.Handler, root, verb
 		spawn = trail.Spawn{Lease: forwarded}
 	}
 	h := sessions.NewFactHandler(root, sessions.SessionStart{
+		Origin:       trail.LocalOrigin(ctx),
 		Workspace:    root,
 		Command:      strings.Join(append([]string{verb}, args...), " "),
 		Version:      version,

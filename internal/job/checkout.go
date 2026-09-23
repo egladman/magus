@@ -135,7 +135,7 @@ func (c Checkout) Bind(id string) error {
 	}
 	if bound != "" && bound != id {
 		return &RefusedError{
-			Lease: id, Actor: Actor{Lease: bound, Session: c.Session},
+			Lease: id, Actor: Actor{Lease: bound, Origin: types.Origin{Session: c.Session}},
 			Rule: fmt.Sprintf("re-binding it to %s is how a worker would be graded against another lease's paths", id),
 		}
 	}
