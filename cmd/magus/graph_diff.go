@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -318,9 +317,7 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 	}
 	defer os.RemoveAll(tmp)
 
-	if err := res.VCS.ExportRevision(ctx, root, rev, tmp); errors.Is(err, types.ErrVCSUnsupported) {
-		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: --rev is not supported by %s; export a baseline with `graph export -o json` instead", res.Name)
-	} else if err != nil {
+	if err := res.VCS.ExportRevision(ctx, root, rev, tmp); err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: export revision %q: %w", rev, err)
 	}
 

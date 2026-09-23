@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-type hgVCS struct{}
+type hgVCS struct{ declines[hgName] }
 
 func (v hgVCS) Name() string     { return "hg" }
 func (v hgVCS) Claims() []string { return []string{".hg"} }
@@ -196,7 +196,7 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 	return out, nil
 }
 
-// RangeDiff implements types.RangeDiffReporter via `hg diff -r "ancestor(base,head)" -r
+// RangeDiff implements types.RangeReporter via `hg diff -r "ancestor(base,head)" -r
 // head`. Mercurial's ancestor() revset function is the two revisions' merge base, so
 // diffing FROM there TO head is the symmetric difference the interface promises: what head
 // added since it diverged, never base's own changes since the fork. Verified against
@@ -411,6 +411,11 @@ func (v hgVCS) writeMergeDriver(ctx context.Context, root string, outputGlobs []
 	return lockedWrite(ctx, hgMetaDir(root), func() (bool, error) {
 		return writeHgFamilyMergeDriverSection(hgrcPath(root), outputGlobs)
 	})
+}
+
+// MergeDriverCommand implements types.MergeDriverInstaller; see hgFamilyMergeDriverCommand.
+func (v hgVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
+	return hgFamilyMergeDriverCommand(ctx, "hg", root)
 }
 
 // CheckMergeDriver reports whether .hg/hgrc holds the magus merge-driver section. A torn
@@ -685,12 +690,12 @@ func (v hgVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) 
 	return hgFamilyRemoteURL(ctx, "hg", dir, name)
 }
 
-// RangeFiles implements types.RangeDiffReporter; see hgFamilyRangeFiles.
-func (v hgVCS) RangeFiles(ctx context.Context, dir, base, head string) ([]string, error) {
-	return hgFamilyRangeFiles(ctx, "hg", dir, base, head)
+// RangeFiles implements types.RangeReporter; see hgFamilyRangeFiles.
+func (v hgVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
+	return hgFamilyRangeFiles(ctx, "hg", dir, base, head, paths)
 }
 
-// RangeCommits implements types.RangeDiffReporter; see hgFamilyRangeCommits.
+// RangeCommits implements types.RangeReporter; see hgFamilyRangeCommits.
 func (v hgVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
 	return hgFamilyRangeCommits(ctx, v, "hg", dir, base, head, paths)
 }
@@ -720,8 +725,13 @@ func (v hgVCS) ConfiguredRemote(dir string) (string, error) {
 // have no revision on default, and answering with a ref that resolves to nothing would put
 // a dead link in a committed artifact.
 func (v hgVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
-	if _, err := vcsOutput(ctx, dir, "hg", "log", "-r", "default", "-l", "1", "--template", "{node}"); err != nil {
+	_, err := vcsOutput(ctx, dir, "hg", "log", "-r", "default", "-l", "1", "--template", "{node}")
+	var ee *exec.ExitError
+	if errors.As(err, &ee) && strings.Contains(string(ee.Stderr), "unknown revision") {
 		return "", types.ErrVCSUnsupported
+	}
+	if err != nil {
+		return "", fmt.Errorf("hg log -r default: %w", err)
 	}
 	return "default", nil
 }
@@ -737,6 +747,9 @@ func (v hgVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 // branch gives in a fresh clone, not a probe failure. The one error left is a date hg
 // printed that did not parse.
 func (v hgVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return time.Time{}, false, err
+	}
 	out, _ := vcsOutput(ctx, dir, "hg", "log", "-r", rev, "--template", "{date|rfc3339date}")
 	if out == "" {
 		return time.Time{}, false, nil

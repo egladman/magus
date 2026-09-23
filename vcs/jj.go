@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-type jjVCS struct{}
+type jjVCS struct{ declines[jjName] }
 
 func (v jjVCS) Name() string     { return "jj" }
 func (v jjVCS) Claims() []string { return []string{".jj"} }
@@ -277,43 +277,33 @@ func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []st
 	return out, nil
 }
 
-// RangeFiles implements types.RangeDiffReporter: RangeDiff's fork point and range, names
-// only, run from the workspace root so the paths are repo-relative.
-func (v jjVCS) RangeFiles(ctx context.Context, dir, base, head string) ([]string, error) {
-	if err := checkRevsetRef(base); err != nil {
-		return nil, err
-	}
-	if err := checkRevsetRef(head); err != nil {
+// RangeFiles implements types.RangeReporter: RangeDiff's fork point and range, names only,
+// run from the workspace root so the paths are repository-relative.
+func (v jjVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
 	root, err := v.Root(ctx, dir)
 	if err != nil {
 		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
 	}
-	out, err := vcsOutput(ctx, root, "jj", "diff", "--name-only", "--from", "heads(::"+base+" & ::"+head+")", "--to", head)
+	args := append([]string{"diff", "--name-only", "--from", "heads(::" + base + " & ::" + head + ")", "--to", head},
+		jjRootPaths(paths)...)
+	out, err := vcsOutput(ctx, root, "jj", args...)
 	if err != nil {
 		return nil, fmt.Errorf("jj diff --name-only --from %s --to %s: %w", base, head, err)
 	}
 	return splitLines([]byte(out)), nil
 }
 
-// RangeCommits implements types.RangeDiffReporter. jj's base..head is git's: ancestors of
-// head that are not ancestors of base, and `jj log` lists newest first. Each path is a
-// root: fileset, a literal repo-relative path however it is spelled.
+// RangeCommits implements types.RangeReporter. jj's base..head is git's: ancestors of
+// head that are not ancestors of base, and `jj log` lists newest first.
 func (v jjVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
-	if err := checkRevsetRef(base); err != nil {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
-	if err := checkRevsetRef(head); err != nil {
-		return nil, err
-	}
-	args := []string{"log", "-r", base + ".." + head, "--no-graph", "-T", `commit_id ++ "\n"`}
-	if len(paths) > 0 {
-		args = append(args, "--")
-		for _, p := range paths {
-			args = append(args, "root:"+strconv.Quote(p))
-		}
-	}
+	args := append([]string{"log", "-r", base + ".." + head, "--no-graph", "-T", `commit_id ++ "\n"`},
+		jjRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, "jj", args...)
 	if err != nil {
 		return nil, fmt.Errorf("jj log %s..%s: %w", base, head, err)
@@ -321,13 +311,23 @@ func (v jjVCS) RangeCommits(ctx context.Context, dir, base, head string, paths [
 	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
 }
 
+// jjRootPaths spells repository-relative paths as literal root: filesets after `--`, or
+// nothing when there are none.
+func jjRootPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	out := []string{"--"}
+	for _, p := range paths {
+		out = append(out, "root:"+strconv.Quote(p))
+	}
+	return out
+}
+
 // IsAncestor implements types.AncestryReporter. `::descendant` includes descendant itself,
 // and an unknown revision fails the log rather than matching nothing.
 func (v jjVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
-	if err := checkRevsetRef(ancestor); err != nil {
-		return false, err
-	}
-	if err := checkRevsetRef(descendant); err != nil {
+	if err := checkRequiredRevsetRef(ancestor, descendant); err != nil {
 		return false, err
 	}
 	out, err := vcsOutput(ctx, dir, "jj", "log", "-r", ancestor+" & ::"+descendant, "--no-graph", "-T", "commit_id")
@@ -492,8 +492,8 @@ func (v jjVCS) ConfiguredRemote(dir string) (string, error) {
 
 // RemoteURL implements types.RemoteReporter. `jj git remote list` prints one "<name> <url>"
 // line per remote; name defaults to "origin", matching git. A repository without the named
-// remote (or without a git backend at all) yields ErrVCSUnsupported, and callers degrade to
-// no link.
+// remote yields ErrVCSUnsupported, and callers degrade to no link; a listing that fails is
+// a real error.
 func (v jjVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) {
 	name = cmp.Or(name, "origin")
 	if err := checkRemoteName(name); err != nil {
@@ -501,7 +501,7 @@ func (v jjVCS) RemoteURL(ctx context.Context, dir, name string) (string, error) 
 	}
 	out, err := vcsOutput(ctx, dir, "jj", "git", "remote", "list")
 	if err != nil {
-		return "", types.ErrVCSUnsupported
+		return "", fmt.Errorf("jj git remote list: %w", err)
 	}
 	for _, line := range splitLines([]byte(out)) {
 		if remote, url, ok := strings.Cut(line, " "); ok && remote == name {
@@ -549,6 +549,9 @@ func (v jjVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 // have never fetched this" answer, not a probe failure. The one error left is a date jj
 // printed that did not parse.
 func (v jjVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return time.Time{}, false, err
+	}
 	out, _ := vcsOutput(ctx, dir, "jj", "log", "-r", rev, "--no-graph", "-T",
 		`committer.timestamp().format("%Y-%m-%dT%H:%M:%S%:z")`)
 	if out == "" {

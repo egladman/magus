@@ -35,7 +35,7 @@ import (
 //
 // Sapling has no colocation story: `sl clone` of a git repo writes .sl and NO .git, so
 // unlike jj there is no repo that satisfies two claims at once.
-type saplingVCS struct{}
+type saplingVCS struct{ declines[saplingName] }
 
 // Name is the BINARY name, not the product name. std.vcsExe resolves the active VCS by
 // running exec.LookPath on it, so "sapling" would leave `vcs.cmd` looking for a binary
@@ -228,7 +228,7 @@ func (v saplingVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (
 	return out, nil
 }
 
-// RangeDiff implements types.RangeDiffReporter via `sl diff -r "ancestor(base,head)" -r
+// RangeDiff implements types.RangeReporter via `sl diff -r "ancestor(base,head)" -r
 // head`, the same Mercurial-inherited ancestor() revset hg's RangeDiff uses. Verified
 // separately against Sapling 0.2.20260811-150444, per this file's own rule about verifying
 // the two backends independently rather than porting one to the other: a repository forked
@@ -373,13 +373,21 @@ func (v saplingVCS) RemoteURL(ctx context.Context, dir, name string) (string, er
 	return hgFamilyRemoteURL(ctx, "sl", dir, name)
 }
 
-// RangeFiles implements types.RangeDiffReporter; see hgFamilyRangeFiles. --root-relative
-// for the reason DirtyFiles passes it.
-func (v saplingVCS) RangeFiles(ctx context.Context, dir, base, head string) ([]string, error) {
-	return hgFamilyRangeFiles(ctx, "sl", dir, base, head, "--root-relative")
+// RangeFiles implements types.RangeReporter; see hgFamilyRangeFiles. --root-relative for
+// the reason DirtyFiles passes it, except with paths, which sl refuses it beside; those run
+// from the repository root instead, where the output is root-relative anyway.
+func (v saplingVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
+	if len(paths) == 0 {
+		return hgFamilyRangeFiles(ctx, "sl", dir, base, head, nil, "--root-relative")
+	}
+	root, err := v.Root(ctx, dir)
+	if err != nil {
+		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
+	}
+	return hgFamilyRangeFiles(ctx, "sl", root, base, head, paths)
 }
 
-// RangeCommits implements types.RangeDiffReporter; see hgFamilyRangeCommits.
+// RangeCommits implements types.RangeReporter; see hgFamilyRangeCommits.
 func (v saplingVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
 	return hgFamilyRangeCommits(ctx, v, "sl", dir, base, head, paths)
 }
@@ -439,6 +447,9 @@ func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) 
 // never fetched this" answer, not a probe failure. The one error left is a date sl printed
 // that did not parse.
 func (v saplingVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	if err := checkRequiredRevsetRef(rev); err != nil {
+		return time.Time{}, false, err
+	}
 	out, _ := vcsOutput(ctx, dir, "sl", "log", "-r", rev, "--template", "{date|rfc3339date}")
 	if out == "" {
 		return time.Time{}, false, nil
@@ -643,6 +654,11 @@ func (v saplingVCS) writeMergeDriver(ctx context.Context, root string, outputGlo
 	return lockedWrite(ctx, slMetaDir(root), func() (bool, error) {
 		return writeHgFamilyMergeDriverSection(slConfigPath(root), outputGlobs)
 	})
+}
+
+// MergeDriverCommand implements types.MergeDriverInstaller; see hgFamilyMergeDriverCommand.
+func (v saplingVCS) MergeDriverCommand(ctx context.Context, root string) (string, error) {
+	return hgFamilyMergeDriverCommand(ctx, "sl", root)
 }
 
 // CheckMergeDriver reports whether .sl/config holds the magus merge-driver section. A

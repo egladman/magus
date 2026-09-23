@@ -3,6 +3,7 @@
 package vcs
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -321,7 +322,7 @@ func TestParityTrackedFilesAnswersWhenNoneAreTracked(t *testing.T) {
 // a directory it asked about is silently reported as not ignored.
 func TestParityIgnoredFilesEchoesTheGivenPaths(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		skipUnsupported(t, b, "IgnoredFileReporter")
+		skipUnsupported(t, b, types.CapIgnoredFileReporter)
 		reporter := b.drv
 		dir := t.TempDir()
 		name, body := ignoreRule(b, "build/")
@@ -343,7 +344,7 @@ func TestParityIgnoredFilesEchoesTheGivenPaths(t *testing.T) {
 // the only thing that catches it.
 func TestParityIgnoreReportersAgree(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
-		skipUnsupported(t, b, "IgnoredFileReporter")
+		skipUnsupported(t, b, types.CapIgnoredFileReporter)
 		reporter, resolver := b.drv, b.drv
 		// keep.log is TRACKED and matches an ignore rule: the case the two disagreed on.
 		dir := t.TempDir()
@@ -1079,43 +1080,44 @@ func TestParityRangeDiffScopesToPaths(t *testing.T) {
 // capabilityMatrix is deliberate: adding a backend to a row is an implementation, removing
 // one is a regression, and neither happens by accident. Every backend DECLARES every
 // capability, so this matrix, not the compiler, is where support is written down.
-var capabilityMatrix = map[string]map[string]bool{
-	"Bisect":                {"git": true, "hg": true, "sl": true},
-	"MergeDriverInstaller":  {"git": true, "hg": true, "sl": true},
-	"RefreshHookInstaller":  {"git": true, "hg": true, "sl": true},
-	"DriftHookInstaller":    {"git": true, "hg": true, "sl": true},
-	"RegenHookInstaller":    {"git": true},
-	"RemoteReporter":        {"git": true, "hg": true, "sl": true, "jj": true},
-	"RemoteConfigReporter":  {"git": true, "hg": true, "sl": true, "jj": true},
-	"DefaultRefReporter":    {"git": true, "hg": true, "sl": true, "jj": true},
-	"PushStatusReporter":    {"git": true, "hg": true, "sl": true},
-	"RevTimeReporter":       {"git": true, "hg": true, "sl": true, "jj": true},
-	"TrackedFileReporter":   {"git": true, "hg": true, "sl": true, "jj": true},
-	"IgnoredFileReporter":   {"git": true, "hg": true, "sl": true},
-	"ChurnReporter":         {"git": true, "hg": true, "sl": true, "jj": true},
-	"BranchChangeReporter":  {"git": true},
-	"RangeDiffReporter":     {"git": true, "hg": true, "sl": true, "jj": true},
-	"AncestryReporter":      {"git": true, "hg": true, "sl": true, "jj": true},
-	"ConflictResolver":      {"git": true, "hg": true, "sl": true, "jj": true},
-	"RevisionFileReader":    {"git": true, "hg": true, "sl": true, "jj": true},
-	"RevisionExporter":      {"git": true, "hg": true, "sl": true, "jj": true},
-	"MergeStarter":          {"git": true, "hg": true, "sl": true, "jj": true},
-	"Committer":             {"git": true},
-	"TreeReporter":          {"git": true},
-	"TreeMerger":            {"git": true},
-	"GeneratedPathReporter": {"git": true},
-	"CheckoutCreator":       {"git": true},
-	"RevisionFetcher":       {"git": true},
-	"Pusher":                {"git": true},
-	"Bundler":               {"git": true},
+var capabilityMatrix = map[types.VCSCapability]map[string]bool{
+	types.CapBisector:              {"git": true, "hg": true, "sl": true},
+	types.CapMergeDriverInstaller:  {"git": true, "hg": true, "sl": true},
+	types.CapRefreshHookInstaller:  {"git": true, "hg": true, "sl": true},
+	types.CapDriftHookInstaller:    {"git": true, "hg": true, "sl": true},
+	types.CapRegenHookInstaller:    {"git": true},
+	types.CapRemoteReporter:        {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRemoteConfigReporter:  {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapDefaultRefReporter:    {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapPushStatusReporter:    {"git": true, "hg": true, "sl": true},
+	types.CapRevTimeReporter:       {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapTrackedFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapIgnoredFileReporter:   {"git": true, "hg": true, "sl": true},
+	types.CapChurnReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapBranchChangeReporter:  {"git": true},
+	types.CapRangeReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapAncestryReporter:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapConflictResolver:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRevisionFileReader:    {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRevisionExporter:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapMergeStarter:          {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapCommitWriter:          {"git": true},
+	types.CapTreeReporter:          {"git": true},
+	types.CapTreeMerger:            {"git": true},
+	types.CapGeneratedPathReporter: {"git": true},
+	types.CapCheckoutProvisioner:   {"git": true},
+	types.CapRevisionFetcher:       {"git": true},
+	types.CapPusher:                {"git": true},
+	types.CapBundler:               {"git": true},
 }
 
 // capabilityProbe calls one method. The arguments make a real implementation fail fast
 // and touch nothing outside dir (an invalid revision, remote or path wherever the method
-// validates one), so only a stub's refusal can come back as an *UnsupportedError.
+// validates one), so only a decline can come back as a *VCSUnsupportedError.
 type capabilityProbe struct {
-	capability, method string
-	call               func(d types.VCSDriver, dir string) error
+	capability types.VCSCapability
+	method     string
+	call       func(d types.VCSDriver, dir string) error
 }
 
 func capabilityProbes(t *testing.T) []capabilityProbe {
@@ -1123,74 +1125,78 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 	id := strings.Repeat("a", 40)
 	errOf := func(_ any, err error) error { return err }
 	return []capabilityProbe{
-		{"Bisect", "Bisect", func(d types.VCSDriver, dir string) error {
+		{types.CapBisector, "Bisect", func(d types.VCSDriver, dir string) error {
 			return errOf(d.Bisect(ctx, dir, types.BisectOptions{Good: "-x"}))
 		}},
-		{"MergeDriverInstaller", "InstallMergeDriver", func(d types.VCSDriver, dir string) error { return d.InstallMergeDriver(ctx, dir, nil) }},
-		{"MergeDriverInstaller", "CheckMergeDriver", func(d types.VCSDriver, dir string) error { return errOf(d.CheckMergeDriver(ctx, dir)) }},
-		{"MergeDriverInstaller", "EnsureMergeDriver", func(d types.VCSDriver, dir string) error { return errOf(d.EnsureMergeDriver(ctx, dir, nil)) }},
-		{"RefreshHookInstaller", "InstallRefreshHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRefreshHook(ctx, dir, "true")) }},
-		{"DriftHookInstaller", "InstallDriftHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallDriftHook(ctx, dir, "true")) }},
-		{"RegenHookInstaller", "InstallRegenHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRegenHook(ctx, dir, "true")) }},
-		{"RemoteReporter", "RemoteURL", func(d types.VCSDriver, dir string) error { return errOf(d.RemoteURL(ctx, dir, "-x")) }},
-		{"RemoteConfigReporter", "ConfiguredRemote", func(d types.VCSDriver, dir string) error { return errOf(d.ConfiguredRemote(dir)) }},
-		{"DefaultRefReporter", "DefaultRef", func(d types.VCSDriver, dir string) error { return errOf(d.DefaultRef(ctx, dir)) }},
-		{"PushStatusReporter", "CommitPushed", func(d types.VCSDriver, dir string) error {
+		{types.CapMergeDriverInstaller, "InstallMergeDriver", func(d types.VCSDriver, dir string) error { return d.InstallMergeDriver(ctx, dir, nil) }},
+		{types.CapMergeDriverInstaller, "CheckMergeDriver", func(d types.VCSDriver, dir string) error { return errOf(d.CheckMergeDriver(ctx, dir)) }},
+		{types.CapMergeDriverInstaller, "EnsureMergeDriver", func(d types.VCSDriver, dir string) error { return errOf(d.EnsureMergeDriver(ctx, dir, nil)) }},
+		{types.CapMergeDriverInstaller, "MergeDriverCommand", func(d types.VCSDriver, dir string) error { return errOf(d.MergeDriverCommand(ctx, dir)) }},
+		{types.CapRefreshHookInstaller, "InstallRefreshHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRefreshHook(ctx, dir, "true")) }},
+		{types.CapDriftHookInstaller, "InstallDriftHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallDriftHook(ctx, dir, "true")) }},
+		{types.CapRegenHookInstaller, "InstallRegenHook", func(d types.VCSDriver, dir string) error { return errOf(d.InstallRegenHook(ctx, dir, "true")) }},
+		{types.CapRemoteReporter, "RemoteURL", func(d types.VCSDriver, dir string) error { return errOf(d.RemoteURL(ctx, dir, "-x")) }},
+		{types.CapRemoteConfigReporter, "ConfiguredRemote", func(d types.VCSDriver, dir string) error { return errOf(d.ConfiguredRemote(dir)) }},
+		{types.CapDefaultRefReporter, "DefaultRef", func(d types.VCSDriver, dir string) error { return errOf(d.DefaultRef(ctx, dir)) }},
+		{types.CapPushStatusReporter, "CommitPushed", func(d types.VCSDriver, dir string) error {
 			_, _, err := d.CommitPushed(ctx, dir, "-x")
 			return err
 		}},
-		{"RevTimeReporter", "RevTime", func(d types.VCSDriver, dir string) error {
+		{types.CapRevTimeReporter, "RevTime", func(d types.VCSDriver, dir string) error {
 			_, _, err := d.RevTime(ctx, dir, "-x")
 			return err
 		}},
-		{"TrackedFileReporter", "TrackedFiles", func(d types.VCSDriver, dir string) error { return errOf(d.TrackedFiles(ctx, dir, nil)) }},
-		{"IgnoredFileReporter", "IgnoredFiles", func(d types.VCSDriver, dir string) error { return errOf(d.IgnoredFiles(ctx, dir, nil)) }},
-		{"ChurnReporter", "ChangesByCommit", func(d types.VCSDriver, dir string) error { return errOf(d.ChangesByCommit(ctx, dir, 1, "-x")) }},
-		{"BranchChangeReporter", "BranchChanges", func(d types.VCSDriver, dir string) error { return errOf(d.BranchChanges(ctx, dir, "-x", 1)) }},
-		{"RangeDiffReporter", "RangeDiff", func(d types.VCSDriver, dir string) error { return errOf(d.RangeDiff(ctx, dir, "-x", "-x", nil)) }},
-		{"RangeDiffReporter", "RangeFiles", func(d types.VCSDriver, dir string) error { return errOf(d.RangeFiles(ctx, dir, "-x", "-x")) }},
-		{"RangeDiffReporter", "RangeCommits", func(d types.VCSDriver, dir string) error { return errOf(d.RangeCommits(ctx, dir, "-x", "-x", nil)) }},
-		{"AncestryReporter", "IsAncestor", func(d types.VCSDriver, dir string) error { return errOf(d.IsAncestor(ctx, dir, "-x", "-x")) }},
-		{"ConflictResolver", "Conflicts", func(d types.VCSDriver, dir string) error { return errOf(d.Conflicts(ctx, dir)) }},
-		{"ConflictResolver", "KeepIncoming", func(d types.VCSDriver, dir string) error { return d.KeepIncoming(ctx, dir, nil) }},
-		{"ConflictResolver", "MarkResolved", func(d types.VCSDriver, dir string) error { return d.MarkResolved(ctx, dir, nil) }},
-		{"ConflictResolver", "RemoveConflicts", func(d types.VCSDriver, dir string) error { return d.RemoveConflicts(ctx, dir, nil) }},
-		{"ConflictResolver", "IgnoredPaths", func(d types.VCSDriver, dir string) error { return errOf(d.IgnoredPaths(ctx, dir, nil)) }},
-		{"RevisionFileReader", "ReadFileAt", func(d types.VCSDriver, dir string) error { return errOf(d.ReadFileAt(ctx, dir, "-x", "a")) }},
-		{"RevisionExporter", "ExportRevision", func(d types.VCSDriver, dir string) error {
+		{types.CapTrackedFileReporter, "TrackedFiles", func(d types.VCSDriver, dir string) error { return errOf(d.TrackedFiles(ctx, dir, nil)) }},
+		{types.CapIgnoredFileReporter, "IgnoredFiles", func(d types.VCSDriver, dir string) error { return errOf(d.IgnoredFiles(ctx, dir, nil)) }},
+		{types.CapChurnReporter, "ChangesByCommit", func(d types.VCSDriver, dir string) error { return errOf(d.ChangesByCommit(ctx, dir, 1, "-x")) }},
+		{types.CapBranchChangeReporter, "BranchChanges", func(d types.VCSDriver, dir string) error { return errOf(d.BranchChanges(ctx, dir, "-x", 1)) }},
+		{types.CapRangeReporter, "RangeDiff", func(d types.VCSDriver, dir string) error { return errOf(d.RangeDiff(ctx, dir, "-x", "-x", nil)) }},
+		{types.CapRangeReporter, "RangeFiles", func(d types.VCSDriver, dir string) error { return errOf(d.RangeFiles(ctx, dir, "-x", "-x", nil)) }},
+		{types.CapRangeReporter, "RangeCommits", func(d types.VCSDriver, dir string) error { return errOf(d.RangeCommits(ctx, dir, "-x", "-x", nil)) }},
+		{types.CapAncestryReporter, "IsAncestor", func(d types.VCSDriver, dir string) error { return errOf(d.IsAncestor(ctx, dir, "-x", "-x")) }},
+		{types.CapConflictResolver, "Conflicts", func(d types.VCSDriver, dir string) error { return errOf(d.Conflicts(ctx, dir)) }},
+		{types.CapConflictResolver, "KeepIncoming", func(d types.VCSDriver, dir string) error { return d.KeepIncoming(ctx, dir, nil) }},
+		{types.CapConflictResolver, "MarkResolved", func(d types.VCSDriver, dir string) error { return d.MarkResolved(ctx, dir, nil) }},
+		{types.CapConflictResolver, "RemoveConflicts", func(d types.VCSDriver, dir string) error { return d.RemoveConflicts(ctx, dir, nil) }},
+		{types.CapConflictResolver, "IgnoredPaths", func(d types.VCSDriver, dir string) error { return errOf(d.IgnoredPaths(ctx, dir, nil)) }},
+		{types.CapRevisionFileReader, "ReadFileAt", func(d types.VCSDriver, dir string) error { return errOf(d.ReadFileAt(ctx, dir, "-x", "a")) }},
+		{types.CapRevisionExporter, "ExportRevision", func(d types.VCSDriver, dir string) error {
 			return d.ExportRevision(ctx, dir, "-x", filepath.Join(dir, "out"))
 		}},
-		{"MergeStarter", "StartMerge", func(d types.VCSDriver, dir string) error { return d.StartMerge(ctx, dir, "-x") }},
-		{"MergeStarter", "AbortMerge", func(d types.VCSDriver, dir string) error { return d.AbortMerge(ctx, dir) }},
-		{"Committer", "Commit", func(d types.VCSDriver, dir string) error { return errOf(d.Commit(ctx, dir, types.CommitOptions{})) }},
-		{"TreeReporter", "TreeID", func(d types.VCSDriver, dir string) error { return errOf(d.TreeID(ctx, dir, "-x")) }},
-		{"TreeReporter", "DiffTrees", func(d types.VCSDriver, dir string) error { return errOf(d.DiffTrees(ctx, dir, "-x", "-x")) }},
-		{"TreeMerger", "MergeTrees", func(d types.VCSDriver, dir string) error {
+		{types.CapMergeStarter, "StartMerge", func(d types.VCSDriver, dir string) error { return d.StartMerge(ctx, dir, "-x") }},
+		{types.CapMergeStarter, "AbortMerge", func(d types.VCSDriver, dir string) error { return d.AbortMerge(ctx, dir) }},
+		{types.CapCommitWriter, "Commit", func(d types.VCSDriver, dir string) error { return errOf(d.Commit(ctx, dir, types.CheckoutCommit{})) }},
+		{types.CapCommitWriter, "CommitTree", func(d types.VCSDriver, dir string) error { return errOf(d.CommitTree(ctx, dir, types.TreeCommit{})) }},
+		{types.CapTreeReporter, "TreeID", func(d types.VCSDriver, dir string) error { return errOf(d.TreeID(ctx, dir, "-x")) }},
+		{types.CapTreeReporter, "DiffTrees", func(d types.VCSDriver, dir string) error { return errOf(d.DiffTrees(ctx, dir, "-x", "-x")) }},
+		{types.CapTreeMerger, "MergeTrees", func(d types.VCSDriver, dir string) error {
 			return errOf(d.MergeTrees(ctx, dir, types.TreeMerge{Ours: "-x", Theirs: "-x"}))
 		}},
-		{"TreeMerger", "CommitTree", func(d types.VCSDriver, dir string) error { return errOf(d.CommitTree(ctx, dir, types.TreeCommit{})) }},
-		{"GeneratedPathReporter", "GeneratedPaths", func(d types.VCSDriver, dir string) error {
+		{types.CapGeneratedPathReporter, "GeneratedPaths", func(d types.VCSDriver, dir string) error {
 			return errOf(d.GeneratedPaths(ctx, dir, "-x", []string{"a"}))
 		}},
-		{"CheckoutCreator", "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
-		{"CheckoutCreator", "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
-		{"CheckoutCreator", "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
-		{"RevisionFetcher", "FetchBranch", func(d types.VCSDriver, dir string) error { return errOf(d.FetchBranch(ctx, dir, "-x", "main")) }},
-		{"RevisionFetcher", "FetchRef", func(d types.VCSDriver, dir string) error { return errOf(d.FetchRef(ctx, dir, "-x", "refs/heads/main")) }},
-		{"RevisionFetcher", "FetchCommit", func(d types.VCSDriver, dir string) error { return d.FetchCommit(ctx, dir, "-x", id) }},
-		{"Pusher", "Push", func(d types.VCSDriver, dir string) error { return d.Push(ctx, dir, "-x", "refs/heads/main", id, id) }},
-		{"Bundler", "Bundle", func(d types.VCSDriver, dir string) error { return d.Bundle(ctx, dir, "rel", "-x", "-x") }},
-		{"Bundler", "Unbundle", func(d types.VCSDriver, dir string) error { return d.Unbundle(ctx, dir, "rel") }},
+		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
+		{types.CapCheckoutProvisioner, "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
+		{types.CapCheckoutProvisioner, "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
+		{types.CapRevisionFetcher, "FetchRef", func(d types.VCSDriver, dir string) error { return errOf(d.FetchRef(ctx, dir, "-x", "refs/heads/main")) }},
+		{types.CapRevisionFetcher, "FetchCommit", func(d types.VCSDriver, dir string) error { return d.FetchCommit(ctx, dir, "-x", id) }},
+		{types.CapPusher, "Push", func(d types.VCSDriver, dir string) error {
+			return d.Push(ctx, dir, types.PushLease{Remote: "-x", Ref: "refs/heads/main", To: id, Expected: id})
+		}},
+		{types.CapBundler, "Bundle", func(d types.VCSDriver, dir string) error {
+			return d.Bundle(ctx, dir, "rel", types.BundleRange{Head: "-x"})
+		}},
+		{types.CapBundler, "Unbundle", func(d types.VCSDriver, dir string) error { return d.Unbundle(ctx, dir, "rel") }},
 	}
 }
 
-// Every method of every capability either answers or refuses with an *UnsupportedError
+// Every method of every capability either answers or refuses with a *VCSUnsupportedError
 // naming the backend and the capability, matching the matrix. Needs no VCS binary: a stub
 // refuses before running anything, and a real implementation's failure to run is not a
 // refusal.
 func TestParityCapabilityMatrix(t *testing.T) {
 	probes := capabilityProbes(t)
-	probed := map[string]bool{}
+	probed := map[types.VCSCapability]bool{}
 	for _, p := range probes {
 		probed[p.capability] = true
 	}
@@ -1203,10 +1209,10 @@ func TestParityCapabilityMatrix(t *testing.T) {
 				row, ok := capabilityMatrix[p.capability]
 				require.Truef(t, ok, "%s has a probe but no row in the matrix", p.capability)
 				err := p.call(b.drv, t.TempDir())
-				var declined *types.UnsupportedError
+				var declined *types.VCSUnsupportedError
 				if !row[b.name] {
 					require.ErrorAsf(t, err, &declined, "the matrix says %s declines %s", b.name, p.capability)
-					assert.Equal(t, &types.UnsupportedError{VCS: b.name, Capability: p.capability}, declined)
+					assert.Equal(t, &types.VCSUnsupportedError{VCS: b.name, Capability: p.capability}, declined)
 					assert.ErrorIs(t, err, types.ErrVCSUnsupported)
 					assert.ErrorIs(t, err, errors.ErrUnsupported)
 					return
@@ -1217,8 +1223,28 @@ func TestParityCapabilityMatrix(t *testing.T) {
 	}
 }
 
+// MergeDriverCommand reads back what InstallMergeDriver registered, and nothing before it.
+func TestParityMergeDriverCommandReadsTheRegistration(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		skipUnsupported(t, b, types.CapMergeDriverInstaller)
+		isolateGitConfig(t)
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "a\n"})
+		ctx := t.Context()
+
+		got, err := b.drv.MergeDriverCommand(ctx, dir)
+		require.NoErrorf(t, err, "%s before install", b.name)
+		assert.Emptyf(t, got, "%s reported a driver nothing registered", b.name)
+
+		require.NoError(t, b.drv.InstallMergeDriver(ctx, dir, []string{"gen/**"}))
+		got, err = b.drv.MergeDriverCommand(ctx, dir)
+		require.NoErrorf(t, err, "%s after install", b.name)
+		assert.Containsf(t, got, "vcs merge-driver", "%s", b.name)
+	})
+}
+
 // skipUnsupported skips a parity test for a backend the matrix says declines capability.
-func skipUnsupported(t *testing.T, b parityBackend, capability string) {
+func skipUnsupported(t *testing.T, b parityBackend, capability types.VCSCapability) {
 	t.Helper()
 	if !capabilityMatrix[capability][b.name] {
 		t.Skipf("%s declines %s", b.name, capability)
@@ -1261,7 +1287,7 @@ func TestParityRangeFilesMatchesRangeDiff(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir, _, base, head := forkedRange(t, b)
 
-		files, err := b.drv.RangeFiles(t.Context(), dir, base, head)
+		files, err := b.drv.RangeFiles(t.Context(), dir, base, head, nil)
 		require.NoErrorf(t, err, "%s RangeFiles", b.name)
 		slices.Sort(files)
 		assert.Equalf(t, []string{"head-only.txt", "root.txt"}, files, "%s", b.name)
@@ -1272,8 +1298,21 @@ func TestParityRangeFilesMatchesRangeDiff(t *testing.T) {
 			assert.Containsf(t, diff, f, "%s RangeFiles named %s, which RangeDiff does not show", b.name, f)
 		}
 
-		_, err = b.drv.RangeFiles(t.Context(), dir, base, "no-such-revision")
+		_, err = b.drv.RangeFiles(t.Context(), dir, base, "no-such-revision", nil)
 		assert.Errorf(t, err, "%s: an unresolvable revision is an error, not an empty list", b.name)
+
+		scoped, err := b.drv.RangeFiles(t.Context(), dir, base, head, []string{"root.txt"})
+		require.NoErrorf(t, err, "%s scoped RangeFiles", b.name)
+		assert.Equalf(t, []string{"root.txt"}, scoped, "%s: paths did not narrow the files", b.name)
+
+		// Empty is not a revision: it would read as the whole history on one backend and as
+		// an error on another.
+		_, err = b.drv.RangeFiles(t.Context(), dir, "", head, nil)
+		assert.Errorf(t, err, "%s: an empty base", b.name)
+		_, err = b.drv.RangeCommits(t.Context(), dir, "", head, nil)
+		assert.Errorf(t, err, "%s: an empty base", b.name)
+		_, _, err = b.drv.RevTime(t.Context(), dir, "-x")
+		assert.Errorf(t, err, "%s: an option-shaped revision", b.name)
 	})
 }
 
@@ -1355,5 +1394,18 @@ func TestParityRemoteURLByName(t *testing.T) {
 		_, err = b.drv.RemoteURL(ctx, dir, "--upload-pack=x")
 		require.Error(t, err)
 		assert.NotErrorIsf(t, err, types.ErrVCSUnsupported, "%s: an option-shaped name is refused, not reported absent", b.name)
+
+		// A lookup that could not run is not "no remote": callers degrade on the sentinel,
+		// and a cancelled read must not turn into a missing link.
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		_, err = b.drv.RemoteURL(cancelled, dir, "")
+		require.Errorf(t, err, "%s cancelled", b.name)
+		assert.NotErrorIsf(t, err, types.ErrVCSUnsupported, "%s: a cancelled read reported no remote", b.name)
+		if b.name == "hg" {
+			_, err = b.drv.DefaultRef(cancelled, dir)
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, types.ErrVCSUnsupported, "hg: a cancelled read reported no default branch")
+		}
 	})
 }

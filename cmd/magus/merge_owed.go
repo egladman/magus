@@ -161,12 +161,9 @@ func settleOwedRegeneration(ctx context.Context, m *magus.Magus, driver types.VC
 		return owedSettlement{}, err
 	}
 	if len(paths) > 0 {
-		// A backend that cannot record paths leaves them for the reader to stage.
-		staged, _, err := stagePaths(ctx, m.Root(), driver.Name(), driver, paths)
-		if err != nil && !errors.Is(err, types.ErrVCSUnsupported) {
+		if s.staged, _, err = stagePaths(ctx, m.Root(), driver, paths); err != nil {
 			return owedSettlement{}, err
 		}
-		s.staged = staged
 	}
 	if err := vcs.DropOwedRegenerations(ctx, m.Root(), slices.Concat(live, s.undeclared)); err != nil {
 		return owedSettlement{}, err

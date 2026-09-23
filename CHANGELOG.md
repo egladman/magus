@@ -8,11 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **VCS capabilities that combine revisions without a working copy.** `AncestryReporter`,
-  `TreeReporter`, `TreeMerger`, `GeneratedPathReporter`, `CheckoutCreator`, `Committer`,
+- **VCS capabilities that combine revisions without a working copy.** `TreeReporter`,
+  `TreeMerger`, `CommitWriter`, `GeneratedPathReporter`, `CheckoutProvisioner`,
   `RevisionFetcher`, `Pusher` and `Bundler` join `types.VCSDriver`, with `RangeFiles` and
-  `RangeCommits` on `RangeDiffReporter`. git implements every one; hg, Sapling and jj
-  answer ancestry and range questions. None runs a hook or signs anything.
+  `RangeCommits` on `RangeReporter`. git implements every one; none runs a hook or signs.
+- **`AncestryReporter` answers whether one revision reaches another.** All four backends
+  implement `IsAncestor`.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
@@ -122,10 +123,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
-  without one returns `*types.UnsupportedError`, naming itself and the capability and
-  matching both `ErrVCSUnsupported` and `errors.ErrUnsupported`, so callers handle an error
-  instead of type-asserting. `RemoteReporter.RemoteURL` takes a remote name; `""` is the
-  backend's default.
+  without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
+  matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
+  name, `RangeDiffReporter` is `RangeReporter`, and `Bisect` moves to `Bisector`.
 - **magus never waits on another magus invocation.** A workspace lock or machine budget
   held by another invocation refuses immediately (exit 75), naming the holder.
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
@@ -242,7 +242,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for credentials, and no signing, rerere or signature line changes what magus reads.
 - **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**
   A conflicted merge there read as one that never started, and a file named `*.txt`
-  staged every `.txt` file.
+  staged every `.txt` file. A merge already underway is now refused.
+- **`magus affected` rebuilds the project a renamed file left.** Under `diff.renames`,
+  git's default, only the new path was reported. Branch-change notices list both too.
+- **`magus bisect` names the culprit on current git.** Newer git writes
+  `# first 'bad' commit:` in the bisect log, which the parser did not read.
 - **A broken working tree no longer switches off the approved spawn rule.** The committed
   `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
   it too slowly denies. A skipped rule says what applied. A workspace advise joins a

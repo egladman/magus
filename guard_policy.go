@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -77,10 +76,6 @@ func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {
 		return os.ReadFile(path)
 	}
 	content, err := h.driver.ReadFileAt(ctx, h.repoRoot, "", filepath.ToSlash(rel))
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		// A backend that cannot read a revision approves nothing beyond the working tree.
-		return os.ReadFile(path)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -89,8 +84,7 @@ func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {
 
 // approvedPolicyAt is the loosening authority of the workspace at root, nil when it has
 // none: version control disabled or no repository. Without one the working tree is the whole
-// policy, and a backend that cannot read a file at a revision answers the same way file by
-// file.
+// policy.
 func approvedPolicyAt(ctx context.Context, root string, opts types.VCSOptions) (ApprovedPolicy, error) {
 	res, err := vcs.Resolve(ctx, root, "", opts)
 	if err != nil {

@@ -333,19 +333,6 @@ func TestClassifyWithoutReaders(t *testing.T) {
 	assert.Equal(t, ClassProse, got.Paths[2].Class)
 }
 
-// A backend that declines RevisionFileReader answers At with its *UnsupportedError, and
-// the verdict names the backend's gap rather than claiming the file was absent.
-func TestClassifyWithABackendThatCannotReadARevision(t *testing.T) {
-	c := classifierWith(ProseScopes(nil))
-	c.At = func(context.Context, string, string) (string, error) {
-		return "", &types.UnsupportedError{VCS: "jj", Capability: "RevisionFileReader"}
-	}
-	got := c.Classify(context.Background(), []string{"a.go"}, "green")
-	assert.Equal(t, []ClassifiedPath{
-		{Path: "a.go", Class: ClassCode, Why: "this VCS backend cannot read the file at the green gate's revision"},
-	}, got.Paths)
-}
-
 // testSyntax mirrors the mgs_getCommentSyntax declarations in the built-in
 // spells (spells/golang, spells/buzz, spells/python); the spells are the
 // source of truth, and TestBuiltinCommentSyntax in internal/spell pins

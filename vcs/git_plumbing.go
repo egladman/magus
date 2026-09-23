@@ -3,13 +3,16 @@ package vcs
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/egladman/magus/types"
@@ -17,22 +20,57 @@ import (
 
 // The capabilities that combine revisions without a working copy, or in a checkout magus
 // owns: tree identity, tree merges, commits, secondary checkouts, fetch, push and bundles.
-// Every call here passes NoHooks, since no hook on the box belongs to that work, and every
-// revision argument is checked before git sees it.
+// Every call that writes is Isolated, since no hook or signing setting on the box belongs
+// to that work, and every argument is checked before git sees it. A git command that fails
+// reports as "git <subcommand>: ..."; an argument refused before git runs, as "vcs: ...".
 
-// scratchSeq numbers scratchRef's refs within this process.
-var scratchSeq atomic.Int64
+// scratchRetention is how old a scratch ref must be before any call may sweep it: far
+// longer than one fetch or bundle, so only a ref a crashed process left behind qualifies.
+const scratchRetention = 24 * time.Hour
 
-// scratchRef names a ref that is unique to this process and call, under refs/magus/<kind>/,
-// so concurrent calls, and a branch named like another's prefix, can never share one.
-func scratchRef(kind string) string {
-	return fmt.Sprintf("refs/magus/%s/%d-%d", kind, os.Getpid(), scratchSeq.Add(1))
+// scratchRef names a ref under refs/magus/<kind>/ that no other call, in this process or
+// another, can share: the mint time, the pid, and random bytes. The time is what lets
+// sweepScratchRefs judge a leftover without guessing.
+func scratchRef(kind string) (string, error) {
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("vcs: scratch ref: %w", err)
+	}
+	return fmt.Sprintf("refs/magus/%s/%d-%d-%s", kind, time.Now().Unix(), os.Getpid(), hex.EncodeToString(b[:])), nil
 }
 
 // dropScratchRef deletes a scratchRef whatever became of the caller's context, so a
 // cancelled call leaves no ref behind.
-func dropScratchRef(ctx context.Context, root, ref string) {
-	_, _ = gitOutput(context.WithoutCancel(ctx), root, gitOpts{NoHooks: true}, "update-ref", "-d", ref)
+func dropScratchRef(ctx context.Context, dir, ref string) error {
+	if _, err := gitOutput(context.WithoutCancel(ctx), dir, gitOpts{Isolated: true}, "update-ref", "-d", ref); err != nil {
+		return fmt.Errorf("git update-ref -d %s: %w", ref, err)
+	}
+	return nil
+}
+
+// sweepScratchRefs deletes the scratch refs of kind older than scratchRetention, which only
+// a process that died mid-call leaves. Each is deleted against the id it was listed at, so
+// a ref another process moved in between is left alone. It is housekeeping: a failure
+// costs the leftovers their cleanup and never the caller its work.
+func sweepScratchRefs(ctx context.Context, dir, kind string) {
+	prefix := "refs/magus/" + kind + "/"
+	listed, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref", "--format=%(refname) %(objectname)", prefix)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-scratchRetention)
+	for _, line := range splitLines([]byte(listed)) {
+		ref, id, ok := strings.Cut(line, " ")
+		if !ok {
+			continue
+		}
+		stamp, _, _ := strings.Cut(strings.TrimPrefix(ref, prefix), "-")
+		secs, err := strconv.ParseInt(stamp, 10, 64)
+		if err != nil || !time.Unix(secs, 0).Before(cutoff) {
+			continue
+		}
+		_, _ = gitOutput(ctx, dir, gitOpts{Isolated: true}, "update-ref", "-d", ref, id)
+	}
 }
 
 // TreeID implements types.TreeReporter.
@@ -52,17 +90,17 @@ func (v gitVCS) DiffTrees(ctx context.Context, root, a, b string) ([]string, err
 	if err := checkRequiredRev(a, b); err != nil {
 		return nil, err
 	}
-	return gitDiffTree(ctx, root, a, b)
+	return gitDiffTree(ctx, root, a, b, nil)
 }
 
 // MergeTrees implements types.TreeMerger with `merge-tree --write-tree`, which exits 1 when
 // the merge conflicts: an answer, read as one.
-func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) (types.MergeResult, error) {
+func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) (types.TreeMergeResult, error) {
 	if err := checkRequiredRev(m.Ours, m.Theirs); err != nil {
-		return types.MergeResult{}, err
+		return types.TreeMergeResult{}, err
 	}
 	if err := checkRev(m.Base); err != nil {
-		return types.MergeResult{}, err
+		return types.TreeMergeResult{}, err
 	}
 	args := []string{"merge-tree", "--write-tree", "--no-messages", "-z"}
 	if m.Base != "" {
@@ -70,15 +108,15 @@ func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) 
 	}
 	args = append(args, m.Ours, m.Theirs)
 	var stderr bytes.Buffer
-	cmd := gitExec(ctx, root, gitOpts{NoHooks: true}, args...)
+	cmd := gitExec(ctx, root, gitOpts{Isolated: true}, args...)
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
-	switch code := gitExitCode(err); {
+	switch code := exitCode(err); {
 	case err == nil, code == 1:
 	case code == 129:
-		return types.MergeResult{}, errors.New("vcs: git: merge-tree --write-tree needs git 2.40 or newer")
+		return types.TreeMergeResult{}, errors.New("git merge-tree --write-tree needs git 2.40 or newer")
 	default:
-		return types.MergeResult{}, fmt.Errorf("git merge-tree %s %s: %w: %s", m.Ours, m.Theirs, err, strings.TrimSpace(stderr.String()))
+		return types.TreeMergeResult{}, fmt.Errorf("git merge-tree %s %s: %w: %s", m.Ours, m.Theirs, err, strings.TrimSpace(stderr.String()))
 	}
 	return parseMergeTree(string(out))
 }
@@ -87,19 +125,19 @@ func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) 
 // "<mode> <object> <stage>\t<path>" record per conflicted index entry. Which stages a path
 // has classifies it: both sides (2 and 3) is a content conflict, the base alone is a
 // deletion on both sides, and anything else is one side deleting what the other changed.
-func parseMergeTree(out string) (types.MergeResult, error) {
+func parseMergeTree(out string) (types.TreeMergeResult, error) {
 	fields := splitNUL(out)
 	if len(fields) == 0 {
-		return types.MergeResult{}, errors.New("vcs: git merge-tree printed no tree")
+		return types.TreeMergeResult{}, errors.New("git merge-tree: printed no tree")
 	}
-	res := types.MergeResult{Tree: fields[0]}
+	res := types.TreeMergeResult{Tree: fields[0]}
 	stages := map[string][]byte{}
 	var order []string
 	for _, rec := range fields[1:] {
 		meta, path, ok := strings.Cut(rec, "\t")
 		parts := strings.Fields(meta)
 		if !ok || len(parts) != 3 || len(parts[2]) != 1 {
-			return types.MergeResult{}, fmt.Errorf("vcs: git merge-tree: unreadable conflict record %q", rec)
+			return types.TreeMergeResult{}, fmt.Errorf("git merge-tree: unreadable conflict record %q", rec)
 		}
 		if _, seen := stages[path]; !seen {
 			order = append(order, path)
@@ -120,8 +158,8 @@ func parseMergeTree(out string) (types.MergeResult, error) {
 	return res, nil
 }
 
-// CommitTree implements types.TreeMerger. The message goes on stdin, so no message can be
-// read as an option and none is cleaned up.
+// CommitTree implements types.CommitWriter. The message goes on stdin, so no message can
+// be read as an option and none is cleaned up.
 func (v gitVCS) CommitTree(ctx context.Context, root string, c types.TreeCommit) (string, error) {
 	if err := checkCommitID(c.Tree); err != nil {
 		return "", err
@@ -133,56 +171,62 @@ func (v gitVCS) CommitTree(ctx context.Context, root string, c types.TreeCommit)
 		}
 		args = append(args, "-p", p)
 	}
-	env, err := commitIdentity(c.Author, c.Committer, c.Date)
+	env, err := commitIdentity(c.CommitMeta)
 	if err != nil {
 		return "", err
 	}
 	args = append(args, "-F", "-")
-	id, err := gitOutput(ctx, root, gitOpts{NoHooks: true, Env: env, Stdin: []byte(c.Message)}, args...)
+	id, err := gitOutput(ctx, root, gitOpts{Isolated: true, Env: env, Stdin: []byte(c.Message)}, args...)
 	if err != nil {
 		return "", fmt.Errorf("git commit-tree: %w", err)
 	}
 	return id, nil
 }
 
-// commitIdentity is the environment that names a commit's author and committer, so a
-// commit never falls back to whoever configured the box. Both need a name and an email.
-func commitIdentity(author, committer types.Person, date time.Time) ([]string, error) {
+// commitIdentity is the environment that names a commit's author, committer and dates, so
+// a commit never falls back to whoever configured the box or to a date the environment
+// carries. Both people need a name and an email.
+func commitIdentity(d types.CommitMeta) ([]string, error) {
 	for _, p := range []struct {
 		role string
 		who  types.Person
-	}{{"author", author}, {"committer", committer}} {
+	}{{"author", d.Author}, {"committer", d.Committer}} {
 		if p.who.Name == "" || p.who.Email == "" {
 			return nil, fmt.Errorf("vcs: a commit needs a %s with a name and an email", p.role)
 		}
 	}
-	env := []string{
-		"GIT_AUTHOR_NAME=" + author.Name, "GIT_AUTHOR_EMAIL=" + author.Email,
-		"GIT_COMMITTER_NAME=" + committer.Name, "GIT_COMMITTER_EMAIL=" + committer.Email,
+	date := d.Date
+	if date.IsZero() {
+		date = time.Now()
 	}
-	if !date.IsZero() {
-		stamp := fmt.Sprintf("@%d %s", date.Unix(), date.Format("-0700"))
-		env = append(env, "GIT_AUTHOR_DATE="+stamp, "GIT_COMMITTER_DATE="+stamp)
-	}
-	return env, nil
+	stamp := fmt.Sprintf("@%d %s", date.Unix(), date.Format("-0700"))
+	return []string{
+		"GIT_AUTHOR_NAME=" + d.Author.Name, "GIT_AUTHOR_EMAIL=" + d.Author.Email,
+		"GIT_COMMITTER_NAME=" + d.Committer.Name, "GIT_COMMITTER_EMAIL=" + d.Committer.Email,
+		"GIT_AUTHOR_DATE=" + stamp, "GIT_COMMITTER_DATE=" + stamp,
+	}, nil
 }
 
-// Commit implements types.Committer. Paths are recorded literally, then `commit` runs with
-// the message verbatim from stdin and no hook, so the box's commit.cleanup, template and
-// hooks cannot change what is recorded.
-func (v gitVCS) Commit(ctx context.Context, root string, o types.CommitOptions) (string, error) {
-	env, err := commitIdentity(o.Author, o.Committer, o.Date)
+// Commit implements types.CommitWriter. Paths are recorded literally, then `commit` runs
+// with the message verbatim from stdin and no hook, so the box's commit.cleanup, template
+// and hooks cannot change what is recorded.
+func (v gitVCS) Commit(ctx context.Context, root string, c types.CheckoutCommit) (string, error) {
+	env, err := commitIdentity(c.CommitMeta)
 	if err != nil {
 		return "", err
 	}
-	if err := runGitBatched(ctx, root, []string{"add", "-A"}, o.Paths); err != nil {
+	if err := runGitBatched(ctx, root, []string{"add", "-A"}, c.Paths); err != nil {
 		return "", err
 	}
-	opts := gitOpts{NoHooks: true, Env: env, Stdin: []byte(o.Message)}
+	opts := gitOpts{Isolated: true, Env: env, Stdin: []byte(c.Message)}
 	if _, err := gitOutput(ctx, root, opts, "commit", "--quiet", "--no-verify", "--cleanup=verbatim", "-F", "-"); err != nil {
 		return "", fmt.Errorf("git commit: %w", err)
 	}
-	return gitOutput(ctx, root, gitOpts{}, "rev-parse", "--verify", "HEAD")
+	id, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+	}
+	return id, nil
 }
 
 // GeneratedPaths implements types.GeneratedPathReporter from the linguist-generated
@@ -205,9 +249,9 @@ func (v gitVCS) GeneratedPaths(ctx context.Context, root, rev string, paths []st
 		local = filepath.Join(root, local)
 	}
 	if _, err := os.Stat(local); err == nil {
-		return nil, fmt.Errorf("vcs: git: %s overrides the revision's attributes; remove it", local)
+		return nil, fmt.Errorf("vcs: %s overrides the revision's attributes; remove it", local)
 	}
-	opts := gitOpts{Env: []string{"GIT_ATTR_NOSYSTEM=1"}, Raw: true}
+	opts := gitOpts{Env: []string{"GIT_ATTR_NOSYSTEM=1"}, KeepLeadingSpace: true}
 	for _, chunk := range gitPathChunks(paths) {
 		opts.Stdin = []byte(strings.Join(chunk, "\x00") + "\x00")
 		out, err := gitOutput(ctx, root, opts, "-c", "core.attributesFile="+os.DevNull,
@@ -230,7 +274,26 @@ func (v gitVCS) GeneratedPaths(ctx context.Context, root, rev string, paths []st
 // own locking there is not built for contention.
 var worktreeAdmin sync.Mutex
 
-// CreateCheckout implements types.CheckoutCreator with a detached linked worktree.
+// checkoutLockReason is the lock reason CreateCheckout records on each worktree it adds.
+// It marks the checkouts CheckoutProvisioner manages, and the lock keeps `git worktree prune`
+// from dropping one whose directory went missing before RemoveCheckout ran.
+const checkoutLockReason = "magus checkout"
+
+// realPath resolves p's symlinks, resolving the nearest existing ancestor when p itself
+// does not exist yet, so a path is compared by where it really lands.
+func realPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	parent := filepath.Dir(p)
+	if parent == p {
+		return p
+	}
+	return filepath.Join(realPath(parent), filepath.Base(p))
+}
+
+// CreateCheckout implements types.CheckoutProvisioner with a detached linked worktree,
+// locked with checkoutLockReason.
 func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
 	if err := checkRequiredRev(rev); err != nil {
 		return err
@@ -241,71 +304,100 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error
 	if _, err := os.Lstat(dir); !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("vcs: checkout %s already exists", dir)
 	}
-	top, err := filepath.Abs(root)
-	if err != nil {
-		return err
-	}
-	if pathUnder(top, dir) {
-		return fmt.Errorf("vcs: checkout %s lies inside %s, where discovery would index it as a copy of the workspace", dir, top)
+	if pathUnder(realPath(root), realPath(dir)) {
+		return fmt.Errorf("vcs: checkout %s lies inside %s, where discovery would index it as a copy of the workspace", dir, root)
 	}
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
-	if _, err := gitOutput(ctx, root, gitOpts{NoHooks: true}, "worktree", "add", "--quiet", "--detach", "--", dir, rev); err != nil {
+	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "worktree", "add", "--quiet", "--detach",
+		"--lock", "--reason", checkoutLockReason, "--", dir, rev); err != nil {
 		return fmt.Errorf("git worktree add %s: %w", dir, err)
 	}
 	return nil
 }
 
-// RemoveCheckout implements types.CheckoutCreator. --force removes a checkout with changes
-// in it, and drops the registration of one whose directory is already gone.
+// RemoveCheckout implements types.CheckoutProvisioner. The doubled --force removes a
+// locked worktree, one with changes in it, and the registration of one whose directory is
+// gone.
 func (v gitVCS) RemoveCheckout(ctx context.Context, root, dir string) error {
 	if !filepath.IsAbs(dir) {
 		return fmt.Errorf("vcs: checkout %q is not an absolute path", dir)
 	}
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
-	if _, err := gitOutput(ctx, root, gitOpts{NoHooks: true}, "worktree", "remove", "--force", "--", dir); err != nil {
+	owned, err := gitCheckouts(ctx, root)
+	if err != nil {
+		return err
+	}
+	registered, ok := owned[realPath(dir)]
+	if !ok {
+		return fmt.Errorf("vcs: %s is not a checkout CreateCheckout made", dir)
+	}
+	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "worktree", "remove", "--force", "--force", "--", registered); err != nil {
 		return fmt.Errorf("git worktree remove %s: %w", dir, err)
 	}
 	return nil
 }
 
-// Checkouts implements types.CheckoutCreator. The first record `worktree list` prints is
-// the main checkout, which is not a secondary one.
+// Checkouts implements types.CheckoutProvisioner.
 func (v gitVCS) Checkouts(ctx context.Context, root string) ([]string, error) {
-	out, err := gitOutput(ctx, root, gitOpts{Raw: true}, "worktree", "list", "--porcelain", "-z")
+	owned, err := gitCheckouts(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(owned))
+	for real := range owned {
+		out = append(out, real)
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// gitCheckouts maps each worktree CreateCheckout made, by its resolved path, to the path
+// git registered it under. `worktree list --porcelain -z` is records of NUL-terminated
+// attribute lines, each record ending in an empty one.
+func gitCheckouts(ctx context.Context, root string) (map[string]string, error) {
+	out, err := gitOutput(ctx, root, gitOpts{KeepLeadingSpace: true}, "worktree", "list", "--porcelain", "-z")
 	if err != nil {
 		return nil, fmt.Errorf("git worktree list: %w", err)
 	}
-	var dirs []string
-	for _, f := range splitNUL(out) {
-		if dir, ok := strings.CutPrefix(f, "worktree "); ok {
-			dirs = append(dirs, dir)
+	owned := map[string]string{}
+	path := ""
+	for _, line := range strings.Split(out, "\x00") {
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			path = strings.TrimPrefix(line, "worktree ")
+		case line == "locked "+checkoutLockReason && path != "":
+			owned[realPath(path)] = path
+		case line == "":
+			path = ""
 		}
 	}
-	if len(dirs) == 0 {
-		return nil, nil
-	}
-	return dirs[1:], nil
+	return owned, nil
 }
 
-// FetchBranch implements types.RevisionFetcher.
-func (v gitVCS) FetchBranch(ctx context.Context, root, remote, branch string) (string, error) {
+// checkConfiguredRemote refuses a remote name the repository has not configured. git
+// reads an unconfigured name as a path or URL, so without this "evil" would fetch from
+// ./evil.
+func checkConfiguredRemote(ctx context.Context, dir, remote string) error {
 	if err := checkRemoteName(remote); err != nil {
-		return "", err
+		return err
 	}
-	if err := checkBranchName(branch); err != nil {
-		return "", err
+	if _, err := gitOutput(ctx, dir, gitOpts{}, "config", "--get", "remote."+remote+".url"); err != nil {
+		if exitCode(err) == 1 {
+			return fmt.Errorf("vcs: %q is not a remote this repository has configured", remote)
+		}
+		return fmt.Errorf("git config remote.%s.url: %w", remote, err)
 	}
-	return fetchCommit(ctx, root, remote, "refs/heads/"+branch)
+	return nil
 }
 
 // FetchRef implements types.RevisionFetcher.
 func (v gitVCS) FetchRef(ctx context.Context, root, remote, ref string) (string, error) {
-	if err := checkRemoteName(remote); err != nil {
+	if err := checkRefName(ref); err != nil {
 		return "", err
 	}
-	if err := checkRefName(ref); err != nil {
+	if err := checkConfiguredRemote(ctx, root, remote); err != nil {
 		return "", err
 	}
 	return fetchCommit(ctx, root, remote, ref)
@@ -313,10 +405,10 @@ func (v gitVCS) FetchRef(ctx context.Context, root, remote, ref string) (string,
 
 // FetchCommit implements types.RevisionFetcher.
 func (v gitVCS) FetchCommit(ctx context.Context, root, remote, id string) error {
-	if err := checkRemoteName(remote); err != nil {
+	if err := checkCommitID(id); err != nil {
 		return err
 	}
-	if err := checkCommitID(id); err != nil {
+	if err := checkConfiguredRemote(ctx, root, remote); err != nil {
 		return err
 	}
 	if _, err := gitOutput(ctx, root, gitOpts{}, "cat-file", "-e", "--end-of-options", id+"^{commit}"); err == nil {
@@ -327,7 +419,7 @@ func (v gitVCS) FetchCommit(ctx context.Context, root, remote, id string) error 
 		return err
 	}
 	if got != id {
-		return fmt.Errorf("vcs: git: fetching %s from %s produced %s", id, remote, got)
+		return fmt.Errorf("git fetch %s %s: produced %s", remote, id, got)
 	}
 	return nil
 }
@@ -337,15 +429,19 @@ func (v gitVCS) FetchCommit(ctx context.Context, root, remote, id string) error 
 // remote-tracking update git otherwise makes when src matches remote.<name>.fetch, so no
 // ref the user reads moves. The fetched commit rests on gc's prune grace, two weeks by
 // default, which outlasts any caller that goes on to anchor it.
-func fetchCommit(ctx context.Context, root, remote, src string) (string, error) {
-	tmp := scratchRef("fetch")
-	defer dropScratchRef(ctx, root, tmp)
-	if _, err := gitOutput(ctx, root, gitOpts{NoHooks: true}, "fetch", "--quiet", "--no-tags",
+func fetchCommit(ctx context.Context, dir, remote, src string) (id string, err error) {
+	sweepScratchRefs(ctx, dir, "fetch")
+	tmp, err := scratchRef("fetch")
+	if err != nil {
+		return "", err
+	}
+	if _, err := gitOutput(ctx, dir, gitOpts{Isolated: true}, "fetch", "--quiet", "--no-tags",
 		"--no-write-fetch-head", "--no-recurse-submodules", "--no-auto-maintenance", "--refmap=",
 		"--", remote, "+"+src+":"+tmp); err != nil {
 		return "", fmt.Errorf("git fetch %s %s: %w", remote, src, err)
 	}
-	id, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--verify", "--end-of-options", tmp+"^{commit}")
+	defer func() { err = errors.Join(err, dropScratchRef(ctx, dir, tmp)) }()
+	id, err = gitOutput(ctx, dir, gitOpts{}, "rev-parse", "--verify", "--end-of-options", tmp+"^{commit}")
 	if err != nil {
 		return "", fmt.Errorf("git fetch %s %s: %s names no commit: %w", remote, src, src, err)
 	}
@@ -353,74 +449,91 @@ func fetchCommit(ctx context.Context, root, remote, src string) (string, error) 
 }
 
 // Push implements types.Pusher. Each refused ref is read from --porcelain's "!" line,
-// "<flag>\t<from>:<to>\t<summary> (<reason>)", never from stderr's prose: a lease that no
-// longer holds is "stale info", and every other refusal is the remote's own.
-func (v gitVCS) Push(ctx context.Context, root, remote, ref, id, expected string) error {
-	if err := checkRemoteName(remote); err != nil {
+// never from stderr's prose.
+func (v gitVCS) Push(ctx context.Context, root string, p types.PushLease) error {
+	if err := checkRefName(p.Ref); err != nil {
 		return err
 	}
-	if err := checkRefName(ref); err != nil {
+	if err := checkCommitID(p.To); err != nil {
 		return err
 	}
-	if err := checkCommitID(id); err != nil {
+	if err := checkCommitID(p.Expected); err != nil {
 		return err
 	}
-	if err := checkCommitID(expected); err != nil {
+	if err := checkConfiguredRemote(ctx, root, p.Remote); err != nil {
 		return err
 	}
 	var stderr bytes.Buffer
-	cmd := gitExec(ctx, root, gitOpts{NoHooks: true}, "-c", "push.gpgSign=false",
-		"push", "--quiet", "--porcelain", "--no-verify", "--no-follow-tags",
-		"--force-with-lease="+ref+":"+expected, "--", remote, id+":"+ref)
+	cmd := gitExec(ctx, root, gitOpts{Isolated: true}, "push", "--quiet", "--porcelain", "--no-verify",
+		"--no-follow-tags", "--recurse-submodules=no", "--force-with-lease="+p.Ref+":"+p.Expected,
+		"--", p.Remote, p.To+":"+p.Ref)
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err == nil {
 		return nil
 	}
-	if reason, ok := pushRefusal(string(out), ref); ok {
-		if reason == "stale info" {
-			return types.ErrPushLease
-		}
-		return &types.PushRejectedError{Ref: ref, Reason: reason}
+	if refused := pushRefusal(string(out), p.Ref); refused != nil {
+		return refused
 	}
-	return fmt.Errorf("git push %s %s: %w: %s", remote, ref, err, strings.TrimSpace(stderr.String()))
+	return fmt.Errorf("git push %s %s: %w: %s", p.Remote, p.Ref, err, strings.TrimSpace(stderr.String()))
 }
 
-// pushRefusal finds ref's "!" line in `push --porcelain` output and returns the reason in
-// its trailing parentheses, or the summary when there is none.
-func pushRefusal(out, ref string) (string, bool) {
+// staleLeaseReasons are the refusals that mean the ref was not where the lease expected:
+// git's own check before sending ("stale info"), and the remote's under a race it lost
+// ("cannot lock ref", "failed to update ref", "incorrect old value provided").
+var staleLeaseReasons = []string{"stale info", "cannot lock ref", "failed to update ref", "incorrect old value provided"}
+
+// pushRefusal reads ref's "!" line in `push --porcelain` output,
+// "<flag>\t<from>:<to>\t<summary> (<reason>)", as ErrStaleLease or a *PushRejectedError
+// carrying the reason, or the summary when there is none. nil means no such line.
+func pushRefusal(out, ref string) error {
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.SplitN(line, "\t", 3)
 		if len(fields) != 3 || fields[0] != "!" || !strings.HasSuffix(fields[1], ":"+ref) {
 			continue
 		}
-		summary := strings.TrimSpace(fields[2])
-		if open := strings.LastIndex(summary, " ("); open >= 0 && strings.HasSuffix(summary, ")") {
-			return summary[open+2 : len(summary)-1], true
+		reason := strings.TrimSpace(fields[2])
+		if open := strings.LastIndex(reason, " ("); open >= 0 && strings.HasSuffix(reason, ")") {
+			reason = reason[open+2 : len(reason)-1]
 		}
-		return summary, true
+		for _, stale := range staleLeaseReasons {
+			if strings.Contains(reason, stale) {
+				return types.ErrStaleLease
+			}
+		}
+		return &types.PushRejectedError{Ref: ref, Reason: reason}
 	}
-	return "", false
+	return nil
 }
 
-// Bundle implements types.Bundler. A bundle carries refs, not bare commits, so rev rides
-// under a scratch ref that is gone when Bundle returns.
-func (v gitVCS) Bundle(ctx context.Context, root, file, exclude, rev string) error {
-	if err := checkCommitID(exclude); err != nil {
+// Bundle implements types.Bundler. A bundle carries refs, not bare commits, so r.Head
+// rides under a scratch ref that is gone when Bundle returns.
+func (v gitVCS) Bundle(ctx context.Context, root, file string, r types.BundleRange) (err error) {
+	if err := checkCommitID(r.Head); err != nil {
 		return err
 	}
-	if err := checkCommitID(rev); err != nil {
-		return err
+	if r.Base != "" {
+		if err := checkCommitID(r.Base); err != nil {
+			return err
+		}
 	}
 	if !filepath.IsAbs(file) {
 		return fmt.Errorf("vcs: bundle %q is not an absolute path", file)
 	}
-	tmp := scratchRef("bundle")
-	if _, err := gitOutput(ctx, root, gitOpts{NoHooks: true}, "update-ref", tmp, rev); err != nil {
+	sweepScratchRefs(ctx, root, "bundle")
+	tmp, err := scratchRef("bundle")
+	if err != nil {
+		return err
+	}
+	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "update-ref", tmp, r.Head); err != nil {
 		return fmt.Errorf("git update-ref %s: %w", tmp, err)
 	}
-	defer dropScratchRef(ctx, root, tmp)
-	if _, err := gitOutput(ctx, root, gitOpts{}, "bundle", "create", "--quiet", file, tmp, "^"+exclude); err != nil {
+	defer func() { err = errors.Join(err, dropScratchRef(ctx, root, tmp)) }()
+	args := []string{"bundle", "create", "--quiet", file, tmp}
+	if r.Base != "" {
+		args = append(args, "^"+r.Base)
+	}
+	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, args...); err != nil {
 		return fmt.Errorf("git bundle create %s: %w", file, err)
 	}
 	return nil
@@ -435,7 +548,7 @@ func (v gitVCS) Unbundle(ctx context.Context, root, file string) error {
 	if _, err := gitOutput(ctx, root, gitOpts{}, "bundle", "verify", "--quiet", file); err != nil {
 		return fmt.Errorf("git bundle verify %s: %w", file, err)
 	}
-	if _, err := gitOutput(ctx, root, gitOpts{}, "bundle", "unbundle", file); err != nil {
+	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "bundle", "unbundle", file); err != nil {
 		return fmt.Errorf("git bundle unbundle %s: %w", file, err)
 	}
 	return nil

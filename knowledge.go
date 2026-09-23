@@ -925,10 +925,6 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *
 		return nil
 	}
 	changes, err := res.VCS.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		log.DebugContext(ctx, "knowledge: vcs backend cannot report per-commit files, skipping", slog.String("vcs", res.Name))
-		return nil
-	}
 	if err != nil {
 		log.WarnContext(ctx, "knowledge: vcs history scan failed, skipping", slog.String("error", err.Error()))
 		return nil

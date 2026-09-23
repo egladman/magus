@@ -2,274 +2,228 @@ package vcs
 
 import (
 	"context"
+	"time"
 
 	"github.com/egladman/magus/types"
 )
 
-// The capabilities hg, sl and jj decline, in one place so the matrix reads at a glance;
-// TestParityCapabilityMatrix pins it. Each stub refuses before looking at its arguments,
-// so asking costs nothing.
+// backendName names the backend a declines answers for, so a zero-value driver still
+// refuses in its own name.
+type backendName interface{ name() string }
 
-func unsupported(v types.VCSDriver, capability string) error {
-	return &types.UnsupportedError{VCS: v.Name(), Capability: capability}
+type (
+	hgName      struct{}
+	saplingName struct{}
+	jjName      struct{}
+)
+
+func (hgName) name() string      { return "hg" }
+func (saplingName) name() string { return "sl" }
+func (jjName) name() string      { return "jj" }
+
+// declines answers every capability with a *types.VCSUnsupportedError naming backend N.
+// hg, sl and jj embed it and override what they implement; git implements everything and
+// does not embed it. TestParityCapabilityMatrix pins what each still declines, so an
+// embed that hides a missing implementation fails there.
+//
+// Why each backend declines what it does:
+//
+//   - jj, MergeDriverInstaller: its merge-tools config selects one tool for the whole
+//     repository, with no per-path key (checked against `jj config list
+//     --include-defaults`), so registering magus would route every conflicted file
+//     through it. ConflictResolver settles a jj workspace with no driver at all.
+//   - jj, the hook installers: jj has no native hooks, and `jj git push` passes
+//     --no-verify, so not even git's hooks under a colocated workspace would fire.
+//   - jj, PushStatusReporter: hg and Sapling answer from a phase recorded on the commit;
+//     jj records no such fact.
+//   - jj, IgnoredFileReporter: no query over its ignore RULES; see jjVCS.IgnoredPaths.
+//   - jj, BranchChangeReporter: its working-copy commit is usually anonymous, so every
+//     bookmark, the reader's own included, would report as another line of work.
+//   - jj, Bisector: jj has no bisect command.
+//   - hg and sl, RegenHookInstaller and BranchChangeReporter: not built yet, though their
+//     hooks and revsets could answer.
+//   - hg, sl and jj, the capabilities that combine revisions without a checkout: git's
+//     alone so far, though hg and Sapling have bundles, shares and commit, and jj has
+//     workspaces.
+type declines[N backendName] struct{}
+
+func decline[N backendName](c types.VCSCapability) error {
+	var n N
+	return &types.VCSUnsupportedError{VCS: n.name(), Capability: c}
 }
 
-// jj: MergeDriverInstaller takes the workspace's declared output GLOBS, and jj has nowhere
-// to put them: its merge-tools config selects one tool for the whole repository, with no
-// per-path key (checked against `jj config list --include-defaults`), so registering magus
-// would route every conflicted file through it. jj's path is the bulk one instead:
-// ConflictResolver settles a jj workspace with no driver at all.
-
-func (v jjVCS) InstallMergeDriver(context.Context, string, []string) error {
-	return unsupported(v, "MergeDriverInstaller")
+func (declines[N]) Bisect(context.Context, string, types.BisectOptions) (types.Culprit, error) {
+	return types.Culprit{}, decline[N](types.CapBisector)
 }
 
-func (v jjVCS) CheckMergeDriver(context.Context, string) (bool, error) {
-	return false, unsupported(v, "MergeDriverInstaller")
+func (declines[N]) InstallMergeDriver(context.Context, string, []string) error {
+	return decline[N](types.CapMergeDriverInstaller)
 }
 
-func (v jjVCS) EnsureMergeDriver(context.Context, string, []string) (bool, error) {
-	return false, unsupported(v, "MergeDriverInstaller")
+func (declines[N]) CheckMergeDriver(context.Context, string) (bool, error) {
+	return false, decline[N](types.CapMergeDriverInstaller)
 }
 
-// jj has no native hooks, and `jj git push` passes --no-verify deliberately, so not even
-// git's hooks under a colocated workspace would fire. With no merge driver, nothing is
-// owed that a regeneration hook would settle.
-
-func (v jjVCS) InstallRefreshHook(context.Context, string, string) ([]string, error) {
-	return nil, unsupported(v, "RefreshHookInstaller")
+func (declines[N]) EnsureMergeDriver(context.Context, string, []string) (bool, error) {
+	return false, decline[N](types.CapMergeDriverInstaller)
 }
 
-func (v jjVCS) InstallDriftHook(context.Context, string, string) ([]string, error) {
-	return nil, unsupported(v, "DriftHookInstaller")
+func (declines[N]) MergeDriverCommand(context.Context, string) (string, error) {
+	return "", decline[N](types.CapMergeDriverInstaller)
 }
 
-func (v jjVCS) InstallRegenHook(context.Context, string, string) ([]string, error) {
-	return nil, unsupported(v, "RegenHookInstaller")
+func (declines[N]) InstallRefreshHook(context.Context, string, string) ([]string, error) {
+	return nil, decline[N](types.CapRefreshHookInstaller)
 }
 
-// CommitPushed: hg and Sapling answer from a phase recorded on the commit; jj records no
-// such fact, and asking whether a bookmark's `@<remote>` ref reaches the commit answers
-// only for a git-backed repository.
-func (v jjVCS) CommitPushed(context.Context, string, string) (bool, bool, error) {
-	return false, false, unsupported(v, "PushStatusReporter")
+func (declines[N]) InstallDriftHook(context.Context, string, string) ([]string, error) {
+	return nil, decline[N](types.CapDriftHookInstaller)
 }
 
-// IgnoredFiles: jj exposes no query over its ignore RULES; see jjVCS.IgnoredPaths.
-func (v jjVCS) IgnoredFiles(context.Context, string, []string) ([]string, error) {
-	return nil, unsupported(v, "IgnoredFileReporter")
+func (declines[N]) InstallRegenHook(context.Context, string, string) ([]string, error) {
+	return nil, decline[N](types.CapRegenHookInstaller)
 }
 
-// BranchChanges excludes "the branch this checkout is on", and jj's working-copy commit is
-// usually anonymous, so every bookmark would report as another line of work, the reader's
-// own included.
-func (v jjVCS) BranchChanges(context.Context, string, string, int) ([]types.BranchChange, error) {
-	return nil, unsupported(v, "BranchChangeReporter")
+func (declines[N]) RemoteURL(context.Context, string, string) (string, error) {
+	return "", decline[N](types.CapRemoteReporter)
 }
 
-// Not yet implemented for hg and sl, though both could be: their hooks and their revsets
-// cover the ground.
-
-func (v hgVCS) InstallRegenHook(context.Context, string, string) ([]string, error) {
-	return nil, unsupported(v, "RegenHookInstaller")
+func (declines[N]) ConfiguredRemote(string) (string, error) {
+	return "", decline[N](types.CapRemoteConfigReporter)
 }
 
-func (v saplingVCS) InstallRegenHook(context.Context, string, string) ([]string, error) {
-	return nil, unsupported(v, "RegenHookInstaller")
+func (declines[N]) DefaultRef(context.Context, string) (string, error) {
+	return "", decline[N](types.CapDefaultRefReporter)
 }
 
-func (v hgVCS) BranchChanges(context.Context, string, string, int) ([]types.BranchChange, error) {
-	return nil, unsupported(v, "BranchChangeReporter")
+func (declines[N]) CommitPushed(context.Context, string, string) (bool, bool, error) {
+	return false, false, decline[N](types.CapPushStatusReporter)
 }
 
-func (v saplingVCS) BranchChanges(context.Context, string, string, int) ([]types.BranchChange, error) {
-	return nil, unsupported(v, "BranchChangeReporter")
+func (declines[N]) RevTime(context.Context, string, string) (time.Time, bool, error) {
+	return time.Time{}, false, decline[N](types.CapRevTimeReporter)
 }
 
-// The capabilities a merge queue runs on are git's alone so far: hg and Sapling have
-// bundles, shares and commit, and jj has workspaces, but none is implemented.
-
-func (v hgVCS) TreeID(context.Context, string, string) (string, error) {
-	return "", unsupported(v, "TreeReporter")
+func (declines[N]) TrackedFiles(context.Context, string, []string) ([]string, error) {
+	return nil, decline[N](types.CapTrackedFileReporter)
 }
 
-func (v hgVCS) DiffTrees(context.Context, string, string, string) ([]string, error) {
-	return nil, unsupported(v, "TreeReporter")
+func (declines[N]) IgnoredFiles(context.Context, string, []string) ([]string, error) {
+	return nil, decline[N](types.CapIgnoredFileReporter)
 }
 
-func (v hgVCS) MergeTrees(context.Context, string, types.TreeMerge) (types.MergeResult, error) {
-	return types.MergeResult{}, unsupported(v, "TreeMerger")
+func (declines[N]) ChangesByCommit(context.Context, string, int, string) ([]types.CommitChange, error) {
+	return nil, decline[N](types.CapChurnReporter)
 }
 
-func (v hgVCS) CommitTree(context.Context, string, types.TreeCommit) (string, error) {
-	return "", unsupported(v, "TreeMerger")
+func (declines[N]) BranchChanges(context.Context, string, string, int) ([]types.BranchChange, error) {
+	return nil, decline[N](types.CapBranchChangeReporter)
 }
 
-func (v hgVCS) GeneratedPaths(context.Context, string, string, []string) (map[string]bool, error) {
-	return nil, unsupported(v, "GeneratedPathReporter")
+func (declines[N]) RangeDiff(context.Context, string, string, string, []string) (string, error) {
+	return "", decline[N](types.CapRangeReporter)
 }
 
-func (v hgVCS) CreateCheckout(context.Context, string, string, string) error {
-	return unsupported(v, "CheckoutCreator")
+func (declines[N]) RangeFiles(context.Context, string, string, string, []string) ([]string, error) {
+	return nil, decline[N](types.CapRangeReporter)
 }
 
-func (v hgVCS) RemoveCheckout(context.Context, string, string) error {
-	return unsupported(v, "CheckoutCreator")
+func (declines[N]) RangeCommits(context.Context, string, string, string, []string) ([]types.Commit, error) {
+	return nil, decline[N](types.CapRangeReporter)
 }
 
-func (v hgVCS) Checkouts(context.Context, string) ([]string, error) {
-	return nil, unsupported(v, "CheckoutCreator")
+func (declines[N]) IsAncestor(context.Context, string, string, string) (bool, error) {
+	return false, decline[N](types.CapAncestryReporter)
 }
 
-func (v hgVCS) Commit(context.Context, string, types.CommitOptions) (string, error) {
-	return "", unsupported(v, "Committer")
+func (declines[N]) Conflicts(context.Context, string) ([]types.Conflict, error) {
+	return nil, decline[N](types.CapConflictResolver)
 }
 
-func (v hgVCS) FetchBranch(context.Context, string, string, string) (string, error) {
-	return "", unsupported(v, "RevisionFetcher")
+func (declines[N]) KeepIncoming(context.Context, string, []string) error {
+	return decline[N](types.CapConflictResolver)
 }
 
-func (v hgVCS) FetchRef(context.Context, string, string, string) (string, error) {
-	return "", unsupported(v, "RevisionFetcher")
+func (declines[N]) MarkResolved(context.Context, string, []string) error {
+	return decline[N](types.CapConflictResolver)
 }
 
-func (v hgVCS) FetchCommit(context.Context, string, string, string) error {
-	return unsupported(v, "RevisionFetcher")
+func (declines[N]) RemoveConflicts(context.Context, string, []string) error {
+	return decline[N](types.CapConflictResolver)
 }
 
-func (v hgVCS) Push(context.Context, string, string, string, string, string) error {
-	return unsupported(v, "Pusher")
+func (declines[N]) IgnoredPaths(context.Context, string, []string) (map[string]bool, error) {
+	return nil, decline[N](types.CapConflictResolver)
 }
 
-func (v hgVCS) Bundle(context.Context, string, string, string, string) error {
-	return unsupported(v, "Bundler")
+func (declines[N]) ReadFileAt(context.Context, string, string, string) (string, error) {
+	return "", decline[N](types.CapRevisionFileReader)
 }
 
-func (v hgVCS) Unbundle(context.Context, string, string) error {
-	return unsupported(v, "Bundler")
+func (declines[N]) ExportRevision(context.Context, string, string, string) error {
+	return decline[N](types.CapRevisionExporter)
 }
 
-func (v saplingVCS) TreeID(context.Context, string, string) (string, error) {
-	return "", unsupported(v, "TreeReporter")
+func (declines[N]) StartMerge(context.Context, string, string) error {
+	return decline[N](types.CapMergeStarter)
 }
 
-func (v saplingVCS) DiffTrees(context.Context, string, string, string) ([]string, error) {
-	return nil, unsupported(v, "TreeReporter")
+func (declines[N]) AbortMerge(context.Context, string) error {
+	return decline[N](types.CapMergeStarter)
 }
 
-func (v saplingVCS) MergeTrees(context.Context, string, types.TreeMerge) (types.MergeResult, error) {
-	return types.MergeResult{}, unsupported(v, "TreeMerger")
+func (declines[N]) Commit(context.Context, string, types.CheckoutCommit) (string, error) {
+	return "", decline[N](types.CapCommitWriter)
 }
 
-func (v saplingVCS) CommitTree(context.Context, string, types.TreeCommit) (string, error) {
-	return "", unsupported(v, "TreeMerger")
+func (declines[N]) CommitTree(context.Context, string, types.TreeCommit) (string, error) {
+	return "", decline[N](types.CapCommitWriter)
 }
 
-func (v saplingVCS) GeneratedPaths(context.Context, string, string, []string) (map[string]bool, error) {
-	return nil, unsupported(v, "GeneratedPathReporter")
+func (declines[N]) TreeID(context.Context, string, string) (string, error) {
+	return "", decline[N](types.CapTreeReporter)
 }
 
-func (v saplingVCS) CreateCheckout(context.Context, string, string, string) error {
-	return unsupported(v, "CheckoutCreator")
+func (declines[N]) DiffTrees(context.Context, string, string, string) ([]string, error) {
+	return nil, decline[N](types.CapTreeReporter)
 }
 
-func (v saplingVCS) RemoveCheckout(context.Context, string, string) error {
-	return unsupported(v, "CheckoutCreator")
+func (declines[N]) MergeTrees(context.Context, string, types.TreeMerge) (types.TreeMergeResult, error) {
+	return types.TreeMergeResult{}, decline[N](types.CapTreeMerger)
 }
 
-func (v saplingVCS) Checkouts(context.Context, string) ([]string, error) {
-	return nil, unsupported(v, "CheckoutCreator")
+func (declines[N]) GeneratedPaths(context.Context, string, string, []string) (map[string]bool, error) {
+	return nil, decline[N](types.CapGeneratedPathReporter)
 }
 
-func (v saplingVCS) Commit(context.Context, string, types.CommitOptions) (string, error) {
-	return "", unsupported(v, "Committer")
+func (declines[N]) CreateCheckout(context.Context, string, string, string) error {
+	return decline[N](types.CapCheckoutProvisioner)
 }
 
-func (v saplingVCS) FetchBranch(context.Context, string, string, string) (string, error) {
-	return "", unsupported(v, "RevisionFetcher")
+func (declines[N]) RemoveCheckout(context.Context, string, string) error {
+	return decline[N](types.CapCheckoutProvisioner)
 }
 
-func (v saplingVCS) FetchRef(context.Context, string, string, string) (string, error) {
-	return "", unsupported(v, "RevisionFetcher")
+func (declines[N]) Checkouts(context.Context, string) ([]string, error) {
+	return nil, decline[N](types.CapCheckoutProvisioner)
 }
 
-func (v saplingVCS) FetchCommit(context.Context, string, string, string) error {
-	return unsupported(v, "RevisionFetcher")
+func (declines[N]) FetchRef(context.Context, string, string, string) (string, error) {
+	return "", decline[N](types.CapRevisionFetcher)
 }
 
-func (v saplingVCS) Push(context.Context, string, string, string, string, string) error {
-	return unsupported(v, "Pusher")
+func (declines[N]) FetchCommit(context.Context, string, string, string) error {
+	return decline[N](types.CapRevisionFetcher)
 }
 
-func (v saplingVCS) Bundle(context.Context, string, string, string, string) error {
-	return unsupported(v, "Bundler")
+func (declines[N]) Push(context.Context, string, types.PushLease) error {
+	return decline[N](types.CapPusher)
 }
 
-func (v saplingVCS) Unbundle(context.Context, string, string) error {
-	return unsupported(v, "Bundler")
+func (declines[N]) Bundle(context.Context, string, string, types.BundleRange) error {
+	return decline[N](types.CapBundler)
 }
 
-func (v jjVCS) TreeID(context.Context, string, string) (string, error) {
-	return "", unsupported(v, "TreeReporter")
-}
-
-func (v jjVCS) DiffTrees(context.Context, string, string, string) ([]string, error) {
-	return nil, unsupported(v, "TreeReporter")
-}
-
-func (v jjVCS) MergeTrees(context.Context, string, types.TreeMerge) (types.MergeResult, error) {
-	return types.MergeResult{}, unsupported(v, "TreeMerger")
-}
-
-func (v jjVCS) CommitTree(context.Context, string, types.TreeCommit) (string, error) {
-	return "", unsupported(v, "TreeMerger")
-}
-
-func (v jjVCS) GeneratedPaths(context.Context, string, string, []string) (map[string]bool, error) {
-	return nil, unsupported(v, "GeneratedPathReporter")
-}
-
-func (v jjVCS) CreateCheckout(context.Context, string, string, string) error {
-	return unsupported(v, "CheckoutCreator")
-}
-
-func (v jjVCS) RemoveCheckout(context.Context, string, string) error {
-	return unsupported(v, "CheckoutCreator")
-}
-
-func (v jjVCS) Checkouts(context.Context, string) ([]string, error) {
-	return nil, unsupported(v, "CheckoutCreator")
-}
-
-func (v jjVCS) Commit(context.Context, string, types.CommitOptions) (string, error) {
-	return "", unsupported(v, "Committer")
-}
-
-func (v jjVCS) FetchBranch(context.Context, string, string, string) (string, error) {
-	return "", unsupported(v, "RevisionFetcher")
-}
-
-func (v jjVCS) FetchRef(context.Context, string, string, string) (string, error) {
-	return "", unsupported(v, "RevisionFetcher")
-}
-
-func (v jjVCS) FetchCommit(context.Context, string, string, string) error {
-	return unsupported(v, "RevisionFetcher")
-}
-
-func (v jjVCS) Push(context.Context, string, string, string, string, string) error {
-	return unsupported(v, "Pusher")
-}
-
-func (v jjVCS) Bundle(context.Context, string, string, string, string) error {
-	return unsupported(v, "Bundler")
-}
-
-func (v jjVCS) Unbundle(context.Context, string, string) error {
-	return unsupported(v, "Bundler")
-}
-
-// jj has no bisect command of its own.
-func (v jjVCS) Bisect(context.Context, string, types.BisectOptions) (types.Culprit, error) {
-	return types.Culprit{}, unsupported(v, "Bisect")
+func (declines[N]) Unbundle(context.Context, string, string) error {
+	return decline[N](types.CapBundler)
 }

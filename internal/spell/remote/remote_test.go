@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -435,6 +436,20 @@ func TestReadProvenanceHonorsSourceDateEpoch(t *testing.T) {
 	t.Setenv("SOURCE_DATE_EPOCH", "yesterday")
 	_, err = ReadProvenance(t.Context(), fixedCommit{ID: "abc"}, "/src/spells/x")
 	require.ErrorContains(t, err, "SOURCE_DATE_EPOCH")
+}
+
+// brokenRemote is a checkout whose remote could not be read at all.
+type brokenRemote struct{ fixedCommit }
+
+func (brokenRemote) RemoteURL(context.Context, string, string) (string, error) {
+	return "", errors.New("hg paths default: signal: killed")
+}
+
+// Only "no remote configured" leaves the source empty. A remote that could not be read is
+// an error, or the published provenance silently loses its source link.
+func TestReadProvenanceSurfacesAFailedRemoteRead(t *testing.T) {
+	_, err := ReadProvenance(t.Context(), brokenRemote{fixedCommit{ID: "abc"}}, "/src/spells/x")
+	require.ErrorContains(t, err, "signal: killed")
 }
 
 func TestSourceURL(t *testing.T) {

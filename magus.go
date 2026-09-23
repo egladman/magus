@@ -938,13 +938,7 @@ func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string
 				"this workspace has version control disabled, so there is no revision range to read"),
 			types.ErrVCSUnsupported)
 	}
-	out, err := res.VCS.RangeDiff(ctx, m.ws.Root, base, head, paths)
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return "", fmt.Errorf("%w: %w",
-			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not diff a revision range", res.Name),
-			err)
-	}
-	return out, err
+	return res.VCS.RangeDiff(ctx, m.ws.Root, base, head, paths)
 }
 
 // RevisionCheckpoint resolves a revision expression to the checkpoint that names it.
@@ -982,13 +976,7 @@ func (m *Magus) FileAt(ctx context.Context, rev, path string) (string, error) {
 				"this workspace has version control disabled, so there is no revision to read %s at", path),
 			types.ErrVCSUnsupported)
 	}
-	out, err := res.VCS.ReadFileAt(ctx, m.ws.Root, rev, path)
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return "", fmt.Errorf("%w: %w",
-			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not read a file at a revision", res.Name),
-			err)
-	}
-	return out, err
+	return res.VCS.ReadFileAt(ctx, m.ws.Root, rev, path)
 }
 
 // ReviewOrigin reports the branch this tree is on and the remote it would be pushed to, for a
@@ -1023,8 +1011,7 @@ func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 // Untracked paths are derived from two capabilities the backends already expose rather than
 // by parsing status output (DirtyFiles lists everything dirty, TrackedFiles says which of
 // those the VCS knows), so this stays backend-agnostic instead of learning git's porcelain
-// column format. A backend that cannot report tracked files yields no untracked half, which
-// is the honest degradation.
+// column format.
 func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, paths []string) (string, error) {
 	lines, err := driver.DirtyFiles(ctx, m.ws.Root, paths)
 	if err != nil || len(lines) == 0 {
@@ -1040,9 +1027,6 @@ func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, path
 		return "", nil
 	}
 	known, err := driver.TrackedFiles(ctx, m.ws.Root, dirty)
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return "", nil
-	}
 	if err != nil {
 		return "", err
 	}

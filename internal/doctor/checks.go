@@ -1256,9 +1256,6 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Do
 	// "." is a pathspec for the whole tree, so this is one ls-files rather than one
 	// per candidate: the check has no candidate set until it has the file list.
 	files, err := res.VCS.TrackedFiles(r.runCtx(), r.root, []string{"."})
-	if errors.Is(err, types.ErrVCSUnsupported) {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: res.Name + " cannot report tracked files"}
-	}
 	if err != nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not list tracked files: " + err.Error()}
 	}
@@ -2519,9 +2516,6 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.Doctor
 			continue
 		}
 		tracked, err := res.VCS.TrackedFiles(r.runCtx(), p.Dir, rels)
-		if errors.Is(err, types.ErrVCSUnsupported) {
-			return types.DoctorCheck{Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
-		}
 		if err != nil {
 			continue
 		}

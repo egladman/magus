@@ -3,8 +3,10 @@ package vcs
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -37,6 +39,24 @@ func writeHgFamilyMergeDriverSection(path string, outputGlobs []string) (bool, e
 	body.WriteString("magus.premerge = False\n")
 	body.WriteString("magus.gui = False\n")
 	return writeManagedSection(path, generatedMarkers, body.String(), configFile)
+}
+
+// hgFamilyMergeDriverCommand is MergeDriverCommand for hg and Sapling: the merge tool
+// writeHgFamilyMergeDriverSection registers, as `config` resolves it across every layer.
+// `config` exits 1 for an unset key.
+func hgFamilyMergeDriverCommand(ctx context.Context, prog, root string) (string, error) {
+	exe, err := vcsOutput(ctx, root, prog, "config", "merge-tools.magus.executable")
+	if exitCode(err) == 1 {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("%s config merge-tools.magus.executable: %w", prog, err)
+	}
+	args, err := vcsOutput(ctx, root, prog, "config", "merge-tools.magus.args")
+	if err != nil && exitCode(err) != 1 {
+		return "", fmt.Errorf("%s config merge-tools.magus.args: %w", prog, err)
+	}
+	return strings.TrimSpace(exe + " " + args), nil
 }
 
 // writeHgFamilyRefreshSection registers an `update` hook running command in the
@@ -81,33 +101,45 @@ func hgFamilyGlobs(paths []string) []string {
 }
 
 // hgFamilyRemoteURL is RemoteURL for hg and Sapling: `paths <name>` prints the named
-// path, "default" when name is empty, and exits non-zero with "not found!" for one that
-// is not configured, the ErrVCSUnsupported case callers degrade on.
+// path, "default" when name is empty, and exits 1 with "not found!" for one that is not
+// configured, the ErrVCSUnsupported case callers degrade on. Any other failure is real.
 func hgFamilyRemoteURL(ctx context.Context, prog, dir, name string) (string, error) {
 	name = cmp.Or(name, "default")
 	if err := checkRemoteName(name); err != nil {
 		return "", err
 	}
 	out, err := vcsOutput(ctx, dir, prog, "paths", name)
-	if err != nil || out == "" {
+	if exitCode(err) == 1 || (err == nil && out == "") {
 		return "", types.ErrVCSUnsupported
 	}
+	if err != nil {
+		return "", fmt.Errorf("%s paths %s: %w", prog, name, err)
+	}
 	return out, nil
+}
+
+// exitCode is err's exit status, or -1 when the command did not exit normally (it never
+// started, or ctx ended it). The callers that read a status as an answer (`paths` 1,
+// merge-tree 1, check-ignore 1, remote get-url 2, merge-base --is-ancestor 1) use it.
+func exitCode(err error) int {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 // hgFamilyRangeFiles is RangeFiles for hg and Sapling: status between ancestor(), the
 // merge base RangeDiff also diffs from, and head. Without --copies a rename is a removal
 // and an add, which is the contract. extra carries sl's --root-relative.
-func hgFamilyRangeFiles(ctx context.Context, prog, dir, base, head string, extra ...string) ([]string, error) {
-	if err := checkRevsetRef(base); err != nil {
-		return nil, err
-	}
-	if err := checkRevsetRef(head); err != nil {
+func hgFamilyRangeFiles(ctx context.Context, prog, dir, base, head string, paths []string, extra ...string) ([]string, error) {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
 	args := append([]string{"status"}, extra...)
 	args = append(args, "--no-status", "--added", "--modified", "--removed",
 		"--rev", "ancestor("+base+","+head+")", "--rev", head)
+	args = append(args, hgFamilyRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, prog, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s status ancestor(%s,%s)-%s: %w", prog, base, head, head, err)
@@ -119,19 +151,11 @@ func hgFamilyRangeFiles(ctx context.Context, prog, dir, base, head string, extra
 // and reverse() makes it newest first. "path:" makes each path literal and relative to the
 // repository root, as RangeFiles reports them.
 func hgFamilyRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, base, head string, paths []string) ([]types.Commit, error) {
-	if err := checkRevsetRef(base); err != nil {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return nil, err
 	}
-	if err := checkRevsetRef(head); err != nil {
-		return nil, err
-	}
-	args := []string{"log", "-r", "reverse(only(" + head + "," + base + "))", "--template", "{node}\n"}
-	if len(paths) > 0 {
-		args = append(args, "--")
-		for _, p := range paths {
-			args = append(args, "path:"+p)
-		}
-	}
+	args := append([]string{"log", "-r", "reverse(only(" + head + "," + base + "))", "--template", "{node}\n"},
+		hgFamilyRootPaths(paths)...)
 	out, err := vcsOutput(ctx, dir, prog, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s log only(%s,%s): %w", prog, head, base, err)
@@ -139,13 +163,23 @@ func hgFamilyRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, bas
 	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
 }
 
+// hgFamilyRootPaths spells repository-relative paths as literal "path:" patterns after
+// `--`, or nothing when there are none.
+func hgFamilyRootPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	out := []string{"--"}
+	for _, p := range paths {
+		out = append(out, "path:"+p)
+	}
+	return out
+}
+
 // hgFamilyIsAncestor is IsAncestor for hg and Sapling: ancestors() includes the revision
 // itself, and an unknown revision aborts the log rather than matching nothing.
 func hgFamilyIsAncestor(ctx context.Context, prog, dir, ancestor, descendant string) (bool, error) {
-	if err := checkRevsetRef(ancestor); err != nil {
-		return false, err
-	}
-	if err := checkRevsetRef(descendant); err != nil {
+	if err := checkRequiredRevsetRef(ancestor, descendant); err != nil {
 		return false, err
 	}
 	out, err := vcsOutput(ctx, dir, prog, "log", "-r", ancestor+" and ancestors("+descendant+")", "--template", "{node}")

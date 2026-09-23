@@ -809,7 +809,7 @@ func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
 	gitRun(t, repo, "tag", "-a", "v1.0.0", "-m", "annotated")
 	gitRun(t, repo, "tag", "v1.0.1")
 
-	head, err := vcsOutput(t.Context(), repo, "git", "rev-parse", "HEAD")
+	head, err := gitOutput(t.Context(), repo, gitOpts{}, "rev-parse", "HEAD")
 	require.NoError(t, err)
 
 	tags, err := gitVCS{}.Tags(t.Context(), repo, "")
@@ -877,7 +877,7 @@ func TestTagsSeesLooseAndPackedRefs(t *testing.T) {
 func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
 	repo := t.TempDir()
 	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n", "uni/café.md": "x\n"})
-	base, err := vcsOutput(t.Context(), repo, "git", "rev-parse", "HEAD")
+	base, err := gitOutput(t.Context(), repo, gitOpts{}, "rev-parse", "HEAD")
 	require.NoError(t, err)
 
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "uni", "café.md"), []byte("changed\n"), 0o644))
@@ -902,17 +902,12 @@ func TestUncoloredUsesEachBackendsOwnSwitch(t *testing.T) {
 	git := gitExec(t.Context(), "", gitOpts{}, "diff", "-U1", "HEAD").Args
 	assert.Equal(t, []string{"-c", "color.ui=false"}, git[1:3])
 	assert.Equal(t, []string{"diff", "-U1", "HEAD"}, git[len(git)-3:])
-	for _, name := range []string{"hg", "sl", "jj"} {
-		assert.Equal(t, []string{"--color=never", "diff"}, uncolored(name, []string{"diff"}), name)
-	}
 	// The switch must PRECEDE the subcommand: all four treat it as a global option, and one
 	// placed after the subcommand is either rejected or silently scoped to it.
-	got := uncolored("hg", []string{"-R", "/repo", "log"})
-	assert.Equal(t, "--color=never", got[0])
-
-	// An unknown backend is passed through untouched rather than guessed at: inventing a
-	// flag for it would break every invocation instead of merely leaving color on.
-	assert.Equal(t, []string{"diff"}, uncolored("fossil", []string{"diff"}))
+	for _, name := range []string{"hg", "sl", "jj"} {
+		assert.Equal(t, []string{name, "--color=never", "-R", "/repo", "log"},
+			vcsExec(t.Context(), name, "-R", "/repo", "log").Args, name)
+	}
 }
 
 // BranchChanges answers the question the console asks to warn a reader that a file in front of

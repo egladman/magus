@@ -505,8 +505,13 @@ func ReadProvenance(ctx context.Context, vcs provenanceSource, dir string) (Prov
 		}
 		p.Created = time.Unix(secs, 0)
 	}
-	if remote, err := vcs.RemoteURL(ctx, dir, ""); err == nil {
+	// No remote configured is an ordinary checkout with no source link; any other failure
+	// would publish provenance that silently lacks one.
+	switch remote, err := vcs.RemoteURL(ctx, dir, ""); {
+	case err == nil:
 		p.Source = SourceURL(remote)
+	case !errors.Is(err, types.ErrVCSUnsupported):
+		return Provenance{}, fmt.Errorf("read the remote of %s: %w", dir, err)
 	}
 	return p, nil
 }

@@ -141,12 +141,14 @@ func Installer(name string) (types.MergeDriverInstaller, bool) {
 	return v, true
 }
 
-// installsMergeDriver asks v without touching anything: EnsureMergeDriver with no globs
-// has nothing to ensure, so a backend that installs answers (false, nil) at once and one
-// that cannot answers with its *UnsupportedError.
+// installsMergeDriver asks v through a read, under a context already cancelled, so nothing
+// runs: a backend that declines answers with its *VCSUnsupportedError before looking at
+// the context, and one that installs fails to start its read.
 func installsMergeDriver(v types.VCSDriver) bool {
-	_, err := v.EnsureMergeDriver(context.Background(), "", nil)
-	var declined *types.UnsupportedError
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := v.MergeDriverCommand(ctx, "")
+	var declined *types.VCSUnsupportedError
 	return !errors.As(err, &declined)
 }
 
@@ -205,6 +207,19 @@ func checkRequiredRev(revs ...string) error {
 	return checkRev(revs...)
 }
 
+// checkRequiredRevsetRef is checkRevsetRef for revisions the call cannot do without.
+func checkRequiredRevsetRef(refs ...string) error {
+	for _, ref := range refs {
+		if ref == "" {
+			return errors.New("vcs: a revision is required")
+		}
+		if err := checkRevsetRef(ref); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // checkCommitID accepts a full lowercase hex object id (SHA-1 or SHA-256), nothing else.
 func checkCommitID(id string) error {
 	if len(id) != 40 && len(id) != 64 {
@@ -242,11 +257,6 @@ func checkRefName(ref string) error {
 		}
 	}
 	return nil
-}
-
-// checkBranchName is checkRefName over the branch's full name.
-func checkBranchName(name string) error {
-	return checkRefName("refs/heads/" + name)
 }
 
 // checkRemoteName accepts only what can name a configured remote: no leading "-" or ".",
