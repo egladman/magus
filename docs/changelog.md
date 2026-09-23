@@ -136,8 +136,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
   `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
   workspace reloads when a `.buzz` file or `magus.yaml` changes.
-- **The daemon refuses a request as `google.rpc.Status` JSON in the route's protocol.**
-  A Connect service answers Connect's envelope; every other route, `/mcp` included, answers
+- **The daemon's guards refuse a request as `google.rpc.Status` JSON in the route's protocol.**
+  A Connect service answers Connect's envelope; every other route, `/mcp` included,
   AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
@@ -233,6 +233,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A broken working tree no longer switches off the approved spawn rule.** The committed
+  `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
+  it too slowly denies. A skipped rule says what applied. A workspace advise joins a
+  built-in one, and the idle clock follows the agent's id.
+- **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
+  wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
+  its message and Help link. Health reports down when every workspace failed, and the
+  Windows sign-in line is PowerShell's `Start-Process`.
 - **A run the machine's build budget refuses says so.** It exited 75 with nothing after
   the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
   cause naming the holder, and `-o jsonl` emits the `run.target.result` and

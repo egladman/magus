@@ -15,6 +15,13 @@ type Base struct {
 	Log *slog.Logger
 }
 
+// Fail answers a route whose source failed: 500 with a body naming only what failed. err
+// can carry the daemon's absolute paths, so it goes to the log and never to the client.
+func (b Base) Fail(w http.ResponseWriter, r *http.Request, what string, err error) {
+	b.Log.ErrorContext(r.Context(), what+" failed", slog.String("path", r.URL.Path), slog.String("error", err.Error()))
+	http.Error(w, what+" failed", http.StatusInternalServerError)
+}
+
 // New builds a Base wrapping serve, defaulting Log to slog.Default() when nil.
 func New(serve http.HandlerFunc, log *slog.Logger) Base {
 	if log == nil {

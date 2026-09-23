@@ -40,8 +40,7 @@ var _ insightv1alpha1connect.InsightServiceHandler = (*Service)(nil)
 
 // GetInsight returns every lens in one message. A daemon with no workspace cannot scan
 // anything, which is a transient condition of THIS daemon rather than a bad request or a bug,
-// so it maps to CodeUnavailable (the Connect twin of the JSON route's 503) and the client
-// keeps whatever it last rendered.
+// so it maps to CodeUnavailable and the client keeps whatever it last rendered.
 func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.GetInsightRequest]) (*connect.Response[insightv1.Insight], error) {
 	view, err := s.src.Insight(ctx)
 	if err != nil {

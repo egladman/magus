@@ -231,7 +231,7 @@ func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
 // Route is one data route a share serves, with the format its refusals are written in.
 type Route struct {
 	Handler http.Handler
-	Format  httpx.ErrorFormat
+	Format  rpcerr.Format
 }
 
 // Start mints a fresh read-only token and opens a new LAN listener serving the
@@ -407,13 +407,12 @@ func newSessionGuard(m *Manager) *sessionGuard {
 // device other than the one that first bound the share is rejected with 403 before the
 // handler runs; the bound device is served, and its first request records one trail
 // event.
-func (g *sessionGuard) admit(format httpx.ErrorFormat, next http.Handler) http.Handler {
+func (g *sessionGuard) admit(format rpcerr.Format, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !g.bindDevice(remoteHost(r)) {
 			format.Write(w, r, rpcerr.Error{
 				Code:    connect.CodePermissionDenied,
 				Reason:  types.ShareBoundToAnotherDevice,
-				Title:   "share link bound to another device",
 				Message: shareBoundOtherDeviceMsg,
 			})
 			return

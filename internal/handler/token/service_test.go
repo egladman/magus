@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -312,7 +313,7 @@ func TestUnauthenticatedCallRejected(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	path, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
 	// A fixed verifier standing in for auth.VerifyMCPBearer: accept exactly "good".
-	guarded := httpx.BearerGuard(httpx.FormatConnect, func(presented string) bool { return presented == "good" }, h)
+	guarded := httpx.BearerGuard(rpcerr.FormatConnect, func(presented string) bool { return presented == "good" }, h)
 	srv := httptest.NewServer(guarded)
 	defer srv.Close()
 
@@ -362,7 +363,7 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	require.False(t, auth.VerifyCLIBearer(connSecret))
 
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
-	srv := httptest.NewServer(httpx.BearerGuard(httpx.FormatConnect, auth.VerifyCLIBearer, h))
+	srv := httptest.NewServer(httpx.BearerGuard(rpcerr.FormatConnect, auth.VerifyCLIBearer, h))
 	defer srv.Close()
 
 	asConnector := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,

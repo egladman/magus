@@ -351,25 +351,25 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	pinned := types.Job{ID: "orchestrator/guard-facts", Criteria: "the seam", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}}
 	cases := []struct {
 		name    string
-		snap    types.JobSnapshot
+		snap    job.Snapshot
 		want    types.JobList
 		wantErr string
 	}{
 		{
 			name: "the guard's rows",
-			snap: types.JobSnapshot{Rows: []types.Job{pinned}},
+			snap: job.Snapshot{Rows: []types.Job{pinned}},
 			want: types.NewJobList([]types.Job{pinned}),
 		},
-		{name: "an empty store", snap: types.JobSnapshot{}, want: types.NewJobList(nil)},
+		{name: "an empty store", snap: job.Snapshot{}, want: types.NewJobList(nil)},
 		{
 			name:    "a store the guard could not read",
-			snap:    types.JobSnapshot{Err: errors.New("jobs.json: unexpected end of JSON input")},
+			snap:    job.Snapshot{Err: errors.New("jobs.json: unexpected end of JSON input")},
 			wantErr: "unexpected end of JSON input",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := types.WithJobSnapshot(ws, tc.snap)
+			ctx := job.WithSnapshot(ws, tc.snap)
 			got, err := MagusListJob(ctx)
 			if tc.wantErr != "" {
 				assert.ErrorContains(t, err, tc.wantErr)
@@ -380,7 +380,7 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 		})
 	}
 
-	ctx := types.WithJobSnapshot(ws, types.JobSnapshot{Rows: []types.Job{pinned}})
+	ctx := job.WithSnapshot(ws, job.Snapshot{Rows: []types.Job{pinned}})
 	_, err = MagusPutJob(ctx, pinned.ID, map[string]any{"state": "pass"})
 	assert.ErrorContains(t, err, "read-only")
 	_, _, err = MagusRegisterJob(ctx, pinned.ID, "abc123")
