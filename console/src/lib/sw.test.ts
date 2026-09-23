@@ -23,8 +23,13 @@ test("a daemon that starts serving another build asks for one reload", async () 
     (r, s) => stale.push([r, s]),
     5,
   );
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   try {
-    await new Promise((r) => setTimeout(r, 60));
+    // A deadline, not a fixed wait: a loaded runner fires fewer 5ms ticks than an idle one.
+    const deadline = Date.now() + 5000;
+    while (stale.length === 0 && Date.now() < deadline) await sleep(5);
+    // Further ticks still see the new build; "once" means none of them report it again.
+    await sleep(50);
     assert.deepEqual(stale, [["aaaaaaaaaaaa", "bbbbbbbbbbbb"]]);
   } finally {
     stop();

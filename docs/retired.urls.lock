@@ -316,3 +316,6 @@ tags/magus-ledger/
 # through a spell, so there is no successor spell page to send a reader to.
 concepts/spells/buzz/
 reference/codes/sandbox/MGS3015/
+# The pinning tag is down to one page, reference/remote-spells.md; a one-page tag gets no
+# index, as with the tags above.
+tags/pinning/
