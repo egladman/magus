@@ -147,9 +147,14 @@ type Gate interface {
 	Validate(ctx context.Context, s Stage, onto string, c Change) (GateResult, error)
 }
 
-// AffectedFunc answers what a change can affect from the paths it changes: the units it
-// reaches, or why that set is not a proof.
-type AffectedFunc func(ctx context.Context, c Change, paths []string) (affected []string, unboundedBy string, err error)
+// BuildFacts is the build tool's side of the queue: what a change can affect, from the
+// paths it changes. It reads the base, never a change's code.
+type BuildFacts interface {
+	// Affected returns the units (projects, or whatever the caller partitions by) paths
+	// reach, and, when that set is not a proof, why: the paths edit the declarations it
+	// was computed from, or files nothing claims. A nil affected set is unbounded.
+	Affected(ctx context.Context, c Change, paths []string) (affected []string, unboundedBy string, err error)
+}
 
 // RegenerateFunc rewrites the derived files in a stage's checkout at dir. onto is the
 // commit the stage was built onto and paths are the derived files the change touched or
@@ -157,8 +162,17 @@ type AffectedFunc func(ctx context.Context, c Change, paths []string) (affected 
 // other error is the machine's.
 type RegenerateFunc func(ctx context.Context, dir, onto string, c Change, paths []string) error
 
-// StagingRepo is the version-control side of planning and validation. It merges and
-// regenerates, so it runs the changes' code, and must never hold a write credential.
+// ExportFunc writes the commits an [Applier] needs for stage, from baseCommit up, into
+// file.
+type ExportFunc func(ctx context.Context, file, baseCommit, stage string) error
+
+// StagingRepo is the version-control side of planning and validation. It merges, and
+// Stage runs the regeneration hook, so it runs the changes' code and must never hold a
+// write credential.
+//
+// A file is derived when the plan's base commit marks it so. It is read from the base,
+// never from a change, so a change cannot declare its own sources derived and have the
+// queue settle their conflicts.
 type StagingRepo interface {
 	// FetchTip fetches branch and returns its tip.
 	FetchTip(ctx context.Context, branch string) (string, error)
@@ -171,28 +185,29 @@ type StagingRepo interface {
 	// CheckMerge merges c onto baseCommit without touching any checkout and returns a
 	// *[ConflictError] when a source file conflicts. Derived files are not reported.
 	CheckMerge(ctx context.Context, baseCommit string, c Change) error
-	// Stage checks out onto in a directory of its own, merges c, regenerates the derived
-	// files c touches, and commits. baseCommit is the plan's, whose attributes say which
-	// files are derived. Safe for concurrent use. A source conflict is a
-	// *[ConflictError]; a regeneration the change's code broke is a *[RefusedError].
-	Stage(ctx context.Context, baseCommit, onto string, c Change) (Stage, error)
+	// Stage checks out onto in a directory of its own, merges c, runs regenerate on the
+	// derived files c touches or conflicts in (nil leaves them as merged), and commits.
+	// Safe for concurrent use. A source conflict is a *[ConflictError]; a regeneration
+	// the change's code broke, or one writing a file that is not derived, is a
+	// *[RefusedError].
+	Stage(ctx context.Context, baseCommit, onto string, c Change, regenerate RegenerateFunc) (Stage, error)
 	// Discard removes a stage's directory; its commit stays in the object store.
 	Discard(ctx context.Context, s Stage) error
 	// SquashMessage is the squash body for head: its own commits since baseCommit.
 	SquashMessage(ctx context.Context, baseCommit, head string) (string, error)
 }
 
-// MergingRepo is the version control of the step that merges. It runs git plumbing only,
-// never a build, so the job holding the write credential executes no change's code.
+// MergingRepo is the version control of the step that merges. It takes no hook and
+// builds nothing, so the job holding the write credential executes no change's code.
 type MergingRepo interface {
 	FetchTip(ctx context.Context, branch string) (string, error)
 	FetchHead(ctx context.Context, c Change) error
 	// ReviewTarget is the commit a review of head covers: head itself, or, when head is an
 	// update commit UpdateBranch pushed (or any merge of the base branch into an approved
-	// commit), the commit beneath it. See the git package for the rule.
+	// commit that adds nothing outside derived files), the commit beneath it.
 	ReviewTarget(ctx context.Context, tip, head string) (string, error)
-	// ImportBundle loads the stage commits validation exported to file, creating no ref.
-	ImportBundle(ctx context.Context, file string) error
+	// ImportStage loads the stage commits validation exported to file, creating no ref.
+	ImportStage(ctx context.Context, file string) error
 	// Predict is the tree the base branch must carry once the change validated at stage
 	// merges on tip: stage's changes since baseCommit, merged onto tip. onto is the commit
 	// the stage was built onto. A file that both the stage and what merged since onto

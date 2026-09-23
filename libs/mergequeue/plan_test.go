@@ -88,7 +88,7 @@ func TestPlanAsksTheAffectedHookOnlyForChangesWithoutASet(t *testing.T) {
 	}}
 	var events bytes.Buffer
 	pl := NewPlanner(st)
-	pl.Affected, pl.Depth, pl.Parallel, pl.Events = affected, 2, 4, NewEvents(&events)
+	pl.Facts, pl.Depth, pl.Parallel, pl.Events = factsFunc(affected), 2, 4, NewEvents(&events)
 	p, err := pl.Run(context.Background(), in)
 	require.NoError(t, err)
 	slices.Sort(asked)
@@ -109,7 +109,7 @@ func TestPlanStopsWhenTheAffectedHookFails(t *testing.T) {
 		return nil, "", errors.New("exit status 2")
 	}
 	pl := NewPlanner(st)
-	pl.Affected = broken
+	pl.Facts = factsFunc(broken)
 	_, err := pl.Run(context.Background(), Changes{Schema: SchemaChanges, Base: "main", Changes: []Change{{ID: "1", Head: head("1")}}})
 	require.EqualError(t, err, "affected set of #1: exit status 2", "misconfiguration is an error, never an unbounded guess")
 }

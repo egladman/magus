@@ -17,8 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **The merge queue is a separate library, `libs/mergequeue`; `magus vcs queue` is gone.**
   Its `mergequeue` CLI reads JSON, reports JSONL, and merges each green stage once the
-  changes beneath it have. Magus only supplies affected sets: `magus affected --plan`
-  now prints `affected` and `unbounded_by`.
+  changes beneath it have. Its `client` package answers the queue's host interfaces with
+  magus's `vcs` package and Go SDK; `plan --affected <command>` serves other build tools.
+  `magus affected --plan` prints `affected` and `unbounded_by`.
+- **The `vcs` package can stage speculative merges.** `RevisionFetcher` and `Stager` fetch
+  branches and revisions, check a merge, build, export and import a stage, predict a
+  merged tree, and update a branch with a lease. git implements them; jj, hg and Sapling
+  return a `types.UnsupportedError` that unwraps to `errors.ErrUnsupported`.
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's

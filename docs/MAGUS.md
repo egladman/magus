@@ -45,7 +45,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind       |     Size | List them                     | Anchors (most connected)                                                                                                    |
 | ---------- | -------: | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                          |
+| project    |      10+ | `magus query kind=project`    | `magus`, `libs/mergequeue`, `docs`                                                                                          |
 | target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `test`                                                                                 |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                                  |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                             |
@@ -60,7 +60,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | function   |    1000+ | `magus query kind=function`   | `main`, `tail`, `main`                                                                                                      |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
 | rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
-| package    |     100+ | `magus query kind=package`    | `github.com/davecgh/go-spew`, `github.com/dlclark/regexp2`, `github.com/ebitengine/purego`                                  |
+| package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `github.com/davecgh/go-spew`                                                       |
 | link       |      80+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                          |
 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |

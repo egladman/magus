@@ -1,6 +1,6 @@
 //go:build !unix
 
-package command
+package mergequeue
 
 import (
 	"os"

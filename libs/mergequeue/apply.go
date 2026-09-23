@@ -170,8 +170,8 @@ func (r *applyRun) merge(ctx context.Context, v Verdict) (bool, error) {
 		r.Events.Emit(Event{Kind: EventMerged, Change: c.ID, Commit: v.Stage, Reason: "dry run: would merge stage " + short(v.Stage)})
 		return true, nil
 	}
-	if v.Bundle != "" {
-		if err := r.repo.ImportBundle(ctx, v.Bundle); err != nil {
+	if v.StageFile != "" {
+		if err := r.repo.ImportStage(ctx, v.StageFile); err != nil {
 			return false, fmt.Errorf("import the stage of %s: %w", c.Label(), err)
 		}
 	}
@@ -229,7 +229,7 @@ func (r *applyRun) merge(ctx context.Context, v Verdict) (bool, error) {
 	r.Events.Emit(Event{Kind: EventMerged, Change: c.ID, Commit: commit})
 	if got != tree {
 		// Stop rather than merge more on a base nobody validated: something wrote to the
-		// branch besides the queue, or the host merged differently than git does.
+		// branch besides the queue, or the host merged differently than predicted.
 		return true, fmt.Errorf("%s merged, but %s at %s carries tree %s, not the validated %s; stopping",
 			c.Label(), r.plan.Base, short(after), short(got), short(tree))
 	}

@@ -87,8 +87,8 @@ type Verdict struct {
 	Depth      int   `json:"depth,omitempty"`
 	DurationMS int64 `json:"duration_ms,omitempty"` // gate wall time
 
-	// Bundle is the file holding Stage's commits, set by whoever read the verdict.
-	Bundle string `json:"-"`
+	// StageFile is the file holding Stage's commits, set by whoever read the verdict.
+	StageFile string `json:"-"`
 }
 
 // ReadChanges decodes and checks a [Changes] document.
@@ -225,10 +225,11 @@ func decode(r io.Reader, schema string, v any, got *string) error {
 	return nil
 }
 
-// Check reports whether c can be handed to git and used as a directory name: an id
-// [CheckID] accepts, a full commit id as head, and refs and branches git itself accepts.
-// Every field reaches a git command line, so a value that could read as an option or a
-// refspec is refused here rather than quoted there.
+// Check reports whether c can be handed to a version control system and used as a
+// directory name: an id [CheckID] accepts, a full commit id as head, and refs and
+// branches in the strict grammar [CheckBranch] names. Every field reaches a VCS command
+// line, so a value that could read as an option or a refspec is refused here rather than
+// quoted there.
 func (c Change) Check() error {
 	if err := CheckID(c.ID); err != nil {
 		return err
@@ -271,7 +272,8 @@ func CheckID(id string) error {
 	return nil
 }
 
-// CheckBranch accepts a branch name git would.
+// CheckBranch accepts a branch name in git's check-ref-format grammar, which the queue
+// holds every version control system to.
 func CheckBranch(name string) error {
 	if name == "" {
 		return errors.New("empty branch name")

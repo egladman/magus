@@ -2,14 +2,15 @@
 // command reports JSONL events on stdout; hook output and errors go to stderr.
 //
 //	mergequeue ls       --provider github --base main              > changes.json
-//	mergequeue plan     --changes changes.json --provider github \
-//	                    --affected 'magus affected ci --plan --stdin' --out plan.json
+//	mergequeue plan     --changes changes.json --provider github --out plan.json
 //	mergequeue validate --plan plan.json --gate 'magus affected ci --base "$MERGEQUEUE_ONTO"' \
 //	                    --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"' --verdicts verdicts
 //	mergequeue apply    --provider github verdicts
 //	mergequeue apply    --provider github github-actions:acme/widgets/runs/"$RUN_ID"
 //
-// -C <path>, before the command, runs it as if started in <path>.
+// -C <path>, before the command, runs it as if started in <path>. The checkout's version
+// control goes through magus's vcs package, and plan asks the magus workspace there for
+// each change's affected set unless --affected names another build tool's command.
 package main
 
 import (
@@ -19,19 +20,17 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/libs/mergequeue"
-	"github.com/egladman/magus/libs/mergequeue/command"
-	"github.com/egladman/magus/libs/mergequeue/git"
+	"github.com/egladman/magus/libs/mergequeue/client"
 	"github.com/egladman/magus/libs/mergequeue/provider"
-	"github.com/egladman/magus/libs/mergequeue/verdicts"
 )
 
 // errUsage exits 2 rather than 1, so a workflow can tell a wiring mistake from a
@@ -115,8 +114,8 @@ Commands:
   apply     merge the green verdicts <source> holds as they arrive, each change as its
             own commit (holds the write credential; runs no change's code)
 
--C <path> runs the command as if started in <path>: the git checkout the queue works
-in, and what every relative path resolves against.
+-C <path> runs the command as if started in <path>: the checkout the queue works in,
+and what every relative path resolves against.
 
 Run 'mergequeue <command> -h' for its flags. Every command prints JSONL events
 (mergequeue.event/v1) on stdout.
@@ -187,8 +186,10 @@ func (e *env) path(p string) string {
 	return filepath.Join(e.dir, p)
 }
 
-func (e *env) gitConfig(remote, attribute string) git.Config {
-	return git.Config{Root: e.dir, Remote: remote, Attribute: attribute}
+// openRepo opens the checkout at -C; scratch is where stages are built, empty for a
+// command that builds none.
+func (e *env) openRepo(ctx context.Context, remote, attribute, scratch string) (*client.Repo, error) {
+	return client.NewRepo(ctx, client.Config{Root: e.dir, Remote: remote, Attribute: attribute, Scratch: scratch})
 }
 
 func (e *env) openProvider(ctx context.Context, spec string) (*provider.Script, error) {
@@ -198,22 +199,12 @@ func (e *env) openProvider(ctx context.Context, spec string) (*provider.Script, 
 	return provider.Open(ctx, spec)
 }
 
-// remoteURL names remote for a provider: a configured remote's URL, else the value as
-// given, since a URL or a path is its own name.
-func (e *env) remoteURL(ctx context.Context, remote string) string {
-	out, err := exec.CommandContext(ctx, "git", "-C", e.dir, "remote", "get-url", "--", remote).Output()
-	if err != nil {
-		return remote
-	}
-	return strings.TrimSpace(string(out))
-}
-
 func remoteFlag(fs *flag.FlagSet) *string {
 	return fs.String("remote", "origin", "remote name or URL changes and the base are fetched from")
 }
 
 func attributeFlag(fs *flag.FlagSet) *string {
-	return fs.String("attribute", git.DefaultAttribute, "gitattribute marking derived files, read at the base commit")
+	return fs.String("attribute", client.DefaultAttribute, "path attribute marking derived files, read at the base commit")
 }
 
 // parse parses a command's flags and exactly the operands named, returning them in
@@ -296,12 +287,19 @@ func ls(ctx context.Context, e *env, args []string) error {
 	if err := e.required("ls", flagValue{"provider", spec}, flagValue{"base", base}); err != nil {
 		return err
 	}
+	repo, err := e.openRepo(ctx, *remote, "", "")
+	if err != nil {
+		return err
+	}
+	url, err := repo.RemoteURL(ctx)
+	if err != nil {
+		return err
+	}
 	p, err := e.openProvider(ctx, spec)
 	if err != nil {
 		return err
 	}
 	defer p.Close()
-	url := e.remoteURL(ctx, *remote)
 	changes, err := p.ListChanges(ctx, mergequeue.ListQuery{Base: base, Remote: url})
 	if err != nil {
 		return err
@@ -311,31 +309,36 @@ func ls(ctx context.Context, e *env, args []string) error {
 }
 
 func plan(ctx context.Context, e *env, args []string) error {
-	var changesFile, spec, affected, out string
+	var changesFile, spec, affected, target, out string
 	var remote, attribute *string
 	var depth, parallel int
-	if _, _, err := e.parse("plan", args, func(fs *flag.FlagSet) {
+	_, fs, err := e.parse("plan", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&changesFile, "changes", "-", "the mergequeue.changes/v1 document, or \"-\" for stdin")
 		fs.StringVar(&spec, "provider", "", "provider to check approval at each head with; empty admits every change unchecked")
-		fs.StringVar(&affected, "affected", "", "command printing a change's affected set from its paths on stdin")
+		fs.StringVar(&affected, "affected", "", "command printing a change's affected set from its paths on stdin, for a build tool other than magus; without it the magus workspace at -C answers")
+		fs.StringVar(&target, "target", "ci", "magus target the affected set is computed for")
 		fs.IntVar(&depth, "depth", 3, "stages of one partition that validate at once")
 		fs.IntVar(&parallel, "parallel", runtime.NumCPU(), "changes admitted, and affected hooks run, at once")
 		fs.StringVar(&out, "out", "", "file to write the mergequeue.plan/v1 document to")
 		remote, attribute = remoteFlag(fs), attributeFlag(fs)
-	}); err != nil {
+	})
+	if err != nil {
 		return helpOK(err)
 	}
 	if err := e.required("plan", flagValue{"out", out}); err != nil {
 		return err
 	}
-	if depth < 1 || parallel < 1 {
+	switch {
+	case depth < 1 || parallel < 1:
 		return e.usageError("plan", "--depth and --parallel must be at least 1")
+	case affected != "" && isSet(fs, "target"):
+		return e.usageError("plan", "--target has no effect with --affected")
 	}
 	in, err := readChanges(e.path(changesFile), e.stdin)
 	if err != nil {
 		return err
 	}
-	repo, err := git.NewStagingRepo(e.gitConfig(*remote, *attribute), "", nil)
+	repo, err := e.openRepo(ctx, *remote, *attribute, "")
 	if err != nil {
 		return err
 	}
@@ -349,8 +352,19 @@ func plan(ctx context.Context, e *env, args []string) error {
 		defer p.Close()
 		planner.Provider = p
 	}
-	if affected != "" {
-		planner.Affected = command.Affected(affected, e.dir, command.NewLog(e.stderr))
+	// Loading the workspace is the slowest step of a plan, so input whose every change
+	// carries its set never pays it.
+	unanswered := slices.ContainsFunc(in.Changes, func(c mergequeue.Change) bool { return c.Affected == nil && c.UnboundedBy == "" })
+	switch {
+	case affected != "":
+		planner.Facts = mergequeue.CommandFacts(affected, e.dir, mergequeue.NewHookLog(e.stderr))
+	case unanswered:
+		ws, err := client.OpenWorkspace(ctx, e.dir, target)
+		if err != nil {
+			return fmt.Errorf("open the magus workspace at %s (pass --affected for another build tool): %w", e.dir, err)
+		}
+		defer ws.Close()
+		planner.Facts = ws
 	}
 	pl, err := planner.Run(ctx, in)
 	if err != nil {
@@ -369,19 +383,6 @@ func readChanges(file string, stdin io.Reader) (mergequeue.Changes, error) {
 	}
 	defer f.Close()
 	return mergequeue.ReadChanges(f)
-}
-
-func readPlan(file string) (mergequeue.Plan, error) {
-	f, err := os.Open(file)
-	if err != nil {
-		return mergequeue.Plan{}, err
-	}
-	defer f.Close()
-	p, err := mergequeue.ReadPlan(f)
-	if err != nil {
-		return mergequeue.Plan{}, fmt.Errorf("%s: %w", file, err)
-	}
-	return p, nil
 }
 
 func writeFile(file string, write func(io.Writer) error) error {
@@ -419,14 +420,14 @@ func validate(ctx context.Context, e *env, args []string) (err error) {
 	if parallel < 1 {
 		return e.usageError("validate", "--parallel must be at least 1")
 	}
-	dir := &verdicts.Dir{Path: e.path(dirPath)}
+	dir := &mergequeue.VerdictDir{Path: e.path(dirPath)}
 	// A single-change run is one of several filling out; whoever gathers them marks it.
 	// A full run marks it however it ends: what it recorded is final, and apply
 	// following the directory would otherwise wait forever.
 	if only == "" {
 		defer func() { err = errors.Join(err, dir.MarkDone()) }()
 	}
-	pl, err := readPlan(e.path(planFile))
+	pl, err := mergequeue.ReadPlanFile(e.path(planFile))
 	if err != nil {
 		return err
 	}
@@ -439,12 +440,7 @@ func validate(ctx context.Context, e *env, args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	log := command.NewLog(e.stderr)
-	var regen mergequeue.RegenerateFunc
-	if regenerate != "" {
-		regen = command.Regenerate(regenerate, pl, log)
-	}
-	repo, err := git.NewStagingRepo(e.gitConfig(*remote, *attribute), scratch, regen)
+	repo, err := e.openRepo(ctx, *remote, *attribute, scratch)
 	if err != nil {
 		_ = os.RemoveAll(scratch)
 		return err
@@ -453,9 +449,13 @@ func validate(ctx context.Context, e *env, args []string) (err error) {
 		_ = os.RemoveAll(scratch)
 		_ = repo.Prune(context.WithoutCancel(ctx))
 	}()
-	dir.Export = repo.Export
-	v := mergequeue.NewValidator(repo, command.Gate(gate, pl, log), dir)
+	dir.Export = repo.ExportStage
+	log := mergequeue.NewHookLog(e.stderr)
+	v := mergequeue.NewValidator(repo, mergequeue.CommandGate(gate, pl, log), dir)
 	v.Only, v.Parallel, v.Events = only, parallel, mergequeue.NewEvents(e.stdout)
+	if regenerate != "" {
+		v.Regenerate = mergequeue.CommandRegenerate(regenerate, pl, log)
+	}
 	return v.Run(ctx, pl)
 }
 
@@ -504,22 +504,22 @@ func apply(ctx context.Context, e *env, args []string) error {
 		return err
 	}
 	defer p.Close()
-	repo, err := git.NewMergingRepo(e.gitConfig(*remote, *attribute))
+	repo, err := e.openRepo(ctx, *remote, *attribute, "")
 	if err != nil {
 		return err
 	}
 	events := mergequeue.NewEvents(e.stdout)
 	var from planSource
 	if src.dir != "" {
-		from = &verdicts.Dir{Path: e.path(src.dir), Follow: !once, Interval: interval}
+		from = &mergequeue.VerdictDir{Path: e.path(src.dir), Follow: !once, Interval: interval}
 	} else {
-		// Bundles are imported while applying, so the unpacked run lives only as long.
+		// Stages are imported while applying, so the unpacked run lives only as long.
 		tmp, err := os.MkdirTemp("", "mergequeue-apply-")
 		if err != nil {
 			return err
 		}
 		defer os.RemoveAll(tmp)
-		from = &verdicts.ActionsRun{
+		from = &mergequeue.ActionsRun{
 			API: os.Getenv("GITHUB_API_URL"), Repo: src.repo, RunID: src.runID, Token: readToken(),
 			Path: tmp, Follow: !once, Interval: interval, Events: events,
 		}
@@ -531,7 +531,7 @@ func apply(ctx context.Context, e *env, args []string) error {
 	switch {
 	case planned:
 	case src.dir != "":
-		return fmt.Errorf("%s holds no %s; mergequeue validate --verdicts writes one", e.path(src.dir), verdicts.PlanFile)
+		return fmt.Errorf("%s holds no %s; mergequeue validate --verdicts writes one", e.path(src.dir), mergequeue.PlanFile)
 	case once:
 		events.Emit(mergequeue.Event{Kind: mergequeue.EventNotice, Reason: "run " + src.runID + " has uploaded no plan yet; nothing to apply"})
 		return nil

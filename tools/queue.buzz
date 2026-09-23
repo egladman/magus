@@ -67,9 +67,10 @@ export fun outputs(ids: [str]) > str {
     return "matrix=" + encode({"include": include}) + "\ncount={ids.len()}\n";
 }
 
+// planArgs passes no --affected: mergequeue asks this checkout's magus workspace itself.
 export fun planArgs(dir: str, depth: str) > [str] {
     return ["plan", "--changes", dir + "/changes.json", "--provider", "github", "--depth", depth,
-        "--affected", "magus affected ci --plan --stdin", "--out", dir + "/plan.json"];
+        "--out", dir + "/plan.json"];
 }
 
 // validateArgs keeps $MERGEQUEUE_ONTO literal: mergequeue sets it for each hook.
@@ -217,10 +218,11 @@ test "apply follows the validation run as its source" {
         "--interval", "15s", "github-actions:o/r/runs/99"], message: "argv");
 }
 
-test "plan args carry the depth and the affected hook" {
+test "plan args carry the depth and leave the affected sets to the workspace" {
     final args = planArgs("/t/queue", depth: "3");
     assert\equal(args[6], want: "3", message: "depth");
-    assert\equal(args[8], want: "magus affected ci --plan --stdin", message: "affected hook");
+    assert\equal(args[7], want: "--out", message: "no affected hook");
+    assert\equal(args.len(), want: 9, message: "argv length");
 }
 
 test "tip reads the commit off ls-remote" {

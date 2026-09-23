@@ -1,16 +1,19 @@
 ---
 title: Merge queue
-description: libs/mergequeue is a speculative, partitioned merge queue with its own CLI; magus only supplies it affected sets.
+description: libs/mergequeue is a speculative, partitioned merge queue with its own CLI; magus supplies its version control operations and its affected sets.
 tags: [merge-queue, queue, pull-request, auto-merge, speculation, github, provider, mergequeue]
 ---
 
 # Merge queue
 
 The merge queue is a separate Go module, `github.com/egladman/magus/libs/mergequeue`,
-with its own CLI, `mergequeue`. It does not import magus, and magus does not import it:
-a queue owns checkouts (staging commits, applying) and magus never does. Anyone can run it
-without magus. Magus feeds it one fact, each change's affected set, through
-`magus affected <target> --plan --stdin`.
+with its own CLI, `mergequeue`. Magus does not import it: a queue owns checkouts (staging
+commits, applying) and magus never does. The queue's root package imports nothing of
+magus either; it asks its host through small interfaces, and its `client` package
+answers them with magus: version control through magus's `vcs` package (git today; jj,
+Mercurial and Sapling refuse by name), and each change's affected set through magus's Go
+SDK, with the workspace loaded once. Another build tool answers through
+`plan --affected <command>`.
 
 A pull request joins the queue when someone enables GitHub's auto-merge on it. From
 there the queue:
@@ -58,8 +61,7 @@ errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 
 
 ```sh
 mergequeue ls --provider github --base main > changes.json
-mergequeue plan --changes changes.json --provider github --out plan.json \
-  --affected 'magus affected ci --plan --stdin'
+mergequeue plan --changes changes.json --provider github --out plan.json
 mergequeue validate --plan plan.json --verdicts verdicts \
   --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
   --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'
@@ -67,8 +69,8 @@ mergequeue apply --provider github verdicts
 ```
 
 `-C <path>`, the one global flag, goes before the command, as with git: the command
-runs as if started in `<path>`, which is the git checkout the queue works in and what
-every relative path resolves against. Every other flag belongs to the commands that use
+runs as if started in `<path>`, which is the checkout the queue works in and what every
+relative path resolves against. Every other flag belongs to the commands that use
 it, and a flag a command does not take is a usage error. `validate` takes no
 `--provider`: it runs the changes' code, so it never talks to the forge.
 
@@ -129,18 +131,23 @@ else `GITHUB_TOKEN`.
 
 `id` and `head` are required. An id is letters, digits, `.`, `_` and `-`, not starting
 with `.` or `-`, since it names a directory; `head` is a full commit id, and `ref` and
-`branch` must be names git accepts. Changes are in queue order. `affected` is the set of
+`branch` must be names git's `check-ref-format` accepts. Changes are in queue order. `affected` is the set of
 units (projects, packages, anything the caller partitions by) the change can reach.
 Omitted or `null` means unknown, and `unbounded_by` names why a set is not a proof;
 either one puts the change in one partition with everything. An empty list is a proof
 that the change reaches nothing.
 
-## The affected hook
+## Affected sets
 
-A change without an `affected` set is asked about with `--affected <command>`: the
-command runs in the checkout with the change's paths on stdin, one per line, and prints a
-JSON object with `affected` and optionally `unbounded_by`. Other keys are ignored, so
-magus's plan output is the answer as it stands:
+A change without an `affected` set is asked about by `plan`. By default it asks the
+magus workspace at `-C` through the Go SDK, computing the set for `--target` (`ci`
+unless given); the workspace is loaded once per plan, and not at all when every change
+already carries its set.
+
+For another build tool, `--affected <command>` runs the command in the checkout with the
+change's paths on stdin, one per line; it prints a JSON object with `affected` and
+optionally `unbounded_by`. Other keys are ignored, so magus's own plan output is an
+answer as it stands:
 
 ```sh
 printf 'libs/parser/lex.go\n' | magus affected ci --plan --stdin
@@ -175,8 +182,8 @@ which magus returns when a lock or the machine budget is busy) is run again, twi
 then stops the run rather than kicking the author back; so does a gate killed by a
 signal, or exiting 130, 137 or 143, a shell's report of one. Gating against
 `$MERGEQUEUE_ONTO` runs only what the top change adds, and the magus cache replays what
-the stage below already ran. Each stage is a worktree of its own, so export one
-`MAGUS_CACHE_DIR` for all of them.
+the stage below already ran. Each stage is a checkout of its own (a git worktree), so
+export one `MAGUS_CACHE_DIR` for all of them.
 
 A file is derived when main's `.gitattributes` sets `linguist-generated` on it (change it
 with `--attribute`); magus writes those lines for every declared output. Attributes are
@@ -189,7 +196,8 @@ on.
 
 `validate --verdicts <dir>` first writes the plan there as `plan.json`, then one
 directory per decided change, named by its id, holding `verdict.json` and, for a green
-change, `stage.bundle` (the staging commits as a git bundle). Each appears by rename the
+change, `stage.export` (the staging commits as the version control exports them, a git
+bundle under git). Each appears by rename the
 moment its change is decided, so a reader never sees a partial one. `.done` beside them
 says the run finished, and a full run writes it even when it stopped early. Validating a
 different plan into a directory that already holds one is an error.
@@ -281,3 +289,31 @@ The GitHub provider reads `GITHUB_TOKEN` or `MERGEQUEUE_TOKEN` for its reads and
 
 Merge intent is GitHub's native auto-merge. Kicking a change back comments and disables
 auto-merge; enabling it again re-queues the change.
+
+## The library
+
+The queue is usable without magus. Its root package, `mergequeue`, holds the three steps
+(`Planner`, `Validator`, `Applier`, each built with its required dependencies and run
+with `Run`), the documents, the verdict directory and the command hooks, and asks its
+host through four interfaces:
+
+| Interface     | What it answers                                              | magus's implementation      |
+| ------------- | ------------------------------------------------------------ | --------------------------- |
+| `StagingRepo` | fetch, check a merge, build and discard stages (runs hooks)  | `client.Repo`               |
+| `MergingRepo` | fetch, import a stage, predict the tree, update a branch     | `client.Repo`               |
+| `BuildFacts`  | a change's affected set, and why it is not a proof           | `client.Workspace`          |
+| `Provider`    | the forge: list, approve, post a status, merge, kick back    | the `provider` Buzz scripts |
+
+`client.Repo` detects the checkout's version control the way magus does and uses the
+`RevisionFetcher` and `Stager` capabilities of magus's `vcs` package. `CommandFacts` is
+the `BuildFacts` behind `--affected`.
+
+Where Go ends and Buzz begins is a rule, not a taste. Go holds what the invariants are
+proven over and what needs the machine: admission, partitioning, stage order, the
+landing checks, version control, processes, files and concurrency. Buzz holds what talks
+to a system outside the repository, the forge and the CI system, as a pure function of
+that system's answers and the record it was handed: it supplies facts and performs
+writes, and decides nothing. A fact the queue acts on is re-checked in Go before it is
+trusted: a change record passes `Change.Check`, an approval must name a head, a stale
+head is unproven. A knob is a fact, not a script: what the schedule computes over comes
+from the build tool and the forge; how it computes is fixed in Go.

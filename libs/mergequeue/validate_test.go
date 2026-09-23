@@ -198,3 +198,12 @@ func TestAValidatorMissingAPartIsAnError(t *testing.T) {
 	_, err = validateWith(t, newStager(nil), newGate(), planOf(1), func(v *Validator) { v.Parallel = -1 })
 	require.EqualError(t, err, "parallel -1 must not be negative")
 }
+
+func TestEveryStageIsHandedTheValidatorsRegeneration(t *testing.T) {
+	st := newStager(nil)
+	regen := func(context.Context, string, string, Change, []string) error { return nil }
+	_, err := validateWith(t, st, newGate(), planOf(2, []Change{change("1", "a"), change("2", "a")}),
+		func(v *Validator) { v.Regenerate = regen })
+	require.NoError(t, err)
+	assert.Equal(t, 2, st.regenerated)
+}

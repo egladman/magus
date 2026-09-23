@@ -1,4 +1,4 @@
-// Package mergequeue is a speculative, partitioned merge queue for git repositories.
+// Package mergequeue is a speculative, partitioned merge queue.
 //
 // A queue run has three steps, each with the rights it needs and no more:
 //
@@ -20,11 +20,21 @@
 // commit or the stage beneath it. The tip is the base branch's commit at apply, and a
 // head is a change's own commit.
 //
-// The queue knows nothing about the build tool: affected sets arrive in the input or
-// from an affected hook, and the gate and the regeneration are hooks run on each stage
-// (see the command package). It knows nothing about the forge either: a [Provider] is a
-// Buzz script (see the provider package) that lists changes, reports approval at a
-// commit, posts a commit status, merges and kicks back.
+// The queue imports nothing of its host. It asks the version control system through
+// [StagingRepo] and [MergingRepo], the build tool through [BuildFacts], and the forge
+// through [Provider]; the gate and the regeneration are hooks run on each stage
+// ([CommandGate], [CommandRegenerate]). The client package implements the first two
+// with magus, and [CommandFacts] asks any other build tool through a command line.
+//
+// Go holds what the invariants are proven over and what needs the machine: admission,
+// partitioning, stage order, the landing checks, version control, processes, files and
+// concurrency. Buzz holds what talks to a system outside the repository, the forge and
+// the CI system, as a pure function of that system's answers and the record it was
+// handed: it supplies facts and performs writes, and decides nothing (see the provider
+// package). A fact the queue acts on is re-checked in Go before it is trusted: a change
+// record passes [Change.Check], an approval must name a head, and a stale head is
+// unproven. A knob is a fact, not a script: what the schedule computes over comes from
+// the build tool and the forge, and how it computes is fixed here.
 //
 // Every document it reads or writes is JSON carrying a "schema" name with a version,
 // and everything it reports is JSONL [Event] records.

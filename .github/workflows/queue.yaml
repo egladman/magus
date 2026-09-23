@@ -2,8 +2,8 @@ name: Queue
 
 # The merge queue's validation half, run by the mergequeue CLI (libs/mergequeue). A pull
 # request joins the queue when auto-merge is enabled on it. The plan job lists the queue,
-# checks approval at each head and partitions it by the affected sets
-# `magus affected ci --plan --stdin` reports; each stage job then validates one change on
+# checks approval at each head and partitions it by the affected sets the magus workspace
+# reports through the Go SDK; each stage job then validates one change on
 # main plus the changes ahead of it in its partition, gated with `magus affected ci`
 # against the stage it was built onto. Every stage uploads its verdict the moment it finishes, and
 # queue-apply.yaml, already running, merges it.
@@ -151,7 +151,7 @@ jobs:
         run: magus buzz tools/queue.buzz
 
       # The directory's contents become the artifact's root: verdict.json and, for a green
-      # change, stage.bundle.
+      # change, stage.export.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: magus-queue-verdict-${{ matrix.change }}

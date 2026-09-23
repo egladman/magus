@@ -22,7 +22,10 @@ type Validator struct {
 	// many disjoint partitions do not each start Depth builds. Zero means
 	// runtime.NumCPU().
 	Parallel int
-	Events   *Events
+	// Regenerate rewrites the derived files a change touches or conflicts in on each
+	// stage. Nil leaves them as merged, which is only right when nothing derives them.
+	Regenerate RegenerateFunc
+	Events     *Events
 
 	repo StagingRepo
 	gate Gate
@@ -246,7 +249,7 @@ func (r *validation) stage(ctx context.Context, onto string, c Change) (Stage, e
 	if err := r.repo.FetchHead(ctx, c); err != nil {
 		return Stage{}, fmt.Errorf("fetch %s: %w", c.Label(), err)
 	}
-	return r.repo.Stage(ctx, r.plan.BaseCommit, onto, c)
+	return r.repo.Stage(ctx, r.plan.BaseCommit, onto, c, r.Regenerate)
 }
 
 func (r *validation) acquire(ctx context.Context) error {

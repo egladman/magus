@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/mergequeue"
-	"github.com/egladman/magus/libs/mergequeue/verdicts"
 )
 
 var gitEnv = []string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
@@ -151,6 +150,17 @@ func (f cliFixture) plan(t *testing.T) string {
 	return planFile
 }
 
+// Without --affected, plan asks the magus workspace at -C, loaded once in process.
+func TestPlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
+	f := newCLIFixture(t, map[string]string{"magusfile.buzz": "", "app/magusfile.buzz": "", "lib/magusfile.buzz": ""})
+	out, err := runCLI(t, string(f.changes), "-C", f.queue, "plan", "--changes", "-", "--out", filepath.Join(f.root, "plan.json"))
+	require.NoError(t, err)
+	evs := events(t, out)
+	require.Len(t, evs, 2)
+	assert.Equal(t, []string{"1"}, evs[0].Changes)
+	assert.Equal(t, []string{"2"}, evs[1].Changes, "app and lib are disjoint projects")
+}
+
 // The CLI end to end, the way a workflow drives it: a changes document with no affected
 // sets, an affected hook that answers them, validation writing a verdict per change, and
 // apply merging each green change through a Buzz provider.
@@ -162,8 +172,8 @@ func TestTheCLIPlansValidatesAndMergesDisjointChanges(t *testing.T) {
 		"--gate", `test "$(cat app/a.txt)" = "change 1" || test "$MERGEQUEUE_CHANGE" = 2`)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]mergequeue.Decision{"1": mergequeue.DecisionMerge, "2": mergequeue.DecisionMerge}, decided(t, out))
-	assert.FileExists(t, filepath.Join(dir, verdicts.DoneFile))
-	assert.FileExists(t, filepath.Join(dir, verdicts.PlanFile), "the directory carries its own plan")
+	assert.FileExists(t, filepath.Join(dir, mergequeue.DoneFile))
+	assert.FileExists(t, filepath.Join(dir, mergequeue.PlanFile), "the directory carries its own plan")
 
 	out, err = runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--interval", "10ms", dir)
 	require.NoError(t, err)
@@ -246,11 +256,11 @@ func TestApplyFollowsAnActionsRun(t *testing.T) {
 	require.NoError(t, err)
 	planDir := filepath.Join(f.root, "plan-artifact")
 	require.NoError(t, os.Mkdir(planDir, 0o755))
-	require.NoError(t, os.Rename(planFile, filepath.Join(planDir, verdicts.PlanFile)))
+	require.NoError(t, os.Rename(planFile, filepath.Join(planDir, mergequeue.PlanFile)))
 	fakeRun(t, map[string]string{
-		verdicts.PlanArtifact:                planDir,
-		verdicts.VerdictArtifactPrefix + "1": filepath.Join(dir, "1"),
-		verdicts.VerdictArtifactPrefix + "2": filepath.Join(dir, "2"),
+		mergequeue.PlanArtifact:                planDir,
+		mergequeue.VerdictArtifactPrefix + "1": filepath.Join(dir, "1"),
+		mergequeue.VerdictArtifactPrefix + "2": filepath.Join(dir, "2"),
 	})
 
 	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--interval", "10ms", "github-actions:acme/widgets/runs/7")
@@ -282,7 +292,7 @@ func TestApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, out))
 
-	require.NoError(t, os.Remove(filepath.Join(dir, verdicts.PlanFile)))
+	require.NoError(t, os.Remove(filepath.Join(dir, mergequeue.PlanFile)))
 	for _, mode := range [][]string{{"--once"}, {"--interval", "10ms"}} {
 		args := append(append([]string{"-C", f.queue, "apply", "--provider", f.provider(t)}, mode...), dir)
 		_, err = runCLI(t, "", args...)
@@ -297,7 +307,7 @@ func TestApplyFollowsADirectoryUntilDoneUnlessOnce(t *testing.T) {
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 	_, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir, "--only", "1", "--gate", "true")
 	require.NoError(t, err)
-	require.NoFileExists(t, filepath.Join(dir, verdicts.DoneFile))
+	require.NoFileExists(t, filepath.Join(dir, mergequeue.DoneFile))
 
 	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--once", "--dry-run", dir)
 	require.NoError(t, err)
@@ -325,7 +335,7 @@ func TestApplyFollowsADirectoryUntilDoneUnlessOnce(t *testing.T) {
 		t.Fatalf("apply returned before the directory was done: %v", r.err)
 	case <-time.After(50 * time.Millisecond):
 	}
-	require.NoError(t, (&verdicts.Dir{Path: dir}).MarkDone())
+	require.NoError(t, (&mergequeue.VerdictDir{Path: dir}).MarkDone())
 	r := <-followed
 	require.NoError(t, r.err)
 	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, r.out))
@@ -348,7 +358,7 @@ func TestDashCResolvesRelativePathsAgainstTheCheckout(t *testing.T) {
 	assert.FileExists(t, filepath.Join(f.queue, "plan.json"))
 	_, err = runCLI(t, "", "-C", "queue", "validate", "--plan", "plan.json", "--verdicts", "verdicts", "--gate", "true")
 	require.NoError(t, err)
-	assert.FileExists(t, filepath.Join(f.queue, "verdicts", verdicts.PlanFile))
+	assert.FileExists(t, filepath.Join(f.queue, "verdicts", mergequeue.PlanFile))
 	out, err := runCLI(t, "", "-C", "queue", "apply", "--provider", "local.buzz", "--once", "verdicts")
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, out))
@@ -402,7 +412,7 @@ func TestAFailingRegenerationKicksItsChangeBackAndTheRunFinishes(t *testing.T) {
 		"--gate", "true", "--regenerate", `echo "cannot regenerate $MERGEQUEUE_CHANGE" >&2; exit 1`)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]mergequeue.Decision{"1": mergequeue.DecisionMerge, "2": mergequeue.DecisionKick}, decided(t, out))
-	assert.FileExists(t, filepath.Join(dir, verdicts.DoneFile))
+	assert.FileExists(t, filepath.Join(dir, mergequeue.DoneFile))
 }
 
 func TestUsageMistakesExitTwoAndErrorsNameTheirCommandOnce(t *testing.T) {
@@ -441,6 +451,7 @@ func TestUsageMistakesExitTwoAndErrorsNameTheirCommandOnce(t *testing.T) {
 		"ls runs nothing in parallel":      {"ls", "--parallel", "2", "--provider", "github", "--base", "main"},
 		"apply runs nothing in parallel":   {"apply", "--parallel", "2", "--provider", "github", "s"},
 		"plan merges nothing":              {"plan", "--dry-run", "--out", "p"},
+		"--target is magus's alone":        {"plan", "--out", "p", "--affected", "true", "--target", "build"},
 		"validate merges nothing":          {"validate", "--once", "--plan", "p", "--gate", "true", "--verdicts", "v"},
 	} {
 		_, err = runCLI(t, "", args...)

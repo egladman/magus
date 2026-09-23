@@ -1,4 +1,4 @@
-package verdicts
+package mergequeue
 
 import (
 	"archive/zip"
@@ -15,8 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/egladman/magus/libs/mergequeue"
 )
 
 // The artifact names a validation run uploads under. The plan artifact carries
@@ -26,8 +24,8 @@ const (
 	VerdictArtifactPrefix = "magus-queue-verdict-"
 )
 
-// DefaultAPI is the GitHub REST API an [ActionsRun] reads when API is empty.
-const DefaultAPI = "https://api.github.com"
+// DefaultActionsAPI is the GitHub REST API an [ActionsRun] reads when API is empty.
+const DefaultActionsAPI = "https://api.github.com"
 
 // artifactPage is the listing's page size, the API's maximum.
 const artifactPage = 100
@@ -35,7 +33,7 @@ const artifactPage = 100
 // ActionsRun follows one GitHub Actions workflow run and unpacks its artifacts into the
 // verdict directory Path as the run uploads them: [PlanArtifact] becomes Path/[PlanFile]
 // and each [VerdictArtifactPrefix]<id> becomes the entry for change <id>. It is a
-// [mergequeue.VerdictSource], so an Applier merges a green change while slower stages of
+// [VerdictSource], so an Applier merges a green change while slower stages of
 // the same run are still going.
 //
 // While following, it reads the run's status before listing its artifacts, and reports
@@ -43,7 +41,7 @@ const artifactPage = 100
 // artifact the run uploaded. Methods must not be called concurrently, and an ActionsRun
 // must not be copied after first use.
 type ActionsRun struct {
-	API   string // REST base URL; empty means DefaultAPI
+	API   string // REST base URL; empty means DefaultActionsAPI
 	Repo  string // owner/name
 	RunID string
 	Token string
@@ -57,25 +55,25 @@ type ActionsRun struct {
 	// drops Authorization on a redirect to another host, which is what keeps the token
 	// away from the storage host an artifact download redirects to.
 	Client *http.Client
-	Events *mergequeue.Events
+	Events *Events
 
-	dir Dir
+	dir VerdictDir
 }
 
-var _ mergequeue.VerdictSource = (*ActionsRun)(nil)
+var _ VerdictSource = (*ActionsRun)(nil)
 
 var defaultClient = &http.Client{Timeout: 60 * time.Second}
 
 // Plan returns the plan the run's [PlanArtifact] carries, waiting for it while following.
 // It returns false, and no error, when the run completed without uploading one or,
 // without Follow, has not uploaded one yet.
-func (r *ActionsRun) Plan(ctx context.Context) (mergequeue.Plan, bool, error) {
+func (r *ActionsRun) Plan(ctx context.Context) (Plan, bool, error) {
 	return awaitPlan(ctx, filepath.Join(r.Path, PlanFile), r.Interval, r.sync)
 }
 
 // Poll unpacks what the run uploaded since the last call and returns the verdicts among
 // it; done once the run has completed, or at once without Follow.
-func (r *ActionsRun) Poll(ctx context.Context) ([]mergequeue.Verdict, bool, error) {
+func (r *ActionsRun) Poll(ctx context.Context) ([]Verdict, bool, error) {
 	completed, err := r.sync(ctx)
 	if err != nil {
 		return nil, false, err
@@ -164,7 +162,7 @@ func (r *ActionsRun) unpackPlan(ctx context.Context, id int64) error {
 }
 
 func (r *ActionsRun) unpackVerdict(ctx context.Context, id int64, change string) error {
-	if err := mergequeue.CheckID(change); err != nil {
+	if err := CheckID(change); err != nil {
 		return fmt.Errorf("artifact %s%s: %w", VerdictArtifactPrefix, change, err)
 	}
 	final := filepath.Join(r.Path, change)
@@ -185,7 +183,7 @@ func (r *ActionsRun) unpackVerdict(ctx context.Context, id int64, change string)
 }
 
 // download extracts artifact id into a new directory under Path whose name starts with
-// ".", which [Dir.Poll] skips until it is renamed into place. The caller owns it.
+// ".", which [VerdictDir.Poll] skips until it is renamed into place. The caller owns it.
 func (r *ActionsRun) download(ctx context.Context, id int64, name string) (string, error) {
 	archive, err := os.CreateTemp(r.Path, ".zip-")
 	if err != nil {
@@ -266,7 +264,7 @@ func writeEntry(e *zip.File, dst string) error {
 func (r *ActionsRun) repoURL(segments ...string) string {
 	base := strings.TrimRight(r.API, "/")
 	if base == "" {
-		base = DefaultAPI
+		base = DefaultActionsAPI
 	}
 	u := base + "/repos/" + r.Repo
 	for _, s := range segments {
@@ -306,7 +304,7 @@ func (r *ActionsRun) get(ctx context.Context, u string, read func(io.Reader) err
 }
 
 func (r *ActionsRun) notice(reason string) {
-	r.Events.Emit(mergequeue.Event{Kind: mergequeue.EventNotice, Reason: reason})
+	r.Events.Emit(Event{Kind: EventNotice, Reason: reason})
 }
 
 func exists(p string) bool {

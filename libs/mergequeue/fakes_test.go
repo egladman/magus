@@ -43,6 +43,8 @@ type fakeStager struct {
 	mu        sync.Mutex
 	builds    []string
 	discarded int
+	// regenerated counts the stages handed a regeneration hook.
+	regenerated int
 }
 
 func newStager(paths map[string][]string) *fakeStager {
@@ -66,7 +68,14 @@ func (s *fakeStager) CheckMerge(_ context.Context, _ string, c Change) error {
 	return nil
 }
 
-func (s *fakeStager) Stage(_ context.Context, _, onto string, c Change) (Stage, error) {
+// factsFunc is BuildFacts from a function.
+type factsFunc func(ctx context.Context, c Change, paths []string) ([]string, string, error)
+
+func (f factsFunc) Affected(ctx context.Context, c Change, paths []string) ([]string, string, error) {
+	return f(ctx, c, paths)
+}
+
+func (s *fakeStager) Stage(_ context.Context, _, onto string, c Change, regenerate RegenerateFunc) (Stage, error) {
 	for _, below := range strings.Split(onto, "+")[1:] {
 		if p, ok := s.conflicts[[2]string{below, c.ID}]; ok {
 			return Stage{}, &ConflictError{Conflict: Conflict{Change: c, Paths: p}}
@@ -78,6 +87,9 @@ func (s *fakeStager) Stage(_ context.Context, _, onto string, c Change) (Stage, 
 	commit := onto + "+" + c.ID
 	s.mu.Lock()
 	s.builds = append(s.builds, commit)
+	if regenerate != nil {
+		s.regenerated++
+	}
 	s.mu.Unlock()
 	return Stage{Commit: commit, Dir: "/stages/" + commit}, nil
 }

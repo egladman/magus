@@ -41,7 +41,7 @@ func (l *fakeMergingRepo) ReviewTarget(_ context.Context, _, h string) (string, 
 	return h, nil
 }
 
-func (l *fakeMergingRepo) ImportBundle(_ context.Context, file string) error {
+func (l *fakeMergingRepo) ImportStage(_ context.Context, file string) error {
 	l.imported = append(l.imported, file)
 	return nil
 }
@@ -226,7 +226,7 @@ func TestSuccessIsPostedOnlyOnceTheChangeMerged(t *testing.T) {
 // one beneath it waits for it rather than merging out of order.
 func TestEachStageMergesTheMomentItAndEverythingBeneathItAreGreen(t *testing.T) {
 	two := green("2", base+"+1", "1")
-	two.Bundle = "verdicts/2/stage.bundle"
+	two.StageFile = "verdicts/2/" + StageFile
 	src := &polls{batches: [][]Verdict{{two}, {green("7", base, "")}, {green("1", base, "")}}}
 	a, repo, p := newApplier(src)
 	var order []string
@@ -238,7 +238,7 @@ func TestEachStageMergesTheMomentItAndEverythingBeneathItAreGreen(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"7@poll2", "1@poll3", "2@poll3"}, order,
 		"#7 merges while #1 is still validating; #2, green first, waits for #1")
-	assert.Equal(t, []string{"verdicts/2/stage.bundle"}, repo.imported)
+	assert.Equal(t, []string{two.StageFile}, repo.imported)
 }
 
 func TestAChangeValidatedOnOneThatDidNotMergeWaits(t *testing.T) {

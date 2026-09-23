@@ -174,7 +174,7 @@ func (p *Script) ListChanges(ctx context.Context, q mergequeue.ListQuery) ([]mer
 }
 
 // decodeChange refuses a record [mergequeue.Change.Check] refuses: the queue would stage
-// and post against nothing, or hand git an option.
+// and post against nothing, or hand the version control an option.
 func decodeChange(row any, where string) (mergequeue.Change, error) {
 	m, ok := row.(map[string]any)
 	if !ok {

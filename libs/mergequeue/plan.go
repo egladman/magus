@@ -14,13 +14,13 @@ type Planner struct {
 	// Provider checks approval at each head. Nil admits every change unchecked, for a
 	// caller that vouched for its input; an Applier re-checks approval regardless.
 	Provider Provider
-	// Affected is asked about a change whose input carries no affected set. Nil leaves
-	// such a change unbounded.
-	Affected AffectedFunc
+	// Facts is asked about a change whose input carries no affected set. Nil leaves such
+	// a change unbounded.
+	Facts BuildFacts
 	// Depth is how many stages of one partition validate at once. Zero means 1.
 	Depth int
-	// Parallel is how many changes are admitted (fetched, checked, and put to Affected)
-	// at once. Zero means 1.
+	// Parallel is how many changes are admitted (fetched, checked, and put to Facts) at
+	// once. Zero means 1.
 	Parallel int
 	Events   *Events
 
@@ -138,10 +138,10 @@ func (p *Planner) admit(ctx context.Context, base, tip string, c Change) (admiss
 		report := conflictReport(base, c.Head, conf)
 		return decide(DecisionKick, firstLine(report), report)
 	}
-	if c.Affected == nil && c.UnboundedBy == "" && p.Affected != nil {
-		// The hook is a build tool loading its workspace once per call, the slowest step
-		// of a plan, which is why admission runs side by side.
-		affected, unboundedBy, err := p.Affected(ctx, c, paths)
+	if c.Affected == nil && c.UnboundedBy == "" && p.Facts != nil {
+		// Asking the build tool is the slowest step of a plan, which is why admission
+		// runs side by side.
+		affected, unboundedBy, err := p.Facts.Affected(ctx, c, paths)
 		if err != nil {
 			return admission{}, fmt.Errorf("affected set of %s: %w", c.Label(), err)
 		}

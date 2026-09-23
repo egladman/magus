@@ -1,4 +1,4 @@
-package verdicts
+package mergequeue
 
 import (
 	"archive/zip"
@@ -16,8 +16,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/libs/mergequeue"
 )
 
 // fakeActions serves the three GitHub REST routes an ActionsRun reads, for run 7 of
@@ -112,24 +110,24 @@ func zipOf(t *testing.T, files map[string][]byte) []byte {
 
 func planBytes(t *testing.T, ids ...string) []byte {
 	t.Helper()
-	var g []mergequeue.Change
+	var g []Change
 	for _, id := range ids {
 		g = append(g, change(id))
 	}
 	var buf bytes.Buffer
-	require.NoError(t, mergequeue.WritePlan(&buf, mergequeue.Plan{
-		Base: "main", BaseCommit: strings.Repeat("b", 40), Depth: 3, Partitions: [][]mergequeue.Change{g},
+	require.NoError(t, WritePlan(&buf, Plan{
+		Base: "main", BaseCommit: strings.Repeat("b", 40), Depth: 3, Partitions: [][]Change{g},
 	}))
 	return buf.Bytes()
 }
 
-func verdictFiles(t *testing.T, id string, bundle bool) map[string][]byte {
+func verdictFiles(t *testing.T, id string, staged bool) map[string][]byte {
 	t.Helper()
 	var buf bytes.Buffer
-	require.NoError(t, mergequeue.WriteVerdict(&buf, mergequeue.Verdict{Change: change(id), Decision: mergequeue.DecisionWait}))
+	require.NoError(t, WriteVerdict(&buf, Verdict{Change: change(id), Decision: DecisionWait}))
 	files := map[string][]byte{VerdictFile: buf.Bytes()}
-	if bundle {
-		files[BundleFile] = []byte("bundle")
+	if staged {
+		files[StageFile] = []byte("stage")
 	}
 	return files
 }
@@ -142,7 +140,7 @@ func newRun(t *testing.T, f *fakeActions) *ActionsRun {
 	return &ActionsRun{API: srv.URL + "/", Repo: "acme/widgets", RunID: "7", Token: "tok", Path: filepath.Join(t.TempDir(), "verdicts"), Follow: true, Interval: 1}
 }
 
-func ids(vs []mergequeue.Verdict) []string {
+func verdictIDs(vs []Verdict) []string {
 	out := []string{}
 	for _, v := range vs {
 		out = append(out, v.Change.ID)
@@ -170,16 +168,16 @@ func TestActionsRunUnpacksArtifactsAcrossPollsAndIsDoneOnceTheRunCompletes(t *te
 	f.add(VerdictArtifactPrefix+"1", verdictFiles(t, "1", true))
 	fresh, done, err = r.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, ids(fresh))
-	assert.Equal(t, filepath.Join(r.Path, "1", BundleFile), fresh[0].Bundle)
+	assert.Equal(t, []string{"1"}, verdictIDs(fresh))
+	assert.Equal(t, filepath.Join(r.Path, "1", StageFile), fresh[0].StageFile)
 	assert.False(t, done)
 
 	f.add(VerdictArtifactPrefix+"2", verdictFiles(t, "2", false))
 	f.status = "completed"
 	fresh, done, err = r.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"2"}, ids(fresh), "each verdict once")
-	assert.Empty(t, fresh[0].Bundle)
+	assert.Equal(t, []string{"2"}, verdictIDs(fresh), "each verdict once")
+	assert.Empty(t, fresh[0].StageFile)
 	assert.True(t, done)
 }
 
@@ -194,7 +192,7 @@ func TestActionsRunReadsTheStatusBeforeTheListingItTrusts(t *testing.T) {
 	}
 	fresh, done, err := r.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, ids(fresh))
+	assert.Equal(t, []string{"1"}, verdictIDs(fresh))
 	assert.False(t, done, "the status read predates the listing, so it vouches for nothing in it")
 	assert.Equal(t, []string{
 		"/repos/acme/widgets/actions/runs/7",
@@ -236,7 +234,7 @@ func TestActionsRunWithoutFollowReadsOneListingOfARunInProgress(t *testing.T) {
 	assert.True(t, ok)
 	fresh, done, err := r.Poll(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1"}, ids(fresh))
+	assert.Equal(t, []string{"1"}, verdictIDs(fresh))
 	assert.True(t, done, "a run still going is complete as far as one pass reads")
 }
 
