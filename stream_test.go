@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -120,36 +121,32 @@ func TestStream_EmptyBatchSkipped(t *testing.T) {
 	assert.False(t, errCalled, "Stream (empty input): errFn called unexpectedly")
 }
 
-// TestStream_BatchErrorDoesNotStopTheLoop pins the --watch contract: magus never waits
-// on another magus process, so a batch that hits a contended lock or a full machine
-// budget now fails a whole target run (exit 75) instead of blocking. That failure must
-// be reported through errFn and skipped, not treated as fatal to the stream: a later
-// batch (the next change) still gets a turn, and Stream itself still returns nil.
+// TestStream_BatchErrorDoesNotStopTheLoop pins that a failed batch is reported through
+// errFn and skipped rather than ending the stream: the next change still gets a turn,
+// and Stream itself returns nil. Under --watch that is what turns a refused run (exit
+// 75, another invocation holding the lock) into a retry on the next change.
 //
-// A zero Magus has no workspace, so every batch's AffectedFromPaths errors the same way
-// a real contention would surface to errFn; the loop's behavior on that error is what
-// this test pins, not the specific cause.
+// A zero Magus has no workspace, so every batch fails in AffectedFromPaths; the loop's
+// handling of a failure is what this pins, whatever the cause.
 func TestStream_BatchErrorDoesNotStopTheLoop(t *testing.T) {
 	t.Parallel()
 	m := &Magus{}
-	var mu sync.Mutex
-	var errs int
+	var errs atomic.Int32
+	firstFailed := make(chan struct{})
+	var once sync.Once
 	pr, pw := io.Pipe()
 	go func() {
-		io.WriteString(pw, "a\n\n")
-		// Long enough that the first batch is picked up, fails, and the worker goes
-		// idle again before the second one (the "next change") arrives.
-		time.Sleep(100 * time.Millisecond)
-		io.WriteString(pw, "b\n\n")
-		pw.Close()
+		_, _ = io.WriteString(pw, "a\n\n")
+		// The next change arrives only after the first batch has failed, so it cannot be
+		// merged into the batch it is meant to follow.
+		<-firstFailed
+		_, _ = io.WriteString(pw, "b\n\n")
+		_ = pw.Close()
 	}()
 	err := m.Stream(context.Background(), pr, "build", func(error) {
-		mu.Lock()
-		errs++
-		mu.Unlock()
+		errs.Add(1)
+		once.Do(func() { close(firstFailed) })
 	})
 	require.NoError(t, err, "a batch failure must never become Stream's own return value")
-	mu.Lock()
-	defer mu.Unlock()
-	assert.Equal(t, 2, errs, "both the failing batch and the next change must be attempted")
+	assert.Equal(t, int32(2), errs.Load(), "both the failing batch and the next change must be attempted")
 }

@@ -118,10 +118,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **magus never waits on another magus process.** A held workspace lock or machine
-  budget now refuses immediately (exit 75), naming the holder, instead of queuing with a
-  heartbeat. `MAGUS_NO_WAIT` is removed: that is the only behavior now. A nested run under
-  its own parent's claim is still excused, and `--watch` retries on the next change.
+- **magus never waits on another magus invocation.** A workspace lock or machine budget
+  held by another invocation refuses immediately (exit 75), naming the holder.
+  `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
+  other, as do the nested runs of one root invocation. `--watch` retries on the next
+  change.
 - **A daemon whose workspace fails to load keeps serving and says why.** The console,
   `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
@@ -134,9 +135,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
 - **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
-  projects/charms/cache header, per-stage progress, the run summary and lock-wait
-  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
-  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
+  projects/charms/cache header, per-stage progress and the run summary are now typed
+  events (`run.scope`, `run.step`, `run.summary`, `run.notice`) on the same stream as
+  `run.target.result`; anything not
   yet converted falls back to a plain JSON line instead of prose.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination

@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
 
@@ -178,32 +179,53 @@ func TestContendedAcquireFailsFast(t *testing.T) {
 	}
 }
 
-// TestAcquireAllSortedNoDeadlock proves multi-project acquisition in sorted order
-// is deadlock-safe: two goroutines each lock the same set given in OPPOSING
-// orders and both complete. Sorted acquisition means neither can hold one lock
-// while waiting on another the peer holds.
+// TestAcquireAllSortedNoDeadlock proves multi-project acquisition in sorted order is
+// deadlock-safe where acquires queue: two invocations of one process each lock the same
+// set given in OPPOSING orders and both complete.
+func TestAcquireAllSortedNoDeadlock(t *testing.T) {
+	cacheDir := t.TempDir()
+	sets := [][]string{{"a", "b", "c"}, {"c", "b", "a"}}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, len(sets)*20)
+	for _, set := range sets {
+		wg.Go(func() {
+			l := newProjectLocker(cacheDir, testWorkspaceRoot)
+			for range 20 {
+				rel, err := l.acquireAll(ctx, set)
+				if err != nil {
+					errs <- err
+					return
+				}
+				rel()
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("acquireAll: %v", err)
+	}
+}
+
 // TestAcquireAllReleasesOnContention proves acquireAll rolls back whatever it already
 // holds when a later lock in the sorted set is held by a different process, rather than
 // leaving a partial acquisition in place.
-//
-// This replaces a test that ran two goroutines acquiring {a,b,c} and {c,b,a} concurrently
-// to prove sorted acquisition could not deadlock via opposing lock order. Under fail-fast
-// that guarantee is now unconditional: acquire never blocks, so two invocations can never
-// wait on each other and a mutual-wait deadlock cannot occur by construction. What is left
-// to prove is that a partial failure inside acquireAll cleans up after itself.
 func TestAcquireAllReleasesOnContention(t *testing.T) {
 	cacheDir := t.TempDir()
-	locker := newProjectLocker(cacheDir, testWorkspaceRoot)
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
-	// A second locker stands in for a different magus process holding "b".
-	holder := newProjectLocker(cacheDir, testWorkspaceRoot)
-	relB, err := holder.acquire(context.Background(), "b")
-	if err != nil {
-		t.Fatalf("holder acquire: %v", err)
+	cmd := helperHold(t, cacheDir, "b", 5_000)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start holder: %v", err)
 	}
-	defer relB()
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	waitForFile(t, filepath.Join(lockDir, "b", "ready"), 3*time.Second)
 
-	_, err = locker.acquireAll(context.Background(), []string{"a", "b", "c"})
+	locker := newProjectLocker(cacheDir, testWorkspaceRoot)
+	_, err := locker.acquireAll(context.Background(), []string{"a", "b", "c"})
 	var c *lockContendedError
 	if !errors.As(err, &c) {
 		t.Fatalf("want *lockContendedError for the held project, got %v", err)
@@ -219,6 +241,107 @@ func TestAcquireAllReleasesOnContention(t *testing.T) {
 		t.Fatalf("acquire %q after acquireAll failed: %v; a partial hold was leaked", "a", err)
 	}
 	relA()
+}
+
+// TestInProcessContentionQueues pins the daemon shape: two unrelated invocations in ONE
+// process (two adopted clients, or a client and the symbol indexer) contend for a project.
+// flock conflicts per open file description, so without in-process arbitration the second
+// is refused as "another magus process" naming its own pid.
+func TestInProcessContentionQueues(t *testing.T) {
+	cacheDir := t.TempDir()
+	first := newProjectLocker(cacheDir, testWorkspaceRoot)
+	rel, err := first.acquire(ancestryCtx(t, "inv-client-a"), "app")
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ancestryCtx(t, "inv-client-b"), 10*time.Second)
+	defer cancel()
+	second := newProjectLocker(cacheDir, testWorkspaceRoot)
+	type result struct {
+		rel func()
+		err error
+	}
+	got := make(chan result, 1)
+	go func() {
+		r, err := second.acquire(ctx, "app")
+		got <- result{r, err}
+	}()
+
+	select {
+	case r := <-got:
+		if r.rel != nil {
+			r.rel()
+		}
+		rel()
+		t.Fatalf("second acquire returned (%v) while the first held the lock; an invocation of the same process must queue", r.err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	rel()
+	select {
+	case r := <-got:
+		if r.err != nil {
+			t.Fatalf("second acquire after the first released: %v", r.err)
+		}
+		if owner := second.readOwner("app"); owner.Inv != "inv-client-b" {
+			t.Errorf("owner Inv = %q, want the queued invocation to hold it", owner.Inv)
+		}
+		r.rel()
+	case <-time.After(5 * time.Second):
+		t.Fatal("second acquire never took the lock after the first released")
+	}
+}
+
+// TestASiblingOfTheSameRunIsAwaited pins cross-process contention inside one root
+// invocation: a ci target whose parallel steps each shell `magus run build libs/shared`
+// runs two child processes under one root. They belong to one run, so the later child
+// waits for its sibling; a holder under any other root is still refused.
+func TestASiblingOfTheSameRunIsAwaited(t *testing.T) {
+	const root = "1:inv-root"
+	cases := []struct {
+		name       string
+		holderRoot string
+		wantWait   bool
+	}{
+		{"a sibling under the same root is awaited", root, true},
+		{"a holder under another root is refused", "1:inv-other-root", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cacheDir := t.TempDir()
+			lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+			cmd := helperHold(t, cacheDir, "libs/shared", 400,
+				procrun.AncestorsEnvVar+"="+tc.holderRoot, "LOCKTEST_INV=inv-sibling-a")
+			if err := cmd.Start(); err != nil {
+				t.Fatalf("start holder: %v", err)
+			}
+			t.Cleanup(func() { _ = cmd.Process.Kill() })
+			waitForFile(t, filepath.Join(lockDir, "libs", "shared", "ready"), 3*time.Second)
+
+			ctx := types.AppendInvocationAncestor(
+				types.WithInvocationAncestors(context.Background(), []string{root}), os.Getpid(), "inv-sibling-b")
+			ctx, cancel := context.WithTimeout(journal.WithInvocationID(ctx, "inv-sibling-b"), 10*time.Second)
+			defer cancel()
+
+			l := newProjectLocker(cacheDir, testWorkspaceRoot)
+			rel, err := l.acquire(ctx, "libs/shared")
+			if !tc.wantWait {
+				var c *lockContendedError
+				if !errors.As(err, &c) {
+					t.Fatalf("want *lockContendedError for a holder under another root, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("acquire behind a sibling of the same run: %v; siblings wait for each other", err)
+			}
+			defer rel()
+			if err := cmd.Wait(); err != nil {
+				t.Fatalf("holder subprocess failed: %v", err)
+			}
+		})
+	}
 }
 
 // TestLockPathMirrorsProjectTree proves lock files mirror the project tree and
@@ -270,7 +393,10 @@ func TestLockNamespaceIsPerWorkspace(t *testing.T) {
 // helperHold builds a command that runs TestHelperHold in a subprocess, which
 // acquires the given project's exclusive lock, signals readiness, and holds for
 // holdMS milliseconds. Running in a separate process exercises the real OS lock.
-func helperHold(t *testing.T, cacheDir, project string, holdMS int) *exec.Cmd {
+//
+// env is appended last, so it can hand the holder an ancestry (MAGUS_INVOCATION_ANCESTORS),
+// its own invocation id (LOCKTEST_INV), or gate status (LOCKTEST_GATE=1).
+func helperHold(t *testing.T, cacheDir, project string, holdMS int, env ...string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=TestHelperHold")
 	cmd.Env = append(os.Environ(),
@@ -278,7 +404,9 @@ func helperHold(t *testing.T, cacheDir, project string, holdMS int) *exec.Cmd {
 		"LOCKTEST_CACHE_DIR="+cacheDir,
 		"LOCKTEST_PROJECT="+project,
 		"LOCKTEST_HOLD_MS="+strconv.Itoa(holdMS),
+		procrun.AncestorsEnvVar+"=",
 	)
+	cmd.Env = append(cmd.Env, env...)
 	cmd.Stderr = os.Stderr
 	return cmd
 }
@@ -294,8 +422,17 @@ func TestHelperHold(t *testing.T) {
 	project := os.Getenv("LOCKTEST_PROJECT")
 	holdMS, _ := strconv.Atoi(os.Getenv("LOCKTEST_HOLD_MS"))
 
-	locker := newProjectLocker(cacheDir, testWorkspaceRoot)
-	rel, err := locker.acquire(context.Background(), project)
+	// Assembled the way a nested magus assembles it: the inherited ancestry, then its own id.
+	ctx := types.WithInvocationAncestors(context.Background(), procrun.AncestorsFromEnv())
+	if inv := os.Getenv("LOCKTEST_INV"); inv != "" {
+		ctx = journal.WithInvocationID(types.AppendInvocationAncestor(ctx, os.Getpid(), inv), inv)
+	}
+	var opts []lockerOption
+	if os.Getenv("LOCKTEST_GATE") == "1" {
+		opts = append(opts, asGate())
+	}
+	locker := newProjectLocker(cacheDir, testWorkspaceRoot, opts...)
+	rel, err := locker.acquire(ctx, project)
 	if err != nil {
 		t.Fatalf("helper acquire: %v", err)
 	}
@@ -497,46 +634,6 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 	}
 }
 
-// TestLockWaitersAreRecorded pins the second half of the picture. A holder answers
-// "who is working"; a waiter answers "who is stalled because of it", which is the
-// question anyone staring at a queue that will not move is actually asking.
-func TestLockWaitersAreRecorded(t *testing.T) {
-	cache := t.TempDir()
-	l := newProjectLocker(cache, testWorkspaceRoot)
-
-	release, err := l.acquire(context.Background(), "web/api")
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	defer release()
-
-	if held := heldLocks(cache, testWorkspaceRoot); len(held) != 1 || len(held[0].Waiters) != 0 {
-		t.Fatalf("HeldLocks with no contention = %+v; want one holder and no waiters", held)
-	}
-
-	// A waiter marker is written while blocked and cleared when the wait ends, so
-	// record/clear is exercised directly rather than racing a second process.
-	stop := l.recordWaiter(context.Background(), "web/api")
-	held := heldLocks(cache, testWorkspaceRoot)
-	if len(held) != 1 {
-		t.Fatalf("HeldLocks = %d entries, want 1", len(held))
-	}
-	if len(held[0].Waiters) != 1 {
-		t.Fatalf("waiters = %+v, want exactly one", held[0].Waiters)
-	}
-	if held[0].Waiters[0].PID != os.Getpid() {
-		t.Errorf("waiter pid = %d, want %d", held[0].Waiters[0].PID, os.Getpid())
-	}
-	if held[0].Waiters[0].WaitTime.IsZero() {
-		t.Error("waiter WaitTime is zero; how long a run has been stalled is the point")
-	}
-
-	stop()
-	if held := heldLocks(cache, testWorkspaceRoot); len(held) != 1 || len(held[0].Waiters) != 0 {
-		t.Errorf("after the wait ended, waiters = %+v; want none", held[0].Waiters)
-	}
-}
-
 // TestWatchWorkspaceRootReleasesOnVanish pins the orphan case. A process whose
 // checkout is deleted keeps running and, because a flock lives exactly as long as its
 // holder, keeps every lock it took. Peers then wait forever on a holder that is never
@@ -659,6 +756,7 @@ func TestLockRecordRoundTripsTheSupersedeFields(t *testing.T) {
 		Dir:     "/ws",
 		Started: time.Now(),
 		Inv:     "inv-0123456789abcdef",
+		Run:     "41200:inv-root",
 		Root:    "/ws",
 		Gate:    true,
 	}
@@ -896,21 +994,24 @@ func TestAnUnansweredSupersedeFallsBackToRefusing(t *testing.T) {
 	quickSupersede(t, 200*time.Millisecond)
 	out, toOut := captureLockOut()
 	cacheDir := t.TempDir()
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
-	// No watch is armed over this holder, so nothing ever reads the request. It releases
-	// well after the supersede bound, so a test that blocked for it would prove the wait
-	// this refusal is supposed to have replaced.
-	earlier := newProjectLocker(cacheDir, testWorkspaceRoot, asGate(), toOut)
-	earlier.started = time.Now().Add(-time.Minute)
-	rel, err := earlier.acquire(t.Context(), "app")
-	if err != nil {
-		t.Fatalf("earlier acquire: %v", err)
+	// Another process, since only another process is ever refused. No watch is armed
+	// over it, so nothing reads the request, and it holds well past the supersede bound,
+	// so a test that blocked for it would prove a wait rather than the refusal.
+	cmd := helperHold(t, cacheDir, "app", 5_000, "LOCKTEST_GATE=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start holder: %v", err)
 	}
-	defer rel()
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	waitForFile(t, filepath.Join(lockDir, "app", "ready"), 3*time.Second)
 
+	// RFC3339 keeps seconds, so a gate that began within the holder's second would not
+	// read as later.
 	later := newProjectLocker(cacheDir, testWorkspaceRoot, asGate(), toOut)
+	later.started = time.Now().Add(2 * time.Second)
 	start := time.Now()
-	_, err = later.acquire(t.Context(), "app")
+	_, err := later.acquire(t.Context(), "app")
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("acquire took %v after an unanswered supersede; want a fail-fast refusal, not a wait", elapsed)
 	}

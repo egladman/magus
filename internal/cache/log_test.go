@@ -638,14 +638,6 @@ func TestStatusLineRender(t *testing.T) {
 		{"pool only, nothing done yet", statusLine{capacity: 8, running: 3}, "■ ■ ■ □ □ □ □ □ (3/8)"},
 		{"queued work is shown", statusLine{capacity: 8, running: 8, queued: 2}, "■ ■ ■ ■ ■ ■ ■ ■ (8/8), 2 queued"},
 		{"a quiet queue is omitted", statusLine{capacity: 4}, "□ □ □ □ (0/4)"},
-		// A blocked run leads, because the pool counters alone would read as a stall
-		// with no cause. This is the clause that describes doing nothing.
-		// The blocked state deliberately does NOT appear here: it is announced
-		// once, as the pinned notification, which is bold and carries the
-		// remedy. Saying it in both places said the same facts twice for one
-		// event. The fields are still set: blockedMessage reads them.
-		{"a blocked run does not repeat itself here", statusLine{capacity: 8, blocked: "web/api"}, "□ □ □ □ □ □ □ □ (0/8)"},
-		{"nor when the holder is known", statusLine{capacity: 8, blocked: ".", blockedBy: "pid 71557 (magus run serve)"}, "□ □ □ □ □ □ □ □ (0/8)"},
 		{
 			"tally appears once work completes",
 			statusLine{capacity: 8, running: 2, passed: 3, cached: 2},
@@ -1172,9 +1164,6 @@ func TestNoEscapeSequencesEverReachAPipe(t *testing.T) {
 	for _, rec := range []slog.Record{
 		buildRecord("cache.scope", slog.String("label", "api"), slog.String("source", "vcs")),
 		buildRecord("cache.pool", slog.Int("capacity", 8), slog.Int("running", 3), slog.Int("queued", 1)),
-		buildRecord("lock.waiting", slog.String("project", "api"),
-			slog.String("holder_pid", "4211"), slog.String("holder_command", "magus run build")),
-		buildRecord("lock.acquired"),
 		buildRecord("cache.hit", slog.String("project", "api"), slog.String("target", "build"),
 			slog.Int64("duration", int64(time.Millisecond))),
 		buildRecord("cache.miss", slog.String("project", "api"), slog.String("target", "test"),

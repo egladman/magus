@@ -71,9 +71,7 @@ func (p slotPressure) nudge() string {
 // idle, and "" otherwise. The caller decides whether and how often to print it.
 //
 // Silent when concurrency was set explicitly, when the profile is already aggressive,
-// and in the daemon, whose limiter spans every client's runs. There is no machine-budget
-// exception any more: a contended machine budget now refuses immediately (exit 75)
-// rather than throttling this run, so it never shows up as slot wait to suppress here.
+// and in the daemon, whose limiter spans every client's runs.
 func (m *Magus) ConcurrencyNudge() string {
 	// Only the daemon hands its workspaces a machine admitter.
 	if m.cache == nil || m.machineAdmitter != nil {

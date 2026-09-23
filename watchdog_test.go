@@ -208,10 +208,8 @@ func TestSupersedeWatchCancelsAndKeepsTheLocks(t *testing.T) {
 	require.ErrorAs(t, watch.verdict(nil), &stated)
 	assert.Equal(t, supersedeExit, stated.ExitCode())
 
-	other := newProjectLocker("", testWorkspaceRoot)
-	other.dir = hold.locker.dir
-	_, err := other.acquire(t.Context(), "app")
-	require.Error(t, err, "the lock is still held: the watch cancelled and released nothing")
+	assert.True(t, lockIsHeld(hold.locker.lockPath("app")),
+		"the lock is still held: the watch cancelled and released nothing")
 }
 
 // TestSupersedeWatchIgnoresANonGate is the containment: only a gate is superseded, so an
@@ -226,7 +224,7 @@ func TestSupersedeWatchIgnoresANonGate(t *testing.T) {
 	requestYieldFrom(t, hold, "app")
 	time.Sleep(100 * time.Millisecond)
 
-	assert.NoError(t, ctx.Err(), "a non-gate holder keeps waiting behind it, exactly as before")
+	assert.NoError(t, ctx.Err(), "a non-gate holder is never aborted by a marker")
 	assert.NoError(t, watch.verdict(nil))
 }
 

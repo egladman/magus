@@ -79,15 +79,12 @@ func DecideGate(f GateFacts) GateDecision {
 	return GateRefuse
 }
 
-// PoolSaturated reports whether a new run would queue against the machine
-// budget: something is already waiting, or an axis with a limit is fully
-// held. A nil snapshot is an absent arbiter and reads as idle (fail open).
+// PoolSaturated reports whether a new run would be refused by the machine
+// budget: an axis with a limit is fully held. A nil snapshot is an absent
+// arbiter and reads as idle (fail open).
 func PoolSaturated(m *types.MachineSnapshot) bool {
 	if m == nil {
 		return false
-	}
-	if len(m.Waiters) > 0 {
-		return true
 	}
 	if m.BudgetSlots > 0 && m.HeldSlots >= m.BudgetSlots {
 		return true

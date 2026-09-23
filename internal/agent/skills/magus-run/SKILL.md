@@ -221,13 +221,13 @@ Each target's result line mints an output reference id (`out1a2b3c`).
    availability, cycles){{if .Full}} when failures look environmental rather than caused by
    your change{{end}}.
 
-## When a target is waiting on another magus process
+## When another magus process holds the project
 
-Do not write `sleep`/`ps`/`pgrep` polling loops or invent a second waiter. The
-lock message already names the holder, and `magus status --watch=15s` reads that
-same lock state continuously: holder PID, command, directory, age, and waiters.
-Keep the status watch attached until the lock releases, then let the queued
-target continue. A long-running target is not evidence of a hang by itself.
+A run whose project lock or machine budget another magus invocation holds exits
+75 at once, naming the holder. Do not write `sleep`/`ps`/`pgrep` polling loops.
+`magus status --watch=15s` reads that same lock state continuously: holder PID,
+command, directory, and age. Re-run once the lock releases. A long-running
+holder is not evidence of a hang by itself.
 The guard denies `pgrep`, `pidof`, and `ps` for this reason.
 
 ```sh

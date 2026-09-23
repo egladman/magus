@@ -59,7 +59,7 @@ separate process. Only a lock does.
 
 So before a non-dry run begins mutating, magus takes a **per-project advisory lock**
 for every project the run will touch, holds it for the whole invocation, and releases
-it at the end. **magus never waits on another magus process**: a second `magus` that
+it at the end. **magus never waits on another magus invocation**: a second `magus` that
 wants the same project is refused immediately rather than queued behind the first.
 
 Key properties:
@@ -91,6 +91,16 @@ running 12s, in /Users/me/src/acme); not waiting
 75 is the transient-failure convention, so a caller can branch on "the machine is
 busy, retry later" without treating a genuinely broken build the same way. Nothing
 ran, and the same invocation succeeds once the holder finishes.
+
+Two exceptions queue instead, because the holder shares something with the run that
+wants the lock:
+
+- **The same process.** The daemon runs adopted nested runs, background jobs and its
+  own symbol indexer in one process. Those queue for a project rather than refusing
+  each other.
+- **The same run.** A `ci` target whose parallel steps each run `magus run build
+  libs/shared` starts two nested magus processes under one root invocation. They are
+  one run, so the second waits for its sibling rather than failing the parent.
 
 ### When the contender is a newer gate
 
@@ -137,11 +147,13 @@ Key properties:
   ([`memory_mb`](targets.md)), so the same command on the same machine reaches the
   same verdict whatever else is running. Observed pressure warns separately and
   never blocks.
-- **It never queues.** A step that does not fit is refused immediately, exiting
-  **75** ([MGS3009](../reference/codes/sandbox/MGS3009.md)) - the same transient-failure
-  code a contended lock uses above, and for the same reason: magus never waits on
-  another magus process. The refusal names who holds the budget - pid, project,
-  target, and directory - so a caller can go see why and retry once it frees.
+- **It does not queue behind another invocation.** A step kept out by another magus
+  invocation is refused immediately, exiting **75**
+  ([MGS3009](../reference/codes/sandbox/MGS3009.md)) - the same transient-failure code
+  a contended lock uses above, and for the same reason. The refusal names who holds
+  the budget - pid, project, target, and directory - so a caller can go see why and
+  retry once it frees. A step kept out only by its own process or its own run waits
+  for them, on the same terms as the lock.
 - **It fails open.** A daemon that will not start, or that dies mid-run, leaves the
   run unarbitrated and finishing, having said once that it is. Claims are retired by
   process liveness, so nothing has to release cleanly.

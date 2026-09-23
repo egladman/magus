@@ -41,8 +41,6 @@ const (
 	TypeRunBase               = "run.base"
 	TypeRunStep               = "run.step"
 	TypeRunSummary            = "run.summary"
-	TypeLockWait              = "lock.wait"
-	TypeLockReleased          = "lock.released"
 	TypeNotice                = "run.notice"
 )
 
@@ -207,26 +205,6 @@ type RunSummary struct {
 	DurationMs int64 `json:"duration_ms"`
 }
 
-// LockWait reported a run blocked on another magus process holding a project's lock.
-//
-// compat(until: no reader still needs to decode a JSONL stream produced before magus
-// stopped waiting on another magus process): magus never queues behind a peer any more
-// (a held lock or machine budget refuses immediately, exit 75), so no current build of
-// magus emits this event. The type stays so a stream captured by an older magus, or one
-// still mid-flight in a mixed-version fleet, keeps decoding.
-type LockWait struct {
-	Project   string `json:"project"`
-	HolderPID int    `json:"holder_pid,omitempty"`
-	Command   string `json:"command,omitempty"`
-	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
-}
-
-// LockReleased reported that a previously-waited-on project lock freed and the run
-// proceeded. See LockWait: no current magus emits this either.
-type LockReleased struct {
-	Project string `json:"project"`
-}
-
 // Notice is a free-form advisory line -- a hint, warning, or one-time banner --
 // that has no dedicated event type of its own. Code is the diagnostic code (e.g.
 // an MGS####) when the notice carries one.
@@ -254,8 +232,6 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RunBase{}):               TypeRunBase,
 	reflect.TypeOf(RunStep{}):               TypeRunStep,
 	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
-	reflect.TypeOf(LockWait{}):              TypeLockWait,
-	reflect.TypeOf(LockReleased{}):          TypeLockReleased,
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }
 

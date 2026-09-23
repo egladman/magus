@@ -973,8 +973,8 @@ var (
 		"Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
 		"Waiting on something outside this machine is what your host's monitor surface is for."
 
-	denyProcessPoll = "Use `" + hint.Status.With("--watch=15s") + "`: it reads the project lock continuously (holder PID, command, age, waiters).\n" +
-		"`pgrep`, `pidof` and `ps` invent a second waiter that races the real one and answers what the lock message already said."
+	denyProcessPoll = "Use `" + hint.Status.With("--watch=15s") + "`: it reads the project lock continuously (holder PID, command, age).\n" +
+		"`pgrep`, `pidof` and `ps` invent an unbounded poll that answers what the lock message already said."
 
 	// LEADS with the replacement, like the pipe and redirect messages it extends,
 	// and spells out the block because the reader cannot lose what they can see.

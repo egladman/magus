@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	runPkg "github.com/egladman/magus/internal/proc/run"
@@ -19,9 +18,8 @@ import (
 // MachineAdmitter is the budget as a client reaches it: the daemon over the proc
 // socket, or a MachineBudget directly when this process IS the daemon.
 type MachineAdmitter interface {
-	Request(ctx context.Context, waiter string, c types.MachineClaim) (types.MachineVerdict, error)
+	Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error)
 	Release(ctx context.Context, id string)
-	Drop(ctx context.Context, waiter string)
 }
 
 // machineReleaseTimeout bounds handing a claim back. The release runs in the defer
@@ -32,13 +30,9 @@ type MachineAdmitter interface {
 // cannot shorten is a timing that either costs real wall-clock or goes uncovered.
 var machineReleaseTimeout = 5 * time.Second
 
-// machineWaiterSeq numbers waiters within this PROCESS, not within a Cache.
-//
-// The daemon holds one Cache per workspace and every one of them reports the daemon's
-// pid, so a per-Cache counter handed two workspaces the same "<pid>.1" and their
-// waiters overwrote each other in the registry: one run's queue entry silently became
-// the other's, and the budget then reserved for a claim nobody was waiting on.
-var machineWaiterSeq atomic.Int64
+// machinePollEvery paces a step kept out only by claims its own process or run holds.
+// The budget has no wakeup to push across the socket, so the step asks again.
+const machinePollEvery = 100 * time.Millisecond
 
 // ExitCodeMachineBusy is the process status a machine-budget refusal asks for: 75,
 // EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
@@ -56,8 +50,8 @@ const ExitCodeMachineBusy = 75
 // are configuration answers rather than timing ones.
 const ExitCodeMachineDeclaration = 78
 
-// machineGate is the client half of admission: it asks the budget once and either
-// proceeds or refuses; it never queues behind another magus process.
+// machineGate is the client half of admission: it asks the budget, and either proceeds,
+// waits on its own run, or refuses.
 type machineGate struct {
 	admit MachineAdmitter
 	log   *slog.Logger
@@ -68,8 +62,9 @@ type machineGate struct {
 // it, or an MGS3009 error naming who holds it.
 //
 // A step declaring nothing still takes a slot: concurrency is the half every step
-// spends. magus never waits on another magus process, so a step that does not fit right
-// now is refused immediately (exit 75) rather than queued.
+// spends. A step kept out only by claims of its own process or its own run waits for
+// them, until ctx ends; one kept out by any other magus invocation is refused at once
+// (exit 75), since magus never waits on another magus invocation.
 //
 // Fails OPEN. A daemon that dies, or a transport that breaks, admits the step and says
 // so once: losing the arbiter must not stop a build that was going to run.
@@ -77,26 +72,34 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 	if g == nil || g.admit == nil {
 		return func() {}, nil
 	}
-	waiter := machineWaiterID(c)
-	v, err := g.admit.Request(ctx, waiter, c)
-	if err != nil {
-		return g.admitOpen(ctx, err), nil
-	}
-	switch {
-	case v.Granted:
-		return g.releaser(v.ID), nil
-	case !v.Fits:
-		return nil, machineDoesNotFitError(c, v)
-	case blindToOwnAncestry(ctx):
-		// A nested magus that cannot name its ancestors cannot be excused from its own
-		// parent's claim, so queueing here is queueing behind a step that is blocked in
-		// exec waiting for THIS process: a permanent deadlock. Refusing turns it into an
-		// answer a caller can act on.
-		g.admit.Drop(ctx, waiter)
-		return nil, machineBlindError(c, v)
-	default:
-		g.admit.Drop(ctx, waiter)
-		return nil, machineBusyError(c, v)
+	for {
+		v, err := g.admit.Request(ctx, c)
+		if err != nil {
+			return g.admitOpen(ctx, err), nil
+		}
+		switch {
+		case v.Granted:
+			return g.releaser(v.ID), nil
+		case !v.Fits:
+			return nil, machineDoesNotFitError(c, v)
+		case v.OwnRun:
+			// Falls out of the switch to the wait below.
+		case blindToOwnAncestry(ctx):
+			// A nested magus that cannot name its ancestors cannot be excused from its own
+			// parent's claim, so the refusal names the fix rather than the holders.
+			return nil, machineBlindError(c, v)
+		default:
+			return nil, machineBusyError(c, v)
+		}
+		// The holders are this run's own steps, whose progress feeds the stall watchdog,
+		// or another invocation of this process, whose progress does not; beat for the
+		// latter, or a run queued in the daemon trips MGS3012.
+		ProgressFromContext(ctx).Beat()
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("machine budget: gave up waiting for %s %s: %w", displayProject(c.Project), c.Target, ctx.Err())
+		case <-time.After(machinePollEvery):
+		}
 	}
 }
 
@@ -135,13 +138,6 @@ func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 			slog.String("error", err.Error()))
 	})
 	return func() {}
-}
-
-// machineWaiterID identifies this step across its polls. The pid keeps it unique across
-// the machine and the process-wide counter across every concurrent step in this one,
-// whichever Cache they belong to.
-func machineWaiterID(c types.MachineClaim) string {
-	return fmt.Sprintf("%d.%d", c.PID, machineWaiterSeq.Add(1))
 }
 
 // ancestorInvocations is the invocations this one runs underneath, this one excluded.
@@ -198,9 +194,8 @@ func workingDir() string {
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.
 
-// machineBusyError is the fail-fast answer: the machine is full right now, and the same
-// command will succeed later. magus never queues behind another magus process, so this
-// is the only answer a full budget ever gets.
+// machineBusyError is the fail-fast answer: another magus invocation fills the machine
+// right now, and the same command will succeed later.
 func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this machine's build budget is full; %s, and %s. %s",
