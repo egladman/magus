@@ -143,19 +143,25 @@ func (w *Writer) drain() {
 		batch = 0
 	}
 
+	var line []byte
+	write := func(env envelope) {
+		if w.hasErr() {
+			w.dropped.Add(1)
+			return
+		}
+		line = env.appendJSONL(line[:0])
+		if _, err := w.bw.Write(line); err != nil {
+			w.setErr(err)
+			return
+		}
+		w.flushed.Add(1)
+		batch++
+	}
+
 	for {
 		select {
 		case env := <-w.ch:
-			if w.hasErr() {
-				w.dropped.Add(1)
-				continue
-			}
-			if err := env.writeJSONL(w.bw); err != nil {
-				w.setErr(err)
-				continue
-			}
-			w.flushed.Add(1)
-			batch++
+			write(env)
 			if batch >= w.flushN {
 				flush()
 			}
@@ -164,17 +170,15 @@ func (w *Writer) drain() {
 			for {
 				select {
 				case env := <-w.ch:
-					if !w.hasErr() {
-						if err := env.writeJSONL(w.bw); err != nil {
-							w.setErr(err)
-						} else {
-							w.flushed.Add(1)
-							batch++
-						}
-					} else {
-						w.dropped.Add(1)
-					}
+					write(env)
 				default:
+					// Last, so a reader of the stream learns it is incomplete from the
+					// stream itself.
+					if n := w.dropped.Load(); n > 0 {
+						write(envelope{Type: TypeNotice, Body: Notice{
+							Level: slog.LevelError, Message: fmt.Sprintf("report: %d events dropped", n),
+						}})
+					}
 					flush()
 					return
 				}

@@ -66,10 +66,11 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		return errSilent{exitCode: 2}
 	}
 
-	m, err := loadMagus(ctx, root)
+	m, sink, cleanup, err := openXRun(ctx, root)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = cleanup() }()
 	all := m.All()
 	if len(all) == 0 {
 		return errors.New("magus x: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project); run `" + hint.Init.String() + "` to bootstrap one")
@@ -92,7 +93,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	}
 	_ = interactive.SaveLastTarget(chosen.Dir, targetName)
 
-	m.Sink(nil).Scope(ctx, chosen.Path, "")
+	sink.EmitScope(ctx, chosen.Path, "")
 
 	if *step {
 		ctx = withStepGate(ctx)
@@ -100,7 +101,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 
 	if targetName == "ci" {
 		ciTargets := []types.Target{{Path: chosen.Path, Name: "ci"}}
-		var ciOpts []magus.RunOption
+		ciOpts := []magus.RunOption{magus.WithSink(sink)}
 		if globalCfg.DryRun {
 			ciOpts = append(ciOpts, magus.WithDryRun())
 		}
@@ -112,7 +113,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	// Expand short aliases.
 	targetName = canonicalTarget(targetName)
 	targets := []types.Target{{Path: chosen.Path, Name: targetName}}
-	var xOpts []magus.RunOption
+	xOpts := []magus.RunOption{magus.WithSink(sink)}
 	if globalCfg.DryRun {
 		xOpts = append(xOpts, magus.WithDryRun())
 	}
@@ -328,6 +329,29 @@ func isInteractiveTTY() bool {
 // resolver below is what says whether the ref exists.
 var outputRefShape = regexp.MustCompile(`^out[0-9a-f]{8,}$`)
 
+// openXRun loads the workspace and the sink an x run reports through; cleanup closes
+// the -o jsonl report writer, if one was opened.
+func openXRun(ctx context.Context, root string) (*magus.Magus, *magus.Sink, func() error, error) {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	rw, cleanup, err := setupJSONLReport(m, opts)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sink, err := runSink(m, rw)
+	if err != nil {
+		_ = cleanup()
+		return nil, nil, nil, err
+	}
+	return m, sink, cleanup, nil
+}
+
 // reproduceRef re-runs the invocation an output ref recorded.
 //
 // The ref is the whole point: it comes off a CI log, names a run on a machine you
@@ -336,10 +360,11 @@ var outputRefShape = regexp.MustCompile(`^out[0-9a-f]{8,}$`)
 // at. When the artifact is in reach the cache replays it; when it is not, this runs
 // the same invocation rather than a similar one.
 func reproduceRef(ctx context.Context, root, ref string, step bool) error {
-	m, err := loadMagus(ctx, root)
+	m, sink, cleanup, err := openXRun(ctx, root)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = cleanup() }()
 	d, err := m.OutputDescriptorByRef(ref)
 	if err != nil {
 		// Not here yet, which is the ordinary case for a ref copied out of CI: ask the
@@ -364,7 +389,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 	// the wrong revision is still often what you want, and deciding otherwise for you
 	// would make the ref useless the moment it is a day old.
 	if d.Dirty {
-		interactive.Emit(os.Stderr, fmt.Sprintf(
+		sink.EmitNotice(ctx, slog.LevelInfo, "", fmt.Sprintf(
 			"ref %s was produced from a working tree with uncommitted changes; its revision alone cannot reproduce it", ref))
 	}
 	// Compared by KEY, not by revision. A different commit is not a different
@@ -377,20 +402,20 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 			// Best-effort: a key that will not compute is not a reason to refuse the run.
 			slog.DebugContext(ctx, "magus x: could not compute the local key", slog.String("error", kerr.Error()))
 		case live == d.Key:
-			interactive.Emit(os.Stderr, fmt.Sprintf(
+			sink.EmitNotice(ctx, slog.LevelInfo, "", fmt.Sprintf(
 				"ref %s reproduces exactly here: same cache key, so this replays the recorded run", ref))
 		default:
-			reportForeignMachine(ctx, m, ref, d)
+			reportForeignMachine(ctx, m, sink, ref, d)
 		}
 	}
 
-	m.Sink(nil).Scope(ctx, d.Project, "ref "+ref)
+	sink.EmitScope(ctx, d.Project, "ref "+ref)
 	if step {
 		ctx = withStepGate(ctx)
 	}
 
 	targets := []types.Target{{Path: d.Project, Name: parsed.Name, Charms: parsed.Charms}}
-	opts := []magus.RunOption{magus.WithCharms(parsed.Charms...)}
+	opts := []magus.RunOption{magus.WithCharms(parsed.Charms...), magus.WithSink(sink)}
 	if d.Spell != "" {
 		opts = append(opts, magus.WithSpellFilter(d.Spell))
 	}
@@ -432,7 +457,7 @@ func shortRev(r string) string {
 // "different inputs" is true and useless: the reader already knows it did not
 // replay, and what they need is which of the handful of possible causes it was.
 // Only differing fields are printed, so the rows that appear are the diagnosis.
-func reportForeignMachine(ctx context.Context, m *magus.Magus, ref string, d magus.OutputDescriptor) {
+func reportForeignMachine(ctx context.Context, m *magus.Magus, sink *magus.Sink, ref string, d magus.OutputDescriptor) {
 	type row struct{ field, recorded, here string }
 	var rows []row
 	add := func(field, recorded, here string) {
@@ -470,5 +495,6 @@ func reportForeignMachine(ctx context.Context, m *magus.Magus, ref string, d mag
 		b.WriteString("  the two keys were computed by different key versions and can never match\n")
 	}
 
-	fmt.Fprintln(os.Stderr, types.DiagnosticErrorf(types.OutputRefForeignMachine, "%s", strings.TrimRight(b.String(), "\n")).Error())
+	fmt.Fprintf(&b, "  see %s", types.CodeURL(types.OutputRefForeignMachine))
+	sink.EmitNotice(ctx, slog.LevelWarn, types.OutputRefForeignMachine, b.String())
 }

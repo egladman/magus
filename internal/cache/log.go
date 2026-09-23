@@ -22,7 +22,7 @@ import (
 const levelTrace slog.Level = slog.LevelDebug - 4
 
 // newLogger returns a *slog.Logger for the given format ("text", "json", or "pretty")
-// and level. A structured (-o jsonl) run uses [WithStructuredLog] instead.
+// and level. A -o jsonl run uses [WithRecordOnlyOutput] instead.
 //
 // Human formats (pretty, plain) render to stderr so stdout stays clean for machine
 // output; json/text keep their slog handlers. Pretty uses the shared PrettyHandler,

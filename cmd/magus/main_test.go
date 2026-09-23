@@ -732,13 +732,15 @@ func TestScripts(t *testing.T) {
 	})
 }
 
-// jsonlRecords is `jsonl-records`: every line the last exec wrote to stdout and to
-// stderr is a report envelope, a JSON object carrying a schema and a type. A regex
-// cannot say that; `{` at the start of a line is not a parse.
+// jsonlRecords is `jsonl-records [type...]`: every line the last exec wrote to stdout
+// and to stderr is a report envelope, a JSON object carrying a schema and a type, and
+// each named type is among them. A regex cannot say that; `{` at the start of a line is
+// not a parse.
 func jsonlRecords(ts *testscript.TestScript, neg bool, args []string) {
-	if neg || len(args) != 0 {
-		ts.Fatalf("usage: jsonl-records")
+	if neg {
+		ts.Fatalf("usage: jsonl-records [type...]")
 	}
+	seen := map[string]bool{}
 	for _, stream := range []string{"stdout", "stderr"} {
 		for i, line := range strings.Split(ts.ReadFile(stream), "\n") {
 			if line == "" {
@@ -751,6 +753,12 @@ func jsonlRecords(ts *testscript.TestScript, neg bool, args []string) {
 			if err := json.Unmarshal([]byte(line), &head); err != nil || head.Schema == nil || head.Type == "" {
 				ts.Fatalf("%s line %d is not a record: %q", stream, i+1, line)
 			}
+			seen[head.Type] = true
+		}
+	}
+	for _, typ := range args {
+		if !seen[typ] {
+			ts.Fatalf("no %s record on either stream", typ)
 		}
 	}
 }

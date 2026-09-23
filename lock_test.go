@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/types"
 )
 
@@ -1086,5 +1087,48 @@ func TestAnUnansweredSupersedeFallsBackToWaiting(t *testing.T) {
 	}
 	if _, err := os.Stat(later.yieldPath("app")); !os.IsNotExist(err) {
 		t.Error("a supersede that gave up must retract its request")
+	}
+}
+
+// Under -o jsonl the unanswered supersede is a record of its own type: a lock.superseded
+// line would tell a reader a gate was stopped when none was.
+func TestAnUnansweredSupersedeRecordsItsOwnEvent(t *testing.T) {
+	quickSupersede(t, 200*time.Millisecond)
+	out, toOut := captureLockOut()
+	cacheDir := t.TempDir()
+
+	earlier := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
+	earlier.started = time.Now().Add(-time.Minute)
+	rel, err := earlier.acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("earlier acquire: %v", err)
+	}
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		rel()
+	}()
+
+	var records bytes.Buffer
+	w := report.NewWriter(&records, report.WithBlockOnFull())
+	later := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut, withReportWriter(w))
+	rel2, err := later.acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("later acquire: %v", err)
+	}
+	defer rel2()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := records.String()
+	if !strings.Contains(got, `"type":"lock.supersede_unanswered","project":"app","holder_pid":`) ||
+		!strings.Contains(got, `"bound_ms":200`) {
+		t.Errorf("records = %q, want a lock.supersede_unanswered naming the project, holder and bound", got)
+	}
+	if strings.Contains(got, report.TypeLockSuperseded+`"`) {
+		t.Errorf("records = %q, must not record a supersede that never happened", got)
+	}
+	if strings.Contains(out.String(), "did not stop within") {
+		t.Errorf("lock output = %q, a structured run says it as a record only", out.String())
 	}
 }

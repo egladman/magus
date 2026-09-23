@@ -179,13 +179,26 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if target == "ls" {
 			return fmt.Errorf("magus affected: --stdin is not supported with the ls target")
 		}
+		opts, err := outputOptionsOrDefault()
+		if err != nil {
+			return err
+		}
 		m, err := loadMagus(ctx, root)
+		if err != nil {
+			return err
+		}
+		rw, cleanupReport, err := setupJSONLReport(m, opts)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cleanupReport() }()
+		sink, err := runSink(m, rw)
 		if err != nil {
 			return err
 		}
 		streamCtx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
-		var streamOpts []magus.StreamOption
+		streamOpts := []magus.StreamOption{magus.WithStreamSink(sink)}
 		if globalCfg.DryRun {
 			streamOpts = append(streamOpts, magus.WithStreamDryRun())
 		}
@@ -242,7 +255,10 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return err
 	}
 	defer func() { _ = cleanupReport() }()
-	sink := m.Sink(rw)
+	sink, err := runSink(m, rw)
+	if err != nil {
+		return err
+	}
 
 	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {
@@ -269,8 +285,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// different build), and burying it in parentheses after a project list made it the
 	// one header fact nobody read. source already names the VCS that produced it
 	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
-	sink.Scope(ctx, scopeLabel, "")
-	sink.Base(ctx, source)
+	sink.EmitScope(ctx, scopeLabel, "")
+	sink.EmitBase(ctx, source)
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
@@ -280,8 +296,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if target == "ci" {
 		charms = magus.CharmsForCI(charms)
 	}
-	sink.Charms(ctx, strings.Join(charms, ","))
-	sink.Cache(ctx)
+	sink.EmitCharms(ctx, strings.Join(charms, ","))
+	sink.EmitCache(ctx)
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
 		return nil
@@ -300,10 +316,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	// After the gate agreed to run, because a refused gate pays for nothing.
 	noteUndeclaredSeedCost(ctx, sink, undeclaredOnly)
-
-	if rw != nil {
-		reportUndeclaredSeeds(undeclaredOnly, rw)
-	}
+	reportUndeclaredSeeds(ctx, sink, undeclaredOnly)
 
 	var runOpts []magus.RunOption
 	if isGateInvocation(target, false) {
@@ -844,7 +857,7 @@ func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
 	if len(undeclaredBySeed) == 0 {
 		return
 	}
-	interactive.Emit(os.Stderr, undeclaredSeedNotice(undeclaredBySeed, false))
+	interactive.Emit(os.Stderr, "["+string(types.UndeclaredSeedingFile)+"] "+undeclaredSeedNotice(undeclaredBySeed, false))
 }
 
 // noteUndeclaredSeedCost reports MGS1028 on the run that PAYS for it: `magus affected
@@ -865,12 +878,12 @@ func noteUndeclaredSeedCost(ctx context.Context, sink *magus.Sink, undeclaredOnl
 	if len(undeclaredOnly) == 0 {
 		return
 	}
-	sink.Notice(ctx, "warn", types.UndeclaredSeedingFile, undeclaredSeedNotice(undeclaredOnly, true))
+	sink.EmitNotice(ctx, slog.LevelWarn, types.UndeclaredSeedingFile, undeclaredSeedNotice(undeclaredOnly, true))
 }
 
-// undeclaredSeedNotice renders MGS1028 for the seed projects in undeclaredBySeed. With
-// withFiles each project carries its undeclared files, for a reader that cannot see
-// them anywhere else; both lists are capped by cappedList.
+// undeclaredSeedNotice renders MGS1028's message, without the code, for the seed
+// projects in undeclaredBySeed. With withFiles each project carries its undeclared files,
+// for a reader that cannot see them anywhere else; both lists are capped by cappedList.
 func undeclaredSeedNotice(undeclaredBySeed map[string][]string, withFiles bool) string {
 	seeds := slices.Sorted(maps.Keys(undeclaredBySeed))
 	named := make([]string, 0, len(seeds))
@@ -881,10 +894,10 @@ func undeclaredSeedNotice(undeclaredBySeed map[string][]string, withFiles bool) 
 		named = append(named, seed)
 	}
 	return fmt.Sprintf(
-		"[%s] projects seeded by changed files nothing declares: %s. Directory containment "+
+		"projects seeded by changed files nothing declares: %s. Directory containment "+
 			"selected them, so the targets they rerun were already correct. Declare the files "+
 			"in the owning project's sources, or leave them undeclared deliberately (see %s)",
-		types.UndeclaredSeedingFile, strings.Join(cappedList(named), ", "),
+		strings.Join(cappedList(named), ", "),
 		types.CodeURL(types.UndeclaredSeedingFile))
 }
 
@@ -964,12 +977,12 @@ func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOpti
 	return out
 }
 
-// reportUndeclaredSeeds carries MGS1028 into the -o jsonl stream as one coded event per
-// project, the shape the engine's own diagnostic sink emits, so a consumer counts the
-// code and the unit instead of matching the hint's wording.
-func reportUndeclaredSeeds(undeclaredOnly map[string][]string, rw *magus.ReportWriter) {
+// reportUndeclaredSeeds carries MGS1028 as one coded event per project, the shape the
+// engine's own diagnostic sink emits, so a -o jsonl consumer counts the code and the
+// unit instead of matching the notice's wording.
+func reportUndeclaredSeeds(ctx context.Context, sink *magus.Sink, undeclaredOnly map[string][]string) {
 	for _, seed := range slices.Sorted(maps.Keys(undeclaredOnly)) {
-		_ = rw.RecordDiagnostic(seed, types.UndeclaredSeedingFile,
+		sink.EmitDiagnostic(ctx, seed, types.UndeclaredSeedingFile,
 			"seeded only by changed files no project declares: "+
 				strings.Join(cappedList(undeclaredOnly[seed]), ", "))
 	}

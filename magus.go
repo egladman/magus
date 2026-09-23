@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
@@ -46,16 +47,31 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// isStructuredLog reports a -o jsonl invocation, the one format config validation
-// refuses from magus.yaml and the CLI sets after it.
-func isStructuredLog(l config.Log) bool { return strings.EqualFold(l.Format, "jsonl") }
+// isJSONLLog reports a -o jsonl invocation, the one format config validation refuses
+// from magus.yaml and the CLI sets after it.
+func isJSONLLog(l config.Log) bool { return strings.EqualFold(l.Format, "jsonl") }
+
+// withRecordedOutput routes output written outside a target's capture, a magusfile's
+// print at load or a target body a dry run evaluates, to records when this is a -o
+// jsonl invocation. ctx already carrying writers is returned as is.
+func (m *Magus) withRecordedOutput(ctx context.Context) context.Context {
+	if m.records == nil {
+		return ctx
+	}
+	if _, _, ok := procrun.CapturedOutput(ctx); ok {
+		return ctx
+	}
+	return procrun.WithOutputWriters(ctx,
+		report.NewLineNotices(ctx, m.records, "stdout"),
+		report.NewLineNotices(ctx, m.records, "stderr"))
+}
 
 // collapseOnSuccess decides whether per-project subprocess output is withheld until a
 // failure. It is the default for human output; -v streams live. A structured run always
 // withholds, whatever -s or -vv say: a raw line on either stream breaks the one contract
 // it has, and the stage observer this attaches is what emits run.step.
 func collapseOnSuccess(l config.Log) bool {
-	if isStructuredLog(l) {
+	if isJSONLLog(l) {
 		return true
 	}
 	switch strings.ToLower(l.Format) {
@@ -90,6 +106,9 @@ type Magus struct {
 	// a workspace-load failure can say what this binary IS: the one thing an
 	// out-of-date binary can state about itself. See explainStale.
 	version string
+	// records receives a -o jsonl invocation's stderr records: the cache's log and any
+	// output that runs outside a target's capture. Nil for every other format.
+	records slog.Handler
 
 	limOnce   sync.Once
 	lim       *cache.Limiter
@@ -297,10 +316,6 @@ func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
 	return f
 }
 
-// sourceLocated is a load error that names the file it failed in: interp.ExecError and
-// interp.ImportError.
-type sourceLocated interface{ SourcePath() string }
-
 // locatedBranch is one leaf of a load error and the innermost file that encloses it.
 type locatedBranch struct {
 	err  error
@@ -313,8 +328,11 @@ type locatedBranch struct {
 // under an ImportError leaves the file on the wrapper rather than on each branch.
 func joinedBranches(err error, file string) []locatedBranch {
 	for e := err; e != nil; e = errors.Unwrap(e) {
-		if l, ok := e.(sourceLocated); ok {
-			file = l.SourcePath()
+		switch l := e.(type) { //nolint:errorlint // one link at a time; As would skip past the innermost file
+		case *interp.ExecError:
+			file = l.Path
+		case *interp.ImportError:
+			file = l.Path
 		}
 		if j, ok := e.(interface{ Unwrap() []error }); ok {
 			var out []locatedBranch
@@ -335,6 +353,7 @@ func (m *Magus) load(ctx context.Context) error {
 	// root is only present on the run path (Magus.Run), so preload-time resolution
 	// (describe, affected, ls) could not walk spell imports up to the root.
 	ctx = types.WithWorkspace(ctx, m)
+	ctx = m.withRecordedOutput(ctx)
 	// Remote spells resolve before any Buzz loads, from magus.lock alone: a load never
 	// asks a registry what a tag means.
 	imports, err := remotespell.LoadImports(ctx, m.ws.Root, m.cfg.Spells, remotespell.LoadOptions{
@@ -471,6 +490,9 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// validated but never reached a resolution.
 	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version}
+	if isJSONLLog(cfg.Log) {
+		m.records = secret.NewRedactingHandler(report.NewStderrNoticeHandler(cfg.Log.SlogLevel()))
+	}
 	var o workspace.Load
 	for _, fn := range opts {
 		fn(&o)
@@ -717,9 +739,8 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if m.cfg.Cache.SizeMB != 0 {
 		cfgOpts = append(cfgOpts, cache.WithSizeMB(m.cfg.Cache.SizeMB))
 	}
-	if isStructuredLog(m.cfg.Log) {
-		lvl := m.cfg.Log.SlogLevel()
-		cfgOpts = append(cfgOpts, cache.WithStructuredLog(secret.NewRedactingHandler(report.NewNoticeHandler(os.Stderr, lvl)), lvl))
+	if m.records != nil {
+		cfgOpts = append(cfgOpts, cache.WithRecordOnlyOutput(m.records))
 	} else {
 		cfgOpts = append(cfgOpts, cache.WithLog(m.cfg.Log.Format, m.cfg.Log.SlogLevel()))
 	}

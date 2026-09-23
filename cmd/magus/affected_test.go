@@ -344,10 +344,11 @@ func TestTrackedUndeclaredSeedsGoesQuietWithoutAVCS(t *testing.T) {
 
 // TestUndeclaredSeedNoticeNamesFilesAndFix pins what MGS1028's notice carries. The
 // channel it rides (a hint in text, which -s still bubbles up and hints.enabled turns
-// off) is the sink's, pinned by TestTextSinkRendersANoticeAsAHint at the root.
+// off) is the sink's, pinned by TestTextSinkRendersANoticeAsAHint at the root, and so is
+// the code: the sink prefixes it in text and records it as a field in JSONL.
 func TestUndeclaredSeedNoticeNamesFilesAndFix(t *testing.T) {
 	got := undeclaredSeedNotice(map[string][]string{"silent-run": {".golangci.yml", "dprint.json"}}, true)
-	assert.Contains(t, got, "["+string(types.UndeclaredSeedingFile)+"]")
+	assert.NotContains(t, got, string(types.UndeclaredSeedingFile)+"]", "the code is the notice's field, not its text")
 	assert.Contains(t, got, "silent-run (.golangci.yml, dprint.json)", "the run prints a project list and never the changeset, so the files come with it")
 	assert.Contains(t, got, "sources", "the one-line fix rides along")
 	assert.Contains(t, got, types.CodeURL(types.UndeclaredSeedingFile))

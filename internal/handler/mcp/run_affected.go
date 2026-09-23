@@ -43,7 +43,11 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req spells.InvokeRequest) 
 
 	charms := effectiveCharms(parsed.Charms, t.opts.Config.DefaultCharms)
 
-	runOpts := []magus.RunOption{magus.WithReport(rw)}
+	sink, err := t.opts.Magus.JSONLSink(rw)
+	if err != nil {
+		return spells.InvokeResponse{}, err
+	}
+	runOpts := []magus.RunOption{magus.WithSink(sink)}
 	if dryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
 	}

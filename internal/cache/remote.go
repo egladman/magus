@@ -313,25 +313,26 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 		slog.Duration("duration", time.Since(putStart)))
 }
 
-// RemoteSummary is what the remote cache did during one run.
-type RemoteSummary struct {
-	Hits      int64
-	Misses    int64
-	Published int64
-	Failures  int64
-	DownBytes int64
-	UpBytes   int64
+// RemoteTally is what the remote cache did during one run. Its JSON is the body of the
+// report stream's run.remote record.
+type RemoteTally struct {
+	Hits      int64 `json:"hits"`
+	Misses    int64 `json:"misses"`
+	Published int64 `json:"published"`
+	Failures  int64 `json:"failures"`
+	DownBytes int64 `json:"down_bytes"`
+	UpBytes   int64 `json:"up_bytes"`
 }
 
 // RemoteSummary reads the run-scoped remote counters off ctx. It reports false when no
 // remote is configured or ctx carries no counters (a caller outside Magus.Run); a
 // configured remote the run never touched reports true with every count zero.
-func (c *Cache) RemoteSummary(ctx context.Context) (RemoteSummary, bool) {
+func (c *Cache) RemoteSummary(ctx context.Context) (RemoteTally, bool) {
 	stats := remoteStatsFrom(ctx)
 	if c.remote == nil || stats == nil {
-		return RemoteSummary{}, false
+		return RemoteTally{}, false
 	}
-	return RemoteSummary{
+	return RemoteTally{
 		Hits:      stats.hits.Load(),
 		Misses:    stats.misses.Load(),
 		Published: stats.puts.Load(),
@@ -345,7 +346,7 @@ func (c *Cache) RemoteSummary(ctx context.Context) (RemoteSummary, bool) {
 // place the ZERO case gets stated: a run that never touched a configured remote says so
 // rather than saying nothing, and silence is what made that indistinguishable from
 // working.
-func (c *Cache) LogRemoteSummary(ctx context.Context, s RemoteSummary) {
+func (c *Cache) LogRemoteSummary(ctx context.Context, s RemoteTally) {
 	attrs := []any{
 		slog.Int64("hits", s.Hits),
 		slog.Int64("misses", s.Misses),

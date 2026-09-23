@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -97,7 +96,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 		RunSummary{Hits: 1, Misses: 2, Errors: 0, DurationMs: 1600},
 		LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci"},
 		LockReleased{Project: "."},
-		Notice{Level: "warn", Code: "MGS1028", Message: "projects seeded by changed files nothing declares"},
+		Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "projects seeded by changed files nothing declares"},
 	}
 	for _, e := range events {
 		require.NoError(t, recordAny(w, e), "Record %T", e)
@@ -520,12 +519,13 @@ func TestStructuredRunEventTypes(t *testing.T) {
 		{"RunSummary", RunSummary{Hits: 3, Misses: 1, Errors: 0, DurationMs: 1600}, TypeRunSummary},
 		{"RunSummary dry", RunSummary{Dry: true, Planned: 4, DurationMs: 12}, TypeRunSummary},
 		{"RunRemote", RunRemote{Hits: 2, Misses: 1, Published: 1, Failures: 1, DownBytes: 2048, UpBytes: 512}, TypeRunRemote},
-		{"LockWait", LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci", Holder: "pid 4242 (magus run ci)", ElapsedMs: 15000}, TypeLockWait},
+		{"RunDry", RunDry{}, TypeRunDry},
+		{"LockWait", LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci", ElapsedMs: 15000}, TypeLockWait},
 		{"LockReleased", LockReleased{Project: "libs/gopherbuzz"}, TypeLockReleased},
-		{"LockSuperseded", LockSuperseded{Project: ".", HolderPID: 4242, Command: "magus run ci", Holder: "pid 4242 (magus run ci)"}, TypeLockSuperseded},
-		{"LockSuperseded timed out", LockSuperseded{Project: ".", TimedOut: true, BoundMs: 30000}, TypeLockSuperseded},
-		{"DeterminismMismatch unchecked", DeterminismMismatch{Project: "api", Target: "build", DifferingPaths: []string{}, Error: "open dist: permission denied"}, TypeDeterminismMismatch},
-		{"Notice", Notice{Level: "warn", Code: "MGS1028", Message: "projects seeded by changed files nothing declares"}, TypeNotice},
+		{"LockSuperseded", LockSuperseded{Project: ".", HolderPID: 4242, Command: "magus run ci"}, TypeLockSuperseded},
+		{"LockSupersedeUnanswered", LockSupersedeUnanswered{Project: ".", HolderPID: 4242, Command: "magus run ci", BoundMs: 30000}, TypeLockSupersedeUnanswered},
+		{"DeterminismUnchecked", DeterminismUnchecked{Project: "api", Target: "build", Error: "open dist: permission denied"}, TypeDeterminismUnchecked},
+		{"Notice", Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "projects seeded by changed files nothing declares"}, TypeNotice},
 	}
 
 	for _, tc := range cases {
@@ -554,20 +554,4 @@ func TestStructuredRunEventTypes(t *testing.T) {
 			assert.Equal(t, tc.event, reflect.ValueOf(got).Elem().Interface())
 		})
 	}
-}
-
-// A log record no typed event converts still reaches a -o jsonl reader as a run.notice
-// envelope, with its fields under attrs so none can collide with the envelope's own.
-func TestNoticeHandlerWritesNoticeEnvelopes(t *testing.T) {
-	t.Parallel()
-	var buf bytes.Buffer
-	log := slog.New(NewNoticeHandler(&buf, slog.LevelInfo))
-	log.Debug("cache.dropped")
-	log.With("project", "api").WithGroup("remote").Warn("cache.warn",
-		slog.String("msg", "push failed"), slog.Int("failures", 2), slog.Any("err", errors.New("unreachable")))
-	log.Info("cache.notice")
-
-	assert.Equal(t, `{"schema":4,"type":"run.notice","level":"warn","msg":"cache.warn","attrs":{"project":"api","remote":{"err":"unreachable","failures":2,"msg":"push failed"}}}
-{"schema":4,"type":"run.notice","level":"info","msg":"cache.notice"}
-`, buf.String())
 }

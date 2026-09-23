@@ -230,7 +230,7 @@ func applyDisplay() {
 	// records, the envelope every other line of the run has.
 	switch {
 	case global.output == string(FormatJSONL):
-		h = secret.NewRedactingHandler(report.NewNoticeHandler(os.Stderr, lvl))
+		h = secret.NewRedactingHandler(report.NewStderrNoticeHandler(lvl))
 	case globalCfg.Log.Format == "json":
 		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
 	case globalCfg.Log.Format == "text":

@@ -1059,9 +1059,6 @@ func (e *ExecError) Error() string {
 
 func (e *ExecError) Unwrap() error { return e.Err }
 
-// SourcePath is the magusfile that failed to evaluate.
-func (e *ExecError) SourcePath() string { return e.Path }
-
 // ImportError is a magusfile whose imports failed to bind. Err may join one error per
 // failed import, which is why the file lives here: a caller splitting Err into its
 // branches would otherwise lose it.
@@ -1077,9 +1074,6 @@ func (e *ImportError) Error() string {
 }
 
 func (e *ImportError) Unwrap() error { return e.Err }
-
-// SourcePath is the importing magusfile.
-func (e *ImportError) SourcePath() string { return e.Path }
 
 // displayPath is rel, or abs for an error built without a workspace-relative name.
 func displayPath(rel, abs string) string {

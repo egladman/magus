@@ -92,7 +92,7 @@ func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 // gate marks this invocation the workspace's gate, which is what admits it to
 // supersession in both directions: it may take a lock from an earlier gate on this same
 // tree, and a later one may take its locks (MGS3014). Everything else queues as before.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, out eventSink) (*projectHold, error) {
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
@@ -105,7 +105,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
 	}
-	lopts := []lockerOption{emittingTo(out)}
+	lopts := []lockerOption{withReportWriter(rw)}
 	if gate {
 		lopts = append(lopts, asGate())
 	}
@@ -223,13 +223,18 @@ type projectLocker struct {
 	// gate marks this invocation the whole ci target. Only a gate supersedes, and only a
 	// gate is superseded.
 	gate bool
-	// out receives the lock's decisions (wait, heartbeat, resume, supersede) as events:
-	// the invocation's own sink in a real run, a text sink over a buffer under test so it
-	// can read the exact bytes a user sees. -s/--silent cannot suppress any of them: a
-	// run that stalls or yields without explanation is the failure they exist to prevent.
-	// ctx cannot carry the sink: the lock is acquired before Run wraps ctx, so it is
-	// threaded in directly.
-	out eventSink
+	// out is where the lock's decision lines go: os.Stderr in every real run, a buffer
+	// under test so it can read the exact bytes a user sees. The lines are written
+	// straight to the stream, never through the console, which is why -s/--silent
+	// cannot suppress any of them: a run that stalls or yields without explanation is
+	// the failure they exist to prevent.
+	out io.Writer
+	// rw is set for a structured (-o jsonl) invocation; when non-nil the wait/
+	// resume lines go there as typed events instead of the prose lines above, which
+	// would otherwise be free text on a stream a caller is parsing as JSONL. ctx
+	// cannot carry this the way [report.WithWriter] does elsewhere: the lock is
+	// acquired before Run wraps ctx with it, so it is threaded in directly instead.
+	rw *report.Writer
 }
 
 // lockRetryDelay is how often a blocked acquire re-polls the OS lock while waiting.
@@ -258,20 +263,15 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 // asGate marks this invocation the workspace's gate. See projectLocker.gate.
 func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
 
-// emittingTo routes the lock's decisions through the invocation's sink. nil keeps the
-// default, prose on stderr.
-func emittingTo(s eventSink) lockerOption {
-	return func(l *projectLocker) {
-		if s != nil {
-			l.out = s
-		}
-	}
+// withReportWriter routes the wait/resume lines to w as typed events instead of the
+// prose lines emitWaiting/emitResumed otherwise print, for a structured (-o jsonl)
+// invocation. nil is a no-op, so callers can pass opts.Report unconditionally.
+func withReportWriter(w *report.Writer) lockerOption {
+	return func(l *projectLocker) { l.rw = w }
 }
 
-// writingTo renders the lock's decisions as prose into w, for a test that reads them.
-func writingTo(w io.Writer) lockerOption {
-	return func(l *projectLocker) { l.out = textSink{out: w} }
-}
+// writingTo redirects the lock's decision lines, for a test that reads them.
+func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
 
 // newProjectLocker returns a projectLocker whose lock files live under
 // <cacheDir>/locks/<workspace>, mirroring the workspace project tree. When noWait is
@@ -289,7 +289,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, noWait bool, opts ...locke
 		noWait:  noWait,
 		root:    resolvedRoot(workspaceRoot),
 		started: time.Now(),
-		out:     textSink{out: os.Stderr},
+		out:     os.Stderr,
 	}
 	for _, o := range opts {
 		o(l)
@@ -504,7 +504,7 @@ func (l *projectLocker) lockPath(projectPath string) string {
 
 // emitWaiting tells the user, up front, that the run is not hung: another magus
 // process holds the project's lock, this run will start automatically once it frees,
-// and MAGUS_NO_WAIT is the fail-fast escape hatch. It goes to l.out unconditionally
+// and MAGUS_NO_WAIT is the fail-fast escape hatch. It goes to stderr unconditionally
 // (even under -s/--silent): a run that stalls without explanation is the exact UX we
 // are avoiding. The notify hook diverts it for tests and the console.
 func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
@@ -517,7 +517,41 @@ func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 		p = "."
 	}
 	rec := l.readOwner(projectPath)
-	l.out.emit(ctx, report.LockWait{Project: p, HolderPID: rec.PID, Command: rec.Command, Holder: rec.describe()})
+	// A structured invocation gets the same fact as a typed event instead of the
+	// prose below: -o jsonl parses this stream, and a caller cannot tell where a
+	// "magus:" line ends and JSON begins.
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.LockWait{
+			Project: p, HolderPID: rec.PID, Command: rec.Command,
+		})
+		return
+	}
+	fmt.Fprintf(l.out, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
+	// What is SAFE while you wait, which is the question a blocked caller actually has and
+	// the one the line above leaves open.
+	//
+	// Measured on one session: ten gate runs in two hours, thirty-eight minutes of wall
+	// clock, and most of the waiting was a caller who had stopped working entirely because
+	// it could not tell which edits would spoil the run. Nothing said. The cost of that
+	// silence is a person or an agent idling for the length of a full gate, repeatedly,
+	// and it is worse than the cost this message was written to explain.
+	//
+	// The rule is narrow enough to state: a run reads the locked project's files, so
+	// editing THOSE makes its verdict describe a tree that no longer exists. Everything
+	// else in the workspace is untouched by it.
+	fmt.Fprintf(l.out, "magus: while it runs, editing files OUTSIDE %s is safe; editing files INSIDE it makes this run's verdict describe a tree that no longer exists.\n", p)
+	// Also as a record, so the sticky terminal region can PIN the wait. The stderr
+	// line above announces the event and then scrolls away; a run that is blocked
+	// needs the state to stay on screen, because the alternative a reader sees is
+	// silence.
+	// Structured, not the rendered line above: that string is this package's own
+	// stderr output, and handing it to another package to display verbatim would put
+	// presentation for a surface magus cannot see inside magus. The region composes
+	// its own from these fields.
+	slog.InfoContext(ctx, "lock.waiting",
+		slog.String("project", p),
+		slog.Int("holder_pid", rec.PID),
+		slog.String("holder_command", rec.Command))
 }
 
 // lockWaitHeartbeat is how often a blocked acquire reprints that it is still waiting.
@@ -560,13 +594,18 @@ func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath stri
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				rec := l.readOwner(projectPath)
-				// At least 1ms: a zero ElapsedMs is how the first wait event reads.
-				elapsedMs := max(time.Since(start).Milliseconds(), 1)
-				l.out.emit(ctx, report.LockWait{
-					Project: p, HolderPID: rec.PID, Command: rec.Command, Holder: rec.describe(),
-					ElapsedMs: elapsedMs,
-				})
+				elapsed := time.Since(start)
+				if l.rw != nil {
+					rec := l.readOwner(projectPath)
+					_ = report.Record(l.rw, report.LockWait{
+						Project: p, HolderPID: rec.PID, Command: rec.Command,
+						ElapsedMs: elapsed.Milliseconds(),
+					})
+					continue
+				}
+				fmt.Fprintf(l.out,
+					"magus: still waiting for the lock on project %s (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.%s\n",
+					p, elapsed.Round(time.Second), orphanHint(elapsed, l.describeOwner(projectPath)))
 			}
 		}
 	}()
@@ -587,7 +626,12 @@ func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	l.out.emit(ctx, report.LockReleased{Project: p})
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.LockReleased{Project: p})
+		return
+	}
+	fmt.Fprintf(l.out, "magus: lock on project %s released; starting.\n", p)
+	slog.InfoContext(ctx, "lock.acquired", slog.String("project", p))
 }
 
 // lockOwner is the best-effort record of which process holds a project lock,
@@ -861,28 +905,47 @@ func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath strin
 		if ctx.Err() != nil {
 			return false, fmt.Errorf("workspace lock: gave up waiting for %s: %w", projectPath, ctx.Err())
 		}
-		l.emitSuperseded(ctx, projectPath, holder, true)
+		l.emitSupersedeUnanswered(projectPath, holder)
 		return false, nil
 	}
-	l.emitSuperseded(ctx, projectPath, holder, false)
+	l.emitSuperseded(ctx, projectPath, holder)
 	return true, nil
 }
 
-// emitSuperseded states the decision, once, on the run that made it: that it stopped the
-// earlier gate, or with timedOut that the gate did not stop and this run waits instead. It
-// is a decision and not progress, so it goes to l.out like every other lock line and -s
-// cannot suppress it: a gate that silently killed another run is worse than one that
-// never did.
-func (l *projectLocker) emitSuperseded(ctx context.Context, projectPath string, holder processRecord, timedOut bool) {
+// emitSupersedeUnanswered says the earlier gate did not stop within the bound: a record of
+// its own, because nothing was superseded.
+func (l *projectLocker) emitSupersedeUnanswered(projectPath string, holder processRecord) {
 	p := projectPath
 	if p == "" {
 		p = "."
 	}
-	e := report.LockSuperseded{Project: p, HolderPID: holder.PID, Command: holder.Command, Holder: holder.describe()}
-	if timedOut {
-		e.TimedOut, e.BoundMs = true, supersedeYieldBound.Milliseconds()
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.LockSupersedeUnanswered{
+			Project: p, HolderPID: holder.PID, Command: holder.Command, BoundMs: supersedeYieldBound.Milliseconds(),
+		})
+		return
 	}
-	l.out.emit(ctx, e)
+	fmt.Fprintf(l.out, "magus: the earlier gate on project %s did not stop within %s; waiting for it instead.\n", p, supersedeYieldBound)
+}
+
+// emitSuperseded states the decision, once, on the run that made it. It is a decision and
+// not progress, so it goes to l.out like every other lock line and -s cannot suppress
+// it: a gate that silently killed another run is worse than one that never did.
+func (l *projectLocker) emitSuperseded(ctx context.Context, projectPath string, holder processRecord) {
+	p := projectPath
+	if p == "" {
+		p = "."
+	}
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.LockSuperseded{Project: p, HolderPID: holder.PID, Command: holder.Command})
+		return
+	}
+	fmt.Fprintf(l.out, "magus: superseded the earlier gate on project %s%s; its verdict would have described a tree that has since changed.\n",
+		p, heldBy(holder.describe()))
+	slog.InfoContext(ctx, "lock.superseded",
+		slog.String("project", p),
+		slog.Int("holder_pid", holder.PID),
+		slog.String("holder_command", holder.Command))
 }
 
 // removeOwner clears the sidecar on release so a later reader never attributes a

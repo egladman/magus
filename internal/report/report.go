@@ -6,11 +6,14 @@ package report
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"reflect"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -20,32 +23,37 @@ import (
 // v4 prefixed that event and the diagnostic one with "run.": both collided by name
 // with types.StreamEvent, which stamps its own schema number on a line of nearly the
 // same shape.
-const Schema = 4
+// v5 dropped run.base's vcs field, and a -o jsonl run's stderr moved from slog's
+// {time,level,msg} lines to run.notice records.
+const Schema = 5
 
 // Type values stamped on every event line; stable across versions.
 const (
-	TypeTargetResult          = "run.target.result"
-	TypeGraphBuild            = "graph.build"
-	TypeGraphQuery            = "graph.query"
-	TypeGraphError            = "graph.error"
-	TypeVolatility            = "volatile"
-	TypeShardTotal            = "shard.total"
-	TypeRaceDetected          = "race.detected"
-	TypeOutputOverlapDetected = "race.output_overlap"
-	TypeDeterminismMismatch   = "race.determinism_mismatch"
-	TypeMissingDependency     = "race.missing_dependency"
-	TypeDiagnosticEmitted     = "run.diagnostic"
-	TypeRunScope              = "run.scope"
-	TypeRunCharms             = "run.charms"
-	TypeRunCache              = "run.cache"
-	TypeRunBase               = "run.base"
-	TypeRunStep               = "run.step"
-	TypeRunSummary            = "run.summary"
-	TypeRunRemote             = "run.remote"
-	TypeLockWait              = "lock.wait"
-	TypeLockReleased          = "lock.released"
-	TypeLockSuperseded        = "lock.superseded"
-	TypeNotice                = "run.notice"
+	TypeTargetResult            = "run.target.result"
+	TypeGraphBuild              = "graph.build"
+	TypeGraphQuery              = "graph.query"
+	TypeGraphError              = "graph.error"
+	TypeVolatility              = "volatile"
+	TypeShardTotal              = "shard.total"
+	TypeRaceDetected            = "race.detected"
+	TypeOutputOverlapDetected   = "race.output_overlap"
+	TypeDeterminismMismatch     = "race.determinism_mismatch"
+	TypeDeterminismUnchecked    = "race.determinism_unchecked"
+	TypeMissingDependency       = "race.missing_dependency"
+	TypeDiagnosticEmitted       = "run.diagnostic"
+	TypeRunScope                = "run.scope"
+	TypeRunCharms               = "run.charms"
+	TypeRunCache                = "run.cache"
+	TypeRunBase                 = "run.base"
+	TypeRunStep                 = "run.step"
+	TypeRunSummary              = "run.summary"
+	TypeRunRemote               = "run.remote"
+	TypeRunDry                  = "run.dry"
+	TypeLockWait                = "lock.wait"
+	TypeLockReleased            = "lock.released"
+	TypeLockSuperseded          = "lock.superseded"
+	TypeLockSupersedeUnanswered = "lock.supersede_unanswered"
+	TypeNotice                  = "run.notice"
 )
 
 // TargetResult reports the outcome of one target run — the single per-target event
@@ -133,16 +141,21 @@ type OutputOverlapDetected struct {
 	Overlapping []string `json:"overlapping"`
 }
 
-// DeterminismMismatch records a project whose outputs differed between two consecutive
-// runs (--race=replay), or whose byte-stability could not be checked at all: Globs is set
-// when the declared outputs matched nothing, Error when they could not be hashed. Either
-// fails the gate, like a difference does.
+// DeterminismMismatch records a project whose outputs differed between two consecutive runs (--race=replay).
 type DeterminismMismatch struct {
 	Project        string   `json:"project"`
 	Target         string   `json:"target"`
 	DifferingPaths []string `json:"differing_paths"`
-	Globs          string   `json:"globs,omitempty"`
-	Error          string   `json:"error,omitempty"`
+}
+
+// DeterminismUnchecked records a project whose byte-stability --race=replay could not
+// check: Globs is set when its declared outputs matched nothing, Error when they could
+// not be hashed. It fails the gate, like a mismatch does.
+type DeterminismUnchecked struct {
+	Project string `json:"project"`
+	Target  string `json:"target"`
+	Globs   string `json:"globs,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // MissingDependency records a likely missing graph edge: Consumer sources Path but didn't run; Producer wrote it.
@@ -207,14 +220,11 @@ type RunStep struct {
 // RunRemote accounts for what the remote cache did this run, once, beside the summary.
 // It is emitted whenever a remote is configured, so all-zero counts mean the run never
 // reached it rather than that nothing was reported.
-type RunRemote struct {
-	Hits      int64 `json:"hits"`
-	Misses    int64 `json:"misses"`
-	Published int64 `json:"published"`
-	Failures  int64 `json:"failures"`
-	DownBytes int64 `json:"down_bytes"`
-	UpBytes   int64 `json:"up_bytes"`
-}
+type RunRemote = cache.RemoteTally
+
+// RunDry opens a dry run: what follows are the steps it would take, none executed. The
+// run.summary with dry set closes it.
+type RunDry struct{}
 
 // RunSummary is the end-of-run footer: hit/miss/error counts (or, for a dry run,
 // the planned count) and elapsed wall time.
@@ -235,11 +245,7 @@ type LockWait struct {
 	Project   string `json:"project"`
 	HolderPID int    `json:"holder_pid,omitempty"`
 	Command   string `json:"command,omitempty"`
-	// Holder describes the holder for a reader: pid, command, how long it has run and
-	// where. Empty when nothing trustworthy is recorded.
-	Holder string `json:"holder,omitempty"`
-	// ElapsedMs is how long this run has waited; absent on the first event.
-	ElapsedMs int64 `json:"elapsed_ms,omitempty"`
+	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
 }
 
 // LockReleased reports that a previously-waited-on project lock freed and this
@@ -249,54 +255,114 @@ type LockReleased struct {
 }
 
 // LockSuperseded reports that this gate stopped an earlier gate on the same tree and
-// took its project lock (MGS3014), or, with TimedOut, that the earlier gate did not stop
-// within BoundMs and this run is waiting for it instead.
+// took its project lock (MGS3014).
 type LockSuperseded struct {
 	Project   string `json:"project"`
 	HolderPID int    `json:"holder_pid,omitempty"`
 	Command   string `json:"command,omitempty"`
-	Holder    string `json:"holder,omitempty"`
-	TimedOut  bool   `json:"timed_out,omitempty"`
-	BoundMs   int64  `json:"bound_ms,omitempty"`
+}
+
+// LockSupersedeUnanswered reports that this gate asked an earlier gate on the same tree
+// to stop and it did not within BoundMs, so nothing was superseded.
+type LockSupersedeUnanswered struct {
+	Project   string `json:"project"`
+	HolderPID int    `json:"holder_pid,omitempty"`
+	Command   string `json:"command,omitempty"`
+	BoundMs   int64  `json:"bound_ms"`
 }
 
 // Notice is a free-form advisory line -- a hint, warning, or one-time banner --
 // that has no dedicated event type of its own. Code is the diagnostic code (e.g.
-// an MGS####) when the notice carries one. Attrs carries the fields of a log record
-// no typed event converts (see [NewNoticeHandler]).
+// an MGS####) when the notice carries one, and Message does not repeat it. Attrs
+// carries the fields of a log record no typed event converts (see [NewNoticeHandler]).
+//
+// Level is written as "debug", "info", "warn" or "error" (see [LevelName]).
 type Notice struct {
-	Level   string         `json:"level"` // "debug" | "info" | "warn" | "error"
+	Level   slog.Level
+	Code    string
+	Message string
+	Attrs   map[string]any
+}
+
+// noticeWire is Notice as a line carries it.
+type noticeWire struct {
+	Level   string         `json:"level"`
 	Code    string         `json:"code,omitempty"`
 	Message string         `json:"msg"`
 	Attrs   map[string]any `json:"attrs,omitempty"`
 }
 
+// MarshalJSON writes Level by name.
+func (n Notice) MarshalJSON() ([]byte, error) {
+	return json.Marshal(noticeWire{Level: LevelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
+}
+
+// UnmarshalJSON reads a line [Notice.MarshalJSON] wrote.
+func (n *Notice) UnmarshalJSON(b []byte) error {
+	var w noticeWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	var l slog.Level
+	if err := l.UnmarshalText([]byte(w.Level)); err != nil {
+		return fmt.Errorf("report: notice level: %w", err)
+	}
+	*n = Notice{Level: l, Code: w.Code, Message: w.Message, Attrs: w.Attrs}
+	return nil
+}
+
+// LevelName is the name a record carries for l: one of debug, info, warn and error, with
+// anything below debug (magus's trace) reading as debug and anything past error as error.
+func LevelName(l slog.Level) string {
+	switch {
+	case l < slog.LevelInfo:
+		return "debug"
+	case l < slog.LevelWarn:
+		return "info"
+	case l < slog.LevelError:
+		return "warn"
+	}
+	return "error"
+}
+
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
-	reflect.TypeOf(DiagnosticEmitted{}):     TypeDiagnosticEmitted,
-	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
-	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
-	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
-	reflect.TypeOf(GraphError{}):            TypeGraphError,
-	reflect.TypeOf(VolatilityCall{}):        TypeVolatility,
-	reflect.TypeOf(ShardTotal{}):            TypeShardTotal,
-	reflect.TypeOf(RaceDetected{}):          TypeRaceDetected,
-	reflect.TypeOf(OutputOverlapDetected{}): TypeOutputOverlapDetected,
-	reflect.TypeOf(DeterminismMismatch{}):   TypeDeterminismMismatch,
-	reflect.TypeOf(MissingDependency{}):     TypeMissingDependency,
-	reflect.TypeOf(RunScope{}):              TypeRunScope,
-	reflect.TypeOf(RunCharms{}):             TypeRunCharms,
-	reflect.TypeOf(RunCache{}):              TypeRunCache,
-	reflect.TypeOf(RunBase{}):               TypeRunBase,
-	reflect.TypeOf(RunStep{}):               TypeRunStep,
-	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
-	reflect.TypeOf(LockWait{}):              TypeLockWait,
-	reflect.TypeOf(LockReleased{}):          TypeLockReleased,
-	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
-	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
-	reflect.TypeOf(Notice{}):                TypeNotice,
+	reflect.TypeOf(DiagnosticEmitted{}):       TypeDiagnosticEmitted,
+	reflect.TypeOf(TargetResult{}):            TypeTargetResult,
+	reflect.TypeOf(GraphBuild{}):              TypeGraphBuild,
+	reflect.TypeOf(GraphQuery{}):              TypeGraphQuery,
+	reflect.TypeOf(GraphError{}):              TypeGraphError,
+	reflect.TypeOf(VolatilityCall{}):          TypeVolatility,
+	reflect.TypeOf(ShardTotal{}):              TypeShardTotal,
+	reflect.TypeOf(RaceDetected{}):            TypeRaceDetected,
+	reflect.TypeOf(OutputOverlapDetected{}):   TypeOutputOverlapDetected,
+	reflect.TypeOf(DeterminismMismatch{}):     TypeDeterminismMismatch,
+	reflect.TypeOf(DeterminismUnchecked{}):    TypeDeterminismUnchecked,
+	reflect.TypeOf(MissingDependency{}):       TypeMissingDependency,
+	reflect.TypeOf(RunScope{}):                TypeRunScope,
+	reflect.TypeOf(RunCharms{}):               TypeRunCharms,
+	reflect.TypeOf(RunCache{}):                TypeRunCache,
+	reflect.TypeOf(RunBase{}):                 TypeRunBase,
+	reflect.TypeOf(RunStep{}):                 TypeRunStep,
+	reflect.TypeOf(RunSummary{}):              TypeRunSummary,
+	reflect.TypeOf(RunDry{}):                  TypeRunDry,
+	reflect.TypeOf(LockWait{}):                TypeLockWait,
+	reflect.TypeOf(LockReleased{}):            TypeLockReleased,
+	reflect.TypeOf(LockSuperseded{}):          TypeLockSuperseded,
+	reflect.TypeOf(LockSupersedeUnanswered{}): TypeLockSupersedeUnanswered,
+	reflect.TypeOf(RunRemote{}):               TypeRunRemote,
+	reflect.TypeOf(Notice{}):                  TypeNotice,
 }
 
 func typeOf(e any) string { return registry[reflect.TypeOf(e)] }
+
+// RegisteredTypes returns every event type [Record] accepts, in no fixed order.
+func RegisteredTypes() []reflect.Type {
+	out := make([]reflect.Type, 0, len(registry))
+	for t := range registry {
+		out = append(out, t)
+	}
+	return out
+}
 
 // Record appends one event to w; no-op when w is nil. Unknown event types return an error.
 // Under default (non-blocking) policy a full queue drops the event; use [WithBlockOnFull] for lossless capture.

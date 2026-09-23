@@ -222,7 +222,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return err
 	}
 	defer func() { _ = cleanupReport() }()
-	sink := m.Sink(rw)
+	sink, err := runSink(m, rw)
+	if err != nil {
+		return err
+	}
 
 	// cwd is the caller's directory: for an adopted run it is the client's, carried on
 	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
@@ -248,7 +251,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
-	sink.Scope(ctx, scopeLabel, source)
+	sink.EmitScope(ctx, scopeLabel, source)
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
@@ -258,8 +261,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if targetName == "ci" {
 		charms = magus.CharmsForCI(charms)
 	}
-	sink.Charms(ctx, strings.Join(charms, ","))
-	sink.Cache(ctx)
+	sink.EmitCharms(ctx, strings.Join(charms, ","))
+	sink.EmitCache(ctx)
 	if len(targets) == 0 {
 		// Zero targets here means the fan-out found no projects at all in the resolved
 		// workspace: a degenerate or wrong-workspace resolution, not "nothing to do".
@@ -905,12 +908,17 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 			"--detach needs the persistent daemon, and %s is not one: a per-process server exits with this command, so the work would be queued and silently dropped. Start it with `%s`",
 			addr, hint.ServerStart)
 	}
+	out, closeOut, err := openDetachOutput()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = closeOut() }()
 	inv, err := proc.SubmitJob(ctx, addr, argv, version)
 	if err != nil {
 		return fmt.Errorf("--detach: %w", err)
 	}
 	if inv == "" {
-		fmt.Fprintln(os.Stderr, "magus: the daemon is already running this exact command; not queued twice")
+		out.say("magus: the daemon is already running this exact command; not queued twice")
 		return nil
 	}
 	// Hand back the HANDLE and the command that resolves it, never a dashboard
@@ -920,12 +928,46 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 	// its journal (outcome, timings, the output refs of every target it ran)
 	// whenever the reader actually wants it.
 	if !wait {
-		fmt.Fprintf(os.Stderr, "magus: detached as %s\n  read it with: %s\n",
-			inv, hint.QueryInvocation.With(inv))
+		out.say(fmt.Sprintf("magus: detached as %s\n  read it with: %s", inv, hint.QueryInvocation.With(inv)))
 		return nil
 	}
-	fmt.Fprintf(os.Stderr, "magus: running as %s on the daemon\n", inv)
-	return awaitInvocation(ctx, root, inv)
+	out.say(fmt.Sprintf("magus: running as %s on the daemon", inv))
+	return awaitInvocation(ctx, root, inv, out)
+}
+
+// detachOutput is where --detach reports what it did: prose on stderr, or run.notice
+// records on the report stream under -o jsonl, which has no run of its own to carry
+// them.
+type detachOutput struct{ rw *magus.ReportWriter }
+
+// openDetachOutput opens the report stream for a -o jsonl invocation; close flushes it.
+func openDetachOutput() (detachOutput, func() error, error) {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return detachOutput{}, nil, err
+	}
+	if opts.Format != outputJSONL {
+		return detachOutput{}, func() error { return nil }, nil
+	}
+	w, cleanup, err := outputDst()
+	if err != nil {
+		return detachOutput{}, nil, err
+	}
+	rw, err := magus.NewReportWriter(w, globalCfg.Report.Filter)
+	if err != nil {
+		_ = cleanup()
+		return detachOutput{}, nil, err
+	}
+	return detachOutput{rw: rw}, func() error { return errors.Join(rw.Close(), cleanup()) }, nil
+}
+
+// say writes msg, whose continuation lines are indented, as prose or as one record.
+func (d detachOutput) say(msg string) {
+	if d.rw == nil {
+		fmt.Fprintln(os.Stderr, msg)
+		return
+	}
+	_ = d.rw.RecordNotice(slog.LevelInfo, "", strings.ReplaceAll(strings.TrimSpace(msg), "\n  ", "; "))
 }
 
 // awaitInvocation blocks until the daemon's run records a finished event, then
@@ -942,7 +984,7 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 // event, and InvocationFromEvents backfills its finish time from the last event
 // it saw, so a timestamp says "something happened last", while a status is the
 // only thing that says "this is over".
-func awaitInvocation(ctx context.Context, root, inv string) error {
+func awaitInvocation(ctx context.Context, root, inv string, out detachOutput) error {
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
@@ -953,8 +995,8 @@ func awaitInvocation(ctx context.Context, root, inv string) error {
 			// Ctrl-C detaches the WATCHER, not the run: the daemon owns it and
 			// keeps going, so say how to pick it up again rather than implying
 			// it was cancelled.
-			fmt.Fprintf(os.Stderr, "\nmagus: stopped waiting; %s is still running on the daemon\n  read it with: %s\n",
-				inv, hint.QueryInvocation.With(inv))
+			out.say(fmt.Sprintf("\nmagus: stopped waiting; %s is still running on the daemon\n  read it with: %s",
+				inv, hint.QueryInvocation.With(inv)))
 			return ctx.Err()
 		case <-time.After(delay):
 		}
@@ -965,7 +1007,7 @@ func awaitInvocation(ctx context.Context, root, inv string) error {
 			return fmt.Errorf("--wait: read run log for %s: %w", inv, err)
 		}
 		if err == nil && header.Status != "" {
-			return reportInvocation(header, inv)
+			return reportInvocation(header, inv, out)
 		}
 		if delay < 2*time.Second {
 			delay *= 2
@@ -974,14 +1016,14 @@ func awaitInvocation(ctx context.Context, root, inv string) error {
 }
 
 // reportInvocation prints a finished run's outcome and exits with it.
-func reportInvocation(header magus.Invocation, inv string) error {
+func reportInvocation(header magus.Invocation, inv string, out detachOutput) error {
 	took := time.Duration(header.FinishedMs-header.StartedMs) * time.Millisecond
 	if header.Status != "pass" {
-		fmt.Fprintf(os.Stderr, "magus: %s failed (%s)\n  read it with: %s\n",
-			inv, formatDur(took), hint.QueryInvocation.With(inv))
+		out.say(fmt.Sprintf("magus: %s failed (%s)\n  read it with: %s",
+			inv, formatDur(took), hint.QueryInvocation.With(inv)))
 		return errSilent{exitCode: 1}
 	}
-	fmt.Fprintf(os.Stderr, "magus: %s passed (%s)\n  read it with: %s\n",
-		inv, formatDur(took), hint.QueryInvocation.With(inv))
+	out.say(fmt.Sprintf("magus: %s passed (%s)\n  read it with: %s",
+		inv, formatDur(took), hint.QueryInvocation.With(inv)))
 	return nil
 }

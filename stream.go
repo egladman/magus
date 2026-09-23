@@ -12,23 +12,30 @@ import (
 )
 
 type streamOpts struct {
-	DryRun    bool
-	Null      bool
-	ExtraArgs []string
+	Null bool
+	run  []RunOption // applied to every batch's run
 }
 
 // StreamOption configures a [Stream] invocation.
 type StreamOption func(*streamOpts)
 
 // WithStreamDryRun prints what would run without invoking handlers.
-func WithStreamDryRun() StreamOption { return func(o *streamOpts) { o.DryRun = true } }
+func WithStreamDryRun() StreamOption {
+	return func(o *streamOpts) { o.run = append(o.run, WithDryRun()) }
+}
 
 // WithStreamNull expects NUL-separated paths and double-NUL batch boundaries.
 func WithStreamNull() StreamOption { return func(o *streamOpts) { o.Null = true } }
 
 // WithStreamExtraArgs forwards args to spells via project.WithExtraArgs.
 func WithStreamExtraArgs(args []string) StreamOption {
-	return func(o *streamOpts) { o.ExtraArgs = args }
+	return func(o *streamOpts) { o.run = append(o.run, WithExtraArgs(args)) }
+}
+
+// WithStreamSink routes every batch's progress, and for a JSONL sink its per-target
+// results, through s. See [WithSink].
+func WithStreamSink(s *Sink) StreamOption {
+	return func(o *streamOpts) { o.run = append(o.run, WithSink(s)) }
 }
 
 // StreamAllSentinel is a stream-batch marker that triggers a full-workspace selection.
@@ -81,7 +88,7 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 			}
 		}
 		projects := m.targetProjects(batchTargets)
-		if err := m.executeOnProjects(ctx, projects, target, "stream", run{DryRun: so.DryRun, ExtraArgs: so.ExtraArgs}, handler); err != nil {
+		if err := m.executeOnProjects(ctx, projects, target, "stream", applyRunOpts(so.run), handler); err != nil {
 			errFn(fmt.Errorf("magus: stream: %s: %w", target, err))
 		}
 	}

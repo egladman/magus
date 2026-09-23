@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
@@ -114,7 +115,7 @@ func emitConcurrencyNudge(w io.Writer, m *magus.Magus, args []string, rw *magus.
 	}
 	hint.AppendServedNext(gate.CacheDir(), next)
 	if rw != nil {
-		_ = rw.RecordNotice("info", "", line)
+		_ = rw.RecordNotice(slog.LevelInfo, "", line)
 		return
 	}
 	fmt.Fprintf(w, "hint: %s\n%s", line, hint.Render(next, func(hint.Next) string { return "" }))

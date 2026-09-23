@@ -57,15 +57,15 @@ func WithLog(format string, level slog.Level) Option {
 	}
 }
 
-// WithStructuredLog makes the cache a participant in a structured (-o jsonl) run: h
-// receives every cache record no typed report event already carries, and a target's
-// own output never reaches the terminal, on success or failure. It stays in the run
-// log behind the output ref the run.target.result event names.
-func WithStructuredLog(h slog.Handler, level slog.Level) Option {
+// WithRecordOnlyOutput makes every line the cache writes to the terminal a record, for a
+// -o jsonl run: h receives the cache's log records, and the free text it would otherwise
+// print is withheld. That is a target's own output on success or failure, the failure
+// dump, and the unchanged-failure hint; the output stays in the run log behind the ref
+// the run's result record names. h's own level filters the log records.
+func WithRecordOnlyOutput(h slog.Handler) Option {
 	return func(c *Cache) {
 		c.log = slog.New(jsonlSafetyNetHandler{h})
-		c.logLevel = level
-		c.structured = true
+		c.recordsOnly = true
 	}
 }
 

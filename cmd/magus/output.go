@@ -56,6 +56,15 @@ func setupJSONLReport(m *magus.Magus, opts OutputOptions) (*magus.ReportWriter, 
 	}, nil
 }
 
+// runSink is the invocation's one progress sink: JSONL over rw when -o jsonl opened one
+// (see setupJSONLReport), text otherwise.
+func runSink(m *magus.Magus, rw *magus.ReportWriter) (*magus.Sink, error) {
+	if rw == nil {
+		return m.TextSink(), nil
+	}
+	return m.JSONLSink(rw)
+}
+
 // emitFormatted renders v with opts to the structured-output destination (stdout,
 // mirrored to --tee) and closes it. It owns the outputDst/cleanup pair so every
 // command's `-o json|yaml|jsonl|template` arm is one call instead of repeating the
