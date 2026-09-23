@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, activityservice]
 
 ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a page of events (newest first), Get a payload blob by ref. Mounted on the console's human-facing API surface, never under /mcp (the agent protocol surface).
 
-Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:143](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L143). Part of the [daemon API](../../index.md).
+Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L148). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -17,7 +17,7 @@ Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/act
 
 ListActivity returns a page of recent events, newest first, narrowed by filter.
 
-`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary. Source: [activity.proto:145](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L145).
+`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary. Source: [activity.proto:150](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L150).
 
 Takes [ListActivityEventsRequest](#listactivityeventsrequest), returns [ListActivityEventsResponse](#listactivityeventsresponse).
 
@@ -25,7 +25,7 @@ Takes [ListActivityEventsRequest](#listactivityeventsrequest), returns [ListActi
 
 GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 
-`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary. Source: [activity.proto:147](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L147).
+`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary. Source: [activity.proto:152](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L152).
 
 Takes [GetPayloadRequest](#getpayloadrequest), returns [Payload](#payload).
 
@@ -35,7 +35,7 @@ WatchActivityEvents follows the same trail forward, OLDEST first, until the call
 
 It merges three producers into the one envelope, which is why the filter is where it is rather than on the client: file changes the daemon's watcher saw, attributed to the job whose declared write paths cover the path; the guard's tool-call observations, attributed by the lease the hook resolved; and the runs recorded against a job. A reader narrows by job, session or path and gets one time-ordered stream of all three, so "what is that worker doing" is one subscription rather than three.
 
-`POST /magus.activity.v1alpha1.ActivityService/WatchActivityEvents`: server streaming. Source: [activity.proto:159](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L159).
+`POST /magus.activity.v1alpha1.ActivityService/WatchActivityEvents`: server streaming. Source: [activity.proto:164](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L164).
 
 Takes [WatchActivityEventsRequest](#watchactivityeventsrequest), returns [ActivityEvent](#activityevent).
 
@@ -45,7 +45,7 @@ Takes [WatchActivityEventsRequest](#watchactivityeventsrequest), returns [Activi
 
 ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor, kind, action, outcome) is common to every kind; the payload refs point into the activity blob store (fetched via GetPayload) so a large request/response body never bloats the line. For an MCP tool call: actor is the agent id, action is the tool name, request is the arguments, response is the result. For an agent command observation: actor is the host-supplied agent/session identity when available, action is the host tool name, request is the normalized invocation, and response is the guard decision. For a token lifecycle event: actor is "cli", action is "connector.create"/"connector.revoke", and the refs are empty.
 
-Source: [activity.proto:84](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L84).
+Source: [activity.proto:89](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L89).
 
 | Field            | Type                | #  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ---------------- | ------------------- | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -73,7 +73,7 @@ Used by: [ListActivityEvents (response)](activity.md#listactivityevents), [Watch
 
 ActivityQuery narrows the listing server-side. Fields AND together; repeated values within a field OR; the time window bounds it.
 
-Source: [activity.proto:164](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L164).
+Source: [activity.proto:169](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L169).
 
 | Field      | Type                                                 | # | Description                                                                                                                                                                                                                                                                                                                     |
 | ---------- | ---------------------------------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -89,7 +89,7 @@ Used by: [ListActivityEvents (request)](activity.md#listactivityevents), [WatchA
 
 ### GetPayloadRequest
 
-Source: [activity.proto:201](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L201).
+Source: [activity.proto:206](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L206).
 
 | Field | Type   | # | Description                                                                                                                |
 | ----- | ------ | - | -------------------------------------------------------------------------------------------------------------------------- |
@@ -99,7 +99,7 @@ Used by: [GetPayload (request)](activity.md#getpayload).
 
 ### ListActivityEventsRequest
 
-Source: [activity.proto:181](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L181).
+Source: [activity.proto:186](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L186).
 
 | Field        | Type                            | # | Description                     |
 | ------------ | ------------------------------- | - | ------------------------------- |
@@ -111,7 +111,7 @@ Used by: [ListActivityEvents (request)](activity.md#listactivityevents).
 
 ### ListActivityEventsResponse
 
-Source: [activity.proto:186](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L186).
+Source: [activity.proto:191](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L191).
 
 | Field             | Type                                     | # | Description                 |
 | ----------------- | ---------------------------------------- | - | --------------------------- |
@@ -124,7 +124,7 @@ Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
 
 Payload is one stored request or response body, resolved from an ActivityEvent's ref.
 
-Source: [activity.proto:206](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L206).
+Source: [activity.proto:211](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L211).
 
 | Field        | Type  | # | Description |
 | ------------ | ----- | - | ----------- |
@@ -137,7 +137,7 @@ Used by: [GetPayload (response)](activity.md#getpayload).
 
 WatchActivityEventsRequest subscribes to the merged feed.
 
-Source: [activity.proto:192](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L192).
+Source: [activity.proto:197](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L197).
 
 | Field      | Type                            | # | Description                                                                                                                                                                                                                                                                                                                                                       |
 | ---------- | ------------------------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -169,6 +169,7 @@ Source: [activity.proto:23](https://github.com/egladman/magus/blob/main/proto/ma
 | `KIND_NOTES`            | 10 | The console NotesService door onto the workspace's human-authored notes. The service has no write path - a note's whole value is the guarantee that a person wrote it - so every event under this kind is a READ, audited because this is the only door that can serve the PRIVATE note store, which lives outside any repository and which nothing else attributes.                                                                                                                    |
 | `KIND_FILE_CHANGE`      | 11 | A path under a job's declared write paths changed, as the daemon's file watcher saw it. action is the repo-relative path and unit is the job whose write paths cover it. The producer is the FILESYSTEM, not an agent: this is the one kind that needs no cooperation from the worker being watched, which is the whole reason a person can see what a worker is doing without asking it. An empty unit means no live job covered the path.                                             |
 | `KIND_RUN`              | 12 | A run magus recorded against a job: its check, one of its completion gates, or the daemon's own last run of a catalog job. action is the rendered command and preview names which of the three it was. OUTCOME\_ERROR means the run failed, which is the one kind here where the outcome is a fact about the work rather than about the recording.                                                                                                                                      |
+| `KIND_GUARD_POLICY`     | 13 | The effective workspace guard rules changed. action is loaded, tightened, loosen\_pending, committed or removed; the request blob names each source file by its working-tree and approved git blob ids, never its body. Written only on a change, so these rows read as the lineage of the workspace's policy, and a verdict event's policy digest points at one.                                                                                                                       |
 
 Used by: [ListActivityEvents (request)](activity.md#listactivityevents), [ListActivityEvents (response)](activity.md#listactivityevents), [WatchActivityEvents (request)](activity.md#watchactivityevents), [WatchActivityEvents (response)](activity.md#watchactivityevents).
 
@@ -176,7 +177,7 @@ Used by: [ListActivityEvents (request)](activity.md#listactivityevents), [ListAc
 
 Outcome is how the action ended.
 
-Source: [activity.proto:70](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L70).
+Source: [activity.proto:75](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L75).
 
 | Value                 | # | Description |
 | --------------------- | - | ----------- |
