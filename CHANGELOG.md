@@ -216,6 +216,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The daemon API reference matches the protos again.** The committed descriptor set
+  predated the last proto change, so the activity reference described an older API.
+- **The graph links a target to a workspace spell imported without an alias.**
+  `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
+  `magus path` and `magus explain` missed every op it runs.
 - **Console failures are always shown.** Every failed daemon call, stream or undecodable
   frame raises a notification, and the console lint rejects a swallowed catch. A page with
   no token shows one sign-in state with the command that opens it signed in, and a 401
