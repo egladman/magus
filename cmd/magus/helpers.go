@@ -155,14 +155,40 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 // cut `magus ls` from 121ms to 110ms and its CPU by a quarter, for 37MB more peak RSS.
 const loadGCPercent = 400
 
+var (
+	gcRelaxMu    sync.Mutex
+	gcRelaxCount int
+	gcRelaxPrev  int
+)
+
 // relaxGC raises GOGC for a workspace load and returns the restore. An explicit GOGC in
 // the environment is the caller's choice and is left alone.
+//
+// Refcounted and shared across callers because loadMagus and inspectWorkspace can both
+// first-load concurrently (the daemon bootstraps both in parallel goroutines): a plain
+// save/restore pair races there, since either could observe the other's already-raised
+// GOGC as "the prior value" and restore to it instead of the true original, or one
+// restoring early could drop GOGC out from under the other's still-running load. Only
+// the caller that takes the count from 0 saves the prior value; only the one that takes
+// it back to 0 restores it.
 func relaxGC() func() {
 	if os.Getenv("GOGC") != "" {
 		return func() {}
 	}
-	prev := debug.SetGCPercent(loadGCPercent)
-	return func() { debug.SetGCPercent(prev) }
+	gcRelaxMu.Lock()
+	if gcRelaxCount == 0 {
+		gcRelaxPrev = debug.SetGCPercent(loadGCPercent)
+	}
+	gcRelaxCount++
+	gcRelaxMu.Unlock()
+	return func() {
+		gcRelaxMu.Lock()
+		gcRelaxCount--
+		if gcRelaxCount == 0 {
+			debug.SetGCPercent(gcRelaxPrev)
+		}
+		gcRelaxMu.Unlock()
+	}
 }
 
 func inspectWorkspace(ctx context.Context, rootOverride string) (types.WorkspaceRepository, error) {
