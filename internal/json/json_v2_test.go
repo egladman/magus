@@ -122,6 +122,9 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)
+	// libs/mergequeue is its own module and never compiled into magus, so no codec
+	// decision of magus's reaches it, and it cannot import this package anyway.
+	importers = slices.DeleteFunc(importers, func(p string) bool { return strings.HasPrefix(p, "libs/mergequeue/") })
 	assert.Empty(t, importers, "JSON must use the shared JSON package")
 }
 

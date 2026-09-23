@@ -57,6 +57,7 @@ import "project/libs/gopherbuzz";
 import "project/libs/diagnostics";
 import "project/libs/coldread";
 import "project/libs/testlayout";
+import "project/libs/mergequeue";
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
 //
@@ -105,13 +106,6 @@ if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
 // supplies the job-log structure AND answers last_green_run, which is what
 // lets `affected ci --plan` inherit a green run's verdict on a low-risk push.
 magus\ci.provider(github);
-
-// The merge queue's host side: `magus vcs queue` lists pull requests with auto-merge
-// enabled and checks their approval through it, and `magus vcs queue --land` merges and
-// kicks back through it. Unconditional because nothing else calls it; see
-// .github/workflows/queue.yaml and queue-land.yaml for the credential each half holds.
-import "spells/github/queue" as github_queue;
-magus\queue.provider(github_queue);
 magus\harness.provider(cursor);
 magus\harness.provider(codex);
 magus\harness.provider(claude);
@@ -2904,7 +2898,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // write Go files. Left unordered, a reader waiting for those writers while holding
     // its slot stalled a gate for fifteen minutes with nothing running (2026-09-10).
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, coldread\test,
-        testlayout\test, buzz_test);
+        testlayout\test, mergequeue\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
     if (!fs\exists("gen/site/index.html")) {
@@ -2924,7 +2918,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final tables = cov\staticBlockTables();
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
-         "libs/coldread/coverage.out", "libs/testlayout/coverage.out"]));
+         "libs/coldread/coverage.out", "libs/testlayout/coverage.out", "libs/mergequeue/coverage.out"]));
     final go_pct = cov\percentOf(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();

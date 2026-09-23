@@ -53,19 +53,19 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
 | module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS1028`, `MGS3010`, `MGS3012`                                                                                             |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS1002`, `MGS1028`, `MGS3010`                                                                                             |
 | doc        |     400+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
 | dir        |     200+ | `magus query kind=dir`        | `docs/reference/rules`, `docs/reference/codes/magusfile`, `docs/reference/buzz`                                             |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
 | function   |    1000+ | `magus query kind=function`   | `main`, `tail`, `main`                                                                                                      |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
 | rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
-| package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
+| package    |     100+ | `magus query kind=package`    | `github.com/davecgh/go-spew`, `github.com/dlclark/regexp2`, `github.com/ebitengine/purego`                                  |
 | link       |      80+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                          |
 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| .                               |      54 | `magus query project=.`                               | `test`, `buzz-test`, `generate`                          |
+| .                               |      55 | `magus query project=.`                               | `test`, `buzz-test`, `generate`                          |
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `preflight`                        |
@@ -73,6 +73,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
 | libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| libs/mergequeue                 |       8 | `magus query project=libs/mergequeue`                 | `format`, `test`, `build`                                |
 | libs/pricing                    |       8 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
 | libs/testlayout                 |       8 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `preflight`, `test`                              |
@@ -99,7 +100,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `spells-generate`        | Regenerates the compiled built-in spell bytecode (internal/spell/gen), the Buzz value-type mirrors (internal/spell/gen/types) and the per-module host declarations (internal/spell/gen/decls), all driven by the go:generate directives in internal/spell.                                                                                                                                     |
 | `mocks-generate`         | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.                                                                                                                                                                                                                                                                                     |
 | `config-generate`        | Regenerates the CLI config-flag plumbing from internal/config/config.go.                                                                                                                                                                                                                                                                                                                       |
-| `spell-publish`          | Publishes each spell below as an OCI artifact, so a workspace imports it pinned by digest (`oci://ghcr.io/egladman/magus/spells/<name>@sha256:...`) and it versions apart from the binary.                                                                                                                                                                                                     |
+| `spell-publish`          | Publishes each spell below as an OCI artifact, so a workspace imports it by registry path (`import "ghcr.io/egladman/magus/spells/<name>";`, declared in its magus.yaml and pinned in its magus.lock) and it versions apart from the binary.                                                                                                                                                   |
+| `spell-lock`             | Owns magus.lock, the digest each remote spell magus.yaml declares was pinned to.                                                                                                                                                                                                                                                                                                               |
 | `postflight`             | Renders the insight report (hotspots, affinity, ownership, trend) to stdout.                                                                                                                                                                                                                                                                                                                   |
 | `generate`               | Regenerates every *-generate sibling, then gates on drift (scoped to cwd).                                                                                                                                                                                                                                                                                                                     |
 | `termcast-record`        | Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh.                                                                                                                                                                                                                                                         |
@@ -233,6 +235,19 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `conformance`    | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).                                                                                                    |
 | `preflight`      |                                                                                                                                                                                                                                                                             |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                                                                                                                                           |
+
+## Project: libs/mergequeue
+
+| Target           | What it does                                                                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`       | Regenerates MAGUS.md and fails on drift.                                                                                                                   |
+| `format`         |                                                                                                                                                            |
+| `lint`           |                                                                                                                                                            |
+| `build`          |                                                                                                                                                            |
+| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured. |
+| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                            |
+| `preflight`      |                                                                                                                                                            |
+| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                          |
 
 ## Project: libs/pricing
 

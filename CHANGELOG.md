@@ -8,11 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **`magus vcs queue` is a merge queue.** Enabling auto-merge queues a pull request.
-  Stages of main plus the changes ahead validate in parallel, each gating only what its
-  change adds, and disjoint changes never wait on each other. `--land` merges each green
-  change as its own commit by its author, from a write-scoped job. `spells/github/queue`
-  is the GitHub provider.
+- **The merge queue is a separate library, `libs/mergequeue`; `magus vcs queue` is gone.**
+  Its `mergequeue` CLI reads JSON, reports JSONL, and lands each green stage once the
+  changes beneath it have. Magus only supplies affected sets: `magus affected --plan`
+  now prints `affected` and `unbounded`.
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's

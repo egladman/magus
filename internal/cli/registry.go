@@ -1514,27 +1514,13 @@ until you remove them. List them with sl log --hidden -r "desc('magus preserved
 working copy')". Jujutsu mints nothing, so nothing accumulates.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
-base in yourself on the others, then run resolve.
-
-queue is the merge queue, in two halves with different rights. By default it
-validates: the provider spell the root magusfile wires with magus\queue.provider
-lists every change carrying merge intent (on GitHub, auto-merge enabled), and each
-one approved at its head commit is staged in its own worktree, on the base branch
-plus the changes ahead of it in its partition. Changes whose affected closures are
-disjoint form separate partitions that never wait for each other. Within one, up to
---depth stages gate in parallel with magus affected <target>, each running only what
-its own change adds; a red stage kicks its change back and re-stages only what was
-behind it. Validation executes the changes' code and needs read access only. --land
-<dir> lands the manifest it wrote, in queue order, each change as its own commit
-through the provider, after re-checking approval at the validated commit; it runs
-git plumbing only and stops when the base branch does not carry the validated tree.
---dry-run partitions, or reports what would land, and touches nothing.`,
+base in yourself on the others, then run resolve.`,
 	// No parent Flags: neither flag belongs to `magus vcs`, which takes none of
 	// its own. They were declared here with the owning subcommand named in the doc
 	// text ("(vcs resolve)", "(vcs add)") because a child could not carry flags,
 	// which put them in one merged Options section on the man page and made a
 	// generated binder for either child bind both.
-	Usage: "magus vcs <add|resolve|checkpoint|queue|merge-driver> [flags]",
+	Usage: "magus vcs <add|resolve|checkpoint|merge-driver> [flags]",
 	Children: []Command{
 		{
 			Name:  "add",
@@ -1559,18 +1545,6 @@ git plumbing only and stops when the base branch does not carry the validated tr
 			},
 		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
-		{
-			Name:  "queue",
-			Short: "Validate every change carrying merge intent speculatively, or land a validated manifest",
-			Flags: []Flag{
-				{Name: "base", Kind: FlagString, Doc: "The `branch` the queue merges into; defaults to the repository's default branch"},
-				{Name: "remote", Kind: FlagString, Default: "origin", Doc: "The `remote` changes and the base branch are fetched from"},
-				{Name: "target", Kind: FlagString, Default: "ci", Doc: "The `target` `magus affected` gates each stage with"},
-				{Name: "depth", Kind: FlagInt, Default: 3, Doc: "How many stages of one partition gate at once"},
-				{Name: "out", Kind: FlagString, Doc: "Write the manifest and the staged commits to this `dir`"},
-				{Name: "land", Kind: FlagString, Doc: "Land the manifest a validation wrote to this `dir`, building nothing"},
-			},
-		},
 	},
 	Examples: []Example{
 		{"Stage a change without sweeping in build residue", "magus vcs add"},
@@ -1581,9 +1555,6 @@ git plumbing only and stops when the base branch does not carry the validated tr
 		{"Record what a lease was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
 		{"Capture the uncommitted work too, before something risky", "magus vcs checkpoint --preserve"},
-		{"Validate the queue and keep the manifest", "magus vcs queue --out queue/ -- --no-default-charms"},
-		{"Land what a validation decided", "magus vcs queue --land queue/"},
-		{"Partition the queue without staging anything", "magus vcs queue --dry-run"},
 	},
 }
 

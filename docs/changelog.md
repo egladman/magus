@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The merge queue is a separate library, `libs/mergequeue`; `magus vcs queue` is gone.**
+  Its `mergequeue` CLI reads JSON, reports JSONL, and lands each green stage once the
+  changes beneath it have. Magus only supplies affected sets: `magus affected --plan`
+  now prints `affected` and `unbounded`.
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's

@@ -1,19 +1,20 @@
 name: Queue land
 
-# The merge queue's landing half: lands what a Queue run validated, in queue order, each
-# pull request as its own commit through the GitHub API, authored by its author.
+# The merge queue's landing half: lands what a Queue run validates, each pull request as
+# its own commit through the GitHub API, authored by its author, the moment its stage and
+# every stage beneath it in its partition are green.
 #
-# workflow_run rather than workflow_call. A called workflow runs inside the caller's run:
-# it can hold no more than the caller's token, and on a pull_request event the caller's
-# definition comes from the pull request's branch, so a pull request could call it with
-# inputs of its choosing. workflow_run always runs this file as main has it, with its own
-# token and secrets, and only after validation has finished.
+# workflow_run on `requested` rather than `completed`: this job starts beside validation
+# and follows it, downloading each stage's verdict artifact as the stage job uploads it,
+# so a green stage lands while slower stages are still running. `completed` would wait
+# for the slowest stage of the whole run. workflow_run always runs this file as main has
+# it, with its own token and secrets, which a pull request cannot reach.
 #
-# It never checks out or executes pull-request code: it builds magus from main, imports
-# the validated commits from the artifact as git objects, and runs git plumbing and API
-# calls. Before each merge it re-checks approval at the validated head and that the tree
-# it will land differs from the approved change only in files a target regenerates; after
-# each, it stops unless main carries the validated tree.
+# It never checks out or executes pull-request code and never builds magus: it builds
+# the mergequeue CLI from main, imports the validated commits from the artifacts as git
+# objects, and runs git plumbing and API calls. Before each merge it re-checks approval
+# at the validated head and that the tree it will land differs from the approved change
+# only in derived files; after each, it stops unless main carries the validated tree.
 #
 # MAGUS_QUEUE_TOKEN is the write credential: a fine-grained token (or a GitHub App
 # installation token) with contents, pull requests and commit statuses write on this
@@ -22,7 +23,7 @@ name: Queue land
 on:
   workflow_run:
     workflows: [Queue]
-    types: [completed]
+    types: [requested]
 
 concurrency:
   group: magus-queue-land
@@ -30,7 +31,7 @@ concurrency:
 
 permissions:
   contents: read
-  actions: read # download the validation run's artifact
+  actions: read # follow the validation run and download its artifacts
 
 env:
   MISE_SAFE: '1'
@@ -38,10 +39,10 @@ env:
 
 jobs:
   land:
-    name: magus queue land
-    if: github.event.workflow_run.conclusion == 'success'
+    name: queue land
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Validation's own ceiling plus the plan job's.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,39 +52,67 @@ jobs:
           # A regeneration is pushed to a queued branch with the write credential.
           token: ${{ secrets.MAGUS_QUEUE_TOKEN }}
 
-      - id: manifest
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        continue-on-error: true
-        with:
-          name: magus-queue
-          path: ${{ runner.temp }}/queue
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-
-      - if: steps.manifest.outcome == 'success'
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
 
-      - if: steps.manifest.outcome == 'success'
-        uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: source
-          source-path: .
+      - name: Build mergequeue
+        run: |
+          "$(mise where go)/bin/go" -C libs/mergequeue build -o "$RUNNER_TEMP/bin/mergequeue" ./cmd/mergequeue
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # The committer of a regeneration pushed to a queued branch; its author is the
       # branch head's author.
-      - if: steps.manifest.outcome == 'success'
-        name: Identify the queue as committer
+      - name: Identify the queue as committer
         run: |
           git config user.name 'magus-queue'
           git config user.email 'magus-queue@users.noreply.github.com'
 
-      - if: steps.manifest.outcome == 'success'
-        name: Land the validated queue
-        uses: ./.github/actions/magus
+      - name: Land each stage as it goes green
         env:
-          MAGUS_QUEUE_TOKEN: ${{ secrets.MAGUS_QUEUE_TOKEN }}
-        with:
-          command: vcs queue --land ${{ runner.temp }}/queue
+          GH_TOKEN: ${{ github.token }}
+          MERGEQUEUE_TOKEN: ${{ secrets.MAGUS_QUEUE_TOKEN }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          q="$RUNNER_TEMP/queue"
+          mkdir -p "$q/stages"
+          # Reads the run's status BEFORE listing its artifacts, so the sweep that sees
+          # it completed has already seen every artifact it uploaded; only then .done.
+          follow() {
+            while :; do
+              status=$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json status --jq .status)
+              for name in $(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/artifacts" --jq '.artifacts[].name'); do
+                case "$name" in
+                  magus-queue-plan)
+                    if [ ! -f "$q/plan.json" ]; then
+                      gh run download "$RUN" --repo "$GITHUB_REPOSITORY" -n "$name" -D "$q/.plan"
+                      mv "$q/.plan/plan.json" "$q/plan.json"
+                    fi ;;
+                  magus-queue-stage-*)
+                    id=${name#magus-queue-stage-}
+                    if [ ! -d "$q/stages/$id" ]; then
+                      gh run download "$RUN" --repo "$GITHUB_REPOSITORY" -n "$name" -D "$q/stages/.dl-$id"
+                      mv "$q/stages/.dl-$id" "$q/stages/$id"
+                    fi ;;
+                esac
+              done
+              if [ "$status" = completed ]; then
+                touch "$q/stages/.done"
+                return
+              fi
+              sleep 15
+            done
+          }
+          follow &
+          follower=$!
+          until [ -f "$q/plan.json" ] || [ -f "$q/stages/.done" ]; do sleep 5; done
+          if [ ! -f "$q/plan.json" ]; then
+            echo "the validation run planned nothing"
+            wait "$follower"
+            exit 0
+          fi
+          mergequeue land --plan "$q/plan.json" --stages "$q/stages" --provider github \
+            --status-context magus/queue --follow --interval 10s
+          wait "$follower"

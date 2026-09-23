@@ -146,9 +146,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	review := vm.NewMap()
 	review.MapSet("provider", fn("magus.review.provider", retNull))
 	m.MapSet("review", review)
-	queue := vm.NewMap()
-	queue.MapSet("provider", fn("magus.queue.provider", retNull))
-	m.MapSet("queue", queue)
 
 	// magus.secret.<...>: selects the secret provider spell and reads a credential
 	// through it in the real module. provider() stubs to a no-op like the two above.
