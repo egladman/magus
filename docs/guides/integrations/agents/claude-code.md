@@ -255,6 +255,13 @@ claude-code` installs this entry alongside the surfaces above:
           { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
+        ]
+      }
     ]
   }
 }
@@ -268,7 +275,16 @@ rule sees both. The `PostToolUse` entry judges nothing: the finished call's
 against the spawn's `description` is what lets that child's own spawns name
 their parent (`agent_id` on its later hook events). That response field is
 unverified against a live session, and a release that drops it leaves every
-parent empty rather than guessed.
+parent empty rather than guessed. The same record keeps the model the spawn
+named, and, when the spawn's `description` reads `<parent>/<role> <job>` for a
+live job, the job its later calls are graded under.
+
+The `SubagentStop` entry judges nothing either. Its payload names the finished
+subagent's `agent_id` and `agent_transcript_path`; magus reads the last usage
+record in that transcript's final 512 KiB and files input plus cache-read plus
+cache-write tokens as the agent's context size, which a later `SendMessage` to it
+hands a [`magus\guard.spawn`](../../../reference/guard-spawn.md) rule as
+`target.contextTokens`.
 
 Same script as the MCP surface and for the same reason: a spawn's payload is a
 prompt, a `subagent_type`, and an optional `model`, not one string, so there is no

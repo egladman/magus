@@ -184,6 +184,16 @@ fun claude_entries() > [any] {
                 },
             ],
         },
+        // A subagent's stop carries the path of its own transcript, whose last usage
+        // record is the context a later continue to it would resume. It judges nothing.
+        {
+            "path": ["hooks", "SubagentStop"],
+            "entries": [
+                {
+                    "hooks": [claude_command_hook(claude_guard_command())],
+                },
+            ],
+        },
     ];
 }
 
@@ -357,9 +367,9 @@ test "the interpreter is the same string on every machine" {
     assert\isTrue(claude_checkpoint_command().startsWith("{chosen} buzz"), "Stop checkpoint");
 }
 
-test "harness_entries covers PreToolUse PostToolUse SessionStart and Stop" {
+test "harness_entries covers PreToolUse PostToolUse SessionStart Stop and SubagentStop" {
     final entries = claude_entries();
-    assert\equal(entries.len(), 4, "four managed path blocks");
+    assert\equal(entries.len(), 5, "five managed path blocks");
     final pre = entries[0];
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
@@ -389,6 +399,12 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart and Stop" {
     final stop = entries[3];
     final stop_path = stop["path"] as [str];
     assert\equal(stop_path[1], "Stop", "checkpoint");
+    final subagent = entries[4];
+    final subagent_path = subagent["path"] as [str];
+    assert\equal(subagent_path[1], "SubagentStop", "a subagent's usage for a later continue");
+    final subagent_entries = subagent["entries"] as [any];
+    final subagent_hooks = subagent_entries[0]["hooks"] as [any];
+    assert\equal("{subagent_hooks[0]["command"]}", claude_guard_command(), "the guard glue reads the stop whole");
 }
 
 test "harness_mcp prints Claude Code host CLI guidance" {

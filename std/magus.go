@@ -551,7 +551,10 @@ var Magus = Module{
 						"Annotate the result `> JobList` for compile-checked field access. " +
 						"Read straight off the workspace already open on the context - no subprocess. " +
 						"Works from a magusfile target and from a `magus buzz` script run inside a " +
-						"workspace; raises MGS1022 only when there is no workspace to read.",
+						"workspace; raises MGS1022 only when there is no workspace to read. " +
+						"Inside a magus\\guard.spawn rule it answers from the rows the guard read for " +
+						"that call, and every other job member raises there: the store is read-only " +
+						"to a rule.",
 					Returns: []Ret{{Type: TypeAnyMap, Object: "JobList"}},
 					Raises:  true,
 					Extern:  true,
@@ -1289,6 +1292,9 @@ type workspaceJobLimits interface {
 // already accepted for v1 (see internal/job/store.go): a magusfile target is just
 // another such process.
 func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error) {
+	if types.HasJobSnapshot(ctx) {
+		return nil, fmt.Errorf("magus\\%s: the job store is read-only here: a guard rule reads the rows the guard already read, through magus\\job.list, and cannot change them", member)
+	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		// NOT errNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
@@ -1319,7 +1325,16 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 // report; types.NewJobList is the same constructor the magus_job MCP tool's
 // "list" op and the console's JobService.ListJobs call, so the three doors cannot
 // disagree about the rows or the overlaps derived from them.
+//
+// Inside a guard rule it answers from the rows the guard pinned, so the rule and the
+// verdict it adds to read one store.
 func MagusListJob(ctx context.Context) (types.JobList, error) {
+	if snap, pinned := types.JobSnapshotFromContext(ctx); pinned {
+		if snap.Err != nil {
+			return types.JobList{}, snap.Err
+		}
+		return types.NewJobList(snap.Rows), nil
+	}
 	store, err := jobStoreFromContext(ctx, "job.list")
 	if err != nil {
 		return types.JobList{}, err
