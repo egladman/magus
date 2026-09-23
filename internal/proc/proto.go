@@ -157,6 +157,7 @@ type statusRequest struct {
 type Workspace struct {
 	Root string `json:"root"`
 	// State is empty from an older daemon, which reported only loaded workspaces.
+	// compat: see types.StatusWorkspace.Loaded
 	State types.WorkspaceState `json:"state,omitempty"`
 	// Error is set only in WorkspaceFailed.
 	Error      *types.WorkspaceFailure `json:"error,omitempty"`
@@ -175,7 +176,8 @@ type Workspace struct {
 }
 
 // Loaded reports whether w is serving: active, or from a daemon that reports no state.
-func (w Workspace) Loaded() bool { return w.State == "" || w.State == types.WorkspaceActive }
+// compat: see types.StatusWorkspace.Loaded
+func (w Workspace) Loaded() bool { return types.StatusWorkspace{State: w.State}.Loaded() }
 
 // StatusReply carries a point-in-time view of the parent's pool.
 type StatusReply struct {

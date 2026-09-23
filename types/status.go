@@ -394,7 +394,8 @@ type SourceDiagnostic struct {
 // StatusWorkspace describes one workspace the daemon holds: loading, loaded, or failed.
 type StatusWorkspace struct {
 	Root string `json:"root" yaml:"root"`
-	// State is empty from a daemon that reports only loaded workspaces, which reads as active.
+	// State is empty from a daemon that reports only loaded workspaces, which Loaded and
+	// every proto conversion treat as active; see Loaded's compat note.
 	State WorkspaceState `json:"state,omitempty" yaml:"state,omitempty"`
 	// Error is set only in WorkspaceFailed.
 	Error      *WorkspaceFailure `json:"error,omitempty" yaml:"error,omitempty"`
@@ -413,4 +414,8 @@ type StatusWorkspace struct {
 }
 
 // Loaded reports whether w is serving: active, or from a daemon that reports no state.
+//
+// compat(until: no daemon that predates Workspace.State is still reachable): an empty
+// State came only from a daemon built before this field existed, so it is treated as
+// WorkspaceActive rather than as an unrecognized state.
 func (w StatusWorkspace) Loaded() bool { return w.State == "" || w.State == WorkspaceActive }

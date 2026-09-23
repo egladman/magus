@@ -155,15 +155,21 @@ func deriveHealth(r types.StatusSnapshot) statusv1.Health {
 	}
 }
 
+// workspaceStateToProto converts s to the wire enum. compat: see types.StatusWorkspace.Loaded
+// for why "" maps to ACTIVE; any OTHER value this build does not recognize maps to
+// STATE_UNSPECIFIED instead, never silently reading as active.
 func workspaceStateToProto(s types.WorkspaceState) statusv1.Workspace_State {
 	switch s {
+	case "":
+		return statusv1.Workspace_STATE_ACTIVE
 	case types.WorkspaceLoading:
 		return statusv1.Workspace_STATE_LOADING
+	case types.WorkspaceActive:
+		return statusv1.Workspace_STATE_ACTIVE
 	case types.WorkspaceFailed:
 		return statusv1.Workspace_STATE_FAILED
 	default:
-		// An older daemon reports no state and only loaded workspaces.
-		return statusv1.Workspace_STATE_ACTIVE
+		return statusv1.Workspace_STATE_UNSPECIFIED
 	}
 }
 
