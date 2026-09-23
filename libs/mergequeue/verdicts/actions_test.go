@@ -228,6 +228,20 @@ func TestActionsRunWithNoPlanArtifactPlansNothing(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// An empty Path would unpack artifacts into the working directory.
+func TestActionsRunRefusesAMissingRequiredField(t *testing.T) {
+	for name, r := range map[string]*ActionsRun{
+		"repo":   {RunID: "1", Path: t.TempDir()},
+		"run id": {Repo: "acme/widgets", Path: t.TempDir()},
+		"path":   {Repo: "acme/widgets", RunID: "1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := r.Poll(context.Background())
+			require.ErrorContains(t, err, "an ActionsRun needs a Repo, a RunID and a Path")
+		})
+	}
+}
+
 func TestActionsRunStopsOnAFailedDownload(t *testing.T) {
 	f := &fakeActions{status: "in_progress", failZip: true}
 	r := newRun(t, f)

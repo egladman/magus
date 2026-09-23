@@ -121,8 +121,8 @@ func (r *ActionsRun) Poll(ctx context.Context) ([]mergequeue.Verdict, bool, erro
 // sync unpacks every artifact not yet on disk and reports whether the run had completed
 // before the listing began.
 func (r *ActionsRun) sync(ctx context.Context) (bool, error) {
-	if r.Repo == "" || r.RunID == "" {
-		return false, errors.New("an ActionsRun needs a Repo and a RunID")
+	if r.Repo == "" || r.RunID == "" || r.Path == "" {
+		return false, errors.New("an ActionsRun needs a Repo, a RunID and a Path")
 	}
 	r.dir.Path, r.dir.Follow = r.Path, true
 	var run struct {
