@@ -68,13 +68,6 @@ export fun run_artifacts(io: {str: any}) > any {
 }
 `
 
-// skipUntilVCSCapabilities marks a test that drives real git through capabilities
-// magus's vcs package does not have yet.
-func skipUntilVCSCapabilities(t *testing.T) {
-	t.Helper()
-	t.Skip("TODO(merge-queue): needs vcs's TreeMerger, CommitWriter, Pusher and the rest of the capability redesign")
-}
-
 func events(t *testing.T, out []byte) []mergequeue.Event {
 	t.Helper()
 	var evs []mergequeue.Event
@@ -167,7 +160,6 @@ func (f cliFixture) plan(t *testing.T) string {
 
 // Without --affected, plan asks the magus workspace at -C, loaded once in process.
 func TestPlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
-	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{"magusfile.buzz": "", "app/magusfile.buzz": "", "lib/magusfile.buzz": ""})
 	out, err := runCLI(t, string(f.changes), "-C", f.queue, "plan", "--changes", "-", "--out", filepath.Join(f.root, "plan.json"))
 	require.NoError(t, err)
@@ -181,7 +173,6 @@ func TestPlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
 // sets, an affected hook that answers them, validation writing a verdict per change, and
 // apply merging each green change through a Buzz provider.
 func TestTheCLIPlansValidatesAndMergesDisjointChanges(t *testing.T) {
-	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 
@@ -262,7 +253,6 @@ func zipDir(t *testing.T, dir string) []byte {
 // The apply workflow's shape: apply reads the plan and verdicts from the validation
 // run's artifacts, as upload-artifact would have packed validate's output.
 func TestApplyFollowsARun(t *testing.T) {
-	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 	_, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir, "--gate", "true")
@@ -306,7 +296,6 @@ func TestApplyFromARunNeedsAProviderThatReadsRuns(t *testing.T) {
 // A directory is a whole source: apply reads the plan validate wrote into it, and one
 // without a plan is an error rather than an empty queue.
 func TestApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) {
-	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 	_, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir, "--gate", "true")
@@ -328,7 +317,6 @@ func TestApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) {
 // Without --once apply follows a directory until validate marks it done; with --once it
 // merges what is there and leaves the rest queued.
 func TestApplyFollowsADirectoryUntilDoneUnlessOnce(t *testing.T) {
-	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 	_, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir, "--only", "1", "--gate", "true")
@@ -370,7 +358,6 @@ func TestApplyFollowsADirectoryUntilDoneUnlessOnce(t *testing.T) {
 // -C is the checkout and what every relative path resolves against, provider included.
 // Like git's, it is global: it goes before the command.
 func TestDashCResolvesRelativePathsAgainstTheCheckout(t *testing.T) {
-	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	require.NoError(t, os.WriteFile(filepath.Join(f.queue, "changes.json"), f.changes, 0o644))
 	require.NoError(t, os.Rename(f.provider(t, ""), filepath.Join(f.queue, "local.buzz")))
@@ -420,7 +407,6 @@ func TestParseSource(t *testing.T) {
 // Before, a regenerate hook failing on one change's code ended validation with no
 // verdict and no .done, so that change wedged its partition on every run.
 func TestAFailingRegenerationKicksItsChangeBackAndTheRunFinishes(t *testing.T) {
-	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{".gitattributes": "lib/** linguist-generated\n"})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 

@@ -142,7 +142,10 @@ func TestARemoteIsAConfiguredNameNeverAURL(t *testing.T) {
 	assert.Equal(t, f.remote, url)
 
 	_, err = NewRepo(t.Context(), Config{Root: f.queue, Remote: f.remote})
-	require.ErrorContains(t, err, "is configured")
+	require.ErrorContains(t, err, "never a URL or a path")
+
+	_, err = NewRepo(t.Context(), Config{Root: f.queue, Remote: "upstream"})
+	require.ErrorContains(t, err, `no remote named "upstream" is configured`)
 }
 
 func TestRangeFilesAndTreesReadTheCheckout(t *testing.T) {
@@ -160,6 +163,44 @@ func TestRangeFilesAndTreesReadTheCheckout(t *testing.T) {
 	c, err := r.FindCommit(ctx, a.Head)
 	require.NoError(t, err)
 	assert.Equal(t, mergequeue.Commit{ID: a.Head, Parents: []string{f.base}, Author: mergequeue.Person{Name: "ann", Email: "ann@example.invalid"}, Subject: "change 1"}, c)
+}
+
+// B1 over real git: #2 is stacked on #1 and deletes the line #1 added. Once #1 lands as a
+// squash, merging #2 the way the host would, from its fork point, brings the line back;
+// the queue lands #2 through an update commit whose tree is the one it validated.
+func TestAStackedChildsDeletionStaysDeletedOnceItsParentIsSquashed(t *testing.T) {
+	f := newFixture(t)
+	a := f.change(t, "1", "ann", f.base, map[string]string{"lib/x.txt": "x\nL\n"})
+	b := f.change(t, "2", "bob", a.Head, map[string]string{"lib/x.txt": "x\n", "lib/g.txt": "g\n"})
+	merger := filepath.Join(t.TempDir(), "merger")
+	gitIn(t, filepath.Dir(merger), "clone", "--quiet", f.remote, merger)
+	host := &fakeHost{t: t, merger: merger}
+	ctx := t.Context()
+
+	queue := f.repo(t, f.queue)
+	planner := mergequeue.NewPlanner(queue)
+	planner.Provider, planner.Depth = host, 2
+	plan, err := planner.Run(ctx, mergequeue.Changes{Schema: mergequeue.SchemaChanges, Base: "main", Changes: []mergequeue.Change{a, b}})
+	require.NoError(t, err)
+	require.Len(t, plan.Partitions, 1)
+	require.Len(t, plan.Partitions[0], 2)
+	assert.Equal(t, a.Head, plan.Partitions[0][1].StackBase)
+
+	dir := &mergequeue.VerdictDir{Path: t.TempDir(), Export: func(ctx context.Context, file, base, cand string) error {
+		return queue.Bundle(ctx, file, mergequeue.BundleRange{Base: base, Head: cand})
+	}}
+	v := mergequeue.NewValidator(queue, greenGate{}, dir)
+	v.Regenerate, v.Scratch = regenerate, t.TempDir()
+	require.NoError(t, v.Run(ctx, plan))
+	require.NoError(t, dir.MarkDone())
+	require.NoError(t, mergequeue.NewApplier(host, f.repo(t, f.apply), &mergequeue.VerdictDir{Path: dir.Path, Follow: true}).Run(ctx, plan))
+	assert.Equal(t, []string{"1", "2"}, host.merged)
+
+	gitIn(t, merger, "fetch", "--quiet", "origin", "main")
+	assert.Equal(t, "x", gitIn(t, merger, "show", "origin/main:lib/x.txt"), "the line #2 deleted stays deleted")
+	assert.Equal(t, "g", gitIn(t, merger, "show", "origin/main:lib/g.txt"))
+	natural := gitIn(t, merger, "merge-tree", "--write-tree", "origin/main~1", b.Head)
+	assert.Equal(t, "x\nL", gitIn(t, merger, "show", natural+":lib/x.txt"), "the host's own merge of #2 would have brought L back")
 }
 
 // fakeHost approves everything and merges the way GitHub squashes: one commit per
@@ -215,7 +256,6 @@ func (greenGate) Validate(context.Context, mergequeue.Candidate, string, mergequ
 // its own author, the second through a pushed update commit, and main ends on the
 // validated tree.
 func TestValidatedChangesMergeOneCommitEachAndMainCarriesTheValidatedTree(t *testing.T) {
-	t.Skip("TODO(merge-queue): needs vcs's TreeMerger, CommitWriter, Pusher and the rest of the capability redesign")
 	f := newFixture(t)
 	a := f.change(t, "1", "ann", f.base, map[string]string{"app/src.txt": "alpha-a\nbeta\ngamma\n"})
 	b := f.change(t, "2", "bob", f.base, map[string]string{"app/src.txt": "alpha\nbeta\ngamma-b\n"})
