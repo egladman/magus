@@ -168,8 +168,11 @@ type Request struct {
 	Host string
 	// Transport is the form of the installed hook that called, such as sh or buzz, as
 	// that form declares it. Two forms wired into one session are two callers.
-	Transport  string
-	Session    string
+	Transport string
+	Session   string
+	// Agent is the host's subagent id, for a wiring that forwards one field of the event
+	// rather than the whole envelope; an envelope's own agent_id fills it otherwise.
+	Agent      string
 	Transcript string
 	Event      string
 	// Window names the terminal the call runs in, empty off a terminal. It keys what the
@@ -227,7 +230,7 @@ type Verdict struct {
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	input := req.Input
 	hasInput := input != ""
-	who := hookAttribution{Host: req.Host, Transport: req.Transport, Session: req.Session, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
+	who := hookAttribution{Host: req.Host, Transport: req.Transport, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	isPath := req.IsPath
 	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
 	// there to pin a location.
@@ -252,7 +255,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if who.Event == "" {
 			who.Event = env.Who.Event
 		}
-		who.Agent = env.Who.Agent
+		if who.Agent == "" {
+			who.Agent = env.Who.Agent
+		}
 		if env.LoadedSkill != "" {
 			// Recorded, never judged. The gate is built here rather than reusing the one
 			// below because this arm returns before it: same cacheDir, same session.

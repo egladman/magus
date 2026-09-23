@@ -702,6 +702,21 @@ func TestAttributionDoesNotReachTheParent(t *testing.T) {
 	assert.Empty(t, v.Lease)
 }
 
+// The command and path glue forward one field of the event, not the envelope, so the
+// subagent id arrives as --agent beside the extracted command. It must attribute exactly as
+// the envelope's agent_id does, or every subagent shell call is graded as its parent's.
+func TestAgentFlagAttributesAnExtractedCommandToTheSubagentsJob(t *testing.T) {
+	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	ctx, _ := fleetFixture(t, row)
+	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
+
+	child := Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"})
+	assert.Equal(t, "guard-facts", child.Lease, "a subagent's extracted command is graded under its job")
+
+	parent := Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "8f2c6a1e"})
+	assert.Empty(t, parent.Lease, "the same command with no agent id is the parent's")
+}
+
 // denyEverySpawn is a magusfile whose spawn rule denies every spawn.
 const denyEverySpawn = `import "magus";
 

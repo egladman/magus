@@ -76,6 +76,9 @@ not block every tool call.
 
 ## Options
 
+**--agent** *string*
+: The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job
+
 **--agent-name** *string*
 : Name of the agent host this invocation came from (attribution only)
 

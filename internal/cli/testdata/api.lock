@@ -185,6 +185,7 @@ flag run/wait
 flag session/brief
 flag session/limit
 flag session/since
+flag shell/agent
 flag shell/agent-name
 flag shell/event
 flag shell/lease

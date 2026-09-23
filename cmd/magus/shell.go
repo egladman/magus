@@ -179,6 +179,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Host:       sf.AgentName,
 		Transport:  sf.Transport,
 		Session:    strings.TrimSpace(sf.Session),
+		Agent:      strings.TrimSpace(sf.Agent),
 		Window:     window,
 		Transcript: sf.Transcript,
 		Event:      sf.Event,

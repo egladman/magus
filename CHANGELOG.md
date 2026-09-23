@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   events, session records and job rows carry `user`, `uid` and `entry_point` (`cli`,
   `hook`, `mcp`, `rpc`, `daemon`), read by magus itself. `magus session` gains a USER
   column. A job row's `registered_by` is an `Origin`.
+- **A subagent's shell and edit calls are graded under its job.** `magus shell --agent`
+  takes the host's subagent id, and the command and path glue forward it (`HOST_AGENT_PATH`,
+  default `agent_id`). Guard templates are at version 17; re-install them.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
