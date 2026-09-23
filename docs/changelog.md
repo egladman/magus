@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   own top-level `install` target, which `build`/`test`/`lint` need; `:update`
   rewrites the lockfile as before. An unchanged install replays without forking
   the package manager. macOS seeds `node_modules` from a sibling checkout.
+- **A merge's kept generated files regenerate after it finishes.** The merge driver records
+  the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
+  a `regenerate-owed` job that runs each once, deepest project first, and stages the
+  result; it prints the amend command and never amends. `magus doctor` reports an unsettled
+  record (`owed-regeneration`).
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
@@ -129,6 +134,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`install` probes only its own tools and skips dependency order.** A project's install
   no longer waits for its dependencies' installs, and `run install` probes node and pnpm,
   not tsc.
+- **Enum case sets are hand-written; no `_gen.go` file remains.** Each closed string
+  type declares its cases once, and the `magus-utils enums` generator is gone. A test
+  holds the Buzz boundary registry to each type's set.
 - **A daemon whose workspace fails to load keeps serving and says why.** The console,
   `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
@@ -235,6 +243,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
   A run skips re-evaluating a magusfile that does not export the target, and an exact
   source no longer walks the tree. `magus ls` here: 1.45s to 0.11s.
+- **The daemon API reference matches the protos again.** The committed descriptor set
+  predated the last proto change, so the activity reference described an older API.
+- **The graph links a target to a workspace spell imported without an alias.**
+  `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
+  `magus path` and `magus explain` missed every op it runs.
 - **Console failures are always shown.** Every failed daemon call, stream or undecodable
   frame raises a notification, and the console lint rejects a swallowed catch. A page with
   no token shows one sign-in state with the command that opens it signed in, and a 401
