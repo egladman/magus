@@ -82,6 +82,26 @@ func WorkspaceLoadFiles(root string) []string {
 	return out
 }
 
+// IsProjectRoot reports whether rel, a workspace-relative directory, is the root of a
+// project this workspace loads: it holds a magusfile in either form, or a magus.yaml. A
+// directory under one of loadSkipDirs is never one, for the reason loadDirs skips them.
+func IsProjectRoot(root, rel string) bool {
+	rel = path.Clean(filepath.ToSlash(rel))
+	for _, seg := range strings.Split(rel, "/") {
+		if slices.Contains(loadSkipDirs, seg) {
+			return false
+		}
+	}
+	abs := filepath.Join(root, filepath.FromSlash(rel))
+	for _, name := range []string{magusfileName, magusYAML} {
+		if info, err := os.Stat(filepath.Join(abs, name)); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	entries, err := filepath.Glob(filepath.Join(abs, magusfilesDir, "*.buzz"))
+	return err == nil && len(entries) > 0
+}
+
 // loadDirs returns every workspace-relative directory the walk considers, "." first.
 // Skipping loadSkipDirs is what keeps a vendored tree's magusfile, and a sibling
 // worktree parked under .claude, out of this workspace's load set.

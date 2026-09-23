@@ -251,45 +251,6 @@ test "the manifest gains its version header exactly once" {
         message: "a headed manifest is unchanged");
 }
 
-// unreleasedBody returns the trimmed body of CHANGELOG.md's [Unreleased] section, or ""
-// when the section is absent or holds nothing.
-//
-// A mirror of parseUnreleased in cmd/magus-utils/release.go rather than a call to it:
-// `cut` exposes no read-only mode, and adding one would be a subcommand with this as its
-// only caller. The two need agree on one question, whether the section is empty, so this
-// reproduces the heading match (case-insensitive label), the section boundary (the next
-// `## `), and the trim.
-export fun unreleasedBody(changelog: str) > str {
-    var body = mut [<str>];
-    var inside = false;
-    foreach (line in changelog.split("\n")) {
-        if (line.startsWith("## ")) {
-            if (inside) { break; }
-            final rest = line.sub(3);
-            if (rest.startsWith("[")) {
-                final close = rest.indexOf("]");
-                if (close != null and rest.sub(1, len: close - 1).lower() == "unreleased") {
-                    inside = true;
-                }
-            }
-        } else if (inside) {
-            body.append(line);
-        }
-    }
-    return body.join("\n").trim();
-}
-
-test "the unreleased section is read the way cut reads it" {
-    final full = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- a thing\n\n## [v0.3.0]\n\n- old\n";
-    std\assert(unreleasedBody(full) == "### Added\n\n- a thing", message: "content, trimmed, section-bounded");
-    std\assert(unreleasedBody("# Changelog\n\n## [Unreleased]\n\n## [v0.3.0]\n\n- old\n") == "",
-        message: "an emptied section is what cut refuses on");
-    std\assert(unreleasedBody("# Changelog\n\n## [v0.3.0]\n\n- old\n") == "",
-        message: "no section at all");
-    std\assert(unreleasedBody("## [unreleased]\n\n- a thing\n") == "- a thing",
-        message: "the label match is case-insensitive, as cut's is");
-}
-
 // currentVersion returns a module's highest STABLE released version, or "" when
 // it has never had one. Compared on the PARSED major/minor/patch, not the tag
 // text, because string order puts v0.10.0 before v0.9.0.
@@ -402,22 +363,23 @@ test "reads the module path and ignores a require of a similar name" {
 }
 
 // releaseIndexPaths lists every tracked path a release-index publish commit may
-// carry: the manifests, the signed pair, and the two files regenerated from the
-// changelog the cut rewrote. The commit stages exactly this list, so a stray dirty
-// file elsewhere in the tree can never be swept into the automation's commit.
-// docs/gen/public/release names the directory, not the two files: .gitignore
-// re-includes exactly index.json and index.json.sig under it.
+// carry: the manifests, the signed pair, the changelog regenerated from them, and
+// the fragments the cut folded and deleted. The commit stages exactly this list, so
+// a stray dirty file elsewhere in the tree can never be swept into the automation's
+// commit. docs/gen/public/release names the directory, not the two files: .gitignore
+// re-includes exactly index.json and index.json.sig under it. changes, not
+// changes/unreleased: the cut can delete every fragment, and git refuses a pathspec
+// that matches nothing, while changes/README.md always matches.
 export fun releaseIndexPaths() > [str] {
-    return ["releases", "docs/gen/public/release", "CHANGELOG.md",
-        "docs/changelog.md"];
+    return ["releases", "docs/gen/public/release", "CHANGELOG.md", "changes"];
 }
 
-test "the publish paths carry the index pair and the changelog derivatives" {
+test "the publish paths carry the index pair, the changelog and the folded fragments" {
     final paths = releaseIndexPaths();
     std\assert(paths.indexOf("docs/gen/public/release") != null, message: "the signed pair's directory");
     std\assert(paths.indexOf("releases") != null, message: "the manifests the index derives from");
-    std\assert(paths.indexOf("CHANGELOG.md") != null, message: "the file the cut rewrote");
-    std\assert(paths.indexOf("docs/changelog.md") != null, message: "derived from the changelog");
+    std\assert(paths.indexOf("CHANGELOG.md") != null, message: "regenerated from the manifests");
+    std\assert(paths.indexOf("changes") != null, message: "the fragments the cut deleted");
 }
 
 // releaseIndexBranch names the branch a publish rides. Derived from the commit the

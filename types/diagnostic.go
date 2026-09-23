@@ -401,7 +401,13 @@ const (
 	WorkspaceLoadFailed DiagnosticCode = "MGS3016"
 	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
 	// transient twin of MGS3016: the same call succeeds once the load finishes.
-	WorkspaceStillLoading     DiagnosticCode = "MGS3017"
+	WorkspaceStillLoading DiagnosticCode = "MGS3017"
+	// WritePathIsDirectory is a job fork whose write paths name an existing directory that
+	// is not a project root. A directory claims every file under it, so the job overlaps
+	// every other job that edits anything there, and the overlap report fills with pairs
+	// that share no file. A project root the job owns whole, and a directory the job
+	// creates, stay declarable.
+	WritePathIsDirectory      DiagnosticCode = "MGS3018"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -538,7 +544,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
-	WorkspaceLoadFailed, WorkspaceStillLoading,
+	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

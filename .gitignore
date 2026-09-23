@@ -52,6 +52,11 @@
 !/docs/gen/public/registry/index.json.sig
 console/gen/
 
+# The docs changelog page, rendered at build time (docs changelog-page) from releases/ and the
+# changes/unreleased/ fragments. Committed, it would change with every fragment and make every
+# pull request collide on it again.
+/docs/changelog.md
+
 # The assembled deploy tree: `magus run deploy-generate .` writes it from the two gen/ trees
 # and the Pages workflow uploads it. Building it locally is how you see what publishes.
 # Under gen/ because that is what generated output is called in every project here.

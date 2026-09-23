@@ -58,6 +58,9 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 		if err := RefuseAmbiguousSymbols(ctx, candidate.CompletionGates, read); err != nil {
 			return types.Job{}, err
 		}
+		if err := RefuseDirectoryWritePaths(store, id, candidate); err != nil {
+			return types.Job{}, err
+		}
 		if err := RefuseSharedCheckout(store, rows, id, candidate); err != nil {
 			return types.Job{}, err
 		}
