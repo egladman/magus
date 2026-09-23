@@ -215,12 +215,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A broken working tree no longer switches off the approved spawn rule.** The committed
   `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
   it too slowly denies. A skipped rule says what applied. A workspace advise joins a
-  built-in one, the idle clock follows the agent's id, and the bootstrap build is exempt
-  only in cwd.
+  built-in one, and the idle clock follows the agent's id.
 - **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
   wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
   its message and Help link. Health reports down when every workspace failed, and the
   Windows sign-in line is PowerShell's `Start-Process`.
+- **The daemon API reference matches the protos again.** The committed descriptor set
+  predated the last proto change, so the activity reference described an older API.
+- **The graph links a target to a workspace spell imported without an alias.**
+  `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
+  `magus path` and `magus explain` missed every op it runs.
 - **Console failures are always shown.** Every failed daemon call, stream or undecodable
   frame raises a notification, and the console lint rejects a swallowed catch. A page with
   no token shows one sign-in state with the command that opens it signed in, and a 401
