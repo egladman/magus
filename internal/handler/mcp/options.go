@@ -82,7 +82,7 @@ type Options struct {
 
 func (o Options) validate() error {
 	if o.Magus == nil && o.Unavailable == nil {
-		return errors.New("mcp: Options.Magus is required")
+		return errors.New("mcp: Options.Magus or Options.Unavailable is required")
 	}
 	return nil
 }
