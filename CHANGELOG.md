@@ -70,9 +70,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   receives advisories and wires `SessionStart` on `compact`, Cursor's write guard moves to
   `preToolUse`, and OpenCode joins advisories by `callID`. Guard template v12: re-copy
   installed copies.
-- **Shipped hook configs are validated against each host's schema.** Schemas are vendored
-  under `testdata/hosts/` with provenance in `SOURCES.md`; `HOST_SCHEMAS_MODE=verify`
-  re-fetches them.
 - **MGS1028 surfaces where it costs.** The run that reruns an undeclared seeding file names
   it before starting (`undeclared_seeds` in `-o json`), and an undeclared build input rings
   the console's notification center.
@@ -121,9 +118,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
   other, as do the nested runs of one root invocation. `--watch` retries on the next
   change.
-- **Enum case sets are hand-written; no `_gen.go` file remains.** Each closed string
-  type declares its cases once, and the `magus-utils enums` generator is gone. A test
-  holds the Buzz boundary registry to each type's set.
 - **A daemon whose workspace fails to load keeps serving and says why.** The console,
   `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
@@ -184,19 +178,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   path.
 - **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
   runs it anyway.
-- **A failing `magus doctor` no longer cancels CI shards.** The final gate carries its
-  verdict and reports every verdict it holds.
-- **The Go coverage badge spans every platform.** The denominator is enumerated from
-  source; the numerator unions committed per-platform records refreshed with `magus run
-  coverage-badge:rw .`. The 70% floor stays per-platform.
-- **One coverage badge per language.** TypeScript merges the console and
-  libs/textsearch.
 - **The PR advice comment leads with files no project claims.**
 - **MAGUS.md is formatted with the repo's other Markdown.**
 - **The MCP tool catalog is generated from the `std.Magus` descriptor.**
 - **Upstream-wait messages back off** (15s, 30s, 1m, 2m, …) and name both targets.
 - **An ambiguous output ref prints a count and three examples.**
-- **Cursor hook schemas come from Cursor's own validator.**
 - **The agent surface stops promising a checkpoint restore.** A checkpoint records a
   digest, not the patch; magus-vcs-hygiene covers recovering work.
 - **"Handoff journal" is renamed to memory** across the command, docs and manpage.
@@ -230,8 +216,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
   cause naming the holder, and `-o jsonl` emits the `run.target.result` and
   `run.diagnostic` records.
-- **The daemon API reference matches the protos again.** The committed descriptor set
-  predated the last proto change, so the activity reference described an older API.
 - **The graph links a target to a workspace spell imported without an alias.**
   `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
   `magus path` and `magus explain` missed every op it runs.
@@ -272,10 +256,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   provenance only; per-file digests keep it honest.
 - **A shared step no longer inherits one caller's timeout.** It runs under the
   invocation's cancellation. MGS3012 lists what was still admitted.
-- **A failed release publish can be finished without re-tagging.** Re-cutting a matching
-  manifest is idempotent, and `release-index` cuts from the published assets, verified
-  against SHA256SUMS.
-- **Both release-index jobs install Node.** v0.4.3's publish died regenerating docs.
 - **Generated output no longer depends on the build.** magus requires
   `GOEXPERIMENT=jsonv2` and refuses to build without it.
 - **A failed remote-cache exchange names the step that failed.**
