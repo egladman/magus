@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -17,7 +18,7 @@ import (
 //
 // out picks std.print's writer per call; Register's always answers os.Stdout.
 // Embeddings that capture a program's output (e.g. a browser playground) supply
-// their own writer via RegisterWithOutput or RegisterWithOutputFor.
+// their own writer via RegisterWithOutput or RegisterWithOutputFunc.
 func coreModule(out func(context.Context) io.Writer) vm.Value {
 	m := mod()
 	m.MapSet("assert", fn("std.assert", stdAssert))
@@ -60,6 +61,9 @@ func stdAssert(_ context.Context, args []vm.Value) (vm.Value, error) {
 func makeStdPrint(out func(context.Context) io.Writer) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		w := out(ctx)
+		if w == nil {
+			return vm.Null, errors.New("std.print: the host supplied no output writer")
+		}
 		if len(args) < 1 {
 			fmt.Fprintln(w)
 			return vm.Null, nil

@@ -35,14 +35,16 @@ type Module struct {
 }
 
 // ModuleEnv carries what a Bind hook may need beyond the session itself: the
-// context a host module captures, and the writer std's `print` should target. A
-// Module ignores the fields it does not use.
+// context a host module captures, and where std's `print` writes. A Module ignores
+// the fields it does not use.
 type ModuleEnv struct {
 	Ctx context.Context
+	// Out is the one writer print targets for the session's lifetime.
 	Out io.Writer
-	// OutFor, when set, picks print's writer on each call from the calling context, and
-	// Out is ignored. It lets a host route one program's output per caller.
-	OutFor func(context.Context) io.Writer
+	// OutFunc picks print's writer on each call from the context that call runs
+	// under, so one session can route output per caller. Set Out or OutFunc, not
+	// both; std's Bind refuses both. A nil writer from OutFunc fails that print.
+	OutFunc func(context.Context) io.Writer
 }
 
 // Well-known module labels, classifying a module by origin. Labels are free-form

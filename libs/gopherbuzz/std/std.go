@@ -23,6 +23,7 @@ package std
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 
@@ -37,8 +38,11 @@ import (
 // buzz.Module (see gopherbuzz/module.go), shared with host embedders.
 var Modules = []buzz.Module{
 	{Name: "std", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
-		out := env.OutFor
-		if out == nil {
+		out := env.OutFunc
+		switch {
+		case out != nil && env.Out != nil:
+			return errors.New("std: ModuleEnv sets both Out and OutFunc; set one")
+		case out == nil:
 			out = func(context.Context) io.Writer { return env.Out }
 		}
 		s.SetNativeModule("std", coreModule(out))
@@ -116,10 +120,11 @@ func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
 	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), Out: out}, Modules...)
 }
 
-// RegisterWithOutputFor is Register with std.print's writer chosen per call by out,
-// from the context the program runs under.
-func RegisterWithOutputFor(sess *buzz.Session, out func(context.Context) io.Writer) {
-	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), OutFor: out}, Modules...)
+// RegisterWithOutputFunc is RegisterWithOutput with std.print's writer chosen on
+// each call by out, from the context that call runs under. A print whose out
+// returns nil fails with an error.
+func RegisterWithOutputFunc(sess *buzz.Session, out func(context.Context) io.Writer) {
+	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), OutFunc: out}, Modules...)
 }
 
 func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
