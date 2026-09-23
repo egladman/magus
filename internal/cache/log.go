@@ -21,22 +21,70 @@ import (
 // because config imports cache, so cache cannot import config back.
 const levelTrace slog.Level = slog.LevelDebug - 4
 
-// newLogger returns a *slog.Logger for the given format ("text", "json", or "pretty") and level.
+// newLogger returns a *slog.Logger for the given format ("text", "json", "jsonl", or
+// "pretty") and level.
 //
 // Human formats (pretty, plain) render to stderr so stdout stays clean for machine
 // output; json/text keep their slog handlers. Pretty uses the shared PrettyHandler,
 // which is also installed as the process-wide default logger (see cmd/magus) so that
 // general diagnostics render in the same compact style as cache events instead of raw
 // "time=... level=..." lines interleaving with the pretty output.
+//
+// "jsonl" is a SAFETY NET, not the primary path: cmd/magus converts the named cache
+// events (the projects/charms/cache header, per-stage progress, the run summary) into
+// typed events on the run's own report.Writer, matching the run.target.result
+// envelope, before they would reach a logger at all (see cache_ops.go and run.go's
+// stageObserver). This format only covers what is left -- cache.warn, cache.memory,
+// cache.remote.* and anything future code logs without adding a conversion -- so
+// -o jsonl never leaks free text even for a message this package does not yet know
+// about. It writes to STDERR, keeping stdout reserved for the report stream.
 func newLogger(format string, level slog.Level) *slog.Logger {
 	switch strings.ToLower(format) {
 	case "text":
 		return slog.New(secret.NewRedactingHandler(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 	case "json":
 		return slog.New(secret.NewRedactingHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
+	case "jsonl":
+		return slog.New(secret.NewRedactingHandler(newJSONLSafetyNetHandler(os.Stderr, level)))
 	default:
 		return slog.New(NewPrettyHandler(os.Stderr, level))
 	}
+}
+
+// jsonlSafetyNetDropped are cache events already carried by a dedicated event on the
+// report stream, or that exist only to drive an interactive terminal band. Encoding
+// them again here would be either a duplicate of run.target.result (cache.hit,
+// cache.miss, cache.error already carry CacheHit/Duration/Ref/Error there) or noise
+// with nothing a structured reader can act on (cache.pool, a live occupancy sample the
+// pretty renderer itself only shows on a TTY), so this handler drops them instead.
+var jsonlSafetyNetDropped = map[string]bool{
+	"cache.hit":   true,
+	"cache.miss":  true,
+	"cache.error": true,
+	"cache.pool":  true,
+}
+
+// newJSONLSafetyNetHandler wraps a plain JSON slog handler to drop the events named
+// in jsonlSafetyNetDropped.
+func newJSONLSafetyNetHandler(w io.Writer, level slog.Level) slog.Handler {
+	return jsonlSafetyNetHandler{slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})}
+}
+
+type jsonlSafetyNetHandler struct{ slog.Handler }
+
+func (h jsonlSafetyNetHandler) Handle(ctx context.Context, r slog.Record) error {
+	if jsonlSafetyNetDropped[r.Message] {
+		return nil
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h jsonlSafetyNetHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	return jsonlSafetyNetHandler{h.Handler.WithAttrs(as)}
+}
+
+func (h jsonlSafetyNetHandler) WithGroup(name string) slog.Handler {
+	return jsonlSafetyNetHandler{h.Handler.WithGroup(name)}
 }
 
 // PrettyHandler renders both cache events (known cache.* messages) and general

@@ -234,7 +234,7 @@ type SandboxEnv struct {
 
 // Log controls log output.
 type Log struct {
-	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json"` // pretty|plain|text|json
+	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json jsonl"` // pretty|plain|text|json|jsonl
 	// Level is the minimum log level; "trace" also enables the startup timing table.
 	Level string `json:"level" yaml:"level" validate:"omitempty,oneof=trace debug info warn error"`
 	// Silent suppresses progress like --quiet, and additionally bounds the failing-project

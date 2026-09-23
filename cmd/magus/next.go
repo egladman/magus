@@ -97,7 +97,9 @@ func (n nextGate) served(next []hint.Next) []hint.Next {
 // emitConcurrencyNudge prints a finished run's concurrency_profile nudge, at most once
 // per session, with the re-run as a breadcrumb journaled under its id so `magus session
 // hints` can count uptake. -s and disabled hints skip it without spending the firing.
-func emitConcurrencyNudge(w io.Writer, m *magus.Magus, args []string) {
+// rw, when non-nil (a structured -o jsonl invocation), routes the nudge as a typed
+// notice instead of the two prose lines below.
+func emitConcurrencyNudge(w io.Writer, m *magus.Magus, args []string, rw *magus.ReportWriter) {
 	if global.silent || !interactive.HintsEnabled() {
 		return
 	}
@@ -111,6 +113,10 @@ func emitConcurrencyNudge(w io.Writer, m *magus.Magus, args []string) {
 		return
 	}
 	hint.AppendServedNext(gate.CacheDir(), next)
+	if rw != nil {
+		_ = rw.RecordNotice("info", "", line)
+		return
+	}
 	fmt.Fprintf(w, "hint: %s\n%s", line, hint.Render(next, func(hint.Next) string { return "" }))
 }
 
