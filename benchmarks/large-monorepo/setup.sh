@@ -313,8 +313,14 @@ git -C "$REPO" -c user.name=magus-bench -c user.email=bench@magus.invalid \
 
 "$DIR/tasks.sh" "$REPO" "$ENRICHED_BRANCH"
 
-echo "==> npm install"
-( cd "$REPO" && npm install )
+# The queue scenarios (queue.sh) gate on the platform packages' node --test suites,
+# which need no dependencies; skipping the install keeps them runnable without it.
+if [[ "${BENCH_SKIP_INSTALL:-}" == "1" ]]; then
+    echo "==> npm install skipped (BENCH_SKIP_INSTALL=1)"
+else
+    echo "==> npm install"
+    ( cd "$REPO" && npm install )
+fi
 
 echo "==> setup complete: $REPO"
 echo "    next: ./bench.sh        (see README.md for tool/scenario selection)"

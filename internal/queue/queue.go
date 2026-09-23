@@ -1,15 +1,18 @@
 // Package queue is magus's merge queue engine.
 //
-// The engine takes every change carrying merge intent at its head commit, stages it on
-// the base branch, regenerates derived files there, validates the result, and merges
-// through the host only on green. It holds no host knowledge: a [Provider] (a Buzz
-// spell, bridged in internal/interp/bindings) talks to GitHub or GitLab, a [Repo] does
-// the version-control work, a [Graph] answers which projects a change reaches, and a
-// [Validator] runs the gate. The same split cache.RemoteBackend draws for the cache.
+// A run has two halves with different rights, so they are two engines:
 //
-// Changes whose affected closures are pairwise disjoint are validated once together
-// and merge independently: a failure in one never re-runs the other. Overlapping
-// changes stack in queue order and bisect on failure.
+//   - [Validation] executes pull-request code and needs only read access. It admits every
+//     change carrying merge intent that is approved at its head, partitions the changes
+//     by affected closure, and runs one speculative pipeline per partition: stages
+//     base+A, base+A+B, base+A+B+C validate in parallel, and a red stage drops its change
+//     and re-speculates only what was behind it. Its output is a [Manifest].
+//   - [Landing] holds the write credential and executes no pull-request code. It lands the
+//     manifest's changes one by one, in queue order, each as its own commit through the
+//     provider, and stops when the base branch does not carry the tree it predicted.
+//
+// Neither holds host knowledge: a [Provider] (a Buzz spell, bridged in
+// internal/interp/bindings) talks to GitHub, the same split cache.RemoteBackend draws.
 package queue
 
 import (
@@ -25,14 +28,14 @@ const StatusContext = "magus/queue"
 
 // Change is one open change carrying merge intent, as the provider reported it.
 type Change struct {
-	ID     string // provider identifier, opaque to the engine ("482")
-	Repo   string // provider's name for the repository, handed back on every call
-	Head   string // head commit the intent was expressed at
-	Ref    string // ref that fetches Head from the remote; empty fetches Head by sha
-	Branch string // head branch the queue may push a regeneration to; empty when it may not
-	Base   string // branch the change targets
-	Title  string
-	Author string
+	ID     string `json:"id"`               // provider identifier, opaque to the engine ("482")
+	Repo   string `json:"repo,omitempty"`   // provider's name for the repository, handed back on every call
+	Head   string `json:"head"`             // head commit the intent was expressed at
+	Ref    string `json:"ref,omitempty"`    // ref that fetches Head from the remote; empty fetches Head by sha
+	Branch string `json:"branch,omitempty"` // head branch the queue may push to; empty when it may not
+	Base   string `json:"base,omitempty"`   // branch the change targets
+	Title  string `json:"title,omitempty"`
+	Author string `json:"author,omitempty"`
 }
 
 // Label is how the change is named in output and reports.
@@ -73,9 +76,8 @@ type ListQuery struct {
 	Remote string // URL of the remote the checkout fetches from, for the provider to name its repository
 }
 
-// Provider is the host side of the queue, shaped like cache.RemoteBackend. Every
-// method is a network call; none may be skipped by an implementation, because a
-// queue that cannot merge or kick back holds every change forever.
+// Provider is the host side of the queue, shaped like cache.RemoteBackend. Validation
+// calls only List and ApprovalAt; the rest write, and only [Landing] calls them.
 type Provider interface {
 	// Name identifies the provider to a human. It must not dial.
 	Name() string
@@ -85,9 +87,10 @@ type Provider interface {
 	ApprovalAt(ctx context.Context, c Change, sha string) (Approval, error)
 	// PostStatus sets [StatusContext] on sha.
 	PostStatus(ctx context.Context, c Change, sha string, s Status) error
-	// Merge merges c at sha through the host, keeping c's author as the author. It
-	// errors when the host refused, including when c's head is no longer sha.
-	Merge(ctx context.Context, c Change, sha string) error
+	// Merge lands c as one commit at exactly sha, with the change's own merge method and
+	// its author as the author. message is the body for a squash when the author set
+	// none. It errors when the host refused, including when c's head is no longer sha.
+	Merge(ctx context.Context, c Change, sha, message string) error
 	// KickBack removes c's merge intent and posts report to its author.
 	KickBack(ctx context.Context, c Change, sha, report string) error
 }
@@ -97,17 +100,16 @@ type Provider interface {
 type Conflict struct {
 	Change Change   // the change whose addition conflicted
 	Paths  []string // the conflicted source files
-	With   []string // what it conflicts with: base-branch commits touching Paths ("abc123 subject")
+	With   []string // base-branch commits touching Paths ("abc123 subject")
 }
 
-// ConflictError reports a [Conflict] from a [Repo] call.
+// ConflictError reports a [Conflict].
 type ConflictError struct{ Conflict Conflict }
 
 func (e *ConflictError) Error() string {
 	return fmt.Sprintf("%s conflicts in %s", e.Conflict.Change.Label(), strings.Join(e.Conflict.Paths, ", "))
 }
 
-// asConflict unwraps a [ConflictError].
 func asConflict(err error) (Conflict, bool) {
 	var ce *ConflictError
 	if errors.As(err, &ce) {
@@ -116,42 +118,11 @@ func asConflict(err error) (Conflict, bool) {
 	return Conflict{}, false
 }
 
-// RefusedError is a [Repo.Land] refusal the author has to fix, such as generated files
-// the queue must regenerate on a branch it cannot push to. The change is kicked back
-// with Reason.
+// RefusedError is a refusal the author has to fix, such as generated files the queue
+// must regenerate on a branch it cannot push to. The change is kicked back with Reason.
 type RefusedError struct{ Reason string }
 
 func (e *RefusedError) Error() string { return e.Reason }
-
-// Landing is what [Repo.Land] prepared for one change.
-type Landing struct {
-	// Merge is the commit the provider merges: the change's own head when merging it
-	// reproduces the regenerated staging tree, else a commit Land pushed to the change.
-	Merge string
-	// Expect is a commit whose tree the base branch must carry after the merge.
-	Expect string
-}
-
-// Repo is the version-control side of the queue.
-type Repo interface {
-	// Tip fetches branch and returns its tip.
-	Tip(ctx context.Context, branch string) (string, error)
-	// Fetch makes c.Head available locally.
-	Fetch(ctx context.Context, c Change) error
-	// Changed lists the paths head changes since its merge base with base.
-	Changed(ctx context.Context, base, head string) ([]string, error)
-	// Overlap merges changes onto base in order without touching the checkout, and
-	// returns a *[ConflictError] for the first one that conflicts in a source file.
-	// Conflicts in derived files are not reported: staging regenerates them.
-	Overlap(ctx context.Context, base string, changes []Change) error
-	// Stage builds base plus changes in order, regenerates derived files, and returns
-	// the staging commit. A source conflict is a *[ConflictError].
-	Stage(ctx context.Context, base string, changes []Change) (string, error)
-	// Land prepares c to merge onto base; see [Landing].
-	Land(ctx context.Context, base string, c Change) (Landing, error)
-	// SameTree reports whether two commits carry identical trees.
-	SameTree(ctx context.Context, a, b string) (bool, error)
-}
 
 // Closure is the set of projects a change can affect.
 type Closure struct {
@@ -168,14 +139,67 @@ type Graph interface {
 	Closure(ctx context.Context, paths []string) (Closure, error)
 }
 
-// Verdict is one validation outcome.
-type Verdict struct {
+// Stage is one speculative staging commit and the directory it is checked out in.
+type Stage struct {
+	Commit string
+	Dir    string
+}
+
+// GateResult is one gate run's outcome.
+type GateResult struct {
 	Green   bool
 	Summary string // one line naming what failed, for the kick-back report
 }
 
-// Validator runs the gate on a staging commit. An error means the gate could not run
-// at all, which stops the queue; a red gate is a Verdict.
-type Validator interface {
-	Validate(ctx context.Context, commit, base string) (Verdict, error)
+// Gate validates a stage. below is the commit the stage was built on: everything
+// beneath it is validated by the stages below, so a gate need run only what the top
+// change adds. An error means the gate could not run at all; a red gate is a result.
+type Gate interface {
+	Validate(ctx context.Context, s Stage, below string) (GateResult, error)
+}
+
+// Stager is the validation half's version-control side.
+type Stager interface {
+	// Tip fetches branch and returns its tip.
+	Tip(ctx context.Context, branch string) (string, error)
+	// Fetch makes c.Head available locally.
+	Fetch(ctx context.Context, c Change) error
+	// Changed lists the paths head changes since its merge base with base.
+	Changed(ctx context.Context, base, head string) ([]string, error)
+	// Overlap merges c onto base without touching any checkout and returns a
+	// *[ConflictError] when a source file conflicts. Derived files are not reported.
+	Overlap(ctx context.Context, base string, c Change) error
+	// Build checks out on in a directory of its own, merges c, regenerates the derived
+	// files c touches, and commits. Safe for concurrent use. A source conflict is a
+	// *[ConflictError].
+	Build(ctx context.Context, on string, c Change) (Stage, error)
+	// Discard removes a stage's directory; its commit stays in the object store.
+	Discard(ctx context.Context, s Stage) error
+	// Message is the squash body for head: its own commits since base.
+	Message(ctx context.Context, base, head string) (string, error)
+}
+
+// Prepared is what [Lander.Prepare] chose to merge for one change.
+type Prepared struct {
+	// Merge is the commit the provider merges: the change's own head when a plain merge
+	// already yields the validated tree, else a commit Prepare pushed to its branch.
+	Merge string
+}
+
+// Lander is the landing half's version-control side. It runs git plumbing only, never a
+// build, so the job holding the write credential executes no pull-request code.
+type Lander interface {
+	Tip(ctx context.Context, branch string) (string, error)
+	Fetch(ctx context.Context, c Change) error
+	// Expect is the tree the base branch must carry once the change validated at stage
+	// lands on now: stage's changes since base, merged onto now. With nothing landed
+	// since base but the stage's own predecessors, that is stage's tree exactly. A
+	// conflict is a *[ConflictError].
+	Expect(ctx context.Context, base, now, stage string) (string, error)
+	// Prepare picks what to merge so that landing c on now yields tree. A difference from
+	// c's plain merge outside derived files is a *[RefusedError]: the queue only ever
+	// adds regenerated files to what was approved.
+	Prepare(ctx context.Context, now string, c Change, tree string) (Prepared, error)
+	// TreeOf returns rev's tree.
+	TreeOf(ctx context.Context, rev string) (string, error)
 }

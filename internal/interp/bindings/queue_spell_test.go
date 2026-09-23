@@ -101,7 +101,7 @@ func TestQueueRefusalIsAnError(t *testing.T) {
 		}
 		return false, nil
 	})
-	require.ErrorContains(t, p.Merge(context.Background(), change, "abc"), "head moved")
+	require.ErrorContains(t, p.Merge(context.Background(), change, "abc", "* body"), "head moved")
 	require.ErrorContains(t, p.KickBack(context.Background(), change, "abc", "report"), "the host refused")
 }
 

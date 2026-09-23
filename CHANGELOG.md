@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`magus vcs queue` is a merge queue.** Enabling auto-merge queues a pull request.
+  Stages of main plus the changes ahead validate in parallel, each gating only what its
+  change adds, and disjoint changes never wait on each other. `--land` merges each green
+  change as its own commit by its author, from a write-scoped job. `spells/github/queue`
+  is the GitHub provider.
 - **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
   is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
   charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an

@@ -24,7 +24,7 @@ func ids(groups []Group) [][]string {
 }
 
 func TestPlanSeparatesDisjointClosuresAndKeepsQueueOrder(t *testing.T) {
-	got := Plan([]Entry{
+	got := Partition([]Entry{
 		entry("1", true, "a"),
 		entry("2", true, "b"),
 		entry("3", true, "a", "c"),
@@ -33,7 +33,7 @@ func TestPlanSeparatesDisjointClosuresAndKeepsQueueOrder(t *testing.T) {
 }
 
 func TestPlanJoinsGroupsThroughAChangeThatReachesBoth(t *testing.T) {
-	got := Plan([]Entry{
+	got := Partition([]Entry{
 		entry("1", true, "a"),
 		entry("2", true, "b"),
 		entry("3", true, "b", "a"),
@@ -42,7 +42,7 @@ func TestPlanJoinsGroupsThroughAChangeThatReachesBoth(t *testing.T) {
 }
 
 func TestPlanNeverAssumesIndependenceItCannotProve(t *testing.T) {
-	got := Plan([]Entry{
+	got := Partition([]Entry{
 		entry("1", true, "a"),
 		entry("2", false),
 		entry("3", true, "c"),
@@ -51,12 +51,12 @@ func TestPlanNeverAssumesIndependenceItCannotProve(t *testing.T) {
 }
 
 func TestPlanOfNothingIsNothing(t *testing.T) {
-	assert.Nil(t, Plan(nil))
+	assert.Nil(t, Partition(nil))
 }
 
 // BenchmarkPlan sizes planning at monorepo scale: n open changes over a 10k-project
 // graph, each reaching 20 projects.
-func BenchmarkPlan(b *testing.B) {
+func BenchmarkPartition(b *testing.B) {
 	for _, n := range []int{100, 1000} {
 		entries := make([]Entry, n)
 		for i := range entries {
@@ -69,7 +69,7 @@ func BenchmarkPlan(b *testing.B) {
 		b.Run(fmt.Sprintf("changes=%d", n), func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				Plan(entries)
+				Partition(entries)
 			}
 		})
 	}

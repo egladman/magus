@@ -1,0 +1,89 @@
+name: Queue land
+
+# The merge queue's landing half: lands what a Queue run validated, in queue order, each
+# pull request as its own commit through the GitHub API, authored by its author.
+#
+# workflow_run rather than workflow_call. A called workflow runs inside the caller's run:
+# it can hold no more than the caller's token, and on a pull_request event the caller's
+# definition comes from the pull request's branch, so a pull request could call it with
+# inputs of its choosing. workflow_run always runs this file as main has it, with its own
+# token and secrets, and only after validation has finished.
+#
+# It never checks out or executes pull-request code: it builds magus from main, imports
+# the validated commits from the artifact as git objects, and runs git plumbing and API
+# calls. Before each merge it re-checks approval at the validated head and that the tree
+# it will land differs from the approved change only in files a target regenerates; after
+# each, it stops unless main carries the validated tree.
+#
+# MAGUS_QUEUE_TOKEN is the write credential: a fine-grained token (or a GitHub App
+# installation token) with contents, pull requests and commit statuses write on this
+# repository. Its merges start ci.yaml and cd.yaml on main; the Actions token's would not.
+
+on:
+  workflow_run:
+    workflows: [Queue]
+    types: [completed]
+
+concurrency:
+  group: magus-queue-land
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read # download the validation run's artifact
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+
+jobs:
+  land:
+    name: magus queue land
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          filter: blob:none
+          # A regeneration is pushed to a queued branch with the write credential.
+          token: ${{ secrets.MAGUS_QUEUE_TOKEN }}
+
+      - id: manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          name: magus-queue
+          path: ${{ runner.temp }}/queue
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - if: steps.manifest.outcome == 'success'
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+
+      - if: steps.manifest.outcome == 'success'
+        uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # The committer of a regeneration pushed to a queued branch; its author is the
+      # branch head's author.
+      - if: steps.manifest.outcome == 'success'
+        name: Identify the queue as committer
+        run: |
+          git config user.name 'magus-queue'
+          git config user.email 'magus-queue@users.noreply.github.com'
+
+      - if: steps.manifest.outcome == 'success'
+        name: Land the validated queue
+        uses: ./.github/actions/magus
+        env:
+          MAGUS_QUEUE_TOKEN: ${{ secrets.MAGUS_QUEUE_TOKEN }}
+        with:
+          command: vcs queue --land ${{ runner.temp }}/queue

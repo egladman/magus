@@ -3,6 +3,7 @@ package queue
 // Entry is a change admitted to the queue, with what the graph says it reaches.
 type Entry struct {
 	Change  Change
+	Order   int // queue position
 	Paths   []string
 	Closure Closure
 }
@@ -13,16 +14,7 @@ type Group struct {
 	Entries []Entry
 }
 
-// Changes returns the group's changes in order.
-func (g Group) Changes() []Change {
-	out := make([]Change, len(g.Entries))
-	for i, e := range g.Entries {
-		out[i] = e.Change
-	}
-	return out
-}
-
-// Plan partitions entries into groups with pairwise disjoint closures, preserving
+// Partition splits entries into groups with pairwise disjoint closures, preserving
 // queue order inside each group and ordering groups by their first entry.
 //
 // Cost is linear in the summed closure sizes: each project is indexed once to the first
@@ -32,7 +24,7 @@ func (g Group) Changes() []Change {
 //
 // Soundness: one unproven closure puts every entry in one group, because independence
 // the graph cannot prove is never assumed.
-func Plan(entries []Entry) []Group {
+func Partition(entries []Entry) []Group {
 	if len(entries) == 0 {
 		return nil
 	}

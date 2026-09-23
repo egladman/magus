@@ -10,6 +10,11 @@ package spells
 // Every op receives the change record list_queue returned (id, repo, head, ...), so a
 // spell never has to rediscover which repository it is talking to.
 //
+// The two reads (list_queue, approval_at) run in the validation job, which executes
+// pull-request code and holds a read-only credential; the three writes run only in the
+// landing job. A spell should read its write credential under its own reference so the
+// validation job cannot hold it by accident.
+//
 // Unlike the review contract, a spell must implement ALL five. The queue is mandatory
 // once wired (branch protection requires its status), so a provider that can list
 // changes but cannot merge them would hold every change forever; the engine refuses a
@@ -33,9 +38,11 @@ const (
 	// Returns true when the host recorded it.
 	PostStatusContract = "post_status"
 
-	// MergeChangeContract merges a change through the host's API at exactly {sha}, so
-	// the host refuses when the head moved. The change author stays the author.
-	// Returns {merged, reason}.
+	// MergeChangeContract lands a change as one commit through the host's API at exactly
+	// {sha}, so the host refuses when the head moved. It uses the change's own merge
+	// method; {message} is the squash body when the author set none, so a commit the
+	// queue pushed never appears in it. The change author stays the author. Returns
+	// {merged, reason}.
 	MergeChangeContract = "merge_change"
 
 	// KickBackContract removes a change's merge intent and tells its author why.

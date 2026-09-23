@@ -1,10 +1,14 @@
 name: Queue
 
-# magus's own merge queue. A pull request joins it when auto-merge is enabled on it.
-# Each run is one `magus vcs queue` pass: every queued pull request approved at its head
-# is staged on main, its generated files are regenerated there, `magus affected ci`
-# validates the result, and green merges through the GitHub API (spells/github/queue).
-# Branch protection requires the magus/queue status this posts, so nothing merges around it.
+# The merge queue's validation half. A pull request joins the queue when auto-merge is
+# enabled on it. `magus vcs queue` stages every queued pull request approved at its head
+# on main plus the changes ahead of it in its partition, and gates the stages with
+# `magus affected ci`, several at once. It writes a manifest and the staged commits;
+# queue-land.yaml lands them.
+#
+# This job executes pull-request code, so its token reads and nothing more. Nothing here
+# posts a status, comments or merges: that is queue-land.yaml, which holds the write
+# credential and executes no pull-request code.
 #
 # The verb, not a magusfile target: the queue runs nested `magus run` and `magus affected`
 # over whatever projects a change reaches, and a target holding a project's lock is refused
@@ -14,25 +18,25 @@ on:
   pull_request:
     branches: [main]
     # auto_merge_enabled is the entry; synchronize and a review can make a queued pull
-    # request mergeable without enabling auto-merge again.
+    # request ready without enabling auto-merge again.
     types: [auto_merge_enabled, synchronize]
   pull_request_review:
     types: [submitted]
-  # A merge moves the base every other queued pull request waits on. A merge made with the
-  # Actions token starts no workflow, so this fires for merges made any other way.
+  # Every landing moves the base the rest of the queue waits on. The landing credential
+  # is not the Actions token, so its merges start this.
   push:
     branches: [main]
   workflow_dispatch:
 
-# One pass at a time: two would stage against the same main and race to merge.
+# One validation at a time; a newer event waits rather than cancelling a run that may be
+# about to hand its manifest to landing.
 concurrency:
-  group: magus-queue
+  group: magus-queue-validate
   cancel-in-progress: false
 
 permissions:
-  contents: write # push a regeneration to a queued branch
-  pull-requests: write # merge, comment, disable auto-merge
-  statuses: write # post magus/queue
+  contents: read
+  pull-requests: read
 
 env:
   # PR-controlled mise.toml must not execute config hooks or plugins.
@@ -40,10 +44,9 @@ env:
   GOEXPERIMENT: jsonv2
 
 jobs:
-  queue:
-    name: magus queue
-    # A fork's pull request carries a read-only token, and a pull request without auto-merge
-    # is not queued; either way there is nothing for a pull_request run to do.
+  validate:
+    name: magus queue validate
+    # A fork's pull request is never staged: the queue cannot push its regeneration.
     if: >-
       github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
@@ -52,14 +55,15 @@ jobs:
     timeout-minutes: 120
     steps:
       # main, never the pull request: the queue plans with main's declarations and runs
-      # main's magus. It stages each pull request itself.
+      # main's magus. It checks out each staged change in a worktree of its own.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
 
-      # cache_save: false because staging runs queued pull requests' code.
+      # cache_save: false because the stages run queued pull requests' code.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
@@ -74,18 +78,18 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # The committer of a regeneration the queue pushes to a branch. Its author is the
-      # head commit's author; the bot is never an author.
-      - name: Identify the queue as committer
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-
-      # MAGUS_QUEUE_TOKEN, when set, is a token whose merges start workflows (ci.yaml and
-      # cd.yaml on main); the Actions token's merges start none.
-      - name: Run the queue
+      # Pull request refs are fetched over the checkout's remote, which carries no
+      # credential; the repository is public, so the read needs none.
+      - name: Validate the queue
         uses: ./.github/actions/magus
         env:
-          GITHUB_TOKEN: ${{ secrets.MAGUS_QUEUE_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         with:
-          command: vcs queue -- --no-default-charms
+          command: vcs queue --out ${{ runner.temp }}/queue -- --no-default-charms
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: magus-queue
+          path: ${{ runner.temp }}/queue
+          if-no-files-found: ignore
+          retention-days: 1

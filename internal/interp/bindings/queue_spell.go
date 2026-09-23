@@ -171,9 +171,10 @@ func (p *spellQueueProvider) PostStatus(ctx context.Context, c queue.Change, sha
 	return p.acknowledged(ctx, spells.PostStatusContract, params)
 }
 
-func (p *spellQueueProvider) Merge(ctx context.Context, c queue.Change, sha string) error {
+func (p *spellQueueProvider) Merge(ctx context.Context, c queue.Change, sha, message string) error {
 	params := changeParams(c)
 	params["sha"] = sha
+	params["message"] = message
 	data, err := p.invoke(ctx, spells.MergeChangeContract, params)
 	if err != nil {
 		return err

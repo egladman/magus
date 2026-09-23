@@ -1,0 +1,35 @@
+// Merge-queue provider for the benchmark: every local branch under queue/ is a change
+// carrying merge intent, approved at its head. It implements only the two reads, which
+// is all validation calls; the benchmark never lands. queue.sh copies it into the
+// fixture as spells/queue-local.buzz and wires it from a root magusfile.
+import "magus";
+import "vcs";
+
+export fun mgs_getName() > str { return "queue-local"; }
+
+export fun list_queue(target: magus\Target, cb: fun(any)) > [any] !> any {
+    final io = {<str: any>};
+    cb(io);
+    final refs = vcs\cmd(["for-each-ref", "--sort=refname", "--format=%(refname:lstrip=3) %(objectname)", "refs/heads/queue/"], {"quiet": true});
+    final changes = mut [<any>];
+    foreach (line in refs.stdout.split("\n")) {
+        if (line == "") {
+            continue;
+        }
+        final parts = line.split(" ");
+        changes.append({
+            "id": parts[0],
+            "repo": "local",
+            "head": parts[1],
+            "base": "{io["base"] ?? ""}",
+            "title": "queue/" + parts[0],
+        });
+    }
+    return changes;
+}
+
+export fun approval_at(target: magus\Target, cb: fun(any)) > any {
+    final io = {<str: any>};
+    cb(io);
+    return {"approved": true, "head": "{io["head"] ?? ""}"};
+}

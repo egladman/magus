@@ -14,10 +14,15 @@
 // auto-merge. Nothing else queues it: no label, no comment command. Kicking one back
 // disables auto-merge, so enabling it again is how a fixed change re-enters.
 //
-// # Credential
+// # Credentials
 //
-// GITHUB_TOKEN, read through the workspace's secret provider, never from a file. Under
-// Actions the workflow's token needs contents, pull-requests and statuses write.
+// Two references, both read through the workspace's secret provider, never from a file.
+// The two reads (list_queue, approval_at) use MAGUS_QUEUE_TOKEN when the environment
+// carries it, else GITHUB_TOKEN: the validation job runs pull-request code and holds only
+// a read-only Actions token. The three writes use MAGUS_QUEUE_TOKEN and nothing else, so
+// a job that does not hold the write credential cannot write by accident. It is a GitHub
+// App installation token or a fine-grained token with contents, pull requests and commit
+// statuses write; unlike the Actions token, its merges start the workflows on main.
 //
 // # What is NOT verified here
 //
@@ -36,9 +41,10 @@ export fun mgs_getName() > str { return "github-queue"; }
 
 final DEFAULT_API = "https://api.github.com";
 final API_ENV = "GITHUB_API_URL";
-final TOKEN_REF = "GITHUB_TOKEN";
+final READ_REF = "GITHUB_TOKEN";
+final WRITE_REF = "MAGUS_QUEUE_TOKEN";
 
-// NOTE: getenv, apiBase, apiHost, slug, has_token, token and headers repeat
+// NOTE: getenv, apiBase, apiHost, slug and headers repeat
 // spells/github/review. A spell cannot call another spell's functions: importing one
 // binds its handle, not its module.
 fun getenv(name: str) > str {
@@ -95,16 +101,38 @@ fun slug(remote: str, host: str) > str {
     return parts[0] + "/" + parts[1];
 }
 
-fun has_token() > bool { return getenv(TOKEN_REF) != ""; }
+// readRef prefers the write credential where the job holds it, so landing reads with the
+// token it merges with.
+fun readRef() > str {
+    if (getenv(WRITE_REF) != "") {
+        return WRITE_REF;
+    }
+    return READ_REF;
+}
 
-fun token() > str !> any { return magus\secret.read(TOKEN_REF); }
-
-fun headers() > any !> any {
+fun headers(ref: str) > any !> any {
     return mut {
-        "Authorization": "Bearer " + token(),
+        "Authorization": "Bearer " + magus\secret.read(ref),
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     };
+}
+
+// reading and writing check presence WITHOUT resolving, so a missing credential fails
+// with its name instead of a provider prompt; they return the headers to call with.
+fun reading(op: str) > any !> any {
+    final ref = readRef();
+    if (getenv(ref) == "") {
+        throw "github-queue: {op} needs {READ_REF} or {WRITE_REF}, and neither is set";
+    }
+    return headers(ref);
+}
+
+fun writing(op: str) > any !> any {
+    if (getenv(WRITE_REF) == "") {
+        throw "github-queue: {op} writes, and needs {WRITE_REF}, the landing job's credential; it is not set";
+    }
+    return headers(WRITE_REF);
 }
 
 // graphqlURL derives the GraphQL endpoint from the REST one: github.com serves it beside
@@ -116,15 +144,8 @@ fun graphqlURL(base: str) > str {
     return base + "/graphql";
 }
 
-fun needToken(op: str) > bool !> any {
-    if (!has_token()) {
-        throw "github-queue: {op} needs {TOKEN_REF}, and it is not set";
-    }
-    return true;
-}
-
-fun graphql(query: str, variables: any) > any !> any {
-    final res = http\post(graphqlURL(apiBase()), serialize\jsonEncode({"query": query, "variables": variables}), headers: headers());
+fun graphql(query: str, variables: any, hdrs: any) > any !> any {
+    final res = http\post(graphqlURL(apiBase()), serialize\jsonEncode({"query": query, "variables": variables}), headers: hdrs);
     if (res["status"] != 200) {
         throw "github-queue: GraphQL: HTTP {res["status"]}: {res["body"]}";
     }
@@ -169,7 +190,7 @@ fun changesFrom(body: str, repo: str) > [any] !> any {
 export fun list_queue(target: magus\Target, cb: fun(any)) > [any] !> any {
     final io = {<str: any>};
     cb(io);
-    needToken("list_queue");
+    final hdrs = reading("list_queue");
     final base = apiBase();
     final remote = "{io["remote"] ?? ""}";
     final repo = slug(remote, host: apiHost(base));
@@ -180,7 +201,7 @@ export fun list_queue(target: magus\Target, cb: fun(any)) > [any] !> any {
     final queued = mut [<any>];
     var page = 1;
     while (page <= 30) {
-        final res = http\get(url + "{page}", headers: headers());
+        final res = http\get(url + "{page}", headers: hdrs);
         if (res["status"] != 200) {
             throw "github-queue: list pull requests: HTTP {res["status"]}: {res["body"]}";
         }
@@ -270,13 +291,13 @@ final APPROVAL_QUERY = `query($owner: String!, $name: String!, $number: Int!) { 
 export fun approval_at(target: magus\Target, cb: fun(any)) > any !> any {
     final io = {<str: any>};
     cb(io);
-    needToken("approval_at");
+    final hdrs = reading("approval_at");
     final repo = "{io["repo"] ?? ""}";
     final parts = repo.split("/");
     if (parts.len() != 2) {
         throw "github-queue: approval_at needs an owner/name repo, got '{repo}'";
     }
-    final rules = http\get(apiBase() + "/repos/" + repo + "/rules/branches/{io["base"] ?? ""}", headers: headers());
+    final rules = http\get(apiBase() + "/repos/" + repo + "/rules/branches/{io["base"] ?? ""}", headers: hdrs);
     if (rules["status"] != 200) {
         throw "github-queue: read the rules on {io["base"] ?? ""}: HTTP {rules["status"]}: {rules["body"]}";
     }
@@ -284,7 +305,7 @@ export fun approval_at(target: magus\Target, cb: fun(any)) > any !> any {
     final res = http\post(graphqlURL(apiBase()), serialize\jsonEncode({
         "query": APPROVAL_QUERY,
         "variables": {"owner": parts[0], "name": parts[1], "number": std\parseInt("{io["id"] ?? ""}") ?? 0},
-    }), headers: headers());
+    }), headers: hdrs);
     if (res["status"] != 200) {
         throw "github-queue: approval_at: HTTP {res["status"]}: {res["body"]}";
     }
@@ -304,21 +325,26 @@ fun statusBody(state: str, context: str, description: str) > any {
 export fun post_status(target: magus\Target, cb: fun(any)) > bool !> any {
     final io = {<str: any>};
     cb(io);
-    needToken("post_status");
+    final hdrs = writing("post_status");
     final url = apiBase() + "/repos/{io["repo"] ?? ""}/statuses/{io["sha"] ?? ""}";
     final payload = statusBody("{io["state"] ?? ""}", context: "{io["context"] ?? ""}", description: "{io["description"] ?? ""}");
-    final res = http\post(url, serialize\jsonEncode(payload), headers: headers());
+    final res = http\post(url, serialize\jsonEncode(payload), headers: hdrs);
     if (res["status"] != 201) {
         throw "github-queue: post_status: HTTP {res["status"]}: {res["body"]}";
     }
     return true;
 }
 
-// mergeBody builds the merge payload from the pull request, honoring the method and
-// message its author chose when enabling auto-merge. Pinned to sha, so GitHub refuses
+// mergeBody builds the merge payload from the pull request, honoring the method, title
+// and message its author chose when enabling auto-merge. Pinned to sha, so GitHub refuses
 // when the head moved.
-fun mergeBody(pr: str, sha: str) > any !> any {
-    final am = serialize\jsonDecode(pr).q("auto_merge");
+//
+// A squash always carries an explicit title and message. GitHub's default message lists
+// every commit on the branch, which would include a regeneration the queue pushed and
+// credit its author as a co-author; message is the change's own commits instead.
+fun mergeBody(pr: str, sha: str, message: str) > any !> any {
+    final decoded = serialize\jsonDecode(pr);
+    final am = decoded.q("auto_merge");
     var method = am.q("merge_method").stringValue();
     if (method == "") {
         method = "squash";
@@ -326,13 +352,21 @@ fun mergeBody(pr: str, sha: str) > any !> any {
     final body = mut {<str: any>};
     body["sha"] = sha;
     body["merge_method"] = method;
-    final title = am.q("commit_title").stringValue();
+    var title = am.q("commit_title").stringValue();
+    var text = am.q("commit_message").stringValue();
+    if (method == "squash") {
+        if (title == "") {
+            title = "{decoded.q("title").stringValue()} (#{decoded.q("number").integerValue()})";
+        }
+        if (text == "") {
+            text = message;
+        }
+    }
     if (title != "") {
         body["commit_title"] = title;
     }
-    final message = am.q("commit_message").stringValue();
-    if (message != "") {
-        body["commit_message"] = message;
+    if (text != "") {
+        body["commit_message"] = text;
     }
     return body;
 }
@@ -342,20 +376,21 @@ fun mergeBody(pr: str, sha: str) > any !> any {
 export fun merge_change(target: magus\Target, cb: fun(any)) > any !> any {
     final io = {<str: any>};
     cb(io);
-    needToken("merge_change");
+    final hdrs = writing("merge_change");
     final url = apiBase() + "/repos/{io["repo"] ?? ""}/pulls/{io["id"] ?? ""}";
     final sha = "{io["sha"] ?? ""}";
-    final pr = http\get(url, headers: headers());
+    final pr = http\get(url, headers: hdrs);
     if (pr["status"] != 200) {
         throw "github-queue: merge_change: read the pull request: HTTP {pr["status"]}: {pr["body"]}";
     }
-    final res = http\request("PUT", url + "/merge", body: serialize\jsonEncode(mergeBody(pr["body"], sha: sha)), headers: headers());
+    final payload = mergeBody(pr["body"], sha: sha, message: "{io["message"] ?? ""}");
+    final res = http\request("PUT", url + "/merge", body: serialize\jsonEncode(payload), headers: hdrs);
     if (res["status"] == 200) {
         return {"merged": true, "reason": ""};
     }
     // The success status this queue posted can trigger GitHub's own auto-merge first. A
     // pull request already merged at sha is this merge, not a refusal.
-    final after = http\get(url, headers: headers());
+    final after = http\get(url, headers: hdrs);
     if (after["status"] == 200) {
         final now = serialize\jsonDecode(after["body"]);
         if (now.q("merged").booleanValue() and now.q("head").q("sha").stringValue() == sha) {
@@ -372,21 +407,21 @@ final DISABLE_AUTO_MERGE = `mutation($id: ID!) { disablePullRequestAutoMerge(inp
 export fun kick_back(target: magus\Target, cb: fun(any)) > bool !> any {
     final io = {<str: any>};
     cb(io);
-    needToken("kick_back");
+    final hdrs = writing("kick_back");
     final repo = "{io["repo"] ?? ""}";
     final id = "{io["id"] ?? ""}";
     final comment = http\post(apiBase() + "/repos/" + repo + "/issues/" + id + "/comments",
-        serialize\jsonEncode({"body": "{io["body"] ?? ""}"}), headers: headers());
+        serialize\jsonEncode({"body": "{io["body"] ?? ""}"}), headers: hdrs);
     if (comment["status"] != 201) {
         throw "github-queue: kick_back: comment: HTTP {comment["status"]}: {comment["body"]}";
     }
-    final pr = http\get(apiBase() + "/repos/" + repo + "/pulls/" + id, headers: headers());
+    final pr = http\get(apiBase() + "/repos/" + repo + "/pulls/" + id, headers: hdrs);
     if (pr["status"] != 200) {
         throw "github-queue: kick_back: read the pull request: HTTP {pr["status"]}: {pr["body"]}";
     }
     final decoded = serialize\jsonDecode(pr["body"]);
     if (decoded.q("auto_merge").q("merge_method").stringValue() != "") {
-        graphql(DISABLE_AUTO_MERGE, variables: {"id": decoded.q("node_id").stringValue()});
+        graphql(DISABLE_AUTO_MERGE, variables: {"id": decoded.q("node_id").stringValue()}, hdrs: hdrs);
     }
     return true;
 }
@@ -466,12 +501,22 @@ test "required approvals come from the strictest pull_request rule" {
 }
 
 test "the merge honors the author's auto-merge choice and pins the sha" {
-    final body = mergeBody(`{"auto_merge": {"merge_method": "rebase", "commit_title": "feat: x (#7)", "commit_message": ""}}`, sha: "abc");
+    final body = mergeBody(`{"auto_merge": {"merge_method": "rebase", "commit_title": "feat: x (#7)", "commit_message": ""}}`, sha: "abc", message: "* x");
     assert\equal(body["merge_method"], want: "rebase", message: "the author's method");
     assert\equal(body["sha"], want: "abc", message: "pinned to the tested commit");
     assert\equal(body["commit_title"], want: "feat: x (#7)", message: "the author's title");
-    assert\equal(body["commit_message"], want: null, message: "an empty message is left to GitHub");
-    assert\equal(mergeBody(`{"auto_merge": null}`, sha: "abc")["merge_method"], want: "squash", message: "squash by default");
+    assert\equal(body["commit_message"], want: null, message: "a rebase takes no message");
+}
+
+test "a squash carries the pull request title and the change's own commits" {
+    final body = mergeBody(`{"number": 7, "title": "feat: add x", "auto_merge": {"merge_method": "squash"}}`, sha: "abc", message: "* add x\n\n* fix typo");
+    assert\equal(body["merge_method"], want: "squash", message: "squash");
+    assert\equal(body["commit_title"], want: "feat: add x (#7)", message: "the title as subject, GitHub's shape");
+    assert\equal(body["commit_message"], want: "* add x\n\n* fix typo", message: "no queue commit, no co-author trailer");
+    final authored = mergeBody(`{"number": 7, "title": "t", "auto_merge": {"merge_method": "squash", "commit_title": "mine", "commit_message": "my body"}}`, sha: "abc", message: "* x");
+    assert\equal(authored["commit_title"], want: "mine", message: "the author's own title wins");
+    assert\equal(authored["commit_message"], want: "my body", message: "the author's own body wins");
+    assert\equal(mergeBody(`{"number": 1, "title": "t", "auto_merge": null}`, sha: "abc", message: "")["merge_method"], want: "squash", message: "squash by default");
 }
 
 test "a long status description is cut to what GitHub accepts" {
