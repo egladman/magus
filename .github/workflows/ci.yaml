@@ -14,7 +14,7 @@ name: CI
 # See MAGUS_CACHE_WRITE_ENABLED below.
 #
 # workflow_dispatch is the merge queue's main run: its merges use the Actions token, whose
-# pushes start no workflow, so queue-land.yaml dispatches this on main instead. Every
+# pushes start no workflow, so queue-apply.yaml dispatches this on main instead. Every
 # check below that means "a main run" is therefore `!= 'pull_request'`, not `== 'push'`.
 
 on:

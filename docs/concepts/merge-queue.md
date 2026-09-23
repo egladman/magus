@@ -224,7 +224,7 @@ time:
 1. `queue.yaml` (read-only) plans, then fans the plan out as a job matrix, one
    `validate --only <id>` job per change up to the depth of each partition. Each job
    uploads its verdict as an artifact the moment it finishes.
-2. `queue-land.yaml` starts when validation is requested (`workflow_run: requested`), from
+2. `queue-apply.yaml` starts when validation is requested (`workflow_run: requested`), from
    main's definition with a write-scoped Actions token, and downloads each verdict
    artifact as it appears, while validation is still running: `apply` with the run as its
    source lands each change whose predecessors have landed, and stops once the

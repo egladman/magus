@@ -6,10 +6,10 @@ name: Queue
 # `magus affected ci --plan --stdin` reports; each stage job then validates one change on
 # main plus the changes ahead of it in its partition, gated with `magus affected ci`
 # against the stage it was built onto. Every stage uploads its verdict the moment it finishes, and
-# queue-land.yaml, already running, lands it.
+# queue-apply.yaml, already running, merges it.
 #
 # This workflow executes pull-request code, so its token reads and nothing more. Nothing
-# here posts a status, comments or merges: that is queue-land.yaml, which holds the write
+# here posts a status, comments or merges: that is queue-apply.yaml, which holds the write
 # credential and executes no pull-request code. It cannot post statuses either, which is
 # why verdicts travel as artifacts: a job running pull-request code with statuses: write
 # could set the very status branch protection requires.
@@ -23,7 +23,7 @@ on:
   pull_request_review:
     types: [submitted]
   # Every landing moves the base the rest of the queue waits on. Landing merges with the
-  # Actions token, which starts no workflow, so queue-land.yaml dispatches this instead;
+  # Actions token, which starts no workflow, so queue-apply.yaml dispatches this instead;
   # push covers a merge made any other way.
   push:
     branches: [main]

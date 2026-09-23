@@ -1,5 +1,5 @@
 // The merge queue's workflow steps, here so .github/workflows/queue.yaml and
-// queue-land.yaml carry no shell of their own. Each step is one invocation:
+// queue-apply.yaml carry no shell of their own. Each step is one invocation:
 //
 //	QUEUE_STEP=build     magus buzz tools/queue.buzz   compile mergequeue; put it and mise's Go on PATH
 //	QUEUE_STEP=plan      magus buzz tools/queue.buzz   plan the queue; write the stage matrix (DEPTH)

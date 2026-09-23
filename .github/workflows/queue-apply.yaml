@@ -1,6 +1,6 @@
-name: Queue land
+name: Queue apply
 
-# The merge queue's landing half: lands what a Queue run validates, each pull request as
+# The merge queue's apply half: merges what a Queue run validates, each pull request as
 # its own commit through the GitHub API, authored by its author, the moment its stage and
 # every stage beneath it in its partition are green.
 #
@@ -30,7 +30,7 @@ on:
     types: [requested]
 
 concurrency:
-  group: magus-queue-land
+  group: magus-queue-apply
   cancel-in-progress: false
 
 permissions:
@@ -44,8 +44,8 @@ env:
   GOEXPERIMENT: jsonv2
 
 jobs:
-  land:
-    name: queue land
+  apply:
+    name: queue apply
     runs-on: ubuntu-latest
     # Validation's own ceiling plus the plan job's.
     timeout-minutes: 150
