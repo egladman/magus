@@ -102,6 +102,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A daemon whose workspace fails to load keeps serving and says why.** The console,
+  `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
+  `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
+  `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
+  workspace reloads when a `.buzz` file or `magus.yaml` changes.
+- **The daemon refuses a request as `google.rpc.Status` JSON in the route's protocol.**
+  A Connect service answers Connect's envelope; every other route, `/mcp` included, answers
+  AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
+  `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
+  MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
+  console-file refusals gain MGS9007-9010.
 - **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
   and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
   and fails when the build does. The graph JSON is no longer committed.
@@ -216,6 +227,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+
+### Security
+
+- **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
+  built console file, including the demo graph JSON holding the whole knowledge graph and
+  its notes. Other files and directory listings now return 404, on loopback and on the LAN
+  share, and an attached graph explorer never falls back to that demo data.
 
 ## [v0.4.3] - 2026-09-06
 

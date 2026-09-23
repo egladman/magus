@@ -16,10 +16,12 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
@@ -27,53 +29,80 @@ import (
 
 const defaultIdleTTL = 6 * time.Hour
 
+// wsEntry is one workspace the registry holds. It is LOADING until load publishes, then
+// ACTIVE (m set) or FAILED (loadErr set). A failed entry stays, so status reports why, and
+// is replaced by a fresh entry when a source changes (D9 in the error-model plan).
 type wsEntry struct {
-	once       sync.Once
+	once sync.Once
+	root string
+	// m, loadErr, failure and loadedAt are published by load under wsRegistry.mu.
 	m          *magus.Magus
 	loadErr    error
-	root       string
+	failure    *types.WorkspaceFailure
 	loadedAt   time.Time
 	lastAccess atomic.Int64 // unix nanoseconds; updated on every acquire
 	inflight   int          // in-flight dispatches holding m; guarded by wsRegistry.mu
+	// gone is closed when the entry leaves the registry, stopping its source watcher.
+	gone chan struct{}
 }
 
-func (e *wsEntry) load(_ context.Context, lim *cache.Limiter, budget *cache.MachineBudget, tel observability.Provider) {
+func newEntry(root string, now time.Time) *wsEntry {
+	e := &wsEntry{root: root, gone: make(chan struct{})}
+	e.lastAccess.Store(now.UnixNano())
+	return e
+}
+
+// openWorkspace opens root the way every registry workspace is opened.
+func openWorkspace(root string, lim *cache.Limiter, budget *cache.MachineBudget, tel observability.Provider) (*magus.Magus, error) {
+	cfg, err := loadWorkspaceCfg(root)
+	if err != nil {
+		return nil, fmt.Errorf("daemon: load config %s: %w", root, err)
+	}
+	// Warm daemon workspaces record OTel metrics so the /dashboard can read live
+	// cache/pool/target numbers as OTLP. Every workspace shares the daemon's single
+	// provider (WithProvider), so counts survive eviction and the bridge Magus reads
+	// them; only if none was supplied do we build a per-workspace collector.
+	metricsOpt := magus.WithMetricsCollection()
+	if tel != nil {
+		metricsOpt = magus.WithProvider(tel)
+	}
+	opts := []magus.Option{
+		magus.WithLoadedConfig(cfg),
+		// The version lets a load failure that looks like a stale daemon say so.
+		magus.WithVersion(version),
+		workspace.WithLimiter(lim),
+		metricsOpt,
+	}
+	// The budget is held HERE, so hand it over directly: a workspace inside the
+	// daemon that dialled the daemon's socket would be waiting on itself. Only when
+	// there IS one: a registry built without a budget (every test that does) must
+	// not hand the cache an admitter that arbitrates nothing.
+	if budget != nil {
+		opts = append(opts, workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}))
+	}
+	// context.Background(): workspace goroutines must outlive individual RPC contexts.
+	m, err := magus.Open(context.Background(), root, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("daemon: open workspace %s: %w", root, err)
+	}
+	return m, nil
+}
+
+// load opens e once and publishes the outcome. A failure starts the watcher that retries it.
+func (r *wsRegistry) load(e *wsEntry) {
 	e.once.Do(func() {
-		now := time.Now()
-		e.lastAccess.Store(now.UnixNano())
-		cfg, err := loadWorkspaceCfg(e.root)
+		m, err := r.open(e.root, r.lim, r.budget, r.tel)
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		defer r.bump()
 		if err != nil {
-			e.loadErr = fmt.Errorf("daemon: load config %s: %w", e.root, err)
-			return
-		}
-		// Warm daemon workspaces record OTel metrics so the /dashboard can read live
-		// cache/pool/target numbers as OTLP. Every workspace shares the daemon's single
-		// provider (WithProvider), so counts survive eviction and the bridge Magus reads
-		// them; only if none was supplied do we build a per-workspace collector.
-		metricsOpt := magus.WithMetricsCollection()
-		if tel != nil {
-			metricsOpt = magus.WithProvider(tel)
-		}
-		opts := []magus.Option{
-			magus.WithLoadedConfig(cfg),
-			workspace.WithLimiter(lim),
-			metricsOpt,
-		}
-		// The budget is held HERE, so hand it over directly: a workspace inside the
-		// daemon that dialled the daemon's socket would be waiting on itself. Only when
-		// there IS one: a registry built without a budget (every test that does) must
-		// not hand the cache an admitter that arbitrates nothing.
-		if budget != nil {
-			opts = append(opts, workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}))
-		}
-		// context.Background(): workspace goroutines must outlive individual RPC contexts.
-		m, err := magus.Open(context.Background(), e.root, opts...)
-		if err != nil {
-			e.loadErr = fmt.Errorf("daemon: open workspace %s: %w", e.root, err)
+			e.loadErr = err
+			e.failure = magus.WorkspaceLoadFailure(e.root, err)
+			r.watchFailed(e)
 			return
 		}
 		e.m = m
-		e.loadedAt = now
+		e.loadedAt = r.now()
 	})
 }
 
@@ -105,8 +134,15 @@ type wsRegistry struct {
 	tel      observability.Provider // shared with the bridge Magus; owned by the daemon, outlives evictions
 	ttl      time.Duration
 	now      func() time.Time // injectable for tests
-	stopCh   chan struct{}
-	wg       sync.WaitGroup
+	// open and awaitChange are seams for tests; production opens with openWorkspace and
+	// waits on a filesystem watcher.
+	open        func(root string, lim *cache.Limiter, budget *cache.MachineBudget, tel observability.Provider) (*magus.Magus, error)
+	awaitChange func(e *wsEntry) bool
+	// changed is closed and replaced whenever an entry's state moves; guarded by mu.
+	changed chan struct{}
+	ctx     context.Context
+	stopCh  chan struct{}
+	wg      sync.WaitGroup
 }
 
 func newWSRegistry(ctx context.Context, lim *cache.Limiter, budget *cache.MachineBudget, ttl time.Duration, tel observability.Provider) *wsRegistry {
@@ -120,8 +156,12 @@ func newWSRegistry(ctx context.Context, lim *cache.Limiter, budget *cache.Machin
 		tel:     tel,
 		ttl:     ttl,
 		now:     time.Now,
+		open:    openWorkspace,
+		changed: make(chan struct{}),
+		ctx:     ctx,
 		stopCh:  make(chan struct{}),
 	}
+	r.awaitChange = r.awaitSourceChange
 	r.wg.Add(1)
 	go r.janitor(ctx)
 	return r
@@ -185,8 +225,9 @@ func (*wsRegistry) preloadAndApplySandbox(ctx context.Context, roots []string) e
 
 // acquire loads the workspace for root and takes an in-flight lease so evictIdle/close
 // won't Close it underneath the caller. Caller must release(e) when done. Rejects
-// undeclared roots in declared mode.
-func (r *wsRegistry) acquire(ctx context.Context, root string) (*wsEntry, error) {
+// undeclared roots in declared mode. Takes no context: load's own r.open seam has no ctx
+// parameter to bound, so a caller cancelling mid-load could not shorten this call anyway.
+func (r *wsRegistry) acquire(root string) (*wsEntry, error) {
 	r.mu.Lock()
 	if r.declared != nil {
 		if _, ok := r.declared[root]; !ok {
@@ -198,27 +239,167 @@ func (r *wsRegistry) acquire(ctx context.Context, root string) (*wsEntry, error)
 	}
 	e, ok := r.entries[root]
 	if !ok {
-		e = &wsEntry{root: root}
+		e = newEntry(root, r.now())
 		r.entries[root] = e
 	}
 	r.mu.Unlock()
 
-	e.load(ctx, r.lim, r.budget, r.tel)
-	if e.loadErr != nil {
-		// Remove failed entry so it can be retried after TTL eviction.
-		r.mu.Lock()
-		if cur, ok := r.entries[root]; ok && cur == e {
-			delete(r.entries, root)
-		}
-		r.mu.Unlock()
-		return nil, e.loadErr
-	}
+	r.load(e)
 	// Lease under the same lock evictIdle/close use, so it can't be torn down here.
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	if e.loadErr != nil {
+		// The entry stays FAILED: reopening the same bytes per request cannot succeed, and
+		// its watcher retries once a source changes. The error is the load's own, so a
+		// delegated run reads exactly as a local one.
+		return nil, e.loadErr
+	}
 	e.lastAccess.Store(r.now().UnixNano())
 	e.inflight++
-	r.mu.Unlock()
 	return e, nil
+}
+
+// bump wakes everyone waiting on a state change. Callers hold mu.
+func (r *wsRegistry) bump() {
+	if r.changed != nil {
+		close(r.changed)
+	}
+	r.changed = make(chan struct{})
+}
+
+// drop removes e from the registry and stops its watcher. Callers hold mu.
+func (r *wsRegistry) drop(e *wsEntry) {
+	if cur, ok := r.entries[e.root]; ok && cur == e {
+		delete(r.entries, e.root)
+	}
+	if e.gone != nil {
+		select {
+		case <-e.gone:
+		default:
+			close(e.gone)
+		}
+	}
+}
+
+// watchFailed retries e's load once a workspace source changes. Callers hold mu.
+func (r *wsRegistry) watchFailed(e *wsEntry) {
+	select {
+	case <-r.stopCh:
+		return
+	default:
+	}
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		if r.awaitChange(e) {
+			r.retry(e)
+		}
+	}()
+}
+
+// retry replaces the failed entry e with a fresh one, keeping its pin, and loads it. A
+// failure again leaves the fresh entry FAILED with a watcher of its own.
+func (r *wsRegistry) retry(e *wsEntry) {
+	r.mu.Lock()
+	if cur, ok := r.entries[e.root]; !ok || cur != e {
+		r.mu.Unlock()
+		return
+	}
+	fresh := newEntry(e.root, r.now())
+	fresh.inflight = e.inflight
+	r.drop(e)
+	r.entries[e.root] = fresh
+	r.bump()
+	r.mu.Unlock()
+	r.load(fresh)
+}
+
+// awaitSourceChange blocks until a file a workspace load reads changes under e.root, and
+// reports false when e left the registry or the daemon is stopping first.
+func (r *wsRegistry) awaitSourceChange(e *wsEntry) bool {
+	ctx := r.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	w, err := watch.New(ctx, watch.WithRoot(e.root),
+		watch.WithIgnore(watch.RelativeIgnore(e.root, watch.BuiltinIgnore)))
+	if err != nil {
+		slog.WarnContext(ctx, "daemon: cannot watch a failed workspace; it stays failed until `magus server reload`",
+			slog.String("root", e.root), slog.String("error", err.Error()))
+		return false
+	}
+	defer func() { _ = w.Close() }()
+	for {
+		select {
+		case <-r.stopCh:
+			return false
+		case <-ctx.Done():
+			return false
+		case <-e.gone:
+			return false
+		case b, ok := <-w.Events():
+			if !ok {
+				return false
+			}
+			if slices.ContainsFunc(b.Paths, isWorkspaceSource) {
+				return true
+			}
+		}
+	}
+}
+
+// isWorkspaceSource reports whether a load reads path: a Buzz file (magusfile, spell or
+// import) or the workspace config.
+func isWorkspaceSource(path string) bool {
+	return filepath.Ext(path) == ".buzz" || filepath.Base(path) == "magus.yaml"
+}
+
+// failBridge records the daemon's own workspace as FAILED with err, pinned like an adopted
+// bridge, so status reports it and its watcher retries it.
+func (r *wsRegistry) failBridge(root string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if e, ok := r.entries[root]; ok {
+		e.inflight++ // pin whatever is there; awaitActive picks it up
+		return
+	}
+	e := newEntry(root, r.now())
+	e.once.Do(func() {})
+	e.loadErr = err
+	e.failure = magus.WorkspaceLoadFailure(root, err)
+	e.inflight = 1
+	r.entries[root] = e
+	r.watchFailed(e)
+	r.bump()
+}
+
+// awaitActive blocks until root is ACTIVE and returns its workspace, or nil once ctx ends.
+func (r *wsRegistry) awaitActive(ctx context.Context, root string) *magus.Magus {
+	for {
+		r.mu.Lock()
+		if e, ok := r.entries[root]; ok && e.m != nil {
+			r.mu.Unlock()
+			return e.m
+		}
+		ch := r.changed
+		r.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ch:
+		}
+	}
+}
+
+// unavailable is what a call needing root answers while root is not ACTIVE: FAILED with
+// the recorded failure, else LOADING.
+func (r *wsRegistry) unavailable(root string) rpcerr.Error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if e, ok := r.entries[root]; ok && e.failure != nil {
+		return rpcerr.WorkspaceFailed(root, e.failure)
+	}
+	return rpcerr.WorkspaceLoading(root)
 }
 
 // release drops one in-flight lease taken by acquire.
@@ -247,7 +428,7 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 			return
 		default:
 		}
-		e, err := r.acquire(ctx, root)
+		e, err := r.acquire(root)
 		if err != nil {
 			slog.WarnContext(ctx, "daemon: warm workspace failed (readiness probe may be delayed)",
 				"root", root, "err", err)
@@ -262,7 +443,7 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 // on ctx) goes to dispatchJob, which admits the wider maintenance command set. Both reuse the
 // warm workspace via withMagus.
 func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, args []string) error {
-	e, err := r.acquire(ctx, root)
+	e, err := r.acquire(root)
 	if err != nil {
 		return err
 	}
@@ -366,32 +547,49 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 func (r *wsRegistry) adoptBridge(root string, m *magus.Magus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.entries[root]; ok {
-		return // an adopted run already loaded this root; leave its entry in place
+	if cur, ok := r.entries[root]; ok {
+		if cur.failure == nil {
+			return // an adopted run already loaded (or is loading) this root; leave it in place
+		}
+		r.drop(cur) // the bridge loaded where an earlier attempt failed; it supersedes that
 	}
-	e := &wsEntry{root: root, m: m, loadedAt: r.now()}
+	e := newEntry(root, r.now())
+	e.m, e.loadedAt = m, r.now()
 	// Consume the once so a later acquire()'s load() is a no-op and returns this m,
 	// rather than re-opening the workspace.
 	e.once.Do(func() {})
-	e.lastAccess.Store(r.now().UnixNano())
 	e.inflight = 1 // pin: the daemon owns this workspace for its whole lifetime
 	r.entries[root] = e
+	r.bump()
 }
 
-// status returns a snapshot of loaded workspaces for the Status RPC.
+// status returns a snapshot of every workspace the registry holds, in whatever state, for
+// the Status RPC.
 func (r *wsRegistry) status() []proc.Workspace {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make([]proc.Workspace, 0, len(r.entries))
 	for _, e := range r.entries {
-		if e.m == nil {
-			continue // still loading or failed
+		switch {
+		case e.failure != nil:
+			out = append(out, proc.Workspace{
+				Root: e.root, State: types.WorkspaceFailed, Error: e.failure,
+				LastAccess: time.Unix(0, e.lastAccess.Load()),
+			})
+			continue
+		case e.m == nil:
+			out = append(out, proc.Workspace{
+				Root: e.root, State: types.WorkspaceLoading,
+				LastAccess: time.Unix(0, e.lastAccess.Load()),
+			})
+			continue
 		}
 		// This workspace's cache is long-lived in the daemon, so its counters accumulate
 		// across every adopted run: the live cache activity the /dashboard shows.
 		st := e.m.CacheStats()
 		out = append(out, proc.Workspace{
 			Root:         e.root,
+			State:        types.WorkspaceActive,
 			LoadedAt:     e.loadedAt,
 			LastAccess:   time.Unix(0, e.lastAccess.Load()),
 			CacheHit:     st.Hit,
@@ -431,11 +629,11 @@ func (r *wsRegistry) close() {
 	r.wg.Wait()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for root, e := range r.entries {
+	for _, e := range r.entries {
 		if e.m != nil {
 			_ = e.m.Close()
 		}
-		delete(r.entries, root)
+		r.drop(e)
 	}
 }
 
@@ -469,10 +667,22 @@ func (r *wsRegistry) janitor(ctx context.Context) {
 // A busy workspace is skipped, not waited for. A run that is already underway keeps the
 // config it started with, which is the correct answer rather than a limitation: swapping
 // a running build's config halfway is not a reload, it is a race.
+//
+// A FAILED workspace, pinned or not, is loaded again at once rather than dropped: nothing
+// holds it, and reload is the way out when its source watcher could not start.
 func (r *wsRegistry) evictAll() (dropped, busy int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for root, e := range r.entries {
+	for _, e := range r.entries {
+		if e.failure != nil {
+			r.wg.Add(1)
+			go func() {
+				defer r.wg.Done()
+				r.retry(e)
+			}()
+			dropped++
+			continue
+		}
 		if e.inflight > 0 {
 			busy++
 			continue
@@ -480,7 +690,7 @@ func (r *wsRegistry) evictAll() (dropped, busy int) {
 		if e.m != nil {
 			_ = e.m.Close()
 		}
-		delete(r.entries, root)
+		r.drop(e)
 		dropped++
 	}
 	return dropped, busy
@@ -490,7 +700,7 @@ func (r *wsRegistry) evictIdle() {
 	cutoff := r.now().Add(-r.ttl).UnixNano()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for root, e := range r.entries {
+	for _, e := range r.entries {
 		if e.inflight > 0 {
 			continue // never evict a workspace with an in-flight dispatch, even past its TTL
 		}
@@ -498,7 +708,7 @@ func (r *wsRegistry) evictIdle() {
 			if e.m != nil {
 				_ = e.m.Close()
 			}
-			delete(r.entries, root)
+			r.drop(e)
 		}
 	}
 }

@@ -6,6 +6,11 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+
+	"connectrpc.com/connect"
+
+	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/types"
 )
 
 // AllowedSet is the accept-list used by GuardRebind.
@@ -28,21 +33,28 @@ type AllowedSet struct {
 //
 // Health routes (/livez, /readyz, /healthz) are mounted outside this middleware
 // and are deliberately left unguarded.
-func GuardRebind(allowed AllowedSet, next http.Handler) http.Handler {
+func GuardRebind(format ErrorFormat, allowed AllowedSet, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isAllowedHost(r.Host, allowed) {
-			http.Error(w, "forbidden", http.StatusForbidden)
+			format.Write(w, r, hostNotAllowed)
 			return
 		}
 		if orig := r.Header.Get("Origin"); orig != "" {
 			u, err := url.Parse(orig)
 			if err != nil || !isAllowedHost(u.Host, allowed) {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				format.Write(w, r, hostNotAllowed)
 				return
 			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+var hostNotAllowed = rpcerr.Error{
+	Code:    connect.CodePermissionDenied,
+	Reason:  types.HostNotAllowed,
+	Title:   "host not allowed",
+	Message: "the daemon serves only loopback hosts and the configured console origin; this request named another host in its Host or Origin header",
 }
 
 // Allow returns a copy of a that additionally accepts the given hostname, for a

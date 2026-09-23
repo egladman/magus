@@ -3,25 +3,168 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"sync"
-	"testing"
-	"time"
 )
 
 // newTestRegistry builds a wsRegistry with no janitor goroutine, suitable for exercising
 // the entry bookkeeping (adoptBridge, status, evictIdle) directly.
 func newTestRegistry() *wsRegistry {
-	return &wsRegistry{
+	r := &wsRegistry{
 		entries: make(map[string]*wsEntry),
 		ttl:     defaultIdleTTL,
 		now:     time.Now,
+		open:    openWorkspace,
+		changed: make(chan struct{}),
 		stopCh:  make(chan struct{}),
 	}
+	// No filesystem watcher: a failed entry waits until it leaves or the registry stops.
+	r.awaitChange = func(e *wsEntry) bool {
+		select {
+		case <-e.gone:
+		case <-r.stopCh:
+		}
+		return false
+	}
+	return r
+}
+
+// scriptedOpens makes r.open fail until ok is closed, counting every attempt.
+func scriptedOpens(r *wsRegistry, ok <-chan struct{}) *atomic.Int32 {
+	var n atomic.Int32
+	r.open = func(root string, _ *cache.Limiter, _ *cache.MachineBudget, _ observability.Provider) (*magus.Magus, error) {
+		n.Add(1)
+		select {
+		case <-ok:
+			return &magus.Magus{}, nil
+		default:
+			return nil, errors.New("magusfile: exec magusfile.buzz: buzz: line 3:3: expected expression")
+		}
+	}
+	return &n
+}
+
+// D9: a failed workspace stays FAILED and is not reopened per request. Reopening the same
+// bytes cannot succeed, and the status has to say why rather than list nothing.
+func TestAcquireKeepsAFailedWorkspaceWithoutReopening(t *testing.T) {
+	r := newTestRegistry()
+	defer close(r.stopCh)
+	opens := scriptedOpens(r, make(chan struct{}))
+	root := t.TempDir()
+
+	_, err1 := r.acquire(root)
+	_, err2 := r.acquire(root)
+
+	require.Error(t, err1)
+	assert.Same(t, err1, err2, "the recorded load error, not a second attempt")
+	assert.Equal(t, int32(1), opens.Load())
+	got := r.status()
+	require.Len(t, got, 1)
+	assert.Equal(t, types.WorkspaceFailed, got[0].State)
+	require.NotNil(t, got[0].Error)
+	assert.Equal(t, []types.SourceDiagnostic{{Line: 3, Column: 3, Message: "expected expression"}}, got[0].Error.Diagnostics)
+	assert.Equal(t, rpcerr.WorkspaceFailed(root, got[0].Error).Code, r.unavailable(root).Code)
+}
+
+// End to end through a real load: the status names the file, position and BZZ code the
+// magusfile stopped on, which is what the console and the Connect error carry.
+func TestAcquireReportsWhereAMagusfileFailed(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
+		[]byte("import \"fs\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {\n  final x: int = \"s\";\n}\n"), 0o644))
+	r := newTestRegistry()
+	defer close(r.stopCh)
+
+	_, err = r.acquire(root)
+	require.Error(t, err)
+
+	got := r.status()
+	require.Len(t, got, 1)
+	require.NotNil(t, got[0].Error)
+	assert.Equal(t, []types.SourceDiagnostic{{
+		Code: "BZZ1005", URL: "https://github.com/egladman/magus/blob/main/libs/gopherbuzz/docs/codes/BZZ1005.md",
+		File: "magusfile.buzz", Line: 3, Column: 3, Message: `cannot assign str to int variable "x"`,
+	}}, got[0].Error.Diagnostics)
+}
+
+// A source change is what retries a failed workspace; the retried entry keeps the pin.
+func TestSourceChangeRetriesAFailedBridge(t *testing.T) {
+	r := newTestRegistry()
+	defer close(r.stopCh)
+	ok := make(chan struct{})
+	opens := scriptedOpens(r, ok)
+	changed := make(chan struct{})
+	r.awaitChange = func(e *wsEntry) bool {
+		select {
+		case <-changed:
+			return true
+		case <-e.gone:
+			return false
+		}
+	}
+	root := t.TempDir()
+	r.failBridge(root, errors.New("[BZZ1005] cannot assign"))
+	assert.Equal(t, types.WorkspaceFailed, r.status()[0].State)
+
+	close(ok)
+	close(changed)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	m := r.awaitActive(ctx, root)
+
+	require.NotNil(t, m, "the retried load became the bridge")
+	assert.Equal(t, int32(1), opens.Load())
+	r.mu.Lock()
+	assert.Equal(t, 1, r.entries[root].inflight, "the bridge stays pinned across the retry")
+	r.mu.Unlock()
+	assert.Equal(t, types.WorkspaceActive, r.status()[0].State)
+}
+
+// `magus server reload` is the escape hatch when a watcher cannot start: it retries a failed
+// workspace, pinned or not, instead of reporting it busy.
+func TestEvictAllRetriesAFailedWorkspace(t *testing.T) {
+	r := newTestRegistry()
+	ok := make(chan struct{})
+	opens := scriptedOpens(r, ok)
+	root := t.TempDir()
+	r.failBridge(root, errors.New("boom"))
+
+	close(ok)
+	dropped, busy := r.evictAll()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	assert.Equal(t, 1, dropped)
+	assert.Zero(t, busy)
+	assert.NotNil(t, r.awaitActive(ctx, root))
+	assert.Equal(t, int32(1), opens.Load())
+	close(r.stopCh)
+	r.wg.Wait()
+}
+
+func TestUnavailableIsLoadingWhileALoadRuns(t *testing.T) {
+	r := newTestRegistry()
+	root := t.TempDir()
+	r.entries[root] = newEntry(root, time.Now())
+
+	assert.Equal(t, rpcerr.WorkspaceLoading(root).Code, r.unavailable(root).Code)
+	assert.Equal(t, types.WorkspaceLoading, r.status()[0].State)
 }
 
 // TestAdoptBridgeReportsWorkspace pins the fix for /readyz reporting "no workspaces loaded"
@@ -65,7 +208,7 @@ func TestAdoptBridgeReusedByAcquire(t *testing.T) {
 	bridge := &magus.Magus{}
 	r.adoptBridge(root, bridge)
 
-	e, err := r.acquire(context.Background(), root)
+	e, err := r.acquire(root)
 	require.NoError(t, err)
 	defer r.release(e)
 	assert.Same(t, bridge, e.m, "acquire must hand back the already-adopted bridge Magus")
@@ -121,12 +264,11 @@ func preloadedRegistry(b *testing.B, root string) *wsRegistry {
 func BenchmarkRegistryAcquireHot(b *testing.B) {
 	root := b.TempDir()
 	r := preloadedRegistry(b, root)
-	ctx := context.Background()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = r.acquire(ctx, root)
+		_, _ = r.acquire(root)
 	}
 }
 
@@ -136,13 +278,12 @@ func BenchmarkRegistryAcquireHot(b *testing.B) {
 func BenchmarkRegistryAcquireParallel(b *testing.B) {
 	root := b.TempDir()
 	r := preloadedRegistry(b, root)
-	ctx := context.Background()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _ = r.acquire(ctx, root)
+			_, _ = r.acquire(root)
 		}
 	})
 }

@@ -46,6 +46,7 @@ import {
   authHeaders,
   isRemembered,
   setRemembered,
+  mayLoadBundledDemo,
   wantsDemo,
   createDaemonTransport,
   parseHash,
@@ -97,6 +98,7 @@ import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
+import { isServing } from "../../lib/workspace";
 import { attachHelpPopover } from "../../ui/help-popover";
 import { signal } from "../view";
 import { publishStatus } from "../status";
@@ -523,7 +525,8 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   // A BARE /graph/ (no directive at all) is the cold visit that gets the empty state instead,
   // deferring the graph.json download until the visitor asks. Loading via a reload into boot
   // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
-  if (wantsDemo(params) || params.view || params.q || params.node) {
+  // The daemon refuses to serve these files too; this keeps an attached surface from asking.
+  if (mayLoadBundledDemo(params) && (wantsDemo(params) || params.view || params.q || params.node)) {
     try {
       // Two demos ship, both generated from THIS workspace by the root graph-generate
       // target: the knowledge graph and the target graph. Selected by the same fragment
@@ -5274,9 +5277,9 @@ async function fetchLiveStatus() {
     const res = await client.getStatus({});
     const status = res.status;
     if (!status) return;
-    // Extract workspace name from the first loaded workspace.
-    if (status.pool && status.pool.workspaces.length > 0) {
-      liveWorkspaceName = status.pool.workspaces[0].root;
+    const loaded = status.pool?.workspaces.find(isServing);
+    if (loaded) {
+      liveWorkspaceName = loaded.root;
     }
     // No pool strip here: how many targets the daemon is running is session state the dashboard
     // owns. The affected set does not come from here either - StatusOutput.Affected is on the wire

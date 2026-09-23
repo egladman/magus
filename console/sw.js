@@ -28,8 +28,9 @@ const PRECACHE = [
   BASE + "graph/explorer.js",
   BASE + "graph/graph.css",
   BASE + "graph/scaffold.html",
-  BASE + "graph/knowledge-graph.json",
-  BASE + "graph/target-graph.json",
+  // Not the demo graph JSON: a daemon refuses to serve it (it is a workspace's data), and one
+  // failed entry fails addAll, so the worker would never install on a daemon origin. The hosted
+  // demo still caches it on first view through the network-first branch below.
   BASE + "dashboard/dashboard.js",
   BASE + "dashboard/dashboard.css",
   BASE + "dashboard/scaffold.html",

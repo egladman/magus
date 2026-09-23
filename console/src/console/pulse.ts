@@ -6,6 +6,7 @@
 import { createClient, Code, ConnectError } from "@connectrpc/connect";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { createDaemonTransport, getLiveToken } from "../lib/daemon";
+import { isServing } from "../lib/workspace";
 
 export interface PulseView {
   running: number;
@@ -42,7 +43,10 @@ async function getPool(host: string): Promise<PulseView | null> {
   return {
     running: pool.running,
     queued: pool.queued,
-    workspaces: pool.workspaces.map((w) => w.root).filter((r) => r !== ""),
+    workspaces: pool.workspaces
+      .filter(isServing)
+      .map((w) => w.root)
+      .filter((r) => r !== ""),
     cache: c
       ? { hits: Number(c.hits), misses: Number(c.misses), savedMs: Number(c.savedMs ?? 0) }
       : null,

@@ -380,7 +380,14 @@ const (
 	//
 	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
 	// command is valid again the moment the later gate finishes.
-	GateSuperseded            DiagnosticCode = "MGS3014"
+	GateSuperseded DiagnosticCode = "MGS3014"
+	// WorkspaceLoadFailed is a daemon call against a workspace whose magusfiles failed to
+	// load. The proximate cause of the refusal; the BZZ or MGS code the load stopped on
+	// rides beside it as the underlying one. Retrying cannot help until a source changes.
+	WorkspaceLoadFailed DiagnosticCode = "MGS3016"
+	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
+	// transient twin of MGS3016: the same call succeeds once the load finishes.
+	WorkspaceStillLoading     DiagnosticCode = "MGS3017"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -442,6 +449,21 @@ const (
 	NoAuthToken              DiagnosticCode = "MGS9004"
 	ConnectorNameExists      DiagnosticCode = "MGS9005"
 	ConnectorNotFound        DiagnosticCode = "MGS9006"
+	// HostNotAllowed is a request whose Host or Origin names a host the daemon does not
+	// serve: the DNS-rebinding guard, answered 403.
+	HostNotAllowed DiagnosticCode = "MGS9007"
+	// LoopbackPeerRequired is a request to a local-only route from a peer that is not on
+	// this machine's loopback interface, answered 403.
+	LoopbackPeerRequired DiagnosticCode = "MGS9008"
+	// ShareBoundToAnotherDevice is a valid share token replayed from a device other than
+	// the one that first used it, answered 403.
+	ShareBoundToAnotherDevice DiagnosticCode = "MGS9009"
+	// ConsoleFileWithheld is a console path outside the tokenless app shell, answered 404.
+	ConsoleFileWithheld DiagnosticCode = "MGS9010"
+	// BearerMissing is a request to a guarded route that carried no bearer token at all,
+	// answered 401. A token that was sent and refused is BearerRejected instead: the two
+	// need different fixes (attach one, or mint a new one).
+	BearerMissing DiagnosticCode = "MGS9011"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -494,6 +516,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
+	WorkspaceLoadFailed, WorkspaceStillLoading,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
@@ -503,6 +526,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
 	NoAuthToken, ConnectorNameExists, ConnectorNotFound,
+	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
+	BearerMissing,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 
