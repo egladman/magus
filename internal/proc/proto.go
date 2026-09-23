@@ -153,11 +153,16 @@ type statusRequest struct {
 	Protocol string `json:"protocol"`
 }
 
-// Workspace describes one workspace currently loaded by the daemon.
+// Workspace describes one workspace the daemon holds: loading, loaded, or failed.
 type Workspace struct {
-	Root       string    `json:"root"`
-	LoadedAt   time.Time `json:"loaded_at"`
-	LastAccess time.Time `json:"last_access"`
+	Root string `json:"root"`
+	// State is empty from an older daemon, which reported only loaded workspaces.
+	// compat: see types.StatusWorkspace.Loaded
+	State types.WorkspaceState `json:"state,omitempty"`
+	// Error is set only in WorkspaceFailed.
+	Error      *types.WorkspaceFailure `json:"error,omitempty"`
+	LoadedAt   time.Time               `json:"loaded_at"`
+	LastAccess time.Time               `json:"last_access"`
 	// Live cache activity for this workspace's long-lived cache. Zero for pre-cache-aware
 	// daemons or an Inspect workspace with no cache.
 	CacheHit   int   `json:"cache_hit,omitempty"`
@@ -169,6 +174,10 @@ type Workspace struct {
 	// SecretProvider is the selected provider spell's name; empty = built-in env provider.
 	SecretProvider string `json:"secret_provider,omitempty"`
 }
+
+// Loaded reports whether w is serving: active, or from a daemon that reports no state.
+// compat: see types.StatusWorkspace.Loaded
+func (w Workspace) Loaded() bool { return types.StatusWorkspace{State: w.State}.Loaded() }
 
 // StatusReply carries a point-in-time view of the parent's pool.
 type StatusReply struct {

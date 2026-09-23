@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -28,9 +30,11 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -102,6 +106,9 @@ type Magus struct {
 	probeCache     *cache.Cache
 
 	wsReg *WorkspaceRegistry
+	// policyLog is every file the root magusfile's load read, which is where a workspace
+	// guard rule can come from. Nil until preloadMagusfiles runs.
+	policyLog *interp.SourceLog
 
 	// magusfileExports are the target keys each project's magusfile registered when
 	// load evaluated it, by project path. A project absent here was not evaluated.
@@ -110,6 +117,10 @@ type Magus struct {
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
 	resolver *secret.Resolver
+
+	// spellImports is resolved once in load, before any magusfile, and read by every
+	// import resolver after; see SpellImports.
+	spellImports *remotespell.Imports
 
 	// hostMemBytes caches the machine's memory for slotsForPolicy; see hostTotalBytes.
 	hostMemOnce  sync.Once
@@ -253,6 +264,49 @@ func (m *Magus) explainStale(err error) error {
 	return ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion)
 }
 
+// WorkspaceLoadFailure describes err, a failed Open of root, as the daemon reports a FAILED
+// workspace: the error as rendered, plus the source position of each failing file that has
+// one. A position outside root keeps its absolute path.
+func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
+	f := &types.WorkspaceFailure{Message: err.Error()}
+	for _, branch := range joinedBranches(err) {
+		d, ok := buzz.DiagnosticOf(branch)
+		if !ok {
+			continue
+		}
+		sd := types.SourceDiagnostic{Code: d.Code, Line: d.Line, Column: d.Col, Message: d.Msg}
+		// A BZZ code's error carries its docs URL; an outer MGS wrapper must not lend its own.
+		var de *types.DiagnosticError
+		if d.Code != "" && errors.As(branch, &de) && de.Code == d.Code {
+			sd.URL = de.BuzzError()["url"]
+		}
+		var exec *interp.ExecError
+		if errors.As(branch, &exec) {
+			sd.File = exec.Path
+			if rel, rerr := filepath.Rel(root, exec.Path); rerr == nil && !strings.HasPrefix(rel, "..") {
+				sd.File = filepath.ToSlash(rel)
+			}
+		}
+		f.Diagnostics = append(f.Diagnostics, sd)
+	}
+	return f
+}
+
+// joinedBranches splits err at the first errors.Join in its chain: a load joins one error
+// per failing file, and errors.As would only ever find the first.
+func joinedBranches(err error) []error {
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		if j, ok := e.(interface{ Unwrap() []error }); ok {
+			var out []error
+			for _, b := range j.Unwrap() {
+				out = append(out, joinedBranches(b)...)
+			}
+			return out
+		}
+	}
+	return []error{err}
+}
+
 // load completes workspace setup shared by Inspect and Open: magusfile preloading,
 // workspace-registry application, and magusfile spell autobind.
 func (m *Magus) load(ctx context.Context) error {
@@ -261,6 +315,19 @@ func (m *Magus) load(ctx context.Context) error {
 	// root is only present on the run path (Magus.Run), so preload-time resolution
 	// (describe, affected, ls) could not walk spell imports up to the root.
 	ctx = types.WithWorkspace(ctx, m)
+	// Remote spells resolve before any Buzz loads, from magus.lock alone: a load never
+	// asks a registry what a tag means.
+	imports, err := remotespell.LoadImports(ctx, m.ws.Root, m.cfg.Spells, remotespell.LoadOptions{
+		Client: m.spellRegistryClient,
+		Embedded: func(name string) bool {
+			_, ok := spell.Builtins()[name]
+			return ok
+		},
+	})
+	if err != nil {
+		return err
+	}
+	m.spellImports = imports
 	customTargets, err := preloadMagusfiles(ctx, m)
 	if err != nil {
 		// Apply and the policy check would judge a registry the failed magusfiles
@@ -303,6 +370,31 @@ func (m *Magus) load(ctx context.Context) error {
 	m.autobindMagusfileSpell()
 	return m.spellShadows()
 }
+
+// SpellImports returns the spells magus.yaml declares, as this workspace's load resolved
+// them. The import resolvers reach it through the workspace on the context.
+func (m *Magus) SpellImports() *remotespell.Imports { return m.spellImports }
+
+// spellRegistryClient is the client a remote spell pull uses for host: authenticated
+// by its spells.registries entry when there is one, anonymous otherwise. It runs before
+// any magusfile could select a secret provider, so the reference resolves through the
+// built-in environment provider.
+func (m *Magus) spellRegistryClient(ctx context.Context, host string) (*oci.Client, error) {
+	c := &oci.Client{HTTP: &http.Client{Timeout: spellPullTimeout}}
+	entry, ok := m.cfg.Spells.Registry(host)
+	if !ok {
+		return c, nil
+	}
+	pass, err := m.resolver.Read(ctx, entry.Password)
+	if err != nil {
+		return nil, fmt.Errorf("spells.registries %s: %w", host, err)
+	}
+	c.Username, c.Password = entry.Username, pass.Reveal()
+	return c, nil
+}
+
+// spellPullTimeout bounds one registry request of a remote spell pull.
+const spellPullTimeout = 2 * time.Minute
 
 // spellShadows is the shadow ward: a nested spells/<name> that a root-wins ancestor
 // already defines is dead code (its import always resolves to the ancestor). Block it
@@ -436,6 +528,10 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			continue
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
+		if filepath.Clean(p.Dir) == filepath.Clean(m.ws.Root) {
+			m.policyLog = &interp.SourceLog{}
+			pctx = interp.WithSourceLog(pctx, m.policyLog)
+		}
 		for _, src := range srcs {
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {

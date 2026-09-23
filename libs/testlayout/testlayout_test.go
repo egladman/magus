@@ -32,6 +32,19 @@ func TestAnalyzerUnpaired(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "unpaired")
 }
 
+// TestAnalyzerCrossCutting checks the exits from the Unpaired rule: a marker with a
+// reason above the package clause, and a platform family standing in for the missing
+// source file. An empty reason, a marker below the package clause, and a marked file
+// that narrows a source name are all still reported.
+func TestAnalyzerCrossCutting(t *testing.T) {
+	analyzer, err := New(Options{Unpaired: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	analysistest.Run(t, analysistest.TestData(), analyzer, "crosscutting")
+}
+
 // TestAnalyzerAllow checks that a glob excuses a file the default rule reports:
 // widget_conformance_test.go narrows widget.go exactly as resolver_edge_cases
 // narrows resolver.

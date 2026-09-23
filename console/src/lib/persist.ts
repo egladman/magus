@@ -15,6 +15,9 @@
 // lifetime and intentionally expose no teardown: their single storage listener is
 // a fixed cost. A future per-view cell (e.g. a settings page rebuilt on navigation)
 // would need an unsubscribe; today every cell is a singleton, so none is added.
+import { errMessage } from "./guards";
+import { reportFailure } from "./notifications";
+
 export interface Persisted<T> {
   get(): T;
   set(value: T): void;
@@ -49,7 +52,8 @@ export function persisted<T>(key: string, fallback: T): Persisted<T> {
       const raw = localStorage.getItem(full);
       return raw === null ? fallback : (JSON.parse(raw) as T);
     } catch {
-      return fallback; // storage disabled or value corrupt: fall back to the default
+      // not-a-failure: storage disabled or value corrupt; the default is the honest value
+      return fallback;
     }
   };
 
@@ -68,8 +72,13 @@ export function persisted<T>(key: string, fallback: T): Persisted<T> {
     writeChain = writeChain.then(() => {
       try {
         localStorage.setItem(full, JSON.stringify(value));
-      } catch {
-        /* best-effort: keep the in-memory value */
+      } catch (e) {
+        // The in-memory value still holds for this page; what is lost is the next load.
+        reportFailure(
+          "Settings",
+          "Could not save a console setting for the next load (" + errMessage(e) + ").",
+          "persist:write:" + full,
+        );
       }
     });
   };

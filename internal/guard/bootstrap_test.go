@@ -23,7 +23,8 @@ func checkoutFixture(t *testing.T, module string, withBinary bool) string {
 
 func judgeOwnBuild(cwd, command string) ShellVerdict {
 	deps := testDependencies()
-	return rankOwnBuild(Evaluate(deps, command), deps, cwd, command, effectiveDialect(""))
+	d := effectiveDialect("")
+	return rankOwnBuild(Evaluate(deps, command), ownBuildVerdict(deps, cwd, command, d))
 }
 
 func TestOwnModuleIsReadFromTheBinary(t *testing.T) {
@@ -46,6 +47,7 @@ func TestRankOwnBuild(t *testing.T) {
 		says string
 	}{
 		{name: "bootstrap", cwd: fresh, command: "go build -o magus ./cmd/magus", advise: true, says: "./magus run go-build ."},
+		{name: "bare package operand", cwd: fresh, command: "go build -o magus cmd/magus", advise: true},
 		{name: "dot-slash output", cwd: fresh, command: "go build -o ./magus ./cmd/magus/", advise: true},
 		{name: "joined output flag", cwd: fresh, command: "go build -o=magus ./cmd/magus", advise: true},
 		{name: "absolute output in root", cwd: fresh, command: "go build -o " + filepath.Join(fresh, "magus") + " ./cmd/magus", advise: true},

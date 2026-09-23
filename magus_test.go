@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/spells"
@@ -1175,6 +1176,27 @@ func floorWorkspace(t *testing.T, constraint string) string {
 	return root
 }
 
+// A load joins one error per failing file; each is its own diagnostic. A coded type error
+// needs the magusfile bindings, which cmd/magus links; its registry test covers that case.
+func TestWorkspaceLoadFailureLocatesEachJoinedFile(t *testing.T) {
+	err := fmt.Errorf("magus: repo: %w", errors.Join(
+		&interp.ExecError{Path: "/repo/a/magusfile.buzz", Err: errors.New("buzz: line 2:1: expected identifier")},
+		&interp.ExecError{Path: "/elsewhere/spell.buzz", Err: errors.New("buzz: line 5:4: unexpected }")},
+	))
+	assert.Equal(t, &types.WorkspaceFailure{
+		Message: err.Error(),
+		Diagnostics: []types.SourceDiagnostic{
+			{File: "a/magusfile.buzz", Line: 2, Column: 1, Message: "expected identifier"},
+			{File: "/elsewhere/spell.buzz", Line: 5, Column: 4, Message: "unexpected }"},
+		},
+	}, WorkspaceLoadFailure("/repo", err))
+}
+
+func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
+	err := errors.New("daemon: load config /repo: magus.yaml: unknown key")
+	assert.Equal(t, &types.WorkspaceFailure{Message: err.Error()}, WorkspaceLoadFailure("/repo", err))
+}
+
 // The wiring, not the comparison: internal/ward covers the semver logic, and this
 // covers that magus.yaml's required_version actually reaches it. That path is easy to
 // break invisibly: the field carries `cli:"-"`, so it is absent from the generated
@@ -1429,4 +1451,19 @@ func TestLoadConfigRefusesAnUnknownProfile(t *testing.T) {
 
 	_, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
 	require.ErrorContains(t, err, `unknown concurrency profile "turbo"`)
+}
+
+// TestTargetLabel renders the scope header a run prints. The empty case is the one
+// worth pinning: a scope that selected nothing says so, rather than rendering as
+// "0 projects" among the plural forms.
+func TestTargetLabel(t *testing.T) {
+	one := []types.Target{{Path: "api", Name: "build"}}
+	several := []types.Target{{Path: "api"}, {Path: "web"}, {Path: "."}}
+
+	assert.Equal(t, "no projects", TargetLabel(nil, ""))
+	assert.Equal(t, "no projects (affected)", TargetLabel(nil, "affected"))
+	assert.Equal(t, "api", TargetLabel(one, ""))
+	assert.Equal(t, "api (affected)", TargetLabel(one, "affected"))
+	assert.Equal(t, "3 projects", TargetLabel(several, ""))
+	assert.Equal(t, "3 projects (stdin paths)", TargetLabel(several, "stdin paths"))
 }

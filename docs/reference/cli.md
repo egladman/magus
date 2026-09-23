@@ -134,6 +134,14 @@ nowhere locally, `magus query output <ref>` sweeps the workspace for a target
 whose live cache key predicts it and prints the command that reproduces it. See
 [output references](../concepts/cache/output-refs.md).
 
+The lines above (`[pass] ...`, the reproduce command, the ref, the `summary:`
+footer) are the TEXT rendering. `magus run <target> -o jsonl` reports the
+same facts as typed events on the same stream as `run.target.result`:
+`run.scope`/`run.charms`/`run.cache` for the header, `run.step` per
+`ctx.needs` sub-target, and `run.summary` for the footer. Nothing free-text
+reaches stdout or stderr under `-o jsonl`; a message this conversion does not
+yet name falls back to a plain JSON line instead of prose.
+
 For structural questions, the knowledge graph commands answer different shapes
 of "why":
 

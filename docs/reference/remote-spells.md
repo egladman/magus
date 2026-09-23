@@ -1,38 +1,108 @@
 ---
 title: Remote spells
-description: Import a spell published as an OCI artifact, pinned by its manifest digest, so it versions apart from the magus binary and loads offline once cached.
-tags: [spells, imports, remote, oci, registry, pinning, digest, offline, harness, publish, credentials]
+description: Import a spell published as an OCI artifact by its registry path. magus.yaml declares the tag, magus.lock pins the manifest digest, only the update charm resolves a tag, and a pinned spell loads offline once cached.
+tags: [spells, imports, remote, oci, registry, pinning, digest, lockfile, offline, harness, publish, credentials, override]
 ---
 
 # Remote spells
 
 A spell that is neither built in nor in your workspace can be imported from a container
-registry, pinned by the digest of its OCI manifest:
+registry by its repository path, the way a Go import path names its repository:
 
 ```buzz
-import "oci://ghcr.io/egladman/magus/spells/cursor@sha256:<digest>" as cursor;
+import "ghcr.io/egladman/magus/spells/cursor";   // binds `cursor`
 magus\harness.provider(cursor);
 ```
 
 The spell versions apart from the binary: upgrading magus does not change the bytes a
-workspace runs, and moving to a newer spell is an edit to the magusfile. The same form
-works wherever a spell is named: a magusfile import, the handle `magus\harness.provider`
-takes, and a remote cache backend selector.
+workspace runs, and moving to a newer spell is a reviewed change to `magus.lock`. The same
+path works wherever a spell is named: a magusfile import, the handle
+`magus\harness.provider` takes, and a remote cache backend selector.
 
-## The form
+## Three kinds of import
 
-```text
-oci://<registry>/<repository>[:<tag>]@sha256:<digest>
+The path alone says where a spell comes from ([ADR 0002](../decisions/0002-remote-spells-are-imported-by-registry-path.md)):
+
+| Import                         | Kind      | Comes from                                            |
+| ------------------------------ | --------- | ----------------------------------------------------- |
+| `ghcr.io/team/spells/lint`     | remote    | a registry: the first element carries a dot or a port |
+| `magus/spell/go`               | embedded  | the magus binary                                      |
+| `spells/lint`, `./tools/drift` | workspace | a file in the workspace                               |
+
+The import binds the path's last segment, as every Buzz import does; alias it
+(`as claude`) when that segment is not a Buzz identifier, such as `claude-code`.
+
+## Declare, lock, import
+
+**1. Declare.** `magus.yaml` names each remote spell by that same path, with the tag it
+tracks:
+
+```yaml
+spells:
+  ghcr.io/egladman/magus/spells/cursor:
+    tag: "1.4"
 ```
 
-The digest is required. A registry is content-addressed, so the manifest digest names one
-artifact forever, while a tag can be moved to another. A reference without a digest fails
-to load with [MGS1041](codes/magusfile/MGS1041.md). A tag beside the digest is allowed
-and ignored for the pull. A registry that serves a manifest or layer whose bytes do not
-hash to what the pin names fails with [MGS1042](codes/magusfile/MGS1042.md). Both are
-errors: nothing is cached and the magusfile does not load.
+An import of a registry path with no entry fails to load with
+[MGS1041](codes/magusfile/MGS1041.md). An entry that is not a lowercase registry path,
+names both or neither of `tag` and `path`, or nests inside another remote path fails
+when `magus.yaml` loads.
 
-The import must be aliased (`as <name>`): the alias is the handle you pass on.
+**2. Lock.** `magus.lock`, beside `magus.yaml`, pins the manifest digest each declared
+tag named when it was last resolved. Only magus writes it, as YAML with sorted keys, and
+it is committed:
+
+```yaml
+# Written by `magus spell lock`. Do not edit: change a tag in magus.yaml and run the update charm.
+version: 1
+spells:
+  ghcr.io/egladman/magus/spells/cursor:
+    tag: "1.4"
+    digest: sha256:4f1c...
+```
+
+**Only the update charm resolves a tag.** The workspace's root magusfile has one target
+that declares `magus.lock` as its output (this repository calls it `spell-lock`) and runs
+`magus spell lock`. Run plain, it checks the lock against `magus.yaml` and verifies every
+pinned digest without asking a registry what a tag means. Under `:update` it resolves
+each declared tag, pulls and verifies the new artifacts, and rewrites the lock:
+
+```sh
+magus run spell-lock:update
+```
+
+Reviewing an upgrade is reviewing that diff. `ci` strips the update charm, so a gate can
+never move a pin.
+
+**3. Import.** Every other run reads the locked digest only. A declared spell whose lock
+entry is missing, or was written for a different tag, fails its import with
+[MGS1043](codes/magusfile/MGS1043.md). A registry or cache that serves bytes other than
+the pinned ones fails with [MGS1042](codes/magusfile/MGS1042.md). Both are held against
+the one import, not the whole workspace, so the target that repairs the lock still
+loads. When the magusfile owning that target imports the stale spell itself, run
+`magus spell lock --update` directly.
+
+## Overrides
+
+A workspace copy replaces a remote or embedded spell by a `path:` entry, the way Go's
+`replace` does. The import never changes:
+
+```yaml
+spells:
+  ghcr.io/team/spells/lint:
+    path: vendor/lint     # a local copy replaces a remote spell
+  magus/spell/go:
+    path: spells/go       # a workspace copy replaces the embedded spell
+```
+
+The declaration is the acknowledgment. A copy that replaces an embedded spell must carry
+that spell's name, and takes it over everywhere the name is used. An entry whose `path`
+holds no spell, or replaces an embedded spell magus does not ship, is
+[MGS1044](codes/magusfile/MGS1044.md). An override is never inferred from a file
+existing: a workspace directory at a declared remote path, or a workspace spell carrying
+an embedded spell's name, without an entry is [MGS1002](codes/magusfile/MGS1002.md).
+An override points at a workspace directory only; replacing one registry path with
+another is not supported.
 
 ## Publish your own spell
 
@@ -86,9 +156,12 @@ pinned reference followed by where the files are:
 ```sh
 magus spell pull ghcr.io/<owner>/<repo>/spells/cursor:v1.2.0            # into the cache
 magus spell pull ghcr.io/<owner>/<repo>/spells/cursor@sha256:4f1c... ./vendor/cursor
+magus spell pull ghcr.io/<owner>/<repo>/spells/cursor ./vendor/cursor   # the digest magus.lock pins
 ```
 
-A target directory must be absent or empty. Every verb takes `-o json`.
+A bare registry path, as a magusfile imports it, pulls the digest `magus.lock` pins for
+that declaration, so what lands is exactly what a load would run. A target directory must
+be absent or empty. Every verb takes `-o json`.
 
 This repository publishes its spells with the `spell-publish` target. It declares the
 spell sources as inputs, so a change to one selects it; without the `cd` charm it only
@@ -113,6 +186,13 @@ resolves one, and the value is redacted from everything magus writes. Under the 
 environment provider it names an environment variable; under a provider spell it is that
 provider's own path (`Private/ghcr/token` for 1Password). The workspace is loaded to
 reach its provider only when a verb needs the credential.
+
+Two readers cannot wait for a magusfile to choose a provider, so they resolve the
+reference through the built-in environment provider: a workspace load pulling a locked
+spell that is not yet cached, which happens before any magusfile runs, and
+`magus spell lock`, which never loads the workspace because loading it reads the pins it
+exists to repair. Warm the cache with the lock target where the environment holds no
+token.
 
 The entry applies to every verb, pull and ls included, so a private repository reads the
 same way it is written. A host with no entry is reached anonymously. An entry whose host
@@ -149,10 +229,19 @@ against the layer. An entry that does not verify is replaced by a fresh pull. Wi
 `MAGUS_OFFLINE=1` magus never pulls: an uncached reference fails, and a cached one that
 does not verify fails with [MGS1042](codes/magusfile/MGS1042.md) instead of refetching.
 
+The verified spells are then laid out by import path under
+`$XDG_CACHE_HOME/magus/spells/views/<id>/`, so `<view>/ghcr.io/team/spells/lint/spell.buzz`
+is the entry of `import "ghcr.io/team/spells/lint"`. The view is named by the pins it
+holds, so a changed lock names a new view and an existing one never changes.
+
 ## Resolution order
 
-A remote reference is resolved by magus before Buzz's file search runs, so no local file,
-relative to the process working directory or the workspace, can stand in for it.
+Remote spells resolve once per workspace load, before any magusfile runs, from
+`magus.lock` alone: one read of the lock and no registry call for a cached digest. The
+view joins the magusfile search roots after the workspace's own, and a workspace
+directory at a declared remote path is refused rather than searched, so no local file,
+relative to the process working directory or the workspace, can stand in for a remote
+spell.
 
 ## See also
 

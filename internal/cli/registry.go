@@ -679,12 +679,12 @@ Subcommands (the first argument):
 
 var spellCommand = Command{
 	Name:        "spell",
-	Short:       "Build, publish, pull and list spells as OCI artifacts pinned by digest",
-	Description: "Pack a spell directory's tracked files as an OCI artifact with the standard provenance annotations, push it under one or more tags, pull and verify a published spell, and list a repository's tags.",
-	Tags:        []string{"cli", "magus spell", "spell", "publish", "pull", "oci", "registry", "digest", "remote spells", "credentials"},
-	Long: `A spell as an artifact: what one workspace publishes so another pulls it
-pinned by digest, versioned apart from the magus binary. Authoring a spell is
-magus init spell.
+	Short:       "Build, publish, pull and list spells as OCI artifacts, and pin them in magus.lock",
+	Description: "Pack a spell directory's tracked files as an OCI artifact with the standard provenance annotations, push it under one or more tags, pull and verify a published spell, list a repository's tags, and check or rewrite the magus.lock pins of the remote spells magus.yaml declares.",
+	Tags:        []string{"cli", "magus spell", "spell", "publish", "pull", "oci", "registry", "digest", "remote spells", "credentials", "magus.lock", "lock", "update"},
+	Long: `A spell as an artifact: what one workspace publishes so another imports it
+by registry path, pinned by digest in magus.lock and versioned apart from the
+magus binary. Authoring a spell is magus init spell.
 
 Subcommands (the first argument):
 
@@ -696,8 +696,14 @@ Subcommands (the first argument):
            upload. Prints <registry>/<repository>@sha256:<digest>.
   pull     Fetch <ref> by tag or digest, verify the manifest and layer digests,
            and print the pinned reference and the directory holding the files:
-           [<dir>] when given, otherwise the user cache.
+           [<dir>] when given, otherwise the user cache. A bare registry path,
+           as a magusfile imports it, pulls the digest magus.lock pins.
   ls       List <registry>/<repository>'s tags, following pagination.
+  lock     Check that magus.lock pins every remote spell magus.yaml declares,
+           for its declared tag, and verify each pinned digest; no tag is
+           resolved. --update resolves each tag and rewrites magus.lock, and is
+           what the update charm on the lock-owning target runs. The workspace
+           is not loaded, so credentials resolve through the environment.
 
 Only files the VCS tracks are packed, each with a fixed mode, owner and time,
 and the manifest carries org.opencontainers.image.{title,source,revision,created},
@@ -710,7 +716,7 @@ names a username and a secret reference, resolved through the workspace's
 secret provider. --username overrides it and reads the password from stdin.
 With neither, requests are anonymous. A new GHCR package is private until
 someone makes it public.`,
-	Usage: "magus spell <build|push|pull|ls> [args] [flags]",
+	Usage: "magus spell <build|push|pull|ls|lock> [args] [flags]",
 	Children: []Command{
 		{
 			Name:  "build",
@@ -743,12 +749,20 @@ someone makes it public.`,
 				{Name: "username", Kind: FlagString, Doc: "The registry username; the password is then read from stdin, overriding spells.registries"},
 			},
 		},
+		{
+			Name:  "lock",
+			Short: "Check magus.lock against magus.yaml, or rewrite it with --update",
+			Flags: []Flag{
+				{Name: "update", Kind: FlagBool, Doc: "Ask the registry what each declared tag names now, and rewrite magus.lock"},
+			},
+		},
 	},
 	Examples: []Example{
 		{"Print the digest a push of this commit would produce", "magus spell build spells/harness/cursor"},
 		{"Publish under a version and a floating tag", "magus spell push spells/harness/cursor ghcr.io/owner/repo/spells/cursor:v1.2.0 --tag latest"},
 		{"Pull a published spell into a directory", "magus spell pull ghcr.io/owner/repo/spells/cursor:v1.2.0 ./vendor/cursor"},
 		{"List a spell repository's tags", "magus spell ls ghcr.io/owner/repo/spells/cursor"},
+		{"Pin every declared remote spell's tag in magus.lock", "magus spell lock --update"},
 	},
 }
 
@@ -2301,13 +2315,13 @@ AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
 harness applies, removes, or verifies harnesses selected with
 magus\harness.provider (several hosts are fine when you bounce between LLM
-tools) or a JSON descriptor: apply merges opaque host-config fragments the
-descriptor already names, remove deletes only those same fragments (a user's
-own hooks beside them are untouched, and nothing is asked for confirmation -
-pass --dry-run to preview one first), and verify actually runs the wired guard
-command against a synthetic event rather than trusting its mere presence in
-the config. Omit --id to act on every magusfile-wired provider. Guard feedback
-that keeps recurring is doctor's recurring-guard-denials check, not a verb here.
+tools): apply merges opaque host-config fragments the descriptor already
+names, remove deletes only those same fragments (a user's own hooks beside
+them are untouched, and nothing is asked for confirmation - pass --dry-run to
+preview one first), and verify actually runs the wired guard command against
+a synthetic event rather than trusting its mere presence in the config. Omit
+--id to act on every magusfile-wired provider. Guard feedback that keeps
+recurring is doctor's recurring-guard-denials check, not a verb here.
 
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
@@ -2328,7 +2342,7 @@ a pattern no graph verb fits.`,
 	Usage: "magus agent <install|harness|starter|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
-		{Name: "harness", Short: "Apply, remove, or verify harnesses wired in the magusfile or JSON descriptors", Children: []Command{
+		{Name: "harness", Short: "Apply, remove, or verify harnesses wired in the magusfile", Children: []Command{
 			{Name: "apply", Short: "Write descriptor-managed hook entries", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to apply every magusfile-wired provider"}}},
 			{Name: "remove", Short: "Delete only the descriptor-managed hook entries apply would have written, leaving a user's own hooks untouched", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to remove every magusfile-wired provider"}}},
 			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},

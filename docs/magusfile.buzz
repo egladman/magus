@@ -1,7 +1,7 @@
 import "magus";
 import "../tools/toolchain-policy" as policy;
-// The shared advisory gate; see tools/audit.buzz for why an exit code is the wrong question.
-import "../tools/audit" as audit;
+// The shared advisory gate; see tools/advisories.buzz for why an exit code is the wrong question.
+import "../tools/advisories" as advisories;
 import "../tools/drift" as drift;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // npm), vcs (drift gate), http (serve). render.buzz owns the rendering
@@ -565,7 +565,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // pnpm-workspace.yaml cooling period is the stronger half of this.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    audit\audit();
+    advisories\audit();
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {

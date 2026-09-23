@@ -1,5 +1,7 @@
 //go:build !buzz_safe && !buzz_unsafe
 
+// cross-cutting: drives vm/heapattr.go through a real Session; vm cannot import this package
+
 package buzz
 
 import (

@@ -1,3 +1,5 @@
+// cross-cutting: upstream parity cases through the public API, across parser, checker and VM
+
 package buzz_test //nolint:testlayout // in-package would close a cycle: gopherbuzz/std imports gopherbuzz
 
 // Hermetic coverage for the upstream-parity language features. TestUpstreamConformance

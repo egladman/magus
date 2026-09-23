@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path"
@@ -11,10 +12,13 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -125,7 +129,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 // A deeper level defining a name an ancestor already owns is a shadow footgun,
 // guarded separately by the shadow ward at preload; this resolver just picks the
 // canonical one deterministically and never errors.
-func resolveLocalSpellImport(ctx context.Context, importPath string) (vm.Value, bool) {
+func resolveLocalSpellImport(ctx context.Context, im *remotespell.Imports, importPath string) (vm.Value, bool) {
 	for _, dir := range spellSearchLevels(ctx) {
 		// Two layouts are accepted: a flat spells/<name>.buzz, and the directory
 		// convention spells/<name>/spell.buzz (preferred — keeps a spell's source
@@ -143,6 +147,9 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (vm.Value, 
 			// handler op-capable spell whether it is bound to a project or wired as
 			// the remote cache backend.
 			if m, ok := loadLocalSpell(ctx, path); ok {
+				if err := embeddedShadow(im, m.Name, filepath.Dir(path)); err != nil {
+					return importFailed(ctx, err)
+				}
 				return spellHandleFromMeta(m), true
 			}
 		}
@@ -150,23 +157,75 @@ func resolveLocalSpellImport(ctx context.Context, importPath string) (vm.Value, 
 	return vm.Null, false
 }
 
-// resolveRemoteSpellImport binds a spell imported by URL. It always claims the
-// import, binding null on failure, because returning false would hand the URL to
-// the cwd-first file search, where a crafted local path could answer it. For a
-// magusfile import, interp's pre-exec check has already resolved the reference and
-// reported any failure with its code, so a failure here is only logged.
-func resolveRemoteSpellImport(ctx context.Context, importPath string) (vm.Value, bool) {
-	entry, err := remotespell.EntryPath(ctx, importPath)
+// resolveRemoteSpellImport binds a spell imported by registry path from its verified
+// copy under the workspace's view, where <view>/<import path>/spell.buzz is its entry.
+// It always claims the import, binding null on failure, because returning false would
+// hand the path to the file search, where a crafted local directory could answer it.
+func resolveRemoteSpellImport(ctx context.Context, im *remotespell.Imports, importPath string) (vm.Value, bool) {
+	dir, err := im.Dir(importPath)
 	if err != nil {
-		slog.ErrorContext(ctx, "remote spell import", "err", err)
-		return vm.Null, true
+		return importFailed(ctx, err)
 	}
-	m, ok := loadLocalSpell(ctx, entry)
+	m, ok := loadLocalSpell(ctx, filepath.Join(dir, "spell.buzz"))
 	if !ok {
-		slog.ErrorContext(ctx, "remote spell import is not a spell", "import", importPath)
-		return vm.Null, true
+		return importFailed(ctx, fmt.Errorf("remote spell %s: its spell.buzz does not load as a spell", importPath))
+	}
+	if err := embeddedShadow(im, m.Name, dir); err != nil {
+		return importFailed(ctx, err)
 	}
 	return spellHandleFromMeta(m), true
+}
+
+// resolveOverrideImport binds the workspace copy magus.yaml declares for importPath. An
+// embedded spell's copy must carry that spell's name, and takes over its registry entry,
+// so every use of the name runs the copy; a remote spell's copy registers like any
+// workspace spell.
+func resolveOverrideImport(ctx context.Context, im *remotespell.Imports, importPath, dir string) (vm.Value, bool) {
+	spec, sp, err := newBuzzSpell(ctx, filepath.Join(dir, "spell.buzz"))
+	if err != nil {
+		return importFailed(ctx, types.WrapDiagnostic(types.SpellOverrideInvalid, err,
+			"magus.yaml spells.%s: %s does not load as a spell: %v", importPath, dir, err))
+	}
+	name, embedded := strings.CutPrefix(importPath, spells.ModulePrefix)
+	switch {
+	case embedded && spec.Name != name:
+		return importFailed(ctx, types.DiagnosticErrorf(types.SpellOverrideInvalid,
+			"magus.yaml spells.%s: %s holds the spell %q, not %q, so it cannot replace it", importPath, dir, spec.Name, name))
+	case embedded:
+		project.DefaultSpellRegistry().ReplaceSpell(sp)
+	default:
+		if err := embeddedShadow(im, spec.Name, dir); err != nil {
+			return importFailed(ctx, err)
+		}
+		project.DefaultSpellRegistry().RegisterIfAbsent(sp)
+	}
+	return spellHandleFromMeta(spec), true
+}
+
+// embeddedShadow refuses a workspace or remote spell carrying an embedded spell's name
+// unless magus.yaml declares it as that spell's replacement. Registration is by name,
+// so an undeclared one would silently bind the embedded spell under a handle that
+// reads like the workspace copy.
+func embeddedShadow(im *remotespell.Imports, name, dir string) error {
+	if _, builtin := spell.Builtins()[name]; !builtin {
+		return nil
+	}
+	module := spells.ModulePath(name)
+	if declared, ok := im.Override(module); ok && filepath.Clean(declared) == filepath.Clean(dir) {
+		return nil
+	}
+	return types.DiagnosticErrorf(types.SpellShadowed,
+		"spell %q at %s has the name of the embedded spell %s; declare `spells: {%s: {path: <dir>}}` in magus.yaml to replace the embedded one, or rename it",
+		name, dir, module, module)
+}
+
+// importFailed claims an import the resolver could not bind, reporting err to the load
+// in progress so it fails with the cause; outside a load, it is logged.
+func importFailed(ctx context.Context, err error) (vm.Value, bool) {
+	if !interp.ReportImportError(ctx, err) {
+		slog.ErrorContext(ctx, "spell import", "err", err)
+	}
+	return vm.Null, true
 }
 
 // spellSearchLevels returns the directories a path-style spell import is searched

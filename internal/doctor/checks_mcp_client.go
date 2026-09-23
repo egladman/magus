@@ -15,7 +15,7 @@ func (r *runner) checkMCPClient() types.DoctorCheck {
 	root := r.ws.Root()
 	wired := workspaceHarnesses(r.ws)
 	ctx := agent.ContextWithWiredHarnesses(r.runCtx(), wired)
-	ids, err := agent.KnownHarnesses(ctx, root, wired...)
+	ids, err := agent.KnownHarnesses(ctx, wired...)
 	if err != nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorAdvice, Message: "cannot list harnesses: " + err.Error()}
 	}

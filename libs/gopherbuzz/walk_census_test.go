@@ -1,3 +1,5 @@
+// cross-cutting: pins ast.Inspect against real parser output; ast cannot import the parser
+
 package buzz
 
 import (

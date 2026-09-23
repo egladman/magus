@@ -24,11 +24,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
   alias isolates it, so it is exempt, as is `as _`. The root magusfile and built-in
   harness spells dropped their redundant `as codex`, `as cursor`, `as opencode`.
-- **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
-  loads offline once cached; MGS1041 refuses a tag alone, MGS1042 mismatched bytes.
-  `magus spell build|push|pull|ls` build a reproducible digest, push under several tags,
-  verify a pull and list tags. Registry credentials are secret references under
-  `spells.registries`.
+- **`magus\guard.spawn` registers a workspace spawn rule.** One Buzz function sees every
+  subagent spawn and continuation and may deny or advise, never lift a built-in deny. An
+  uncommitted loosening waits for a commit. Policy changes land on the trail as
+  `guard_policy`; MGS1045 refuses a bad registration. magus ships no rule.
+- **A spawn rule sees its continue target's facts and the job store.** `target` carries
+  the spawn's `description`, `model` and last observed `contextTokens`;
+  `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
+  grades the child under that job's lease and records its base.
+- **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
+  is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
+  charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
+  embedded or remote spell. MGS1041 through MGS1044 cover undeclared, stale, mismatched
+  and invalid. `magus spell build|push|pull|ls` publish.
 - **`magus job fork` declares a job from the terminal.** Flags cover one row
   (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
   `--stdin` takes a full record and `--schema` prints its contract.
@@ -119,6 +127,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`install` probes only its own tools and skips dependency order.** A project's install
   no longer waits for its dependencies' installs, and `run install` probes node and pnpm,
   not tsc.
+- **A daemon whose workspace fails to load keeps serving and says why.** The console,
+  `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
+  `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
+  `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
+  workspace reloads when a `.buzz` file or `magus.yaml` changes.
+- **The daemon refuses a request as `google.rpc.Status` JSON in the route's protocol.**
+  A Connect service answers Connect's envelope; every other route, `/mcp` included, answers
+  AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
+  `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
+  MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
+  console-file refusals gain MGS9007-9010.
+- **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
+  projects/charms/cache header, per-stage progress, the run summary and lock-wait
+  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
+  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
+  yet converted falls back to a plain JSON line instead of prose.
+- **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
+  denial count, session count, and followed rate; the retired advice layer's destination
+  and confidence labels are gone. A human reads the evidence and decides.
 - **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
   and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
   and fails when the build does. The graph JSON is no longer committed.
@@ -157,7 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A deny on a multi-command line says nothing on it ran.**
 - **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
   wired with `magus\harness.provider`. Adapt one by forking it and changing the import
-  path. JSON under `harnesses/` remains the unwired fallback.
+  path.
 - **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
   runs it anyway.
 - **A failing `magus doctor` no longer cancels CI shards.** The final gate carries its
@@ -189,6 +216,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
+  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
+  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
+  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
+  forking its spell's import path instead.
 - **Breaking: the `exclusive` target and project option, with no replacement.** A
   magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
@@ -201,6 +233,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
   A run skips re-evaluating a magusfile that does not export the target, and an exact
   source no longer walks the tree. `magus ls` here: 1.45s to 0.11s.
+- **Console failures are always shown.** Every failed daemon call, stream or undecodable
+  frame raises a notification, and the console lint rejects a swallowed catch. A page with
+  no token shows one sign-in state with the command that opens it signed in, and a 401
+  returns there.
+- **The console dashboard connects on the daemon's own origin.** The token exchange sends
+  an expiry the daemon accepts, and a page from an older console build asks for a reload.
+- **Console links carry a runnable command.** `magus job fork`, `ls jobs` and the other
+  console hints print `open "<url>#token=$(magus config token print)"`, and
+  `magus_console_present` returns it as `open`. The job hint names a daemon running a
+  different build instead of claiming nothing serves the console.
 - **A fresh magus checkout can build its first binary.** The `raw-tool` rule advises
   `go build -o magus ./cmd/magus` alone into a checkout root with no `magus` yet, and denies
   it once one exists. `go -C <dir> <verb>` and `go <verb> -C <dir>` reach one verdict, and a
@@ -237,6 +279,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+
+### Security
+
+- **The daemon's unauthenticated `/console/` serves only the app shell.** It served every
+  built console file, including the demo graph JSON holding the whole knowledge graph and
+  its notes. Other files and directory listings now return 404, on loopback and on the LAN
+  share, and an attached graph explorer never falls back to that demo data.
 
 ## [v0.4.3] - 2026-09-06
 

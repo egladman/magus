@@ -62,6 +62,21 @@ func compileBuzzSpell(ctx context.Context, path string) (spells.Descriptor, stri
 // can't. Op bodies re-read their inputs each invocation, so a fixed captured
 // source is correct, and the registration is idempotent for re-imports.
 func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.Spell, error) {
+	spec, sp, err := newBuzzSpell(ctx, path)
+	if err != nil {
+		return spells.Descriptor{}, nil, err
+	}
+	// Register-if-absent (not Lookup-then-Register): two imports of the same spell
+	// racing here must not both reach RegisterSpell's duplicate panic. First wins;
+	// a re-import gets the existing handle. Op bodies re-read inputs per call, so a
+	// fixed captured source is correct.
+	return spec, project.DefaultSpellRegistry().RegisterIfAbsent(sp), nil
+}
+
+// newBuzzSpell compiles the Buzz spell at path into a spell that is not yet
+// registered, so an override of an embedded spell can replace the entry by name where
+// loadBuzzSpell would keep the first one.
+func newBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.Spell, error) {
 	spec, src, err := compileBuzzSpell(ctx, path)
 	if err != nil {
 		return spells.Descriptor{}, nil, err
@@ -117,11 +132,7 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	for _, o := range extra {
 		o(sp)
 	}
-	// Register-if-absent (not Lookup-then-Register): two imports of the same spell
-	// racing here must not both reach RegisterSpell's duplicate panic. First wins;
-	// a re-import gets the existing handle. Op bodies re-read inputs per call, so a
-	// fixed captured source is correct.
-	return spec, project.DefaultSpellRegistry().RegisterIfAbsent(sp), nil
+	return spec, sp, nil
 }
 
 // extractDescriptorWithModules runs the spell module in a session that has the std

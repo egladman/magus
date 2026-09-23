@@ -15,6 +15,7 @@
 package statusv1alpha1
 
 import (
+	status "google.golang.org/genproto/googleapis/rpc/status"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -146,6 +147,59 @@ func (x TargetRun_State) Number() protoreflect.EnumNumber {
 // Deprecated: Use TargetRun_State.Descriptor instead.
 func (TargetRun_State) EnumDescriptor() ([]byte, []int) {
 	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{5, 0}
+}
+
+// State is where the daemon's copy of this workspace sits. Output only; values may be added.
+type Workspace_State int32
+
+const (
+	Workspace_STATE_UNSPECIFIED Workspace_State = 0
+	Workspace_STATE_LOADING     Workspace_State = 1 // evaluating magusfiles; resolves on its own
+	Workspace_STATE_ACTIVE      Workspace_State = 2 // loaded; workspace calls are served
+	Workspace_STATE_FAILED      Workspace_State = 3 // load failed, see error; held until a workspace source changes
+)
+
+// Enum value maps for Workspace_State.
+var (
+	Workspace_State_name = map[int32]string{
+		0: "STATE_UNSPECIFIED",
+		1: "STATE_LOADING",
+		2: "STATE_ACTIVE",
+		3: "STATE_FAILED",
+	}
+	Workspace_State_value = map[string]int32{
+		"STATE_UNSPECIFIED": 0,
+		"STATE_LOADING":     1,
+		"STATE_ACTIVE":      2,
+		"STATE_FAILED":      3,
+	}
+)
+
+func (x Workspace_State) Enum() *Workspace_State {
+	p := new(Workspace_State)
+	*p = x
+	return p
+}
+
+func (x Workspace_State) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Workspace_State) Descriptor() protoreflect.EnumDescriptor {
+	return file_magus_status_v1alpha1_status_proto_enumTypes[2].Descriptor()
+}
+
+func (Workspace_State) Type() protoreflect.EnumType {
+	return &file_magus_status_v1alpha1_status_proto_enumTypes[2]
+}
+
+func (x Workspace_State) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Workspace_State.Descriptor instead.
+func (Workspace_State) EnumDescriptor() ([]byte, []int) {
+	return file_magus_status_v1alpha1_status_proto_rawDescGZIP(), []int{9, 0}
 }
 
 // Status is the live snapshot.
@@ -941,7 +995,7 @@ func (x *RunningTarget) GetInvocation() string {
 	return ""
 }
 
-// Workspace is one workspace the daemon has loaded.
+// Workspace is one workspace the daemon holds: loading, loaded, or failed to load.
 type Workspace struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Root           string                 `protobuf:"bytes,1,opt,name=root,proto3" json:"root,omitempty"`
@@ -956,9 +1010,13 @@ type Workspace struct {
 	// The name and nothing else. No reference list, no value: magus does not store secrets,
 	// it reads them through a provider, and publishing what a build CAN reach would be a map
 	// of what to go after.
-	SecretProvider string `protobuf:"bytes,5,opt,name=secret_provider,json=secretProvider,proto3" json:"secret_provider,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	SecretProvider string          `protobuf:"bytes,5,opt,name=secret_provider,json=secretProvider,proto3" json:"secret_provider,omitempty"`
+	State          Workspace_State `protobuf:"varint,6,opt,name=state,proto3,enum=magus.status.v1alpha1.Workspace_State" json:"state,omitempty"`
+	// Why the workspace is FAILED; unset in every other state. The same Status a call against
+	// it returns. Spelled out because a bare Status here resolves to this package's message.
+	Error         *status.Status `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Workspace) Reset() {
@@ -1024,6 +1082,20 @@ func (x *Workspace) GetSecretProvider() string {
 		return x.SecretProvider
 	}
 	return ""
+}
+
+func (x *Workspace) GetState() Workspace_State {
+	if x != nil {
+		return x.State
+	}
+	return Workspace_STATE_UNSPECIFIED
+}
+
+func (x *Workspace) GetError() *status.Status {
+	if x != nil {
+		return x.Error
+	}
+	return nil
 }
 
 // Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this
@@ -1367,7 +1439,7 @@ var File_magus_status_v1alpha1_status_proto protoreflect.FileDescriptor
 
 const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\n" +
-	"\"magus/status/v1alpha1/status.proto\x12\x15magus.status.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdc\x02\n" +
+	"\"magus/status/v1alpha1/status.proto\x12\x15magus.status.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\"\xdc\x02\n" +
 	"\x06Status\x125\n" +
 	"\x06health\x18\x01 \x01(\x0e2\x1d.magus.status.v1alpha1.HealthR\x06health\x12/\n" +
 	"\x04pool\x18\x02 \x01(\v2\x1b.magus.status.v1alpha1.PoolR\x04pool\x12.\n" +
@@ -1453,13 +1525,20 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\x04step\x18\x04 \x01(\tR\x04step\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x05 \x01(\tR\n" +
-	"invocation\"\xfb\x01\n" +
+	"invocation\"\xba\x03\n" +
 	"\tWorkspace\x12\x12\n" +
 	"\x04root\x18\x01 \x01(\tR\x04root\x127\n" +
 	"\tload_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bloadTime\x12D\n" +
 	"\x10last_access_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastAccessTime\x122\n" +
 	"\x05cache\x18\x04 \x01(\v2\x1c.magus.status.v1alpha1.CacheR\x05cache\x12'\n" +
-	"\x0fsecret_provider\x18\x05 \x01(\tR\x0esecretProvider\"\xa5\x01\n" +
+	"\x0fsecret_provider\x18\x05 \x01(\tR\x0esecretProvider\x12<\n" +
+	"\x05state\x18\x06 \x01(\x0e2&.magus.status.v1alpha1.Workspace.StateR\x05state\x12(\n" +
+	"\x05error\x18\a \x01(\v2\x12.google.rpc.StatusR\x05error\"U\n" +
+	"\x05State\x12\x15\n" +
+	"\x11STATE_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rSTATE_LOADING\x10\x01\x12\x10\n" +
+	"\fSTATE_ACTIVE\x10\x02\x12\x10\n" +
+	"\fSTATE_FAILED\x10\x03\"\xa5\x01\n" +
 	"\x05Cache\x12\x12\n" +
 	"\x04hits\x18\x01 \x01(\x03R\x04hits\x12\x16\n" +
 	"\x06misses\x18\x02 \x01(\x03R\x06misses\x12\x16\n" +
@@ -1502,65 +1581,69 @@ func file_magus_status_v1alpha1_status_proto_rawDescGZIP() []byte {
 	return file_magus_status_v1alpha1_status_proto_rawDescData
 }
 
-var file_magus_status_v1alpha1_status_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_magus_status_v1alpha1_status_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_magus_status_v1alpha1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_magus_status_v1alpha1_status_proto_goTypes = []any{
 	(Health)(0),                   // 0: magus.status.v1alpha1.Health
 	(TargetRun_State)(0),          // 1: magus.status.v1alpha1.TargetRun.State
-	(*Status)(nil),                // 2: magus.status.v1alpha1.Status
-	(*Lock)(nil),                  // 3: magus.status.v1alpha1.Lock
-	(*LockWaiter)(nil),            // 4: magus.status.v1alpha1.LockWaiter
-	(*BuildInfo)(nil),             // 5: magus.status.v1alpha1.BuildInfo
-	(*Run)(nil),                   // 6: magus.status.v1alpha1.Run
-	(*TargetRun)(nil),             // 7: magus.status.v1alpha1.TargetRun
-	(*Service)(nil),               // 8: magus.status.v1alpha1.Service
-	(*Pool)(nil),                  // 9: magus.status.v1alpha1.Pool
-	(*RunningTarget)(nil),         // 10: magus.status.v1alpha1.RunningTarget
-	(*Workspace)(nil),             // 11: magus.status.v1alpha1.Workspace
-	(*Cache)(nil),                 // 12: magus.status.v1alpha1.Cache
-	(*GetStatusRequest)(nil),      // 13: magus.status.v1alpha1.GetStatusRequest
-	(*GetStatusResponse)(nil),     // 14: magus.status.v1alpha1.GetStatusResponse
-	(*Config)(nil),                // 15: magus.status.v1alpha1.Config
-	(*StreamStatusRequest)(nil),   // 16: magus.status.v1alpha1.StreamStatusRequest
-	(*StreamStatusResponse)(nil),  // 17: magus.status.v1alpha1.StreamStatusResponse
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
+	(Workspace_State)(0),          // 2: magus.status.v1alpha1.Workspace.State
+	(*Status)(nil),                // 3: magus.status.v1alpha1.Status
+	(*Lock)(nil),                  // 4: magus.status.v1alpha1.Lock
+	(*LockWaiter)(nil),            // 5: magus.status.v1alpha1.LockWaiter
+	(*BuildInfo)(nil),             // 6: magus.status.v1alpha1.BuildInfo
+	(*Run)(nil),                   // 7: magus.status.v1alpha1.Run
+	(*TargetRun)(nil),             // 8: magus.status.v1alpha1.TargetRun
+	(*Service)(nil),               // 9: magus.status.v1alpha1.Service
+	(*Pool)(nil),                  // 10: magus.status.v1alpha1.Pool
+	(*RunningTarget)(nil),         // 11: magus.status.v1alpha1.RunningTarget
+	(*Workspace)(nil),             // 12: magus.status.v1alpha1.Workspace
+	(*Cache)(nil),                 // 13: magus.status.v1alpha1.Cache
+	(*GetStatusRequest)(nil),      // 14: magus.status.v1alpha1.GetStatusRequest
+	(*GetStatusResponse)(nil),     // 15: magus.status.v1alpha1.GetStatusResponse
+	(*Config)(nil),                // 16: magus.status.v1alpha1.Config
+	(*StreamStatusRequest)(nil),   // 17: magus.status.v1alpha1.StreamStatusRequest
+	(*StreamStatusResponse)(nil),  // 18: magus.status.v1alpha1.StreamStatusResponse
+	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
+	(*status.Status)(nil),         // 20: google.rpc.Status
 }
 var file_magus_status_v1alpha1_status_proto_depIdxs = []int32{
 	0,  // 0: magus.status.v1alpha1.Status.health:type_name -> magus.status.v1alpha1.Health
-	9,  // 1: magus.status.v1alpha1.Status.pool:type_name -> magus.status.v1alpha1.Pool
-	6,  // 2: magus.status.v1alpha1.Status.runs:type_name -> magus.status.v1alpha1.Run
-	8,  // 3: magus.status.v1alpha1.Status.services:type_name -> magus.status.v1alpha1.Service
-	5,  // 4: magus.status.v1alpha1.Status.build:type_name -> magus.status.v1alpha1.BuildInfo
-	3,  // 5: magus.status.v1alpha1.Status.locks:type_name -> magus.status.v1alpha1.Lock
-	18, // 6: magus.status.v1alpha1.Lock.acquire_time:type_name -> google.protobuf.Timestamp
-	4,  // 7: magus.status.v1alpha1.Lock.waiters:type_name -> magus.status.v1alpha1.LockWaiter
-	18, // 8: magus.status.v1alpha1.LockWaiter.wait_time:type_name -> google.protobuf.Timestamp
-	18, // 9: magus.status.v1alpha1.Run.start_time:type_name -> google.protobuf.Timestamp
-	7,  // 10: magus.status.v1alpha1.Run.targets:type_name -> magus.status.v1alpha1.TargetRun
+	10, // 1: magus.status.v1alpha1.Status.pool:type_name -> magus.status.v1alpha1.Pool
+	7,  // 2: magus.status.v1alpha1.Status.runs:type_name -> magus.status.v1alpha1.Run
+	9,  // 3: magus.status.v1alpha1.Status.services:type_name -> magus.status.v1alpha1.Service
+	6,  // 4: magus.status.v1alpha1.Status.build:type_name -> magus.status.v1alpha1.BuildInfo
+	4,  // 5: magus.status.v1alpha1.Status.locks:type_name -> magus.status.v1alpha1.Lock
+	19, // 6: magus.status.v1alpha1.Lock.acquire_time:type_name -> google.protobuf.Timestamp
+	5,  // 7: magus.status.v1alpha1.Lock.waiters:type_name -> magus.status.v1alpha1.LockWaiter
+	19, // 8: magus.status.v1alpha1.LockWaiter.wait_time:type_name -> google.protobuf.Timestamp
+	19, // 9: magus.status.v1alpha1.Run.start_time:type_name -> google.protobuf.Timestamp
+	8,  // 10: magus.status.v1alpha1.Run.targets:type_name -> magus.status.v1alpha1.TargetRun
 	1,  // 11: magus.status.v1alpha1.TargetRun.state:type_name -> magus.status.v1alpha1.TargetRun.State
-	18, // 12: magus.status.v1alpha1.TargetRun.start_time:type_name -> google.protobuf.Timestamp
-	18, // 13: magus.status.v1alpha1.TargetRun.end_time:type_name -> google.protobuf.Timestamp
-	18, // 14: magus.status.v1alpha1.Service.start_time:type_name -> google.protobuf.Timestamp
-	10, // 15: magus.status.v1alpha1.Pool.running_targets:type_name -> magus.status.v1alpha1.RunningTarget
-	11, // 16: magus.status.v1alpha1.Pool.workspaces:type_name -> magus.status.v1alpha1.Workspace
-	12, // 17: magus.status.v1alpha1.Pool.cache:type_name -> magus.status.v1alpha1.Cache
-	18, // 18: magus.status.v1alpha1.RunningTarget.start_time:type_name -> google.protobuf.Timestamp
-	18, // 19: magus.status.v1alpha1.Workspace.load_time:type_name -> google.protobuf.Timestamp
-	18, // 20: magus.status.v1alpha1.Workspace.last_access_time:type_name -> google.protobuf.Timestamp
-	12, // 21: magus.status.v1alpha1.Workspace.cache:type_name -> magus.status.v1alpha1.Cache
-	2,  // 22: magus.status.v1alpha1.GetStatusResponse.status:type_name -> magus.status.v1alpha1.Status
-	18, // 23: magus.status.v1alpha1.GetStatusResponse.observe_start_time:type_name -> google.protobuf.Timestamp
-	15, // 24: magus.status.v1alpha1.GetStatusResponse.config:type_name -> magus.status.v1alpha1.Config
-	2,  // 25: magus.status.v1alpha1.StreamStatusResponse.status:type_name -> magus.status.v1alpha1.Status
-	13, // 26: magus.status.v1alpha1.StatusService.GetStatus:input_type -> magus.status.v1alpha1.GetStatusRequest
-	16, // 27: magus.status.v1alpha1.StatusService.StreamStatus:input_type -> magus.status.v1alpha1.StreamStatusRequest
-	14, // 28: magus.status.v1alpha1.StatusService.GetStatus:output_type -> magus.status.v1alpha1.GetStatusResponse
-	17, // 29: magus.status.v1alpha1.StatusService.StreamStatus:output_type -> magus.status.v1alpha1.StreamStatusResponse
-	28, // [28:30] is the sub-list for method output_type
-	26, // [26:28] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	19, // 12: magus.status.v1alpha1.TargetRun.start_time:type_name -> google.protobuf.Timestamp
+	19, // 13: magus.status.v1alpha1.TargetRun.end_time:type_name -> google.protobuf.Timestamp
+	19, // 14: magus.status.v1alpha1.Service.start_time:type_name -> google.protobuf.Timestamp
+	11, // 15: magus.status.v1alpha1.Pool.running_targets:type_name -> magus.status.v1alpha1.RunningTarget
+	12, // 16: magus.status.v1alpha1.Pool.workspaces:type_name -> magus.status.v1alpha1.Workspace
+	13, // 17: magus.status.v1alpha1.Pool.cache:type_name -> magus.status.v1alpha1.Cache
+	19, // 18: magus.status.v1alpha1.RunningTarget.start_time:type_name -> google.protobuf.Timestamp
+	19, // 19: magus.status.v1alpha1.Workspace.load_time:type_name -> google.protobuf.Timestamp
+	19, // 20: magus.status.v1alpha1.Workspace.last_access_time:type_name -> google.protobuf.Timestamp
+	13, // 21: magus.status.v1alpha1.Workspace.cache:type_name -> magus.status.v1alpha1.Cache
+	2,  // 22: magus.status.v1alpha1.Workspace.state:type_name -> magus.status.v1alpha1.Workspace.State
+	20, // 23: magus.status.v1alpha1.Workspace.error:type_name -> google.rpc.Status
+	3,  // 24: magus.status.v1alpha1.GetStatusResponse.status:type_name -> magus.status.v1alpha1.Status
+	19, // 25: magus.status.v1alpha1.GetStatusResponse.observe_start_time:type_name -> google.protobuf.Timestamp
+	16, // 26: magus.status.v1alpha1.GetStatusResponse.config:type_name -> magus.status.v1alpha1.Config
+	3,  // 27: magus.status.v1alpha1.StreamStatusResponse.status:type_name -> magus.status.v1alpha1.Status
+	14, // 28: magus.status.v1alpha1.StatusService.GetStatus:input_type -> magus.status.v1alpha1.GetStatusRequest
+	17, // 29: magus.status.v1alpha1.StatusService.StreamStatus:input_type -> magus.status.v1alpha1.StreamStatusRequest
+	15, // 30: magus.status.v1alpha1.StatusService.GetStatus:output_type -> magus.status.v1alpha1.GetStatusResponse
+	18, // 31: magus.status.v1alpha1.StatusService.StreamStatus:output_type -> magus.status.v1alpha1.StreamStatusResponse
+	30, // [30:32] is the sub-list for method output_type
+	28, // [28:30] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_magus_status_v1alpha1_status_proto_init() }
@@ -1573,7 +1656,7 @@ func file_magus_status_v1alpha1_status_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_status_v1alpha1_status_proto_rawDesc), len(file_magus_status_v1alpha1_status_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,

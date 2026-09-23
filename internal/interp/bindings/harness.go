@@ -14,8 +14,8 @@ import (
 // spell as an agent-host harness (a fifth provider-style contract beside cache,
 // CI, secret and review):
 //
-//	import "oci://ghcr.io/egladman/magus/spells/cursor@sha256:<digest>" as cursor
-//	magus\harness.provider(cursor)
+//	import "ghcr.io/egladman/magus/spells/cursor";
+//	magus\harness.provider(cursor);
 //
 // The spell exports harness_config / harness_skills / harness_entries; Magus
 // invokes them by name on apply/verify. A workspace may use several harnesses.

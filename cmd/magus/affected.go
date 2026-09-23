@@ -225,10 +225,24 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return nil
 	}
 
+	// See the matching comment in runTarget: finalizeConfig already pointed
+	// globalCfg.Log.Format at "jsonl" for this invocation.
+	opts, optsErr := outputOptionsOrDefault()
+	if optsErr != nil {
+		return optsErr
+	}
+
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
 	}
+
+	rw, cleanupReport, err := setupJSONLReport(m, opts)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = cleanupReport() }()
+
 	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {
 		return err
@@ -254,8 +268,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// different build), and burying it in parentheses after a project list made it the
 	// one header fact nobody read. source already names the VCS that produced it
 	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
-	m.LogScope(ctx, scopeLabel, "")
-	m.LogBase(ctx, source, "")
+	if rw != nil {
+		_ = rw.RecordRunScope(scopeLabel, "")
+		_ = rw.RecordRunBase(source, "")
+	} else {
+		m.LogScope(ctx, scopeLabel, "")
+		m.LogBase(ctx, source, "")
+	}
 	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
@@ -265,8 +284,14 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if target == "ci" {
 		charms = magus.CharmsForCI(charms)
 	}
-	m.LogCharms(ctx, strings.Join(charms, ","))
-	m.LogCache(ctx)
+	if rw != nil {
+		_ = rw.RecordRunCharms(strings.Join(charms, ","))
+		tier, mode := m.CacheDescription()
+		_ = rw.RecordRunCache(tier, mode)
+	} else {
+		m.LogCharms(ctx, strings.Join(charms, ","))
+		m.LogCache(ctx)
+	}
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
 		return nil
@@ -284,28 +309,10 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return gateErr
 	}
 	// After the gate agreed to run, because a refused gate pays for nothing.
-	noteUndeclaredSeedCost(os.Stderr, undeclaredOnly)
+	noteUndeclaredSeedCost(os.Stderr, undeclaredOnly, rw)
 
-	opts, optsErr := outputOptionsOrDefault()
-	if optsErr != nil {
-		return optsErr
-	}
-
-	var rw *magus.ReportWriter
-	if opts.Format == outputJSONL {
-		w, cleanup, openErr := outputDst()
-		if openErr != nil {
-			return openErr
-		}
-		defer func() { _ = cleanup() }()
-		var rwErr error
-		rw, rwErr = magus.NewReportWriter(w, globalCfg.Report.Filter)
-		if rwErr != nil {
-			return rwErr
-		}
-		m.SetGraphObserver(rw.GraphObserver())
-		defer func() { _ = rw.Close() }()
-		reportUndeclaredSeeds(rw, undeclaredOnly)
+	if rw != nil {
+		reportUndeclaredSeeds(undeclaredOnly, rw)
 	}
 
 	var runOpts []magus.RunOption
@@ -388,7 +395,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
-	emitConcurrencyNudge(os.Stderr, m, os.Args[1:])
+	emitConcurrencyNudge(os.Stderr, m, os.Args[1:], rw)
 
 	if chained {
 		return runChain(ctx, m, opts, target, targets, chain, readReturns(target))
@@ -866,8 +873,12 @@ func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
 // daemon dedupes fewer of these than the project-only twin above. That is the trade for
 // naming files the reader cannot see anywhere else, and interactive.maxEmittedDedupe
 // bounds what it can cost.
-func noteUndeclaredSeedCost(w io.Writer, undeclaredOnly map[string][]string) {
+func noteUndeclaredSeedCost(w io.Writer, undeclaredOnly map[string][]string, rw *magus.ReportWriter) {
 	if len(undeclaredOnly) == 0 {
+		return
+	}
+	if rw != nil {
+		_ = rw.RecordNotice("warn", types.UndeclaredSeedingFile, undeclaredSeedNotice(undeclaredOnly, true))
 		return
 	}
 	interactive.Emit(w, undeclaredSeedNotice(undeclaredOnly, true))
@@ -972,7 +983,7 @@ func trackedUndeclaredSeeds(ctx context.Context, root string, opts types.VCSOpti
 // reportUndeclaredSeeds carries MGS1028 into the -o jsonl stream as one coded event per
 // project, the shape the engine's own diagnostic sink emits, so a consumer counts the
 // code and the unit instead of matching the hint's wording.
-func reportUndeclaredSeeds(rw *magus.ReportWriter, undeclaredOnly map[string][]string) {
+func reportUndeclaredSeeds(undeclaredOnly map[string][]string, rw *magus.ReportWriter) {
 	for _, seed := range slices.Sorted(maps.Keys(undeclaredOnly)) {
 		_ = rw.RecordDiagnostic(seed, types.UndeclaredSeedingFile,
 			"seeded only by changed files no project declares: "+
@@ -1169,7 +1180,7 @@ func printImpactText(out *types.ImpactResult) error {
 		}
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: types.KindProject + ":" + seed})
 		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
-		fmt.Printf("%s\n", authHint)
+		fmt.Printf("%s\n", authHint(link))
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
 

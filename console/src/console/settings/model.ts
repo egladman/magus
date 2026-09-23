@@ -160,6 +160,7 @@ export function importSettings(
   try {
     parsed = JSON.parse(raw);
   } catch {
+    // reported: the ImportResult carries this error to the Settings import form
     return { ok: false, error: "The text is not valid JSON." };
   }
   if (!isRecord(parsed) || !isRecord(parsed.settings)) {

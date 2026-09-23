@@ -3,6 +3,7 @@ package describe
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -783,4 +784,25 @@ func TestWritesOutsideRWCharm(t *testing.T) {
 `)
 		assert.Empty(t, got, "a target that always writes is an ordinary generator, and never claimed to run two ways")
 	})
+}
+
+// A remote spell binds under its path's last segment, the way an embedded one does,
+// so the graph wires the target that uses it without an alias.
+func TestSpellHandle(t *testing.T) {
+	for _, tc := range []struct {
+		path, alias, want string
+		ok                bool
+	}{
+		{path: "magus/spell/go", want: "go", ok: true},
+		{path: "magus/spell/go", alias: "golang", want: "golang", ok: true},
+		{path: "ghcr.io/egladman/magus/spells/cursor", want: "cursor", ok: true},
+		{path: "ghcr.io/egladman/magus/spells/claude-code", alias: "claude", want: "claude", ok: true},
+		{path: "spells/harness/cursor", alias: "cursor", want: "cursor", ok: true},
+		{path: "spells/harness/cursor"},
+		{path: "project/libs/json", alias: "json"},
+	} {
+		got, ok := spellHandle(&ast.ImportStmt{Path: tc.path, Alias: tc.alias})
+		assert.Equal(t, tc.ok, ok, tc.path)
+		assert.Equal(t, tc.want, got, tc.path)
+	}
 }

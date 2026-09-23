@@ -12,6 +12,7 @@ import (
 	sprig "github.com/Masterminds/sprig/v3"
 	"gopkg.in/yaml.v3"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/json"
 )
 
@@ -25,6 +26,34 @@ func outputDst() (io.Writer, func() error, error) {
 		return nil, nil, fmt.Errorf("--tee: %w", err)
 	}
 	return io.MultiWriter(os.Stdout, f), f.Close, nil
+}
+
+// setupJSONLReport opens the -o jsonl report writer and wires it into m's graph
+// observer; a nil writer and a no-op cleanup for any other format. run.go and
+// affected.go both open the same writer over the same destination, so this is the
+// one place that dance is written.
+func setupJSONLReport(m *magus.Magus, opts OutputOptions) (*magus.ReportWriter, func() error, error) {
+	if opts.Format != outputJSONL {
+		return nil, func() error { return nil }, nil
+	}
+	w, cleanup, err := outputDst()
+	if err != nil {
+		return nil, nil, err
+	}
+	rw, err := magus.NewReportWriter(w, globalCfg.Report.Filter)
+	if err != nil {
+		_ = cleanup()
+		return nil, nil, err
+	}
+	m.SetGraphObserver(rw.GraphObserver())
+	return rw, func() error {
+		closeErr := rw.Close()
+		cleanupErr := cleanup()
+		if closeErr != nil {
+			return closeErr
+		}
+		return cleanupErr
+	}, nil
 }
 
 // emitFormatted renders v with opts to the structured-output destination (stdout,

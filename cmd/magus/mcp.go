@@ -15,6 +15,7 @@ import (
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -132,7 +133,18 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	}
 	m, err := loadMagus(ctx, "", metricsOpt)
 	if err != nil {
-		slog.Warn("[AGENT] skipping: workspace unavailable", slog.String("error", err.Error()))
+		root, rerr := magus.FindRoot("")
+		if rerr != nil || daemonRegistry == nil {
+			slog.Warn("[AGENT] skipping: workspace unavailable", slog.String("error", err.Error()))
+			return
+		}
+		// Serve anyway: a console and an agent that can connect and read the diagnostic
+		// beat a daemon with nothing listening. The registry holds the failure and retries
+		// once a source changes; the full surface takes over when that load succeeds.
+		slog.Warn("[AGENT] workspace failed to load; serving its failure until a source changes",
+			slog.String("root", root), slog.String("error", err.Error()))
+		daemonRegistry.failBridge(root, err)
+		go serveUnloadedBridge(ctx, cancel, root, addr)
 		return
 	}
 	// Register this bridge workspace in the per-workspace registry the WorkspaceLister reports,
@@ -142,6 +154,98 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	if daemonRegistry != nil {
 		daemonRegistry.adoptBridge(m.Root(), m)
 	}
+	serveBridge(ctx, cancel, m, addr)
+}
+
+// serveUnloadedBridge serves the daemon's surface for a workspace that failed to load
+// until the registry reports it ACTIVE, then hands the listener to the full surface over
+// that workspace.
+func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root string, addr netip.AddrPort) {
+	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
+	srvCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	d := daemon.NewUnloaded(internalmcp.Options{
+		Logger:     slog.Default(),
+		Version:    version,
+		Build:      types.BuildInfo{Version: version, Commit: commit, Date: buildDate},
+		Config:     globalCfg,
+		HTTPAddr:   addr,
+		StatusBase: buildStatusBase(),
+		HealthRoutes: healthRoutes(status, readinessExtras{
+			services: bridgeServices,
+		}),
+	}, daemon.Unloaded{
+		Root: root,
+		Err:  func() rpcerr.Error { return daemonRegistry.unavailable(root) },
+	}, bridgeDaemonOptions()...)
+	done := make(chan error, 1)
+	go func() { done <- d.Serve(srvCtx) }()
+	active := make(chan *magus.Magus, 1)
+	go func() { active <- daemonRegistry.awaitActive(srvCtx, root) }()
+	select {
+	case err := <-done:
+		if err != nil && ctx.Err() == nil {
+			slog.Error("[AGENT] MCP HTTP server failed; initiating daemon shutdown", slog.String("error", err.Error()))
+			cancel()
+		}
+	case m := <-active:
+		stop()
+		<-done // the listener is released before the full surface binds it
+		if m == nil {
+			return
+		}
+		slog.Info("[AGENT] workspace loaded; serving the full surface", slog.String("root", root))
+		serveBridge(ctx, cancel, m, addr)
+	}
+}
+
+// bridgeServices is the hosted-services source the console and /readyz read; nil when the
+// daemon hosts none.
+func bridgeServices() []types.StatusService {
+	if daemonServices == nil {
+		return nil
+	}
+	return serviceStatuses(daemonServices)
+}
+
+// healthRoutes are the k8s probes the daemon serves beside MCP, on the same port.
+// /healthz aliases /livez (liveness): a liveness probe must not depend on warm-up state,
+// or it would crash-loop pods. /readyz is the workspace-loaded readiness gate, and carries
+// component-level detail so the console dashboard can render per-subsystem health.
+func healthRoutes(status statusFunc, extras readinessExtras) map[string]http.Handler {
+	return map[string]http.Handler{
+		"/livez":   healthHTTPHandler(probeLiveness, status),
+		"/readyz":  readinessHTTPHandler(status, extras),
+		"/healthz": healthHTTPHandler(probeLiveness, status),
+	}
+}
+
+// bridgeDaemonOptions wires the daemon-wide registries (runs, hosted services, every
+// workspace's activity) into the bridge's daemon. Each is nil for a bridge started without
+// the multi-workspace daemon, and the option is then left unset.
+func bridgeDaemonOptions() []daemon.Option {
+	var opts []daemon.Option
+	// The live-run registry (built by startMultiWorkspaceDaemon) backs the dashboard's
+	// runs view; without it the status report simply omits runs.
+	if daemonRuns != nil {
+		opts = append(opts, daemon.WithRuns(daemonRuns.Snapshot))
+	}
+	// The hosted-services registry backs the dashboard's services view the same way.
+	if daemonServices != nil {
+		opts = append(opts, daemon.WithServices(bridgeServices))
+	}
+	// The activity view is daemon-wide, so it reads every loaded workspace's trail, not just this
+	// bridge's: an agent hook runs as a short-lived client outside the daemon and writes to ITS
+	// workspace's cache dir, so a bridge-only view misses every other workspace's agent activity.
+	// Same registry the WorkspaceLister reports from.
+	if daemonRegistry != nil {
+		opts = append(opts, daemon.WithActivityWorkspaces(daemonRegistry.activityWorkspaces))
+	}
+	return opts
+}
+
+// serveBridge serves the full daemon surface over the loaded bridge workspace m.
+func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus, addr netip.AddrPort) {
 	// Keep a warm knowledge graph for MCP queries: the watcher invalidates it on
 	// source changes, so query/explain/path/stats answer from memory without
 	// re-parsing every magusfile per call. Non-fatal if it cannot start: the
@@ -161,29 +265,6 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	// so the health handlers query this daemon, not whatever a per-request
 	// discovery scan happens to find.
 	status := daemonStatus(os.Getenv("MAGUS_DAEMON_SOCKET"))
-	// The live-run registry (built by startMultiWorkspaceDaemon) backs the dashboard's
-	// runs view. It is nil for a bridge started without the multi-workspace daemon;
-	// WithRuns then goes unset and the status report simply omits runs.
-	var daemonOpts []daemon.Option
-	if daemonRuns != nil {
-		daemonOpts = append(daemonOpts, daemon.WithRuns(daemonRuns.Snapshot))
-	}
-	// The hosted-services registry (built by startMultiWorkspaceDaemon) backs the
-	// dashboard's services view the same way daemonRuns backs its runs view. Nil for a
-	// bridge started without the multi-workspace daemon, leaving StatusSnapshot.Services empty.
-	if daemonServices != nil {
-		daemonOpts = append(daemonOpts, daemon.WithServices(func() []types.StatusService {
-			return serviceStatuses(daemonServices)
-		}))
-	}
-	// The activity view is daemon-wide, so it reads every loaded workspace's trail, not just this
-	// bridge's: an agent hook runs as a short-lived client outside the daemon and writes to ITS
-	// workspace's cache dir, so a bridge-only view misses every other workspace's agent activity.
-	// Same registry the WorkspaceLister reports from. Nil for a bridge started without the
-	// multi-workspace daemon, where the bridge workspace is the only one anyway.
-	if daemonRegistry != nil {
-		daemonOpts = append(daemonOpts, daemon.WithActivityWorkspaces(daemonRegistry.activityWorkspaces))
-	}
 	m.SetDaemon(daemon.New(internalmcp.Options{
 		Magus:      m,
 		Logger:     slog.Default(),
@@ -203,29 +284,12 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 		// Health endpoints share this HTTP server so k8s probes hit the
 		// same port as MCP. Set MAGUS_MCP_ADDRESS=0.0.0.0:7391 (or mcp.address)
 		// so the kubelet can reach them (default 127.0.0.1 is pod-local).
-		// /healthz aliases /livez (liveness): a liveness probe must not
-		// depend on warm-up state, or it would crash-loop pods. Use
-		// /readyz for the workspace-loaded readiness gate.
-		HealthRoutes: map[string]http.Handler{
-			"/livez": healthHTTPHandler(probeLiveness, status),
-			// /readyz carries component-level detail (symbol-index freshness, hosted
-			// services, the warm knowledge-graph watcher) alongside the same pass/fail
-			// gate, so the console dashboard can render real per-subsystem health
-			// instead of a bare text line. m, daemonServices, and the warm graph are
-			// all in scope right here, so the wiring stays local to this call.
-			"/readyz": readinessHTTPHandler(status, readinessExtras{
-				symbolIndexes: m.SymbolIndexStatus,
-				services: func() []types.StatusService {
-					if daemonServices == nil {
-						return nil
-					}
-					return serviceStatuses(daemonServices)
-				},
-				knowledgeGraph: m.KnowledgeGraphHealthy,
-			}),
-			"/healthz": healthHTTPHandler(probeLiveness, status),
-		},
-	}, daemonOpts...))
+		HealthRoutes: healthRoutes(status, readinessExtras{
+			symbolIndexes:  m.SymbolIndexStatus,
+			services:       bridgeServices,
+			knowledgeGraph: m.KnowledgeGraphHealthy,
+		}),
+	}, bridgeDaemonOptions()...))
 	go func() {
 		err := m.ServeDaemon(ctx)
 		if err != nil && ctx.Err() == nil {

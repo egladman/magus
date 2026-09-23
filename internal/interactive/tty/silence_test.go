@@ -1,3 +1,5 @@
+// cross-cutting: one property asserted across every type in the package at once
+
 package tty
 
 import (
@@ -10,10 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// No same-named source file, deliberately: this asserts one property across
-// every type in the package at once, which is the point: a new entry point
-// that forgets its gate fails here rather than in somebody's CI log.
-//
 // TestNothingIsWrittenToANonTerminal is the backstop for this whole package.
 //
 // Every type here exists to drive a terminal, and every one of them is supposed

@@ -68,30 +68,27 @@ wire the guard hook. Both are on your host's page.
 | [Any other host](agents/any-host.md) | wherever it reads them        | a collaborator-owned harness descriptor or small adapter |
 
 What you wire is yours. Prefer a harness spell selected from the root magusfile
-(a pinned `import "oci://ghcr.io/egladman/magus/spells/<id>@sha256:<digest>" as host`
-then `magus\harness.provider(host)`; [Remote spells](../../reference/remote-spells.md)
-explains the pin).
+(`import "ghcr.io/egladman/magus/spells/<id>";` then `magus\harness.provider(<id>)`,
+with the spell declared in `magus.yaml` and pinned in `magus.lock`;
+[Remote spells](../../reference/remote-spells.md) explains the pin).
 Wire several providers when you bounce between hosts; each call appends.
 
 To adapt a Buzz harness **without modifying Magus source**, copy the shipped
-spell into the workspace and change only the import path (keep
-`magus\harness.provider(...)`). Edit the workspace Buzz, then
+spell into the workspace and declare the copy as a `path:` override of the
+registry path in `magus.yaml`. The import and `magus\harness.provider(...)`
+stay as they are. Edit the workspace Buzz, then
 `magus agent harness apply` / `verify`. That ownership switch is documented in
 the [workspace-rules skill](../../reference/skills/magus-workspace-rules.md)
-under "Adapting a Buzz harness" and in [Improving recurring friction](agents/guard.md#improving-recurring-friction). Additive deny/advise
+under "Adapting a Buzz harness" and in [Recurring guard friction](agents/guard.md#recurring-guard-friction). Additive deny/advise
 that is not host-shaped stays in `magus\guard.shell({...})`.
 
-A JSON descriptor under `harnesses/` still works the same way: it names a config
-path, skill locations, and opaque host-config fragments. Magus merges those
-fragments; it does not inject a reserved command or a reply codec. The glue that
-talks to `session hook` is the shipped scripts and plugin. `magus agent harness
-apply` (no `--id`) applies every magusfile-wired provider; `--id <id>` targets
-one spell or JSON descriptor. `verify` reports whether the fragments are still
+`magus agent harness apply` (no `--id`) applies every magusfile-wired provider;
+`--id <id>` targets one spell. `verify` reports whether the fragments are still
 present and that the config invokes magus. A host Magus has never heard of can
-therefore ship its own descriptor without a Magus release; a portable adapter
-remains an option where a native event contract is not available.
-[Doctrine](../../doctrine.md#the-host-wiring-is-yours) records that trade and
-what it costs you.
+ship its own harness spell without a Magus release, by the same ownership switch
+as adapting a shipped one; a portable adapter remains an option where a native
+event contract is not available. [Doctrine](../../doctrine.md#the-host-wiring-is-yours)
+records that trade and what it costs you.
 
 ### This repository as a worked example
 
@@ -109,7 +106,6 @@ each host's vendored schema.
 | [`.codex/hooks.json`](https://github.com/egladman/magus/blob/main/.codex/hooks.json)         | Codex guard hooks                                              |
 | [`.cursor/hooks.json`](https://github.com/egladman/magus/blob/main/.cursor/hooks.json)       | Cursor hooks, all routed through one script                    |
 | [`AGENTS.md`](https://github.com/egladman/magus/blob/main/AGENTS.md)                         | the managed skills block between its `magus:skills` markers    |
-| [`harnesses/`](https://github.com/egladman/magus/tree/main/harnesses)                        | the JSON descriptor form of the same four hosts                |
 
 Installed skills are not committed, because `magus agent install` regenerates
 them from the binary. The two under `.claude/skills/` that are committed are
@@ -138,7 +134,8 @@ classifier `magus describe file` uses, the live leases with the command that
 binds each one, the last recorded run's failures with the ref that holds their
 output, whether any hook config here invokes magus, and where this workspace's
 rules live. When recurring guard evidence needs a human decision, it adds one
-bounded improvement-review line pointing to `magus agent improve`. Every line is read off the disk on the call, so none of it can
+bounded line pointing to `magus doctor` (its recurring-guard-denials check).
+Every line is read off the disk on the call, so none of it can
 degrade; it restates no rule, because a rule copied into a context block is a
 second copy to go stale.
 

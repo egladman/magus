@@ -33,12 +33,13 @@ Prefer wiring the OpenCode harness from the root magusfile so skills install
 and multi-host apply see it beside the other hosts:
 
 ```buzz
-import "oci://ghcr.io/egladman/magus/spells/opencode@sha256:<digest>" as opencode
-magus\harness.provider(opencode)
+import "ghcr.io/egladman/magus/spells/opencode";
+magus\harness.provider(opencode);
 ```
 
-The import is pinned by the digest cd's `spell-publish` step prints for a commit,
-so the harness versions apart from your magus binary; see
+Declare the spell in `magus.yaml` with the tag cd's `spell-publish` step pushed, and
+run your lock target with `:update` to pin its digest in `magus.lock`, so the harness
+versions apart from your magus binary; see
 [Remote spells](../../../reference/remote-spells.md).
 
 The spell is skills-only (empty config path): `magus agent harness apply` writes
@@ -47,9 +48,9 @@ The guard is the TypeScript plugin, not managed hook fragments. To adapt without
 Magus source edits, fork the spell and change only the import path; see
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md).
 
-`harnesses/opencode.json` remains the unwired fallback so
-`magus agent harness install --id opencode` can still refresh `.opencode/skills`.
-OpenCode has no shell-command hook config, so that descriptor is skills-only too.
+`magus agent harness install --id opencode` refreshes `.opencode/skills` once the
+spell is wired with `magus\harness.provider(opencode)`; OpenCode has no
+shell-command hook config, so the descriptor it resolves to is skills-only too.
 
 If you already installed into `.claude/skills` for Claude Code, OpenCode reads
 those too and this step is optional. [Skills](skills.md) covers the rest of the
