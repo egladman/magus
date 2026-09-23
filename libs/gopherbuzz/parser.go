@@ -163,7 +163,9 @@ func tokenize(src string) ([]token.Token, error) {
 	// Copied to its length: the lexer over-allocates for comment-heavy source, and a
 	// full-capacity slice keeps any reader's append from writing into a shared array.
 	toks = slices.Clone(toks)
-	size := len(toks) * int(unsafe.Sizeof(token.Token{}))
+	// The key holds the whole source string alive, not just the token slice, so it
+	// counts toward the bound too; omitting it undercounted every entry by len(src).
+	size := len(toks)*int(unsafe.Sizeof(token.Token{})) + len(src)
 	tokenCache.Lock()
 	defer tokenCache.Unlock()
 	if cached, ok := tokenCache.m[src]; ok {

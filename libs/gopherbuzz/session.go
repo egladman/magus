@@ -1386,10 +1386,19 @@ func (s *Session) declaredNamespace(src string) []string {
 	if !ok {
 		ns = leadingNamespace(src, key.strict)
 		namespaceCache.Lock()
-		if len(namespaceCache.m) >= maxNamespaceCache {
+		// Another goroutine may have computed and inserted the same key while this one
+		// held no lock; tokenCache checks again before inserting for the same reason.
+		if cached, ok := namespaceCache.m[key]; ok {
+			namespaceCache.Unlock()
+			return slices.Clone(cached)
+		}
+		size := len(key.src)
+		if namespaceCache.bytes+size > maxNamespaceCacheBytes {
 			clear(namespaceCache.m)
+			namespaceCache.bytes = 0
 		}
 		namespaceCache.m[key] = ns
+		namespaceCache.bytes += size
 		namespaceCache.Unlock()
 	}
 	return slices.Clone(ns)
@@ -1401,13 +1410,18 @@ type namespaceKey struct {
 }
 
 // namespaceCache memoizes leadingNamespace process-wide; see tokenCache for why a host
-// asks the same question of the same source many times.
+// asks the same question of the same source many times, and for the eviction policy
+// this mirrors: bounded by retained source bytes, not entry count, since a key holds
+// its whole source string alive.
 var namespaceCache = struct {
 	sync.Mutex
-	m map[namespaceKey][]string
+	m     map[namespaceKey][]string
+	bytes int
 }{m: map[namespaceKey][]string{}}
 
-const maxNamespaceCache = 4096
+// maxNamespaceCacheBytes matches maxTokenCacheBytes: the two caches key on the same
+// source strings, so a workload that bounds one bounds the other the same way.
+const maxNamespaceCacheBytes = 64 << 20
 
 func leadingNamespace(src string, strict bool) []string {
 	prog, err := parseModed(src, strict)
