@@ -787,7 +787,10 @@ func TestWritesOutsideRWCharm(t *testing.T) {
 }
 
 // A remote spell binds under its path's last segment, the way an embedded one does,
-// so the graph wires the target that uses it without an alias.
+// so the graph wires the target that uses it without an alias. A workspace spell
+// binds by value too (checker.go's importBindsByValue), so it takes the same
+// default; only a plain relative import (project/) is excluded, since that binds
+// a project reference rather than a spell.
 func TestSpellHandle(t *testing.T) {
 	for _, tc := range []struct {
 		path, alias, want string
@@ -798,7 +801,7 @@ func TestSpellHandle(t *testing.T) {
 		{path: "ghcr.io/egladman/magus/spells/cursor", want: "cursor", ok: true},
 		{path: "ghcr.io/egladman/magus/spells/claude-code", alias: "claude", want: "claude", ok: true},
 		{path: "spells/harness/cursor", alias: "cursor", want: "cursor", ok: true},
-		{path: "spells/harness/cursor"},
+		{path: "spells/harness/cursor", want: "cursor", ok: true},
 		{path: "project/libs/json", alias: "json"},
 	} {
 		got, ok := spellHandle(&ast.ImportStmt{Path: tc.path, Alias: tc.alias})
