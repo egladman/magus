@@ -49,6 +49,9 @@ func list(t *testing.T, dir string, q *activityv1.ActivityQuery) []*activityv1.A
 	return resp.Msg.GetEvents()
 }
 
+// consoleCred is the verified credential the seeded token event was made under.
+var consoleCred = types.Credential{Class: types.ClassToken, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()
 	dir = t.TempDir()
@@ -61,7 +64,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	})
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 2, Kind: trail.KindTokenLifecycle,
-		Origin: types.Origin{EntryPoint: types.EntryPointRPC, Credential: "console-1"},
+		Origin: types.Origin{EntryPoint: types.EntryPointRPC, Credential: consoleCred},
 		Action: "connector.create", Outcome: trail.OutcomeOK,
 	})
 	trail.Append(t.Context(), dir, trail.Event{
@@ -220,12 +223,15 @@ func TestMatchFilter_ActorsActions(t *testing.T) {
 	// an unmatched value yields nothing, not everything.
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{"nobody"}}))
 
-	// An actor matches one origin field exactly, never the rendered label: the credential
-	// alone finds its event, and the label that event is served under finds nothing.
-	assert.Equal(t, []string{"connector.create"},
-		actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{"console-1"}})))
+	// An actor matches one origin field exactly, never the rendered label: the credential's
+	// name or its id alone finds its event, and the label that event is served under finds
+	// nothing.
+	for _, actor := range []string{consoleCred.Name, consoleCred.ID} {
+		assert.Equal(t, []string{"connector.create"},
+			actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{actor}})), actor)
+	}
 	user := trail.LocalOrigin(t.Context()).User
-	label := types.Origin{User: user, Credential: "console-1"}.Label()
+	label := types.Origin{User: user, Credential: consoleCred}.Label()
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{label}}),
 		"a filter never matches the label's wording")
 }

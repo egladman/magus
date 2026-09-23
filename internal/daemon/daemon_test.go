@@ -66,7 +66,7 @@ func waitReady(t *testing.T, url string) {
 
 // TestServeBearerGuardTwoTier boots a real daemon against a fixture workspace and
 // proves the two-tier bearer guard is wired onto both /mcp and the /api bridge:
-// unauthenticated requests get 401, while both the retrievable cli token and a
+// unauthenticated requests get 401, while both the retrievable operator token and a
 // non-expired named connector token pass the guard.
 func TestServeBearerGuardTwoTier(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
@@ -96,14 +96,14 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitReady(t, base+"/readyz")
 
-	// Resolve minted the cli token during Serve; read it back.
+	// EnsureOperator minted the operator token during Serve; read it back.
 	cli, err := auth.Load()
 	require.NoError(t, err)
 
-	// A non-expired named connector token is the second accepted tier.
-	store, err := auth.LoadConnectorStore()
+	// A non-expired connector token reaches /mcp.
+	store, err := auth.LoadStore()
 	require.NoError(t, err)
-	connectorTok, _, err := store.Create("test", time.Now().Add(time.Hour), auth.ScopeMCP)
+	connectorTok, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "test", Grant: types.GrantConnector, Expires: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
 
 	// status issues a GET and returns only the status code. It must NOT read the
@@ -392,7 +392,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	}
 	d := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: addr, HealthRoutes: routes})
 	mounted := make(chan []string, 1)
-	d.onMounted = func(p []string) { mounted <- p }
+	d.onMounted = func(p []string, _ map[string]types.Need) { mounted <- p }
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- d.Serve(ctx) }()
@@ -639,7 +639,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	loadedAddr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), loadedPort)
 	loaded := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: loadedAddr, HealthRoutes: map[string]http.Handler{"/readyz": ok}})
 	loadedMounted := make(chan []string, 1)
-	loaded.onMounted = func(p []string) { loadedMounted <- p }
+	loaded.onMounted = func(p []string, _ map[string]types.Need) { loadedMounted <- p }
 	loadedErr := make(chan error, 1)
 	go func() { loadedErr <- loaded.Serve(ctx) }()
 	loadedBase := fmt.Sprintf("http://127.0.0.1:%d", loadedPort)

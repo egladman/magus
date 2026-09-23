@@ -15,7 +15,7 @@ func TestPresent(t *testing.T) {
 	assert.Equal(t, "http://127.0.0.1:7391/console/dashboard/", got.URL)
 	assert.Equal(t, "dashboard", got.Surface)
 	assert.Equal(t, "inspect the jobs", got.Reason)
-	assert.Contains(t, got.OpenCommand, `"http://127.0.0.1:7391/console/dashboard/#token=$(magus config token print)"`)
+	assert.Contains(t, got.OpenCommand, `"http://127.0.0.1:7391/console/dashboard/#token=$(magus config console token create --expires 12h)"`)
 	assert.NotContains(t, got.URL, "token=")
 }
 

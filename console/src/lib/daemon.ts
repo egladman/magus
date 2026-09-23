@@ -848,9 +848,10 @@ export function signalAuthLost(host: string): void {
 }
 
 // signInCommand is the shell line that opens url signed in. The token is a substitution the reader's
-// shell expands, so the page never holds or displays it. The opener follows the browser's platform,
-// which is the machine a loopback daemon runs on. Windows gets PowerShell's opener, since cmd.exe
-// never expands $(...).
+// shell expands, so the page never displays it, and it mints a console token that expires in 12
+// hours rather than handing the browser the operator token (console.OpenCommandAs is the daemon's
+// twin of this line). The opener follows the browser's platform, which is the machine a loopback
+// daemon runs on. Windows gets PowerShell's opener, since cmd.exe never expands $(...).
 export function signInCommand(url: string, platform = browserPlatform()): string {
   const sep = url.includes("#") ? "&" : "#";
   const opener = /mac/i.test(platform)
@@ -858,7 +859,7 @@ export function signInCommand(url: string, platform = browserPlatform()): string
     : /win/i.test(platform)
       ? "Start-Process"
       : "xdg-open";
-  return opener + ' "' + url + sep + 'token=$(magus config token print)"';
+  return opener + ' "' + url + sep + 'token=$(magus config console token create --expires 12h)"';
 }
 
 function browserPlatform(): string {

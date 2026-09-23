@@ -158,7 +158,8 @@ test("parseRefusal reads an AIP-193 body's message and Help link", () => {
 // cmd.exe's start.
 test("signInCommand uses each platform's opener", () => {
   const url = "http://127.0.0.1:7391/console/";
-  const tail = ' "http://127.0.0.1:7391/console/#token=$(magus config token print)"';
+  const tail =
+    ' "http://127.0.0.1:7391/console/#token=$(magus config console token create --expires 12h)"';
   assert.equal(signInCommand(url, "MacIntel"), "open" + tail);
   assert.equal(signInCommand(url, "Win32"), "Start-Process" + tail);
   assert.equal(signInCommand(url, "Linux x86_64"), "xdg-open" + tail);

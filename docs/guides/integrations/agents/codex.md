@@ -58,7 +58,7 @@ enabled = true
 ```
 
 ```sh
-export MAGUS_MCP_TOKEN="$(magus config token print)"
+magus config mcp connector create --name codex --expires 366d   # shown once: store it as MAGUS_MCP_TOKEN
 codex mcp list
 magus status --probe=liveness,mcp
 ```

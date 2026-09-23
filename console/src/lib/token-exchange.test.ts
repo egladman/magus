@@ -59,7 +59,7 @@ test("the exchange runs once, not on every load", async () => {
 });
 
 test("a successful mint replaces the operator token and marks the page", async () => {
-  await withStorage({ "magus-live-token": "mgs_operator" }, async () => {
+  await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
     const out = await ensureScopedToken(async () => "mgs_console");
     assert.equal(out, "exchanged");
     assert.equal(getLiveToken(), "mgs_console", "the page now holds the scoped token");
@@ -67,15 +67,33 @@ test("a successful mint replaces the operator token and marks the page", async (
   });
 });
 
-// The operator-only mount refuses a page that already holds a console token. That is the
-// steady state, not a fault: mark it so the next load stops asking.
+// The class is in the token: a stored or share token is already scoped, and is never sent to
+// the mint, so a console token cannot even ask for a second one.
+test("a token that is not the operator's is never exchanged", async () => {
+  for (const held of ["mgs_console", "mgl_share"]) {
+    await withStorage({ "magus-live-token": held }, async () => {
+      let called = false;
+      const out = await ensureScopedToken(async () => {
+        called = true;
+        return "mgs_another";
+      });
+      assert.equal(out, "already-scoped", held);
+      assert.equal(called, false, "a scoped token must not reach the mint: " + held);
+      assert.equal(getLiveToken(), held);
+      assert.equal(hasScopedToken(), true);
+    });
+  }
+});
+
+// The daemon still decides: a refusal is the steady state, not a fault, so it is recorded and
+// the next load stops asking.
 test("a refusal is recorded rather than retried, and keeps the token", async () => {
-  await withStorage({ "magus-live-token": "mgs_console" }, async () => {
+  await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
     const out = await ensureScopedToken(async () => {
       throw new ConnectError("token management not offered", Code.PermissionDenied);
     });
     assert.equal(out, "denied");
-    assert.equal(getLiveToken(), "mgs_console", "a refusal must not disturb the credential");
+    assert.equal(getLiveToken(), "mgo_operator", "a refusal must not disturb the credential");
     assert.equal(hasScopedToken(), true, "a refused page must stop asking");
   });
 });
@@ -84,21 +102,21 @@ test("a refusal is recorded rather than retried, and keeps the token", async () 
 // credential it already had, and unmarked, so the swap is retried rather than lost. A bug
 // here strands the console with no working token and no way back except a fresh paste.
 test("a transport failure leaves the page exactly as it was", async () => {
-  await withStorage({ "magus-live-token": "mgs_operator" }, async () => {
+  await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
     const out = await ensureScopedToken(async () => {
       throw new ConnectError("connection refused", Code.Unavailable);
     });
     assert.equal(out, "failed");
-    assert.equal(getLiveToken(), "mgs_operator", "the working credential must survive");
+    assert.equal(getLiveToken(), "mgo_operator", "the working credential must survive");
     assert.equal(hasScopedToken(), false, "an unmarked page retries on the next load");
   });
 });
 
 test("an empty secret is treated as a failure, not stored", async () => {
-  await withStorage({ "magus-live-token": "mgs_operator" }, async () => {
+  await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
     const out = await ensureScopedToken(async () => "");
     assert.equal(out, "failed");
-    assert.equal(getLiveToken(), "mgs_operator");
+    assert.equal(getLiveToken(), "mgo_operator");
     assert.equal(hasScopedToken(), false);
   });
 });
@@ -107,7 +125,7 @@ test("an empty secret is treated as a failure, not stored", async () => {
 // load hit before this sent one. Pinned on the wire: the request carries an expiry at the daemon's
 // ceiling, and the minted secret replaces the operator token.
 test("the real exchange asks for an expiring console token", async () => {
-  await withStorage({ "magus-live-token": "mgs_operator" }, async () => {
+  await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
     const realFetch = globalThis.fetch;
     let body: Record<string, unknown> = {};
     globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {

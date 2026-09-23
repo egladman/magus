@@ -144,11 +144,11 @@ func TestOpenCommandAs(t *testing.T) {
 		goos, link, want string
 	}{
 		{"darwin", "http://127.0.0.1:7391/console/plan/",
-			`open "http://127.0.0.1:7391/console/plan/#token=$(magus config token print)"`},
+			`open "http://127.0.0.1:7391/console/plan/#token=$(magus config console token create --expires 12h)"`},
 		{"linux", "http://127.0.0.1:7391/console/plan/#job=a",
-			`xdg-open "http://127.0.0.1:7391/console/plan/#job=a&token=$(magus config token print)"`},
+			`xdg-open "http://127.0.0.1:7391/console/plan/#job=a&token=$(magus config console token create --expires 12h)"`},
 		{"windows", "http://127.0.0.1:7391/console/",
-			`Start-Process "http://127.0.0.1:7391/console/#token=$(magus config token print)"`},
+			`Start-Process "http://127.0.0.1:7391/console/#token=$(magus config console token create --expires 12h)"`},
 	} {
 		assert.Equal(t, tc.want, OpenCommandAs(tc.link, tc.goos, "magus"), tc.goos)
 	}

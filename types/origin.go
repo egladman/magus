@@ -39,13 +39,13 @@ type Origin struct {
 	Session string `json:"session,omitempty" yaml:"session,omitempty"`
 	// Agent is the host's subagent id within Session, empty for the main conversation.
 	Agent string `json:"agent,omitempty" yaml:"agent,omitempty"`
-	// Credential is the name of the bearer credential a daemon request presented, as
-	// the daemon verified it. It proves possession of that credential, not who holds it.
-	Credential string `json:"credential,omitempty" yaml:"credential,omitempty"`
+	// Credential is the bearer a daemon request presented, as the daemon verified it. It
+	// proves possession of that credential, not who holds it.
+	Credential Credential `json:"credential,omitzero" yaml:"credential,omitempty"`
 }
 
 // Label renders the origin as one phrase for a row head: "eli", "eli via <host>",
-// "eli via <host> via agent a1b2", "eli via credential console-1", "daemon". It is
+// "eli via <host> via agent a1b2", "eli via token laptop (3fa9c1d2)", "daemon". It is
 // "unattributed" when no channel named anything. A reader that needs one field, a filter
 // included, reads that field, never this.
 func (o Origin) Label() string {
@@ -53,7 +53,7 @@ func (o Origin) Label() string {
 		return string(EntryPointDaemon)
 	}
 	label := o.User
-	for _, via := range []string{o.Host, phrase("agent", o.Agent), phrase("credential", o.Credential)} {
+	for _, via := range []string{o.Host, phrase("agent", o.Agent), o.Credential.Phrase()} {
 		switch {
 		case via == "":
 		case label == "":
@@ -75,15 +75,17 @@ func phrase(what, name string) string {
 	return what + " " + name
 }
 
-// Names reports whether any channel of the origin (User, Host, Agent, Credential, or the
-// EntryPoint) is exactly name. It is what an activity filter matches on: each field
-// separately, so "eli" never matches a host that happens to contain it and a change to
-// [Origin.Label]'s wording cannot change what a filter selects.
+// Names reports whether any channel of the origin (User, Host, Agent, the credential's
+// class, id or name, or the EntryPoint) is exactly name. It is what an activity filter
+// matches on: each field separately, so "eli" never matches a host that happens to contain
+// it and a change to [Origin.Label]'s wording cannot change what a filter selects. A
+// credential's name is a reusable label and its id the identity, so both match.
 func (o Origin) Names(name string) bool {
 	if name == "" {
 		return false
 	}
-	for _, field := range []string{o.User, o.Host, o.Agent, o.Credential, string(o.EntryPoint)} {
+	c := o.Credential
+	for _, field := range []string{o.User, o.Host, o.Agent, string(c.Class), c.ID, c.Name, string(o.EntryPoint)} {
 		if field == name {
 			return true
 		}

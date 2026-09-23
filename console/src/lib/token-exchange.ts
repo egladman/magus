@@ -12,12 +12,12 @@
 // TokenService there would put the token client in every surface bundle. Only a surface
 // that actually exchanges pays for this one.
 //
-// DETECTION IS BY ATTEMPT, NOT BY INSPECTION. Nothing in a token's bytes says which tier
-// it belongs to, and the console must not try to guess. TokenService is mounted behind the
-// operator-only guard, so a CreateToken call that SUCCEEDS is itself the proof the page
-// held the operator token; a refusal means it already holds a scoped one and there is
-// nothing to do. So a REFUSAL is never shown; any other failure is (see the shell's
-// caller), because it leaves the operator credential in the browser.
+// A token's class is its prefix (mgo_ operator, mgs_ stored, mgl_ share link), so only an
+// operator token is sent to the exchange; any other is already scoped. The daemon still
+// decides: TokenService needs tokens=write, which only the operator holds, so a refusal means
+// the page holds a scoped token and there is nothing to do. A REFUSAL is never shown; any
+// other failure is (see the shell's caller), because it leaves the operator credential in the
+// browser.
 
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
@@ -47,8 +47,13 @@ export type Mint = () => Promise<string>;
 // had without having stored the one that replaces it. If the write fails, the mark is not
 // set, so a later load retries rather than stranding the page with a token it did not keep.
 export async function ensureScopedToken(mint: Mint): Promise<Outcome> {
-  if (getLiveToken() === null) return "no-token";
+  const held = getLiveToken();
+  if (held === null) return "no-token";
   if (hasScopedToken()) return "already-scoped";
+  if (!held.startsWith(OPERATOR_PREFIX)) {
+    markScopedToken();
+    return "already-scoped";
+  }
 
   let secret: string;
   try {
@@ -70,10 +75,12 @@ export async function ensureScopedToken(mint: Mint): Promise<Outcome> {
   return "exchanged";
 }
 
-// CONSOLE_TOKEN_TTL_MS is the lifetime the console asks for: the daemon's own ceiling for a
-// browser-minted token (maxConsoleTokenTTL in internal/handler/token/service.go), which refuses a
-// mint with no expiry. Asking for the ceiling rather than less keeps the page signed in as long as
-// the daemon allows; the daemon clamps anything further out, so a drift here cannot mint a longer one.
+// OPERATOR_PREFIX marks the operator class (internal/auth/format.go).
+const OPERATOR_PREFIX = "mgo_";
+
+// CONSOLE_TOKEN_TTL_MS is the lifetime the console asks for: the default for a stored token
+// (auth.DefaultTokenTTL). The daemon requires an expiry and refuses one past auth.MaxTokenTTL
+// (366 days) rather than shortening it, so this must stay under that.
 export const CONSOLE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 // exchangeOperatorToken wires ensureScopedToken to the real daemon. The minted token carries no

@@ -46,14 +46,16 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 // made under it, so no handler copies it by hand.
 func TestStampOriginReadsTheCredentialFromTheContext(t *testing.T) {
 	t.Parallel()
-	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), types.EntryPointRPC), "console-1")
+	cred := types.Credential{Class: types.ClassToken, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), types.EntryPointRPC), cred)
 
 	got := StampOrigin(ctx, types.Origin{Host: "console"})
 	assert.Equal(t, types.EntryPointRPC, got.EntryPoint)
-	assert.Equal(t, "console-1", got.Credential)
+	assert.Equal(t, cred, got.Credential)
 	assert.Equal(t, "console", got.Host)
-	assert.Equal(t, "share", StampOrigin(ctx, types.Origin{Credential: "share"}).Credential, "a named credential is kept")
-	assert.Empty(t, StampOrigin(t.Context(), types.Origin{}).Credential, "no guard, no credential")
+	share := types.Credential{Class: types.ClassShare, ID: "9b2e04aa", Grant: types.GrantShare}
+	assert.Equal(t, share, StampOrigin(ctx, types.Origin{Credential: share}).Credential, "a named credential is kept")
+	assert.Zero(t, StampOrigin(t.Context(), types.Origin{}).Credential, "no guard, no credential")
 }
 
 // A failed passwd lookup records the uid alone. user.Current's pure-Go fallback reads

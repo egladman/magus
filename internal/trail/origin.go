@@ -51,18 +51,19 @@ func EntryPointFromContext(ctx context.Context) types.EntryPoint {
 
 type credentialKey struct{}
 
-// ContextWithCredential returns ctx recording name as the bearer credential the request
+// ContextWithCredential returns ctx recording c as the bearer credential the request
 // presented. httpx's bearer guard is the one door that verifies a credential, and so the
-// one caller that sets it; [StampOrigin] reads it onto every record made under ctx.
-func ContextWithCredential(ctx context.Context, name string) context.Context {
-	return context.WithValue(ctx, credentialKey{}, name)
+// one caller that sets it; [StampOrigin] reads it onto every record made under ctx, and a
+// handler that mints reads its Grant as the minter's.
+func ContextWithCredential(ctx context.Context, c types.Credential) context.Context {
+	return context.WithValue(ctx, credentialKey{}, c)
 }
 
-// CredentialFromContext returns the name of the credential [ContextWithCredential]
-// recorded on ctx, or "" when the request passed no bearer guard.
-func CredentialFromContext(ctx context.Context) string {
-	name, _ := ctx.Value(credentialKey{}).(string)
-	return name
+// CredentialFromContext returns the credential [ContextWithCredential] recorded on ctx, or
+// the zero credential, which grants nothing, when the request passed no bearer guard.
+func CredentialFromContext(ctx context.Context) types.Credential {
+	c, _ := ctx.Value(credentialKey{}).(types.Credential)
+	return c
 }
 
 type hostKey struct{}
@@ -109,7 +110,7 @@ func StampOrigin(ctx context.Context, o types.Origin) types.Origin {
 	if o.EntryPoint == "" {
 		o.EntryPoint = local.EntryPoint
 	}
-	if o.Credential == "" {
+	if o.Credential == (types.Credential{}) {
 		o.Credential = local.Credential
 	}
 	if o.Host == "" {

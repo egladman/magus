@@ -1,15 +1,13 @@
 // tokens.ts - the Settings "Access tokens" section: a LIST + REVOKE view over the daemon's
-// connector tokens and the active share token, spoken to over magus.token.v1alpha1.TokenService.
+// stored tokens and the active share link, spoken to over magus.token.v1alpha1.TokenService.
 //
-// It is VIEW-AND-REVOKE ONLY, matching the service: there is deliberately NO mint control.
-// Minting a durable credential stays a CLI-only operation (`magus config mcp connector`), so
-// the browser has no path to forge one - that is what closes the XSS-to-durable-credential
-// escalation, and re-adding a mint button here would reopen it. The operator (cli) token is
-// structurally absent from ListTokens and unrevokable, so it never appears and is never a
-// revoke target.
+// It has no mint control. The service needs tokens=write, which only the operator token holds,
+// and a console link never carries the operator token, so this page is normally refused and the
+// section hidden (opts.onDenied). The operator token is structurally absent from ListTokens and
+// unrevokable, so it never appears and is never a revoke target.
 //
-// Everything shown - names, fingerprints - is rendered through textContent (via h()), never
-// as HTML, so a token name can carry no markup into the page.
+// Everything shown - names, ids, grants - is rendered through textContent (via h()), never as
+// HTML, so a token name can carry no markup into the page.
 
 import { createClient, type Client } from "@connectrpc/connect";
 import { TokenService, TokenScope, type TokenInfo } from "@wire/token/v1alpha1/token_pb";
@@ -17,13 +15,17 @@ import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../l
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 
-// scopeLabel names a token's class for the operator. Only connector and share tokens ever
-// reach a ListTokens response (the operator token is invisible by construction); an
-// unspecified/unknown scope falls back to a plain "Token" so a future class still renders.
+// scopeLabel names a token's preset grant for the operator. The operator token never reaches a
+// ListTokens response; an unspecified scope falls back to a plain "Token", and the grant column
+// says what it may do.
 function scopeLabel(scope: TokenScope): string {
   switch (scope) {
     case TokenScope.CONNECTOR:
       return "Connector";
+    case TokenScope.CONSOLE:
+      return "Console";
+    case TokenScope.CONSOLE_READ:
+      return "Viewer";
     case TokenScope.SHARE_READ:
       return "Read-only share";
     default:
@@ -31,8 +33,8 @@ function scopeLabel(scope: TokenScope): string {
   }
 }
 
-// expiryLabel renders a token's expiry as a local date-time, or "Never expires" when the
-// expires timestamp is unset (a non-expiring connector token).
+// expiryLabel renders a token's expiry as a local date-time. Every token the daemon lists
+// expires; "Never expires" is only what an unset timestamp would mean.
 function expiryLabel(t: TokenInfo): string {
   const ts = t.expireTime;
   if (!ts) return "Never expires";
@@ -121,7 +123,7 @@ export function buildTokensSection(
 
     const head = h("div", "console-settings-tokens__row console-settings-tokens__row--head");
     head.setAttribute("role", "row");
-    for (const label of ["Type", "Name", "Fingerprint", "Expires", ""]) {
+    for (const label of ["Type", "Name", "ID", "Expires", ""]) {
       const cell = h("span", "console-settings-tokens__cell", label);
       cell.setAttribute("role", "columnheader");
       head.append(cell);
@@ -136,6 +138,7 @@ export function buildTokensSection(
       type.setAttribute("role", "cell");
       const label = h("span", "pf-v6-c-label pf-m-compact");
       label.append(h("span", "pf-v6-c-label__content", scopeLabel(t.scope)));
+      if (t.grant) label.title = t.grant;
       type.append(label);
 
       const name = h(

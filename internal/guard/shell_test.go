@@ -1749,6 +1749,37 @@ func TestGuardDeniesExitStatusEcho(t *testing.T) {
 	}
 }
 
+// Every command the guard judges came from an agent, and an agent never reads or rotates the
+// operator token, however the line spells it: the operator token reaches token management.
+// Minting a scoped token, and asking whether the operator token exists, stay allowed.
+func TestOperatorTokenIsDeniedToAnAgent(t *testing.T) {
+	for _, cmd := range []string{
+		"magus config token print",
+		"./magus config token print",
+		"magus --root . config token print",
+		"magus config token generate --force",
+		`export MAGUS_MCP_TOKEN="$(magus config token print)"`,
+		`open "http://127.0.0.1:7391/console/#token=$(magus config token print)"`,
+		"magus config token print | pbcopy",
+		"true && magus config token generate",
+		"magus config token print && (", // unparsable: the pattern answers
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleOperatorToken, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "config mcp connector create", "the reason names the token an agent may hold: %s", cmd)
+	}
+	for _, cmd := range []string{
+		"magus config token status",
+		"magus config mcp connector create --name agent",
+		"magus config console token create --expires 12h",
+		"magus run go::go-test . -- -run 'Token'",
+		"grep -rn 'config token print' docs",
+	} {
+		assert.NotEqual(t, denyRuleOperatorToken, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
 // The rule refuses only a status printed and dropped. Every form here can feed $? into
 // later logic, or is not the last word on the line, so the guard cannot prove it is noise.
 func TestGuardAllowsExitStatusThatFeedsLogic(t *testing.T) {

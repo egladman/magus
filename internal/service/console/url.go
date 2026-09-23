@@ -178,12 +178,18 @@ func SurfaceLink(surface string, fragment ...FragmentParam) string {
 	return "/console/" + surface + "/" + frag
 }
 
+// LinkTokenLifetime is the --expires a sign-in line mints its console token with.
+const LinkTokenLifetime = "12h"
+
 // OpenCommand is a shell line that opens link signed in:
-// open "<link>#token=$(magus config token print)", with the platform's opener.
+// open "<link>#token=$(magus config console token create --expires 12h)", with the
+// platform's opener.
 //
 // The token is a command substitution the reader's own shell expands, so nothing that
-// prints this line ever holds the secret. The link must not carry a token already; it is
-// percent-encoded, so it holds nothing a double-quoted shell word would expand.
+// prints this line ever holds a secret. It mints a console=write token that expires, never
+// the operator token, so the browser never holds a credential that can reach token
+// management. The link must not carry a token already; it is percent-encoded, so it holds
+// nothing a double-quoted shell word would expand.
 //
 // The command is spelled as this process was invoked, which is right for a CLI line and
 // wrong for a daemon reply read in another directory: that caller uses [OpenCommandAs]
@@ -206,7 +212,7 @@ func OpenCommandAs(link, goos, bin string) string {
 		// cmd.exe never expands $(...), so the line is PowerShell's, where it does.
 		opener = "Start-Process"
 	}
-	return opener + ` "` + link + sep + "token=$(" + hint.ConfigTokenPrint.StringAs(bin) + `)"`
+	return opener + ` "` + link + sep + "token=$(" + hint.ConfigConsoleTokenCreate.WithAs(bin, "--expires", LinkTokenLifetime) + `)"`
 }
 
 // encodeComponent percent-encodes s the way the browser's encodeURIComponent does, which is what

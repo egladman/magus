@@ -4,40 +4,21 @@
 // 	protoc        (unknown)
 // source: magus/token/v1alpha1/token.proto
 
-// Package magus.token.v1alpha1 is the console-facing TokenService: the typed MANAGEMENT
-// surface for the daemon's auth tokens. It is VIEW-AND-REVOKE ONLY - it can list
-// tokens and revoke them, but it can NEVER mint one. Minting stays a CLI-only
-// operation (`magus config mcp connector`); the browser has no path to a durable
-// credential, which closes the XSS-to-durable-credential escalation by construction.
-// It is a SECOND door onto the same on-disk connector store the CLI writes - not a
-// second store - plus a read/revoke view of the daemon's in-memory share token. Two
-// tokens are deliberately out of reach here:
-//   - the OPERATOR token (the built-in cli credential, auto-seeded on first daemon
-//     start): it is bootstrap-only and managed SOLELY by the CLI. It lives in a store
-//     this service never opens, so it is structurally INVISIBLE and IMMUTABLE to the
-//     browser-facing surface - it can be neither enumerated by ListTokens nor targeted
-//     by RevokeToken (a revoke keyed on its fingerprint returns NotFound and leaves it
-//     on disk), so the management UI can never lock the operator out of the daemon it
-//     authenticates against. This is by construction, not by convention: see
-//     TokenScope's TOKEN_SCOPE_OPERATOR and the handler's boundary tests.
-//   - there is NO renew/extend RPC by design: a token is reminted (via the CLI),
-//     never extended, for cryptographic hygiene (a fresh secret on rotation, not a
-//     longer-lived one).
+// Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
+// surface over the daemon's stored tokens and its live share link. It is a second door onto
+// the same token store the CLI writes (tokens.d) and the same share manager the share
+// endpoint drives, never a second store.
 //
-// Access policy - the three-tier credential model, enforced at the mount:
-//   - cli token (operator): the ONLY credential accepted on ANY TokenService RPC.
-//     Token management is operator-tier because whoever can revoke tokens owns the
-//     daemon.
-//   - connector token (MCP client): valid on the data surfaces (/mcp, the console
-//     read/control services) but REJECTED here - a client credential must never
-//     revoke credentials (privilege self-replication).
-//   - share token (read-only viewer): valid only on the ephemeral LAN share
-//     listener, which never mounts this service; it cannot reach any RPC here.
+// Access: every RPC needs tokens=write, which only the operator grant holds, so a console,
+// viewer, connector or share token is refused at the mount with 403. A mint is ALSO checked
+// against the caller's own grant (a token is never granted more than its minter holds), so
+// the mount is defense in depth rather than the rule.
 //
-// The service is mounted on the loopback listener behind a cli-token-only bearer
-// guard and NEVER on the LAN share listener. buf-breaking gates this file: fields
-// and RPCs may be ADDED (old clients ignore unknown fields), never renumbered or
-// removed.
+// The operator token is out of reach here: it lives in a file this service never opens, so it
+// is neither listed nor revocable, and the management UI cannot lock the operator out. There
+// is no renew RPC: a token is reminted, never extended.
+//
+// buf-breaking gates this file: fields and RPCs may be ADDED, never renumbered or removed.
 
 package tokenv1alpha1
 
@@ -58,33 +39,24 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// TokenScope names the CLASS a token belongs to in the credential model,
-// so a client can group and label listed tokens - and so the full taxonomy is named
-// in one place even for the class this service never lists. A connector token is a
-// full MCP bearer minted for an external client; a share-read token is the short-lived,
-// read-only secret behind "share to phone"; the operator token is the built-in cli
-// credential.
+// TokenScope names the preset grant a token was minted with, so a client can group and label
+// listed tokens. It is a label over TokenInfo.grant, which is what the daemon enforces.
 type TokenScope int32
 
 const (
 	TokenScope_TOKEN_SCOPE_UNSPECIFIED TokenScope = 0
-	// TOKEN_SCOPE_OPERATOR is the built-in cli token: auto-seeded on first daemon start,
-	// the bootstrap "god" credential that authenticates the operator to the daemon. It is
-	// managed SOLELY by the CLI and is structurally invisible+immutable to this service -
-	// it lives in a store this handler never opens, so it can be neither listed nor
-	// revoked here and this value therefore NEVER appears in a ListTokensResponse. It
-	// exists in the enum to name the class, not because the wire ever carries it.
+	// TOKEN_SCOPE_OPERATOR is the operator token: every surface on loopback. It is managed
+	// SOLELY by the CLI and never appears in a ListTokensResponse; it is named here so the full
+	// taxonomy has one home.
 	TokenScope_TOKEN_SCOPE_OPERATOR TokenScope = 3
-	// TOKEN_SCOPE_CONNECTOR reaches /mcp and nothing else: the tier an external agent
-	// holds.
+	// TOKEN_SCOPE_CONNECTOR is mcp=write: the grant an external agent holds.
 	TokenScope_TOKEN_SCOPE_CONNECTOR TokenScope = 1
-	// TOKEN_SCOPE_SHARE_READ is the short-lived secret behind "share to phone", minted by
-	// the LAN share listener rather than stored. Distinct from CONSOLE_READ, which reaches
-	// the same routes but is a stored, named token with its own lifetime.
+	// TOKEN_SCOPE_SHARE_READ is the share link: console=read, served only on the link's own LAN
+	// listener and held only in daemon memory.
 	TokenScope_TOKEN_SCOPE_SHARE_READ TokenScope = 2
-	// TOKEN_SCOPE_CONSOLE reaches the console read and write surfaces, never /mcp.
+	// TOKEN_SCOPE_CONSOLE is console=write.
 	TokenScope_TOKEN_SCOPE_CONSOLE TokenScope = 4
-	// TOKEN_SCOPE_CONSOLE_READ is the viewer tier: the console's read surface alone.
+	// TOKEN_SCOPE_CONSOLE_READ is console=read: a viewer.
 	TokenScope_TOKEN_SCOPE_CONSOLE_READ TokenScope = 5
 )
 
@@ -135,21 +107,18 @@ func (TokenScope) EnumDescriptor() ([]byte, []int) {
 	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{0}
 }
 
-// TokenInfo describes one manageable token WITHOUT its secret, minimized to exactly
-// what a view+revoke UI needs. A read-only list is still an intelligence surface -
-// names, timing, and expiries let a viewer fingerprint the deployment - so it carries
-// ONLY: a short revoke handle (identifier, the prefix-only fingerprint, never the token
-// bytes or the full hash), the token class (scope), the expiry, and the user-chosen
-// name (the operator needs the name to know which token to revoke). It deliberately
-// omits the raw secret, the full hash, any filesystem path, the creation time, and
-// every other internal storage detail: none is needed to revoke, all would help a
-// viewer map the infrastructure.
+// TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and
+// revoke UI needs: the revoke handle (identifier, the 8-hex id, never the token bytes or the
+// full hash), the scope, the grant, the expiry, and the name. A list is still an intelligence
+// surface, so it omits the full hash, any filesystem path, and the creation time.
 type TokenInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`             // connector name, or a label for the share token
-	Identifier    string                 `protobuf:"bytes,2,opt,name=identifier,proto3" json:"identifier,omitempty"` // prefix-only fingerprint; the Revoke key
-	Scope         TokenScope             `protobuf:"varint,3,opt,name=scope,proto3,enum=magus.token.v1alpha1.TokenScope" json:"scope,omitempty"`
-	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"` // unset means the token never expires
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Name       string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`             // the token's name, or a label for the share link
+	Identifier string                 `protobuf:"bytes,2,opt,name=identifier,proto3" json:"identifier,omitempty"` // the 8-hex id; the Revoke key
+	Scope      TokenScope             `protobuf:"varint,3,opt,name=scope,proto3,enum=magus.token.v1alpha1.TokenScope" json:"scope,omitempty"`
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	// The grant as the daemon enforces it, e.g. "console=write" or "mcp=write".
+	Grant         string `protobuf:"bytes,7,opt,name=grant,proto3" json:"grant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -210,6 +179,13 @@ func (x *TokenInfo) GetExpireTime() *timestamppb.Timestamp {
 		return x.ExpireTime
 	}
 	return nil
+}
+
+func (x *TokenInfo) GetGrant() string {
+	if x != nil {
+		return x.Grant
+	}
+	return ""
 }
 
 type ListTokensRequest struct {
@@ -298,7 +274,7 @@ type CreateTokenRequest struct {
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; anything else is refused.
 	Scope TokenScope `protobuf:"varint,2,opt,name=scope,proto3,enum=magus.token.v1alpha1.TokenScope" json:"scope,omitempty"`
-	// Absent means the token never expires.
+	// Required: when the token dies, in the future and at most 366 days out.
 	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expire_time,json=expireTime,proto3,oneof" json:"expire_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -355,11 +331,9 @@ func (x *CreateTokenRequest) GetExpireTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource,
-// because the secret is NOT part of the resource: TokenInfo is deliberately secret-free
-// so that listing tokens cannot leak one, and the plaintext exists only in this reply and
-// is unrecoverable afterwards. Returning TokenInfo alone would drop the one value the
-// caller needs; adding the secret TO TokenInfo would put it on every List response.
+// CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource, because
+// the secret is NOT part of the resource: TokenInfo is secret-free so that listing tokens
+// cannot leak one, and the plaintext exists only in this reply.
 type CreateTokenResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Token *TokenInfo             `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -415,9 +389,7 @@ func (x *CreateTokenResponse) GetSecret() string {
 
 type RevokeTokenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The token's resource name. TokenInfo.identifier (the display fingerprint) is accepted
-	// here too, since it identifies the same token and is what a listing gives a reader to
-	// copy.
+	// The token's name, or its identifier as TokenInfo gives it.
 	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -464,7 +436,7 @@ var File_magus_token_v1alpha1_token_proto protoreflect.FileDescriptor
 
 const file_magus_token_v1alpha1_token_proto_rawDesc = "" +
 	"\n" +
-	" magus/token/v1alpha1/token.proto\x12\x14magus.token.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xd4\x01\n" +
+	" magus/token/v1alpha1/token.proto\x12\x14magus.token.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xea\x01\n" +
 	"\tTokenInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
 	"\n" +
@@ -472,7 +444,8 @@ const file_magus_token_v1alpha1_token_proto_rawDesc = "" +
 	"identifier\x126\n" +
 	"\x05scope\x18\x03 \x01(\x0e2 .magus.token.v1alpha1.TokenScopeR\x05scope\x12;\n" +
 	"\vexpire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTimeJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\acreatedR\tlast_used\"\x13\n" +
+	"expireTime\x12\x14\n" +
+	"\x05grant\x18\a \x01(\tR\x05grantJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\acreatedR\tlast_used\"\x13\n" +
 	"\x11ListTokensRequest\"M\n" +
 	"\x12ListTokensResponse\x127\n" +
 	"\x06tokens\x18\x01 \x03(\v2\x1f.magus.token.v1alpha1.TokenInfoR\x06tokens\"\xbc\x01\n" +

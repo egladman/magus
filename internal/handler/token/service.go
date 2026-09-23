@@ -1,27 +1,13 @@
-// Package token is the console-facing TokenService handler: the typed management
-// surface for the daemon's auth tokens. It LISTS, REVOKES, and MINTS tokens, but the
-// mint path is narrow: only the two console scopes (CONSOLE and CONSOLE_READ) are
-// mintable, and OPERATOR and CONNECTOR are refused (mintableScope), so a compromised
-// browser session can never forge an /mcp credential or reach the operator token. A
-// browser-minted token is bounded further still: it always expires and its TTL is
-// clamped (CreateToken, consoleTokenExpiry), so an XSS cannot mint a durable, never-
-// expiring credential. It is a SECOND door onto the exact stores the CLI and the share flow
-// already use, the on-disk connector store (internal/auth) and the daemon's
-// in-memory share manager (internal/share), never a second store of its own. Two
-// tokens are deliberately beyond its reach: the OPERATOR token (the built-in cli
-// credential, auto-seeded on first daemon start) and any renew/extend operation (a
-// token is reminted via the CLI, never extended). The operator boundary is by
-// CONSTRUCTION, not convention: the cli token lives in a store this handler never
-// opens (auth.Load, distinct from the connector store), so ListTokens cannot
-// enumerate it and RevokeToken keyed on its fingerprint falls through to the
-// connector store and returns NotFound, leaving the cli token file untouched: the
-// management UI can never lock the operator out of the daemon it authenticates
-// against. TestOperatorTokenInvisibleAndImmutable proves it. The daemon mounts it on
-// the loopback listener behind a CLI-TOKEN-ONLY
-// bearer guard (auth.VerifyCLIBearer): token management is operator-tier, so a
-// connector token (a mere MCP-client credential) is rejected at the guard and can
-// never revoke credentials. It is NEVER mounted on the LAN share listener and never
-// served unauthenticated.
+// Package token is the console-facing TokenService handler: it lists, mints and revokes stored
+// tokens, and lists and revokes the active share link. It is a second door onto the stores the
+// CLI and the share flow already use (auth.Store, share.Manager), never a store of its own.
+//
+// Two rules keep it from being a way up. A mint is checked against the caller's own grant, read
+// from the credential the bearer guard verified (auth.Store.Mint refuses anything wider), so the
+// daemon's tokens=write mount is defense in depth rather than the rule. And it mints only the
+// two console presets: a browser has no business minting an /mcp bearer, and the operator token
+// lives in a file this handler never opens, so it can be neither listed nor revoked here and the
+// management UI cannot lock the operator out.
 package token
 
 import (
@@ -29,42 +15,36 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/share"
+	"github.com/egladman/magus/internal/trail"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
+	"github.com/egladman/magus/types"
 )
 
-// shareView is the narrow slice of *share.Manager the handler needs: read the active
-// share token's metadata and tear it (with its listener) down by identity. Satisfied
-// structurally by *share.Manager; a test fake stands in for it. CloseIf, not Close, is
-// what the handler holds so revoke stays an atomic check-and-close (see RevokeToken).
+// shareView is the slice of *share.Manager the handler needs. CloseIf, not Close, so a revoke
+// is an atomic check-and-close (see RevokeToken).
 type shareView interface {
 	Active() (share.TokenInfo, bool)
-	CloseIf(fingerprint string) bool
+	CloseIf(id string) bool
 }
 
-// Service implements tokenv1alpha1connect.TokenServiceHandler over the shared connector
-// store and the daemon's share manager. loadStore is injectable so the list/revoke
-// mapping is unit-testable without a live daemon; it defaults to the real store
-// loader.
+// Service implements tokenv1alpha1connect.TokenServiceHandler over the token store and the
+// daemon's share manager. loadStore is injectable so the mapping is testable without a daemon.
 type Service struct {
 	share     shareView
-	loadStore func() (*auth.ConnectorStore, error)
+	loadStore func() (*auth.Store, error)
 }
 
-// NewService builds a TokenService handler that manages connector tokens through the
-// shared on-disk store and the share token through mgr. It takes the CONCRETE
-// *share.Manager (not the shareView interface) on purpose: a typed-nil manager passed
-// straight into an interface field would be non-nil at the interface level (the
-// classic typed-nil trap), and every `s.share != nil` guard would then pass and
-// nil-deref. Converting only a non-nil manager keeps "no share feature" a true nil, so
-// a nil mgr simply means no share token is ever listed or revoked.
+// NewService builds a TokenService handler over the token store and mgr. It takes the concrete
+// *share.Manager so a nil one stays a true nil rather than a non-nil interface holding nil; a
+// nil mgr means no share is ever listed or revoked.
 func NewService(mgr *share.Manager) *Service {
 	var view shareView
 	if mgr != nil {
@@ -73,30 +53,23 @@ func NewService(mgr *share.Manager) *Service {
 	return newService(view)
 }
 
-// newService injects the shareView directly. It backs NewService and lets tests supply
-// a fake share manager without opening a real LAN listener.
 func newService(view shareView) *Service {
-	return &Service{
-		share:     view,
-		loadStore: auth.LoadConnectorStore,
-	}
+	return &Service{share: view, loadStore: auth.LoadStore}
 }
 
 var _ tokenv1alpha1connect.TokenServiceHandler = (*Service)(nil)
 
-// ListTokens returns every connector token plus the active share token, each as a
-// secret-free TokenInfo. The cli token is deliberately absent: it is neither read
-// from nor exposed here, so this surface cannot reveal or target it. last_used is
-// left unset: see the package note; there is no cheap seam to record it.
+// ListTokens returns every stored token plus the active share link, each secret-free. The
+// operator token is never read here, so it never appears.
 func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListTokensRequest]) (*connect.Response[tokenv1.ListTokensResponse], error) {
 	store, err := s.loadStore()
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
-	conns := store.List()
-	out := make([]*tokenv1.TokenInfo, 0, len(conns)+1)
-	for _, c := range conns {
-		out = append(out, connectorInfo(c))
+	stored := store.List()
+	out := make([]*tokenv1.TokenInfo, 0, len(stored)+1)
+	for _, t := range stored {
+		out = append(out, storedInfo(t))
 	}
 	if s.share != nil {
 		if info, ok := s.share.Active(); ok {
@@ -106,81 +79,44 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 	return connect.NewResponse(&tokenv1.ListTokensResponse{Tokens: out}), nil
 }
 
-// CreateToken mints a console or viewer token and returns its secret once. The token
-// always expires: a zero, absent, or past expire_time is refused, and one further out
-// than maxConsoleTokenTTL is clamped to that ceiling, so a credential minted from the
-// browser origin can never be made permanent (see consoleTokenExpiry).
-//
-// There is no caller-class check here on purpose. The service is mounted behind
-// BearerGuard(VerifyCLIBearer) (see internal/daemon), so only the operator tier can
-// reach this method at all, and that tier already dominates both scopes it may mint;
-// there is no escalation to check for. What IS checked is the requested scope, because
-// "operator may mint anything" is not the same claim as "anything may be minted from a
-// browser": OPERATOR is refused because it lives in a file this service never opens, and
-// CONNECTOR because an /mcp bearer must not be mintable from the console surface.
-func (s *Service) CreateToken(_ context.Context, req *connect.Request[tokenv1.CreateTokenRequest]) (*connect.Response[tokenv1.CreateTokenResponse], error) {
-	scope, ok := mintableScope(req.Msg.GetScope())
+// CreateToken mints a console or viewer token within the caller's grant and returns its
+// secret once. expire_time is required and must fall within auth.MaxTokenTTL; it is refused,
+// never shortened. A caller whose grant does not cover the request gets PermissionDenied.
+func (s *Service) CreateToken(ctx context.Context, req *connect.Request[tokenv1.CreateTokenRequest]) (*connect.Response[tokenv1.CreateTokenResponse], error) {
+	grant, ok := mintableGrant(req.Msg.GetScope())
 	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("token: scope must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; the operator and connector classes are not mintable here"))
+			errors.New("token: scope must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; the operator and connector classes are not minted here"))
 	}
-
-	store, err := auth.LoadConnectorStore()
+	if req.Msg.ExpireTime == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("token: expire_time is required; a token must expire, at most 366 days out"))
+	}
+	store, err := s.loadStore()
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("token: %w", err))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("token: %w", err))
 	}
 	name := strings.TrimSpace(req.Msg.GetName())
 	if name == "" {
 		name = defaultConsoleTokenName(store)
 	}
-	expires, err := consoleTokenExpiry(req.Msg.GetExpireTime())
-	if err != nil {
+	minter := trail.CredentialFromContext(ctx).Grant
+	secret, rec, err := store.Mint(minter, auth.MintRequest{Name: name, Grant: grant, Expires: req.Msg.GetExpireTime().AsTime()})
+	switch {
+	case errors.Is(err, auth.ErrExceedsGrant):
+		return nil, connect.NewError(connect.CodePermissionDenied, err)
+	case errors.Is(err, auth.ErrTokenLifetime):
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, auth.ErrTokenExists):
+		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("token: a token named %q already exists", name))
+	case err != nil:
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-
-	secret, c, err := store.Create(name, expires, scope)
-	if err != nil {
-		if errors.Is(err, auth.ErrConnectorExists) {
-			return nil, connect.NewError(connect.CodeAlreadyExists,
-				fmt.Errorf("token: a token named %q already exists", name))
-		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("token: %w", err))
-	}
-	return connect.NewResponse(&tokenv1.CreateTokenResponse{Token: connectorInfo(c), Secret: secret}), nil
+	return connect.NewResponse(&tokenv1.CreateTokenResponse{Token: storedInfo(rec), Secret: secret}), nil
 }
 
-// maxConsoleTokenTTL bounds a browser-minted console token's lifetime. Unlike the CLI
-// mint (which trusts the operator's own shell and may mint a never-expiring token), a
-// token minted from the console origin (where an injected script can reach this surface)
-// is a durable, on-disk, mutating credential, so it must always expire and cannot be
-// made to live indefinitely. Mirrors the share token's bounded-lifetime rule
-// (internal/share, MaxTTL): whoever holds the secret is the audience, and a leaked or
-// forged credential that never expires is a standing one.
-const maxConsoleTokenTTL = 90 * 24 * time.Hour
-
-// consoleTokenExpiry validates and clamps the caller-supplied expiry for a console mint.
-// A zero, absent, or past expiry is refused (it would store as never-expires); an expiry
-// beyond maxConsoleTokenTTL is clamped to that window rather than rejected, so a caller
-// asking for "as long as possible" still succeeds with a bounded token.
-func consoleTokenExpiry(exp *timestamppb.Timestamp) (time.Time, error) {
-	if exp == nil {
-		return time.Time{}, errors.New("token: expire_time is required; a console token minted here must expire (at most 90 days out)")
-	}
-	expires := exp.AsTime()
-	now := time.Now()
-	if !expires.After(now) {
-		return time.Time{}, errors.New("token: expire_time must be in the future; a zero or past expiry would never expire")
-	}
-	if ceiling := now.Add(maxConsoleTokenTTL); expires.After(ceiling) {
-		return ceiling, nil
-	}
-	return expires, nil
-}
-
-// defaultConsoleTokenName picks an unused "console-N" label so a caller that supplies no
-// name cannot collide with an existing token and get AlreadyExists for a name it never
-// chose. The CLI derives its default the same way.
-func defaultConsoleTokenName(store *auth.ConnectorStore) string {
+// defaultConsoleTokenName picks an unused "console-N", so a caller that names nothing cannot
+// collide with a name it never chose.
+func defaultConsoleTokenName(store *auth.Store) string {
 	taken := map[string]bool{}
 	for _, t := range store.List() {
 		taken[t.Name] = true
@@ -193,113 +129,120 @@ func defaultConsoleTokenName(store *auth.ConnectorStore) string {
 	}
 }
 
-// RevokeToken removes the token matching identifier. It checks the active share
-// token first: when identifier names it, CloseIf revokes the token AND tears the LAN
-// listener down (the share's own teardown, not a reimplementation), but ONLY if that
-// exact share is still live: if a supersede won the race between Active and CloseIf,
-// the revoke reports NotFound rather than tearing down whatever share replaced it.
-// Otherwise it falls to the connector store. The cli token is never consulted, so it
-// cannot be revoked here even if its fingerprint is supplied.
+// RevokeToken removes the token identifier names. The active share link is checked first,
+// and CloseIf revokes it only if that exact link is still live, so a revoke that raced a new
+// share reports NotFound rather than tearing the new one down. Otherwise it falls to the store.
+// The operator token is never consulted, so it cannot be revoked here.
 func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
 	id := strings.TrimSpace(req.Msg.GetName())
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("token: identifier is required"))
 	}
-
 	if s.share != nil {
 		if info, ok := s.share.Active(); ok && shareMatches(info, id) {
-			if s.share.CloseIf(info.Fingerprint) {
+			if s.share.CloseIf(info.ID) {
 				return connect.NewResponse(shareInfo(info)), nil
 			}
-			// The share we matched was superseded between Active and CloseIf, so there
-			// is nothing of that identity left to revoke; do not fall through to the
-			// connector store with a share fingerprint.
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("token: no token matches %q", id))
 		}
 	}
-
 	store, err := s.loadStore()
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	removed, err := store.Revoke(id)
 	if err != nil {
-		if errors.Is(err, auth.ErrConnectorNotFound) {
+		if errors.Is(err, auth.ErrTokenNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("token: no token matches %q", id))
 		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return connect.NewResponse(connectorInfo(removed)), nil
+	return connect.NewResponse(storedInfo(removed)), nil
 }
 
-// wireScope maps a stored token's surface to its wire class. One store holds all three
-// client classes, so reading the record's own scope is what keeps a console token from
-// being listed as a connector, which is what a hardcoded class did, and it mislabelled
-// every console and viewer token the moment the tiers split.
-func wireScope(s auth.ClientScope) tokenv1.TokenScope {
-	switch s {
-	case auth.ScopeConsole:
-		return tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE
-	case auth.ScopeConsoleRead:
-		return tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ
-	default:
-		return tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR
-	}
-}
-
-// mintableScope maps a requested wire class to the stored scope it may be minted as, and
-// reports false for every class this service refuses to mint. Only the two console tiers
-// are mintable: OPERATOR lives in a file this service never opens, and CONNECTOR would be
-// an /mcp bearer minted from a browser.
-func mintableScope(s tokenv1.TokenScope) (auth.ClientScope, bool) {
+// mintableGrant is the which-door policy: the grants a browser may ask for by scope.
+func mintableGrant(s tokenv1.TokenScope) (types.Grant, bool) {
 	switch s {
 	case tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE:
-		return auth.ScopeConsole, true
+		return types.GrantConsole, true
 	case tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ:
-		return auth.ScopeConsoleRead, true
+		return types.GrantViewer, true
 	}
-	return "", false
+	return types.Grant{}, false
 }
 
-// shareTokenLabel is the display name for the anonymous share token, which carries
-// no user-assigned name. It doubles as a revoke alias (revoke "share to phone").
+// wireScope labels a grant with its preset. A grant matching no preset is UNSPECIFIED; the
+// grant field says what it is.
+func wireScope(g types.Grant) tokenv1.TokenScope {
+	switch g {
+	case types.GrantConnector:
+		return tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR
+	case types.GrantConsole:
+		return tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE
+	case types.GrantViewer:
+		return tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ
+	}
+	return tokenv1.TokenScope_TOKEN_SCOPE_UNSPECIFIED
+}
+
+// shareTokenLabel names the share link in a listing, and doubles as a revoke alias.
 const shareTokenLabel = "share to phone"
 
-// connectorInfo maps a stored connector record to its secret-free, minimized wire
-// shape: the revoke handle (fingerprint), the class, the user-chosen name, and the
-// expiry only, never the secret, the full hash, or the creation time (see TokenInfo's
-// minimization note). A zero Expires (never expires) leaves the expires timestamp unset.
-func connectorInfo(c auth.ConnectorToken) *tokenv1.TokenInfo {
-	info := &tokenv1.TokenInfo{
-		Name:       c.Name,
-		Identifier: c.Fingerprint,
-		Scope:      wireScope(c.EffectiveScope()),
+// storedInfo is a stored token's secret-free wire shape.
+func storedInfo(t auth.Token) *tokenv1.TokenInfo {
+	return &tokenv1.TokenInfo{
+		Name:       t.Name,
+		Identifier: t.ID,
+		Scope:      wireScope(t.Grant),
+		ExpireTime: timestamppb.New(t.Expires),
+		Grant:      t.Grant.String(),
 	}
-	if !c.Expires.IsZero() {
-		info.ExpireTime = timestamppb.New(c.Expires)
-	}
-	return info
 }
 
-// shareInfo maps the active share's metadata to its secret-free, minimized wire shape:
-// the same handle/class/name/expiry-only projection as connectorInfo, with no creation
-// time or full hash.
 func shareInfo(i share.TokenInfo) *tokenv1.TokenInfo {
 	return &tokenv1.TokenInfo{
 		Name:       shareTokenLabel,
-		Identifier: i.Fingerprint,
+		Identifier: i.ID,
 		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ,
 		ExpireTime: timestamppb.New(i.Expires),
+		Grant:      types.GrantShare.String(),
 	}
 }
 
-// shareMatches reports whether identifier names the active share token: either its
-// label or its EXACT full fingerprint. Unlike the connector store's name/fingerprint/
-// prefix resolution, the share deliberately does NOT prefix-match: a prefix that also
-// prefixes a connector fingerprint must resolve to the connector (the store's job),
-// never get intercepted here by the share. Exact-only keeps that disambiguation
-// unambiguous: List hands out the full 8-char fingerprint, so an exact match is
-// always available to a client that wants the share.
+// shareMatches reports whether identifier names the share link: its label or its exact id.
+// No prefix match, so a prefix shared with a stored token's id resolves to the stored token.
 func shareMatches(i share.TokenInfo, identifier string) bool {
-	return identifier == shareTokenLabel || identifier == i.Fingerprint
+	return identifier == shareTokenLabel || identifier == i.ID
+}
+
+// AuditSubject renders what the trail records about a mint or revoke: the TokenInfo of the
+// token acted on as JSON, which has no secret field, and a one-line preview such as "token
+// 3fa9c1d2 (laptop) console=write until 2026-12-22". It returns nil for a response that names
+// no token (ListTokens), so nothing is recorded for it.
+func AuditSubject(resp connect.AnyResponse) (blob []byte, preview string) {
+	var info *tokenv1.TokenInfo
+	switch msg := resp.Any().(type) {
+	case *tokenv1.CreateTokenResponse:
+		info = msg.GetToken()
+	case *tokenv1.TokenInfo:
+		info = msg
+	}
+	if info == nil {
+		return nil, ""
+	}
+	blob, err := protojson.Marshal(info)
+	if err != nil {
+		return nil, ""
+	}
+	preview = "token " + info.GetIdentifier()
+	if info.GetName() != "" {
+		preview += " (" + info.GetName() + ")"
+	}
+	if info.GetGrant() != "" {
+		preview += " " + info.GetGrant()
+	}
+	if info.ExpireTime != nil {
+		preview += " until " + info.GetExpireTime().AsTime().UTC().Format("2006-01-02")
+	}
+	return blob, preview
 }

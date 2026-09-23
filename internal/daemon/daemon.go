@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -77,9 +78,9 @@ type Daemon struct {
 	// unloaded is set by NewUnloaded: the workspace failed, so only the surfaces that
 	// need none are served.
 	unloaded *Unloaded
-	// onMounted receives every route pattern once mounting is done, before the listener
-	// serves; the route-enumeration test reads the mux through it.
-	onMounted func(patterns []string)
+	// onMounted receives every route pattern and each guarded pattern's Need once mounting
+	// is done, before the listener serves; the route tests read the mux through it.
+	onMounted func(patterns []string, needs map[string]types.Need)
 }
 
 // Option customizes a Daemon.
@@ -265,7 +266,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// rides in the URL. CORS still advertises the Authorization header for
 			// the cross-origin preflight.
 			// Read handlers are built ONCE and reused for two audiences: the loopback
-			// bridge mux below (behind rebind + cli/connector bearer), and the on-demand
+			// bridge mux below (behind rebind + the console bearer guard), and the on-demand
 			// LAN "share to phone" listener (behind a per-session read-only share token,
 			// see shareGuarded). Building them once keeps the two surfaces serving the
 			// identical read logic.
@@ -362,7 +363,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// hosted PWA is answered here rather than 401'd; siteAllowed admits that
 			// Origin past the rebind check. Inner cors() on each bridgeMux handler is
 			// redundant for responses that reach the mux and harmless if both fire.
-			f.server.Handle("/api/", f.siteGuarded(rpcerr.FormatJSON, auth.VerifyConsoleBearer, bridgeMux))
+			f.guarded("/api/", rpcerr.FormatJSON, needConsoleWrite, bridgeMux)
 
 			// shareGuarded is the exact read surface the LAN share listener exposes,
 			// each entry guarded per-session by the share token (share.Manager wraps
@@ -392,7 +393,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				// preflight is answered here rather than 401'd by the bearer check; the actual
 				// POST still carries and is verified against the bearer token. /mcp stays on
 				// the loopback-only accept-list.
-				f.server.Handle(mPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, mHandler))
+				f.guarded(mPath, rpcerr.FormatConnect, needConsoleRead, mHandler)
 				// MetricsService is a read-only stream, so it joins the share read surface.
 				shareGuarded[mPath] = share.Route{Handler: mHandler, Format: rpcerr.FormatConnect}
 				log.InfoContext(ctx, "[BRIDGE] metrics service mounted", slog.String("path", mPath))
@@ -421,7 +422,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				activityhandler.WithFileChanges(jobFeed.Subscribe)(activitySvc)
 			}
 			activityPath, activityHandler := activityv1alpha1connect.NewActivityServiceHandler(activitySvc, connectReadMax)
-			f.server.Handle(activityPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, activityHandler))
+			f.guarded(activityPath, rpcerr.FormatConnect, needConsoleRead, activityHandler)
 			// ActivityService.ListActivityEvents is read-only, so it joins the share read surface.
 			shareGuarded[activityPath] = share.Route{Handler: activityHandler, Format: rpcerr.FormatConnect}
 			log.InfoContext(ctx, "[BRIDGE] activity service mounted", slog.String("path", activityPath))
@@ -432,7 +433,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Same cross-origin guards as the other read services (the dashboard is a hosted-site
 			// browser client) and read-only, so it joins the share read surface too.
 			statusPath, statusConnectHandler := statusv1alpha1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log), connectReadMax)
-			f.server.Handle(statusPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, statusConnectHandler))
+			f.guarded(statusPath, rpcerr.FormatConnect, needConsoleRead, statusConnectHandler)
 			shareGuarded[statusPath] = share.Route{Handler: statusConnectHandler, Format: rpcerr.FormatConnect}
 			log.InfoContext(ctx, "[BRIDGE] status service mounted", slog.String("path", statusPath))
 
@@ -446,7 +447,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// processes on the operator's machine. The console reaches it over the
 			// authenticated loopback route.
 			toolPath, toolConnectHandler := toolv1alpha1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus), connectReadMax)
-			f.server.Handle(toolPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, toolConnectHandler))
+			f.guarded(toolPath, rpcerr.FormatConnect, needConsoleRead, toolConnectHandler)
 			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
 
 			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
@@ -456,7 +457,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// share read surface too: the LAN "share to phone" dashboard renders insight, and it
 			// reaches it over this route now rather than the JSON one.
 			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc), connectReadMax)
-			f.server.Handle(insightPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, insightConnectHandler))
+			f.guarded(insightPath, rpcerr.FormatConnect, needConsoleRead, insightConnectHandler)
 			shareGuarded[insightPath] = share.Route{Handler: insightConnectHandler, Format: rpcerr.FormatConnect}
 			log.InfoContext(ctx, "[BRIDGE] insight service mounted", slog.String("path", insightPath))
 
@@ -472,7 +473,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				viewerOpts = append(viewerOpts, viewer.WithSessionRoot(opts.Magus.Root()))
 			}
 			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore, viewerOpts...), connectReadMax)
-			f.server.Handle(viewerPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, viewerConnectHandler))
+			f.guarded(viewerPath, rpcerr.FormatConnect, needConsoleRead, viewerConnectHandler)
 			shareGuarded[viewerPath] = share.Route{Handler: viewerConnectHandler, Format: rpcerr.FormatConnect}
 			log.InfoContext(ctx, "[BRIDGE] viewer service mounted", slog.String("path", viewerPath))
 
@@ -491,7 +492,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				"/api/v1/events":  eventsH,
 				"/api/v1/insight": insightH,
 			} {
-				f.server.Handle(path, f.siteGuarded(rpcerr.FormatJSON, auth.VerifyConsoleReadBearer, h))
+				f.guarded(path, rpcerr.FormatJSON, needConsoleRead, h)
 			}
 
 			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
@@ -499,14 +500,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// cross-origin allowance as the read services (never unauthenticated), so a browser
 			// client can trigger maintenance without the daemon exposing an open action endpoint.
 			jobPath, jobHandler := jobv1alpha1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version, opts.Jobs), connectReadMax)
-			f.server.Handle(jobPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleBearer, jobHandler))
+			f.guarded(jobPath, rpcerr.FormatConnect, needConsoleWrite, jobHandler)
 			log.InfoContext(ctx, "[BRIDGE] job service mounted", slog.String("path", jobPath))
 
 			// Share to phone: POST /api/v1/share opens an on-demand, time-boxed LAN
 			// listener serving shareGuarded (the read surface) under a fresh read-only
 			// token. The trigger is loopback-only (RequireLoopbackPeer, atop the
-			// loopback-bound listener) and requires the existing cli/connector bearer:
-			// only the local, already-authenticated console can open a share. CORS wraps
+			// loopback-bound listener) and needs console=write: only the local,
+			// already-authenticated console can open a share. CORS wraps
 			// the bearer so the console's cross-origin POST preflight is answered here.
 			// The manager's parent is ctx, so every open share listener is torn down on
 			// daemon shutdown; Close is a belt-and-suspenders immediate teardown.
@@ -523,8 +524,9 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			shareH := s.newShareHandler(shareMgr, consoleDir, shareGuarded, log)
 			// siteAllowed so a hosted-PWA Origin clears rebind; RequireLoopbackPeer still
 			// keeps the peer on loopback so only the local browser can open a share.
+			f.needs["/api/v1/share"] = needConsoleWrite
 			f.server.Handle("/api/v1/share", httpx.GuardRebind(rpcerr.FormatJSON, f.siteAllowed, f.cors(httpx.RequireLoopbackPeer(
-				httpx.BearerGuard(rpcerr.FormatJSON, auth.VerifyConsoleBearer, shareH)))))
+				httpx.BearerGuard(rpcerr.FormatJSON, auth.Verify, needConsoleWrite, shareH)))))
 			log.InfoContext(ctx, "[SHARE] share endpoint mounted", slog.String("path", "/api/v1/share"), slog.Bool("console_ready", ok))
 
 			// Static console on loopback: serve the built PWA at /console/ from the SAME
@@ -546,34 +548,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				log.InfoContext(ctx, "[BRIDGE] static console mounted", slog.String("path", "/console/"), slog.String("dir", consoleDir))
 			}
 
-			// Token management service: the typed surface the console Settings UI uses to LIST,
-			// CREATE, and REVOKE console and viewer tokens, and to see/revoke the active share
-			// token. CreateToken can mint (it is not view-and-revoke only), but only the two
-			// scopes a browser has any business minting (console, console-read); the operator and
-			// connector classes are refused there by the handler itself (internal/handler/token),
-			// regardless of who is asking. What guards against a compromised browser forging a
-			// durable /mcp credential is the GUARD tier below, not an absence of a mint path. It
-			// is a second door onto the same connector store the CLI writes and the same shareMgr
-			// the share endpoint drives, never a second store.
-			//
-			// The mount enforces the three-tier credential hierarchy at the GUARD, so the handler
-			// stays dumb:
-			//   - operator token (built-in cli credential): the ONLY accepted bearer here
-			//     (VerifyCLIBearer, not the generic VerifyBearer). Whoever holds it owns the daemon,
-			//     so every token op, mint included, is operator-tier.
-			//   - connector token (MCP client): valid on /mcp and the console data services, but
-			//     rejected on this mount; a client credential must never mint or revoke another
-			//     credential (privilege self-replication).
-			//   - share token (read-only viewer): only ever valid on the LAN share listener; this
-			//     service is deliberately NOT in shareGuarded, so a shared phone can never reach
-			//     the token-management surface.
-			// siteAllowed admits the hosted PWA Origin past rebind (Settings runs from
-			// eli.gladman.cc against the local daemon). VerifyCLIBearer still refuses every
-			// non-operator credential. The operator/built-in token is additionally unreachable
-			// through the handler itself: it is bootstrap-only, managed SOLELY by the CLI, and
-			// structurally invisible+immutable to this service (it lives in a store the handler
-			// never opens, so it is neither listed, mintable, nor revocable here), preventing
-			// lockout.
+			// Token management service: the console Settings UI lists, mints and revokes console
+			// and viewer tokens here, and sees and revokes the active share. It needs tokens=write,
+			// which only the operator grant holds, and every mint it makes is checked against the
+			// caller's own grant in auth.Store.Mint, so neither the mount nor the handler is the
+			// only thing standing between a token and a wider one. The operator token lives in a
+			// file the handler never opens, so it can be neither listed nor revoked here, and the
+			// Settings UI cannot lock the operator out. Not in shareGuarded: a share link never
+			// reaches token management.
 			// The audit interceptor classifies every RPC on this service by its leading verb
 			// (internal/handler/trailrpc) and records the mutating ones (CreateToken and
 			// RevokeToken today) to the trail, so a browser-reachable mint or revoke is always
@@ -581,9 +563,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// caller-supplied field. Reads (ListTokens) are not recorded. See
 			// internal/handler/trailrpc for the pattern and the arch-test ratchet that keeps it
 			// honest.
-			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindTokenLifecycle))
+			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindTokenLifecycle,
+				trailrpc.WithSubject(tokenhandler.AuditSubject)))
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit, connectReadMax)
-			f.server.Handle(tokenPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyCLIBearer, tokenHandler))
+			f.guarded(tokenPath, rpcerr.FormatConnect, needTokens, tokenHandler)
 			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
 
 			// Memory management service: the typed surface the console Settings UI uses to LIST,
@@ -601,7 +584,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// door onto the same files is audited separately.
 			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindMemory, trailrpc.WithAuditReads()))
 			memoryPath, memoryHandler := memoryv1alpha1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit, connectReadMax)
-			f.server.Handle(memoryPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleBearer, memoryHandler))
+			f.guarded(memoryPath, rpcerr.FormatConnect, needConsoleWrite, memoryHandler)
 			log.InfoContext(ctx, "[BRIDGE] memory service mounted", slog.String("path", memoryPath))
 
 			// Notes service: the typed surface the console's Notes view uses to READ the
@@ -619,7 +602,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// private store: this is the only door that serves notes nothing else attributes.
 			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, trailrpc.WithAuditReads()))
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit, connectReadMax)
-			f.server.Handle(notesPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, notesHandler))
+			f.guarded(notesPath, rpcerr.FormatConnect, needConsoleRead, notesHandler)
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
 
 			// Graph service: the typed surface for the knowledge graph's own verbs (query,
@@ -633,26 +616,27 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// either: unlike notes and memory, nothing here is attributable to a person, and the
 			// same facts are already served unaudited over /api/v1/graph.
 			//
-			// VerifyConsoleBearer, NOT the read-tier verifier its read-only contract would
-			// suggest. This service and /api/v1/graph are two doors onto ONE body of data, and
-			// /api/ is mounted at the write tier, so the read tier here would let a viewer
+			// console=write, NOT the console=read its read-only contract would suggest. This
+			// service and /api/v1/graph are two doors onto ONE body of data, and /api/ needs
+			// console=write, so console=read here would let a viewer
 			// credential page the whole graph through QueryNodes after being refused the bulk
 			// route, which is a hole rather than a convenience. The tiers move together or the
 			// weaker one decides.
 			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(opts.Magus), connectReadMax)
-			f.server.Handle(graphPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleBearer, graphServiceHandler))
+			f.guarded(graphPath, rpcerr.FormatConnect, needConsoleWrite, graphServiceHandler)
 			log.InfoContext(ctx, "[BRIDGE] graph service mounted", slog.String("path", graphPath))
 
 			log.InfoContext(ctx, "[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}
 	}
 
-	return s.run(ctx, log, f.server)
+	return s.run(ctx, log, f)
 }
 
-func (s *Daemon) run(ctx context.Context, log *slog.Logger, httpServer *httpx.Server) error {
+func (s *Daemon) run(ctx context.Context, log *slog.Logger, f frame) error {
+	httpServer := f.server
 	if s.onMounted != nil {
-		s.onMounted(httpServer.Patterns())
+		s.onMounted(httpServer.Patterns(), maps.Clone(f.needs))
 	}
 	log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", httpServer.Addr().String()))
 	if err := httpServer.Serve(ctx); err != nil {
@@ -663,7 +647,7 @@ func (s *Daemon) run(ctx context.Context, log *slog.Logger, httpServer *httpx.Se
 }
 
 // prepare resolves the logger and bind address from the exported option fields, mirroring
-// the fallbacks the handler package applies internally, and provisions the cli token.
+// the fallbacks the handler package applies internally, and provisions the operator token.
 func (s *Daemon) prepare(ctx context.Context) (*slog.Logger, netip.AddrPort, error) {
 	log := s.opts.Logger
 	if log == nil {
@@ -674,39 +658,47 @@ func (s *Daemon) prepare(ctx context.Context) (*slog.Logger, netip.AddrPort, err
 		addr = netip.MustParseAddrPort(mcp.DefaultAddress)
 	}
 
-	// Provision the retrievable cli token before serving. Fail closed: if it
-	// can't be loaded or generated, the MCP endpoint never comes up. Both surface
-	// guards re-evaluate their verifier on each request, re-reading the cli token
-	// (and, for /mcp, the named connector store) from disk, so a rotate, create, or
-	// revoke takes effect without a daemon restart.
-	if _, err := auth.Resolve(ctx, log); err != nil {
-		return nil, addr, err
+	// A non-loopback bind (MAGUS_MCP_ADDRESS=0.0.0.0 for k8s health probes, say) serves every
+	// bearer token over plaintext HTTP, so it is an explicit opt-in, never a warning.
+	if !addr.Addr().IsLoopback() && !s.opts.Config.MCP.InsecureBind {
+		return nil, addr, fmt.Errorf("daemon: mcp.address %s is not loopback, and a non-loopback listener sends bearer tokens in cleartext; front it with TLS or a tunnel and set mcp.insecure_bind: true (MAGUS_MCP_INSECURE_BIND=true), or bind 127.0.0.1", addr)
 	}
 
-	// A non-loopback bind (e.g. MAGUS_MCP_ADDRESS=0.0.0.0 for k8s health probes)
-	// serves /mcp over plaintext HTTP, so the bearer token crosses the network in
-	// the clear. The MCP transport spec says remote HTTP should use TLS; warn so an
-	// operator fronts it with TLS or a tunnel rather than exposing a cleartext token.
-	if !addr.Addr().IsLoopback() {
-		log.WarnContext(ctx, "[AGENT] MCP is bound to a non-loopback address; the bearer token is sent in cleartext over HTTP - front it with TLS or a tunnel",
-			slog.String("addr", addr.String()))
+	// Fail closed: without an operator token the daemon never serves. Every guard re-reads
+	// the operator file and the token store per request, so a rotate, mint or revoke takes
+	// effect without a restart.
+	if _, err := auth.EnsureOperator(ctx, log); err != nil {
+		return nil, addr, err
 	}
 	return log, addr, nil
 }
 
-// frame is the listener and the guard chains every route mounts behind.
+// The Need of each daemon route. A mount names one of these; the route matrix test in
+// daemon_test.go pins which.
+var (
+	needMCP          = types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
+	needTokens       = types.Need{Surface: types.SurfaceTokens, Level: types.LevelWrite}
+	needConsoleRead  = types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
+	needConsoleWrite = types.Need{Surface: types.SurfaceConsole, Level: types.LevelWrite}
+)
+
+// frame is the listener and the guard chains every route mounts behind. needs records each
+// guarded pattern's Need as it is mounted.
 type frame struct {
 	server      *httpx.Server
 	allowed     httpx.AllowedSet
 	siteAllowed httpx.AllowedSet
 	cors        func(http.Handler) http.Handler
+	needs       map[string]types.Need
 }
 
-// siteGuarded is the chain every console data route mounts behind. CORS sits between
-// rebind and bearer so a tokenless OPTIONS preflight is answered, while a hosted-PWA
-// Origin still clears rebind first. format is the mounted handler's own protocol.
-func (f frame) siteGuarded(format rpcerr.Format, verify func(string) (string, bool), h http.Handler) http.Handler {
-	return httpx.GuardRebind(format, f.siteAllowed, f.cors(httpx.BearerGuard(format, verify, h)))
+// guarded mounts h at pattern behind the chain every console data route uses: rebind, then
+// CORS, so a tokenless OPTIONS preflight is answered while a hosted-PWA Origin still clears
+// rebind first, then the bearer guard holding the route to need. format is the handler's own
+// protocol.
+func (f frame) guarded(pattern string, format rpcerr.Format, need types.Need, h http.Handler) {
+	f.needs[pattern] = need
+	f.server.Handle(pattern, httpx.GuardRebind(format, f.siteAllowed, f.cors(httpx.BearerGuard(format, auth.Verify, need, h))))
 }
 
 // mount binds the listener and mounts /mcp and the health routes, the surface every
@@ -720,7 +712,7 @@ func (s *Daemon) mount(addr netip.AddrPort, mcpHandler http.Handler) (frame, err
 	// freely. The rebind check runs outermost so a forged cross-origin browser
 	// request is rejected before the bearer token is even examined; the bearer
 	// guard then enforces the shared secret on everything that gets past it.
-	f := frame{allowed: httpx.AllowedHosts(addr)}
+	f := frame{allowed: httpx.AllowedHosts(addr), needs: map[string]types.Need{}}
 	httpServer, err := httpx.NewServer(addr)
 	if err != nil {
 		return f, err
@@ -733,7 +725,8 @@ func (s *Daemon) mount(addr netip.AddrPort, mcpHandler http.Handler) (frame, err
 		handler.LimitRequestBody(w, r)
 		mcpHandler.ServeHTTP(w, r)
 	})
-	httpServer.Handle("/mcp", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, httpx.BearerGuard(rpcerr.FormatJSON, auth.VerifyMCPBearer, cappedMCP)))
+	f.needs["/mcp"] = needMCP
+	httpServer.Handle("/mcp", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, httpx.BearerGuard(rpcerr.FormatJSON, auth.Verify, needMCP, cappedMCP)))
 
 	// CORS allows the hosted explorer origin plus the two loopback origins derived from
 	// the server port. Built here (not only inside the console block) so /livez and
@@ -796,7 +789,7 @@ func (s *Daemon) serveUnloaded(ctx context.Context) error {
 		return err
 	}
 	if opts.Config.Console.Enabled != nil && !*opts.Config.Console.Enabled || !addr.Addr().IsLoopback() {
-		return s.run(ctx, log, f.server)
+		return s.run(ctx, log, f)
 	}
 
 	var svcOpts []console.Option
@@ -810,21 +803,21 @@ func (s *Daemon) serveUnloaded(ctx context.Context) error {
 	// this workspace's state and error, which is the thing to show.
 	svc := console.NewService(nil, opts.Config, opts.StatusBase, opts.Version, svcOpts...)
 	statusPath, statusHandler := statusv1alpha1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log), connectReadMax)
-	f.server.Handle(statusPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, statusHandler))
+	f.guarded(statusPath, rpcerr.FormatConnect, needConsoleRead, statusHandler)
 
 	refuseConnect := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rpcerr.FormatConnect.Write(w, r, u.Err())
 	})
 	for _, name := range workspaceServices {
-		f.server.Handle("/"+name+"/", f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, refuseConnect))
+		f.guarded("/"+name+"/", rpcerr.FormatConnect, needConsoleRead, refuseConnect)
 	}
-	f.server.Handle("/api/", f.siteGuarded(rpcerr.FormatJSON, auth.VerifyConsoleReadBearer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	f.guarded("/api/", rpcerr.FormatJSON, needConsoleRead, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rpcerr.FormatJSON.Write(w, r, u.Err())
-	})))
+	}))
 	if consoleDir, ok := resolveConsoleDir(u.Root); ok {
 		f.server.Handle("/console/", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, console.StaticHandler(consoleDir)))
 	}
 	log.WarnContext(ctx, "[BRIDGE] workspace not loaded; serving status and the console only",
 		slog.String("root", u.Root), slog.String("error", u.Err().Message))
-	return s.run(ctx, log, f.server)
+	return s.run(ctx, log, f)
 }

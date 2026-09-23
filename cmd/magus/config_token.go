@@ -1,20 +1,12 @@
 package main
 
-// config_token.go is the OPERATOR token: the bootstrap credential the CLI itself uses
-// and the only one that may manage other tokens.
+// config_token.go is the OPERATOR token (mgo_): the credential the CLI itself uses, holding
+// every surface on loopback, and the only one that may manage other tokens.
 //
 // It lives at `magus config token`, NOT under `config mcp`, because it is not an MCP
-// credential: internal/auth/guard.go calls it "the OPERATOR tier and nothing else",
-// and it opens the console just as much as it opens /mcp. It sat under `config mcp`
-// only because MCP was the first surface that needed it, and every reader who met it
-// there learned that the daemon has one "MCP token", which is the conflation the
-// scoped tiers exist to undo.
-//
-// compat(until: no install still carries the pre-rename file): the on-disk path stays
-// <state>/magus/mcp_token. Moving it would strand an existing token behind a rename
-// for no user-visible gain (the file is not something anyone types), so only the
-// command moved. Observe it is safe to rename by checking that no state dir in the
-// wild still holds mcp_token; auth.Path is the one place that would change.
+// credential: it opens the console and token management as much as /mcp. `print` and
+// `generate` are denied to agent sessions by the guard (rule operator-token); an agent
+// holds its own connector token.
 
 import (
 	"errors"
@@ -84,7 +76,7 @@ func configTokenGenerate(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config token generate [--force]")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Mint a new 256-bit MCP bearer token and store it 0600 in the user state dir.")
+		fmt.Fprintln(os.Stderr, "Mint a new mgo_ operator token and store it 0600 in the user state dir.")
 		fmt.Fprintln(os.Stderr, "Refuses to overwrite an existing token unless --force is given. A running")
 		fmt.Fprintln(os.Stderr, "daemon picks up a rotated token automatically - no restart needed.")
 		fmt.Fprintln(os.Stderr, "")
@@ -115,10 +107,12 @@ func configTokenGenerate(args []string) error {
 		return err
 	}
 
+	// The secret goes to stdout alone, once; repeating it on stderr would put it in every
+	// terminal log that captures both.
 	fmt.Printf("%s\n", tok)
 	fmt.Fprintf(os.Stderr, "\nmagus config token generate: wrote %s\n", path)
-	fmt.Fprintf(os.Stderr, "Configure your MCP client with header:\n  Authorization: Bearer %s\n", tok)
 	fmt.Fprintln(os.Stderr, "A running daemon picks this up automatically - no restart needed.")
+	fmt.Fprintln(os.Stderr, "For an MCP client, mint a scoped token instead: "+hint.ConfigMCPConnectorCreate.String())
 	return nil
 }
 
@@ -166,7 +160,7 @@ func configTokenStatus(args []string) error {
 		return err
 	}
 	fmt.Printf("token:       present\n")
-	fmt.Printf("fingerprint: %s\n", auth.Fingerprint(tok))
+	fmt.Printf("id:          %s\n", auth.Fingerprint(tok))
 	fmt.Printf("path:        %s\n", path)
 	return nil
 }

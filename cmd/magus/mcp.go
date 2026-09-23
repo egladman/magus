@@ -54,7 +54,7 @@ func mcpCmd(_ context.Context, _ []string) error {
 	fmt.Fprintf(os.Stderr, "MCP is served by the magus daemon, not as a standalone command.\n\n")
 	fmt.Fprintf(os.Stderr, "Start the daemon:\n  magus server start\n\n")
 	fmt.Fprintf(os.Stderr, "MCP endpoint (Streamable HTTP):\n  http://%s/mcp\n\n", addr)
-	fmt.Fprintf(os.Stderr, "The endpoint requires a bearer token. Print it with:\n  magus config token print\n\n")
+	fmt.Fprintf(os.Stderr, "The endpoint requires a bearer token holding mcp=write. Mint one per client:\n  magus config mcp connector create --name <client> --expires 366d\n\n")
 	// Everything above is what EVERY client needs: transport, URL, credential.
 	// What each client does with them (a TOML table, a JSON object, an env var
 	// read at launch) is that client's dialect, and it belongs in documentation
@@ -64,8 +64,9 @@ func mcpCmd(_ context.Context, _ []string) error {
 	fmt.Fprintf(os.Stderr, "  transport  streamable-http\n")
 	fmt.Fprintf(os.Stderr, "  url        http://%s/mcp\n", addr)
 	fmt.Fprintf(os.Stderr, "  auth       Authorization: Bearer <token>, or a token env var\n\n")
-	fmt.Fprintf(os.Stderr, "Many clients read a token from the environment at launch:\n")
-	fmt.Fprintf(os.Stderr, "  export MAGUS_MCP_TOKEN=\"$(magus config token print)\"\n\n")
+	fmt.Fprintf(os.Stderr, "Many clients read a token from the environment at launch; store the minted\n")
+	fmt.Fprintf(os.Stderr, "secret where that client reads it, since it is shown once.\n")
+	fmt.Fprintf(os.Stderr, "`magus doctor` warns 14 days before a token expires.\n\n")
 	fmt.Fprintf(os.Stderr, "Then confirm the endpoint is actually serving:\n")
 	fmt.Fprintf(os.Stderr, "  magus status --probe=liveness,mcp\n\n")
 	fmt.Fprintf(os.Stderr, "Per-client configuration, and what to re-register when mcp.address\n")

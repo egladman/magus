@@ -13,6 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
@@ -88,32 +92,76 @@ func TestPickLANIPv4(t *testing.T) {
 	}
 }
 
-// TestResolveTTL covers the caller-requested-lifetime clamp: a non-positive request
-// falls back to the manager default, and any other value is bounded to [MinTTL, MaxTTL].
-func TestResolveTTL(t *testing.T) {
-	m := NewManager(context.Background(), 15*time.Minute, nil)
-	cases := []struct {
-		name string
-		in   time.Duration
-		want time.Duration
-	}{
-		{"zero uses default", 0, 15 * time.Minute},
-		{"negative uses default", -time.Hour, 15 * time.Minute},
-		{"in range passes through", time.Hour, time.Hour},
-		// A multi-week lifetime is now IN range, not clamped: the wall-display case is what
-		// raised the ceiling, and this pins that the long durations the console offers
-		// actually survive the clamp rather than being silently cut back to a day.
-		{"long display lifetime passes through", 30 * 24 * time.Hour, 30 * 24 * time.Hour},
-		{"below min clamps up", 10 * time.Second, MinTTL},
-		{"above max clamps down", 365 * 24 * time.Hour, MaxTTL},
+// Start mints by the same rule as every token: a lifetime outside [1m, 24h] and a minter
+// below the share's grant are refused before any listener opens, and nothing is clamped. A
+// non-positive request is "no preference" and takes the manager default.
+func TestStartRefusesWhatTheMintingRuleRefuses(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := newTestManager(t, ctx, 15*time.Minute)
+	consoleDir := consoleDirFixture(t)
+	routes := map[string]Route{"/api/v1/status": {Handler: okHandler}}
+
+	for _, ttl := range []time.Duration{10 * time.Second, 25 * time.Hour, 30 * 24 * time.Hour} {
+		_, err := m.Start(types.GrantConsole, consoleDir, routes, ttl)
+		assert.ErrorIs(t, err, auth.ErrShareLifetime, ttl.String())
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := m.resolveTTL(tc.in); got != tc.want {
-				t.Fatalf("resolveTTL(%s) = %s, want %s", tc.in, got, tc.want)
-			}
-		})
+	for _, minter := range []types.Grant{{}, types.GrantConnector} {
+		_, err := m.Start(minter, consoleDir, routes, 0)
+		assert.ErrorIs(t, err, auth.ErrExceedsGrant, minter.String())
 	}
+	_, active := m.Active()
+	assert.False(t, active, "a refused share opens nothing")
+
+	link, err := m.Start(types.GrantViewer, consoleDir, routes, 0)
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now().Add(15*time.Minute), link.ExpiresAt, 5*time.Second, "no preference takes the default")
+	link, err = m.Start(types.GrantConsole, consoleDir, routes, 24*time.Hour)
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now().Add(24*time.Hour), link.ExpiresAt, 5*time.Second, "the lifetime asked for is the lifetime given")
+}
+
+// The LAN listener accepts its own mgl_ secret and nothing else: the operator token and a
+// stored token are 401 there even though both are valid on loopback. The operator secret
+// never crosses the LAN.
+func TestShareListenerRefusesEveryOtherClass(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	trailDir := t.TempDir()
+	m := newTestManager(t, ctx, time.Minute, WithTrailDir(trailDir))
+	link, err := m.Start(types.GrantOperator, consoleDirFixture(t), map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
+	require.NoError(t, err)
+	base := "http://" + hostOfURL(t, link.URL)
+
+	op, err := auth.EnsureOperator(t.Context(), nil)
+	require.NoError(t, err)
+	store, err := auth.LoadStore()
+	require.NoError(t, err)
+	console, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "c", Grant: types.GrantConsole, Expires: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	for name, tok := range map[string]string{"operator": op, "console token": console} {
+		assert.Equal(t, http.StatusUnauthorized, get(t, base+"/api/v1/status", tok), name)
+	}
+	secret := tokenFromURL(t, link.URL)
+	assert.Equal(t, http.StatusOK, get(t, base+"/api/v1/status", secret))
+
+	// The first use is recorded, and the record holds no secret.
+	var events []trail.Event
+	require.Eventually(t, func() bool {
+		events, _ = trail.ReadRecent(trailDir, 10)
+		return len(events) > 0
+	}, 5*time.Second, 20*time.Millisecond)
+	require.NoError(t, filepath.WalkDir(trailDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err == nil {
+			assert.NotContains(t, string(b), secret, path)
+		}
+		return err
+	}))
 }
 
 // newTestManager returns a Manager that binds its share listener on loopback,
@@ -181,7 +229,7 @@ func TestManagerServesGuardedRoutesWithToken(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
+	sess, err := m.Start(types.GrantConsole, consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -226,13 +274,13 @@ func TestManagerSupersedeRevokesOldToken(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	first, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
+	first, err := m.Start(types.GrantConsole, consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	oldToken := tokenFromURL(t, first.URL)
 
-	second, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
+	second, err := m.Start(types.GrantConsole, consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -265,7 +313,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	if _, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0); err != nil {
+	if _, err := m.Start(types.GrantConsole, consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0); err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	first, ok := m.Active()
@@ -274,7 +322,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	}
 
 	// Supersede: the second Start replaces the first under the lock.
-	second, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
+	second, err := m.Start(types.GrantConsole, consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -286,7 +334,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	newToken := tokenFromURL(t, second.URL)
 
 	// CloseIf on the OLD (superseded) fingerprint must not touch the live share.
-	if m.CloseIf(first.Fingerprint) {
+	if m.CloseIf(first.ID) {
 		t.Fatalf("CloseIf on a superseded fingerprint should report false")
 	}
 	if code := get(t, newBase+"/api/v1/status", newToken); code != http.StatusOK {
@@ -294,7 +342,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	}
 
 	// CloseIf on the LIVE fingerprint tears it down.
-	if !m.CloseIf(cur.Fingerprint) {
+	if !m.CloseIf(cur.ID) {
 		t.Fatalf("CloseIf on the live fingerprint should report true")
 	}
 	waitClosed(t, newBase+"/console/")
@@ -309,7 +357,7 @@ func TestManagerCloseKillsListener(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
+	sess, err := m.Start(types.GrantConsole, consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -321,11 +369,17 @@ func TestManagerCloseKillsListener(t *testing.T) {
 func TestManagerTTLClosesListener(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// A short TTL exercises the timeout teardown path.
-	m := newTestManager(t, ctx, 150*time.Millisecond)
+	// A token that dies in 150ms exercises the timeout teardown path; the listener's lifetime is
+	// the token's, not a second clock.
+	m := newTestManager(t, ctx, time.Minute)
+	m.mint = func(minter types.Grant, ttl time.Duration) (string, auth.ShareToken, error) {
+		secret, tok, err := auth.MintShare(minter, ttl)
+		tok.Expires = time.Now().Add(150 * time.Millisecond)
+		return secret, tok, err
+	}
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
+	sess, err := m.Start(types.GrantConsole, consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -367,7 +421,7 @@ func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute, WithTrailDir(trailDir))
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
+	sess, err := m.Start(types.GrantConsole, consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}

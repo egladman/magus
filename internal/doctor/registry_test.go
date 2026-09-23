@@ -67,6 +67,8 @@ func TestCheckCodesAreRoutable(t *testing.T) {
 // encodes: a workspace that will not load still gets the host checks answered, and gets
 // them without any check dereferencing the workspace that is not there.
 func TestRunSkipsWorkspaceChecksWhenLoadFailed(t *testing.T) {
+	// The tokens check reads the state dir; the real one says nothing about this contract.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	report := Run(t.Context(), t.TempDir(), nil, assert.AnError)
 
 	var want int

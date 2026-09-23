@@ -115,11 +115,20 @@ export interface Diff {
   readonly api?: DiffAPI;
 }
 
+// CommentCredential mirrors types.Credential: the verified bearer, never its secret. id is the
+// identity; name is a label a later token can reuse.
+export interface CommentCredential {
+  readonly class?: "operator" | "token" | "share";
+  readonly id?: string;
+  readonly name?: string;
+  readonly grant?: { readonly tokens?: string; readonly mcp?: string; readonly console?: string };
+}
+
 export interface CommentOrigin {
   readonly user?: string;
   readonly entry_point?: string;
   readonly host?: string;
-  readonly credential?: string;
+  readonly credential?: CommentCredential;
 }
 
 export interface DiffComment {

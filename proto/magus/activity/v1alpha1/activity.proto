@@ -143,12 +143,12 @@ message ActivityEvent {
   // Where the action came from, one field per channel, so a reader never guesses which kind of
   // value a single string holds. user is the OS account the recording process ran as, read from
   // the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, daemon).
-  // credential names the bearer credential a daemon request presented, as the daemon verified
-  // it. agent is the host's subagent id within session. actor above is these rendered as one
-  // label for a row head, and filters match that label.
+  // credential is the bearer a daemon request presented, as the daemon verified it. agent is the
+  // host's subagent id within session. actor above is these rendered as one label for a row
+  // head.
   string user = 18;
   string entry_point = 19;
-  string credential = 20;
+  Credential credential = 20;
   string agent = 21;
 
   // Which source answered unit (the lease), where the producer resolved one: flag, agent (the
@@ -157,6 +157,16 @@ message ActivityEvent {
   // BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so
   // it takes magus's word for the concept rather than unit's.
   string lease_from = 22;
+}
+
+// Credential is a verified bearer, never its secret: which class it is, its stable id, the name
+// it was minted under, and the grant it held when the action was recorded. The id is the
+// identity; the name is a label a later token can reuse.
+message Credential {
+  string class = 1;   // operator, token or share
+  string id = 2;      // first 8 hex of the secret's SHA-256
+  string name = 3;    // empty for the operator and a share link
+  string grant = 4;   // e.g. "console=write" or "mcp=write"
 }
 
 // ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a
@@ -185,7 +195,7 @@ service ActivityService {
 // a field OR; the time window bounds it.
 message ActivityQuery {
   repeated Kind kinds = 1;              // restrict to these action kinds
-  repeated string actors = 2;          // restrict to events whose origin names one of these in a single field: user, host, agent, credential or entry_point, matched exactly (never the actor label)
+  repeated string actors = 2;          // restrict to events whose origin names one of these in a single field: user, host, agent, the credential's class, id or name, or entry_point, matched exactly (never the actor label)
   repeated string actions = 3;         // restrict to these actions (e.g. tool names)
   magus.query.v1alpha1.TimeRange time = 4;   // action-time window
   // The three narrowings a person watching a worker asks for. They are here rather than on

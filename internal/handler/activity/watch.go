@@ -183,7 +183,7 @@ func wireFeedEvent(e jobstore.FeedEvent) *activityv1.ActivityEvent {
 		Host:       e.Origin.Host,
 		Session:    e.Origin.Session,
 		Agent:      e.Origin.Agent,
-		Credential: e.Origin.Credential,
+		Credential: wireCredential(e.Origin.Credential),
 		Unit:       e.Job,
 		Outcome:    encodeOutcome(e.Outcome),
 		Error:      e.Error,
@@ -236,7 +236,13 @@ func fromWire(e *activityv1.ActivityEvent) trail.Event {
 		Ts: e.GetTime().AsTime().UnixMilli(),
 		Origin: types.Origin{
 			User: e.GetUser(), EntryPoint: types.EntryPoint(e.GetEntryPoint()), Host: e.GetHost(),
-			Session: e.GetSession(), Agent: e.GetAgent(), Credential: e.GetCredential(),
+			Session: e.GetSession(), Agent: e.GetAgent(),
+			// The filter matches a credential by class, id and name; the grant is not a filter.
+			Credential: types.Credential{
+				Class: types.CredentialClass(e.GetCredential().GetClass()),
+				ID:    e.GetCredential().GetId(),
+				Name:  e.GetCredential().GetName(),
+			},
 		},
 		Action: e.GetAction(),
 		Lease:  e.GetUnit(),

@@ -144,7 +144,7 @@ used by (11)  op:go:go-build, op:go:go-clean, op:go:go-generate,
               spell:go
 
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago
-open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago&token=$(magus config token print)"
+open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago&token=$(magus config console token create --expires 12h)"
 (start the magus daemon if the graph does not load)
 
 next:
@@ -171,7 +171,7 @@ depends on  target:.:format
 part of     project:.
 
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest
-open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest&token=$(magus config token print)"
+open it signed in: open "http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest&token=$(magus config console token create --expires 12h)"
 (start the magus daemon if the graph does not load)
 
 next:

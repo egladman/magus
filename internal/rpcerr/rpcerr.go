@@ -60,10 +60,10 @@ var titles = map[types.DiagnosticCode]string{
 	types.WorkspaceStillLoading:     "workspace still loading",
 	types.BearerRejected:            "bearer token rejected",
 	types.InsecureTokenPermissions:  "insecure token file permissions",
-	types.ConnectorStoreTooNew:      "connector store is too new",
+	types.TokenStoreTooNew:          "token store is too new",
 	types.NoAuthToken:               "no auth token configured",
-	types.ConnectorNameExists:       "connector name already exists",
-	types.ConnectorNotFound:         "connector token not found",
+	types.TokenNameExists:           "token name already exists",
+	types.TokenNotFound:             "token not found",
 	types.HostNotAllowed:            "host not allowed",
 	types.LoopbackPeerRequired:      "local access only",
 	types.ShareBoundToAnotherDevice: "share link bound to another device",
@@ -71,7 +71,10 @@ var titles = map[types.DiagnosticCode]string{
 	types.BearerMissing:             "no bearer token presented",
 	types.MethodNotAllowed:          "method not allowed",
 	types.ConsoleNotBuilt:           "console not built",
-	types.ShareUnavailable:          "share listener unavailable",
+	types.ShareUnavailable:          "share could not open",
+	types.GrantInsufficient:         "grant below the route's need",
+	types.OperatorTokenFormat:       "operator token predates the class prefix",
+	types.TokenStoreTooOld:          "token store predates grants",
 }
 
 // Error returns the rendered message, so an Error can travel as a Go error.

@@ -24,7 +24,6 @@ import (
 	_ "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	_ "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 
-	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/trail"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -118,7 +117,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
-	srv := httptest.NewServer(verifiedAs("console-1", mux))
+	srv := httptest.NewServer(verifiedAs(console1, mux))
 	defer srv.Close()
 
 	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
@@ -141,15 +140,65 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 		t.Fatalf("recorded %d events, want exactly 1 (the mutation; the read must not record): %+v", len(events), events)
 	}
 	got := events[0]
-	if got.Action != "RevokeToken" || got.Credential != "console-1" || got.EntryPoint != types.EntryPointRPC ||
+	if got.Action != "RevokeToken" || got.Credential != console1 || got.EntryPoint != types.EntryPointRPC ||
 		got.Kind != trail.KindTokenLifecycle || got.Outcome != trail.OutcomeOK {
 		t.Errorf("recorded event = %+v, want RevokeToken/console-1/rpc/token_lifecycle/ok", got)
 	}
+	if got.RequestRef != "" {
+		t.Errorf("without WithSubject nothing but the method is recorded, got request ref %q", got.RequestRef)
+	}
 }
 
-// verifiedAs stands in for the bearer guard, which puts the verified credential's name and
-// the rpc entry point on the request context before any service sees it.
-func verifiedAs(credential string, next http.Handler) http.Handler {
+var (
+	console1 = types.Credential{Class: types.ClassToken, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+	operator = types.Credential{Class: types.ClassOperator, ID: "0badf00d", Grant: types.GrantOperator}
+)
+
+// subjectService answers a revoke with a named token, so the WithSubject test can show the
+// subject lands in the trail.
+type subjectService struct{ fakeTokenService }
+
+func (subjectService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
+	return connect.NewResponse(&tokenv1.TokenInfo{Identifier: "3fa9c1d2", Name: "laptop"}), nil
+}
+
+func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
+	dir := t.TempDir()
+	subject := func(resp connect.AnyResponse) ([]byte, string) {
+		switch msg := resp.Any().(type) {
+		case *tokenv1.TokenInfo:
+			return []byte(`{"identifier":"` + msg.GetIdentifier() + `"}`), "token " + msg.GetIdentifier()
+		case *tokenv1.CreateTokenResponse:
+			return []byte(`{"identifier":"minted"}`), "token minted"
+		}
+		return nil, ""
+	}
+	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(subjectService{},
+		connect.WithInterceptors(Interceptor(dir, trail.KindTokenLifecycle, WithSubject(subject))))
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(verifiedAs(operator, mux))
+	defer srv.Close()
+	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
+	if _, err := client.RevokeToken(context.Background(), connect.NewRequest(&tokenv1.RevokeTokenRequest{Name: "laptop"})); err != nil {
+		t.Fatalf("RevokeToken: %v", err)
+	}
+	events, err := trail.ReadRecent(dir, 10)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("ReadRecent = %d events, %v", len(events), err)
+	}
+	if events[0].Preview != "token 3fa9c1d2" || events[0].RequestRef == "" {
+		t.Fatalf("the subject was not recorded: %+v", events[0])
+	}
+	blob, err := trail.ReadBlob(dir, events[0].RequestRef)
+	if err != nil || !strings.Contains(string(blob), "3fa9c1d2") {
+		t.Fatalf("subject blob = %q, %v", blob, err)
+	}
+}
+
+// verifiedAs stands in for the bearer guard, which puts the verified credential and the rpc
+// entry point on the request context before any service sees it.
+func verifiedAs(credential types.Credential, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), types.EntryPointRPC)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -167,7 +216,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
-	srv := httptest.NewServer(verifiedAs(auth.CLICredential, mux))
+	srv := httptest.NewServer(verifiedAs(operator, mux))
 	defer srv.Close()
 
 	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
@@ -188,17 +237,15 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("recorded %d events, want 2 (the read AND the mutation, audit-reads on): %+v", len(events), events)
 	}
-	// Newest-first: the mutation, then the read, both naming the cli credential.
-	got := []struct{ action, credential string }{
-		{events[0].Action, events[0].Credential},
-		{events[1].Action, events[1].Credential},
+	// Newest-first: the mutation, then the read, both naming the operator credential.
+	type row struct {
+		action     string
+		credential types.Credential
 	}
-	want := []struct{ action, credential string }{
-		{"RevokeToken", auth.CLICredential},
-		{"ListTokens", auth.CLICredential},
-	}
+	got := []row{{events[0].Action, events[0].Credential}, {events[1].Action, events[1].Credential}}
+	want := []row{{"RevokeToken", operator}, {"ListTokens", operator}}
 	if got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("recorded events = %+v, want RevokeToken then ListTokens (both the cli credential)", got)
+		t.Errorf("recorded events = %+v, want RevokeToken then ListTokens (both the operator credential)", got)
 	}
 	if events[0].Kind != trail.KindMemory || events[1].Kind != trail.KindMemory {
 		t.Errorf("recorded kinds = %v,%v, want both %v", events[0].Kind, events[1].Kind, trail.KindMemory)

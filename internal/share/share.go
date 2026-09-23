@@ -36,31 +36,6 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// defaultTTL is how long a share stays live before the listener closes and the
-// token expires when the caller does not request a specific lifetime. Short by
-// default: the common case is a "glance at my phone" affordance, not a standing
-// remote endpoint. Fifteen minutes is long enough to scan and look, short enough
-// that a leaked QR is worth little.
-const defaultTTL = 15 * time.Minute
-
-// MinTTL and MaxTTL bound a caller-requested share lifetime. The console lets the
-// operator pick a duration before minting (a quick phone glance versus an all-day
-// display on a TV), and the daemon clamps the request to this range so a leaked QR
-// can never be made to live indefinitely. The token stays read-only regardless, so
-// a longer window only widens who may look, never what they may change.
-//
-// MaxTTL is 90 days because a wall display outlives any session and a link expiring
-// nightly turns an ambient dashboard into a daily chore.
-//
-// It stays BOUNDED, and short of a year. This is a bearer credential (whoever holds
-// the URL is the audience), and URLs end up pasted into chat, photographed off a
-// screen, left in a kiosk browser's history. An unexpiring share makes each of those
-// permanent.
-const (
-	MinTTL = 1 * time.Minute
-	MaxTTL = 90 * 24 * time.Hour
-)
-
 // iface is the minimal, testable projection of a network interface that
 // pickLANIPv4 needs: whether it is up and a loopback, and its addresses. The
 // real selector maps net.Interface into this; tests construct it directly so the
@@ -140,7 +115,7 @@ type Link struct {
 
 // active holds the runtime state of one live share: the closer that tears the
 // listener down plus the token record and mint time. Exactly one is live at a time.
-// It retains the token record (hash + scope + expiry, never the secret) and the mint
+// It retains the token record (hash and expiry, never the secret) and the mint
 // time so a management surface can list and identify the live share via
 // [Manager.Active] without reaching into the URL for the secret.
 type active struct {
@@ -150,13 +125,12 @@ type active struct {
 }
 
 // TokenInfo is the secret-free description of the active share token, for a management
-// surface (the console Settings token list). Fingerprint is the prefix-only
-// identifier used to revoke it; it never contains the token bytes.
+// surface (the console Settings token list). ID is the 8-hex identifier used to revoke
+// it; it never contains the token bytes.
 type TokenInfo struct {
-	Fingerprint string
-	Scope       string
-	Created     time.Time
-	Expires     time.Time
+	ID      string
+	Created time.Time
+	Expires time.Time
 }
 
 // Manager owns the at-most-one active share. Start opens a fresh listener
@@ -170,6 +144,9 @@ type Manager struct {
 	// selectAddr picks the bind IP. Production uses SelectLANIPv4; tests swap in
 	// a loopback selector so the listener lifecycle can be exercised off a LAN.
 	selectAddr func() (netip.Addr, error)
+	// mint is auth.MintShare; a test swaps in one whose token expires sooner than the
+	// minimum, to exercise the timeout teardown without waiting a minute.
+	mint func(minter types.Grant, ttl time.Duration) (string, auth.ShareToken, error)
 
 	// trailDir is the activity-trail base (the workspace cache dir). When set, the
 	// first authenticated request from each remote device on a link records one
@@ -195,37 +172,21 @@ func WithTrailDir(dir string) option {
 	return func(m *Manager) { m.trailDir = dir }
 }
 
-// NewManager returns a Manager whose shares live for ttl (<=0 uses defaultTTL)
-// and whose listeners are torn down when parent is cancelled (daemon shutdown).
+// NewManager returns a Manager whose shares live for ttl when a caller asks for no lifetime
+// (<=0 uses auth.DefaultShareTTL), and whose listeners are torn down when parent is cancelled
+// (daemon shutdown).
 func NewManager(parent context.Context, ttl time.Duration, log *slog.Logger, opts ...option) *Manager {
 	if ttl <= 0 {
-		ttl = defaultTTL
+		ttl = auth.DefaultShareTTL
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	m := &Manager{parent: parent, ttl: ttl, log: log, selectAddr: SelectLANIPv4}
+	m := &Manager{parent: parent, ttl: ttl, log: log, selectAddr: SelectLANIPv4, mint: auth.MintShare}
 	for _, opt := range opts {
 		opt(m)
 	}
 	return m
-}
-
-// resolveTTL turns a caller-requested lifetime into the one this share will use: a
-// non-positive request falls back to the manager's configured default; any other
-// value is clamped to [MinTTL, MaxTTL] so a request can neither be too brief to scan
-// nor long enough to make a leaked QR a standing endpoint.
-func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
-	if ttl <= 0 {
-		return m.ttl
-	}
-	if ttl < MinTTL {
-		return MinTTL
-	}
-	if ttl > MaxTTL {
-		return MaxTTL
-	}
-	return ttl
 }
 
 // Route is one data route a share serves, with the format its refusals are written in.
@@ -241,19 +202,25 @@ type Route struct {
 // exactly one live listener: a token from a prior link validates nowhere.
 // The listener closes and the token expires together after ttl (or on parent
 // cancellation / Close). ttl is the caller-requested lifetime: a non-positive value
-// uses the manager's configured default, and any other value is clamped to
-// [MinTTL, MaxTTL]. consoleDir must contain the built console.
+// uses the manager's configured default. consoleDir must contain the built console.
+//
+// minter is the grant of the credential that asked. The link is minted by the same rule as
+// every stored token (auth.MintShare), so a minter below [types.GrantShare] gets
+// auth.ErrExceedsGrant and a ttl outside [auth.MinShareTTL, auth.MaxShareTTL] gets
+// auth.ErrShareLifetime; neither opens a listener.
+//
 // No ctx parameter on purpose: a share OUTLIVES the request that opened it, so accepting
 // the caller's context invites the wrong wiring: the HTTP handler passes r.Context(),
 // which would tear the share down the instant that POST returned.
-func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Duration) (Link, error) {
-	addr, err := m.selectAddr()
+func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[string]Route, ttl time.Duration) (Link, error) {
+	if ttl <= 0 {
+		ttl = m.ttl
+	}
+	secret, tok, err := m.mint(minter, ttl)
 	if err != nil {
 		return Link{}, err
 	}
-
-	ttl = m.resolveTTL(ttl)
-	secret, tok, err := auth.MintShareToken(ttl)
+	addr, err := m.selectAddr()
 	if err != nil {
 		return Link{}, err
 	}
@@ -273,10 +240,15 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 	url := fmt.Sprintf("http://%s:%d/console/#token=%s", addr, port, secret)
 
 	// The verifier is bound to THIS link's token only. A new link builds a
-	// new closure over a new token, so an old link cannot authenticate here.
-	verify := func(presented string) (string, bool) {
-		return auth.ShareCredential, tok.Verify(presented, time.Now())
+	// new closure over a new token, so an old link cannot authenticate here, and it
+	// accepts only the mgl_ class, so the operator token never authenticates on the LAN.
+	verify := func(presented string) (types.Credential, bool) {
+		if !tok.Verify(presented, time.Now()) {
+			return types.Credential{}, false
+		}
+		return tok.Credential(), true
 	}
+	need := types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
 	mux := http.NewServeMux()
 	// Static console: unauthenticated. The app shell is not a secret; it reads the
 	// fragment token and replays it as a bearer on the guarded API routes below. It is
@@ -302,7 +274,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 	// runs after BearerGuard, so it only ever sees requests that already carry a valid
 	// token; it binds the first device and rejects the token replayed from any other.
 	for pattern, rt := range guarded {
-		mux.Handle(pattern, httpx.BearerGuard(rt.Format, verify, sg.admit(rt.Format, rt.Handler)))
+		mux.Handle(pattern, httpx.BearerGuard(rt.Format, verify, need, sg.admit(rt.Format, rt.Handler)))
 	}
 
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -317,7 +289,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 	// //nolint:gosec for G118; gosec no longer flags it, so nolintlint reported the
 	// directive as unused and it is gone. The reasoning stays: it is why the pattern
 	// is safe, not merely why a linter was quiet.
-	ctx, cancel := context.WithTimeout(m.parent, ttl)
+	ctx, cancel := context.WithDeadline(m.parent, tok.Expires)
 
 	// Supersede any current share and publish this one under the lock BEFORE starting
 	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if
@@ -370,10 +342,9 @@ func (m *Manager) Active() (TokenInfo, bool) {
 		return TokenInfo{}, false
 	}
 	return TokenInfo{
-		Fingerprint: m.cur.tok.SHA256[:8],
-		Scope:       m.cur.tok.Scope,
-		Created:     m.cur.created,
-		Expires:     m.cur.tok.Expires,
+		ID:      m.cur.tok.ID(),
+		Created: m.cur.created,
+		Expires: m.cur.tok.Expires,
 	}, true
 }
 
@@ -516,18 +487,17 @@ func (m *Manager) Close() {
 	}
 }
 
-// CloseIf tears the active share down only when its token fingerprint (the first 8
-// hex of the SHA-256, as [Manager.Active] reports it) still equals fingerprint, and
-// reports whether it did. It is the atomic check-and-close a revoke needs: a caller
-// that read the active fingerprint via Active and then called Close could, in the
-// window between the two, race a supersede and tear down a DIFFERENT share minted in
-// the meantime. CloseIf re-checks identity while holding the lock, so it revokes
-// exactly the share the caller named or nothing: a lost race leaves the new share
-// alive and returns false (the revoke maps that to NotFound).
-func (m *Manager) CloseIf(fingerprint string) bool {
+// CloseIf tears the active share down only when its token id (as [Manager.Active]
+// reports it) still equals id, and reports whether it did. It is the atomic
+// check-and-close a revoke needs: a caller that read the active id via Active and then
+// called Close could, in the window between the two, race a supersede and tear down a
+// DIFFERENT share minted in the meantime. CloseIf re-checks identity while holding the
+// lock, so it revokes exactly the share the caller named or nothing: a lost race leaves
+// the new share alive and returns false (the revoke maps that to NotFound).
+func (m *Manager) CloseIf(id string) bool {
 	m.mu.Lock()
 	cur := m.cur
-	if cur == nil || cur.tok.SHA256[:8] != fingerprint {
+	if cur == nil || cur.tok.ID() != id {
 		m.mu.Unlock()
 		return false
 	}

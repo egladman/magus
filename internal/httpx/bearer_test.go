@@ -31,7 +31,7 @@ func TestBearerGuard(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+		BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, types.GrantViewer), anyNeed, okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 
@@ -93,7 +93,7 @@ func TestBearerGuardWithQueryToken(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuardWithQueryToken(rpcerr.FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+		BearerGuardWithQueryToken(rpcerr.FormatJSON, SingleTokenVerifier(load, types.GrantViewer), anyNeed, okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 	code := func(authHeader, rawQuery string) int { return serve(authHeader, rawQuery).Code }
@@ -115,7 +115,7 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+	BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load, types.GrantOperator), anyNeed, okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
@@ -123,29 +123,67 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 // returns false denies access regardless of the presented token.
 func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 	t.Parallel()
-	reject := func(string) (string, bool) { return "", false }
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(rpcerr.FormatJSON, reject, okHandler).ServeHTTP(rr, req)
+	BearerGuard(rpcerr.FormatJSON, rejectAll, anyNeed, okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+// The guard's authorization is the grant against the need, checked exhaustively: every grant
+// on the lattice against every need. A credential below the need is a 403 MGS9015 naming the
+// need, never a 401 (the token is valid) and never a pass.
+func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
+	t.Parallel()
+	surfaces := []types.Surface{types.SurfaceTokens, types.SurfaceMCP, types.SurfaceConsole}
+	levels := []types.Level{types.LevelNone, types.LevelRead, types.LevelWrite}
+	for _, tok := range []types.Level{types.LevelNone, types.LevelWrite} {
+		for _, mcp := range []types.Level{types.LevelNone, types.LevelWrite} {
+			for _, con := range levels {
+				grant := types.Grant{Tokens: tok, MCP: mcp, Console: con}
+				verify := func(string) (types.Credential, bool) {
+					return types.Credential{Class: types.ClassToken, Grant: grant}, true
+				}
+				for _, s := range surfaces {
+					for _, l := range levels[1:] {
+						need := types.Need{Surface: s, Level: l}
+						req := httptest.NewRequest(http.MethodPost, "/x", nil)
+						req.Header.Set("Authorization", "Bearer anything")
+						rr := httptest.NewRecorder()
+						BearerGuard(rpcerr.FormatJSON, verify, need, okHandler).ServeHTTP(rr, req)
+						want := http.StatusForbidden
+						if grant.Level(s) >= l {
+							want = http.StatusOK
+						}
+						if !assert.Equal(t, want, rr.Code, "%s against %s", grant, need) || want == http.StatusOK {
+							continue
+						}
+						st := decodeStatus(t, rr.Body.Bytes())
+						assert.Equal(t, "MGS9015", st.reason(), "%s against %s", grant, need)
+						assert.Contains(t, st.Error.Message, need.String())
+					}
+				}
+			}
+		}
+	}
 }
 
 // The guard puts the credential it verified and the rpc entry point on the context once, so
 // every record made under the request is stamped from there and no handler copies either.
 func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 	t.Parallel()
-	named := func(presented string) (string, bool) { return "console-1", presented == "good" }
+	cred := types.Credential{Class: types.ClassToken, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+	named := func(presented string) (types.Credential, bool) { return cred, presented == "good" }
 	var seen types.Origin
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = trail.StampOrigin(r.Context(), types.Origin{})
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/x", nil)
 	req.Header.Set("Authorization", "Bearer good")
-	BearerGuard(rpcerr.FormatJSON, named, next).ServeHTTP(httptest.NewRecorder(), req)
-	assert.Equal(t, "console-1", seen.Credential)
+	BearerGuard(rpcerr.FormatJSON, named, anyNeed, next).ServeHTTP(httptest.NewRecorder(), req)
+	assert.Equal(t, cred, seen.Credential)
 	assert.Equal(t, types.EntryPointRPC, seen.EntryPoint)
-	assert.Empty(t, trail.CredentialFromContext(t.Context()), "no guard, no credential")
+	assert.Zero(t, trail.CredentialFromContext(t.Context()), "no guard, no credential")
 }
 
 func TestBearerToken(t *testing.T) {

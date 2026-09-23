@@ -79,7 +79,8 @@ func TestConsoleLinksCarryNoToken(t *testing.T) {
 func TestAuthHintIsRunnable(t *testing.T) {
 	got := authHint("http://127.0.0.1:7391/console/plan/#job=a")
 	require.Contains(t, got, `"http://127.0.0.1:7391/console/plan/#job=a&token=$(`)
-	require.Contains(t, got, `config token print)"`)
+	require.Contains(t, got, `config console token create --expires 12h)"`)
+	require.NotContains(t, got, "config token print", "a sign-in line never hands the operator token to a browser")
 }
 
 func TestConsoleSkew(t *testing.T) {
