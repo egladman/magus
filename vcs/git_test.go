@@ -1932,8 +1932,13 @@ func TestGitCallsIgnoreAHostileGitDir(t *testing.T) {
 		files, err := gitVCS{}.ChangedFiles(t.Context(), clone, "origin/main")
 		require.NoError(t, err)
 		assert.Contains(t, files, "app.txt")
+		// elsewhere has no origin/main, so a merge sent there fails instead of starting.
+		require.NoError(t, gitVCS{}.StartMerge(t.Context(), clone, "origin/main"))
 	})
 
+	assert.Equal(t, gitTestOutput(t, clone, "rev-parse", "origin/main"), gitTestOutput(t, clone, "rev-parse", "MERGE_HEAD"),
+		"the merge did not start in the clone")
+	assert.NoFileExists(t, filepath.Join(elsewhere, ".git", "MERGE_HEAD"))
 	assert.Equal(t, before, refsOf(t, elsewhere), "a magus git call wrote into the repository GIT_DIR named")
 	assert.NotEmpty(t, gitTestOutput(t, clone, "for-each-ref", "refs/remotes/origin/main"), "the fetch landed somewhere other than the clone")
 }

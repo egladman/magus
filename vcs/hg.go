@@ -210,10 +210,7 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 func (v hgVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
 	// checkRevsetRef, not checkRef: both refs are interpolated INTO the ancestor()
 	// expression below, where a comma or a paren rewrites it rather than naming a revision.
-	if err := checkRevsetRef(base); err != nil {
-		return "", err
-	}
-	if err := checkRevsetRef(head); err != nil {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return "", err
 	}
 	args := []string{"diff", "--git", "-r", "ancestor(" + base + "," + head + ")", "-r", head}

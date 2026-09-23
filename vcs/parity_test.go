@@ -1247,6 +1247,21 @@ func forkedRange(t *testing.T, b parityBackend) (dir, root, base, head string) {
 	return dir, root, base, c.ID
 }
 
+// Both refusals come from the check, before the backend runs: an empty base would read as
+// the whole history on one backend and as a revset parse error on another.
+func TestParityRefusesEmptyAndOptionShapedRevisions(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "a\n"})
+		head := initialCommitID(t, b, dir)
+
+		_, err := b.drv.RangeDiff(t.Context(), dir, "", head, nil)
+		assert.ErrorContainsf(t, err, "a revision is required", "%s RangeDiff with an empty base", b.name)
+		_, _, err = b.drv.RevTime(t.Context(), dir, "-x")
+		assert.ErrorContainsf(t, err, "looks like a flag", "%s RevTime with an option-shaped revision", b.name)
+	})
+}
+
 func TestParityIsAncestor(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		dir, root, base, head := forkedRange(t, b)

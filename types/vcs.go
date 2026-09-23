@@ -658,7 +658,8 @@ type RangeReporter interface {
 	//
 	// Reads what the repository already has and never fetches, matching BranchChanges. An
 	// unresolvable revision is an error rather than an empty diff, because the two read identically
-	// to a caller and only one of them means "nothing changed".
+	// to a caller and only one of them means "nothing changed". An empty base or head is
+	// refused too: backends would read it as different revisions.
 	//
 	// paths, when non-empty, narrows the answer to those paths, relative to dir, the way the
 	// backend's own pathspec does, at the SOURCE, so a caller never has to re-emit a filtered

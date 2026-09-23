@@ -240,7 +240,7 @@ func shortBranchName(ref string) (string, bool) {
 // fails because it holds many and the rest are still true; here the range IS the request, and a
 // caller handed "" would read it as a branch that changed nothing.
 func (v gitVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
-	if err := checkRev(base, head); err != nil {
+	if err := checkRequiredRev(base, head); err != nil {
 		return "", err
 	}
 	// Histogram rather than the default myers because this patch is what remarks anchor into: myers

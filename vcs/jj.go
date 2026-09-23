@@ -249,10 +249,7 @@ func (v jjVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
 	// checkRevsetRef, not checkRef: both refs are interpolated into the heads(::base &
 	// ::head) revset below, where a boolean operator or a paren rewrites it.
-	if err := checkRevsetRef(base); err != nil {
-		return "", err
-	}
-	if err := checkRevsetRef(head); err != nil {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return "", err
 	}
 	root, prefix, err := repoPathPrefix(ctx, v, dir)

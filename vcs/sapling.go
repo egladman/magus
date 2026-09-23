@@ -239,10 +239,7 @@ func (v saplingVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (
 // No --git flag: Sapling already emits a git-style diff by default (see DirtyDiff).
 func (v saplingVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
 	// checkRevsetRef, not checkRef: see hgVCS.RangeDiff, whose expression this mirrors.
-	if err := checkRevsetRef(base); err != nil {
-		return "", err
-	}
-	if err := checkRevsetRef(head); err != nil {
+	if err := checkRequiredRevsetRef(base, head); err != nil {
 		return "", err
 	}
 	args := []string{"diff", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
