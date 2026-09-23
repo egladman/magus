@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	goruntime "runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -80,4 +81,22 @@ func TestPlatformUnknownStyle(t *testing.T) {
 	assert.Error(t, err, "PlatformArch with unknown style: expected error")
 	_, err = PlatformOS(context.Background(), "linux", "bogus")
 	assert.Error(t, err, "PlatformOS with unknown style: expected error")
+}
+
+// TestPlatformCPUs reads GOMAXPROCS rather than NumCPU, because inside a container
+// with a CPU quota the two disagree and the quota is what bounds the work.
+func TestPlatformCPUs(t *testing.T) {
+	got, err := PlatformCPUs(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, goruntime.GOMAXPROCS(0), got)
+	assert.Positive(t, got)
+}
+
+// TestPlatformMemory: zero is UNKNOWN, not "no memory", so a caller branches on it
+// rather than sizing work off it. Either answer is legitimate here: the host may
+// be a platform mem cannot measure.
+func TestPlatformMemory(t *testing.T) {
+	got, err := PlatformMemory(context.Background())
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, got, 0, "memory_bytes never reports a negative or truncated figure")
 }

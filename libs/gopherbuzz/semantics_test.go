@@ -1,3 +1,5 @@
+// cross-cutting: language semantics observed through a whole session, not one compiler stage
+
 package buzz
 
 import (

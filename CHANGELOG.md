@@ -16,11 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the spawn's `description`, `model` and last observed `contextTokens`;
   `magus\job\list()` reads the guard's rows. A spawn titled `<parent>/<role> <job>`
   grades the child under that job's lease and records its base.
-- **Spells can be imported from a registry, pinned by digest.** A pinned `oci://` import
-  loads offline once cached; MGS1041 refuses a tag alone, MGS1042 mismatched bytes.
-  `magus spell build|push|pull|ls` build a reproducible digest, push under several tags,
-  verify a pull and list tags. Registry credentials are secret references under
-  `spells.registries`.
+- **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
+  is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
+  charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
+  embedded or remote spell. MGS1041 through MGS1044 cover undeclared, stale, mismatched
+  and invalid. `magus spell build|push|pull|ls` publish.
 - **`magus job fork` declares a job from the terminal.** Flags cover one row
   (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
   `--stdin` takes a full record and `--schema` prints its contract.
@@ -105,6 +105,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
+  denial count, session count, and followed rate; the retired advice layer's destination
+  and confidence labels are gone. A human reads the evidence and decides.
 - **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
   and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
   and fails when the build does. The graph JSON is no longer committed.
@@ -143,7 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A deny on a multi-command line says nothing on it ran.**
 - **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
   wired with `magus\harness.provider`. Adapt one by forking it and changing the import
-  path. JSON under `harnesses/` remains the unwired fallback.
+  path.
 - **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
   runs it anyway.
 - **A failing `magus doctor` no longer cancels CI shards.** The final gate carries its
@@ -175,6 +178,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
+  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
+  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
+  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
+  forking its spell's import path instead.
 - **Breaking: the `exclusive` target and project option, with no replacement.** A
   magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.

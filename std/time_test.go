@@ -3,6 +3,7 @@ package std
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -97,4 +98,42 @@ func TestTimeLayoutEnumRoundTrips(t *testing.T) {
 	back, err := TimeFormat(ctx, string(types.TimeRFC3339), ms)
 	require.NoError(t, err)
 	assert.Equal(t, "2026-08-11T14:30:00Z", back)
+}
+
+func TestTimeNowISO(t *testing.T) {
+	got, err := TimeNowISO(context.Background())
+	require.NoError(t, err)
+
+	parsed, parseErr := time.Parse(time.RFC3339, got)
+	require.NoError(t, parseErr, "now_iso must render as RFC 3339")
+	assert.WithinDuration(t, time.Now(), parsed, time.Minute)
+	assert.Equal(t, time.UTC, parsed.Location(), "the clock is anchored to UTC")
+}
+
+func TestTimeAdd(t *testing.T) {
+	ctx := context.Background()
+
+	got, err := TimeAdd(ctx, 0, "24h")
+	require.NoError(t, err)
+	assert.InDelta(t, float64(24*60*60*1000), got, 0)
+
+	got, err = TimeAdd(ctx, 10_000, "-1h30m")
+	require.NoError(t, err)
+	assert.InDelta(t, float64(10_000-90*60*1000), got, 0)
+
+	_, err = TimeAdd(ctx, 0, "not a duration")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "time.add")
+}
+
+func TestTimeDiff(t *testing.T) {
+	ctx := context.Background()
+
+	got, err := TimeDiff(ctx, 5_000, 2_000)
+	require.NoError(t, err)
+	assert.InDelta(t, 3_000.0, got, 0)
+
+	got, err = TimeDiff(ctx, 2_000, 5_000)
+	require.NoError(t, err)
+	assert.InDelta(t, -3_000.0, got, 0, "b later than a reads negative")
 }

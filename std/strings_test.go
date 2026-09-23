@@ -227,3 +227,20 @@ func TestStringsCollapseWs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "", got)
 }
+
+func TestStringsContains(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		s, substr string
+		want      bool
+	}{
+		{"magusfile", "file", true},
+		{"magusfile", "FILE", false},
+		{"magusfile", "", true},
+		{"", "x", false},
+	} {
+		got, err := StringsContains(ctx, tc.s, tc.substr)
+		require.NoError(t, err)
+		assert.Equalf(t, tc.want, got, "contains(%q, %q)", tc.s, tc.substr)
+	}
+}

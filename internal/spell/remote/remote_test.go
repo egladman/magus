@@ -23,7 +23,6 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
-	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -139,8 +138,8 @@ func (t trackedOnly) TrackedFiles(_ context.Context, _ string, paths []string) (
 	return out, nil
 }
 
-// publish pushes a spell directory and returns the pinned import for it.
-func publish(t *testing.T, reg *registry, dir string) string {
+// publish pushes a spell directory under tag v1 and returns the pin for it.
+func publish(t *testing.T, reg *registry, dir string) Ref {
 	t.Helper()
 	dest := oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: "v1"}
 	content, err := Build(t.Context(), dir, allTracked{}, Provenance{Title: "x"})
@@ -148,7 +147,9 @@ func publish(t *testing.T, reg *registry, dir string) string {
 	c := &oci.Client{HTTP: reg.srv.Client(), Username: reg.user, Password: reg.pass}
 	d, err := c.Push(t.Context(), dest, content)
 	require.NoError(t, err)
-	return spells.RemotePrefix + reg.host() + "/team/spells/x@" + d.String()
+	ref, err := Pinned(reg.host()+"/team/spells/x", d)
+	require.NoError(t, err)
+	return ref
 }
 
 // fixedCommit answers every FindCommit with one commit, the way a checkout at a fixed
@@ -167,20 +168,21 @@ type withRemote struct {
 
 func (w withRemote) RemoteURL(context.Context, string) (string, error) { return w.remote, nil }
 
-func TestParse(t *testing.T) {
+func TestPinned(t *testing.T) {
 	t.Parallel()
 	d := digest.FromBytes([]byte("m"))
-	raw := spells.RemotePrefix + "ghcr.io/egladman/magus/spells/cursor@" + d.String()
-	got, err := Parse(raw)
+	got, err := Pinned("ghcr.io/egladman/magus/spells/cursor", d)
 	require.NoError(t, err)
-	assert.Equal(t, Ref{Import: raw, OCI: oci.Reference{Registry: "ghcr.io", Repository: "egladman/magus/spells/cursor", Digest: d}}, got)
+	assert.Equal(t, Ref{
+		Import: "ghcr.io/egladman/magus/spells/cursor",
+		OCI:    oci.Reference{Registry: "ghcr.io", Repository: "egladman/magus/spells/cursor", Digest: d},
+	}, got)
 
-	_, err = Parse(spells.RemotePrefix + "ghcr.io/egladman/magus/spells/cursor:latest")
-	require.ErrorIs(t, err, types.RemoteSpellUnpinned, "a tag alone pins nothing")
+	_, err = Pinned("spells/harness/cursor", d)
+	require.ErrorContains(t, err, "not a registry path")
 
-	_, err = Parse(spells.RemotePrefix + "ghcr.io/egladman/magus/spells/cursor@sha256:abc")
-	require.Error(t, err)
-	assert.NotErrorIs(t, err, types.RemoteSpellUnpinned, "a malformed digest is a typo, not a missing pin")
+	_, err = Pinned("ghcr.io/egladman/magus/spells/cursor", digest.Digest("sha256:abc"))
+	require.Error(t, err, "a malformed digest pins nothing")
 }
 
 func TestPackIsDeterministic(t *testing.T) {
@@ -238,8 +240,7 @@ func TestPackSkipsUntrackedFiles(t *testing.T) {
 func TestResolvePullsOnceThenServesOffline(t *testing.T) {
 	reg := newRegistry(t)
 	src := spellDir(t)
-	ref, err := Parse(publish(t, reg, src))
-	require.NoError(t, err)
+	ref := publish(t, reg, src)
 	root := t.TempDir()
 	opts := Options{CacheRoot: root, Client: reg.srv.Client()}
 
@@ -271,7 +272,7 @@ func TestResolvePullsOnceThenServesOffline(t *testing.T) {
 
 func TestResolveOfflineWithoutCacheFails(t *testing.T) {
 	t.Setenv("MAGUS_OFFLINE", "1")
-	ref, err := Parse(spells.RemotePrefix + "ghcr.io/team/spells/x@" + digest.FromBytes([]byte("m")).String())
+	ref, err := Pinned("ghcr.io/team/spells/x", digest.FromBytes([]byte("m")))
 	require.NoError(t, err)
 	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir()})
 	require.ErrorContains(t, err, "is not cached and MAGUS_OFFLINE is set")
@@ -279,14 +280,13 @@ func TestResolveOfflineWithoutCacheFails(t *testing.T) {
 
 func TestResolveRefusesAnotherManifest(t *testing.T) {
 	reg := newRegistry(t)
-	ref, err := Parse(publish(t, reg, spellDir(t)))
-	require.NoError(t, err)
+	ref := publish(t, reg, spellDir(t))
 	reg.mu.Lock()
 	reg.manifests[ref.OCI.Digest.String()] = []byte(`{"schemaVersion":2}`)
 	reg.mu.Unlock()
 
 	root := t.TempDir()
-	_, err = Resolve(t.Context(), ref, Options{CacheRoot: root, Client: reg.srv.Client()})
+	_, err := Resolve(t.Context(), ref, Options{CacheRoot: root, Client: reg.srv.Client()})
 	require.ErrorIs(t, err, types.RemoteSpellDigestMismatch)
 	entries, err := os.ReadDir(root)
 	require.NoError(t, err)
@@ -296,8 +296,7 @@ func TestResolveRefusesAnotherManifest(t *testing.T) {
 func TestResolveRefusesATamperedLayer(t *testing.T) {
 	reg := newRegistry(t)
 	src := spellDir(t)
-	ref, err := Parse(publish(t, reg, src))
-	require.NoError(t, err)
+	ref := publish(t, reg, src)
 	layer, err := Pack(t.Context(), src, allTracked{})
 	require.NoError(t, err)
 	tampered := append([]byte{}, layer...)
@@ -312,8 +311,7 @@ func TestResolveRefusesATamperedLayer(t *testing.T) {
 
 func TestResolveReplacesATamperedCache(t *testing.T) {
 	reg := newRegistry(t)
-	ref, err := Parse(publish(t, reg, spellDir(t)))
-	require.NoError(t, err)
+	ref := publish(t, reg, spellDir(t))
 	opts := Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()}
 	dir, err := Resolve(t.Context(), ref, opts)
 	require.NoError(t, err)
@@ -377,7 +375,7 @@ func TestResolveRefusesAnotherArtifactType(t *testing.T) {
 		Layers:       []oci.Layer{{Name: layerTitle, MediaType: layerMediaType, Payload: []byte("x")}},
 	})
 	require.NoError(t, err)
-	ref, err := Parse(spells.RemotePrefix + reg.host() + "/team/graph@" + d.String())
+	ref, err := Pinned(reg.host()+"/team/graph", d)
 	require.NoError(t, err)
 	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
 	require.ErrorContains(t, err, "carries artifactType")
@@ -456,8 +454,7 @@ func TestSourceURL(t *testing.T) {
 func TestPinAndUnpackATag(t *testing.T) {
 	reg := newRegistry(t)
 	src := spellDir(t)
-	ref, err := Parse(publish(t, reg, src))
-	require.NoError(t, err)
+	ref := publish(t, reg, src)
 	c := &oci.Client{HTTP: reg.srv.Client()}
 
 	pinned, err := Pin(t.Context(), c, oci.Reference{Registry: reg.host(), Repository: "team/spells/x", Tag: "v1"})
@@ -482,10 +479,9 @@ func TestResolveAuthenticatesAPrivatePull(t *testing.T) {
 	reg.mu.Lock()
 	reg.user, reg.pass = "bot", "s3cret-token"
 	reg.mu.Unlock()
-	ref, err := Parse(publish(t, reg, spellDir(t)))
-	require.NoError(t, err)
+	ref := publish(t, reg, spellDir(t))
 
-	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
+	_, err := Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client()})
 	require.ErrorContains(t, err, "401", "an anonymous pull of a private repository is refused")
 
 	_, err = Resolve(t.Context(), ref, Options{CacheRoot: t.TempDir(), Client: reg.srv.Client(), Username: "bot", Password: "s3cret-token"})

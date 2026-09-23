@@ -623,15 +623,21 @@ func TestDisplayPath(t *testing.T) {
 	})
 }
 
-// rootStubWorkspace is a types.WorkspaceReader stub that answers Root() with a
-// fixed value; every other method panics via the embedded nil interface if
-// exercised, which no path in TestDisplayPath does.
+// rootStubWorkspace is a types.WorkspaceReader stub that answers Root() (and,
+// when set, Harnesses()) with a fixed value; every other method panics via the
+// embedded nil interface if exercised, which no path in TestDisplayPath does.
 type rootStubWorkspace struct {
 	types.WorkspaceReader
-	root string
+	root      string
+	harnesses []string
 }
 
 func (r rootStubWorkspace) Root() string { return r.root }
+
+// Harnesses satisfies the unexported interface workspaceHarnesses probes for; a
+// zero-value harnesses field means "nothing wired", matching every stub literal
+// that predates this field.
+func (r rootStubWorkspace) Harnesses() []string { return r.harnesses }
 
 func TestCheckConfigFile(t *testing.T) {
 	xdgDir := t.TempDir()

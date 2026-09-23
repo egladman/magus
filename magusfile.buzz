@@ -10,7 +10,7 @@ import "./tools/drift" as drift;
 // callable" at run time.
 import "./tools/toolchain" as toolchains;
 // The pull request checks pr.yaml runs; see pr_title and pr_changelog.
-import "./tools/conventional" as conventional;
+import "./tools/commits" as commits;
 import "./tools/changelog" as changelog;
 // This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
@@ -70,8 +70,10 @@ import "project/libs/testlayout" as testlayout;
 // engine reads the parsed config (magus.yaml, then env, then flags). `insecure: false`
 // in magus.yaml with the env var set wires a backend here that the engine then refuses.
 import "spells/github/actions" as github;
-// TODO: switch these to the pinned oci:// imports spell-publish prints once cd has
-// published them and the GHCR packages are public (docs/reference/remote-spells.md).
+// TODO: import these by registry path (`import "ghcr.io/egladman/magus/spells/cursor";`,
+// declared in magus.yaml and pinned by spell-lock:update) once cd has published them and
+// the GHCR packages are public (docs/reference/remote-spells.md). Until then a switch
+// would leave magus.lock with nothing to pin and every load of this magusfile failing.
 import "spells/harness/cursor" as cursor;
 import "spells/harness/codex" as codex;
 import "spells/harness/claude-code" as claude;
@@ -182,9 +184,6 @@ magus\project({
         // and conventions_test.go asserts it invokes the shipped template rather
         // than inlining a copy, so an edit here can turn the root tests red.
         ".claude/settings.json",
-        // Harness descriptors (JSON) remain as a compat fallback for hosts not yet
-        // migrated to harness spells under spells/harness/.
-        "harnesses/*.json",
         "spells/harness/**/*.buzz",
         // The vendored agent-host schemas host_schema_test.go grades the hook configs
         // against. No spell claims them (the go spell takes *.go and *.txtar), so a
@@ -1110,7 +1109,7 @@ fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> an
 
 // Fails a pull request title that is not a conventional commit subject. Squash merges make
 // the title the subject main records, so this is where the format is enforced; the rule is
-// tools/conventional.buzz. Pass a title after `--` to check one by hand.
+// tools/commits.buzz. Pass a title after `--` to check one by hand.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     var title = args.join(" ");
     if (title == "") {
@@ -1120,7 +1119,7 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
         }
         title = event?.q("title").stringValue() ?? "";
     }
-    final problem = conventional\problem(title);
+    final problem = commits\problem(title);
     if (problem != "") {
         throw "pr-title: \"{title}\": {problem}";
     }
@@ -1478,10 +1477,11 @@ fun publish_graph(ctx: magus\Context) > void !> any {
     magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
 }
 
-// Publishes each spell below as an OCI artifact, so a workspace imports it pinned by
-// digest (`oci://ghcr.io/egladman/magus/spells/<name>@sha256:...`) and it versions apart
-// from the binary. It packs only tracked files, so an unchanged spell republishes to the
-// digest it already had. The key is the repository name under GHCR_SPELLS.
+// Publishes each spell below as an OCI artifact, so a workspace imports it by registry
+// path (`import "ghcr.io/egladman/magus/spells/<name>";`, declared in its magus.yaml
+// and pinned in its magus.lock) and it versions apart from the binary. It packs only
+// tracked files, so an unchanged spell republishes to the digest it already had. The
+// key is the repository name under GHCR_SPELLS.
 //
 // cd is the deliver switch: without it each spell is built and its digest printed, and
 // nothing leaves the machine. The spell sources are declared inputs, so a change under
@@ -1508,6 +1508,21 @@ export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
         magus\cmd("spell", args: ["push", dir, reg.repository + "/" + name + ":" + tag, "--username", user],
             opts: {"stdin": token});
     }
+}
+
+// Owns magus.lock, the digest each remote spell magus.yaml declares was pinned to.
+// Plain, it checks the lock against magus.yaml and verifies every pinned digest,
+// resolving no tag. Under the update charm, and only there, it asks the registry what
+// each declared tag names now and rewrites the lock, so reviewing an upgrade is
+// reviewing that diff. ci strips update, so the gate can never move a pin.
+export fun spell_lock(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("magus.yaml");
+    ctx.writesFiles("magus.lock");
+    if (ctx.hasCharm("update")) {
+        magus\cmd("spell", args: ["lock", "--update"]);
+        return;
+    }
+    magus\cmd("spell", args: ["lock"]);
 }
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
@@ -2742,7 +2757,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // this key unmoved and the suite replays a pass computed against the old table.
     // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
     ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
-    // types/kind_palette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
+    // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
     // green while the thing it measures drifts underneath it. Measured: deleting a palette
@@ -2977,7 +2992,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // releaser.buzz carries the version and release-name rules `release` decides on, and no
     // target ran its test blocks: the two hand-named modules above were the whole root list,
     // so those tests passed for as long as they existed without being run. --embedded
-    // because it is a magusfile import, the same reason tools/audit.buzz is.
+    // because it is a magusfile import, the same reason tools/advisories.buzz is.
     cover_for("releaser.buzz", ["--embedded"], {});
     // GLOBBED, for the reason the spell paragraph below gives, applied to the two trees
     // that were still hand-omitted. Both were carrying real breakage precisely because
@@ -2994,7 +3009,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //
     // The MODE is per file, not per directory, because tools/ is not uniform.
     // registry.buzz is the only one invoked bare, so it is the only one that has to
-    // survive strict; audit, drift and toolchain-policy are magusfile imports and
+    // survive strict; advisories, drift and toolchain-policy are magusfile imports and
     // therefore always embedded, and running THEM strict would fail a top-level `if`
     // or an unlabeled second argument that is legal everywhere they actually load - a
     // red for a defect that does not exist. (toolchain.buzz has no importer and no

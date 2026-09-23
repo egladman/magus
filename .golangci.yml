@@ -91,10 +91,11 @@ linters:
     # --- In-repo linters (see libs/testlayout/.custom-gcl.yml) ---
     # Reports a test file whose name narrows a source file's name -
     # resolver_edge_cases_test.go beside resolver.go - which is how a package
-    # accumulates test files no source file accounts for. Deliberately NOT the
-    # broader "every _test.go needs an X.go": that rule fails the Go standard
-    # library on 34% of its test files, where this one costs it 1.2%. The reasoning
-    # and the stdlib measurements are in libs/testlayout/readme.md.
+    # accumulates test files no source file accounts for. `unpaired` below adds the
+    # broader house rule, "every X_test.go needs an X.go", which the Go standard
+    # library would fail on 34% of its test files. A test file with no single
+    # source file to cover opens with `// cross-cutting: <why>` instead. The
+    # reasoning and the stdlib measurements are in libs/testlayout/readme.md.
     #
     # This linter only exists in .magus/custom-gcl. The stock golangci-lint on PATH
     # cannot read this config while the line below is present - it exits with
@@ -120,6 +121,8 @@ linters:
         type: module
         description: reports a test file whose name narrows a source file's name
         original-url: github.com/egladman/magus/libs/testlayout
+        settings:
+          unpaired: true
 
       coldread:
         type: module

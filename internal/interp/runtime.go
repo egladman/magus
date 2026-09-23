@@ -429,30 +429,80 @@ func spellImportNames(src string) []string {
 	return handles
 }
 
-// checkRemoteSpellImports pulls and verifies every remote spell src imports, so the
-// resolver that later binds each one only reads a verified cache entry. A parse error
-// yields nil: Exec re-parses and reports it with position.
+// checkRemoteSpellImports refuses a registry-path import magus.yaml does not declare,
+// before Exec runs any top-level statement, so the load stops naming the entry to add
+// rather than at an unbound name. Declared spells were pulled and verified when the
+// workspace loaded, so this touches no network and no file. A parse error yields nil:
+// Exec re-parses and reports it with position.
 func checkRemoteSpellImports(ctx context.Context, src string) error {
-	if !strings.Contains(src, `"`+spells.RemotePrefix) {
+	if !mentionsRemoteImport(src) {
 		return nil
 	}
 	prog, err := buzz.ParseEmbedded(src)
 	if err != nil {
 		return nil //nolint:nilerr // Exec reports the syntax error
 	}
+	im := remotespell.ImportsFromContext(ctx)
+	var errs []error
 	for _, stmt := range prog.Stmts {
 		imp, ok := stmt.(*ast.ImportStmt)
 		if !ok || !spells.IsRemoteImport(imp.Path) {
 			continue
 		}
-		if imp.Alias == "" || imp.Alias == "_" {
-			return fmt.Errorf("import %q: a remote spell must be aliased: add `as <name>`", imp.Path)
-		}
-		if _, err := remotespell.EntryPath(ctx, imp.Path); err != nil {
-			return err
+		if _, err := im.Dir(imp.Path); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
+}
+
+// mentionsRemoteImport is the cheap textual gate in front of the parse: whether any
+// quoted string following an import keyword reads as a registry path. A false
+// positive only costs the parse; the AST check is the one that decides.
+func mentionsRemoteImport(src string) bool {
+	for rest := src; ; {
+		i := strings.Index(rest, `import "`)
+		if i < 0 {
+			return false
+		}
+		rest = rest[i+len(`import "`):]
+		path, _, ok := strings.Cut(rest, `"`)
+		if ok && spells.IsRemoteImport(path) {
+			return true
+		}
+	}
+}
+
+// importErrors collects the failures a module resolver hits while one magusfile
+// executes. The resolver has no error channel of its own, so without this a spell that
+// fails to bind surfaces later as an unrelated null.
+type importErrors struct {
+	mu   sync.Mutex
+	errs []error
+}
+
+type importErrorsKey struct{}
+
+// ReportImportError records err against the magusfile load on ctx, which fails with it
+// once the file finishes executing. It returns false when no load is collecting, so the
+// caller can log instead.
+func ReportImportError(ctx context.Context, err error) bool {
+	sink, _ := ctx.Value(importErrorsKey{}).(*importErrors)
+	if sink == nil {
+		return false
+	}
+	sink.mu.Lock()
+	sink.errs = append(sink.errs, err)
+	sink.mu.Unlock()
+	return true
+}
+
+func (s *importErrors) take() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := errors.Join(s.errs...)
+	s.errs = nil
+	return err
 }
 
 // importBoundNames maps each import's bound namespace identifier to its path. A flat
@@ -633,6 +683,9 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	// dispatch), and such an import would resolve to nothing. Parse mode already sets
 	// it upstream; re-setting is idempotent.
 	ctx = WithSource(ctx, src)
+	// Installed before the bindings capture ctx, so their module resolver can report.
+	importErrs := &importErrors{}
+	ctx = context.WithValue(ctx, importErrorsKey{}, importErrs)
 	// The buzz path uses the standalone interpreter's concrete API (Exec, Targets,
 	// CallVal) directly; the engine.Session adapter is only for generic registry
 	// consumers, so there's no need to round-trip through engine.Lookup. Confine
@@ -716,9 +769,16 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 			_ = buzzSess.Close()
 			return nil, fmt.Errorf("magusfile: %s: %w", rel, removedAPIErr(call, replacement))
 		}
-		if err := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) }); err != nil {
+		execErr := TimeExec(ctx, ModeMagusfile, func() error { return buzzSess.Exec(ctx, code) })
+		// An import that failed to bind is the cause of whatever Exec tripped on next,
+		// so it wins over Exec's own error.
+		if err := importErrs.take(); err != nil {
 			_ = buzzSess.Close()
-			return nil, fmt.Errorf("magusfile: exec %s: %w", rel, hint.ExplainImplicitMagus(err))
+			return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
+		}
+		if execErr != nil {
+			_ = buzzSess.Close()
+			return nil, fmt.Errorf("magusfile: exec %s: %w", rel, hint.ExplainImplicitMagus(execErr))
 		}
 	}
 
@@ -867,12 +927,20 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 // and can't pull in arbitrary machine-installed buzz code. Note: an imported
 // sibling is not auto-tracked for affected/drift; declare it in the project's
 // `sources` so an edit marks the project dirty.
+//
+// The verified remote spells, laid out by import path, are the last root, so
+// `import "ghcr.io/team/spells/lint"` resolves through the same templates as any
+// module. They come after the workspace only nominally: a workspace directory at a
+// declared remote path is refused at load (MGS1002), so nothing can shadow them.
 func magusSearchPaths(ctx context.Context, projectDir string) []string {
 	roots := []string{projectDir}
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		if root := ws.Root(); root != "" && root != projectDir {
 			roots = append(roots, root)
 		}
+	}
+	if view := remotespell.ImportsFromContext(ctx).View(); view != "" {
+		roots = append(roots, view)
 	}
 	// Per root: the upstream project-relative layouts, then magus's magusfiles/ form.
 	templates := []string{

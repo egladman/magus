@@ -293,7 +293,10 @@ func skillNames(paths []string) []string {
 // command's output, including the actionable parts.
 func printAgentsBlockToPaste(dir string) {
 	verb := "add it to AGENTS.md at your repo root"
-	for _, s := range agentSkills.CheckStatuses(dir) {
+	// No workspace is open at this point in `agent install` (dir is an explicit CLI
+	// argument, not a discovered root), so there is no wired harness list to pass; the
+	// AGENTS.md staleness check below does not need one anyway.
+	for _, s := range agentSkills.CheckStatuses(context.Background(), dir) {
 		if s.Location != agent.AgentsFile {
 			continue
 		}

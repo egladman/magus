@@ -2,7 +2,7 @@ package main
 
 import (
 	"archive/tar"
-	"fmt"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -191,7 +191,7 @@ func TestAgentStarterPrintsAMarkedBlock(t *testing.T) {
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(out), 0o644))
-	statuses := agentSkills.CheckStatuses(dir)
+	statuses := agentSkills.CheckStatuses(context.Background(), dir)
 	require.Len(t, statuses, 1)
 	assert.False(t, statuses[0].Stale, statuses[0].Detail)
 }
@@ -238,19 +238,19 @@ func TestStampSkillInjectsProvenanceInsideFrontmatter(t *testing.T) {
 }
 
 func TestCheckSkillStatusesNothingInstalled(t *testing.T) {
-	assert.Empty(t, agentSkills.CheckStatuses(t.TempDir()))
+	assert.Empty(t, agentSkills.CheckStatuses(context.Background(), t.TempDir()))
 }
 
 func TestCheckSkillStatusesCurrent(t *testing.T) {
 	dir := t.TempDir()
 	const skillsDir = "harness-skills"
-	writeStatusHarness(t, dir, skillsDir)
+	writeStatusHarness(t, skillsDir)
 	_, _, err := agentSkills.WriteSkillTree(dir, skillsDir, false, agent.FormFull)
 	require.NoError(t, err)
 	// Pasted the way a developer would, since magus no longer writes this file.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Their notes\n\n"+agentSkills.AgentsBlock()), 0o644))
 
-	statuses := agentSkills.CheckStatuses(dir)
+	statuses := agentSkills.CheckStatuses(context.Background(), dir, "status-test")
 	require.Len(t, statuses, 2, "one status per installed location")
 	for _, s := range statuses {
 		assert.True(t, s.Installed, "%s installed", s.Location)
@@ -263,12 +263,12 @@ func TestCheckSkillStatusesCurrent(t *testing.T) {
 func TestCheckSkillStatusesStale(t *testing.T) {
 	dir := t.TempDir()
 	const skillsDir = "harness-skills"
-	writeStatusHarness(t, dir, skillsDir)
+	writeStatusHarness(t, skillsDir)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, skillsDir, "magus-query"), 0o755))
 	// A footer stamped with an older skill version is stale.
 	stale := "---\nname: x\n---\nbody\n<!-- agent-skill-version: 0; knowledge-schema-version: 1 -->\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, skillsDir, "magus-query/SKILL.md"), []byte(stale), 0o644))
-	statuses := agentSkills.CheckStatuses(dir)
+	statuses := agentSkills.CheckStatuses(context.Background(), dir, "status-test")
 	require.Len(t, statuses, 1)
 	assert.True(t, statuses[0].Stale)
 	assert.Contains(t, statuses[0].Detail, "agent harness install")
@@ -277,19 +277,33 @@ func TestCheckSkillStatusesStale(t *testing.T) {
 func TestCheckSkillStatusesNoFooter(t *testing.T) {
 	dir := t.TempDir()
 	const skillsDir = "harness-skills"
-	writeStatusHarness(t, dir, skillsDir)
+	writeStatusHarness(t, skillsDir)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, skillsDir, "magus-query"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, skillsDir, "magus-query/SKILL.md"), []byte("---\nname: x\n---\nno footer\n"), 0o644))
-	statuses := agentSkills.CheckStatuses(dir)
+	statuses := agentSkills.CheckStatuses(context.Background(), dir, "status-test")
 	require.Len(t, statuses, 1)
 	assert.True(t, statuses[0].Stale, "a stamp-less install reads as stale (predates versioning)")
 }
 
-func writeStatusHarness(t *testing.T, root, skillsDir string) {
+// writeStatusHarness registers "status-test" as a fake harness spell (there is
+// no harnesses/*.json compat directory left to write it into), so
+// CheckStatuses(ctx, dir, "status-test") resolves skillsDir the way a wired host
+// spell would.
+func writeStatusHarness(t *testing.T, skillsDir string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "harnesses"), 0o755))
-	const descriptor = `{"schema_version":2,"id":"status-test","display":{"name":"Status test"},"skills":{"paths":[%q],"form":"full"},"config":{"path":".status-test/config.json"}}`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "harnesses", "status-test.json"), []byte(fmt.Sprintf(descriptor, skillsDir)), 0o644))
+	agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
+		if id != "status-test" {
+			return agent.HarnessDescriptor{}, "", false, nil
+		}
+		return agent.HarnessDescriptor{
+			SchemaVersion: 2,
+			ID:            "status-test",
+			Display:       agent.HarnessDisplay{Name: "Status test"},
+			Skills:        agent.HarnessSkills{Paths: []string{skillsDir}, Form: agent.FormFull},
+			Config:        agent.HarnessConfig{Path: ".status-test/config.json"},
+		}, "spell:status-test", true, nil
+	})
+	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(nil) })
 }
 
 // TestCheckSkillStatusesIgnoresForeignAgentsMD proves an AGENTS.md without our
@@ -297,7 +311,7 @@ func writeStatusHarness(t *testing.T, root, skillsDir string) {
 func TestCheckSkillStatusesIgnoresForeignAgentsMD(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# their file\n"), 0o644))
-	assert.Empty(t, agentSkills.CheckStatuses(dir))
+	assert.Empty(t, agentSkills.CheckStatuses(context.Background(), dir))
 }
 
 // TestEvaluateBashGuard pins the guard's decision table: destructive whole-tree

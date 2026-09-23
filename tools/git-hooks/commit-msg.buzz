@@ -6,7 +6,7 @@
 // arguments, then `magus run git-hooks-install .`. spells/git/hooks.buzz writes the shim
 // that runs it; a non-zero exit blocks the git operation, and `--no-verify` skips it.
 // The shim sets BUZZ_INCLUDE_PATH to the workspace root, which is how the import of
-// tools/conventional below resolves.
+// tools/commits below resolves.
 //
 // Only the base branch is checked. Pull requests are squash merged, so a branch's own
 // subjects never reach main and keep the lowercase imperative style; a commit made on the
@@ -15,7 +15,7 @@ import "fs";
 import "io";
 import "os";
 import "vcs";
-import "tools/conventional" as conventional;
+import "tools/commits" as commits;
 
 // git writes these subjects itself, or an autosquash rebase rewrites them away.
 fun exempt(subject: str) > bool {
@@ -56,7 +56,7 @@ fun main(args: [str]) > void !> any {
     if (currentBranch() != branch) { return; }
     final subject = subjectOf(fs\readFile(args[0]));
     if (subject == "" or exempt(subject)) { return; }
-    final problem = conventional\problem(subject);
+    final problem = commits\problem(subject);
     if (problem == "") { return; }
     io\stderr.write("commit-msg: commits on {branch} land as written, so the subject must be a "
         + "conventional commit, as pull request titles are.\n  \"{subject}\": {problem}\n") catch void;
