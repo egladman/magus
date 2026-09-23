@@ -197,53 +197,9 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 		out.PoolError = qerr.Error()
 		return out
 	}
-	out.Pool = statusOutputFromReply(reply)
-	return out
-}
-
-// statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput, mirroring
-// the conversion in cmd/magus/status.go so both consumers produce identical shapes.
-//
-// It deliberately leaves StatusOutput.Affected unset (deferred, not an oversight):
-// computing it needs a workspace-scoped VCS diff (magus.Magus.Affected), a meaningfully
-// heavier per-request operation than the rest of this path. The Graph Explorer's live
-// "affected" view is correspondingly kept disabled client-side.
-func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
-	if r == nil {
-		return nil
-	}
-	out := &types.StatusOutput{
-		ParentPID:     r.ParentPID,
-		DaemonVersion: r.DaemonVersion,
-		Mode:          r.Mode,
-		Capacity:      r.Capacity,
-		Running:       r.Running,
-		Queued:        r.Queued,
-	}
-	for _, c := range r.Calls {
-		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{
-			Args:      c.Args,
-			Workspace: c.Workspace,
-			StartedAt: c.StartedAt,
-			Step:      c.SubOp,
-			Inv:       c.Inv,
-		})
-	}
-	for _, ws := range r.Workspaces {
-		out.Workspaces = append(out.Workspaces, types.StatusWorkspace{
-			Root:           ws.Root,
-			State:          ws.State,
-			Error:          ws.Error,
-			LoadedAt:       ws.LoadedAt,
-			LastAccess:     ws.LastAccess,
-			CacheHit:       ws.CacheHit,
-			CacheMiss:      ws.CacheMiss,
-			CacheError:     ws.CacheError,
-			CacheBytes:     ws.CacheBytes,
-			CacheSavedMs:   ws.CacheSavedMs,
-			SecretProvider: ws.SecretProvider,
-		})
-	}
+	// Affected stays unset; the Graph Explorer's live "affected" view is kept disabled
+	// client-side for that reason (see proc.StatusReply.Output).
+	out.Pool = reply.Output()
 	return out
 }
 

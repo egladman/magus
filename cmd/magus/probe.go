@@ -246,7 +246,7 @@ func daemonStatus(socket string) statusFunc {
 		if err != nil {
 			return nil, err
 		}
-		return statusOutputFromReply(reply), nil
+		return reply.Output(), nil
 	}
 }
 

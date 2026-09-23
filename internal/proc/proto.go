@@ -198,6 +198,41 @@ type StatusReply struct {
 	Machine *types.MachineSnapshot `json:"machine,omitempty"`
 }
 
+// Output is r as the status report's pool section, nil for a nil reply. It is the one
+// conversion `magus status` and the console both read, so the two cannot disagree.
+//
+// Affected is left unset: it needs a workspace-scoped VCS diff, and neither reader opens a
+// workspace to answer a status query.
+func (r *StatusReply) Output() *types.StatusOutput {
+	if r == nil {
+		return nil
+	}
+	out := &types.StatusOutput{
+		ParentPID:     r.ParentPID,
+		DaemonVersion: r.DaemonVersion,
+		Mode:          r.Mode,
+		Capacity:      r.Capacity,
+		Running:       r.Running,
+		// Floored: a daemon whose capacity was clamped under load can report more running
+		// than capacity, and "-2 available" is worse than "0".
+		Available: max(0, r.Capacity-r.Running),
+		Queued:    r.Queued,
+	}
+	for _, c := range r.Calls {
+		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{
+			Args: c.Args, Workspace: c.Workspace, StartedAt: c.StartedAt, Step: c.SubOp, Inv: c.Inv,
+		})
+	}
+	for _, w := range r.Workspaces {
+		out.Workspaces = append(out.Workspaces, types.StatusWorkspace{
+			Root: w.Root, State: w.State, Error: w.Error, LoadedAt: w.LoadedAt, LastAccess: w.LastAccess,
+			CacheHit: w.CacheHit, CacheMiss: w.CacheMiss, CacheError: w.CacheError,
+			CacheBytes: w.CacheBytes, CacheSavedMs: w.CacheSavedMs, SecretProvider: w.SecretProvider,
+		})
+	}
+	return out
+}
+
 // Call describes a single adopted call currently executing.
 type Call struct {
 	Args      []string  `json:"args"`
