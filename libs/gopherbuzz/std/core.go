@@ -18,7 +18,8 @@ import (
 //
 // out picks std.print's writer per call; Register's always answers os.Stdout.
 // Embeddings that capture a program's output (e.g. a browser playground) supply
-// their own writer via RegisterWithOutput or RegisterWithOutputFunc.
+// their own writer via RegisterWithOutput, or pick one per call with
+// ModuleEnv.OutFunc.
 func coreModule(out func(context.Context) io.Writer) vm.Value {
 	m := mod()
 	m.MapSet("assert", fn("std.assert", stdAssert))

@@ -171,13 +171,13 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...Modu
 	//
 	// A print goes to the captured stdout on ctx when there is one: a target's print is
 	// its output, withheld, streamed and stored under its ref like a subprocess's.
-	buzzstd.RegisterWithOutputFunc(sess, func(ctx context.Context) io.Writer {
+	env := buzz.ModuleEnv{Ctx: ctx, OutFunc: func(ctx context.Context) io.Writer {
 		if stdout, _, ok := run.CapturedOutput(ctx); ok {
 			return stdout
 		}
 		return cfg.scriptOut
-	})
-	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules(cfg.modules)...)
+	}}
+	_ = sess.Provide(env, slices.Concat(buzzstd.Modules, magusModules(cfg.modules))...)
 }
 
 // registerMagusModules installs the magus module surface a Buzz session sees: Buzz's

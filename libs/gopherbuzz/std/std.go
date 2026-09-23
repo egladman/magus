@@ -114,17 +114,12 @@ func Register(sess *buzz.Session) { RegisterWithOutput(sess, os.Stdout) }
 // RegisterWithOutput is Register with std.print directed to out. An embedding
 // that captures a program's textual output (e.g. the WebAssembly playground)
 // passes its own writer so print lands in a buffer instead of the host stdout.
+// A host that picks the writer per call instead sets [buzz.ModuleEnv.OutFunc] and
+// provides [Modules] itself with sess.Provide.
 func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
-	// std modules never fail to bind; the (always-nil) error is dropped to keep
+	// Binding with Out alone cannot fail; the (always-nil) error is dropped to keep
 	// this a void call. A host that provides fallible modules uses sess.Provide.
 	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), Out: out}, Modules...)
-}
-
-// RegisterWithOutputFunc is RegisterWithOutput with std.print's writer chosen on
-// each call by out, from the context that call runs under. A print whose out
-// returns nil fails with an error.
-func RegisterWithOutputFunc(sess *buzz.Session, out func(context.Context) io.Writer) {
-	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), OutFunc: out}, Modules...)
 }
 
 func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {

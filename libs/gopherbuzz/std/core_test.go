@@ -30,12 +30,12 @@ func TestPrintRoutesPerCallWithOutputFunc(t *testing.T) {
 	var a, b bytes.Buffer
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
-	RegisterWithOutputFunc(sess, func(ctx context.Context) io.Writer {
+	require.NoError(t, sess.Provide(buzz.ModuleEnv{OutFunc: func(ctx context.Context) io.Writer {
 		if ctx.Value(callerKey{}) == "b" {
 			return &b
 		}
 		return &a
-	})
+	}}, Modules...))
 
 	require.NoError(t, sess.Exec(context.WithValue(context.Background(), callerKey{}, "a"), printHello))
 	require.NoError(t, sess.Exec(context.WithValue(context.Background(), callerKey{}, "b"), printHello))
@@ -46,7 +46,7 @@ func TestPrintRoutesPerCallWithOutputFunc(t *testing.T) {
 func TestPrintFailsWhenOutputFuncReturnsNil(t *testing.T) {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
-	RegisterWithOutputFunc(sess, func(context.Context) io.Writer { return nil })
+	require.NoError(t, sess.Provide(buzz.ModuleEnv{OutFunc: func(context.Context) io.Writer { return nil }}, Modules...))
 
 	var err error
 	require.NotPanics(t, func() { err = sess.Exec(context.Background(), printHello) })
