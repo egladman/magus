@@ -421,8 +421,8 @@ func (c *Cache) IsCached(ctx context.Context, s Step) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	m, mErr := c.readManifest(s.ProjectPath, hash)
-	return mErr == nil && len(movedStamps(s.WorkspaceRoot, s.Stamps, m.Stamps)) == 0, nil
+	manifest, mErr := c.readManifest(s.ProjectPath, hash)
+	return mErr == nil && len(movedStamps(s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
 }
 
 // Run executes fn under the cache. On a hash match it replays recorded outputs;

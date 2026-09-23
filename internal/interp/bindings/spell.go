@@ -413,11 +413,11 @@ func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
 		return nil
 	}
 	body := func(ctx context.Context) error {
-		switch from, err := spell.SeedInstall(ctx, choice, dir); {
+		switch from, found, err := spell.SeedInstall(ctx, choice, dir); {
 		case err != nil:
 			slog.WarnContext(ctx, "magus: could not seed the dependency tree from another checkout; installing without it",
 				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("err", err.Error()))
-		case from != "":
+		case found:
 			slog.InfoContext(ctx, "magus: seeded the dependency tree from another checkout",
 				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("from", from))
 		}

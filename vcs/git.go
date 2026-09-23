@@ -54,7 +54,13 @@ func (v gitVCS) IsSecondaryCheckout(dir string) bool {
 
 // Checkouts implements types.CheckoutLister from the files `git worktree list` reads:
 // the primary checkout is the parent of a non-bare common dir, and each linked
-// worktree's admin dir holds a gitdir file naming its .git.
+// worktree's admin dir holds a gitdir file naming its .git. A bare repository's own
+// common dir names no checkout (matching its basename against ".git" would only ever
+// recognize the non-bare shape), so the primary is recognized structurally instead:
+// its parent is a checkout of common exactly when ITS OWN common dir is common too.
+// That also covers the "bare repo alongside a root checkout" layout, where the bare
+// dir sits inside the primary rather than beside it, and the primary is discovered
+// the same way a linked worktree is: by resolving its own gitdir chain.
 func (v gitVCS) Checkouts(root string) ([]string, error) {
 	common := gitCommonDir(root)
 	self, err := filepath.EvalSymlinks(root)
@@ -71,8 +77,8 @@ func (v gitVCS) Checkouts(root string) ([]string, error) {
 			out = append(out, real)
 		}
 	}
-	if filepath.Base(common) == ".git" {
-		add(filepath.Dir(common))
+	if parent := filepath.Dir(common); gitCommonDir(parent) == common {
+		add(parent)
 	}
 	entries, err := os.ReadDir(filepath.Join(common, "worktrees"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {

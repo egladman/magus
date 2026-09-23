@@ -60,36 +60,49 @@ func isRegular(path string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
-// seedSuffix marks a clone in flight beside its destination. It carries the pid so a
-// later seed can tell an abandoned one from a live one.
+// seedSuffix marks a clone in flight beside its destination. It carries the pid for
+// debugging only; a reused pid must not decide whether the seed is abandoned, so the
+// actual liveness signal is the flock on its companion seedLockSuffix file (see
+// acquireSeedLock), held for exactly as long as the clone runs.
 const seedSuffix = ".magus-seed-"
+
+// seedLockSuffix names the lock file that accompanies a seed directory in flight. The OS
+// releases the lock the instant the holding process exits for any reason, including a
+// crash, so a later magus can tell an abandoned seed from a live one without trusting a
+// pid that may since have been reused by an unrelated process.
+const seedLockSuffix = ".lock"
 
 // SeedInstall clones the install's dependency directory from another checkout of the
 // same repository when it is absent here, so the install that follows reconciles a
-// near-complete tree instead of building one. It returns the checkout it seeded from,
-// or "" when it did not seed.
+// near-complete tree instead of building one. found follows [ResolveInstall]'s
+// convention: false means nothing was seeded, whatever the reason, and from is only
+// meaningful when it is true.
 //
 // Seeding is an optimization and never a verdict: every failure is returned for the
 // caller to report, and the install runs either way. It never writes over an existing
 // directory, and a clone becomes visible only by an exclusive rename, so an
 // interrupted seed never leaves a partial tree where the package manager would trust it.
-func SeedInstall(ctx context.Context, choice spells.InstallChoice, projectDir string) (string, error) {
+func SeedInstall(ctx context.Context, choice spells.InstallChoice, projectDir string) (from string, found bool, err error) {
 	in := choice.Install
 	if !in.Relocatable || in.Dir == "" || !cloneSupported {
-		return "", nil
+		return "", false, nil
 	}
 	dst := filepath.Join(projectDir, in.Dir)
 	if _, err := os.Lstat(dst); !errors.Is(err, fs.ErrNotExist) {
-		return "", nil
+		return "", false, nil
 	}
 	root, others, err := vcs.Checkouts(projectDir)
 	if err != nil || root == "" {
-		return "", err
+		return "", false, err
 	}
 	rel, err := filepath.Rel(root, dst)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
+	// A sibling failing to clone (permissions, a mid-clone removal, disk pressure) does
+	// not mean the tree is unseedable, only that this one is; the next sibling still
+	// might work, so failures accumulate rather than stopping the search.
+	var errs []error
 	for _, co := range others {
 		src := filepath.Join(co, rel)
 		if fi, err := os.Lstat(src); err != nil || !fi.IsDir() {
@@ -97,33 +110,53 @@ func SeedInstall(ctx context.Context, choice spells.InstallChoice, projectDir st
 		}
 		removeAbandonedSeeds(ctx, dst)
 		tmp := dst + seedSuffix + strconv.Itoa(os.Getpid())
+		lock, err := acquireSeedLock(tmp + seedLockSuffix)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("lock %s: %w", tmp, err))
+			continue
+		}
+		cleanup := func() {
+			_ = lock.Close()
+			_ = os.Remove(tmp + seedLockSuffix)
+		}
 		if err := cloneTree(src, tmp); err != nil {
 			_ = os.RemoveAll(tmp)
-			return "", fmt.Errorf("clone %s: %w", src, err)
+			cleanup()
+			errs = append(errs, fmt.Errorf("clone %s: %w", src, err))
+			continue
 		}
 		if err := renameExclusive(tmp, dst); err != nil {
 			_ = os.RemoveAll(tmp)
+			cleanup()
 			if errors.Is(err, fs.ErrExist) {
-				return "", nil
+				return "", false, nil
 			}
-			return "", err
+			return "", false, err
 		}
-		return co, nil
+		cleanup()
+		return co, true, nil
 	}
-	return "", nil
+	return "", false, errors.Join(errs...)
 }
 
-// removeAbandonedSeeds deletes clones a killed magus left beside dst. A seed whose pid
-// is still running belongs to a live process and is left alone.
+// removeAbandonedSeeds deletes clones a killed magus left beside dst. A seed whose lock
+// is still held belongs to a live process and is left alone; see seedLockSuffix.
 func removeAbandonedSeeds(ctx context.Context, dst string) {
 	matches, _ := filepath.Glob(dst + seedSuffix + "*")
 	for _, m := range matches {
-		pid, err := strconv.Atoi(strings.TrimPrefix(m, dst+seedSuffix))
-		if err != nil || pid <= 0 || (pid != os.Getpid() && processAlive(pid)) {
+		if strings.HasSuffix(m, seedLockSuffix) {
+			continue // the lock file itself, not the seed directory
+		}
+		if fi, err := os.Lstat(m); err != nil || !fi.IsDir() {
+			continue
+		}
+		if !seedAbandoned(m + seedLockSuffix) {
 			continue
 		}
 		if err := os.RemoveAll(m); err != nil {
 			slog.DebugContext(ctx, "spell: could not remove an abandoned seed", "path", m, "err", err)
+			continue
 		}
+		_ = os.Remove(m + seedLockSuffix)
 	}
 }

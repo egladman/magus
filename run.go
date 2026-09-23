@@ -610,7 +610,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// Nor does it wait on the installs of the projects p depends on: a package manager
 	// reads a dependency project's manifest, never its installed tree, so each install
 	// level the scheduler walked was pure latency.
-	if spellInstall(p, target) {
+	if isSpellInstall(p, target) {
 		step.NoCache = true
 		step.Sources, step.Outputs, step.RequiredOutputs = nil, nil, nil
 		step.DependsOn = nil

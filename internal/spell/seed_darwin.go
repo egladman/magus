@@ -3,6 +3,7 @@ package spell
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -27,6 +28,32 @@ func renameExclusive(from, to string) error {
 	return err
 }
 
-func processAlive(pid int) bool {
-	return syscall.Kill(pid, 0) == nil
+// acquireSeedLock creates path and takes a non-blocking exclusive flock on it, to be
+// held open for as long as the seed clone runs. The caller closes it (releasing the
+// lock) once the clone completes or fails.
+func acquireSeedLock(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
+// seedAbandoned reports whether the seed lock at path is free: no process holds it, or
+// none ever created it. Taking and releasing the lock IS the check, and it never blocks.
+func seedAbandoned(path string) bool {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		return false
+	}
+	_ = unix.Flock(int(f.Fd()), unix.LOCK_UN)
+	return true
 }
