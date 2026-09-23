@@ -50,14 +50,13 @@ carry.
 ### How wide the pool is by default
 
 `concurrency` (`-j`) sets the pool width outright; leaving it unset falls back to
-`concurrency_profile`: `conservative` (half the cores), `balanced` (`min(cores, 8)`),
-or `aggressive` (every core). An unconfigured profile defaults to `aggressive` under
-the generic `CI=true` (set by GitHub Actions, GitLab CI, CircleCI, Buildkite and most
-other providers) and to `balanced` everywhere else - a CI runner has no editor or
-browser competing for its cores, so nothing is served by holding any back, where a
-laptop does. `MAGUS_CONCURRENCY` overrides both. Any explicit setting - the env var,
-`concurrency`, or `concurrency_profile` from config, env, or a flag - always wins over
-this default.
+`concurrency_profile`: `conservative` (half the cores), `balanced` (`min(cores, 8)`,
+the default), or `aggressive` (every core). The default is `balanced` everywhere: magus
+reads no environment variable to guess where it is running, so the same command run
+the same way behaves the same on a laptop and on any CI provider. `MAGUS_CONCURRENCY`
+overrides both. A CI job that wants every core asks for it explicitly - a
+`--concurrency-profile aggressive` flag, `MAGUS_CONCURRENCY_PROFILE=aggressive`, or
+`concurrency_profile: aggressive` in `magus.yaml` - the same way any other caller would.
 
 `concurrency_profile` sizes the machine budget's memory the same way, not just the
 pool's core count: see [below](#across-the-whole-machine-the-budget).
@@ -161,7 +160,7 @@ Key properties:
   decided the pool's width above: `balanced` and `conservative` reserve a quarter of
   memory for the OS, the daemon's own process, and everything else sharing the
   machine; `aggressive` reserves none of that, taking every usable megabyte down to a
-  fixed 512 MiB floor for the kernel and its page cache. A CI runner defaulting to
+  fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
   `aggressive` claims memory the same way it claims cores.
 - **Declared, not observed.** It arbitrates what targets say they need
   ([`memory_mb`](targets.md)), so the same command on the same machine reaches the

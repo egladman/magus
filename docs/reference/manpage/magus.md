@@ -39,7 +39,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Output format: text (default), json, yaml, name, jsonl, or template[=\<go-template\>]. Honored by subcommands that emit structured data. A template body renders a Go text/template over the same value -o json emits (field names are the json keys); a bare -o template with no body lists that output's fields instead of rendering - the json keys usable in -o json and -o template, with each field's type and doc.
 
 **--concurrency** *N*
-: Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or concurrency_profile: aggressive under CI, else balanced (min(NumCPU,8))).
+: Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or concurrency_profile, balanced (min(NumCPU,8)) by default).
 
 **-v**
 : Increase log verbosity. Repeat for more detail (-v, -vv, -vvv).
@@ -181,7 +181,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Maximum number of concurrently running per-project build steps; overrides concurrency_profile when positive (default: concurrency_profile decides). Equivalent magus.yaml key: **concurrency**.
 
 **MAGUS_CONCURRENCY_PROFILE**
-: Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core). Under the generic CI=true, unset defaults to aggressive (default: aggressive under CI, else balanced). Equivalent magus.yaml key: **concurrency_profile**.
+: Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly (default: balanced). Equivalent magus.yaml key: **concurrency_profile**.
 
 **MAGUS_HISTORY_PATH**
 : Path to the runtime-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: **history_path**.

@@ -1166,7 +1166,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	// also decides memory's reservation (a quarter, or aggressive's small fixed floor),
 	// so both axes of "claim the whole machine" agree.
 	machineBudget := cache.NewMachineBudget(
-		mem.BudgetMB(mem.UsableBytes(ctx), cache.EffectiveProfile(cfg.ConcurrencyProfile)),
+		mem.BudgetMB(mem.UsableBytes(ctx), cfg.ConcurrencyProfile),
 		cache.MachineCeiling())
 
 	ttl := cfg.Daemon.IdleTTL

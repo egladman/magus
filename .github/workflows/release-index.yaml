@@ -95,4 +95,4 @@ jobs:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REASON: ${{ inputs.tag != '' && format('recovering the {0} release', inputs.tag) || 'a manual refresh' }}
-        run: magus run release-index:cd --no-default-charms -- "$REASON"
+        run: magus run release-index:cd --no-default-charms --concurrency-profile aggressive -- "$REASON"

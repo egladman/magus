@@ -825,7 +825,6 @@ func TestBuildConfigStatusConcurrency(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("MAGUS_CONCURRENCY", tc.env)
-			t.Setenv("CI", "") // this suite runs under CI itself; an unconfigured profile must not pick aggressive here
 			got := buildConfigStatus(config.Config{Concurrency: tc.configured})
 			assert.Equal(t, tc.want, got.Concurrency.Effective)
 			assert.Equal(t, tc.configured, got.Concurrency.Configured, "the configured value is kept alongside")

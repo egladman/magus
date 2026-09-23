@@ -9,67 +9,45 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// TestProfileConcurrency_CIDefaultsAggressive verifies the generic CI environment
-// variable (set by GitHub Actions, GitLab CI, CircleCI, Buildkite and most other
-// providers) makes an unconfigured profile resolve to aggressive: every core, not
-// the balanced default a laptop gets.
-func TestProfileConcurrency_CIDefaultsAggressive(t *testing.T) {
+// TestProfileConcurrency_UnsetIsBalancedEverywhere pins the rule this package must not
+// break: an unconfigured profile sizes to balanced the same way regardless of the
+// process environment. magus reads no variable to guess where it is running, so the
+// same command behaves the same on a laptop and on any CI provider; a caller that
+// wants every core asks for concurrency_profile: aggressive explicitly.
+func TestProfileConcurrency_UnsetIsBalancedEverywhere(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("CI", "true")
-	assert.Equal(t, runtime.NumCPU(), ProfileConcurrency(""), "CI=true with no profile configured should claim every core")
+	want := runtime.NumCPU()
+	if want > 8 {
+		want = 8
+	}
+	assert.Equal(t, want, ProfileConcurrency(""))
 }
 
-// TestProfileConcurrency_ExplicitProfileBeatsCI verifies an explicitly configured
-// profile is never second-guessed by the CI default.
-func TestProfileConcurrency_ExplicitProfileBeatsCI(t *testing.T) {
-	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("CI", "true")
-	cores := runtime.NumCPU()
-	assert.Equal(t, min(cores, 8), ProfileConcurrency(types.ProfileBalanced), "an explicit balanced profile stays balanced under CI")
-	assert.Equal(t, max(cores/2, 1), ProfileConcurrency(types.ProfileConservative), "an explicit conservative profile stays conservative under CI")
-}
-
-// TestProfileConcurrency_ConcurrencyBeatsCI verifies MAGUS_CONCURRENCY outranks the
-// CI default, matching the documented precedence: MAGUS_CONCURRENCY, then
-// concurrency, then concurrency_profile.
-func TestProfileConcurrency_ConcurrencyBeatsCI(t *testing.T) {
+// TestProfileConcurrency_ConcurrencyBeatsExplicitProfile verifies MAGUS_CONCURRENCY
+// outranks every profile, explicit or not.
+func TestProfileConcurrency_ConcurrencyBeatsExplicitProfile(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "3")
-	t.Setenv("CI", "true")
-	assert.Equal(t, 3, ProfileConcurrency(""), "MAGUS_CONCURRENCY should override the CI default")
+	assert.Equal(t, 3, ProfileConcurrency(""))
+	assert.Equal(t, 3, ProfileConcurrency(types.ProfileAggressive))
 }
 
 // TestProfileConcurrency_GitHubHostedClampIsGone pins the retired GitHub-hosted 4-core
-// hard-code as gone: GITHUB_ACTIONS alone, without the generic CI variable, neither
-// clamps cores nor selects the aggressive profile.
+// hard-code as gone: GITHUB_ACTIONS and RUNNER_ENVIRONMENT, like every other
+// environment variable naming where magus runs, no longer change the width at all.
 func TestProfileConcurrency_GitHubHostedClampIsGone(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("CI", "")
 	t.Setenv("GITHUB_ACTIONS", "true")
 	t.Setenv("RUNNER_ENVIRONMENT", "github-hosted")
 	want := runtime.NumCPU()
 	if want > 8 {
 		want = 8
 	}
-	assert.Equal(t, want, ProfileConcurrency(""), "GITHUB_ACTIONS alone must not clamp to 4 or pick aggressive")
+	assert.Equal(t, want, ProfileConcurrency(""), "GITHUB_ACTIONS and RUNNER_ENVIRONMENT must not clamp to 4 or pick aggressive")
 }
 
-// TestEffectiveProfile pins the resolution mem.BudgetMB relies on to claim memory
-// under the same rule ProfileConcurrency claims cores under: unset resolves to
-// aggressive only under CI, and an explicit profile is never second-guessed.
-func TestEffectiveProfile(t *testing.T) {
-	t.Setenv("CI", "true")
-	assert.Equal(t, types.ProfileAggressive, EffectiveProfile(""), "unset resolves to aggressive under CI")
-	assert.Equal(t, types.ProfileBalanced, EffectiveProfile(types.ProfileBalanced), "an explicit profile passes through under CI")
-	assert.Equal(t, types.ProfileConservative, EffectiveProfile(types.ProfileConservative), "an explicit profile passes through under CI")
-
-	t.Setenv("CI", "")
-	assert.Equal(t, types.ConcurrencyProfile(""), EffectiveProfile(""), "unset stays unset outside CI")
-}
-
-// TestDefaultConcurrency_LocalDefault verifies the no-CI fallback.
+// TestDefaultConcurrency_LocalDefault verifies the balanced fallback.
 func TestDefaultConcurrency_LocalDefault(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("CI", "")
 	want := runtime.NumCPU()
 	if want > 8 {
 		want = 8
@@ -103,7 +81,6 @@ func TestClampConcurrency(t *testing.T) {
 // An explicit width overrides the profile; the profile applies only when none is set.
 func TestResolveConcurrency_ExplicitOverridesProfile(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("CI", "")
 	assert.Equal(t, 1, ResolveConcurrency(1, types.ProfileAggressive))
 	assert.Equal(t, MachineCeiling(), ResolveConcurrency(0, types.ProfileAggressive))
 }
