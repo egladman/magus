@@ -164,6 +164,27 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	assert.Equal(t, trail.OutcomeError, tel.calls[0].Outcome, "the metric must also see error")
 }
 
+// A daemon whose workspace failed to load keeps every tool listed, so an agent's tool list
+// does not change shape, and each call answers the diagnostic as a tool error.
+func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
+	srv := server.NewMCPServer("magus", "test")
+	failure := errors.New("[MGS3016] workspace /repo failed to load")
+	opts := Options{Unavailable: func() error { return failure }}
+	require.NoError(t, opts.validate(), "Unavailable stands in for Magus")
+	registerTools(srv, opts, quietLogger(), func(context.Context) origin.Origin { return origin.Origin{} }, "")
+
+	tools := srv.ListTools()
+	require.Len(t, tools, len(Registry))
+	for _, d := range Registry {
+		st, ok := tools[d.Name]
+		require.True(t, ok, d.Name)
+		res, err := st.Handler(context.Background(), callRequest(d.Name, nil))
+		require.NoError(t, err, d.Name)
+		assert.True(t, res.IsError, d.Name)
+		assert.True(t, strings.HasPrefix(allText(res), failure.Error()), "%s: %s", d.Name, allText(res))
+	}
+}
+
 func TestAllText(t *testing.T) {
 	t.Parallel()
 

@@ -38,7 +38,7 @@ func withStepGate(ctx context.Context) context.Context {
 //
 // Closing the REPL resumes the run, so this is a pause rather than an exit.
 func stepRepl(ctx context.Context, name string, args []string, dir string) error {
-	sess, err := interp.NewBuzzReplSession(ctx, dir)
+	sess, err := interp.NewBuzzReplSession(ctx, dir, true)
 	if err != nil {
 		return fmt.Errorf("step repl: %w", err)
 	}

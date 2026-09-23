@@ -100,3 +100,34 @@ test("an unreachable daemon is asked once, and again only on Retry", async () =>
   assert.equal(statusRequests, 2);
   assert.equal(title(), "Could not reach the daemon");
 });
+
+// The console served BY the daemon carries no #port and, on first use, no Settings address. The
+// shell adopts the page's origin as the daemon, but that flag is per-bundle, so the dashboard has to
+// adopt it itself; before it did, a signed-in dashboard on http://localhost:7391 sat on "No daemon
+// connected" while the daemon streamed status to every other surface.
+test("a signed-in dashboard on the daemon's own origin connects to that origin", async () => {
+  const dom = (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM;
+  const before = location.href;
+  dom.setURL("http://localhost:7391/console/dashboard/");
+  sessionStorage.setItem("magus-live-token", "test-token");
+  const asked: string[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input instanceof Request ? input.url : input);
+    asked.push(url);
+    if (url.endsWith("/api/v1/events"))
+      return Promise.resolve(new Response(new ReadableStream({ start() {} }), { status: 200 }));
+    return Promise.reject(new TypeError("Failed to fetch"));
+  }) as typeof fetch;
+  try {
+    mount();
+    await settle();
+    assert.ok(
+      asked.includes("http://localhost:7391/api/v1/events"),
+      "the status stream is opened against the page's own origin",
+    );
+    assert.notEqual(title(), "No daemon connected");
+  } finally {
+    sessionStorage.clear();
+    dom.setURL(before);
+  }
+});

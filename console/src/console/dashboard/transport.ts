@@ -175,14 +175,11 @@ export class DashboardTransport {
     void fetchSSE(
       url,
       headers,
+      // A frame that fails to decode throws into fetchSSE, which reports it and keeps reading.
       (type, data) => {
         if (type !== "status") return;
-        try {
-          const raw = Uint8Array.from(atob(data), (ch) => ch.charCodeAt(0));
-          this.onStatus(fromBinary(StatusSchema, raw));
-        } catch {
-          // Ignore a malformed frame; the next one supersedes it.
-        }
+        const raw = Uint8Array.from(atob(data), (ch) => ch.charCodeAt(0));
+        this.onStatus(fromBinary(StatusSchema, raw));
       },
       () => {
         this.cb.onStatusError(host);
@@ -258,6 +255,7 @@ export class DashboardTransport {
       }
       if (!signal.aborted) this.scheduleMetricsRetry(host); // stream ended cleanly: reconnect
     } catch {
+      // reported: by the daemon transport's failure interceptor
       if (!signal.aborted) this.scheduleMetricsRetry(host);
     }
   }
@@ -321,8 +319,7 @@ export class DashboardTransport {
       }));
       this.store.set({ agents: mapAgentActivity(events, Date.now()) });
     } catch {
-      // A daemon without a trail, an older daemon without the host/session fields, or a blip: keep
-      // whatever is on screen and let the next poll retry. The tile has its own empty state.
+      // reported: by the daemon transport. Keep what is on screen; the next poll retries.
     }
   }
 
@@ -383,7 +380,7 @@ export class DashboardTransport {
       const violations = rows.filter((r) => r.code !== "").length;
       this.store.set({ tools: { rows, violations } });
     } catch {
-      // A network blip or a daemon with no workspace: leave the prior view in place.
+      // reported: by the daemon transport. Leave the prior view in place.
     }
   }
 
@@ -489,7 +486,7 @@ export class DashboardTransport {
         });
       }
     } catch {
-      // Network blip or abort: leave observingSince null; nothing on the board depends on it.
+      // reported: by the daemon transport. observingSince stays null; nothing depends on it.
     }
   }
 

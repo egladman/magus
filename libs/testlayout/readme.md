@@ -31,6 +31,27 @@ is a house rule, available as `unpaired` and off by default.
 Narrowing is the case worth gating. The tests had a home and someone made a new
 file instead.
 
+### Opting into `unpaired`
+
+With `unpaired` on, two things still pair a test file that has no `X.go`:
+
+- A platform family. `tree_test.go` covers `tree_linux.go` and `tree_darwin.go`
+  when there is no `tree.go`, because the toolchain reads those suffixes as
+  constraints, not as part of the name.
+- A marker. A test file with no single honest home, such as an end-to-end suite,
+  a scale check across the package, or a test sited in a consuming package to
+  dodge an import cycle, opens with a line comment above its package clause:
+
+  ```go
+  // cross-cutting: every backend runs the same cases, so no one backend owns them
+
+  package vcs
+  ```
+
+  The reason is required. `// cross-cutting:` alone does not count, and neither
+  does the marker below the package clause. It excuses a missing pair only: a
+  marked file that narrows a source name is still reported.
+
 ## Where the conventions come from
 
 No published Go style guide states a test-file naming rule. Go by Example says the
@@ -84,7 +105,8 @@ linters:
           allow:
             - "*_conformance_test.go"
           # Report every test file with no source file of the same name. See the
-          # table above for what this costs.
+          # table above for what this costs, and "Opting into unpaired" for the
+          # two ways a test file still pairs.
           unpaired: false
 ```
 
@@ -98,11 +120,11 @@ and `golangci-lint custom` reads that file from its working directory:
 cd libs/testlayout && golangci-lint custom
 ```
 
-`destination: ../..` writes `./custom-gcl` at the workspace root, which reads
+`destination: ../../.magus` writes `.magus/custom-gcl`, which reads
 `.golangci.yml` exactly as the stock binary does. `magus run lint` does both steps.
 
 Once `testlayout` appears in `.golangci.yml` the stock binary can no longer read
-it, so every lint entry point has to move to `./custom-gcl`.
+it, so every lint entry point has to move to `.magus/custom-gcl`.
 
 One binary carries every in-repo plugin, so a second linter is another entry in
 `plugins:` rather than a second config file.

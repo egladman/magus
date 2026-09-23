@@ -73,3 +73,20 @@ func TestConsoleLinksCarryNoToken(t *testing.T) {
 			"the %s link must stay unauthenticated; the token is composed in by authHint", name)
 	}
 }
+
+// The sign-in line is a command a person can run as printed: the token is a substitution
+// their shell expands, never a value this process read.
+func TestAuthHintIsRunnable(t *testing.T) {
+	got := authHint("http://127.0.0.1:7391/console/plan/#job=a")
+	require.Contains(t, got, `"http://127.0.0.1:7391/console/plan/#job=a&token=$(`)
+	require.Contains(t, got, `config token print)"`)
+}
+
+func TestConsoleSkew(t *testing.T) {
+	require.Empty(t, consoleSkew("v1", "v1"))
+	require.Empty(t, consoleSkew("", "v1"), "a daemon that did not say is not skew")
+	got := consoleSkew("v1", "v2")
+	require.Contains(t, got, "daemon v1, this binary is v2")
+	require.Contains(t, got, "server stop && ")
+	require.Contains(t, got, "server start` serves this build")
+}

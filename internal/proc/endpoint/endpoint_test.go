@@ -23,7 +23,6 @@ func TestParse(t *testing.T) {
 		assert.Equal(t, "unix:///tmp/magus-1234-abcd.sock", ep.String())
 		assert.Equal(t, "unix", ep.Network())
 	})
-	// bare path back-compat
 	t.Run("bare path back-compat", func(t *testing.T) {
 		ep, err := Parse("/tmp/magus.sock")
 		require.NoError(t, err)

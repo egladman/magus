@@ -1,8 +1,8 @@
 import "magus";
 import "proc";
-// The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
+// The shared advisory gate. See tools/advisories.buzz for why an exit code is the wrong
 // question and what this asks instead.
-import "../tools/audit" as audit;
+import "../tools/advisories" as advisories;
 import "../tools/toolchain-policy" as policy;
 // Modules the targets use: fs (lcov reads), os (pnpm/esbuild), vcs (the gen/ drift gate).
 import "fs";
@@ -14,7 +14,7 @@ import "vcs";
 // Reference drawer imports from source. Affected tracking is glob-based (not
 // import-graph), so this handle lets lint pull in textsearch.lint (type-check + biome) - a
 // lib edit then marks the console affected and re-checks it through the target graph.
-import "project/../libs/textsearch" as textsearch;
+import "project/../libs/textsearch";
 import "project/.." as root;
 
 // lcov merges the per-process reports into the one figure the floor gates on.
@@ -63,8 +63,7 @@ magus\project({
                 // src/console/diff/gen/demo.ts. Undeclared, editing the patch left the
                 // key where it was, so the generator replayed and the committed TS kept
                 // the old changeset.
-                "src/console/diff/demo.patch",
-                "../gen/knowledge-graph.json", "../gen/target-graph.json"],
+                "src/console/diff/demo.patch"],
     // gen/** alone: the esbuild bundle, which this project actually produces. src/gen/** lands
     // here too, but proto writes it (see proto/buf.gen.yaml) and declares it there against this
     // project. Claiming it here as well is MGS4002 - two projects declaring one path cannot be
@@ -193,6 +192,13 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     // clean, which is why this gate has never fired. It is inert, and the comment above
     // claiming gen/ is committed is wrong - left as-is here rather than changed blind.
     final clean_before = vcs\isDirty(["gen"]) == false;
+    // The explorer's data is graph_generate's declared output, needed above. Copied
+    // here rather than by package.json so the dependency lives where magus sees it,
+    // and before the build because stamp-build.mjs hashes every precached file.
+    fs\mkdirAll(fs\join("gen", "graph"));
+    foreach (name in ["knowledge-graph.json", "target-graph.json"]) {
+        fs\copyFile(fs\join("..", "gen", name), fs\join("gen", "graph", name));
+    }
     proc\exec("pnpm", ["run", "build"], ".", {});
     if (ctx.hasCharm("rw")) {
         return;
@@ -211,6 +217,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
     proc\exec("pnpm", ["run", "stylelint"], ".", {});
+    // A swallowed catch is how a failure becomes an empty page; see scripts/lint-catch.mjs.
+    proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".", {});
 }
 
 // `format:rw` maintains declared source inputs.
@@ -240,7 +248,7 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
 // days in the first place.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    audit\audit();
+    advisories\audit();
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the

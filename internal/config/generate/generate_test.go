@@ -261,15 +261,16 @@ func TestTypeIdentOf(t *testing.T) {
 
 func TestScalarKind(t *testing.T) {
 	for in, want := range map[string]string{
-		"string":        "string",
-		"int":           "int",
-		"bool":          "bool",
-		"float64":       "float64",
-		"*bool":         "boolptr",
-		"time.Duration": "duration",
-		"[]string":      "stringslice",
-		"int64":         "",
-		"":              "",
+		"string":                   "string",
+		"int":                      "int",
+		"bool":                     "bool",
+		"float64":                  "float64",
+		"*bool":                    "boolptr",
+		"time.Duration":            "duration",
+		"[]string":                 "stringslice",
+		"types.ConcurrencyProfile": "text",
+		"int64":                    "",
+		"":                         "",
 	} {
 		assert.Equal(t, want, scalarKind(in), "scalarKind(%q)", in)
 	}

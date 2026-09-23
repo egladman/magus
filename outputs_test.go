@@ -7,10 +7,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/types"
 )
 
 // openTempWorkspace creates a minimal workspace in a temp dir with a single
@@ -180,7 +179,7 @@ func writeCrossOutputWorkspace(t *testing.T) (*Magus, string) {
 	write("site/magusfile.buzz", "")
 	write("producer/magusfile.buzz", `import "magus";
 import "fs";
-import "project/../site" as site;
+import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles(site.file("generated.txt"));
@@ -322,7 +321,7 @@ func TestCrossOutputMutualRefIsRejectedAtLoad(t *testing.T) {
 	write("site/magusfile.buzz", "")
 	write("site/src.md", "source")
 	write("renderer/magusfile.buzz", `import "magus";
-import "project/../site" as site;
+import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(site.file("src.md"));
@@ -468,7 +467,7 @@ func TestCrossOutputDiagnosticsCarryCodes(t *testing.T) {
 				"site/magusfile.buzz": "",
 				"site/src.md":         "source",
 				"p1/magusfile.buzz": `import "magus";
-import "project/../site" as site;
+import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(site.file("src.md"));
@@ -560,4 +559,46 @@ func TestUpdatesFoldIntoSourcesNotOutputs(t *testing.T) {
 		p.TargetUpdates["generate"], "ctx.modifiesExistingFiles should resolve to the declaring project")
 	assert.NotContains(t, p.AllOutputs(), "concepts/spells.md",
 		"an update must never reach AllOutputs - that is the set clean deletes and the cache snapshots")
+}
+
+// TestResolveTargetOutputs answers "where did the artifact land" from the same
+// fold the cache keys and snapshots, so what it reports and what the cache replays
+// cannot disagree. Directories are excluded: a consumer cannot open one.
+func TestResolveTargetOutputs(t *testing.T) {
+	m, root := openTempWorkspace(t, "api", []string{"dist/**"})
+
+	dist := filepath.Join(root, "api", "dist")
+	require.NoError(t, os.MkdirAll(filepath.Join(dist, "assets"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dist, "app.js"), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dist, "assets", "logo.svg"), []byte("y"), 0o644))
+
+	got, err := m.ResolveTargetOutputs(context.Background(), m.All(), "build")
+	require.NoError(t, err)
+
+	paths := make([]string, 0, len(got))
+	for _, a := range got {
+		paths = append(paths, a.Path)
+		assert.Equal(t, "api", a.ProjectPath, "the DECLARING project is recorded, not the tree the file sits in")
+		assert.NotEmpty(t, a.Glob, "a reader chasing an unexpected artifact needs the declaration that claimed it")
+	}
+	assert.Equal(t, []string{"api/dist/app.js", "api/dist/assets/logo.svg"}, paths,
+		"sorted, deduplicated, and directories excluded")
+}
+
+func TestResolveTargetOutputsHonorsCancellation(t *testing.T) {
+	m, _ := openTempWorkspace(t, "api", []string{"dist/**"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := m.ResolveTargetOutputs(ctx, m.All(), "build")
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestResolveTargetOutputsWithNothingDeclared(t *testing.T) {
+	m, _ := openTempWorkspace(t, "api", nil)
+
+	got, err := m.ResolveTargetOutputs(context.Background(), m.All(), "build")
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }

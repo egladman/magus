@@ -70,7 +70,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.DurationVar(&cfg.Jobs.StaleAfter, "jobs-stale-after", cfg.Jobs.StaleAfter, "MAGUS_JOBS_STALE_AFTER: StaleAfter flags a live job nobody updated for this long, in 'magus ls jobs' and 'magus doctor'.")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter.")
 	fs.IntVar(&cfg.Concurrency, "j", cfg.Concurrency, "Short for --concurrency")
-	fs.StringVar(&cfg.ConcurrencyProfile, "concurrency-profile", cfg.ConcurrencyProfile, "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...")
+	fs.TextVar(&cfg.ConcurrencyProfile, "concurrency-profile", cfg.ConcurrencyProfile, "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...")
 	fs.IntVar(&cfg.MaxFailures, "max-failures", cfg.MaxFailures, "MAGUS_MAX_FAILURES: MaxFailures bounds how many projects may fail before a run stops starting more.")
 	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus cancels it.")
 	fs.DurationVar(&cfg.StallTimeout, "stall-timeout", cfg.StallTimeout, "MAGUS_STALL_TIMEOUT: StallTimeout aborts an invocation that is making no progress at all: no target has started, finished, or written a li...")

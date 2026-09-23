@@ -49,8 +49,8 @@ concurrency: 2
 -- magusfile.buzz --
 import "magus";
 import "proc";
-import "spells/acme" as acme;
-import "project/api" as api;
+import "spells/acme";
+import "project/api";
 magus.project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > str !> any {
     ctx.writesFiles("dist/*.txt");
@@ -60,7 +60,7 @@ export fun bundle(ctx: magus\Context, args: [str]) > str !> any {
 -- api/magusfile.buzz --
 import "magus";
 import "proc";
-import "spells/acme" as acme;
+import "spells/acme";
 magus.project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > str !> any {
     ctx.writesFiles("dist/*.txt");

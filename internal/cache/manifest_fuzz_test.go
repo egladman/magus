@@ -19,7 +19,7 @@ func FuzzReadManifest(f *testing.F) {
 	f.Add(``)
 	// Valid JSON but wrong type.
 	f.Add(`[]`)
-	// Null.
+	// JSON null.
 	f.Add(`null`)
 	// Garbage binary-ish data.
 	f.Add("\x00\x01\x02\x03")

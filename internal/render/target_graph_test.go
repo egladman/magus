@@ -449,3 +449,36 @@ func TestKindSizeWithholdsABinaryDependentCount(t *testing.T) {
 func TestKindSizeKeepsAWorkspaceCount(t *testing.T) {
 	assert.Equal(t, "200+", kindSize(types.KnowledgeRoutingKind{Kind: types.KindTarget, Count: 273}))
 }
+
+// targetsClassDefNames are the exact classDef name strings the Go targets-flavor
+// emitter writes. They are listed here explicitly so that renaming one in
+// target_graph.go without updating this list causes a test failure. Only the two
+// role classes are emitted now; MAGUS.md no longer embeds per-project graphs.
+var targetsClassDefNames = []string{
+	"anchor", // targetRoleClasses[0].Name (target_graph.go)
+	"target", // targetRoleClasses[1].Name (target_graph.go)
+}
+
+// TestTargetGraphMermaidClassDefs asserts WriteTargetGraphMermaid writes the classDef
+// names its consumers style against. The CLI's `-o mermaid` is the only emitter, so
+// this is the whole contract: "anchor" and "target", via targetGraphIR.
+func TestTargetGraphMermaidClassDefs(t *testing.T) {
+	out := types.TargetGraphOutput{
+		Projects: []types.TargetGraphProject{{
+			Path: ".",
+			Nodes: []types.TargetGraphNode{
+				{Name: "ci", Dependencies: []string{"build"}}, // anchor (nothing depends on ci)
+				{Name: "build"}, // target (ci depends on build)
+			},
+		}},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, WriteTargetGraphMermaid(&buf, out))
+	got := buf.String()
+	// Use a space suffix to avoid "classDef anchor" matching "classDef anchor2".
+	for _, name := range targetsClassDefNames {
+		require.True(t, strings.Contains(got, "classDef "+name+" "),
+			"WriteTargetGraphMermaid output missing classDef %q - "+
+				"update targetsClassDefNames in this test to match target_graph.go", name)
+	}
+}

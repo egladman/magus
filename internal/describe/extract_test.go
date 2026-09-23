@@ -3,6 +3,7 @@ package describe
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -511,7 +512,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // locality, so neither can answer this on its own, the reason Chain is built from the
 // argument list rather than folded from those two afterwards.
 func TestChainInterleavesCrossSteps(t *testing.T) {
-	g := Extract(`import "project/../lib" as lib;
+	g := Extract(`import "project/../lib";
 export fun format(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun conventions(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void {
@@ -532,7 +533,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // TestChainEmptyForALeafTarget: a target that composes nothing has no chain, so the
 // describe surface prints no line rather than an empty one.
 func TestChainEmptyForALeafTarget(t *testing.T) {
-	g := Extract(`import "project/../lib" as lib;
+	g := Extract(`import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file("go.mod"));
     go["go-build"]();
@@ -544,7 +545,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 func TestExternalCrossDependencies(t *testing.T) {
-	g := Extract(`import "project/../gopherbuzz" as gopherbuzz;
+	g := Extract(`import "project/../gopherbuzz";
 export fun build_playground(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.needs(gopherbuzz.build);
@@ -565,7 +566,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // inside string literals (not code) are ignored — they must not register phantom
 // edges, which for an external edge would pollute the affected set.
 func TestDependencyTokensInStringLiterals(t *testing.T) {
-	g := Extract(`import "project/../api" as api;
+	g := Extract(`import "project/../api";
 export fun build(ctx: magus\Context, args: [str]) > void {
     magus.log.info("run ctx.needs(setup) and api.compile first");
     go["go-build"]();
@@ -584,7 +585,7 @@ export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
 // recognized cross-file arg does NOT trip DynamicIO, and the .file member mints no
 // phantom cross-dependency. Same-project entries come first (arg order), cross after.
 func TestCrossFileInputs(t *testing.T) {
-	g := Extract(`import "project/../lib" as lib;
+	g := Extract(`import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file("go.mod"), "src/**/*.go");
     go["go-build"]();
@@ -603,7 +604,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // TestCrossFileInputsDynamic: a computed (non-literal) rel in alias.file(...) is invisible
 // to the static read, so it trips DynamicIO exactly like any other non-literal io arg.
 func TestCrossFileInputsDynamic(t *testing.T) {
-	g := Extract(`import "project/../lib" as lib;
+	g := Extract(`import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file(args[0]));
     go["go-build"]();
@@ -783,4 +784,28 @@ func TestWritesOutsideRWCharm(t *testing.T) {
 `)
 		assert.Empty(t, got, "a target that always writes is an ordinary generator, and never claimed to run two ways")
 	})
+}
+
+// A remote spell binds under its path's last segment, the way an embedded one does,
+// so the graph wires the target that uses it without an alias. A workspace spell
+// binds by value too (checker.go's importBindsByValue), so it takes the same
+// default; only a plain relative import (project/) is excluded, since that binds
+// a project reference rather than a spell.
+func TestSpellHandle(t *testing.T) {
+	for _, tc := range []struct {
+		path, alias, want string
+		ok                bool
+	}{
+		{path: "magus/spell/go", want: "go", ok: true},
+		{path: "magus/spell/go", alias: "golang", want: "golang", ok: true},
+		{path: "ghcr.io/egladman/magus/spells/cursor", want: "cursor", ok: true},
+		{path: "ghcr.io/egladman/magus/spells/claude-code", alias: "claude", want: "claude", ok: true},
+		{path: "spells/harness/cursor", alias: "cursor", want: "cursor", ok: true},
+		{path: "spells/harness/cursor", want: "cursor", ok: true},
+		{path: "project/libs/json", alias: "json"},
+	} {
+		got, ok := spellHandle(&ast.ImportStmt{Path: tc.path, Alias: tc.alias})
+		assert.Equal(t, tc.ok, ok, tc.path)
+		assert.Equal(t, tc.want, got, tc.path)
+	}
 }

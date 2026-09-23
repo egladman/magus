@@ -319,7 +319,7 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 	}
 	for _, w := range r.Workspaces {
 		out.Workspaces = append(out.Workspaces, types.StatusWorkspace{
-			Root: w.Root, LoadedAt: w.LoadedAt, LastAccess: w.LastAccess,
+			Root: w.Root, State: w.State, Error: w.Error, LoadedAt: w.LoadedAt, LastAccess: w.LastAccess,
 		})
 	}
 	return out
@@ -399,7 +399,7 @@ func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFram
 	fmt.Fprintln(tw, "")
 	fmt.Fprintln(tw, "concurrency")
 	fmt.Fprintf(tw, "  configured\t%s\n", intOrDef(r.Config.Concurrency.Configured, "(from profile)"))
-	fmt.Fprintf(tw, "  profile\t%s\n", strOrDef(r.Config.Concurrency.Profile, "balanced"))
+	fmt.Fprintf(tw, "  profile\t%s\n", r.Config.Concurrency.Profile)
 	fmt.Fprintf(tw, "  effective\t%d\n", r.Config.Concurrency.Effective)
 	if global.verbose >= 1 {
 		fmt.Fprintln(tw, "")
@@ -445,11 +445,21 @@ func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFram
 			}
 		}
 		if len(r.Pool.Workspaces) > 0 {
-			fmt.Fprintf(w, "\nloaded workspaces (%d)\n", len(r.Pool.Workspaces))
+			fmt.Fprintf(w, "\nworkspaces (%d)\n", len(r.Pool.Workspaces))
 			fmt.Fprintln(w, strings.Repeat("-", 60))
 			for _, ws := range r.Pool.Workspaces {
-				idle := time.Since(ws.LastAccess).Round(time.Second)
-				fmt.Fprintf(w, "  %s  (idle %s)\n", ws.Root, idle)
+				switch ws.State {
+				case types.WorkspaceFailed:
+					fmt.Fprintf(w, "  %s  (failed to load)\n", ws.Root)
+					if ws.Error != nil {
+						fmt.Fprintf(w, "    %s\n", strings.ReplaceAll(ws.Error.Message, "\n", "\n    "))
+					}
+				case types.WorkspaceLoading:
+					fmt.Fprintf(w, "  %s  (loading)\n", ws.Root)
+				default:
+					idle := time.Since(ws.LastAccess).Round(time.Second)
+					fmt.Fprintf(w, "  %s  (idle %s)\n", ws.Root, idle)
+				}
 			}
 		}
 	} else {

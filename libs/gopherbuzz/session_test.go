@@ -112,6 +112,43 @@ var x = widget.answer;
 	assert.Equal(t, int64(7), v.AsInt(), "x = %v, want 7", v)
 }
 
+// The file search still picks the path; the reader only supplies its bytes, so a host can
+// evaluate a revision's copy of a file that also exists on disk.
+func TestSession_SourceReader(t *testing.T) {
+	dir := t.TempDir()
+	onDisk := filepath.Join(dir, "widget.buzz")
+	require.NoError(t, os.WriteFile(onDisk, []byte(`export final answer = 1;`), 0o644))
+
+	s := buzz.NewSession(context.Background(), buzz.WithEmbedded(), buzz.WithSearchPaths(filepath.Join(dir, "?.buzz")))
+	var read []string
+	s.SetSourceReader(func(path string) ([]byte, error) {
+		read = append(read, path)
+		return []byte(`export final answer = 2;`), nil
+	})
+
+	require.NoError(t, s.Exec(context.Background(), `
+import "widget";
+var x = answer;
+`))
+	abs, err := filepath.Abs(onDisk)
+	require.NoError(t, err)
+	assert.Equal(t, []string{abs}, absAll(t, read), "the reader is asked for the path the search found")
+	v, ok := s.Globals()["x"]
+	require.True(t, ok)
+	assert.Equal(t, int64(2), v.AsInt(), "the bytes come from the reader, not the disk")
+}
+
+func absAll(t *testing.T, paths []string) []string {
+	t.Helper()
+	out := make([]string, len(paths))
+	for i, p := range paths {
+		abs, err := filepath.Abs(p)
+		require.NoError(t, err)
+		out[i] = abs
+	}
+	return out
+}
+
 func TestSession_Compile_And_ExecChunk(t *testing.T) {
 	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	chunk, err := s.Compile(`var y: str = "hello";`)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -26,6 +27,23 @@ func TestContextWithRegistry_RoundTrip(t *testing.T) {
 func TestWorkspaceRegistryFromContext_MissingReturnsNil(t *testing.T) {
 	got := WorkspaceRegistryFromContext(context.Background())
 	assert.Nil(t, got)
+}
+
+// A re-run of the same magusfile replaces the rule rather than stacking a second one.
+func TestWorkspaceRegistry_SpawnRuleReplaces(t *testing.T) {
+	r := NewWorkspaceRegistry()
+	assert.Nil(t, r.SpawnRule())
+
+	verdict := func(reason string) SpawnRule {
+		return func(context.Context, types.SpawnRequest, hint.Gate) (types.SpawnVerdict, error) {
+			return types.SpawnVerdict{Decision: types.SpawnDeny, Reason: reason}, nil
+		}
+	}
+	r.SetSpawnRule(verdict("first"))
+	r.SetSpawnRule(verdict("second"))
+	got, err := r.SpawnRule()(context.Background(), types.SpawnRequest{}, hint.Gate{})
+	require.NoError(t, err)
+	assert.Equal(t, types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "second"}, got)
 }
 
 func TestWorkspaceRegistry_RegisterProject_ProjectPaths(t *testing.T) {

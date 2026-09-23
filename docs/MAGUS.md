@@ -53,23 +53,23 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
 | module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS1028`, `MGS3010`, `MGS3012`                                                                                             |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS1002`, `MGS1028`, `MGS3010`                                                                                             |
 | doc        |     400+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
 | dir        |     200+ | `magus query kind=dir`        | `docs/reference/rules`, `docs/reference/codes/magusfile`, `docs/reference/buzz`                                             |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
 | function   |    1000+ | `magus query kind=function`   | `main`, `tail`, `main`                                                                                                      |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
-| rationale  |        6 | `magus query kind=rationale`  | `TODO`, `WHY`, `NOTE`                                                                                                       |
+| rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
 | link       |      80+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                          |
 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| .                               |      53 | `magus query project=.`                               | `test`, `buzz-test`, `generate`                          |
+| .                               |      55 | `magus query project=.`                               | `test`, `buzz-test`, `generate`                          |
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `preflight`                        |
-| libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `test`, `build`                                |
+| libs/coldread                   |       8 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
 | libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |

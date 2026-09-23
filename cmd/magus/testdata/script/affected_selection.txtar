@@ -89,7 +89,7 @@ concurrency: 2
 changed-*.txt
 -- magusfile.buzz --
 import "magus";
-import "spells/acme" as acme;
+import "spells/acme";
 magus.project({ "spells": [acme] });
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- spells/acme/spell.buzz --
@@ -101,7 +101,7 @@ fun lint(target: Target) > Command {
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
 -- proj-b/magusfile.buzz --
 import "magus";
-import "spells/beta" as beta;
+import "spells/beta";
 magus.project({ "spells": [beta] });
 export fun lint(ctx: magus\Context, args: [str]) > void { beta.lint(ctx); }
 -- proj-b/spells/beta/spell.buzz --

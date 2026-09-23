@@ -242,6 +242,27 @@ const (
 	// load only warned and carried on, so a file that loaded then can stop the load now,
 	// and the code is what links that failure to the page saying why it changed.
 	UnknownConfigKey DiagnosticCode = "MGS1040"
+	// RemoteSpellUndeclared is an import of a registry path that magus.yaml does not
+	// declare. The declaration names the tag the lock pins, so without one there is no
+	// digest to verify and nothing to load.
+	RemoteSpellUndeclared DiagnosticCode = "MGS1041"
+	// RemoteSpellDigestMismatch is a pinned spell whose bytes do not hash to the pin:
+	// served that way by a registry, or found that way in the cache while MAGUS_OFFLINE
+	// forbids a fresh pull. Nothing loads.
+	RemoteSpellDigestMismatch DiagnosticCode = "MGS1042"
+	// RemoteSpellLockStale is a declared remote spell magus.lock does not pin, or pins for
+	// a different tag than magus.yaml now tracks. Only the update charm resolves a tag, so
+	// an ordinary run refuses rather than resolving it itself.
+	RemoteSpellLockStale DiagnosticCode = "MGS1043"
+	// SpellOverrideInvalid is a magus.yaml spell override that replaces nothing usable: its
+	// path holds no spell, the spell there has another name than the embedded one it
+	// replaces, or it names an embedded spell this magus does not ship.
+	SpellOverrideInvalid DiagnosticCode = "MGS1044"
+	// GuardSpawnMisdeclared is a magus\guard.spawn registration the workspace cannot use:
+	// one that is not a function, a second one in the same load, or one outside the root
+	// magusfile. The load stops, because a rule that silently did not register is a guard
+	// that looks enforced and is not.
+	GuardSpawnMisdeclared DiagnosticCode = "MGS1045"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -373,7 +394,14 @@ const (
 	//
 	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
 	// command is valid again the moment the later gate finishes.
-	GateSuperseded            DiagnosticCode = "MGS3014"
+	GateSuperseded DiagnosticCode = "MGS3014"
+	// WorkspaceLoadFailed is a daemon call against a workspace whose magusfiles failed to
+	// load. The proximate cause of the refusal; the BZZ or MGS code the load stopped on
+	// rides beside it as the underlying one. Retrying cannot help until a source changes.
+	WorkspaceLoadFailed DiagnosticCode = "MGS3016"
+	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
+	// transient twin of MGS3016: the same call succeeds once the load finishes.
+	WorkspaceStillLoading     DiagnosticCode = "MGS3017"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -435,6 +463,21 @@ const (
 	NoAuthToken              DiagnosticCode = "MGS9004"
 	ConnectorNameExists      DiagnosticCode = "MGS9005"
 	ConnectorNotFound        DiagnosticCode = "MGS9006"
+	// HostNotAllowed is a request whose Host or Origin names a host the daemon does not
+	// serve: the DNS-rebinding guard, answered 403.
+	HostNotAllowed DiagnosticCode = "MGS9007"
+	// LoopbackPeerRequired is a request to a local-only route from a peer that is not on
+	// this machine's loopback interface, answered 403.
+	LoopbackPeerRequired DiagnosticCode = "MGS9008"
+	// ShareBoundToAnotherDevice is a valid share token replayed from a device other than
+	// the one that first used it, answered 403.
+	ShareBoundToAnotherDevice DiagnosticCode = "MGS9009"
+	// ConsoleFileWithheld is a console path outside the tokenless app shell, answered 404.
+	ConsoleFileWithheld DiagnosticCode = "MGS9010"
+	// BearerMissing is a request to a guarded route that carried no bearer token at all,
+	// answered 401. A token that was sent and refused is BearerRejected instead: the two
+	// need different fixes (attach one, or mint a new one).
+	BearerMissing DiagnosticCode = "MGS9011"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -480,13 +523,15 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
-	UnknownConfigKey,
+	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
+	SpellOverrideInvalid, GuardSpawnMisdeclared,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
+	WorkspaceLoadFailed, WorkspaceStillLoading,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
@@ -496,6 +541,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
 	NoAuthToken, ConnectorNameExists, ConnectorNotFound,
+	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
+	BearerMissing,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

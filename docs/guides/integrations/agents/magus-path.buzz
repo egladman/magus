@@ -70,7 +70,7 @@
 
 import "io";
 import "flags";
-import "encoding/json" as json;
+import "encoding/json";
 import "env";
 import "fs";
 import "path";

@@ -4,9 +4,11 @@ package status
 
 import (
 	"encoding/base64"
+	"slices"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/egladman/magus/internal/rpcerr"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	"github.com/egladman/magus/types"
 )
@@ -146,8 +148,28 @@ func deriveHealth(r types.StatusSnapshot) statusv1.Health {
 		return statusv1.Health_HEALTH_DOWN
 	case r.PoolError != "":
 		return statusv1.Health_HEALTH_DEGRADED
+	case slices.ContainsFunc(r.Pool.Workspaces, func(w types.StatusWorkspace) bool { return w.State == types.WorkspaceFailed }):
+		return statusv1.Health_HEALTH_DEGRADED
 	default:
 		return statusv1.Health_HEALTH_HEALTHY
+	}
+}
+
+// workspaceStateToProto converts s to the wire enum. compat: see types.StatusWorkspace.Loaded
+// for why "" maps to ACTIVE; any OTHER value this build does not recognize maps to
+// STATE_UNSPECIFIED instead, never silently reading as active.
+func workspaceStateToProto(s types.WorkspaceState) statusv1.Workspace_State {
+	switch s {
+	case "":
+		return statusv1.Workspace_STATE_ACTIVE
+	case types.WorkspaceLoading:
+		return statusv1.Workspace_STATE_LOADING
+	case types.WorkspaceActive:
+		return statusv1.Workspace_STATE_ACTIVE
+	case types.WorkspaceFailed:
+		return statusv1.Workspace_STATE_FAILED
+	default:
+		return statusv1.Workspace_STATE_UNSPECIFIED
 	}
 }
 
@@ -171,6 +193,10 @@ func poolToProto(p *types.StatusOutput) *statusv1.Pool {
 		ws := &statusv1.Workspace{
 			Root: w.Root, LoadTime: tsFromTime(w.LoadedAt), LastAccessTime: tsFromTime(w.LastAccess),
 			SecretProvider: w.SecretProvider,
+			State:          workspaceStateToProto(w.State),
+		}
+		if w.State == types.WorkspaceFailed {
+			ws.Error = rpcerr.WorkspaceFailed(w.Root, w.Error).Status()
 		}
 		if w.CacheHit != 0 || w.CacheMiss != 0 || w.CacheError != 0 || w.CacheBytes != 0 {
 			ws.Cache = &statusv1.Cache{

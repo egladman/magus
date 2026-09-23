@@ -9,7 +9,7 @@ import (
 )
 
 // Coverage ingestion is OBSERVED, not extracted: it parses the Go coverage profile
-// magus produces (`magus run coverage` writes coverage.out) and folds a per-file (and
+// magus produces (`magus run test .` writes .magus/coverage.out) and folds a per-file (and
 // per-symbol) covered-statement ratio onto the file/symbol nodes SCIP already minted.
 // It never churns the deterministic @symbols shards it annotates: the ratio is
 // volatile local run data, so it rides an isolated @coverage shard, re-derived each

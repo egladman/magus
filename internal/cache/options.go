@@ -49,7 +49,7 @@ func WithMaxImportBytes(n int64) Option {
 	}
 }
 
-// WithLog sets the log format ("pretty", "text", "json") and minimum level.
+// WithLog sets the log format ("pretty", "text", "json", "jsonl") and minimum level.
 func WithLog(format string, level slog.Level) Option {
 	return func(c *Cache) {
 		c.log = newLogger(format, level)

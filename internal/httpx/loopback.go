@@ -3,6 +3,11 @@ package httpx
 import (
 	"net"
 	"net/http"
+
+	"connectrpc.com/connect"
+
+	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/types"
 )
 
 // The tool-page RPCs (ViewerService, StatusService) are meant to be reachable only from
@@ -35,7 +40,14 @@ func isLoopbackAddr(addr string) bool {
 func RequireLoopbackPeer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackAddr(r.RemoteAddr) {
-			http.Error(w, "forbidden: local access only", http.StatusForbidden)
+			// Every mux-level caller here is a plain JSON route; a Connect server checks
+			// loopback via its own interceptor instead of this middleware.
+			FormatJSON.Write(w, r, rpcerr.Error{
+				Code:    connect.CodePermissionDenied,
+				Reason:  types.LoopbackPeerRequired,
+				Title:   "local access only",
+				Message: "this route only answers a caller on this machine's loopback interface",
+			})
 			return
 		}
 		next.ServeHTTP(w, r)

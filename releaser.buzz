@@ -402,14 +402,14 @@ test "reads the module path and ignores a require of a similar name" {
 }
 
 // releaseIndexPaths lists every tracked path a release-index publish commit may
-// carry: the manifests, the signed pair, and the three files regenerated from the
+// carry: the manifests, the signed pair, and the two files regenerated from the
 // changelog the cut rewrote. The commit stages exactly this list, so a stray dirty
 // file elsewhere in the tree can never be swept into the automation's commit.
 // docs/gen/public/release names the directory, not the two files: .gitignore
 // re-includes exactly index.json and index.json.sig under it.
 export fun releaseIndexPaths() > [str] {
     return ["releases", "docs/gen/public/release", "CHANGELOG.md",
-        "gen/knowledge-graph.json", "docs/changelog.md"];
+        "docs/changelog.md"];
 }
 
 test "the publish paths carry the index pair and the changelog derivatives" {
@@ -417,7 +417,6 @@ test "the publish paths carry the index pair and the changelog derivatives" {
     std\assert(paths.indexOf("docs/gen/public/release") != null, message: "the signed pair's directory");
     std\assert(paths.indexOf("releases") != null, message: "the manifests the index derives from");
     std\assert(paths.indexOf("CHANGELOG.md") != null, message: "the file the cut rewrote");
-    std\assert(paths.indexOf("gen/knowledge-graph.json") != null, message: "derived from the changelog");
     std\assert(paths.indexOf("docs/changelog.md") != null, message: "derived from the changelog");
 }
 

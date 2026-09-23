@@ -74,7 +74,8 @@ func runOnPTY(ctx context.Context, c *exec.Cmd, w io.Writer, capture *bytes.Buff
 	if onStarted != nil {
 		onStarted(c.Process.Pid)
 	}
-	// Step 2, and the whole reason this function exists.
+	// Closing our slave handle is the whole reason this function exists; the doc
+	// comment's ordered list says why.
 	slave.Close()
 
 	if stdinToWrite != "" {

@@ -1,5 +1,7 @@
 //go:build cgo_engines
 
+// cross-cutting: the cgo_engines half of the tag-split engine list for comparison_test.go
+
 // Adds the opt-in extended tier - LuaJIT and Umka (both cgo) - to the
 // comparison. This file holds no cgo itself (forbidden in _test.go); it drives
 // the primitives in luajit_cgo.go / umka_cgo.go. Compiled only under the

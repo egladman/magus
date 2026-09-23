@@ -10,7 +10,7 @@ import "./tools/drift" as drift;
 // callable" at run time.
 import "./tools/toolchain" as toolchains;
 // The pull request checks pr.yaml runs; see pr_title and pr_changelog.
-import "./tools/conventional" as conventional;
+import "./tools/commits" as commits;
 import "./tools/changelog" as changelog;
 // This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
@@ -43,18 +43,20 @@ import "lcov";
 // Version-selection rules for the `release` target below. ALIASED deliberately:
 // an unaliased import flat-merges the module's exports into this file's scope,
 // where magus reads every exported fun as a target and rejects the ones without a
-// magus\Context first parameter (MGS1008). Aliasing keeps them namespaced, which
+// magus\Context first parameter (MGS1008). Aliasing keeps it namespaced, which
 // is the same reason docs/magusfile.buzz aliases its renderer.
 import "releaser" as releaser;
-import "spells/golang/gomod" as gomod;
+// A "spells/" path is resolved by the workspace spell resolver, not a file import,
+// so unlike releaser above there is no flat-merge to guard against.
+import "spells/golang/gomod";
 
 // gopherbuzz is embedded (require + replace); binds its targets as cross-project handles.
-import "project/libs/gopherbuzz" as gopherbuzz;
+import "project/libs/gopherbuzz";
 // diagnostics is the other embedded module; the coverage badge reads its profile, and
 // the two lint-library modules' profiles beside it.
-import "project/libs/diagnostics" as diagnostics;
-import "project/libs/commentdash" as commentdash;
-import "project/libs/testlayout" as testlayout;
+import "project/libs/diagnostics";
+import "project/libs/coldread";
+import "project/libs/testlayout";
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
 //
@@ -70,10 +72,14 @@ import "project/libs/testlayout" as testlayout;
 // engine reads the parsed config (magus.yaml, then env, then flags). `insecure: false`
 // in magus.yaml with the env var set wires a backend here that the engine then refuses.
 import "spells/github/actions" as github;
-import "spells/harness/cursor" as cursor;
-import "spells/harness/codex" as codex;
+// TODO: import these by registry path (`import "ghcr.io/egladman/magus/spells/cursor";`,
+// declared in magus.yaml and pinned by spell-lock:update) once cd has published them and
+// the GHCR packages are public (docs/reference/remote-spells.md). Until then a switch
+// would leave magus.lock with nothing to pin and every load of this magusfile failing.
+import "spells/harness/cursor";
+import "spells/harness/codex";
 import "spells/harness/claude-code" as claude;
-import "spells/harness/opencode" as opencode;
+import "spells/harness/opencode";
 final cache_trusted = os\env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
 final cache_insecure = os\env("MAGUS_CACHE_REMOTE_INSECURE");
 if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" or cache_insecure == "1") {
@@ -180,9 +186,6 @@ magus\project({
         // and conventions_test.go asserts it invokes the shipped template rather
         // than inlining a copy, so an edit here can turn the root tests red.
         ".claude/settings.json",
-        // Harness descriptors (JSON) remain as a compat fallback for hosts not yet
-        // migrated to harness spells under spells/harness/.
-        "harnesses/*.json",
         "spells/harness/**/*.buzz",
         // The vendored agent-host schemas host_schema_test.go grades the hook configs
         // against. No spell claims them (the go spell takes *.go and *.txtar), so a
@@ -246,6 +249,7 @@ magus\project({
         // would report the charms and credentials of whatever ran last.
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
+        "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
         // NO skip_cache, and the reason it used to carry is now an input instead. The
         // answer still depends on trivy's vulnerability database rather than on this tree
         // alone, which is why a hit once reported yesterday's CVEs against today's image;
@@ -534,6 +538,14 @@ final GHCR = Registry{
 final GHCR_GRAPH = Registry{
     host = "ghcr.io",
     repository = "ghcr.io/egladman/magus/knowledge-graph",
+    user_ref = "GHCR_USERNAME",
+    token_ref = "GHCR_TOKEN",
+};
+
+// Published spells, one repository per spell beneath this one, for the same reason.
+final GHCR_SPELLS = Registry{
+    host = "ghcr.io",
+    repository = "ghcr.io/egladman/magus/spells",
     user_ref = "GHCR_USERNAME",
     token_ref = "GHCR_TOKEN",
 };
@@ -1099,7 +1111,7 @@ fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> an
 
 // Fails a pull request title that is not a conventional commit subject. Squash merges make
 // the title the subject main records, so this is where the format is enforced; the rule is
-// tools/conventional.buzz. Pass a title after `--` to check one by hand.
+// tools/commits.buzz. Pass a title after `--` to check one by hand.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     var title = args.join(" ");
     if (title == "") {
@@ -1109,7 +1121,7 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
         }
         title = event?.q("title").stringValue() ?? "";
     }
-    final problem = conventional\problem(title);
+    final problem = commits\problem(title);
     if (problem != "") {
         throw "pr-title: \"{title}\": {problem}";
     }
@@ -1409,7 +1421,9 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Whole-workspace scope is why this lives at the root rather than in docs/ - a describe
 // from inside a project only sees that project.
 export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("gen/*.json");
+    // Declared although gitignored: console's build needs this target and copies the
+    // pair, so the files are an output it consumes, not residue it happens to find.
+    ctx.writesFiles("gen/knowledge-graph.json", "gen/target-graph.json");
     fs\mkdirAll("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
@@ -1431,7 +1445,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
 // publish_graph pushes the knowledge graph to GHCR as an OCI artifact, so a collaborator
 // or a later CI job can fetch it instead of paying for a full symbol reindex. The
 // published copy carries the SCIP shards, which are the expensive half and are never
-// committed; gen/knowledge-graph.json is already in the repository, so republishing that
+// committed; gen/knowledge-graph.json is a local build output, so republishing that
 // alone would add nothing.
 //
 // The artifact is the knowledge store SHARD BY SHARD, one layer per shard titled with its
@@ -1456,6 +1470,54 @@ fun publish_graph(ctx: magus\Context) > void !> any {
             opts: {"stdin": token});
     }
     magus\log.info("graph-generate: published {reg.repository} as {tags.len()} tag(s)");
+}
+
+// Publishes each spell below as an OCI artifact, so a workspace imports it by registry
+// path (`import "ghcr.io/egladman/magus/spells/<name>";`, declared in its magus.yaml
+// and pinned in its magus.lock) and it versions apart from the binary. It packs only
+// tracked files, so an unchanged spell republishes to the digest it already had. The
+// key is the repository name under GHCR_SPELLS.
+//
+// cd is the deliver switch: without it each spell is built and its digest printed, and
+// nothing leaves the machine. The spell sources are declared inputs, so a change under
+// spells/harness selects this target through the graph and no workflow names it.
+export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
+    final dirs = {
+        "claude-code": "spells/harness/claude-code",
+        "codex": "spells/harness/codex",
+        "cursor": "spells/harness/cursor",
+        "opencode": "spells/harness/opencode",
+    };
+    ctx.readsFiles("spells/harness/**/*");
+    if (!ctx.hasCharm("cd")) {
+        foreach (_, dir in dirs) {
+            magus\cmd("spell", args: ["build", dir]);
+        }
+        return;
+    }
+    final reg = GHCR_SPELLS;
+    final tag = commit();
+    final user = magus\secret.read(reg.user_ref);
+    final token = magus\secret.read(reg.token_ref);
+    foreach (name, dir in dirs) {
+        magus\cmd("spell", args: ["push", dir, reg.repository + "/" + name + ":" + tag, "--username", user],
+            opts: {"stdin": token});
+    }
+}
+
+// Owns magus.lock, the digest each remote spell magus.yaml declares was pinned to.
+// Plain, it checks the lock against magus.yaml and verifies every pinned digest,
+// resolving no tag. Under the update charm, and only there, it asks the registry what
+// each declared tag names now and rewrites the lock, so reviewing an upgrade is
+// reviewing that diff. ci strips update, so the gate can never move a pin.
+export fun spell_lock(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("magus.yaml");
+    ctx.writesFiles("magus.lock");
+    if (ctx.hasCharm("update")) {
+        magus\cmd("spell", args: ["lock", "--update"]);
+        return;
+    }
+    magus\cmd("spell", args: ["lock"]);
 }
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
@@ -1517,8 +1579,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         // not enough twice running: the drift that sent us here turned out to be a
         // daemon auth token captured into a docs example, invisible from a filename.
         var body = vcs\dirtyDiff(changed);
-        // gen/knowledge-graph.json is 2.2MB on one line; bound it so a generated
-        // JSON cannot bury a small, readable drift somewhere else in the list.
+        // A generated JSON blob can be megabytes on one line; bound it so it
+        // cannot bury a small, readable drift somewhere else in the list.
         if (body.len() > 4000) {
             body = body.sub(0, len: 4000)
                 + "\n... truncated; `magus query output <ref>` has it all";
@@ -2625,7 +2687,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // Declared so coverage_render can read them after a cache HIT: without this the
     // profiles are undeclared residue, restored by nothing, and the render target
     // finds no file to measure whenever the suite replays.
-    ctx.writesFiles("coverage.out", "coverage.hand.out", "coverage.cmd.out");
+    ctx.writesFiles(".magus/coverage.out", ".magus/coverage.hand.out", ".magus/coverage.cmd.out");
     // The tree this suite compiles and runs, restated. It is NOT redundant with the
     // project's sources: a ctx.readsFiles call REPLACES a target's footprint rather than
     // adding to it (buildStep in run.go keeps only the magusfiles, then folds these refs
@@ -2690,7 +2752,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // this key unmoved and the suite replays a pass computed against the old table.
     // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
     ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
-    // types/kind_palette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
+    // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
     // green while the thing it measures drifts underneath it. Measured: deleting a palette
@@ -2712,22 +2774,22 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // goroutines. The engine's real concurrency keeps -race below, in the packages that
     // own it: internal/cache, internal/proc/run and the root package.
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"] + raced_packages()});
+        {"args": ["-race", "-covermode=atomic", "-coverprofile=" + COVERAGE_PROFILE] + raced_packages()});
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}),
         {"args": ["-covermode=atomic", "-coverprofile=" + CMD_MAGUS_PROFILE, CMD_MAGUS_PKG]});
     // One profile again, or the badge and the floor below would measure the raced half
     // of the tree and call it the tree.
-    fs\writeFile("coverage.out",
-        merge_profiles(fs\readFile("coverage.out"), second: fs\readFile(CMD_MAGUS_PROFILE)));
+    fs\writeFile(COVERAGE_PROFILE,
+        merge_profiles(fs\readFile(COVERAGE_PROFILE), second: fs\readFile(CMD_MAGUS_PROFILE)));
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
     // the Buzz mirrors) are hundreds of functions no test will ever call, so
     // leaving them in makes the figure a statement about the code generators and
     // rewards writing tests for getters to hold the floor up. coverage.buzz
     // detects them by Go's canonical marker, never by path - this repo keeps
-    // hand-maintained files inside a gen/ directory. coverage.out stays on disk
-    // unfiltered so `go tool cover -html=coverage.out` still shows everything.
-    fs\writeFile("coverage.hand.out",
-        cov\stripGenerated(fs\readFile("coverage.out"),
+    // hand-maintained files inside a gen/ directory. The unfiltered profile stays on
+    // disk so `go tool cover -html=.magus/coverage.out` still shows everything.
+    fs\writeFile(COVERAGE_HAND_PROFILE,
+        cov\stripGenerated(fs\readFile(COVERAGE_PROFILE),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
     if (std\parseInt(coverage_percent().split(".")[0]) < 70) {
         throw "test: coverage " + coverage_percent() + "% is below the 70% floor; investigate the regression or lower the floor deliberately";
@@ -2737,7 +2799,12 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // The package `test` runs without -race, and where its own profile lands. Named once:
 // the split reads as an accident wherever the string appears twice.
 final CMD_MAGUS_PKG = "./cmd/magus";
-final CMD_MAGUS_PROFILE = "coverage.cmd.out";
+final CMD_MAGUS_PROFILE = ".magus/coverage.cmd.out";
+
+// The merged profile and its generated-stripped copy, which coverage_render and
+// coverage_percent read back. Under .magus/ to keep them out of the root listing.
+final COVERAGE_PROFILE = ".magus/coverage.out";
+final COVERAGE_HAND_PROFILE = ".magus/coverage.hand.out";
 
 // raced_packages is every package of this module except the one `test` runs separately.
 // `go list` rather than a hand-kept list, so a package added tomorrow is raced without
@@ -2790,7 +2857,7 @@ fun merge_profiles(first: str, second: str) > str !> any {
 // the suite that just ran, so it has to answer for the tree that suite compiled. The
 // published badge is the whole-tree figure and belongs to coverage_render.
 fun coverage_percent() > str !> any {
-    return total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
+    return total_coverage(proc\exec("go", ["tool", "cover", "-func=" + COVERAGE_HAND_PROFILE]).stdout);
 }
 
 // coverage_blocks_ran unions one platform's module profiles into "block -> did it run".
@@ -2822,7 +2889,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // generate first: the denominator reads every Go file, and the generate sub-targets
     // write Go files. Left unordered, a reader waiting for those writers while holding
     // its slot stalled a gate for fifteen minutes with nothing running (2026-09-10).
-    ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, commentdash\test,
+    ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, coldread\test,
         testlayout\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
@@ -2838,12 +2905,12 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // DENOMINATOR is every statement block of every Go file in every module, enumerated
     // from source whatever its build constraints (coverage.buzz explains how); the
     // NUMERATOR is what this run's suites entered. A file only another platform compiles
-    // counts at zero. coverage.out rather than coverage.hand.out: the denominator never
-    // enumerates generated files, so the merge drops them without a pre-stripped profile.
+    // counts at zero. The unfiltered profile rather than the hand one: the denominator
+    // never enumerates generated files, so the merge drops them without a pre-stripped profile.
     final tables = cov\staticBlockTables();
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
-        ["coverage.out", "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
-         "libs/commentdash/coverage.out", "libs/testlayout/coverage.out"]));
+        [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
+         "libs/coldread/coverage.out", "libs/testlayout/coverage.out"]));
     final go_pct = cov\percentOf(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -2920,7 +2987,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // releaser.buzz carries the version and release-name rules `release` decides on, and no
     // target ran its test blocks: the two hand-named modules above were the whole root list,
     // so those tests passed for as long as they existed without being run. --embedded
-    // because it is a magusfile import, the same reason tools/audit.buzz is.
+    // because it is a magusfile import, the same reason tools/advisories.buzz is.
     cover_for("releaser.buzz", ["--embedded"], {});
     // GLOBBED, for the reason the spell paragraph below gives, applied to the two trees
     // that were still hand-omitted. Both were carrying real breakage precisely because
@@ -2937,7 +3004,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //
     // The MODE is per file, not per directory, because tools/ is not uniform.
     // registry.buzz is the only one invoked bare, so it is the only one that has to
-    // survive strict; audit, drift and toolchain-policy are magusfile imports and
+    // survive strict; advisories, drift and toolchain-policy are magusfile imports and
     // therefore always embedded, and running THEM strict would fail a top-level `if`
     // or an unlabeled second argument that is legal everywhere they actually load - a
     // red for a defect that does not exist. (toolchain.buzz has no importer and no
@@ -3026,17 +3093,17 @@ export fun build(ctx: magus\Context, args: [str])  > void {
         ctx.needs(go_build);
     }
 }
-// Builds ./custom-gcl, the golangci-lint carrying this repo's own linters.
+// Builds .magus/custom-gcl, the golangci-lint carrying this repo's own linters.
 // golangci-lint compiles plugins in rather than loading them at runtime, so an
 // in-repo rule only runs through a binary built here.
 //
 // The build runs in libs/testlayout because `golangci-lint custom` reads
 // .custom-gcl.yml from its working directory and takes no config flag. That file
-// lives with the linter it declares; `destination: ../..` puts the binary back at
-// the root, where .golangci.yml and lint expect it.
+// lives with the linter it declares; `destination: ../../.magus` puts the binary
+// where .golangci.yml and lint expect it, out of the workspace root's own listing.
 //
 // No declared outputs, for go-build's reason: those globs are what
-// EnsureMergeDriver writes into .gitattributes, and /custom-gcl is gitignored, so
+// EnsureMergeDriver writes into .gitattributes, and .magus/ is gitignored, so
 // declaring it would name an untrackable path. Same consequence too - a read-only
 // run leaves no binary, so a fresh worktree needs this again.
 export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
@@ -3045,15 +3112,15 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
-                   "libs/commentdash/go.mod", "libs/commentdash/go.sum",
-                   "libs/commentdash/**/*.go");
+                   "libs/coldread/go.mod", "libs/coldread/go.sum",
+                   "libs/coldread/**/*.go");
     // Remove the old binary first, so the link lands on a FRESH inode. `golangci-lint
-    // custom` otherwise rewrites ./custom-gcl in place, and macOS keeps a code signature
-    // keyed on that inode: the new bytes no longer match it, so the kernel SIGKILLs the
-    // next exec before main runs. It reads as an OOM kill ("signal: killed") and is not
-    // one - `./custom-gcl --version` died the same way on a machine with 13GB free, and
-    // `codesign --force --sign -` on the same file fixed it.
-    fs\remove("custom-gcl");
+    // custom` otherwise rewrites .magus/custom-gcl in place, and macOS keeps a code
+    // signature keyed on that inode: the new bytes no longer match it, so the kernel
+    // SIGKILLs the next exec before main runs. It reads as an OOM kill ("signal:
+    // killed") and is not one - `.magus/custom-gcl --version` died the same way on a
+    // machine with 13GB free, and `codesign --force --sign -` on the same file fixed it.
+    fs\remove(".magus/custom-gcl");
     proc\exec("golangci-lint", ["custom"], "libs/testlayout");
 }
 
@@ -3064,7 +3131,7 @@ export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
 // golangci-lint USED to go through the go spell's op so the spell's version probe
 // (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which
 // code passes while every cache entry replays the old verdict. It no longer can: the binary
-// is ./custom-gcl, built by lint_build, and the op runs whatever `golangci-lint` is on PATH.
+// is .magus/custom-gcl, built by lint_build, and the op runs whatever `golangci-lint` is on PATH.
 // The readsFiles below carries that key by content instead - see the note at the call.
 // Not through `go tool` either: that COMPILES the tool with whichever go leads PATH, which
 // is how CI once built the linter with a different toolchain than it analyzed with, and
@@ -3088,7 +3155,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go",
-                   "libs/commentdash/**/*.go",
+                   "libs/coldread/**/*.go",
                    // A project, so the tree globs below stop at its directory, but also a
                    // package of this module that golangci-lint and go vet both compile.
                    "libs/pricing/**/*.go", "libs/pricing/pricing.json");
@@ -3115,7 +3182,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // a tree with zero of its own. A cold analysis per fresh worktree is the price.
     final lintCache = magus\projects().workspace + "/.magus/golangci-lint";
     os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
-        proc\exec("./custom-gcl", ["run"]);
+        proc\exec(".magus/custom-gcl", ["run"]);
     });
     go["go-vet"](ctx);
     // Compile the browser playground for wasm. COMPILE only, to /dev/null: TinyGo

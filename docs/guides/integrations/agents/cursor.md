@@ -62,9 +62,14 @@ Prefer wiring the Cursor harness from the root magusfile when you bounce between
 hosts; apply then covers every wired provider:
 
 ```buzz
-import "spells/harness/cursor" as cursor
-magus\harness.provider(cursor)
+import "ghcr.io/egladman/magus/spells/cursor";
+magus\harness.provider(cursor);
 ```
+
+Declare the spell in `magus.yaml` with the tag cd's `spell-publish` step pushed, and
+run your lock target with `:update` to pin its digest in `magus.lock`, so the harness
+versions apart from your magus binary; see
+[Remote spells](../../../reference/remote-spells.md).
 
 ```sh
 magus agent harness apply
@@ -76,9 +81,9 @@ the workspace, change only the import path (for example
 `import "harness/cursor" as cursor`), edit the workspace Buzz, then re-run apply
 and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
-Or target Cursor alone (spell or `harnesses/cursor.json`):
+Or target Cursor alone:
 
 ```sh
 magus agent harness apply --id cursor

@@ -691,7 +691,7 @@ func TestPrintStatusTextFullSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	out := string(body)
 	assert.Contains(t, out, "daemon pid 4242", "the daemon block still renders")
-	assert.Contains(t, out, "loaded workspaces")
+	assert.Contains(t, out, "workspaces (")
 	assert.Contains(t, out, "mcp endpoint", "the mcp block renders alongside the daemon block")
 	assert.Contains(t, out, "serving")
 	assert.Contains(t, out, "telemetry is disabled.")
@@ -967,7 +967,7 @@ func TestPrintStatusTextRendersEverySection(t *testing.T) {
 	assert.Contains(t, out, "capacity: 4   running: 2   available: 2   queued: 3")
 	assert.Contains(t, out, "/repos/alpha")
 	assert.Contains(t, out, "run build web")
-	assert.Contains(t, out, "loaded workspaces (1)")
+	assert.Contains(t, out, "workspaces (1)")
 
 	assert.Contains(t, out, "proc servers (2)")
 	assert.Contains(t, out, "unix:///tmp/b.sock")

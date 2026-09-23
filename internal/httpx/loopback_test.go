@@ -33,4 +33,5 @@ func TestRequireLoopbackPeerGuard(t *testing.T) {
 	rr = httptest.NewRecorder()
 	ok.ServeHTTP(rr, remote)
 	assert.Equal(t, http.StatusForbidden, rr.Code, "a non-loopback peer is refused")
+	assert.Equal(t, "MGS9008", decodeStatus(t, rr.Body.Bytes()).reason())
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,4 +69,15 @@ func TestCheckReleaseIndexExpirySilentElsewhere(t *testing.T) {
 func TestServedIndexPassesItsOwnCheck(t *testing.T) {
 	got := (&runner{root: filepath.Join("..", "..")}).checkReleaseIndexExpiry()
 	require.Equal(t, types.DoctorOK, got.Status, got.Message)
+}
+
+func TestRoughly(t *testing.T) {
+	// time.Duration's own String gives "4319h0m0s" at this scale, which nobody reads
+	// as six months.
+	assert.Equal(t, "180 days", roughly(180*24*time.Hour))
+	assert.Equal(t, "2 days", roughly(48*time.Hour))
+	assert.Equal(t, "47 hours", roughly(47*time.Hour))
+	assert.Equal(t, "2 hours", roughly(2*time.Hour))
+	assert.Equal(t, "under an hour", roughly(30*time.Minute))
+	assert.Equal(t, "under an hour", roughly(0))
 }

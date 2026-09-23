@@ -66,3 +66,31 @@ magus.project({
 	require.NotNil(t, p)
 	assert.True(t, p.TargetPolicies["build"].SkipCache)
 }
+
+// TestInspect_ReportsEveryFailingMagusfile pins that one load names every broken
+// magusfile, and that the policy check stays quiet about a registry the failed
+// magusfiles never populated.
+func TestInspect_ReportsEveryFailingMagusfile(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, body string) {
+		p := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+	}
+	write("magusfile.buzz", `import "magus";
+
+magus.project({
+    "targets": {
+        "bogus-target": {"skip_cache": "test policy"}
+    }
+})
+`)
+	write("a/magusfile.buzz", "magus.project({});\n")
+	write("b/magusfile.buzz", "magus.project({});\n")
+
+	_, err := magus.Inspect(context.Background(), root)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "magus: a: ")
+	assert.ErrorContains(t, err, "magus: b: ")
+	assert.NotContains(t, err.Error(), "per-target policy")
+}

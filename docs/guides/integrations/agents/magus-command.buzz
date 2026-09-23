@@ -112,7 +112,7 @@
 import "std";
 import "flags";
 import "io";
-import "encoding/json" as json;
+import "encoding/json";
 import "env";
 import "fs";
 import "os";

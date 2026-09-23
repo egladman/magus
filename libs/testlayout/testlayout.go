@@ -8,7 +8,8 @@
 //
 // Narrowing is the reported case, not a missing sibling. 34% of the standard
 // library's test files are named after a cross-cutting concern no source file
-// owns, which makes reporting those a house rule. See Options.Unpaired.
+// owns, which makes reporting those a house rule. See Options.Unpaired, and
+// [CrossCuttingMarker] for the comment that excuses one file from it.
 //
 // The analyzer depends on no linter runner. The golangci-lint plugin lives in
 // the plugin subpackage.
@@ -20,6 +21,7 @@ package testlayout
 
 import (
 	"fmt"
+	"go/ast"
 	"os"
 	"path/filepath"
 	"slices"
@@ -48,7 +50,10 @@ has narrowed an existing name, and its cases belong in that file's test file.
 It also reports a test file in an external test package (package foo_test). A test
 belongs in the package it tests; the external package is reserved for the case where
 an in-package test would close an import cycle, and that case is worth a //nolint
-naming the cycle rather than a silent convention.`
+naming the cycle rather than a silent convention.
+
+With the unpaired option it reports every X_test.go with no X.go, unless a source
+family (X_linux.go) stands in or the file opens with "// cross-cutting: <why>".`
 
 // conventional lists test filenames that have no source counterpart by design,
 // with the number of uses each has in the Go standard library. Every entry is
@@ -94,8 +99,22 @@ type Options struct {
 	// Unpaired extends the rule to every test file with no source file of the same
 	// name, not only one that narrows an existing name. See the package comment for
 	// what that costs.
+	//
+	// A test file still pairs when its name matches a platform-split family:
+	// tree_test.go covers tree_linux.go and tree_darwin.go when no tree.go exists.
+	// A file carrying [CrossCuttingMarker] above its package clause is exempt.
 	Unpaired bool `json:"unpaired"`
 }
+
+// CrossCuttingMarker opens a line comment above the package clause of a test file
+// that has no single source file to pair with, followed by the reason:
+//
+//	// cross-cutting: every backend runs the same cases, so no one backend owns them
+//
+// It exempts the file from [Options.Unpaired] only. A marked file that narrows a
+// source name is still reported, because that file has a home. An empty reason
+// does not count: the marker exists to make the exception readable.
+const CrossCuttingMarker = "cross-cutting:"
 
 // New returns an analyzer configured by opts, erroring on a malformed Allow glob.
 //
@@ -178,7 +197,7 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 			listings[dir] = sources
 		}
 
-		if message := l.check(name, sources); message != "" {
+		if message := l.check(name, sources, crossCutting(f)); message != "" {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: message})
 		}
 	}
@@ -187,7 +206,8 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 }
 
 // check returns the diagnostic for the test file name, or "" when it is fine.
-func (l linter) check(name string, sources map[string]bool) string {
+// marked reports whether the file carries [CrossCuttingMarker].
+func (l linter) check(name string, sources map[string]bool, marked bool) string {
 	base := strings.TrimSuffix(name, "_test.go")
 
 	// Exact pair first. Trimming ahead of this lookup hides a source file carrying
@@ -209,11 +229,50 @@ func (l linter) check(name string, sources map[string]bool) string {
 		return fmt.Sprintf("%s narrows %s.go; these tests belong in %s_test.go", name, owner, owner)
 	}
 
-	if l.unpaired {
-		return fmt.Sprintf("%s has no source file of the same name", name)
+	if !l.unpaired || marked || pairsWithFamily(trimmed, sources) {
+		return ""
 	}
 
-	return ""
+	return fmt.Sprintf("%s has no source file of the same name; move its tests into the _test.go "+
+		"of the file they exercise, or, when no single file owns them, open the file with "+
+		"`// %s <why>` above the package clause", name, CrossCuttingMarker)
+}
+
+// pairsWithFamily reports whether some source file is base plus build suffixes only,
+// so tree_test.go pairs with tree_linux.go. Checked after the narrowing search because
+// a family is not a file the tests could have been added to.
+func pairsWithFamily(base string, sources map[string]bool) bool {
+	for source := range sources {
+		if source != base && trimBuildSuffixes(source) == base {
+			return true
+		}
+	}
+
+	return false
+}
+
+// crossCutting reports whether a line comment above f's package clause opens with
+// [CrossCuttingMarker] and gives a reason.
+func crossCutting(f *ast.File) bool {
+	for _, group := range f.Comments {
+		if group.Pos() >= f.Package {
+			return false
+		}
+
+		for _, c := range group.List {
+			text, ok := strings.CutPrefix(c.Text, "//")
+			if !ok {
+				continue
+			}
+
+			reason, ok := strings.CutPrefix(strings.TrimSpace(text), CrossCuttingMarker)
+			if ok && strings.TrimSpace(reason) != "" {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // exempted reports whether the test file name matches a conventional name or a

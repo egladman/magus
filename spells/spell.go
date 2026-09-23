@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"sort"
+	"strings"
 )
 
 // Driver is implemented by both spells (*Spell) and MCP tools.
@@ -468,6 +469,30 @@ func NewSpell(name string, opts ...Option) *Spell {
 
 // ModulePrefix is the import namespace every spell is reachable under.
 const ModulePrefix = "magus/spell/"
+
+// IsRemoteImport reports whether importPath names a spell published to a registry,
+// imported by its repository path: `import "ghcr.io/team/spells/lint"`. The first
+// path element decides, as in Go's module rule: a registry host carries a dot or a
+// port (ghcr.io, localhost:5000), and a workspace directory is written with neither.
+// It does not validate the rest of the path; the magus.yaml declaration does.
+func IsRemoteImport(importPath string) bool {
+	host, rest, ok := strings.Cut(importPath, "/")
+	if !ok || rest == "" || host == "." || host == ".." || strings.HasPrefix(rest, "/") || strings.Contains(rest, "//") {
+		return false
+	}
+	if strings.Contains(host, ".") {
+		return true
+	}
+	name, port, ok := strings.Cut(host, ":")
+	return ok && name != "" && port != "" && strings.Trim(port, "0123456789") == ""
+}
+
+// IsEmbeddedImport reports whether importPath names a spell compiled into magus. The
+// prefix is a namespace magus owns, so a built-in added in a release can never collide
+// with a workspace module named first.
+func IsEmbeddedImport(importPath string) bool {
+	return strings.HasPrefix(importPath, ModulePrefix)
+}
 
 // ModulePath is the literal a magusfile writes to bind this spell's handle:
 // ModulePath("go") is "magus/spell/go", for `import "magus/spell/go"`.

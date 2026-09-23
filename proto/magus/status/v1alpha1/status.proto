@@ -10,6 +10,7 @@ syntax = "proto3";
 package magus.status.v1alpha1;
 
 import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
 
 // Health is the at-a-glance rollup a dashboard shows.
 enum Health {
@@ -147,8 +148,15 @@ message RunningTarget {
   string invocation = 5;                     // the invocation id (inv...) this running target belongs to; deep-links to its live log
 }
 
-// Workspace is one workspace the daemon has loaded.
+// Workspace is one workspace the daemon holds: loading, loaded, or failed to load.
 message Workspace {
+  // State is where the daemon's copy of this workspace sits. Output only; values may be added.
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_LOADING = 1; // evaluating magusfiles; resolves on its own
+    STATE_ACTIVE = 2;  // loaded; workspace calls are served
+    STATE_FAILED = 3;  // load failed, see error; held until a workspace source changes
+  }
   string root = 1;
   google.protobuf.Timestamp load_time = 2;
   google.protobuf.Timestamp last_access_time = 3;
@@ -162,6 +170,10 @@ message Workspace {
   // it reads them through a provider, and publishing what a build CAN reach would be a map
   // of what to go after.
   string secret_provider = 5;
+  State state = 6;
+  // Why the workspace is FAILED; unset in every other state. The same Status a call against
+  // it returns. Spelled out because a bare Status here resolves to this package's message.
+  google.rpc.Status error = 7;
 }
 
 // Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this

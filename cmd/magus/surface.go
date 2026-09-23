@@ -61,6 +61,7 @@ var subcommands = []subcommand{
 	{Group: groupIntegrate, Name: "mcp", Short: "print how to reach the MCP server (served by the daemon, not a standalone command)"},
 	{Group: groupIntegrate, Name: "status", Short: "inspect the concurrency pool of a running parent magus"},
 	{Group: groupIntegrate, Name: "buzz", Short: "run a Buzz script (Buzz stdlib + every magus host module)"},
+	{Group: groupIntegrate, Name: "spell", Short: "build, push, pull and list spells as OCI artifacts, and pin them in magus.lock (spell build|push|pull|ls|lock)"},
 	{Group: groupIntegrate, Name: "agent", Short: "install the knowledge-graph agent skills into a repo (agent install <dir>)"},
 
 	{Group: groupSetup, Name: "init", Short: "bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)"},

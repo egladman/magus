@@ -1,8 +1,11 @@
 version: v2
 # protovalidate provides the (buf.validate.field) options used to constrain the RPC
-# request inputs (ref shape, non-empty invocation). buf dep update pins it in buf.lock.
+# request inputs (ref shape, non-empty invocation). googleapis provides google.rpc.Status
+# and its detail messages, the daemon's one error model (AIP-193). buf dep update pins both
+# in buf.lock.
 deps:
   - buf.build/bufbuild/protovalidate
+  - buf.build/googleapis/googleapis
 modules:
   - path: .
 lint:

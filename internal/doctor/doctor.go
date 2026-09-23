@@ -63,6 +63,7 @@ type options struct {
 	probe        bool
 	skills       *agent.Catalog
 	explanations *Explanations
+	graphNodes   func(context.Context) ([]types.KnowledgeNode, error)
 }
 
 // Option configures a [Run] call.
@@ -89,6 +90,14 @@ func WithSkillCatalog(c *agent.Catalog) Option { return func(o *options) { o.ski
 // notes store is resolved by the CLI, so the SDK and this package's tests have no way to
 // tell an empty store from an unreadable one.
 func WithExplanations(e Explanations) Option { return func(o *options) { o.explanations = &e } }
+
+// WithGraphNodes supplies the knowledge graph's nodes for the graph-bounds check. Building
+// the graph takes the full Inspector role, which Run's WorkspaceReader does not carry, so
+// the caller that holds one builds it. A caller that passes nothing gets the check
+// reported as skipped. load runs only when that check does.
+func WithGraphNodes(load func(context.Context) ([]types.KnowledgeNode, error)) Option {
+	return func(o *options) { o.graphNodes = load }
+}
 
 // WithProbe RUNS each declared readiness probe rather than only listing it.
 //

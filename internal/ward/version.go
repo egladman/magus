@@ -164,6 +164,15 @@ func ExplainStaleBinary(err error, running, constraint string) error {
 	if err == nil {
 		return nil
 	}
+	// A load joins every failing file, and the note belongs only to the ones it
+	// explains.
+	if errs, ok := joined(err); ok {
+		out := make([]error, len(errs))
+		for i, e := range errs {
+			out[i] = ExplainStaleBinary(e, running, constraint)
+		}
+		return errors.Join(out...)
+	}
 	var d *diagnostics.Error
 	if !errors.As(err, &d) {
 		return err
@@ -182,4 +191,20 @@ func ExplainStaleBinary(err error, running, constraint string) error {
 	return types.WrapDiagnostic(types.WorkspaceNeedsNewerMagus, err,
 		"%s\n\nThe workspace reached for a name this build does not provide. %s. If the name is "+
 			"genuinely misspelled, this note does not apply", err, StaleBinaryAdvice(build, constraint))
+}
+
+// joined returns err's branches when rejoining them reproduces its message, as it
+// does for errors.Join. A multi-%w wrapper such as "%w: %w" fails that test, so
+// splitting it would drop its own text.
+func joined(err error) ([]error, bool) {
+	multi, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		return nil, false
+	}
+	errs := multi.Unwrap()
+	msgs := make([]string, len(errs))
+	for i, e := range errs {
+		msgs[i] = e.Error()
+	}
+	return errs, strings.Join(msgs, "\n") == err.Error()
 }
