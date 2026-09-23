@@ -50,6 +50,7 @@ type Cache struct {
 	machine         *machineGate
 	machineAdmitter MachineAdmitter
 	mutable         bool // true = read+write (default); false = read-only
+	remoteWrite     bool // write the remote tier too (default); no effect while mutable is false
 	sizeMB          int
 	maxImportBytes  int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
 	log             *slog.Logger
@@ -271,16 +272,15 @@ func deferMtimeFlush() RunOption {
 }
 
 // Open returns a Cache rooted at dir (created on demand). MAGUS_CACHE_WRITE_ENABLED=false
-// opens read-only (replays hits, never writes). Logger respects MAGUS_LOG_FORMAT/LEVEL.
+// opens read-only (replays hits, never writes); MAGUS_CACHE_REMOTE_WRITE_ENABLED=false
+// writes the local tier but never the remote tier. Logger respects MAGUS_LOG_FORMAT/LEVEL.
 func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	dir = filepath.Clean(dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("magus/cache: mkdir %q: %w", dir, err)
 	}
-	mutable := true
-	if v := strings.ToLower(os.Getenv("MAGUS_CACHE_WRITE_ENABLED")); v == "false" || v == "0" {
-		mutable = false
-	}
+	mutable := !envFalse("MAGUS_CACHE_WRITE_ENABLED")
+	remoteWrite := !envFalse("MAGUS_CACHE_REMOTE_WRITE_ENABLED")
 	defaultLevel := slog.LevelInfo
 	if v := os.Getenv("MAGUS_LOG_LEVEL"); v != "" {
 		var lvl slog.Level
@@ -290,13 +290,14 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	}
 	log := newLogger(os.Getenv("MAGUS_LOG_FORMAT"), defaultLevel)
 	c := &Cache{
-		dir:      dir,
-		inflight: newInflight(dir),
-		mutable:  mutable,
-		log:      log,
-		logLevel: defaultLevel,
-		mtimes:   newMtimeStore(dir, log),
-		outputs:  NewOutputStore(dir),
+		dir:         dir,
+		inflight:    newInflight(dir),
+		mutable:     mutable,
+		remoteWrite: remoteWrite,
+		log:         log,
+		logLevel:    defaultLevel,
+		mtimes:      newMtimeStore(dir, log),
+		outputs:     NewOutputStore(dir),
 		// Annotations go to stderr alongside the failure dump they wrap.
 		annotator: annotate.Detect(),
 		platform:  runtime.GOOS + "/" + runtime.GOARCH,
@@ -315,6 +316,11 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	}
 	warnIfCoarseMtimeResolution(ctx, dir, c.log)
 	return c, nil
+}
+
+func envFalse(name string) bool {
+	v := strings.ToLower(os.Getenv(name))
+	return v == "false" || v == "0"
 }
 
 // annotations returns the CI annotator, falling back to Nop for a Cache
@@ -510,7 +516,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			// Local miss (manifest absent or unreadable): pull the artifact from the
 			// remote backend into the local cache, then re-read so the shared hit path
 			// below replays it.
-			if c.fetchFromRemote(ctx, s.ProjectPath, hash) {
+			if c.fetchFromRemote(ctx, &s, hash) {
 				if m, err := c.readManifest(s.ProjectPath, hash); err == nil {
 					manifest, mErr, fromRemote = m, nil, true
 				} else {
@@ -722,7 +728,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// attempt's), so a consumer could not resolve the producer's ref: the whole
 	// point of shipping them.
 	if storable {
-		if c.remote != nil {
+		if c.remote != nil && c.remoteWrite {
 			c.pushToRemote(ctx, s, hash)
 		}
 		c.evictOldest(ctx, c.sizeCap())

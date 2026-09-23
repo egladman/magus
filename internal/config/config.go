@@ -295,14 +295,20 @@ type Cache struct {
 	Remote  CacheRemote  `json:"remote" yaml:"remote"`                    // settings specific to a shared remote cache backend
 }
 
-// CacheWrite gates writing entries: the local snapshot and the remote push alike.
+// CacheWrite gates writing the local cache tier. Off, the remote tier gets nothing
+// either, because a remote-tier entry is exported from the local-tier one.
 //
-// One flag covers both because they are one decision today: a run either produces
-// entries or it does not. Restoring is deliberately NOT gated: a read-only run still
-// populates its local cache from a remote hit, so a pull request replays the shared
-// cache at full speed while publishing nothing to it.
+// Restoring is deliberately NOT gated: a read-only run still populates its local tier
+// from a remote-tier hit.
 type CacheWrite struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default true
+}
+
+// CacheRemoteWrite gates writing the remote cache tier. Separate from CacheWrite so a
+// pull request writes its local tier for its next push and never the remote tier, by
+// setting rather than by a missing signing key.
+type CacheRemoteWrite struct {
+	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = follow cache.write.enabled
 }
 
 // CacheInclude selects which facts about the host enter every cache key.
@@ -326,8 +332,17 @@ type CacheIncludeFlag struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // nil = default false
 }
 
-// WriteEnabled reports whether this run may produce cache entries.
+// WriteEnabled reports whether this run may write the local cache tier.
 func (c Cache) WriteEnabled() bool { return c.Write.Enabled == nil || *c.Write.Enabled }
+
+// RemoteWriteEnabled reports whether this run may write the remote cache tier. It is
+// never true while WriteEnabled is false; [Validate] refuses an explicit true there.
+func (c Cache) RemoteWriteEnabled() bool {
+	if !c.WriteEnabled() {
+		return false
+	}
+	return c.Remote.Write.Enabled == nil || *c.Remote.Write.Enabled
+}
 
 // IncludeOS reports whether the host OS keys every entry.
 func (c Cache) IncludeOS() bool { return c.Include.OS.Enabled != nil && *c.Include.OS.Enabled }
@@ -350,7 +365,8 @@ type CacheRemote struct {
 	// rule SkipCacheReason and DriftReason carry: switching off the check that says
 	// whether an artifact came from who it claims is a claim about this cache. This
 	// file is committed, so the next machine to trust the cache reads the answer here.
-	InsecureReason string `json:"insecure_reason,omitempty" yaml:"insecure_reason,omitempty"`
+	InsecureReason string           `json:"insecure_reason,omitempty" yaml:"insecure_reason,omitempty"`
+	Write          CacheRemoteWrite `json:"write" yaml:"write"`
 }
 
 // CI controls CI fan-out behavior.
@@ -744,6 +760,7 @@ func EnvVarDocs() []EnvVarDoc {
 	return []EnvVarDoc{
 		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
 		{"MAGUS_CACHE_WRITE_ENABLED", "cache.write.enabled", "true", "When false (or 0), replay cache hits but never write new entries, locally or to a remote"},
+		{"MAGUS_CACHE_REMOTE_WRITE_ENABLED", "cache.remote.write.enabled", "cache.write.enabled", "When false (or 0), write the local cache tier but never the remote tier; true while cache.write.enabled is false is a config error"},
 		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "false", "When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "false", "When true, the host architecture keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},

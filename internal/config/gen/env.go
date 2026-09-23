@@ -57,6 +57,10 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	if v := getenv("MAGUS_CACHE_REMOTE_INSECURE_REASON"); v != "" {
 		cfg.Cache.Remote.InsecureReason = v
 	}
+	if v := getenv("MAGUS_CACHE_REMOTE_WRITE_ENABLED"); v != "" {
+		b := parseBoolEnv(v, cfg.Cache.Remote.Write.Enabled != nil && *cfg.Cache.Remote.Write.Enabled)
+		cfg.Cache.Remote.Write.Enabled = &b
+	}
 	if v := getenv("MAGUS_CI_MAX_SHARDS"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CI_MAX_SHARDS: %w", err))

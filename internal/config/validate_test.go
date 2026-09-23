@@ -141,6 +141,45 @@ func TestValidate_SpellImports(t *testing.T) {
 	}
 }
 
+// Each cache tier is written independently. The local tier off with the remote tier
+// explicitly on is the one incoherent pair, refused rather than quietly writing nothing.
+func TestValidate_CacheTierWrites(t *testing.T) {
+	on, off := boolPtr(true), boolPtr(false)
+	for name, tc := range map[string]struct {
+		local, remote         *bool
+		wantLocal, wantRemote bool
+		wantFailures          []FieldFailure
+	}{
+		"defaults":                 {wantLocal: true, wantRemote: true},
+		"remote follows local off": {local: off},
+		"local tier only":          {remote: off, wantLocal: true},
+		"both on":                  {local: on, remote: on, wantLocal: true, wantRemote: true},
+		"both off":                 {local: off, remote: off},
+		"remote on without local": {
+			local: off, remote: on,
+			wantFailures: []FieldFailure{{Field: "cache.remote.write.enabled", Tag: "cache_write_required", Value: "true"}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+			cfg.Cache.Write.Enabled = tc.local
+			cfg.Cache.Remote.Write.Enabled = tc.remote
+			assert.Equal(t, tc.wantLocal, cfg.Cache.WriteEnabled(), "WriteEnabled")
+			assert.Equal(t, tc.wantRemote, cfg.Cache.RemoteWriteEnabled(), "RemoteWriteEnabled")
+
+			err := Validate(cfg)
+			if tc.wantFailures == nil {
+				assert.NoError(t, err)
+				return
+			}
+			var ve *ValidationError
+			require.ErrorAs(t, err, &ve)
+			assert.Equal(t, tc.wantFailures, ve.Failures)
+			assert.Contains(t, ve.Error(), "cannot be true while cache.write.enabled is false")
+		})
+	}
+}
+
 func TestSpellsConfigRegistry(t *testing.T) {
 	s := SpellsConfig{Registries: []SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "GITHUB_TOKEN"}}}
 	got, ok := s.Registry("GHCR.IO")

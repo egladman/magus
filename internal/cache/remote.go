@@ -125,10 +125,11 @@ func OpenRemoteBackend(ctx context.Context, selector string) (RemoteBackend, err
 // read-only suppresses creating *new* artifacts from local builds, not restoring an
 // existing one from the shared store — which is exactly what a PR CI run wants
 // (read remote hits, but never publish).
-func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) bool {
+func (c *Cache) fetchFromRemote(ctx context.Context, s *Step, hash string) bool {
 	if !c.remoteActive(ctx) {
 		return false
 	}
+	projectPath := s.ProjectPath
 	// Timed around the WHOLE fetch, not around GetArtifact alone: the call returns a
 	// stream, so the bytes actually move while importArtifact reads it. Timing the call
 	// would report a fast fetch for a slow download. Active() is excluded because a
@@ -148,6 +149,7 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 	}
 	if r == nil {
 		stats.miss()
+		c.logRemoteMiss(ctx, s, hash)
 		return false
 	}
 	defer r.Close()
@@ -170,6 +172,29 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 		slog.Int64("bytes", counted.n),
 		slog.Duration("duration", time.Since(start)))
 	return true
+}
+
+// logRemoteMiss names the key a remote-tier lookup missed, as the ref the producing run
+// printed, so two machines that should share an entry can be compared by key. At debug
+// it adds a digest per key-input class, which says WHICH class differs without printing
+// every source path.
+func (c *Cache) logRemoteMiss(ctx context.Context, s *Step, hash string) {
+	attrs := []any{
+		slog.String("project", s.ProjectPath),
+		slog.String("label", s.Label),
+		slog.String("target", s.Target),
+		slog.String("hash", hash),
+		slog.String("ref", PortableRef(hash)),
+	}
+	if c.log.Enabled(ctx, slog.LevelDebug) {
+		var lines []string
+		if _, err := c.hashStepInputs(ctx, s, &lines); err == nil {
+			for _, d := range ClassDigests(DigestEnvValues(lines)) {
+				attrs = append(attrs, slog.String("inputs."+d.Class, fmt.Sprintf("%s (%d)", d.Digest, d.Count)))
+			}
+		}
+	}
+	c.log.InfoContext(ctx, "cache.remote.miss", attrs...)
 }
 
 // countingReader totals bytes actually read.

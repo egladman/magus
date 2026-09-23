@@ -11,7 +11,7 @@ name: CI
 #
 # ci also runs on main pushes, and that is not a publish step: the push run is what
 # populates the shared cache and the run-duration history a pull request may only read.
-# See MAGUS_CACHE_WRITE_ENABLED below.
+# See MAGUS_CACHE_REMOTE_WRITE_ENABLED below.
 
 on:
   pull_request:
@@ -37,8 +37,11 @@ env:
   # PR-controlled mise.toml must not execute config hooks or plugins.
   MISE_SAFE: '1'
   GOEXPERIMENT: jsonv2
-  # PRs may read the cache but cannot publish to it.
-  MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
+  # PRs read both cache tiers and write only the local tier, which the shard job carries
+  # to the PR's next push; the remote tier is written by main pushes alone. Stated here
+  # rather than left to the missing signing key, which only refuses a remote-tier write
+  # once a trust set is declared.
+  MAGUS_CACHE_REMOTE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
   # The trust set is what wires the shared cache (see the `if` at magusfile.buzz's
   # cache.remote block) AND what verifies it. MAGUS_CACHE_REMOTE_INSECURE used to be
   # set here too, which was the whole configuration doing two wrong things at once:
@@ -465,6 +468,30 @@ jobs:
             magus describe project "$p" -o 'template={{range .projects}}::notice title=affected::{{.path}}{{end}}'
           done
 
+      # The local cache tier, restored before the run and saved after it. magus looks up
+      # the local tier, then the remote tier, so this answers a pull request's rerun of
+      # what the remote tier has never seen, without the pull request writing to it.
+      #
+      # The key reads general to specific so each restore-key drops a trailing part: this
+      # ref's newest save for the same shard, then for any shard. A pull request cannot
+      # read another pull request's saves, and Actions falls back to the default branch,
+      # which is how a first push starts from main's newest store. main never restores
+      # what a pull request saved.
+      #
+      # cas, manifests and logs carry a hit (docs/concepts/cache.md). mtimes stays out:
+      # it keys on file mtime, which a fresh checkout resets, so a restored memo only misses.
+      - name: Restore the local cache tier
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/cas
+            .magus/manifests
+            .magus/logs
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-
+            ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
+
       - name: Run CI for shard
         uses: ./.github/actions/magus
         with:
@@ -476,6 +503,19 @@ jobs:
           command:  run ci:gha --no-default-charms ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
+
+      # Saved on a red shard too: what passed before the failure is a valid hit for the
+      # rerun, the run that most needs it. Not on cancel, where the store may be half
+      # written.
+      - name: Save the local cache tier
+        if: success() || failure()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/cas
+            .magus/manifests
+            .magus/logs
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}
 
       # The notes store's anchors, gated on the ONE finding worth blocking a merge for.
       #
@@ -534,17 +574,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    env:
-      # The symbol index needs a WRITABLE cache, which the workflow-wide value denies a pull
-      # request. A scip run records its manifest in the cache, and the freshness probe reads
-      # that manifest back; with nothing recorded, every index reads as "predates the sources
-      # it covers" and ingestion drops it. Measured: the same tree indexes 9 projects and
-      # then answers `magus refs` with "unknown, not absent" under the false, and resolves
-      # under the true. That silently cost this job reach, public surface and the API delta.
-      #
-      # It publishes nothing either way: the shared cache needs MAGUS_CACHE_SIGNING_KEY,
-      # which only a main push holds.
-      MAGUS_CACHE_WRITE_ENABLED: 'true'
+    # The symbol index needs a WRITABLE local cache tier, so never set
+    # MAGUS_CACHE_WRITE_ENABLED false here. A scip run records its manifest in the cache and
+    # the freshness probe reads it back; with nothing recorded, every index reads as
+    # "predates the sources it covers" and ingestion drops it, silently costing this job
+    # reach, public surface and the API delta.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

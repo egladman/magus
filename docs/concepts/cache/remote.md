@@ -280,22 +280,35 @@ either variable, setting it can be the only thing turning the cache on - a setup
 looks configured, ships a `trusted_keys` block, and verifies nothing. Let the trust set
 be the switch.
 
-## Read-only on untrusted refs (defense in depth)
+## Never write the remote tier from untrusted refs (defense in depth)
 
-Signatures are the primary defense; opening the cache read-only on untrusted refs
-is a complementary one. Even though an unsigned PR push could never replay
-anywhere, you can also stop a PR from writing the store at all (**replay hits,
-never publish**) by gating mutability on the event. The same flag suppresses the
-remote `put_artifact` upload:
+The remote cache is the **remote tier**; `.magus/` is the **local tier**. Lookup reads
+the local tier, then the remote tier, and each is written independently (see
+[Cache tiers](../cache.md#cache-tiers)).
+
+Signatures are the primary defense; keeping untrusted refs off the remote tier is a
+complementary one. Even though an unsigned PR push could never replay anywhere, you
+can also stop a PR from uploading to the remote tier at all (**replay hits, never
+publish**) by gating remote-tier writes on the event:
 
 ```yaml
 # in your CI workflow env
-MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
+MAGUS_CACHE_REMOTE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
 ```
 
-`MAGUS_CACHE_WRITE_ENABLED=false` (config key `cache.write.enabled`) opens the cache
-read-only; the default is mutable. See the
+`MAGUS_CACHE_REMOTE_WRITE_ENABLED=false` (config key `cache.remote.write.enabled`)
+suppresses every `put_artifact` upload while the run keeps writing its local tier,
+so a CI cache step that saves `.magus` between a PR's pushes still has entries to
+carry. Unset, it follows `cache.write.enabled`. To write neither tier, set
+`MAGUS_CACHE_WRITE_ENABLED=false` instead; writing the remote tier with the local
+tier off is a config error. See the
 [supply-chain note in the README](../../../README.md#shared-cache-trust-signing-and-read-only-refs).
+
+A remote-tier lookup that finds nothing prints
+`<project> not in the remote cache (out...)`, naming the ref the producing run
+printed for that key, and the end-of-run line counts restored, missed, published
+and failed. At `-v` the miss also carries one digest per key-input class, so two
+machines that should share an entry show which class differs.
 
 ## Observability
 

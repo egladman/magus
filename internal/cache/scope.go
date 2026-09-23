@@ -59,8 +59,12 @@ func (c *Cache) Description() (tier, mode string) {
 		}
 		tier = name + " + local"
 	}
-	mode = "read-only"
-	if c.mutable {
+	switch {
+	case !c.mutable:
+		mode = "read-only"
+	case c.remote != nil && !c.remoteWrite:
+		mode = "read+write local, read-only remote"
+	default:
 		mode = "read+write"
 	}
 	return tier, mode

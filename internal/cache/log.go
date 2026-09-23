@@ -824,6 +824,9 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	case "cache.remote.hit":
 		h.printf("  restored %s from the remote cache (%s)\n",
 			displayProjectLabel(label, project), fmtBytesLog(recordInt(r, "bytes")))
+	case "cache.remote.miss":
+		h.printf("  %s not in the remote cache (%s)\n",
+			displayProjectLabel(label, project), recordStr(r, "ref"))
 	case "cache.remote.push":
 		h.printf("  published %s to the remote cache (%s)\n",
 			displayProjectLabel(label, project), fmtBytesLog(recordInt(r, "bytes")))
@@ -832,8 +835,8 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	case "cache.remote.summary":
 		// The ZERO case is the point: a configured remote that did nothing says so,
 		// because silence is what made it indistinguishable from working.
-		h.printf("remote: %d restored, %d published, %d failed (%s down, %s up)\n",
-			recordInt(r, "hits"), recordInt(r, "published"), recordInt(r, "failures"),
+		h.printf("remote: %d restored, %d missed, %d published, %d failed (%s down, %s up)\n",
+			recordInt(r, "hits"), recordInt(r, "misses"), recordInt(r, "published"), recordInt(r, "failures"),
 			fmtBytesLog(recordInt(r, "down_bytes")), fmtBytesLog(recordInt(r, "up_bytes")))
 	case "cache.backend":
 		h.printf("cache: %s (%s)\n", recordStr(r, "tier"), recordStr(r, "mode"))

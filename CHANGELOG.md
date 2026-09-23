@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Each cache tier is written independently.** `cache.remote.write.enabled`
+  (`MAGUS_CACHE_REMOTE_WRITE_ENABLED`) gates the remote tier as `cache.write.enabled`
+  gates the local tier; unset, it follows the local tier, and remote on with local off is
+  a config error. CI pull requests write the local tier, carried between pushes by an
+  Actions cache step, and never the remote tier.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
@@ -226,6 +231,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The GitHub Actions remote tier stores what it publishes.** The spell read the signed
+  URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
+  the empty URL for an existing entry: every push reported success, nothing was stored,
+  and every lookup missed. It reads either name and fails a refused reservation.
+- **A remote-tier miss is visible.** Each prints `<project> not in the remote cache
+  (out...)` with the producing run's ref, the end-of-run line counts misses, and `-v`
+  adds a digest per key-input class.
 - **A run the machine's build budget refuses says so.** It exited 75 with nothing after
   the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
   cause naming the holder, and `-o jsonl` emits the `run.target.result` and

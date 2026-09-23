@@ -6,15 +6,14 @@ import (
 )
 
 // TestMain clears the cache-policy environment this package READS at Open time
-// (cache.go's MAGUS_CACHE_WRITE_ENABLED, eviction.go's MAGUS_CACHE_SIZE_MB) before any
-// test runs. A unit test's cache policy must come from the test, not from whatever
-// the surrounding process happens to export.
+// (cache.go's MAGUS_CACHE_WRITE_ENABLED and MAGUS_CACHE_REMOTE_WRITE_ENABLED,
+// eviction.go's MAGUS_CACHE_SIZE_MB) before any test runs. A unit test's cache policy
+// must come from the test, not from whatever the surrounding process happens to export.
 //
-// This is not hypothetical hygiene. ci.yaml sets
-// `MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}`, so it is
-// false on every PR run and true on a push to main. A write-disabled cache writes no
-// entry, so every test that runs a step twice and asserts the second is a HIT fails on
-// a PR and passes everywhere else, including locally, where the variable is unset.
+// This is not hypothetical hygiene. ci.yaml once set
+// `MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}`, and a
+// write-disabled cache writes no entry, so every test that runs a step twice and asserts
+// the second is a HIT failed on a PR and passed everywhere else, including locally.
 //
 // Tests that care about a value still set it themselves with t.Setenv, which runs
 // after this and restores afterwards; defaults_test.go does exactly that for
@@ -31,7 +30,7 @@ import (
 // hung the package for ten minutes. A test that wants either says so with t.Setenv.
 func TestMain(m *testing.M) {
 	for _, k := range []string{
-		"MAGUS_CACHE_WRITE_ENABLED", "MAGUS_CACHE_SIZE_MB",
+		"MAGUS_CACHE_WRITE_ENABLED", "MAGUS_CACHE_REMOTE_WRITE_ENABLED", "MAGUS_CACHE_SIZE_MB",
 		"MAGUS_LEVEL", "MAGUS_INVOCATION_ANCESTORS",
 	} {
 		_ = os.Unsetenv(k)

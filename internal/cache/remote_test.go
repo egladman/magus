@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -597,6 +598,72 @@ func TestRemotePublishesNothingWithoutASigningKey(t *testing.T) {
 	assert.Empty(t, entries, "a machine with no signing key must leave the store empty")
 	assert.Zero(t, stats.puts.Load(), "and must not claim to have published")
 	assert.Zero(t, stats.fails.Load(), "declining to publish is not a failure")
+}
+
+// The pull-request posture: the local tier keeps the entry for the next push, and the
+// remote tier stays empty even though this machine could sign.
+func TestRemoteTierWriteOffStillWritesTheLocalTier(t *testing.T) {
+	for name, opt := range map[string]func(t *testing.T) Option{
+		"option": func(*testing.T) Option { return WithRemoteWrite(false) },
+		"env": func(t *testing.T) Option {
+			t.Setenv("MAGUS_CACHE_REMOTE_WRITE_ENABLED", "false")
+			return func(*Cache) {}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := t.TempDir()
+			remote, err := NewFSRemoteBackend(store)
+			require.NoError(t, err, "NewFSRemoteBackend")
+			pub, seed := genKeypair(t)
+
+			root := t.TempDir()
+			c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+				WithMutable(true), WithRemoteBackend(remote), WithSigningKey(seed),
+				WithTrustedKeys([][]byte{pub}), opt(t))
+			require.NoError(t, err, "cache.Open")
+			_, mode := c.Description()
+			assert.Equal(t, "read+write local, read-only remote", mode)
+
+			_, ran, stats := buildWithStats(t, root, c)
+			require.True(t, ran, "first run builds")
+			entries, err := os.ReadDir(store)
+			require.NoError(t, err, "read remote store")
+			assert.Empty(t, entries, "the remote tier stays empty")
+			assert.Zero(t, stats.puts.Load())
+
+			r, ran, _ := buildWithStats(t, root, c)
+			assert.True(t, r.Hit, "the local tier answers the next run")
+			assert.False(t, ran)
+		})
+	}
+}
+
+// A remote-tier lookup that finds nothing is counted and named, so a run that asked the
+// remote tier reads differently from one that never did.
+func TestRemoteTierMissIsCountedAndNamed(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err, "NewFSRemoteBackend")
+	pub, _ := genKeypair(t)
+	root, c := openSigned(t, remote, nil, [][]byte{pub})
+	var buf bytes.Buffer
+	c.log = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	_, ran, stats := buildWithStats(t, root, c)
+	require.True(t, ran)
+	assert.Equal(t, int64(1), stats.misses.Load())
+	assert.Zero(t, stats.fails.Load())
+
+	var miss map[string]any
+	for line := range strings.SplitSeq(buf.String(), "\n") {
+		if strings.Contains(line, `"msg":"cache.remote.miss"`) {
+			require.NoError(t, json.Unmarshal([]byte(line), &miss))
+		}
+	}
+	require.NotNil(t, miss, "a miss is logged: %s", buf.String())
+	assert.Equal(t, "test/pkg", miss["project"])
+	hash, _ := miss["hash"].(string)
+	assert.Equal(t, PortableRef(hash), miss["ref"], "the ref the producing run printed for this key")
+	assert.Contains(t, miss, "inputs.src", "at debug the miss carries a digest per key-input class")
 }
 
 // A remote that errors on GET must not end the run on "failures=0": that reads as a

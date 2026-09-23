@@ -15,6 +15,13 @@ func WithMutable(mutable bool) Option {
 	return func(c *Cache) { c.mutable = mutable }
 }
 
+// WithRemoteWrite controls whether a miss also writes the remote tier (default true).
+// The remote tier is written from the local one, so it has no effect while the cache
+// is read-only.
+func WithRemoteWrite(enabled bool) Option {
+	return func(c *Cache) { c.remoteWrite = enabled }
+}
+
 // WithSigningKey sets the Ed25519 seed (32 bytes) used to sign artifacts on push.
 // Set only in trusted CI; without it the cache cannot publish trusted artifacts.
 func WithSigningKey(seed []byte) Option {

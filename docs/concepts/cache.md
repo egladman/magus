@@ -492,15 +492,16 @@ _stale_. Staleness has a declaration now.
 
 ### Opting out and busting
 
-Four controls, at four different scopes:
+Six controls, at different scopes:
 
-| Control                                             | Scope                       | Semantics                                                                                                                                                                                                                               |
-| --------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skip_cache` target policy                          | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                             |
-| `magus run <target> --no-cache`                     | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
-| `magus\bust_cache(path?)`                           | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
-| `magus clean --cache`                               | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
-| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`) | whole cache, whole run      | When false, replays hits, but a miss runs the target and does **not** write a new manifest - locally or to a remote. Restoring still populates the local cache.                                                                         |
+| Control                                                           | Scope                       | Semantics                                                                                                                                                                                                                                        |
+| ----------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `skip_cache` target policy                                        | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                                      |
+| `magus run <target> --no-cache`                                   | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                                    |
+| `magus\bust_cache(path?)`                                         | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead.          |
+| `magus clean --cache`                                             | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                                    |
+| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`)               | local tier, whole run       | When false, replays hits, but a miss runs the target and writes **no** new manifest to either tier. Restoring from the remote tier still populates the local tier.                                                                               |
+| `cache.remote.write.enabled` (`MAGUS_CACHE_REMOTE_WRITE_ENABLED`) | remote tier, whole run      | When false, a miss still writes the local tier but never the remote tier. Unset, it follows `cache.write.enabled`; `true` while `cache.write.enabled` is false is a config error, since a remote-tier entry is exported from the local-tier one. |
 
 `skip_cache` states that **replaying this target would be wrong**: it signs a
 fresh artifact, records a screen capture, mutates `go.mod`, rewrites a badge, or
@@ -874,6 +875,23 @@ set before it is allowed to replay, and an unsigned or untrusted one falls back 
 local build. That trust boundary, the provider contract, and CI wiring are covered
 in full in [remote-cache.md](cache/remote.md); this page's model is what it builds
 on.
+
+### Cache tiers
+
+A run reaches one or two tiers, and the run header names them: `cache: local
+(read+write)`, or `cache: github-actions + local (read+write)` once a remote backend
+is wired. Lookup reads the **local tier** first, then the **remote tier**. Each tier
+is written independently:
+
+| Setting                      | Tier   | Default                       |
+| ---------------------------- | ------ | ----------------------------- |
+| `cache.write.enabled`        | local  | `true`                        |
+| `cache.remote.write.enabled` | remote | follows `cache.write.enabled` |
+
+A remote-tier entry is exported from the local-tier one, so writing the remote tier
+with the local tier off is a config error. A pull request in CI writes the local
+tier, which a CI cache step carries to its next push, and never the remote tier; the
+header then reads `(read+write local, read-only remote)`.
 
 ## Glossary
 
