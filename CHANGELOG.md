@@ -226,6 +226,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`MAGUS.md` routing indexes are byte-identical on every machine.** Example columns rank
+  by the repository's own edges, not the binary's spell catalog; gitignored sources are
+  skipped; and the drift gate now catches an output a composed step writes, which let
+  five library indexes go stale.
 - **A run the machine's build budget refuses says so.** It exited 75 with nothing after
   the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
   cause naming the holder, and `-o jsonl` emits the `run.target.result` and
