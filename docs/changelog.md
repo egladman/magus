@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
   alias isolates it, so it is exempt, as is `as _`. The root magusfile and built-in
   harness spells dropped their redundant `as codex`, `as cursor`, `as opencode`.
+- **`magus\guard.spawn` registers a workspace spawn rule.** One Buzz function sees every
+  subagent spawn and continuation and may deny or advise, never lift a built-in deny. An
+  uncommitted loosening waits for a commit. Policy changes land on the trail as
+  `guard_policy`; MGS1045 refuses a bad registration. magus ships no rule.
 - **Spells can be imported from a registry by path.** `import "ghcr.io/team/spells/lint";`
   is declared with a tag in `magus.yaml` and pinned in `magus.lock`; only the `update`
   charm, through `magus spell lock --update`, resolves a tag. A `path:` entry replaces an
@@ -109,6 +113,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
+  projects/charms/cache header, per-stage progress, the run summary and lock-wait
+  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
+  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
+  yet converted falls back to a plain JSON line instead of prose.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination
   and confidence labels are gone. A human reads the evidence and decides.
