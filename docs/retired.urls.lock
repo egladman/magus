@@ -6,6 +6,10 @@
 # is only the generator's own per-skill alias, which kept a renamed skill's old name
 # alive in a second place; magus is pre-1.0, so a renamed skill breaks its old URL and
 # the break is recorded here once.
+development/gopherbuzz/
+development/projects/gopherbuzz/
+development/projects/website/
+development/website/
 guides/download/
 guides/download/container-image/
 guides/download/docker/
@@ -17,10 +21,6 @@ guides/download/uninstall/
 guides/download/verify/
 guides/download/windows/
 install/
-development/website/
-development/projects/website/
-development/gopherbuzz/
-development/projects/gopherbuzz/
 
 # libs/testsprawl became libs/testlayout when the linter grew a second rule and its
 # name stopped describing what it checks. A project page is generated per project, so
@@ -72,6 +72,7 @@ buzz/modules/time/
 buzz/modules/toml/
 buzz/modules/uuid/
 buzz/modules/vcs/
+buzz/modules/xml/
 buzz/modules/yaml/
 cache/
 charms/
@@ -122,6 +123,10 @@ codes/services/
 codes/services/MGS5001/
 codes/services/MGS5002/
 codes/services/MGS5003/
+concepts/spells/md/
+concepts/spells/py/
+concepts/spells/rs/
+concepts/spells/ts/
 concurrency/
 config/
 daemon/
@@ -176,10 +181,15 @@ spells/md/
 spells/py/
 spells/rs/
 spells/ts/
-concepts/spells/md/
-concepts/spells/py/
-concepts/spells/rs/
-concepts/spells/ts/
+targets/
+targets/ci/
+telemetry/
+testing/
+tips/
+volatility/
+wards/
+workspace/
+
 # Tag indexes that fell to a single carrier when the four duplicate spell pages above
 # went away. A one-page tag gets no /tags/<slug>/ page by design (engine/page.buzz) - the
 # tag stays reachable as a search chip on the page that carries it.
@@ -191,15 +201,6 @@ tags/python/
 tags/ruff/
 tags/uv/
 tags/vitest/
-targets/
-targets/ci/
-telemetry/
-testing/
-tips/
-volatility/
-wards/
-workspace/
-buzz/modules/xml/
 
 # retired with the /public/ autoindex rework: the four nested Apache-style listing
 # pages (and one per release) are gone. The FILES under these paths still serve -
@@ -244,12 +245,12 @@ reference/buzz/encoding/
 # (setup/macos/ and setup/windows/ respectively) and stopped generating. Retired rather
 # than aliased: a tag page listing one link is worse than the guide it would have pointed
 # at, and that guide is what search already returns.
-tags/macos/
-tags/windows/
 tags/analysis/
 tags/hotspots/
+tags/macos/
 tags/symbols/
 tags/volatility/
+tags/windows/
 
 # Each skill page tags itself with its own name, so renaming a skill retires its
 # tag page. Not aliased, unlike the skill pages themselves: a tag page is an
@@ -271,10 +272,10 @@ reference/manpage/magus-activity/
 # family, and a manpage page is generated per command, so the four top-level
 # pages no longer exist. Not aliased: the successor is a single page carrying
 # all four verbs, at reference/manpage/magus-session/.
-reference/manpage/magus-sessions/
 reference/manpage/magus-attention/
-reference/manpage/magus-notify/
 reference/manpage/magus-hook/
+reference/manpage/magus-notify/
+reference/manpage/magus-sessions/
 
 # Tag pages exist only while some page carries the tag; these three were carried
 # solely by the folded manpage pages above, so they retire with them.
@@ -304,8 +305,8 @@ reference/manpage/magus-ledger/
 # The two tag pages naming the retired verb go with it. `leases` follows the count > 1
 # rule above instead: the tag is now carried by one page (guides/integrations/agents/leases/),
 # so it stays reachable as a search chip there and generates no index of its own.
-tags/ledger/
 tags/leases/
+tags/ledger/
 tags/magus-ledger/
 
 # The buzz spell's ops (buzz-check, buzz-test, magus-buzz) had no caller left once

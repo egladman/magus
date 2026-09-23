@@ -9,13 +9,13 @@
 # to reach the pinned 4.4.1. make is the only tool with published numbers today,
 # so leaving it unpinned left the whole table unanchored.
 # magus: the release line, not the build. bench.sh compares the x.y.z it finds.
+bazel=7.6.1
 hyperfine=1.19.0
+lage=2.15.12
 magus=0.4.3
 make=4.4.1
+moon=2.2.5
 node=22.22.2
+nx=22.7.3
 pnpm=10.33.0
 turbo=2.9.14
-nx=22.7.3
-lage=2.15.12
-moon=2.2.5
-bazel=7.6.1
