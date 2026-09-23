@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, activityservice]
 
 ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a page of events (newest first), Get a payload blob by ref. Mounted on the console's human-facing API surface, never under /mcp (the agent protocol surface).
 
-Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:158](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L158). Part of the [daemon API](../../index.md).
+Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:165](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L165). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -17,7 +17,7 @@ Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/act
 
 ListActivity returns a page of recent events, newest first, narrowed by filter.
 
-`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary. Source: [activity.proto:160](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L160).
+`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary. Source: [activity.proto:167](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L167).
 
 Takes [ListActivityEventsRequest](#listactivityeventsrequest), returns [ListActivityEventsResponse](#listactivityeventsresponse).
 
@@ -25,7 +25,7 @@ Takes [ListActivityEventsRequest](#listactivityeventsrequest), returns [ListActi
 
 GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 
-`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary. Source: [activity.proto:162](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L162).
+`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary. Source: [activity.proto:169](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L169).
 
 Takes [GetPayloadRequest](#getpayloadrequest), returns [Payload](#payload).
 
@@ -35,7 +35,7 @@ WatchActivityEvents follows the same trail forward, OLDEST first, until the call
 
 It merges three producers into the one envelope, which is why the filter is where it is rather than on the client: file changes the daemon's watcher saw, attributed to the job whose declared write paths cover the path; the guard's tool-call observations, attributed by the lease the hook resolved; and the runs recorded against a job. A reader narrows by job, session or path and gets one time-ordered stream of all three, so "what is that worker doing" is one subscription rather than three.
 
-`POST /magus.activity.v1alpha1.ActivityService/WatchActivityEvents`: server streaming. Source: [activity.proto:174](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L174).
+`POST /magus.activity.v1alpha1.ActivityService/WatchActivityEvents`: server streaming. Source: [activity.proto:181](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L181).
 
 Takes [WatchActivityEventsRequest](#watchactivityeventsrequest), returns [ActivityEvent](#activityevent).
 
@@ -70,6 +70,7 @@ Source: [activity.proto:88](https://github.com/egladman/magus/blob/main/proto/ma
 | `entry_point`    | string              | 19 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `credential`     | string              | 20 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `agent`          | string              | 21 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `lease_from`     | string              | 22 | Which source answered unit (the lease), where the producer resolved one: flag, agent (the spawn magus recorded for the calling subagent), marker (the checkout's `magus job exec` binding), contested (the marker, over a BAGGAGE claim naming another lease), or env (the BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so it takes magus's word for the concept rather than unit's.                                                                                                                                                                                                                                                                                                |
 
 Used by: [ListActivityEvents (response)](activity.md#listactivityevents), [WatchActivityEvents (response)](activity.md#watchactivityevents).
 
@@ -77,7 +78,7 @@ Used by: [ListActivityEvents (response)](activity.md#listactivityevents), [Watch
 
 ActivityQuery narrows the listing server-side. Fields AND together; repeated values within a field OR; the time window bounds it.
 
-Source: [activity.proto:179](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L179).
+Source: [activity.proto:186](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L186).
 
 | Field      | Type                                                 | # | Description                                                                                                                                                                                                                                                                                                                     |
 | ---------- | ---------------------------------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -93,7 +94,7 @@ Used by: [ListActivityEvents (request)](activity.md#listactivityevents), [WatchA
 
 ### GetPayloadRequest
 
-Source: [activity.proto:216](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L216).
+Source: [activity.proto:223](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L223).
 
 | Field | Type   | # | Description                                                                                                                |
 | ----- | ------ | - | -------------------------------------------------------------------------------------------------------------------------- |
@@ -103,7 +104,7 @@ Used by: [GetPayload (request)](activity.md#getpayload).
 
 ### ListActivityEventsRequest
 
-Source: [activity.proto:196](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L196).
+Source: [activity.proto:203](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L203).
 
 | Field        | Type                            | # | Description                     |
 | ------------ | ------------------------------- | - | ------------------------------- |
@@ -115,7 +116,7 @@ Used by: [ListActivityEvents (request)](activity.md#listactivityevents).
 
 ### ListActivityEventsResponse
 
-Source: [activity.proto:201](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L201).
+Source: [activity.proto:208](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L208).
 
 | Field             | Type                                     | # | Description                 |
 | ----------------- | ---------------------------------------- | - | --------------------------- |
@@ -128,7 +129,7 @@ Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
 
 Payload is one stored request or response body, resolved from an ActivityEvent's ref.
 
-Source: [activity.proto:221](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L221).
+Source: [activity.proto:228](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L228).
 
 | Field        | Type  | # | Description |
 | ------------ | ----- | - | ----------- |
@@ -141,7 +142,7 @@ Used by: [GetPayload (response)](activity.md#getpayload).
 
 WatchActivityEventsRequest subscribes to the merged feed.
 
-Source: [activity.proto:207](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L207).
+Source: [activity.proto:214](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L214).
 
 | Field      | Type                            | # | Description                                                                                                                                                                                                                                                                                                                                                       |
 | ---------- | ------------------------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

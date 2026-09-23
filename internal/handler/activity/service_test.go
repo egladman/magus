@@ -76,6 +76,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	trail.Append(t.Context(), dir, trail.Event{
 		Ts: 4, Kind: trail.KindAgentCommand, Workspace: "/ws/a",
 		Origin: types.Origin{EntryPoint: types.EntryPointHook, Host: "codex", Session: "abc", Agent: "a1"},
+		Lease:  "fleet/a", LeaseFrom: types.LeaseSourceMarker,
 		Action: "Bash", Outcome: trail.OutcomeOK, RequestRef: agentReq, ResponseRef: agentResp,
 		RequestBytes: int64(len(agentReqBody)), ResponseBytes: int64(len(agentRespBody)), Preview: "guard: deny",
 	})
@@ -98,6 +99,8 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Equal(t, user, events[0].GetUser(), "the OS account rides the wire on its own field")
 	assert.Equal(t, "hook", events[0].GetEntryPoint())
 	assert.Equal(t, "a1", events[0].GetAgent())
+	assert.Equal(t, "fleet/a", events[0].GetUnit())
+	assert.Equal(t, "marker", events[0].GetLeaseFrom(), "which source answered the lease rides beside it")
 	assert.Equal(t, "codex", events[0].GetHost())
 	assert.Equal(t, "abc", events[0].GetSession())
 	assert.Equal(t, "/ws/a", events[0].GetWorkspace())

@@ -150,6 +150,13 @@ message ActivityEvent {
   string entry_point = 19;
   string credential = 20;
   string agent = 21;
+
+  // Which source answered unit (the lease), where the producer resolved one: flag, agent (the
+  // spawn magus recorded for the calling subagent), marker (the checkout's `magus job exec`
+  // binding), contested (the marker, over a BAGGAGE claim naming another lease), or env (the
+  // BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so
+  // it takes magus's word for the concept rather than unit's.
+  string lease_from = 22;
 }
 
 // ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a

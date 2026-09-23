@@ -213,7 +213,14 @@ test("comments land on their own hunk, not the first one", () => {
     "",
   ].join("\n");
   const comments = [
-    { id: "c1", path: "a.ts", hunk: 1, author: "unattributed" as const, body: "second", resolved: false },
+    {
+      id: "c1",
+      path: "a.ts",
+      hunk: 1,
+      author: "unattributed" as const,
+      body: "second",
+      resolved: false,
+    },
   ];
   const rows = buildRows(patchFixture(patch), "unified", byHunk(comments));
   const at = rows.findIndex((r) => r.kind === "comment");
@@ -231,7 +238,14 @@ test("comment keys are per file and per hunk index", () => {
 test("several comments on one hunk keep their order", () => {
   const comments = [
     { id: "c1", path: "x.ts", hunk: 0, author: "agent" as const, body: "first", resolved: false },
-    { id: "c2", path: "x.ts", hunk: 0, author: "unattributed" as const, body: "reply", resolved: false },
+    {
+      id: "c2",
+      path: "x.ts",
+      hunk: 0,
+      author: "unattributed" as const,
+      body: "reply",
+      resolved: false,
+    },
   ];
   const rows = buildRows(patchFixture(REPLACEMENT), "unified", byHunk(comments));
   const bodies = rows

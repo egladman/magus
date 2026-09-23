@@ -1396,6 +1396,76 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	})
 }
 
+// TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource pins that the guard refuses
+// `magus agent harness apply|install|remove` under a lease from any source. The CLI refuses
+// them too, but it cannot see the subagent or the host session, so a worker attributed by
+// either would otherwise rewire the hooks that grade it.
+func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
+	const rewire = "magus agent harness apply"
+	spawned := `{"session_id":"spawn-session","hook_event_name":"PostToolUse","tool_name":"Agent",` +
+		`"tool_input":{"description":"orchestrator/integrator lease-a","prompt":"Carry the job."},` +
+		`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
+	for name, tc := range map[string]struct {
+		setup func(t *testing.T, ctx context.Context, cacheDir string)
+		args  []string
+		want  string
+	}{
+		"flag": {args: []string{"--lease", "lease-a"}, want: `"lease_from": "flag"`},
+		"env": {
+			setup: func(t *testing.T, _ context.Context, _ string) {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
+			},
+			want: `"lease_from": "env"`,
+		},
+		"marker": {
+			setup: func(t *testing.T, _ context.Context, cacheDir string) {
+				require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "bound-session"}.Bind("lease-a"))
+			},
+			args: []string{"--session", "bound-session"},
+			want: `"lease_from": "marker"`,
+		},
+		"agent": {
+			setup: func(t *testing.T, ctx context.Context, _ string) {
+				require.NoError(t, shellStdin(ctx, strings.NewReader(spawned), io.Discard, []string{"--agent-name", "claude-code", "-o", "name"}))
+			},
+			args: []string{"--agent-name", "claude-code", "--session", "spawn-session", "--agent", "a1b2c3"},
+			want: `"lease_from": "agent"`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			global = globalFlags{}
+			t.Setenv(trail.EnvBaggage, "")
+			ctx, _, cacheDir := fleetFixture(t, fleetLeases()...)
+			if tc.setup != nil {
+				tc.setup(t, ctx, cacheDir)
+			}
+			var out bytes.Buffer
+			err := shellStdin(ctx, strings.NewReader(rewire), &out, append(tc.args, "-o", "json"))
+			require.Error(t, err, "a bound worker is refused the harness")
+			assert.Contains(t, out.String(), "leave the host harness alone")
+			assert.Contains(t, out.String(), tc.want)
+		})
+	}
+
+	t.Run("an unbound caller rewires its own hosts", func(t *testing.T) {
+		global = globalFlags{}
+		t.Setenv(trail.EnvBaggage, "")
+		ctx, _, _ := fleetFixture(t, fleetLeases()...)
+		var out bytes.Buffer
+		require.NoError(t, shellStdin(ctx, strings.NewReader(rewire), &out, []string{"-o", "json"}))
+		assert.NotContains(t, out.String(), "leave the host harness alone")
+	})
+
+	t.Run("verify is a read", func(t *testing.T) {
+		global = globalFlags{}
+		t.Setenv(trail.EnvBaggage, "")
+		ctx, _, _ := fleetFixture(t, fleetLeases()...)
+		var out bytes.Buffer
+		_ = shellStdin(ctx, strings.NewReader("magus agent harness verify"), &out, []string{"--lease", "lease-a", "-o", "json"})
+		assert.NotContains(t, out.String(), "leave the host harness alone")
+	})
+}
+
 // loadSkillForTest drives the same envelope a host sends when a skill loads, so a test that
 // needs a briefed session gets one through the real path rather than by writing the marker
 // file, which would let the two drift.

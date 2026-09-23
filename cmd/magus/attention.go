@@ -267,16 +267,18 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		return err
 	}
 
+	// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so the
+	// queue can say WHOSE work is blocked without the row's identity moving when a fleet
+	// re-partitions.
+	lease, leaseFrom := checkoutLease(root, trail.LeaseFromEnv())
 	open := sessions.AttentionOpen{
-		Outcome:  string(ev.Outcome),
-		Severity: string(ev.Severity),
-		Source:   sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
-		Where:    attentionWhere(ev.Where),
-		// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so
-		// the queue can say WHOSE work is blocked without the row's identity moving when a
-		// fleet re-partitions.
-		Lease:   trail.LeaseFromEnv(),
-		Message: ev.Message,
+		Outcome:   string(ev.Outcome),
+		Severity:  string(ev.Severity),
+		Source:    sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
+		Where:     attentionWhere(ev.Where),
+		Lease:     lease,
+		LeaseFrom: leaseFrom,
+		Message:   ev.Message,
 	}
 	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointHook),

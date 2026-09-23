@@ -8,7 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,4 +54,32 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, true))
 	assert.DirExists(t, orphan)
 	assert.Contains(t, log.String(), "agent harness install: would remove skill this binary no longer ships")
+}
+
+// TestHarnessChangeRefusesABoundJobFromEitherSource pins that a harness change is refused
+// under the checkout's binding as well as under the claim the process was launched with.
+// Only the claim used to count, so a worker `magus job exec` bound, with no BAGGAGE, could
+// rewire the hooks that grade it.
+func TestHarnessChangeRefusesABoundJobFromEitherSource(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	saved := globalCfg
+	t.Cleanup(func() { globalCfg = saved })
+	globalCfg = config.Config{}
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+
+	assert.Empty(t, harnessActingLease(context.Background(), root), "an unbound caller rewires its own hosts")
+
+	claimed := proc.WithLease(context.Background(), "fleet/claimed")
+	assert.Equal(t, "fleet/claimed", harnessActingLease(claimed, root), "the claim")
+
+	require.NoError(t, job.BindLease(cacheDir, "fleet/bound"))
+	assert.Equal(t, "fleet/bound", harnessActingLease(context.Background(), root), "the binding, with no claim")
+	assert.Equal(t, "fleet/bound", harnessActingLease(claimed, root), "the binding over a different claim")
+
+	err = agentHarnessInstallCmd(context.Background(), root, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
 }

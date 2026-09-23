@@ -148,6 +148,7 @@ func wireEvent(e trail.Event) *activityv1.ActivityEvent {
 		Workspace:     e.Workspace,
 		Action:        e.Action,
 		Unit:          e.Lease, // magus calls this a lease; the proto keeps the "unit" spelling, which is the console's wire
+		LeaseFrom:     string(e.LeaseFrom),
 		Outcome:       encodeOutcome(e.Outcome),
 		Error:         e.Error,
 		RequestRef:    e.RequestRef,

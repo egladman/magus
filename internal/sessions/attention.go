@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // Kinds carrying the attention queue: an agent raises a block, a person closes it.
@@ -32,17 +33,19 @@ const (
 // file is read by binaries older than the one that wrote it, and nesting an envelope
 // that carries its own schema version would leave such a reader two versions to
 // reconcile for one fact.
-// Lease is the lease the RAISING session was launched under, which is what lets a
-// person reading the queue see which slice of a fleet's work is blocked. It is attribution and
-// not identity: see [RequestID] for why it stays out of the id.
+// Lease is the lease the RAISING session acted under, which is what lets a person reading
+// the queue see which slice of a fleet's work is blocked, and LeaseFrom is which source
+// answered it. It is attribution and not identity: see [RequestID] for why it stays out of
+// the id.
 type AttentionOpen struct {
-	Request  string `json:"request"`
-	Outcome  string `json:"outcome"`
-	Severity string `json:"severity,omitempty"`
-	Source   string `json:"source,omitempty"`
-	Where    string `json:"where,omitempty"`
-	Lease    string `json:"lease,omitempty"`
-	Message  string `json:"message"` // clamped to MaxMessageBytes when written
+	Request   string            `json:"request"`
+	Outcome   string            `json:"outcome"`
+	Severity  string            `json:"severity,omitempty"`
+	Source    string            `json:"source,omitempty"`
+	Where     string            `json:"where,omitempty"`
+	Lease     string            `json:"lease,omitempty"`
+	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	Message   string            `json:"message"` // clamped to MaxMessageBytes when written
 }
 
 // MaxMessageBytes bounds the Message one [AttentionOpen] may carry into the store.
@@ -133,7 +136,9 @@ type AttentionRequest struct {
 	Source     string `json:"source,omitempty"`
 	Where      string `json:"where,omitempty"`
 	Lease      string `json:"lease,omitempty"`
-	Message    string `json:"message"`
+	// LeaseFrom is which source answered Lease; see types.LeaseSource.
+	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	Message   string            `json:"message"`
 
 	Disposed   bool   `json:"disposed"`
 	DisposedMs int64  `json:"disposed_ms,omitempty"`
@@ -195,6 +200,7 @@ func Attention(fold Fold) []AttentionRequest {
 				Source:     open.Source,
 				Where:      open.Where,
 				Lease:      open.Lease,
+				LeaseFrom:  open.LeaseFrom,
 				Message:    open.Message,
 			}
 		case KindAttentionDispose:

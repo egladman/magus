@@ -268,10 +268,16 @@ type ActivityEvent struct {
 	// credential names the bearer credential a daemon request presented, as the daemon verified
 	// it. agent is the host's subagent id within session. actor above is these rendered as one
 	// label for a row head, and filters match that label.
-	User          string `protobuf:"bytes,18,opt,name=user,proto3" json:"user,omitempty"`
-	EntryPoint    string `protobuf:"bytes,19,opt,name=entry_point,json=entryPoint,proto3" json:"entry_point,omitempty"`
-	Credential    string `protobuf:"bytes,20,opt,name=credential,proto3" json:"credential,omitempty"`
-	Agent         string `protobuf:"bytes,21,opt,name=agent,proto3" json:"agent,omitempty"`
+	User       string `protobuf:"bytes,18,opt,name=user,proto3" json:"user,omitempty"`
+	EntryPoint string `protobuf:"bytes,19,opt,name=entry_point,json=entryPoint,proto3" json:"entry_point,omitempty"`
+	Credential string `protobuf:"bytes,20,opt,name=credential,proto3" json:"credential,omitempty"`
+	Agent      string `protobuf:"bytes,21,opt,name=agent,proto3" json:"agent,omitempty"`
+	// Which source answered unit (the lease), where the producer resolved one: flag, agent (the
+	// spawn magus recorded for the calling subagent), marker (the checkout's `magus job exec`
+	// binding), contested (the marker, over a BAGGAGE claim naming another lease), or env (the
+	// BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so
+	// it takes magus's word for the concept rather than unit's.
+	LeaseFrom     string `protobuf:"bytes,22,opt,name=lease_from,json=leaseFrom,proto3" json:"lease_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -449,6 +455,13 @@ func (x *ActivityEvent) GetCredential() string {
 func (x *ActivityEvent) GetAgent() string {
 	if x != nil {
 		return x.Agent
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetLeaseFrom() string {
+	if x != nil {
+		return x.LeaseFrom
 	}
 	return ""
 }
@@ -825,7 +838,7 @@ var File_magus_activity_v1alpha1_activity_proto protoreflect.FileDescriptor
 
 const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\n" +
-	"&magus/activity/v1alpha1/activity.proto\x12\x17magus.activity.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/query/v1alpha1/query.proto\"\xbc\x05\n" +
+	"&magus/activity/v1alpha1/activity.proto\x12\x17magus.activity.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/query/v1alpha1/query.proto\"\xdb\x05\n" +
 	"\rActivityEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.magus.activity.v1alpha1.KindR\x04kind\x12\x14\n" +
@@ -852,7 +865,9 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\n" +
 	"credential\x18\x14 \x01(\tR\n" +
 	"credential\x12\x14\n" +
-	"\x05agent\x18\x15 \x01(\tR\x05agent\"\xf3\x01\n" +
+	"\x05agent\x18\x15 \x01(\tR\x05agent\x12\x1d\n" +
+	"\n" +
+	"lease_from\x18\x16 \x01(\tR\tleaseFrom\"\xf3\x01\n" +
 	"\rActivityQuery\x123\n" +
 	"\x05kinds\x18\x01 \x03(\x0e2\x1d.magus.activity.v1alpha1.KindR\x05kinds\x12\x16\n" +
 	"\x06actors\x18\x02 \x03(\tR\x06actors\x12\x18\n" +

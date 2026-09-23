@@ -511,7 +511,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
-		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyWriteOutsideLease} {
+		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedHarness, denyWriteOutsideLease} {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
