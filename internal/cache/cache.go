@@ -952,6 +952,23 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	return held.on(ctx), release, nil
 }
 
+// reportRefusal puts a step that was refused before it started on the record a failed
+// step is put on: counted, logged as cache.error, and handed to the result observers.
+// Run's fail does that for a step that ran; a refusal never reaches Run, and the CLI
+// prints no error of its own for an ExitError, so this is the only place it is said.
+func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error) {
+	c.errs.Add(1)
+	c.log.ErrorContext(ctx,
+		"cache.error",
+		slog.String("project", s.ProjectPath),
+		slog.String("label", s.Label),
+		slog.String("target", reproTarget(s)),
+		slog.String("error", types.CauseText(err)),
+		slog.Bool("refused", true),
+	)
+	rc.fireResults(&s, &Result{ProjectPath: s.ProjectPath}, err)
+}
+
 // admit takes the in-process seats a step needs before it executes and puts it on the
 // record every observer reads: the local limiter slots, the inflight set a killed run is
 // reported from, and the invocation heartbeat the stall watchdog compares against. A step
@@ -1214,6 +1231,9 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				// spends no failure budget and joins no error, and a run that did nothing
 				// reports success.
 				ran = gctx.Err() == nil
+				if ran {
+					c.reportRefusal(gctx, rc, s, machineErr)
+				}
 				return fail(machineErr)
 			}
 			defer releaseMachine()

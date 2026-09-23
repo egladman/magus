@@ -1,9 +1,11 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -468,6 +470,49 @@ func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
 	assert.Contains(t, err.Error(), "MAGUS_NO_WAIT is set")
 	assert.Contains(t, err.Error(), "pid 100 (root) test")
 	assert.NotEmpty(t, adm.dropped, "a run that will not wait must not stay in the queue")
+}
+
+// TestRunAllReportsAMachineRefusal pins that a step the budget refuses is put on the
+// record a failed step is: the refusal happens before Run, whose fail is what logs a
+// failure and fires the result observers, so skipping that left `magus run` exiting 75
+// with nothing printed after the header.
+func TestRunAllReportsAMachineRefusal(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b, _, _ := testBudget(t, 10_000, 8)
+	held := b.Request("100.1", types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
+	})
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+
+	var out bytes.Buffer
+	c, err := Open(t.Context(), t.TempDir(),
+		WithLogger(slog.New(NewPrettyHandler(&out, slog.LevelInfo))),
+		WithMachineAdmission(LocalAdmitter{Budget: b}, true))
+	require.NoError(t, err)
+
+	var observed []error
+	_, err = c.RunAll(t.Context(), []Step{{ProjectPath: ".", Target: "test", MemoryMB: 9000}},
+		func(context.Context, Step) error {
+			t.Error("a refused step must not run")
+			return nil
+		},
+		OnResult(func(_ *Step, _ *Result, err error) { observed = append(observed, err) }))
+
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, ExitCodeMachineBusy, stated.ExitCode())
+
+	printed := out.String()
+	assert.Contains(t, printed, "[fail] workspace test (not started)\n")
+	assert.Contains(t, printed, "  cause: [MGS3009] not starting (root) test: this machine's build budget is full")
+	assert.Contains(t, printed, "held by pid 100 (root) test (8.8 GiB)")
+	assert.NotContains(t, printed, "output:", "nothing ran, so there is no captured output to point at")
+	assert.Contains(t, printed, "  reproduce: magus run test .\n")
+
+	require.Len(t, observed, 1, "the result observers feed -o jsonl's run.target.result and run.diagnostic")
+	assert.ErrorIs(t, observed[0], types.MachineBudgetExhausted)
+	assert.Equal(t, Stats{Error: 1}, c.Stats(), "a refusal counts toward the run's failed total")
 }
 
 func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
