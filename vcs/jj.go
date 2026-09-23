@@ -416,10 +416,10 @@ func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string
 	return map[string]bool{}, nil
 }
 
-// The capability ladder below. jj implements ten of the sixteen optional VCSDriver
+// The capability ladder below. jj implements ten of the seventeen optional VCSDriver
 // capabilities: ConflictResolver (asserted separately above) plus the nine listed in the
-// var block. The six it does NOT implement are absent on purpose, and each is argued here so
-// a reader looking for one finds the reason rather than a silent gap:
+// var block. The seven it does NOT implement are absent on purpose, and each is argued here
+// so a reader looking for one finds the reason rather than a silent gap:
 //
 //   - MergeDriverInstaller: the interface takes the workspace's declared output GLOBS, and
 //     jj has nowhere to put them. git maps a pattern to a driver in .gitattributes and hg
@@ -435,6 +435,7 @@ func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string
 //     is nowhere in jj to register a post-commit/pre-push equivalent, and `jj git push`
 //     passes --no-verify deliberately, so even riding git's own hooks under the hood is
 //     not an option. A jj repo is simply uncovered by this notice, by jj's own design.
+//     types.RegenHookInstaller follows: with no merge driver there is nothing owed.
 //   - IgnoredFileReporter: jj exposes no ignore-RULES query; see IgnoredPaths above, which
 //     is the same gap reached from the other interface.
 //   - BranchChangeReporter: git's exclusion rule is "not the branch this checkout is on",
