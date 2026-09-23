@@ -989,8 +989,14 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 // both come from one probe. Threading the extra map out is what keeps the gate from
 // forking a second time per tool: the run path already pays for these probes, so the
 // check rides along free.
+//
+// One-shot: it builds a fresh, unmemoized toolProber for exactly this call, so a caller
+// that will ask about the same (spell, dir, tool) more than once in one logical
+// operation should hold its own long-lived prober instead (newToolProber, held across
+// calls the way the run path's `prober` variable is) so repeat asks replay rather than
+// re-spawning the probe.
 func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extracted map[string]string) map[string][]string {
-	return m.newToolProber().versions(ctx, projects, nil, extracted)
+	return m.newToolProber().probeVersions(ctx, projects, nil, extracted)
 }
 
 // toolProber memoizes one invocation's version probes per (spell, dir, tool), so a tool is
@@ -1018,10 +1024,10 @@ func (tp *toolProber) dir(p *types.Project) string {
 	return p.Dir
 }
 
-// versions returns each project's "spell:tool:token" key lines, probing what is not yet
-// memoized. only narrows the tools to probe and key on; nil means every declared tool.
-// It is safe for concurrent use; extracted is written only by the calling goroutine.
-func (tp *toolProber) versions(ctx context.Context, projects []*types.Project, only func(spell, tool string) bool, extracted map[string]string) map[string][]string {
+// probeVersions returns each project's "spell:tool:token" key lines, probing what is not
+// yet memoized. only narrows the tools to probe and key on; nil means every declared
+// tool. It is safe for concurrent use; extracted is written only by the calling goroutine.
+func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Project, only func(spell, tool string) bool, extracted map[string]string) map[string][]string {
 	if tp.mode == "off" {
 		return nil
 	}
@@ -1509,7 +1515,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	toolWindows := map[string]string{}
-	prober.versions(ctx, keyed, nil, toolWindows)
+	prober.probeVersions(ctx, keyed, nil, toolWindows)
 	if err := checkToolWindows(keyed, toolWindows); err != nil {
 		return err
 	}
@@ -1542,7 +1548,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		step := m.buildStep(p, target)
 		var toolVersions []string
 		if keysTools(p, target) {
-			toolVersions = prober.versions(ctx, []*types.Project{p}, nil, nil)[p.Path]
+			toolVersions = prober.probeVersions(ctx, []*types.Project{p}, nil, nil)[p.Path]
 		}
 		applyRunKeying(&step, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
 		step.Revision = revision

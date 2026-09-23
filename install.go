@@ -53,7 +53,7 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 			return spell == spellName && slices.Contains(choice.Install.Tools, tool)
 		}
 		windows := map[string]string{}
-		tv := k.prober.versions(ctx, []*types.Project{p}, only, windows)[p.Path]
+		tv := k.prober.probeVersions(ctx, []*types.Project{p}, only, windows)[p.Path]
 		if err := checkToolWindows([]*types.Project{p}, windows); err != nil {
 			return err
 		}
@@ -93,7 +93,7 @@ func (m *Magus) prewarmInstallProbes(ctx context.Context, prober *toolProber, st
 					continue
 				}
 				name, tools := s.Name(), choice.Install.Tools
-				go prober.versions(ctx, []*types.Project{p}, func(sp, tool string) bool {
+				go prober.probeVersions(ctx, []*types.Project{p}, func(sp, tool string) bool {
 					return sp == name && slices.Contains(tools, tool)
 				}, nil)
 			}
