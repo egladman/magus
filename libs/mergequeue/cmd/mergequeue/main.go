@@ -7,6 +7,7 @@
 //	mergequeue validate --plan plan.json --gate 'magus affected ci --base "$MERGEQUEUE_ONTO"' \
 //	                    --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"' --verdicts verdicts
 //	mergequeue land     --plan plan.json --verdicts verdicts --provider github --follow
+//	mergequeue land     --from-run "$RUN_ID" --verdicts verdicts --provider github
 package main
 
 import (
@@ -320,7 +321,7 @@ func validate(ctx context.Context, args []string, _ io.Reader, stdout, stderr io
 
 func land(ctx context.Context, args []string, _ io.Reader, stdout, stderr io.Writer) error {
 	var c common
-	var planFile, dirPath, spec, statusContext string
+	var planFile, dirPath, spec, statusContext, fromRun, runRepo string
 	var follow, dryRun bool
 	var interval time.Duration
 	if err := parse("land", args, stderr, func(fs *flag.FlagSet) {
@@ -332,15 +333,29 @@ func land(ctx context.Context, args []string, _ io.Reader, stdout, stderr io.Wri
 		fs.BoolVar(&follow, "follow", false, "keep landing as verdicts arrive, until "+verdicts.DoneFile+" appears in the verdicts directory")
 		fs.DurationVar(&interval, "interval", 10*time.Second, "how often --follow looks for new verdicts")
 		fs.BoolVar(&dryRun, "dry-run", false, "report what would land; call nothing on the provider")
+		fs.StringVar(&fromRun, "from-run", "", "follow this GitHub Actions run instead of --plan: unpack its "+verdicts.PlanArtifact+
+			" and "+verdicts.VerdictArtifactPrefix+"<id> artifacts into --verdicts as it uploads them (implies --follow)")
+		fs.StringVar(&runRepo, "run-repo", os.Getenv("GITHUB_REPOSITORY"), "owner/name of the repository --from-run belongs to")
 	}); err != nil {
 		return helpOK(err)
 	}
-	if err := required(stderr, "land", flagValue{"plan", planFile}, flagValue{"verdicts", dirPath}, flagValue{"provider", spec}); err != nil {
+	if (planFile == "") == (fromRun == "") {
+		fmt.Fprintf(stderr, "mergequeue land: give exactly one of --plan and --from-run\n")
+		return errUsage
+	}
+	if err := required(stderr, "land", flagValue{"verdicts", dirPath}, flagValue{"provider", spec}); err != nil {
 		return err
 	}
-	pl, err := readPlan(planFile)
-	if err != nil {
-		return err
+	if owner, name, ok := strings.Cut(runRepo, "/"); fromRun != "" && (!ok || owner == "" || name == "" || strings.Contains(name, "/")) {
+		fmt.Fprintf(stderr, "mergequeue land: --run-repo %q is not owner/name\n", runRepo)
+		return errUsage
+	}
+	var pl mergequeue.Plan
+	if planFile != "" {
+		var err error
+		if pl, err = readPlan(planFile); err != nil {
+			return err
+		}
 	}
 	p, err := provider.Open(ctx, spec)
 	if err != nil {
@@ -351,9 +366,35 @@ func land(ctx context.Context, args []string, _ io.Reader, stdout, stderr io.Wri
 	if err != nil {
 		return err
 	}
-	l := mergequeue.NewLander(p, repo, &verdicts.Dir{Path: dirPath, Follow: follow})
-	l.StatusContext, l.Interval, l.DryRun, l.Events = statusContext, interval, dryRun, mergequeue.NewEvents(stdout)
+	events := mergequeue.NewEvents(stdout)
+	var src mergequeue.VerdictSource = &verdicts.Dir{Path: dirPath, Follow: follow}
+	if fromRun != "" {
+		run := &verdicts.ActionsRun{
+			API: os.Getenv("GITHUB_API_URL"), Repo: runRepo, RunID: fromRun, Token: readToken(),
+			Path: dirPath, Interval: interval, Events: events,
+		}
+		var planned bool
+		if pl, planned, err = run.Plan(ctx); err != nil {
+			return err
+		}
+		if !planned {
+			events.Emit(mergequeue.Event{Kind: mergequeue.EventNotice, Reason: "run " + fromRun + " completed without a plan; nothing to land"})
+			return nil
+		}
+		src = run
+	}
+	l := mergequeue.NewLander(p, repo, src)
+	l.StatusContext, l.Interval, l.DryRun, l.Events = statusContext, interval, dryRun, events
 	return l.Run(ctx, pl)
+}
+
+// readToken picks the credential the GitHub provider reads with: the landing job's
+// MERGEQUEUE_TOKEN where it holds one, else GITHUB_TOKEN.
+func readToken() string {
+	if t := os.Getenv("MERGEQUEUE_TOKEN"); t != "" {
+		return t
+	}
+	return os.Getenv("GITHUB_TOKEN")
 }
 
 func helpOK(err error) error {

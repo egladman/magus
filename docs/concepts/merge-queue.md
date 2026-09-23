@@ -74,6 +74,14 @@ plan over separate jobs; a red there waits rather than kicks back, since it may 
 change beneath it that failed. `validate --parallel` caps the stages built or gated at
 once across every partition.
 
+`land --from-run <id>` takes the plan and the verdicts from a GitHub Actions run instead
+of `--plan` and a directory another process fills: it downloads the run's
+`magus-queue-plan` artifact, then each `magus-queue-verdict-<id>` artifact as the run
+uploads it, and lands while slower stages are still going. It reads the run's status
+before each listing, so it stops following only after a listing made once the run had
+completed. It reads with `MERGEQUEUE_TOKEN`, else `GITHUB_TOKEN`, and `--run-repo`
+defaults to `$GITHUB_REPOSITORY`.
+
 ## Input: `mergequeue.changes/v1`
 
 ```json
@@ -129,14 +137,14 @@ and when it could not diff and fell back to every project.
 `--gate` and `--regenerate` run with `sh -c`, in a process group of their own, in the
 staging commit's checkout, with:
 
-| Variable                 | Value                                   |
-| ------------------------ | --------------------------------------- |
-| `MERGEQUEUE_CHANGE`      | the change's id                         |
-| `MERGEQUEUE_HEAD`        | the change's head commit                |
-| `MERGEQUEUE_BASE`        | the branch the queue merges into        |
-| `MERGEQUEUE_BASE_COMMIT` | the commit every partition starts on    |
-| `MERGEQUEUE_ONTO`        | the commit this stage was built onto    |
-| `MERGEQUEUE_STAGE`       | the staging commit (gate only)          |
+| Variable                 | Value                                |
+| ------------------------ | ------------------------------------ |
+| `MERGEQUEUE_CHANGE`      | the change's id                      |
+| `MERGEQUEUE_HEAD`        | the change's head commit             |
+| `MERGEQUEUE_BASE`        | the branch the queue merges into     |
+| `MERGEQUEUE_BASE_COMMIT` | the commit every partition starts on |
+| `MERGEQUEUE_ONTO`        | the commit this stage was built onto |
+| `MERGEQUEUE_STAGE`       | the staging commit (gate only)       |
 
 Hooks never see `MERGEQUEUE_TOKEN`, `GITHUB_TOKEN`, `GH_TOKEN` or the Actions runtime
 tokens: a gate runs the changes' code.
@@ -234,13 +242,13 @@ files. The same holds for main merged into a change by its author.
 A provider is a Buzz script run on an embedded gopherbuzz VM. It exports five functions,
 each taking one record:
 
-| Function       | Receives                                                 | Returns                                               |
-| -------------- | -------------------------------------------------------- | ----------------------------------------------------- |
-| `list_changes` | `{base, remote}`                                         | a list of change records                              |
-| `approval_at`  | the change plus `{commit}`                               | `{approved, head, reason}`; `head` is required        |
-| `post_status`  | the change plus `{commit, context, state, description}`  | `true` when recorded                                  |
-| `merge_change` | the change plus `{commit, message}`                      | `{merged, reason}`                                    |
-| `kick_back`    | the change plus `{commit, report}`                       | `true` when both the comment and the removal happened |
+| Function       | Receives                                                | Returns                                               |
+| -------------- | ------------------------------------------------------- | ----------------------------------------------------- |
+| `list_changes` | `{base, remote}`                                        | a list of change records                              |
+| `approval_at`  | the change plus `{commit}`                              | `{approved, head, reason}`; `head` is required        |
+| `post_status`  | the change plus `{commit, context, state, description}` | `true` when recorded                                  |
+| `merge_change` | the change plus `{commit, message}`                     | `{merged, reason}`                                    |
+| `kick_back`    | the change plus `{commit, report}`                      | `true` when both the comment and the removal happened |
 
 All five are required. Scripts see Buzz's standard library and a `mergequeue` module
 whose `request(method, url: .., body: .., headers: ..)` returns `{status, body}`.

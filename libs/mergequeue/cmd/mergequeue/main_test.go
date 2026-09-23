@@ -1,13 +1,17 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -159,21 +163,110 @@ func TestTheCLIPlansValidatesAndLandsDisjointChanges(t *testing.T) {
 	assert.Equal(t, map[string]mergequeue.Decision{"1": mergequeue.DecisionLand, "2": mergequeue.DecisionLand}, decided(t, out))
 	assert.FileExists(t, filepath.Join(dir, verdicts.DoneFile))
 
+	out, err = runCLI(t, "", "land", "--repo", f.queue, "--plan", planFile, "--verdicts", dir, "--provider", f.provider(t), "--follow", "--interval", "10ms")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, out))
+	assert.Equal(t, "change 2 (#2)\nchange 1 (#1)", gitIn(t, f.root, "--git-dir", f.remote, "log", "--format=%s", f.base+"..main"))
+}
+
+// provider writes the local Buzz provider, merging into the fixture's remote.
+func (f cliFixture) provider(t *testing.T) string {
+	t.Helper()
 	prov := filepath.Join(f.root, "local.buzz")
 	script := filepath.Join(f.root, "merge.sh")
 	require.NoError(t, os.WriteFile(script, []byte(mergeScript), 0o755))
 	src := strings.NewReplacer("MERGE_SCRIPT", script, "REMOTE", f.remote).Replace(localProvider)
 	require.NoError(t, os.WriteFile(prov, []byte(src), 0o644))
-	out, err = runCLI(t, "", "land", "--repo", f.queue, "--plan", planFile, "--verdicts", dir, "--provider", prov, "--follow", "--interval", "10ms")
-	require.NoError(t, err)
-	var merged []string
+	return prov
+}
+
+func merged(t *testing.T, out []byte) []string {
+	t.Helper()
+	var ids []string
 	for _, e := range events(t, out) {
 		if e.Kind == mergequeue.EventMerged {
-			merged = append(merged, e.Change)
+			ids = append(ids, e.Change)
 		}
 	}
-	assert.ElementsMatch(t, []string{"1", "2"}, merged)
-	assert.Equal(t, "change 2 (#2)\nchange 1 (#1)", gitIn(t, f.root, "--git-dir", f.remote, "log", "--format=%s", f.base+"..main"))
+	return ids
+}
+
+// fakeRun serves a completed GitHub Actions run 7 of acme/widgets holding artifacts,
+// each the zip of a directory.
+func fakeRun(t *testing.T, artifacts map[string]string) *httptest.Server {
+	t.Helper()
+	type row struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	var rows []row
+	zips := map[string][]byte{}
+	for name, dir := range artifacts {
+		id := strconv.Itoa(len(rows) + 1)
+		rows = append(rows, row{len(rows) + 1, name})
+		zips["/repos/acme/widgets/actions/artifacts/"+id+"/zip"] = zipDir(t, dir)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/repos/acme/widgets/actions/runs/7":
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "completed"})
+		case "/repos/acme/widgets/actions/runs/7/artifacts":
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": len(rows), "artifacts": rows})
+		default:
+			body, ok := zips[req.URL.Path]
+			if !ok {
+				http.NotFound(w, req)
+				return
+			}
+			_, _ = w.Write(body)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("GITHUB_API_URL", srv.URL)
+	return srv
+}
+
+func zipDir(t *testing.T, dir string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	require.NoError(t, zw.AddFS(os.DirFS(dir)))
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+// The landing workflow's shape: land reads the plan and verdicts from the validation
+// run's artifacts, as upload-artifact would have packed validate's output.
+func TestLandFollowsAnActionsRun(t *testing.T) {
+	f := newCLIFixture(t, map[string]string{})
+	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
+	_, err := runCLI(t, "", "validate", "--repo", f.queue, "--plan", planFile, "--verdicts", dir, "--gate", "true")
+	require.NoError(t, err)
+	planDir := filepath.Join(f.root, "plan-artifact")
+	require.NoError(t, os.Mkdir(planDir, 0o755))
+	require.NoError(t, os.Rename(planFile, filepath.Join(planDir, verdicts.PlanFile)))
+	fakeRun(t, map[string]string{
+		verdicts.PlanArtifact:                planDir,
+		verdicts.VerdictArtifactPrefix + "1": filepath.Join(dir, "1"),
+		verdicts.VerdictArtifactPrefix + "2": filepath.Join(dir, "2"),
+	})
+
+	out, err := runCLI(t, "", "land", "--repo", f.queue, "--from-run", "7", "--run-repo", "acme/widgets",
+		"--verdicts", filepath.Join(f.root, "landing"), "--provider", f.provider(t), "--interval", "10ms")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, out))
+}
+
+func TestLandFromARunThatPlannedNothingLandsNothing(t *testing.T) {
+	f := newCLIFixture(t, map[string]string{})
+	fakeRun(t, map[string]string{})
+	out, err := runCLI(t, "", "land", "--repo", f.queue, "--from-run", "7", "--run-repo", "acme/widgets",
+		"--verdicts", filepath.Join(f.root, "landing"), "--provider", f.provider(t), "--interval", "10ms")
+	require.NoError(t, err)
+	evs := events(t, out)
+	require.Len(t, evs, 1)
+	assert.Equal(t, mergequeue.EventNotice, evs[0].Kind)
+	assert.Equal(t, "run 7 completed without a plan; nothing to land", evs[0].Reason)
 }
 
 // Before, a regenerate hook failing on one change's code ended validation with no
@@ -195,6 +288,12 @@ func TestUsageMistakesExitTwoAndErrorsNameTheirCommandOnce(t *testing.T) {
 	_, err = runCLI(t, "", "frobnicate")
 	require.ErrorIs(t, err, errUsage)
 	_, err = runCLI(t, "", "land", "--plan", "p", "--verdicts", "s", "--provider", "github", "extra")
+	require.ErrorIs(t, err, errUsage)
+	_, err = runCLI(t, "", "land", "--plan", "p", "--from-run", "7", "--run-repo", "a/b", "--verdicts", "s", "--provider", "github")
+	require.ErrorIs(t, err, errUsage, "--plan and --from-run are exclusive")
+	_, err = runCLI(t, "", "land", "--verdicts", "s", "--provider", "github")
+	require.ErrorIs(t, err, errUsage, "one of them is required")
+	_, err = runCLI(t, "", "land", "--from-run", "7", "--run-repo", "a/b/c", "--verdicts", "s", "--provider", "github")
 	require.ErrorIs(t, err, errUsage)
 	_, err = runCLI(t, "", "validate", "-h")
 	require.NoError(t, err)
