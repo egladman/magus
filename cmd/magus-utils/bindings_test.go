@@ -44,3 +44,57 @@ func TestBuzzFilesUpToDate(t *testing.T) {
 func TestObjectReturnContracts(t *testing.T) {
 	require.NoError(t, checkObjectDecls(hostmodules.All()))
 }
+
+func TestTitleCaseAndRegisterName(t *testing.T) {
+	assert.Equal(t, "Fs", titleCase("fs"))
+	assert.Equal(t, "Json", titleCase("json"))
+	assert.Equal(t, "", titleCase(""))
+	assert.Equal(t, "HTTP", titleCase("HTTP"), "an already-capitalized name is left alone")
+	assert.Equal(t, "1st", titleCase("1st"), "a non-letter first byte is left alone")
+	assert.Equal(t, "RegisterVcs", registerName("vcs"))
+}
+
+func TestGoLiteral(t *testing.T) {
+	assert.Equal(t, "nil", goLiteral(nil))
+	assert.Equal(t, `"x"`, goLiteral("x"))
+	assert.Equal(t, `"a\"b"`, goLiteral(`a"b`))
+	assert.Equal(t, "3", goLiteral(3))
+	assert.Equal(t, "3", goLiteral(int64(3)))
+	assert.Equal(t, "1.5", goLiteral(1.5))
+	assert.Equal(t, "true", goLiteral(true))
+	assert.Equal(t, "false", goLiteral(false))
+	// Anything else falls through to %#v, which is Go syntax for the value.
+	assert.Equal(t, "[]int{1}", goLiteral([]int{1}))
+}
+
+func TestRunBindings(t *testing.T) {
+	t.Run("missing flags", func(t *testing.T) {
+		err := runBindings(nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "usage:")
+	})
+
+	t.Run("unknown module", func(t *testing.T) {
+		err := runBindings([]string{"-module", "nosuchmodule", "-out", filepath.Join(t.TempDir(), "x.go")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown module")
+	})
+
+	t.Run("unknown lang", func(t *testing.T) {
+		err := runBindings([]string{"-module", "fs", "-lang", "rust", "-out", filepath.Join(t.TempDir(), "x.go")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown lang")
+	})
+
+	t.Run("writes what emitBuzz renders", func(t *testing.T) {
+		m, ok := hostmodules.Get("fs")
+		require.True(t, ok)
+		want, err := emitBuzz(m)
+		require.NoError(t, err)
+
+		got := readGenerated(t, runBindings, func(out string) []string {
+			return []string{"-module", "fs", "-lang", "buzz", "-out", out}
+		})
+		assert.Equal(t, string(want), got)
+	})
+}

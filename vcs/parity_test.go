@@ -1,3 +1,5 @@
+// cross-cutting: one table of invariants run against every backend, so no one backend owns it
+
 package vcs
 
 import (

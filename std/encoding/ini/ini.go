@@ -24,7 +24,7 @@ const iniGlobalSection = ""
 // standard and is everywhere anyway: .npmrc, .gitconfig, .editorconfig,
 // setup.cfg, .flake8, most systemd units.
 //
-// tools/audit.buzz is the reason this exists. It carries a `coolingHours`
+// tools/advisories.buzz is the reason this exists. It carries a `coolingHours`
 // constant with the comment "mirrors minimum-release-age in each project's .npmrc
 // ... restated as a duration because .npmrc is not a format Buzz reads": a value
 // duplicated by hand, in a second unit, that can drift from the file it mirrors.

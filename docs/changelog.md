@@ -104,11 +104,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
-  projects/charms/cache header, per-stage progress, the run summary and lock-wait
-  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
-  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
-  yet converted falls back to a plain JSON line instead of prose.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination
   and confidence labels are gone. A human reads the evidence and decides.
@@ -150,7 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A deny on a multi-command line says nothing on it ran.**
 - **Claude Code, Codex and OpenCode harnesses are Buzz spells** under `spells/harness/`,
   wired with `magus\harness.provider`. Adapt one by forking it and changing the import
-  path. JSON under `harnesses/` remains the unwired fallback.
+  path.
 - **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
   runs it anyway.
 - **A failing `magus doctor` no longer cancels CI shards.** The final gate carries its
@@ -182,6 +177,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
+  Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
+  descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
+  are no longer read, and `--id` now resolves only a wired spell. Adapt a host by
+  forking its spell's import path instead.
 - **Breaking: the `exclusive` target and project option, with no replacement.** A
   magusfile that sets it fails with MGS1038; delete the key. `slots` and `memory_mb` are
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.

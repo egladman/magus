@@ -188,14 +188,6 @@ the lock target with `:update`, and your workspace fork is unaffected until you
 deliberately rebase it. Additive policy that is not host-shaped stays in
 `{{buzz "guard.shell"}}({...})`, not in the harness spell.{{end}}
 
-JSON descriptors (`harnesses/<id>.json`) are the older sibling. For those, a
-human may apply Magus-owned fragment merges with `{{cmd "agent harness apply"}}
---id claude-code` (or `codex`). That writes only Magus-owned native `PreToolUse`
-entries in the workspace-local JSON configuration and preserves every other
-setting. It never writes user-level configuration, compiled guard rules,
-installed skills, `AGENTS.md`, or memory. Prefer the Buzz import-path fork when
-the host is already a harness spell.
-
 ## Prune on a schedule you already have
 
 Run the `{{skill "context-audit"}}` lens after every `{{cmd "agent install"}} --force`.

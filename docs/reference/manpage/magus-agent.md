@@ -26,13 +26,13 @@ AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
 harness applies, removes, or verifies harnesses selected with
 magus\\harness.provider (several hosts are fine when you bounce between LLM
-tools) or a JSON descriptor: apply merges opaque host-config fragments the
-descriptor already names, remove deletes only those same fragments (a user's
-own hooks beside them are untouched, and nothing is asked for confirmation -
-pass --dry-run to preview one first), and verify actually runs the wired guard
-command against a synthetic event rather than trusting its mere presence in
-the config. Omit --id to act on every magusfile-wired provider. Guard feedback
-that keeps recurring is doctor's recurring-guard-denials check, not a verb here.
+tools): apply merges opaque host-config fragments the descriptor already
+names, remove deletes only those same fragments (a user's own hooks beside
+them are untouched, and nothing is asked for confirmation - pass --dry-run to
+preview one first), and verify actually runs the wired guard command against
+a synthetic event rather than trusting its mere presence in the config. Omit
+--id to act on every magusfile-wired provider. Guard feedback that keeps
+recurring is doctor's recurring-guard-denials check, not a verb here.
 
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
@@ -105,7 +105,7 @@ a pattern no graph verb fits.
 : Render the embedded skills and write or stream them into named destinations
 
 **harness**
-: Apply, remove, or verify harnesses wired in the magusfile or JSON descriptors
+: Apply, remove, or verify harnesses wired in the magusfile
 
 **starter**
 : Print a starter AGENTS.md to stdout; never writes a file

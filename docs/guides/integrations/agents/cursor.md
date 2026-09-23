@@ -83,7 +83,7 @@ and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 
-Or target Cursor alone (spell or `harnesses/cursor.json`):
+Or target Cursor alone:
 
 ```sh
 magus agent harness apply --id cursor
