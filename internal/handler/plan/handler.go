@@ -126,7 +126,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		http.Error(w, "plan error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "plan", err)
 		return
 	}
 	index := indexPlanTargets(graph)

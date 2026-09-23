@@ -118,7 +118,7 @@ func (h *RunHandler) serve(w http.ResponseWriter, r *http.Request) {
 		req.Target, req.Project = strings.TrimSpace(req.Target), strings.TrimSpace(req.Project)
 		h.answer(r.Context(), w, req, true)
 	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		handler.RefuseMethod(w, r, http.MethodGet, http.MethodPost)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
 	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/types"
 )
 
@@ -1021,13 +1022,54 @@ func TestAnUnansweredSupersedeFallsBackToRefusing(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "did not stop within") {
-		t.Errorf("lock output = %q, want the fallback to say the supersede went unanswered", got)
+	if !strings.Contains(got, "did not stop within") || !strings.Contains(got, "refusing") {
+		t.Errorf("lock output = %q, want the refusal to say the supersede went unanswered", got)
 	}
 	if strings.Contains(got, "superseded the earlier gate") {
 		t.Errorf("lock output = %q, must not claim a supersede that never happened", got)
 	}
 	if _, err := os.Stat(later.yieldPath("app")); !os.IsNotExist(err) {
 		t.Error("a supersede that gave up must retract its request")
+	}
+}
+
+// Under -o jsonl the refused supersede is a record of its own type: a lock.superseded
+// line would tell a reader a gate was stopped when none was.
+func TestAnUnansweredSupersedeRecordsItsRefusal(t *testing.T) {
+	quickSupersede(t, 200*time.Millisecond)
+	out, toOut := captureLockOut()
+	cacheDir := t.TempDir()
+	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
+
+	cmd := helperHold(t, cacheDir, "app", 5_000, "LOCKTEST_GATE=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start holder: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	waitForFile(t, filepath.Join(lockDir, "app", "ready"), 3*time.Second)
+
+	var records bytes.Buffer
+	w := report.NewWriter(&records, report.WithBlockOnFull())
+	later := newProjectLocker(cacheDir, testWorkspaceRoot, asGate(), toOut, withReportWriter(w))
+	later.started = time.Now().Add(2 * time.Second)
+	_, err := later.acquire(t.Context(), "app")
+	var c *lockContendedError
+	if !errors.As(err, &c) {
+		t.Fatalf("want *lockContendedError once the supersede bound expires, got %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	got := records.String()
+	if !strings.Contains(got, `"type":"lock.supersede_refused","project":"app","holder_pid":`) ||
+		!strings.Contains(got, `"bound_ms":200`) {
+		t.Errorf("records = %q, want a lock.supersede_refused naming the project, holder and bound", got)
+	}
+	if strings.Contains(got, report.TypeLockSuperseded+`"`) {
+		t.Errorf("records = %q, must not record a supersede that never happened", got)
+	}
+	if strings.Contains(out.String(), "did not stop within") {
+		t.Errorf("lock output = %q, a structured run says it as a record only", out.String())
 	}
 }

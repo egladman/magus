@@ -48,6 +48,14 @@ func TestSpawnEnumsRenderUnsetByName(t *testing.T) {
 	assert.Equal(t, "deny", SpawnDeny.String())
 }
 
+// A decision outside the declared set never reads as allow: it outranks advise and ties
+// with deny, so a verdict nothing can interpret still blocks.
+func TestStricterSpawnVerdictTreatsAnUnknownDecisionAsDeny(t *testing.T) {
+	unknown := SpawnVerdict{Decision: "block", Reason: "typo"}
+	assert.Equal(t, unknown, StricterSpawnVerdict(SpawnVerdict{}, unknown))
+	assert.Equal(t, unknown, StricterSpawnVerdict(unknown, SpawnVerdict{Decision: SpawnAdvise, Reason: "x"}))
+}
+
 // The committed and the working-tree rule are merged with this, which is what makes an
 // uncommitted tightening apply at once and an uncommitted loosening wait for a commit.
 func TestStricterSpawnVerdict(t *testing.T) {

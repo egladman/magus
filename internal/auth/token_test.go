@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,7 +108,7 @@ func (s *TokenSuite) TestGuardHotReload() {
 	a, _ := Generate()
 	_, err := SaveNew(a)
 	require.NoError(t, err, "SaveNew")
-	h := httpx.BearerGuard(httpx.FormatJSON, VerifyMCPBearer, okHandler)
+	h := httpx.BearerGuard(rpcerr.FormatJSON, VerifyMCPBearer, okHandler)
 
 	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+a), "token A")
 

@@ -56,11 +56,23 @@ func WithMaxImportBytes(n int64) Option {
 	}
 }
 
-// WithLog sets the log format ("pretty", "text", "json", "jsonl") and minimum level.
+// WithLog sets the log format ("pretty", "plain", "text", "json") and minimum level.
 func WithLog(format string, level slog.Level) Option {
 	return func(c *Cache) {
 		c.log = newLogger(format, level)
 		c.logLevel = level
+	}
+}
+
+// WithRecordOnlyOutput makes every line the cache writes to the terminal a record, for a
+// -o jsonl run: h receives the cache's log records, and the free text it would otherwise
+// print is withheld. That is a target's own output on success or failure, the failure
+// dump, and the unchanged-failure hint; the output stays in the run log behind the ref
+// the run's result record names. h's own level filters the log records.
+func WithRecordOnlyOutput(h slog.Handler) Option {
+	return func(c *Cache) {
+		c.log = slog.New(jsonlSafetyNetHandler{h})
+		c.recordsOnly = true
 	}
 }
 

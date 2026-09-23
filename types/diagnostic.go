@@ -478,6 +478,13 @@ const (
 	// answered 401. A token that was sent and refused is BearerRejected instead: the two
 	// need different fixes (attach one, or mint a new one).
 	BearerMissing DiagnosticCode = "MGS9011"
+	// MethodNotAllowed is a daemon route asked with a method it does not serve, answered 405.
+	MethodNotAllowed DiagnosticCode = "MGS9012"
+	// ConsoleNotBuilt is a share started while the daemon found no built console to serve.
+	ConsoleNotBuilt DiagnosticCode = "MGS9013"
+	// ShareUnavailable is a share whose LAN listener could not start: no private-range
+	// interface is up, or the listener could not bind.
+	ShareUnavailable DiagnosticCode = "MGS9014"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -542,7 +549,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
 	NoAuthToken, ConnectorNameExists, ConnectorNotFound,
 	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
-	BearerMissing,
+	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

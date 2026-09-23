@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -725,7 +726,41 @@ func TestScripts(t *testing.T) {
 			e.Setenv("__MAGUS_TEMPLATES", templates)
 			return nil
 		},
+		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
+			"jsonl-records": jsonlRecords,
+		},
 	})
+}
+
+// jsonlRecords is `jsonl-records [type...]`: every line the last exec wrote to stdout
+// and to stderr is a report envelope, a JSON object carrying a schema and a type, and
+// each named type is among them. A regex cannot say that; `{` at the start of a line is
+// not a parse.
+func jsonlRecords(ts *testscript.TestScript, neg bool, args []string) {
+	if neg {
+		ts.Fatalf("usage: jsonl-records [type...]")
+	}
+	seen := map[string]bool{}
+	for _, stream := range []string{"stdout", "stderr"} {
+		for i, line := range strings.Split(ts.ReadFile(stream), "\n") {
+			if line == "" {
+				continue
+			}
+			var head struct {
+				Schema *int   `json:"schema"`
+				Type   string `json:"type"`
+			}
+			if err := json.Unmarshal([]byte(line), &head); err != nil || head.Schema == nil || head.Type == "" {
+				ts.Fatalf("%s line %d is not a record: %q", stream, i+1, line)
+			}
+			seen[head.Type] = true
+		}
+	}
+	for _, typ := range args {
+		if !seen[typ] {
+			ts.Fatalf("no %s record on either stream", typ)
+		}
+	}
 }
 
 // In-process benchmarks for magus.Open itself, separate from the cmd-level

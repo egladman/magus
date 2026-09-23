@@ -7,6 +7,8 @@ import {
   adoptDaemonOrigin,
   isReadOnly,
   mayLoadBundledDemo,
+  parseRefusal,
+  signInCommand,
 } from "./daemon";
 
 // The loopback lock and the #port/LAN-share grammar. validateLoopbackHost is the pure
@@ -127,4 +129,47 @@ test("a LAN-share origin resolves the daemon to the page's own LAN origin (not l
       assert.equal(mayLoadBundledDemo({ demo: "" }), false);
     },
   );
+});
+
+// The share endpoint and every guard answer /api/ with AIP-193's JSON shape; the person sees its
+// message and a link to the code's page, never "HTTP 401".
+test("parseRefusal reads an AIP-193 body's message and Help link", () => {
+  const body = {
+    error: {
+      code: 503,
+      message: "MGS9013: the built console was not found",
+      status: "UNAVAILABLE",
+      details: [
+        { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "MGS9013" },
+        {
+          "@type": "type.googleapis.com/google.rpc.Help",
+          links: [{ description: "console not built", url: "https://example.test/MGS9013/" }],
+        },
+      ],
+    },
+  };
+  assert.deepEqual(parseRefusal(body), {
+    message: "MGS9013: the built console was not found",
+    help: { label: "console not built", href: "https://example.test/MGS9013/" },
+  });
+});
+
+// The token substitution only expands in a shell that knows $(...): PowerShell on Windows, never
+// cmd.exe's start.
+test("signInCommand uses each platform's opener", () => {
+  const url = "http://127.0.0.1:7391/console/";
+  const tail = ' "http://127.0.0.1:7391/console/#token=$(magus config token print)"';
+  assert.equal(signInCommand(url, "MacIntel"), "open" + tail);
+  assert.equal(signInCommand(url, "Win32"), "Start-Process" + tail);
+  assert.equal(signInCommand(url, "Linux x86_64"), "xdg-open" + tail);
+});
+
+test("parseRefusal keeps a body without a Help link and rejects any other shape", () => {
+  assert.deepEqual(parseRefusal({ error: { message: "no help here", details: [] } }), {
+    message: "no help here",
+  });
+  assert.equal(parseRefusal({ error: "the old string shape" }), null);
+  assert.equal(parseRefusal({ error: { message: "" } }), null);
+  assert.equal(parseRefusal("plain text"), null);
+  assert.equal(parseRefusal(null), null);
 });

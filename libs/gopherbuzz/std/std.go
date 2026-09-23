@@ -23,6 +23,7 @@ package std
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 
@@ -37,7 +38,14 @@ import (
 // buzz.Module (see gopherbuzz/module.go), shared with host embedders.
 var Modules = []buzz.Module{
 	{Name: "std", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
-		s.SetNativeModule("std", coreModule(env.Out)) // std.print targets env.Out
+		out := env.OutFunc
+		switch {
+		case out != nil && env.Out != nil:
+			return errors.New("std: ModuleEnv sets both Out and OutFunc; set one")
+		case out == nil:
+			out = func(context.Context) io.Writer { return env.Out }
+		}
+		s.SetNativeModule("std", coreModule(out))
 		return nil
 	}},
 	{Name: "math", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("math", mathModule)},
@@ -106,8 +114,10 @@ func Register(sess *buzz.Session) { RegisterWithOutput(sess, os.Stdout) }
 // RegisterWithOutput is Register with std.print directed to out. An embedding
 // that captures a program's textual output (e.g. the WebAssembly playground)
 // passes its own writer so print lands in a buffer instead of the host stdout.
+// A host that picks the writer per call instead sets [buzz.ModuleEnv.OutFunc] and
+// provides [Modules] itself with sess.Provide.
 func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
-	// std modules never fail to bind; the (always-nil) error is dropped to keep
+	// Binding with Out alone cannot fail; the (always-nil) error is dropped to keep
 	// this a void call. A host that provides fallible modules uses sess.Provide.
 	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), Out: out}, Modules...)
 }

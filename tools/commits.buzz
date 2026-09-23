@@ -24,6 +24,31 @@ export fun maxLength() > int {
     return 100;
 }
 
+// typeOf returns subject's type with the scope and `!` stripped, or "" when it has no
+// `<type>: ` prefix. It does not check the type is known; problem does.
+export fun typeOf(subject: str) > str {
+    var head = headerOf(subject) ?? "";
+    if (head.endsWith("!")) {
+        head = head.sub(0, len: head.len() - 1);
+    }
+    final open = head.indexOf("(");
+    if (open != null) {
+        head = head.sub(0, len: open);
+    }
+    return head;
+}
+
+// isBreaking reports whether subject marks a breaking change with `!` before its colon.
+export fun isBreaking(subject: str) > bool {
+    return (headerOf(subject) ?? "").endsWith("!");
+}
+
+fun headerOf(subject: str) > str? {
+    final colon = subject.indexOf(": ");
+    if (colon == null) { return null; }
+    return subject.sub(0, len: colon);
+}
+
 // problem returns "" when subject is `<type>[(<scope>)][!]: <description>`, and otherwise
 // the reason it is not, phrased to be printed as is.
 //
@@ -35,16 +60,15 @@ export fun problem(subject: str) > str {
     if (subject.len() > maxLength()) {
         return "{subject.len()} bytes, over the {maxLength()} a subject may run";
     }
-    final colon = subject.indexOf(": ");
-    if (colon == null) {
+    final header = headerOf(subject);
+    if (header == null) {
         return "no `<type>: ` prefix; " + form;
     }
-    var head = subject.sub(0, len: colon);
-    final description = subject.sub(colon + 2);
+    var head = header;
+    final description = subject.sub(head.len() + 2);
     if (head.endsWith("!")) {
         head = head.sub(0, len: head.len() - 1);
     }
-    var kind = head;
     final open = head.indexOf("(");
     if (open != null) {
         if (!head.endsWith(")")) {
@@ -54,8 +78,8 @@ export fun problem(subject: str) > str {
         if (scope == "" or scope.lower() != scope or scope.indexOf(" ") != null) {
             return "scope `{scope}` must be lowercase with no spaces";
         }
-        kind = head.sub(0, len: open);
     }
+    final kind = typeOf(subject);
     if (types().indexOf(kind) == null) {
         return "unknown type `{kind}`; want one of " + types().join(", ");
     }
@@ -82,6 +106,16 @@ test "a conventional subject in the repository's style passes" {
     std\assert(problem("feat(agent/harness)!: install git hooks on apply") == "", message: "breaking marker with a nested scope");
     std\assert(problem("docs: README framing; one line per audience") == "", message: "semicolons are prose, not structure");
     std\assert(problem("fix: MGS1039 reports the missing import") == "", message: "an identifier may open the description");
+}
+
+test "the type and breaking marker are read past the scope" {
+    std\assert(typeOf("feat(cache)!: drop the v1 key") == "feat", message: "scoped and breaking");
+    std\assert(typeOf("chore: bump go") == "chore", message: "bare type");
+    std\assert(typeOf("add a hook") == "", message: "no prefix");
+    std\assert(isBreaking("chore!: drop go 1.24"), message: "breaking without a scope");
+    std\assert(isBreaking("feat(cache)!: drop the v1 key"), message: "breaking after a scope");
+    std\assert(!isBreaking("feat(cache): add a key"), message: "not breaking");
+    std\assert(!isBreaking("feat: say hi!"), message: "a bang in the description is prose");
 }
 
 test "a subject outside the form names what is wrong" {
