@@ -176,7 +176,9 @@ func capture(bin, dir string, argv []string) (string, error) {
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("%w\n%s", err, stderr.String())
 	}
-	text := stdout.String()
+	// The signed-in line names the host's opener (open, xdg-open), so a page captured on
+	// Linux CI and one captured on a Mac would differ. The docs show macOS's spelling.
+	text := strings.ReplaceAll(stdout.String(), "signed in: xdg-open ", "signed in: open ")
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
