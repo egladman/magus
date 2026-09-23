@@ -167,8 +167,9 @@ type Event struct {
 	// PolicyDigest names the workspace guard rule set in force when a verdict was reached,
 	// the join from a verdict to the guard_policy event that introduced its rules.
 	PolicyDigest string `json:"policy_digest,omitempty"`
-	// DecidedBy is which side reached a verdict: builtin, worktree, or approved. Empty on
-	// a pass, which nothing decided.
+	// DecidedBy is which side reached a verdict: builtin, worktree, or approved, joined
+	// with "+" when a workspace rule added its advice to a built-in one. Empty on a pass,
+	// which nothing decided.
 	DecidedBy string `json:"decided_by,omitempty"`
 }
 
@@ -388,10 +389,20 @@ type AgentSpawn struct {
 	// see Event.
 	PolicyDigest string
 	DecidedBy    string
+	// Continue marks a message to a subagent that already exists rather than a new one.
+	Continue bool
 	// Target is the agent a continuation addresses, "" for a spawn.
 	Target string
-	// RuleFailure is why a workspace spawn rule judged nothing, "" when every rule answered.
-	RuleFailure string
+	// RuleFailures are the workspace spawn rules that judged nothing, empty when every
+	// rule answered.
+	RuleFailures []SpawnRuleFailure
+}
+
+// SpawnRuleFailure is one side of a workspace spawn rule that judged nothing, and why.
+type SpawnRuleFailure struct {
+	// Side is worktree or approved, the values Event.DecidedBy names them by.
+	Side  string `json:"side"`
+	Error string `json:"error"`
 }
 
 const agentSpawnSchemaVersion = 1
@@ -410,14 +421,18 @@ type agentSpawnRequest struct {
 	// "no model declared": the same fact a genuinely undeclared spawn reports. No schema
 	// bump, for the reason agentCommandResponse.PreauthorizedBy already documents.
 	DeclaredModel string `json:"declared_model,omitempty"`
-	// Target and RuleFailure are additive for the reason DeclaredModel is.
-	Target      string `json:"target,omitempty"`
-	RuleFailure string `json:"rule_failure,omitempty"`
+	// Target and RuleFailures are additive for the reason DeclaredModel is.
+	Target       string             `json:"target,omitempty"`
+	RuleFailures []SpawnRuleFailure `json:"rule_failures,omitempty"`
 }
 
-// ActionAgentContinue is the action of an agent_spawn event recording a message to a
-// subagent that already exists.
-const ActionAgentContinue = "agent.continue"
+const (
+	// ActionAgentSpawn is the action of an agent_spawn event whose host named no child.
+	ActionAgentSpawn = "agent.spawn"
+	// ActionAgentContinue is the action of an agent_spawn event recording a message to a
+	// subagent that already exists.
+	ActionAgentContinue = "agent.continue"
+)
 
 // AppendAgentSpawn records one spawn or continuation and stores the context it was given
 // as a blob.
@@ -444,6 +459,10 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// repository would pay for one bad payload.
 	spawn.DeclaredModel = clampRunes(spawn.DeclaredModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
+	failures := make([]SpawnRuleFailure, len(spawn.RuleFailures))
+	for i, f := range spawn.RuleFailures {
+		failures[i] = SpawnRuleFailure{Side: f.Side, Error: secret.RedactString(ctx, f.Error)}
+	}
 	request, _ := json.Marshal(agentSpawnRequest{
 		SchemaVersion: agentSpawnSchemaVersion,
 		Host:          spawn.Host,
@@ -455,7 +474,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Context:       spawn.Context,
 		DeclaredModel: spawn.DeclaredModel,
 		Target:        spawn.Target,
-		RuleFailure:   secret.RedactString(ctx, spawn.RuleFailure),
+		RuleFailures:  failures,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
 
@@ -465,10 +484,10 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// always its own verb and a spawn count can leave it out.
 	action := spawn.Child
 	switch {
-	case spawn.Target != "":
+	case spawn.Continue:
 		action = ActionAgentContinue
 	case action == "":
-		action = "agent.spawn"
+		action = ActionAgentSpawn
 	}
 	actor := spawn.Actor
 	if actor == "" {

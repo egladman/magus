@@ -263,9 +263,6 @@ func TestOptions_Accessors(t *testing.T) {
 
 	// httpAddr falls back to defaultAddrPort when the passed AddrPort is invalid.
 	assert.Equal(t, defaultAddrPort, Options{}.httpAddr())
-
-	// SiteOrigin parses the hosted explorer URL down to scheme://host.
-	assert.Equal(t, "https://eli.gladman.cc", Options{}.SiteOrigin())
 }
 
 func TestAgentFromRequest(t *testing.T) {

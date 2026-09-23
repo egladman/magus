@@ -3,8 +3,8 @@
 package status
 
 import (
-	"context"
 	"encoding/base64"
+	"errors"
 	"slices"
 
 	"google.golang.org/protobuf/proto"
@@ -18,7 +18,11 @@ import (
 // onto the magus.status.v1alpha1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
 // intentionally not on this dashboard contract: it is `magus status`/config.
-func statusSnapshotToProto(ctx context.Context, r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
+//
+// The message is always whole but for the error details err names, which a caller logs
+// and still sends: a dashboard short one error detail beats no dashboard.
+func statusSnapshotToProto(r types.StatusSnapshot, build types.BuildInfo) (*statusv1.Status, error) {
+	var dropped error
 	s := &statusv1.Status{
 		Health: deriveHealth(r),
 		Build: &statusv1.BuildInfo{
@@ -29,7 +33,7 @@ func statusSnapshotToProto(ctx context.Context, r types.StatusSnapshot, build ty
 		},
 	}
 	if r.Pool != nil {
-		s.Pool = poolToProto(ctx, r.Pool)
+		s.Pool, dropped = poolToProto(r.Pool)
 		// Pool-wide cache activity is the sum of the warm workspaces' counters, with the
 		// configured cap from the static report: the headline hit/miss tiles plus the
 		// client-side trend.
@@ -54,7 +58,7 @@ func statusSnapshotToProto(ctx context.Context, r types.StatusSnapshot, build ty
 	for _, l := range r.Locks {
 		s.Locks = append(s.Locks, lockToProto(l))
 	}
-	return s
+	return s, dropped
 }
 
 // lockToProto maps one held workspace lock onto the wire message. It deliberately
@@ -132,11 +136,11 @@ func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
 	}
 }
 
-// EncodeStatusEvent marshals a status snapshot to base64(protobuf) for a StreamStatus
+// EncodeStatusEvent marshals a status message to base64(protobuf) for a StreamStatus
 // SSE `data:` line, the live-dashboard delivery. The JS client base64-decodes then
 // Status.fromBinary.
-func EncodeStatusEvent(ctx context.Context, r types.StatusSnapshot, build types.BuildInfo) (string, error) {
-	raw, err := proto.Marshal(statusSnapshotToProto(ctx, r, build))
+func EncodeStatusEvent(s *statusv1.Status) (string, error) {
+	raw, err := proto.Marshal(s)
 	if err != nil {
 		return "", err
 	}
@@ -179,7 +183,8 @@ func workspaceStateToProto(s types.WorkspaceState) statusv1.Workspace_State {
 	}
 }
 
-func poolToProto(ctx context.Context, p *types.StatusOutput) *statusv1.Pool {
+func poolToProto(p *types.StatusOutput) (*statusv1.Pool, error) {
+	var dropped []error
 	out := &statusv1.Pool{
 		ParentPid:     int32(p.ParentPID),
 		DaemonVersion: p.DaemonVersion,
@@ -202,7 +207,9 @@ func poolToProto(ctx context.Context, p *types.StatusOutput) *statusv1.Pool {
 			State:          workspaceStateToProto(w.State),
 		}
 		if w.State == types.WorkspaceFailed {
-			ws.Error = rpcerr.WorkspaceFailed(w.Root, w.Error).Status(ctx)
+			var err error
+			ws.Error, err = rpcerr.WorkspaceFailed(w.Root, w.Error).Status()
+			dropped = append(dropped, err)
 		}
 		if w.CacheHit != 0 || w.CacheMiss != 0 || w.CacheError != 0 || w.CacheBytes != 0 {
 			ws.Cache = &statusv1.Cache{
@@ -213,5 +220,5 @@ func poolToProto(ctx context.Context, p *types.StatusOutput) *statusv1.Pool {
 		}
 		out.Workspaces = append(out.Workspaces, ws)
 	}
-	return out
+	return out, errors.Join(dropped...)
 }

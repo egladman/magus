@@ -15,9 +15,9 @@ type Presentation struct {
 	URL     string `json:"url" yaml:"url"`
 	Surface string `json:"surface" yaml:"surface"`
 	Reason  string `json:"reason,omitempty" yaml:"reason,omitempty"`
-	// Open is a shell line that opens URL signed in (see [OpenCommand]). URL alone lands on
-	// the console's sign-in screen, because every console route needs a token.
-	Open string `json:"open" yaml:"open"`
+	// OpenCommand is a shell line that opens URL signed in (see [OpenCommand]). URL alone
+	// lands on the console's sign-in screen, because every console route needs a token.
+	OpenCommand string `json:"open" yaml:"open"`
 }
 
 // Present validates a surface and builds its tokenless console link.
@@ -39,6 +39,6 @@ func Present(host, surface, reason string) (Presentation, error) {
 		Surface: surface,
 		Reason:  strings.TrimSpace(reason),
 		// The daemon answers this, so its own argv0 means nothing to the reader.
-		Open: OpenCommandAs(link, runtime.GOOS, hint.DefaultBinaryName),
+		OpenCommand: OpenCommandAs(link, runtime.GOOS, hint.DefaultBinaryName),
 	}, nil
 }

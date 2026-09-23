@@ -6,10 +6,9 @@ import (
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// A pinned snapshot hands out copies, so a reader that edits what it got cannot change
-// what the next reader under the same context sees.
 func TestSnapshotFromContext(t *testing.T) {
 	t.Parallel()
 
@@ -25,7 +24,7 @@ func TestSnapshotFromContext(t *testing.T) {
 	}{
 		{"nothing pinned", nil, Snapshot{}, false},
 		{"rows", &Snapshot{Rows: []types.Job{row()}}, Snapshot{Rows: []types.Job{row()}}, true},
-		{"an unreadable store", &Snapshot{Err: readErr}, Snapshot{Rows: []types.Job{}, Err: readErr}, true},
+		{"an unreadable store", &Snapshot{Err: readErr}, Snapshot{Err: readErr}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -39,11 +38,23 @@ func TestSnapshotFromContext(t *testing.T) {
 			assert.Equal(t, tc.pinned, ok)
 			assert.Equal(t, tc.pinned, HasSnapshot(ctx))
 			assert.Equal(t, tc.want, got)
-			if len(got.Rows) > 0 {
-				got.Rows[0].WritePaths[0] = "edited"
-				again, _ := SnapshotFromContext(ctx)
-				assert.Equal(t, tc.want, again, "a reader's edit does not reach the pinned rows")
-			}
 		})
 	}
+}
+
+// The guard reads the pinned rows on every hook call, so a read shares them; a reader that
+// may edit what it got clones first, and its edit does not reach the pinned rows.
+func TestSnapshotReadSharesAndCloneIsolates(t *testing.T) {
+	t.Parallel()
+
+	pinned := Snapshot{Rows: []types.Job{{ID: "orchestrator/guard-facts", WritePaths: []string{"internal/guard/**"}}}}
+	ctx := WithSnapshot(t.Context(), pinned)
+
+	read, ok := SnapshotFromContext(ctx)
+	require.True(t, ok)
+	assert.Same(t, &pinned.Rows[0], &read.Rows[0], "a read hands out the pinned rows, not a copy")
+
+	clone := read.Clone()
+	clone.Rows[0].WritePaths[0] = "edited"
+	assert.Equal(t, "internal/guard/**", pinned.Rows[0].WritePaths[0], "a clone's edit does not reach the pinned rows")
 }

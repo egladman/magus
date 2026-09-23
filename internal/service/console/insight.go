@@ -9,9 +9,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrNoWorkspace is returned by Insight when the service was built without a *magus.Magus
-// (the graph/scan seams are unset too). A loaded daemon always supplies one, and an
-// unloaded one refuses /api/ before any handler runs, so this fires only on a test service.
+// ErrNoWorkspace is what a service built without a *magus.Magus answers for anything that
+// reads the workspace (the matching seams unset too). The daemon builds one to serve status
+// while its workspace fails to load; a route that reads it answers 503, since "no workspace
+// yet" is a state the console renders rather than a fault it reports.
 var ErrNoWorkspace = errors.New("console: no workspace available")
 
 // insightCommits caps how many recent commits the insight scan reads, matching the

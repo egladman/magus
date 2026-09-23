@@ -58,14 +58,14 @@ func guardDependencies() guard.Dependencies {
 		return deps
 	}
 	root, err := magus.FindRoot("")
-	if loadErr == nil || err != nil {
+	if err != nil {
 		return deps
 	}
 	// The approved sources load when the working tree does not, and they are what an agent
-	// leaving a syntax error behind must not be able to turn off.
+	// breaking the working tree must not be able to turn off.
 	deps.LoadFailure = loadErr
-	deps.ApprovedSpawnRule = func(ctx context.Context) workspace.SpawnRule {
-		return magus.ApprovedSpawnRuleAt(ctx, root, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
+	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
+		return magus.ApprovedSpawnRuleAt(ctx, root)
 	}
 	return deps
 }
@@ -78,7 +78,10 @@ func loadedWorkspace(ctx context.Context) (*magus.Magus, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, _ := ws.(*magus.Magus)
+	m, ok := ws.(*magus.Magus)
+	if !ok {
+		return nil, fmt.Errorf("inspect returned a %T, not a *magus.Magus", ws)
+	}
 	return m, nil
 }
 

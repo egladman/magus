@@ -7,12 +7,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -43,15 +45,34 @@ func TestTitlesMatchTheCodePages(t *testing.T) {
 	}
 }
 
+// The MGS9xxx range is the daemon's, so a writer can be handed any reason in it; a reason
+// missing from titles would fall back to its bare code in the Help link.
+func TestEveryDaemonReasonHasATitle(t *testing.T) {
+	t.Parallel()
+	for _, code := range types.AllDiagnosticCodes() {
+		if !strings.HasPrefix(string(code), "MGS9") {
+			continue
+		}
+		assert.Contains(t, titles, code, "%s has no Help link title", code)
+	}
+}
+
 func assertProto(t *testing.T, want, got proto.Message) {
 	t.Helper()
 	assert.True(t, proto.Equal(want, got), "got %v, want %v", got, want)
 }
 
+func mustStatus(t *testing.T, e Error) *status.Status {
+	t.Helper()
+	st, err := e.Status()
+	require.NoError(t, err)
+	return st
+}
+
 func unpack(t *testing.T, e Error) []proto.Message {
 	t.Helper()
 	var out []proto.Message
-	for _, a := range e.Status(t.Context()).GetDetails() {
+	for _, a := range mustStatus(t, e).GetDetails() {
 		m, err := a.UnmarshalNew()
 		require.NoError(t, err)
 		out = append(out, m)
@@ -69,7 +90,7 @@ func TestWorkspaceFailedCarriesEveryDiagnostic(t *testing.T) {
 		}},
 	}
 	e := WorkspaceFailed("/repo", f)
-	st := e.Status(t.Context())
+	st := mustStatus(t, e)
 
 	assert.Equal(t, int32(connect.CodeFailedPrecondition), st.GetCode())
 	assert.Equal(t, types.FormatDiagnostic(types.WorkspaceLoadFailed,
@@ -109,7 +130,9 @@ func TestWorkspaceFailedWithoutPosition(t *testing.T) {
 func TestWorkspaceLoadingIsRetryable(t *testing.T) {
 	t.Parallel()
 	e := WorkspaceLoading("/repo")
-	assert.Equal(t, connect.CodeUnavailable, e.Connect(t.Context()).Code())
+	cerr, err := e.connectError()
+	require.NoError(t, err)
+	assert.Equal(t, connect.CodeUnavailable, cerr.Code())
 	got := unpack(t, e)
 	assertProto(t, &errdetails.RetryInfo{RetryDelay: durationpb.New(loadingRetry)}, got[1])
 }

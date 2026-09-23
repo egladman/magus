@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -344,12 +345,25 @@ func TestPlanHandler_EmptyPlanIsNeverNull(t *testing.T) {
 	}
 }
 
+// The error names the daemon's workspace path, so it stays in the log.
 func TestPlanHandler_ErrorReturns500(t *testing.T) {
-	h := NewHandler(fakePlanSource{graphErr: errors.New("extract boom")}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(fakePlanSource{graphErr: errors.New("/Users/dev/repo/magusfile.buzz: extract boom")}, fakePlanOutputs{}, "", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/plan", nil))
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", w.Code)
+	}
+	if body := w.Body.String(); body != "plan failed\n" {
+		t.Errorf("want only what failed, got %q", body)
+	}
+}
+
+func TestPlanHandler_NoWorkspaceReturns503(t *testing.T) {
+	h := NewHandler(fakePlanSource{graphErr: console.ErrNoWorkspace}, fakePlanOutputs{}, "", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/plan", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("want 503, got %d", w.Code)
 	}
 }
 

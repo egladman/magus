@@ -237,7 +237,7 @@ func applyStatusPools(ctx context.Context, snapshot *types.StatusSnapshot, addrs
 			failed = append(failed, fmt.Sprintf("query %s: %v", addr, err))
 			continue
 		}
-		out := reply.Output()
+		out := reply.StatusOutput()
 		out.Socket = addr
 		if len(pools) == 0 {
 			snapshot.Services = reply.Services

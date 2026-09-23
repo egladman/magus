@@ -56,7 +56,7 @@ func (s wireStatus) reason() string {
 	return ""
 }
 
-func TestWriteAIPStatusJSON(t *testing.T) {
+func TestBearerRefusalIsAIPStatusJSON(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer nope")
@@ -82,7 +82,7 @@ func TestWriteAIPStatusJSON(t *testing.T) {
 	assert.Equal(t, types.CodeURL(types.BearerRejected), help.Links[0].URL)
 }
 
-func TestWriteOmitsTheBearerChallengeOn403(t *testing.T) {
+func TestRebindRefusalOmitsTheBearerChallenge(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
 	req.Host = "evil.example"
@@ -98,7 +98,7 @@ func TestWriteOmitsTheBearerChallengeOn403(t *testing.T) {
 
 // The Connect cases decode through connect-go's own client, so they prove what a Connect
 // client parses rather than a shape this test assumes.
-func TestWriteSpeaksConnectOnConnectMounts(t *testing.T) {
+func TestBearerRefusalSpeaksConnectOnConnectMounts(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(BearerGuard(rpcerr.FormatConnect, rejectAll, okHandler))
 	t.Cleanup(srv.Close)

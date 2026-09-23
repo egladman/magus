@@ -6,12 +6,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -25,9 +27,10 @@ import (
 // approved anything, which is why this is an interface: an approved pin replaces HEAD here
 // without the evaluator, the stricter-of merge or the trail provenance changing.
 type ApprovedPolicy interface {
-	// Pending reports whether any workspace .buzz source may differ from its approved
-	// content. False lets the caller skip evaluating the approved sources at all.
-	Pending(ctx context.Context) (bool, error)
+	// Pending returns the absolute paths of the workspace sources that may differ from
+	// their approved content: every .buzz source, and the config that shapes a load. Empty
+	// lets the caller skip evaluating the approved sources at all.
+	Pending(ctx context.Context) ([]string, error)
 	// ReadFile returns the approved content of an absolute path inside the workspace, and
 	// an error when the approved state has no such file.
 	ReadFile(ctx context.Context, path string) ([]byte, error)
@@ -42,12 +45,22 @@ type headPolicy struct {
 	reader    types.RevisionFileReader
 }
 
-func (h headPolicy) Pending(ctx context.Context) (bool, error) {
+// loadShapingFiles are the files besides Buzz sources whose edit can change what a load
+// registers, or whether it loads at all.
+var loadShapingFiles = []string{workspaceMarker, remotespell.LockFile}
+
+func (h headPolicy) Pending(ctx context.Context) ([]string, error) {
 	dirty, err := h.driver.DirtyFiles(ctx, h.workspace, nil)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return slices.ContainsFunc(dirty, func(p string) bool { return strings.HasSuffix(p, ".buzz") }), nil
+	var out []string
+	for _, p := range dirty {
+		if strings.HasSuffix(p, ".buzz") || slices.Contains(loadShapingFiles, path.Base(p)) {
+			out = append(out, filepath.Join(h.repoRoot, filepath.FromSlash(p)))
+		}
+	}
+	return out, nil
 }
 
 func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {
@@ -70,26 +83,28 @@ func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {
 	return []byte(content), nil
 }
 
-// approvedPolicy is this workspace's loosening authority, nil when it has none: version
-// control disabled, or a backend that cannot read a file at a revision. Without one the
-// working tree is the whole policy.
-func (m *Magus) approvedPolicy(ctx context.Context) ApprovedPolicy {
-	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
-	if err != nil || res.VCS == nil {
-		return nil
+// approvedPolicyAt is the loosening authority of the workspace at root, nil when it has
+// none: version control disabled, no repository, or a backend that cannot read a file at a
+// revision. Without one the working tree is the whole policy.
+func approvedPolicyAt(ctx context.Context, root string, opts types.VCSOptions) (ApprovedPolicy, error) {
+	res, err := vcs.Resolve(ctx, root, "", opts)
+	if err != nil {
+		return nil, err
 	}
+	// A disabled backend resolves no driver, which fails the assertion too.
 	reader, ok := res.VCS.(types.RevisionFileReader)
 	if !ok {
-		return nil
+		return nil, nil //nolint:nilnil // no authority is a documented answer, not a failure
 	}
-	repoRoot, err := res.VCS.Root(ctx, m.ws.Root)
+	repoRoot, err := res.VCS.Root(ctx, root)
 	if err != nil {
-		return nil
+		//nolint:nilerr,nilnil // a workspace outside any repository has no approved state to defer to
+		return nil, nil
 	}
 	if resolved, err := filepath.EvalSymlinks(repoRoot); err == nil {
 		repoRoot = resolved
 	}
-	return headPolicy{workspace: m.ws.Root, repoRoot: repoRoot, driver: res.VCS, reader: reader}
+	return headPolicy{workspace: root, repoRoot: repoRoot, driver: res.VCS, reader: reader}, nil
 }
 
 // SpawnRule returns the magus\guard.spawn rule the root magusfile registered, or nil.
@@ -101,44 +116,47 @@ func (m *Magus) SpawnRule() workspace.SpawnRule {
 }
 
 // ApprovedSpawnRule returns the magus\guard.spawn rule as the approved sources register it.
-// Nil when nothing is pending (the working tree's rule already is the approved one), when
-// the workspace has no approval authority, or when the approved sources register no rule
-// or fail to load. The guard runs it beside SpawnRule and keeps the stricter answer.
+// Nil with no error when nothing is pending (the working tree's rule already is the
+// approved one), when the workspace has no approval authority, or when the approved sources
+// register no rule. An error means the approved rule could not be resolved, which is not
+// the fact that there is none. The guard runs it beside SpawnRule and keeps the stricter
+// answer.
 //
 // It loads the root magusfile a second time, reading every source it and its Buzz imports
 // read through the approval authority, so call it only for a spawn.
-func (m *Magus) ApprovedSpawnRule(ctx context.Context) workspace.SpawnRule {
-	approved := m.approvedPolicy(ctx)
-	if approved == nil {
-		return nil
+func (m *Magus) ApprovedSpawnRule(ctx context.Context) (workspace.SpawnRule, error) {
+	approved, err := approvedPolicyAt(ctx, m.ws.Root, m.ws.VCSOptions)
+	if err != nil || approved == nil {
+		return nil, err
 	}
-	if pending, err := approved.Pending(ctx); err != nil || !pending {
-		return nil
+	pending, err := approved.Pending(ctx)
+	if err != nil || len(pending) == 0 {
+		return nil, err
 	}
-	return m.spawnRuleFrom(ctx, approved)
+	return approvedSpawnRule(ctx, m.ws.Root, m.rootProjectPath(), m.resolver, approved, pending)
 }
 
 // ApprovedSpawnRuleAt is ApprovedSpawnRule for the workspace at root when its working tree
-// does not load, so a syntax error left in a magusfile cannot switch off the approved rule.
-// It reads the config and discovers projects but evaluates no working-tree magusfile. Nil
-// when the config or the discovery fails, or for any reason ApprovedSpawnRule is nil.
-func ApprovedSpawnRuleAt(ctx context.Context, root string, opts ...Option) workspace.SpawnRule {
-	m, err := inspect(ctx, root, opts...)
-	if err != nil {
-		return nil
+// does not load. Nothing in the working tree is trusted: its magus.yaml is not read, since a
+// broken or edited config (a version floor this binary is below, say) may be the failure,
+// and the approved sources are evaluated whether or not any of them looks pending.
+func ApprovedSpawnRuleAt(ctx context.Context, root string) (workspace.SpawnRule, error) {
+	approved, err := approvedPolicyAt(ctx, root, types.VCSOptions{})
+	if err != nil || approved == nil {
+		return nil, err
 	}
-	return m.ApprovedSpawnRule(ctx)
+	pending, err := approved.Pending(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return approvedSpawnRule(ctx, root, ".", secret.New(), approved, pending)
 }
 
-// spawnRuleFrom evaluates the root magusfile as approved holds it. A magusfiles/ file the
-// approved state lacks is left out rather than failing the load: it did not exist there.
-func (m *Magus) spawnRuleFrom(ctx context.Context, approved ApprovedPolicy) workspace.SpawnRule {
+// approvedSpawnRule evaluates the root magusfile at root as approved holds it. pending
+// names the sources the working tree changed, so a file it deleted is still found.
+func approvedSpawnRule(ctx context.Context, root, projectPath string, resolver *secret.Resolver, approved ApprovedPolicy, pending []string) (workspace.SpawnRule, error) {
 	if !interp.Available() {
-		return nil
-	}
-	srcs, err := interp.FindAll(m.ws.Root)
-	if err != nil {
-		return nil
+		return nil, nil //nolint:nilnil // without an interpreter no magusfile can register a rule
 	}
 	memo := map[string][]byte{}
 	read := func(path string) ([]byte, error) {
@@ -152,26 +170,58 @@ func (m *Magus) spawnRuleFrom(ctx context.Context, approved ApprovedPolicy) work
 		memo[path] = data
 		return data, nil
 	}
+	files, err := approvedMagusfiles(root, pending, read)
+	if err != nil || len(files) == 0 {
+		return nil, err
+	}
 	reg := workspace.NewWorkspaceRegistry()
 	lctx := installWorkspaceRegistry(ctx, reg)
-	lctx = secret.ContextWithResolver(lctx, m.resolver)
-	lctx = interp.WithProjectPath(lctx, m.rootProjectPath())
+	lctx = secret.ContextWithResolver(lctx, resolver)
+	lctx = interp.WithProjectPath(lctx, projectPath)
 	lctx = interp.WithSourceReader(lctx, read)
-	for _, src := range srcs {
-		var files []string
-		for _, f := range src.Files {
-			if _, err := read(f); err == nil {
-				files = append(files, f)
-			}
-		}
-		if len(files) == 0 {
-			continue
-		}
-		if _, err := interp.Parse(lctx, &interp.Source{Dir: src.Dir, Files: files, Engine: src.Engine}); err != nil {
-			return nil
+	for _, src := range interp.Sources(root, files) {
+		if _, err := interp.Parse(lctx, src); err != nil {
+			return nil, fmt.Errorf("approved magusfile: %w", err)
 		}
 	}
-	return reg.SpawnRule()
+	return reg.SpawnRule(), nil
+}
+
+// approvedMagusfiles is the root magusfile's files as approved holds them, in whichever
+// form it holds them. The working tree only proposes candidates, so neither deleting a file
+// nor adding the other form can hide one; a candidate approved lacks did not exist there.
+func approvedMagusfiles(root string, pending []string, read func(string) ([]byte, error)) ([]string, error) {
+	candidates, err := interp.MagusfileCandidates(root)
+	if err != nil {
+		return nil, err
+	}
+	single := candidates[0]
+	if _, err := read(single); err == nil {
+		return []string{single}, nil
+	}
+	// Pending paths hang off the resolved repository root, which root may reach through a
+	// symlink; each is renamed onto root so a file named both ways is read once.
+	dir := filepath.Join(root, "magusfiles")
+	pendingDir := dir
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		pendingDir = filepath.Join(resolved, "magusfiles")
+	}
+	for _, p := range pending {
+		if filepath.Dir(p) == pendingDir && filepath.Ext(p) == ".buzz" {
+			candidates = append(candidates, filepath.Join(dir, filepath.Base(p)))
+		}
+	}
+	slices.Sort(candidates)
+	var files []string
+	for _, f := range slices.Compact(candidates) {
+		if f == single {
+			continue
+		}
+		if _, err := read(f); err == nil {
+			files = append(files, f)
+		}
+	}
+	return files, nil
 }
 
 // rootProjectPath is the path the root project is registered under, "." when none is.
@@ -230,8 +280,8 @@ func (m *Magus) GuardPolicy() GuardPolicy {
 // reads each file through the authority, one process per file on git, so call it only
 // when the answer can change what is recorded.
 func (m *Magus) ApprovedBlobIDs(ctx context.Context, paths []string) map[string]string {
-	approved := m.approvedPolicy(ctx)
-	if approved == nil {
+	approved, err := approvedPolicyAt(ctx, m.ws.Root, m.ws.VCSOptions)
+	if err != nil || approved == nil {
 		return nil
 	}
 	out := make(map[string]string, len(paths))

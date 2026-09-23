@@ -23,6 +23,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,7 +83,11 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := h.src.Diff(r.Context(), paths)
 	if err != nil {
-		http.Error(w, "review error: "+err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, console.ErrNoWorkspace) {
+			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		h.Fail(w, r, "review", err)
 		return
 	}
 	// Attaching here rather than on a separate route means a client that can read a review is
@@ -179,7 +184,11 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	patch, err := h.src.WorkingDiff(r.Context(), nil)
 	if err != nil {
-		http.Error(w, "context snapshot error: "+err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, console.ErrNoWorkspace) {
+			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		h.Fail(w, r, "context snapshot", err)
 		return
 	}
 	if changeset.PatchDigest(patch) != asOf {
@@ -199,7 +208,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	root, err := filepath.EvalSymlinks(h.root)
 	if err != nil {
-		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	target, err := filepath.EvalSymlinks(filepath.Join(root, path))
@@ -208,7 +217,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "file is not present in the working tree", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "context", err)
 		return
 	}
 	rel, err := filepath.Rel(root, target)
@@ -218,7 +227,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := os.Stat(target)
 	if err != nil {
-		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "context", err)
 		return
 	}
 	if !info.Mode().IsRegular() {
@@ -235,7 +244,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "file is not present in the working tree", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "context", err)
 		return
 	}
 	lines := strings.Split(strings.TrimSuffix(string(body), "\n"), "\n")
@@ -278,7 +287,11 @@ func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	patch, err := h.src.WorkingDiff(r.Context(), scopePaths(r))
 	if err != nil {
-		http.Error(w, "diff error: "+err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, console.ErrNoWorkspace) {
+			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		h.Fail(w, r, "diff", err)
 		return
 	}
 	handler.WriteJSON(w, diffResponse{

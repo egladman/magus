@@ -158,16 +158,20 @@ func TestStaticHandlerServesOnlyTheShell(t *testing.T) {
 	}
 }
 
-// The filesystem layer itself refuses a directory with no index.html, so no FileServer path
-// can list one.
-func TestShellDirRefusesADirectoryWithoutAnIndex(t *testing.T) {
+// The filesystem layer itself never lists, so a FileServer reaching a directory with no
+// index.html (one that vanished after the handler's check, say) names none of its files.
+func TestShellDirNeverLists(t *testing.T) {
 	dir := consoleDir(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "listing"), 0o755))
-	root := shellDir{http.Dir(dir)}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "listing", "graph.json"), []byte("{}"), 0o644))
 
-	_, err := root.Open("/listing")
-	require.ErrorIs(t, err, fs.ErrNotExist)
-	f, err := root.Open("/")
+	w := get(t, http.FileServer(shellDir{http.Dir(dir)}), "/listing/")
+	assert.NotEqual(t, http.StatusOK, w.Code)
+	assert.NotContains(t, w.Body.String(), "graph.json")
+
+	f, err := shellDir{http.Dir(dir)}.Open("/listing")
 	require.NoError(t, err)
-	require.NoError(t, f.Close())
+	t.Cleanup(func() { _ = f.Close() })
+	_, err = f.Readdir(-1)
+	require.ErrorIs(t, err, fs.ErrPermission)
 }

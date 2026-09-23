@@ -1,10 +1,12 @@
 package insight
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/service/console"
 )
 
 // Handler serves GET /api/v1/insight: every insight lens as JSON (types.InsightView),
@@ -29,7 +31,11 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	view, err := h.src.Insight(r.Context())
 	if err != nil {
-		http.Error(w, "insight error: "+err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, console.ErrNoWorkspace) {
+			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		h.Fail(w, r, "insight", err)
 		return
 	}
 	handler.WriteJSON(w, view)

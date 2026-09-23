@@ -123,8 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
   workspace reloads when a `.buzz` file or `magus.yaml` changes.
 - **The daemon's guards refuse a request as `google.rpc.Status` JSON in the route's protocol.**
-  On a Connect service the refusal is Connect's envelope; on every other route, `/mcp`
-  included, AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
+  A Connect service answers Connect's envelope; every other route, `/mcp` included,
+  AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
@@ -219,10 +219,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- **A magusfile syntax error no longer switches off the approved spawn rule.** The guard
-  still runs the committed `magus\guard.spawn` rule, reports the load failure, and records
-  rule failures and continuations on the trail. A workspace advise joins a built-in one,
-  the idle clock follows the agent's id, and the bootstrap build is exempt only in cwd.
+- **A broken working tree no longer switches off the approved spawn rule.** The committed
+  `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
+  it too slowly denies. A skipped rule says what applied. A workspace advise joins a
+  built-in one, the idle clock follows the agent's id, and the bootstrap build is exempt
+  only in cwd.
 - **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
   wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
   its message and Help link. Health reports down when every workspace failed, and the

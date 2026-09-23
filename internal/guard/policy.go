@@ -148,16 +148,6 @@ func classifyPolicy(prev policyMarker, seen bool, now PolicyState, pending bool)
 	return PolicyTightened
 }
 
-// policyHadSpawnRule reports whether the last recorded policy carried a spawn rule, which
-// is how a rule deleted from the working tree is still known to have an approved twin.
-func policyHadSpawnRule(cacheDir string) bool {
-	if cacheDir == "" {
-		return false
-	}
-	m, ok := readPolicyMarker(filepath.Join(cacheDir, policyMarkerFile))
-	return ok && m.SpawnRule
-}
-
 func readPolicyMarker(path string) (policyMarker, bool) {
 	body, err := os.ReadFile(path)
 	if err != nil {

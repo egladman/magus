@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -97,12 +98,41 @@ func TestDiffHandler_EmptyPathParamDoesNotWidenScope(t *testing.T) {
 	}
 }
 
+// The error names the daemon's workspace path, so it stays in the log.
 func TestDiffHandler_ErrorReturns500(t *testing.T) {
-	h := NewPatchHandler(&fakePatchSource{err: errors.New("git boom")}, nil)
+	h := NewPatchHandler(&fakePatchSource{err: errors.New("git -C /Users/dev/repo diff: boom")}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", w.Code)
+	}
+	if body := w.Body.String(); body != "diff failed\n" {
+		t.Errorf("want only what failed, got %q", body)
+	}
+}
+
+func TestDiffHandler_NoWorkspaceReturns503(t *testing.T) {
+	h := NewPatchHandler(&fakePatchSource{err: console.ErrNoWorkspace}, nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("want 503, got %d", w.Code)
+	}
+}
+
+// A workspace root that no longer resolves is the workspace gone, and the answer names
+// neither the path nor the error.
+func TestContextHandler_MissingRootReturns503WithoutThePath(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "gone")
+	src := &fakePatchSource{patch: "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"}
+	h := NewContextHandler(root, src, nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(src.patch)+"&start=3&end=3", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), root) {
+		t.Fatalf("the body names the workspace path: %q", w.Body.String())
 	}
 }
 

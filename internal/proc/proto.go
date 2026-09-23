@@ -198,12 +198,12 @@ type StatusReply struct {
 	Machine *types.MachineSnapshot `json:"machine,omitempty"`
 }
 
-// Output is r as the status report's pool section, nil for a nil reply. It is the one
-// conversion `magus status` and the console both read, so the two cannot disagree.
+// StatusOutput is r as the status report's pool section, nil for a nil reply. It is the
+// one conversion `magus status` and the console both read, so the two cannot disagree.
 //
 // Affected is left unset: it needs a workspace-scoped VCS diff, and neither reader opens a
 // workspace to answer a status query.
-func (r *StatusReply) Output() *types.StatusOutput {
+func (r *StatusReply) StatusOutput() *types.StatusOutput {
 	if r == nil {
 		return nil
 	}

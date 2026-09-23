@@ -45,17 +45,25 @@ type Error struct {
 	Links []*errdetails.Help_Link
 	// Details are the typed details besides ErrorInfo and Help, each type at most once.
 	Details []proto.Message
-	// HTTPStatus replaces the status Code maps to in the JSON format, for an HTTP condition
-	// no google.rpc code names, such as 405. Zero keeps the mapping; Connect ignores it.
+	// HTTPStatus replaces the status Code maps to, for an HTTP condition no google.rpc code
+	// names, such as 405. FormatJSON alone reads it: FormatConnect always answers the status
+	// Connect's protocol pairs with Code. Zero keeps the mapping.
 	HTTPStatus int
 }
 
 // titles names each reason in its Help link, the heading of the reason's own page under
-// docs/reference/codes, which TestTitlesMatchTheCodePages holds them to.
+// docs/reference/codes, which TestTitlesMatchTheCodePages holds them to. Every MGS9xxx code
+// is here, since that range is the daemon's and any of it can reach a writer;
+// TestEveryDaemonReasonHasATitle holds that.
 var titles = map[types.DiagnosticCode]string{
 	types.WorkspaceLoadFailed:       "workspace failed to load",
 	types.WorkspaceStillLoading:     "workspace still loading",
 	types.BearerRejected:            "bearer token rejected",
+	types.InsecureTokenPermissions:  "insecure token file permissions",
+	types.ConnectorStoreTooNew:      "connector store is too new",
+	types.NoAuthToken:               "no auth token configured",
+	types.ConnectorNameExists:       "connector name already exists",
+	types.ConnectorNotFound:         "connector token not found",
 	types.HostNotAllowed:            "host not allowed",
 	types.LoopbackPeerRequired:      "local access only",
 	types.ShareBoundToAnotherDevice: "share link bound to another device",
@@ -85,43 +93,53 @@ func (e Error) details() []proto.Message {
 	return append(out, &errdetails.Help{Links: links})
 }
 
-// dropDetail logs a detail that failed to marshal. Every renderer drops such a detail rather
-// than the whole error, and says so here, so a client missing one can be traced to it.
-func dropDetail(ctx context.Context, typ string, err error) {
-	slog.WarnContext(ctx, "rpcerr: dropping a detail that failed to marshal", slog.String("type", typ), slog.String("error", err.Error()))
+// droppedDetail names a detail left out because it failed to marshal.
+func droppedDetail(m proto.Message, err error) error {
+	return fmt.Errorf("rpcerr: dropped a %T detail that failed to marshal: %w", m, err)
 }
 
-// Status is e as a google.rpc.Status, the shape a resource carries in its error field.
+// Status is e as a google.rpc.Status, the shape a resource carries in its error field. A
+// detail that fails to marshal is left out rather than failing the whole status, and err
+// names each one: the status is always usable, and err is for the caller to log.
 //
 // Marshaling is deterministic: ErrorInfo carries a map (Metadata), and the default
 // non-deterministic marshal orders a map's entries from Go's randomized range order, so
 // two Status values built from the same Error would encode to different Any bytes and
 // compare unequal under proto.Equal.
-func (e Error) Status(ctx context.Context) *status.Status {
+func (e Error) Status() (*status.Status, error) {
 	st := &status.Status{Code: int32(e.Code), Message: e.message()}
+	var errs []error
 	for _, m := range e.details() {
 		a := new(anypb.Any)
 		if err := anypb.MarshalFrom(a, m, proto.MarshalOptions{Deterministic: true}); err != nil {
-			dropDetail(ctx, fmt.Sprintf("%T", m), err)
+			errs = append(errs, droppedDetail(m, err))
 			continue
 		}
 		st.Details = append(st.Details, a)
 	}
-	return st
+	return st, errors.Join(errs...)
 }
 
-// Connect is e as a Connect error, for a handler to return.
-func (e Error) Connect(ctx context.Context) *connect.Error {
-	err := connect.NewError(e.Code, errors.New(e.message()))
+// connectError is e as a Connect error, with dropped details named in err as Status does.
+func (e Error) connectError() (*connect.Error, error) {
+	cerr := connect.NewError(e.Code, errors.New(e.message()))
+	var errs []error
 	for _, m := range e.details() {
-		d, derr := connect.NewErrorDetail(m)
-		if derr != nil {
-			dropDetail(ctx, fmt.Sprintf("%T", m), derr)
+		d, err := connect.NewErrorDetail(m)
+		if err != nil {
+			errs = append(errs, droppedDetail(m, err))
 			continue
 		}
-		err.AddDetail(d)
+		cerr.AddDetail(d)
 	}
-	return err
+	return cerr, errors.Join(errs...)
+}
+
+// logDropped reports details a renderer left out, so a client missing one can be traced.
+func logDropped(ctx context.Context, err error) {
+	if err != nil {
+		slog.WarnContext(ctx, err.Error())
+	}
 }
 
 // Format is the wire format one mount answers errors in, chosen where the route is
@@ -145,13 +163,13 @@ const (
 //
 // TODO: route handlers under /api/ still answer their own validation and internal errors
 // with plain-text http.Error; each needs a reason code before it can come through here.
-func (f Format) Write(w http.ResponseWriter, r *http.Request, err Error) {
+func (f Format) Write(w http.ResponseWriter, r *http.Request, e Error) {
 	h := w.Header()
-	if err.Code == connect.CodeUnauthenticated {
+	if e.Code == connect.CodeUnauthenticated {
 		challenge := `Bearer realm="magus"`
 		// RFC 6750 section 3.1: error="invalid_token" only for a token that was presented;
 		// a request with no credential gets the bare challenge.
-		if err.Reason == types.BearerRejected {
+		if e.Reason == types.BearerRejected {
 			challenge += `, error="invalid_token"`
 		}
 		h.Set("WWW-Authenticate", challenge)
@@ -159,18 +177,20 @@ func (f Format) Write(w http.ResponseWriter, r *http.Request, err Error) {
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Content-Type-Options", "nosniff")
 	if f == FormatConnect {
-		writeConnect(w, r, err)
+		writeConnect(w, r, e)
 		return
 	}
-	writeJSON(w, r, err)
+	writeJSON(w, r, e)
 }
 
 var connectWriter = connect.NewErrorWriter()
 
 // writeConnect writes e as a Connect error in the variant r's content type selects.
 func writeConnect(w http.ResponseWriter, r *http.Request, e Error) {
+	cerr, dropped := e.connectError()
+	logDropped(r.Context(), dropped)
 	// A failed write means the client is gone; there is no one left to tell.
-	_ = connectWriter.Write(w, r, e.Connect(r.Context()))
+	_ = connectWriter.Write(w, r, cerr)
 }
 
 // statusBody is AIP-193's HTTP/1.1+JSON rendering of google.rpc.Status: code is the HTTP
@@ -186,7 +206,8 @@ type statusBody struct {
 
 // writeJSON writes e in AIP-193's HTTP/1.1+JSON shape.
 func writeJSON(w http.ResponseWriter, r *http.Request, e Error) {
-	st := e.Status(r.Context())
+	st, dropped := e.Status()
+	logDropped(r.Context(), dropped)
 	code := connect.Code(st.GetCode())
 	httpCode := httpStatus(code)
 	if e.HTTPStatus != 0 {
@@ -199,7 +220,7 @@ func writeJSON(w http.ResponseWriter, r *http.Request, e Error) {
 	for _, a := range st.GetDetails() {
 		raw, err := protojson.Marshal(a)
 		if err != nil {
-			dropDetail(r.Context(), a.GetTypeUrl(), err)
+			logDropped(r.Context(), fmt.Errorf("rpcerr: dropped a %s detail that failed to render as JSON: %w", a.GetTypeUrl(), err))
 			continue
 		}
 		b.Error.Details = append(b.Error.Details, raw)

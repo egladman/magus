@@ -89,7 +89,7 @@ func StaticHandler(consoleDir string) http.Handler {
 		}
 		// A shell path that does not exist is refused here too, so every miss under the mount
 		// answers the one structured 404 rather than FileServer's plain-text one.
-		if name, dir, ok := shellPath(r.URL.Path); !ok || !root.serves(name, dir) {
+		if !isShellFile(consoleDir, r.URL.Path) {
 			rpcerr.FormatJSON.Write(w, r, rpcerr.Error{
 				Code:    connect.CodeNotFound,
 				Reason:  types.ConsoleFileWithheld,
@@ -101,8 +101,9 @@ func StaticHandler(consoleDir string) http.Handler {
 	})
 }
 
-// shellDir is the console directory as FileServer sees it. A directory with no index.html
-// does not open, so FileServer can never render the listing that would name every file in it.
+// shellDir is the console directory as FileServer sees it: nothing it opens can be listed,
+// so FileServer can never render the listing that would name every file in a directory,
+// even one whose index.html vanished after isShellFile saw it.
 type shellDir struct{ dir http.Dir }
 
 func (d shellDir) Open(name string) (http.File, error) {
@@ -110,44 +111,14 @@ func (d shellDir) Open(name string) (http.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	fi, err := f.Stat()
-	if err == nil && fi.IsDir() && !d.hasIndex(name) {
-		err = fs.ErrNotExist
-	}
-	if err != nil {
-		_ = f.Close()
-		return nil, err
-	}
-	return f, nil
+	return unlistable{f}, nil
 }
 
-func (d shellDir) hasIndex(dir string) bool {
-	f, err := d.dir.Open(path.Join(dir, "index.html"))
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	fi, err := f.Stat()
-	return err == nil && fi.Mode().IsRegular()
-}
+// unlistable refuses Readdir. Embedding http.File promotes only its methods, so the
+// underlying ReadDir is hidden as well and FileServer's listing has nothing that answers.
+type unlistable struct{ http.File }
 
-// serves reports whether name opens as the kind the request asked for: a directory for a
-// path ending in a slash, a regular file otherwise. A mismatch would only earn a redirect.
-func (d shellDir) serves(name string, dir bool) bool {
-	f, err := d.Open(name)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	if dir {
-		return fi.IsDir()
-	}
-	return fi.Mode().IsRegular()
-}
+func (unlistable) Readdir(int) ([]fs.FileInfo, error) { return nil, fs.ErrPermission }
 
 // shellExtensions is every file type the app shell is built from. The handler is
 // unauthenticated, and the console dir also holds files that are not shell: the hosted demo's
@@ -159,21 +130,24 @@ var shellExtensions = map[string]bool{
 	".woff": true, ".woff2": true, ".ttf": true, ".otf": true,
 }
 
-// shellPath is the name urlPath (under /console/) opens in the console directory, whether it
-// asks for a directory, and whether it may name part of the shell at all: no dotted segment,
-// and either a directory, which shellDir opens only when it holds an index.html, or a file of
-// a shellExtensions type.
-func shellPath(urlPath string) (name string, dir, ok bool) {
-	name = path.Clean("/" + strings.TrimPrefix(urlPath, "/console/"))
+// isShellFile reports whether urlPath (under /console/) names part of the app shell that
+// exists, with one Stat: no dotted segment, and either a directory holding an index.html,
+// which FileServer serves in place of a listing, or a regular file of a shellExtensions type.
+func isShellFile(consoleDir, urlPath string) bool {
+	name := path.Clean("/" + strings.TrimPrefix(urlPath, "/console/"))
 	for seg := range strings.SplitSeq(name, "/") {
 		if strings.HasPrefix(seg, ".") {
-			return "", false, false
+			return false
 		}
 	}
-	if name == "/" || strings.HasSuffix(urlPath, "/") {
-		return name, true, true
+	switch {
+	case name == "/" || strings.HasSuffix(urlPath, "/"):
+		name = path.Join(name, "index.html")
+	case !shellExtensions[strings.ToLower(path.Ext(name))]:
+		return false
 	}
-	return name, false, shellExtensions[strings.ToLower(path.Ext(name))]
+	fi, err := os.Stat(filepath.Join(consoleDir, filepath.FromSlash(name)))
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // serveConsoleShell writes the console shell (index.html) for a clean /console/<surface>/ route,

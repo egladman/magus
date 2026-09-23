@@ -742,7 +742,7 @@ func (s *Daemon) mount(addr netip.AddrPort, mcpHandler http.Handler) (frame, err
 	// unguarded (no rebind check, no bearer token), so an orchestrator can still probe them
 	// freely. CORSAllow itself only ever reflects an allow-listed Origin, never "*", so this
 	// widens readability, not who may write.
-	siteOrigin := s.opts.SiteOrigin()
+	siteOrigin := mcp.SiteOrigin
 	port := addr.Port()
 	f.cors = httpx.CORSAllow(
 		siteOrigin,

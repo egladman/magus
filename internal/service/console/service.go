@@ -198,8 +198,8 @@ func (s *Service) statusSnapshot(ctx context.Context) types.StatusSnapshot {
 		return out
 	}
 	// Affected stays unset; the Graph Explorer's live "affected" view is kept disabled
-	// client-side for that reason (see proc.StatusReply.Output).
-	out.Pool = reply.Output()
+	// client-side for that reason (see proc.StatusReply.StatusOutput).
+	out.Pool = reply.StatusOutput()
 	return out
 }
 
@@ -362,6 +362,9 @@ func (s *Service) knowledgeGraph(ctx context.Context, withSymbols bool) (*knowle
 func (s *Service) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error) {
 	if s.describeGraphFn != nil {
 		return s.describeGraphFn(), nil
+	}
+	if s.magus == nil {
+		return types.TargetGraphOutput{}, ErrNoWorkspace
 	}
 	return s.magus.TargetGraph(ctx)
 }

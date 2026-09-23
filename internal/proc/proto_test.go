@@ -13,7 +13,7 @@ import (
 // field crosses, a failed workspace keeps its state and error, and Affected stays unset.
 func TestStatusReplyOutput(t *testing.T) {
 	t.Parallel()
-	assert.Nil(t, (*StatusReply)(nil).Output())
+	assert.Nil(t, (*StatusReply)(nil).StatusOutput())
 
 	loaded := time.UnixMilli(1_700_000_000_000)
 	access := time.UnixMilli(1_700_000_100_000)
@@ -51,5 +51,5 @@ func TestStatusReplyOutput(t *testing.T) {
 			},
 			{Root: "/bad", State: types.WorkspaceFailed, Error: failure},
 		},
-	}, reply.Output())
+	}, reply.StatusOutput())
 }

@@ -47,6 +47,26 @@ func groupByEngine(dir string, files []string) []*Source {
 	return out
 }
 
+// Sources groups files, magusfile paths in dir, the way FindAll returns them: one Source
+// per engine, in priority order. For a caller that chose the files itself.
+func Sources(dir string, files []string) []*Source { return groupByEngine(dir, files) }
+
+// MagusfileCandidates lists every path in dir that FindAll could read as a magusfile:
+// magusfile.buzz whether or not it exists, then the magusfiles/ entries present. Unlike
+// FindAll it does not refuse both forms at once, since a caller reading the files from
+// somewhere other than dir must not be misled by what dir holds.
+func MagusfileCandidates(dir string) ([]string, error) {
+	out := []string{filepath.Join(dir, "magusfile.buzz")}
+	for _, pat := range scriptExts {
+		got, err := filepath.Glob(filepath.Join(dir, "magusfiles", pat))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, got...)
+	}
+	return out, nil
+}
+
 // FindAll locates every magusfile source in dir grouped by engine, in priority
 // order. Returns ErrNoMagusfile when nothing is found; errors when single-file
 // and magusfiles/ forms coexist.

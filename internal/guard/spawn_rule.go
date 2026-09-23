@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
@@ -25,14 +26,21 @@ import (
 // namespace workspace shell rules already use so a reader can tell it from a built-in.
 const workspaceSpawnRule = workspaceShellPrefix + "spawn"
 
-// advisorySpawnRuleFailed holds the notice about a broken workspace spawn rule to one
-// firing per session: the rule is broken on every spawn until someone edits it.
+// advisorySpawnRuleFailed names the notice that a workspace spawn rule judged nothing.
+// Each distinct set of failures is told in full once per session, since the rule stays
+// broken on every spawn until someone edits it.
 const advisorySpawnRuleFailed hint.MarkerKind = "workspace-spawn-failed"
 
 // spawnRuleTimeout bounds one workspace rule call. The shipped host wiring kills a hook at
 // ten seconds and reads that as a failed hook, so a rule that loops is cut off well inside
 // it and fails open like any other broken rule.
 const spawnRuleTimeout = 3 * time.Second
+
+// approvedResolveTimeout bounds resolving the approved rule: a VCS status, a read per
+// source and a second load. An agent can slow the status (untracked files, say), so running
+// out denies the spawn rather than dropping the side that would have judged it. With both
+// rule calls it stays inside the host's ten seconds.
+var approvedResolveTimeout = 3 * time.Second
 
 // The sides a verdict can be decided by, recorded on the trail so a deny links to the
 // policy that produced it.
@@ -86,7 +94,8 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	ctx = withJobStoreRows(ctx, at)
 
 	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
-	decided, failure := "", ""
+	decided := ""
+	var failures []trail.SpawnRuleFailure
 	if env.IsSpawn {
 		if verdict = spawnBuiltIns(ctx, req, who, at); verdict.Decision != "pass" {
 			decided = decidedByBuiltin
@@ -95,21 +104,22 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
 	if verdict.Decision != "deny" {
-		var answer types.SpawnVerdict
-		var by string
-		answer, by, failure = askSpawnRules(ctx, deps, spawnRequest(ctx, env, who, at, facts, req.Lease), facts, at.cacheDir)
+		asked := askSpawnRules(ctx, deps, spawnRequest(ctx, env, who, at, facts, req.Lease), facts)
+		failures = asked.failures
+		answer := asked.answer
 		switch {
 		case answer.Decision == types.SpawnDeny:
 			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: workspaceSpawnRule}
-			decided = by
+			decided = asked.by
 		case answer.Decision == types.SpawnAdvise && verdict.Decision == "pass":
 			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: answer.Reason, Rule: workspaceSpawnRule}
-			decided = by
+			decided = asked.by
 		case answer.Decision == types.SpawnAdvise:
 			// The built-in advice keeps its rule; the workspace's is added, never dropped.
 			verdict.Context += "\n\n" + answer.Reason
+			decided += decidedByJoin + asked.by
 		}
-		if note := hint.NewGate(at.cacheDir, who.callerKey()).Once(advisorySpawnRuleFailed, failure); note != "" && verdict.Decision != "deny" {
+		if note := spawnRuleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), failures, asked.answered); note != "" && verdict.Decision != "deny" {
 			if verdict.Decision == "advise" {
 				verdict.Context += "\n\n" + note
 			} else {
@@ -121,7 +131,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		policyDigest: digest,
 		decidedBy:    decided,
 		target:       resolveAgentID(facts, env.Target),
-		ruleFailure:  failure,
+		ruleFailures: failures,
 	})
 	if verdict.Decision != "deny" {
 		markAgentSeen(facts, env)
@@ -144,51 +154,111 @@ func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at loc
 	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 }
 
-// askSpawnRules runs the working-tree rule and, when the approved sources differ, the
-// approved rule, and keeps the stricter answer. An uncommitted edit that tightens applies
-// at once; one that loosens has no effect until it is approved.
+// decidedByJoin joins the sides that together reached a verdict, such as a built-in advice
+// a workspace rule added to.
+const decidedByJoin = "+"
+
+// spawnRulesAnswer is what the workspace's spawn rules said about one spawn.
+type spawnRulesAnswer struct {
+	answer types.SpawnVerdict
+	// by is the side whose answer stands, "" when none tightened anything.
+	by string
+	// answered are the sides whose rule ran and answered, in the order asked.
+	answered []string
+	// failures are the sides that judged nothing, and why.
+	failures []trail.SpawnRuleFailure
+}
+
+// askSpawnRules runs the approved rule and the working-tree rule and keeps the stricter
+// answer. An uncommitted edit that tightens applies at once; one that loosens has no effect
+// until it is approved.
 //
-// A rule that fails contributes nothing and is reported in failure, following
-// magus\guard.shell's standing on a broken workspace rule: the built-ins still apply and
-// the agent is not bricked by a typo in the magusfile.
+// The approved side is asked on every spawn, since only it can say whether it has a rule:
+// the working tree may have deleted its twin, or failed to load. It is asked first, so a
+// working-tree rule that loops cannot spend the time it needs.
 //
-// The approved side is asked only when some spawn rule exists now, existed the last time
-// the lineage recorded one, or cannot be known because the working tree failed to load:
-// that side can cost a VCS status and a second load, and a workspace that never registered
-// a rule should not pay for it on every spawn.
-func askSpawnRules(ctx context.Context, deps Dependencies, req types.SpawnRequest, facts hint.Gate, cacheDir string) (answer types.SpawnVerdict, by, failure string) {
-	type side struct {
-		by   string
-		rule workspace.SpawnRule
-	}
-	var failures []string
+// A rule that fails contributes nothing and is reported, following magus\guard.shell's
+// standing on a broken workspace rule: the built-ins still apply and the agent is not
+// bricked by a typo in the magusfile. The one exception is an approved rule that could not
+// be resolved in time, which denies: the time is the part an agent can spend.
+func askSpawnRules(ctx context.Context, deps Dependencies, req types.SpawnRequest, facts hint.Gate) spawnRulesAnswer {
+	var out spawnRulesAnswer
 	if deps.LoadFailure != nil {
-		failures = append(failures, "The working tree's magusfile failed to load, so only its approved magus\\guard.spawn rule and the built-in rules applied: "+deps.LoadFailure.Error())
+		out.failures = append(out.failures, trail.SpawnRuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + deps.LoadFailure.Error()})
 	}
-	sides := []side{{decidedByWorktree, deps.SpawnRule}}
-	if deps.ApprovedSpawnRule != nil && (deps.LoadFailure != nil || deps.SpawnRule != nil || policyHadSpawnRule(cacheDir)) {
-		resolveCtx, cancel := context.WithTimeout(ctx, spawnRuleTimeout)
-		sides = append(sides, side{decidedByApproved, deps.ApprovedSpawnRule(resolveCtx)})
-		cancel()
-	}
-	for _, s := range sides {
-		if s.rule == nil {
-			continue
+	ask := func(by string, rule workspace.SpawnRule) {
+		if rule == nil || out.answer.Decision == types.SpawnDeny {
+			return
 		}
 		callCtx, cancel := context.WithTimeout(ctx, spawnRuleTimeout)
-		got, err := s.rule(callCtx, req, facts)
+		got, err := rule(callCtx, req, facts)
 		cancel()
 		if err != nil {
-			failures = append(failures, "The workspace's magus\\guard.spawn rule failed on the "+s.by+" side, so that side judged nothing: "+err.Error())
-			continue
+			out.failures = append(out.failures, trail.SpawnRuleFailure{Side: by, Error: "the rule failed: " + err.Error()})
+			return
 		}
-		merged := types.StricterSpawnVerdict(answer, got)
-		if merged.Decision != answer.Decision {
-			by = s.by
+		out.answered = append(out.answered, by)
+		merged := types.StricterSpawnVerdict(out.answer, got)
+		if merged.Decision != out.answer.Decision {
+			out.by = by
 		}
-		answer = merged
+		out.answer = merged
 	}
-	return answer, by, strings.Join(failures, "\n\n")
+	if deps.ApprovedSpawnRule != nil {
+		resolveCtx, cancel := context.WithTimeout(ctx, approvedResolveTimeout)
+		rule, err := deps.ApprovedSpawnRule(resolveCtx)
+		expired := errors.Is(resolveCtx.Err(), context.DeadlineExceeded)
+		cancel()
+		switch {
+		case err == nil && rule != nil:
+			ask(decidedByApproved, rule)
+		case expired:
+			// "No rule" read under an expired deadline may be a read that failed, since the
+			// approved state reports an absent file and a failed read alike.
+			out.failures = append(out.failures, trail.SpawnRuleFailure{Side: decidedByApproved, Error: "resolving the rule took longer than " + approvedResolveTimeout.String()})
+			out.answer = types.SpawnVerdict{Decision: types.SpawnDeny, Reason: approvedRuleTimedOut}
+			out.by = decidedByApproved
+		case err != nil:
+			out.failures = append(out.failures, trail.SpawnRuleFailure{Side: decidedByApproved, Error: "the rule could not be resolved: " + err.Error()})
+		}
+	}
+	ask(decidedByWorktree, deps.SpawnRule)
+	return out
+}
+
+// approvedRuleTimedOut is the deny reason when the approved rule did not resolve in time.
+const approvedRuleTimedOut = "magus could not resolve the approved magus\\guard.spawn rule in time, so this spawn is " +
+	"denied rather than judged without it. Resolving it runs a VCS status and reloads the committed magusfile; " +
+	"retry once `git status` answers quickly in this checkout."
+
+// sideNames words each side for a reader.
+var sideNames = map[string]string{
+	decidedByWorktree: "working tree's magus\\guard.spawn rule",
+	decidedByApproved: "approved magus\\guard.spawn rule",
+}
+
+// spawnRuleFailureNote tells the reader which spawn rules judged this spawn when any
+// workspace rule could not, "" when none failed. A set of failures is told in full the
+// first time it fires in a session and as one line naming what applied on every repeat,
+// so the reader never takes a spawn for judged by a rule that was skipped.
+func spawnRuleFailureNote(gate hint.Gate, failures []trail.SpawnRuleFailure, answered []string) string {
+	if len(failures) == 0 {
+		return ""
+	}
+	applied := []string{"the built-in rules"}
+	for _, by := range answered {
+		applied = append(applied, "the "+sideNames[by])
+	}
+	summary := "Only " + strings.Join(applied, " and ") + " applied to this spawn."
+	var full strings.Builder
+	h := sha256.New()
+	for _, f := range failures {
+		full.WriteString("The " + sideNames[f.Side] + " judged nothing: " + f.Error + "\n\n")
+		_, _ = h.Write([]byte(f.Side + "\x00" + f.Error + "\x00"))
+	}
+	full.WriteString(summary)
+	kind := hint.MarkerKind(string(advisorySpawnRuleFailed) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))
+	return gate.OnceOrBrief(kind, full.String(), summary+" A workspace spawn rule is still failing, as told earlier in this session.")
 }
 
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is
@@ -220,7 +290,9 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 		if rows, err := leaseRows(ctx, at); err == nil {
 			for _, row := range rows {
 				if row.ID == id {
-					req.Lease = &row
+					// The rows are the pinned snapshot's own; the rule gets a copy it may keep.
+					lease := row.Clone()
+					req.Lease = &lease
 					break
 				}
 			}
@@ -292,8 +364,8 @@ func resolveAgentID(facts hint.Gate, addressed string) string {
 type spawnedAgent struct {
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name,omitempty"`
-	// DeclaredModel is the model the spawn named, "" when it named none.
-	DeclaredModel string `json:"model,omitempty"`
+	// Model is the model the spawn named, "" when it named none.
+	Model string `json:"model,omitempty"`
 	// Job is the live job the spawn's title named, "" when it named none.
 	Job string `json:"job,omitempty"`
 	// ContextTokens is the agent's last observed context size, nil until its host
@@ -324,7 +396,7 @@ func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, fac
 	rec := spawnedAgent{
 		Description:   env.Spawn.Description,
 		Name:          env.Spawn.Name,
-		DeclaredModel: env.DeclaredModel,
+		Model:         env.DeclaredModel,
 		ContextTokens: prev.ContextTokens,
 	}
 	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
@@ -386,7 +458,7 @@ func continueTarget(facts hint.Gate, addressed string, now time.Time) *types.Spa
 	id := resolveAgentID(facts, addressed)
 	target := &types.SpawnTarget{Agent: addressed, IdleMs: agentIdle(facts, id, now)}
 	if rec, ok := readSpawnedAgent(facts, id); ok {
-		target.Description, target.Model, target.ContextTokens = rec.Description, rec.DeclaredModel, rec.ContextTokens
+		target.Description, target.Model, target.ContextTokens = rec.Description, rec.Model, rec.ContextTokens
 	}
 	return target
 }

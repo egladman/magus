@@ -61,14 +61,15 @@ type Dependencies struct {
 	// registered. It is called on every spawn and continuation and can only add to
 	// the built-in verdict.
 	SpawnRule workspace.SpawnRule
-	// ApprovedSpawnRule resolves the same rule as the approved sources register it, nil
-	// when those sources are the working tree's or register none. Resolved lazily because
-	// it can load the magusfile a second time, which only a spawn is worth.
-	ApprovedSpawnRule func(ctx context.Context) workspace.SpawnRule
+	// ApprovedSpawnRule resolves the same rule as the approved sources register it: nil
+	// with no error when those sources are the working tree's or register none, and an
+	// error when they could not be evaluated. Resolved lazily because it can load the
+	// magusfile a second time, which only a spawn is worth. Nil when the workspace has no
+	// approval authority wired.
+	ApprovedSpawnRule func(ctx context.Context) (workspace.SpawnRule, error)
 	// LoadFailure is why the working tree's workspace did not load, nil when it loaded or
 	// there is none. SpawnRule is then nil because nothing could be read, not because no
-	// rule is registered, so the approved side is asked regardless and the failure is
-	// reported beside the verdict.
+	// rule is registered, and the failure is reported beside the verdict.
 	LoadFailure error
 	// Policy describes the effective workspace rules for the lineage the trail keeps,
 	// nil when the caller cannot say. See RecordPolicy.
@@ -1080,8 +1081,8 @@ type spawnVerdictRecord struct {
 	decidedBy    string
 	// target is the agent a continuation addresses, resolved to its id when magus knows it.
 	target string
-	// ruleFailure is why a workspace spawn rule judged nothing, "" when every rule answered.
-	ruleFailure string
+	// ruleFailures are the workspace spawn rules that judged nothing, and why.
+	ruleFailures []trail.SpawnRuleFailure
 }
 
 // appendHookSpawn records a spawn or a continuation into the same trail, so a person
@@ -1099,8 +1100,9 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
 		PolicyDigest:  rec.policyDigest,
 		DecidedBy:     rec.decidedBy,
+		Continue:      req.IsContinue,
 		Target:        rec.target,
-		RuleFailure:   rec.ruleFailure,
+		RuleFailures:  rec.ruleFailures,
 		Actor:         "agent",
 		Workspace:     location.workspace,
 		Host:          who.Host,

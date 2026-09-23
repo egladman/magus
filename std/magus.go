@@ -1333,7 +1333,7 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 		if snap.Err != nil {
 			return types.JobList{}, snap.Err
 		}
-		return types.NewJobList(snap.Rows), nil
+		return types.NewJobList(snap.Clone().Rows), nil
 	}
 	store, err := jobStoreFromContext(ctx, "job.list")
 	if err != nil {
