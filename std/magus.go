@@ -467,6 +467,19 @@ var Magus = Module{
 			}},
 		},
 		{
+			Name: "queue",
+			Doc: "Where `magus vcs queue` finds the changes waiting to merge. One member, like " +
+				"review: listing changes, checking approval at a commit, posting the magus/queue " +
+				"status, merging and kicking back are reserved names on the provider spell (see " +
+				"spells/queue.go). Running the queue with no provider wired is an error.",
+			Methods: []Method{{
+				Name:   "provider",
+				Doc:    "Select the merge-queue provider, given an imported spell handle.",
+				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
+				Extern: true,
+			}},
+		},
+		{
 			Name: "workspace",
 			Doc:  "Workspace-level declarations made from the root magusfile.",
 			Methods: []Method{{

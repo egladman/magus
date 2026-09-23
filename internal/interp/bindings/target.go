@@ -140,6 +140,30 @@ func buildReview(_ context.Context, obs buzz.DirectObserver) vm.Value {
 	return review
 }
 
+// buildQueue assembles magus\queue for a magusfile. provider() wires an imported spell as
+// the host `magus vcs queue` lists, approves, merges and kicks back changes through:
+//
+//	import "spells/github/queue" as github_queue
+//	magus\queue.provider(github_queue)
+//
+// One member, like magus\review: the queue's ops are reserved names on the spell (see
+// spells/queue.go). Wiring none is ordinary until someone runs the queue, which refuses.
+func buildQueue(_ context.Context, obs buzz.DirectObserver) vm.Value {
+	q := vm.NewMap()
+	q.MapSet("provider", directVal(obs, "magus.queue.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf(`magus\queue.provider: expected an imported spell handle`)
+		}
+		nv, ok := args[0].MapGet("name")
+		if !ok || !nv.IsStr() || nv.AsString() == "" {
+			return vm.Null, fmt.Errorf(`magus\queue.provider: argument is not a spell handle (no name)`)
+		}
+		SetQueueProvider(nv.AsString())
+		return vm.Null, nil
+	}))
+	return q
+}
+
 // buildSecret assembles magus\secret for a magusfile. provider() wires an imported
 // spell as this workspace's secret backend; read() reads one credential through it:
 //

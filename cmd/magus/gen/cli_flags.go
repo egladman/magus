@@ -535,6 +535,12 @@ const (
 	FlagVCSAddUntracked = "untracked"
 	// vcs checkpoint: --preserve
 	FlagVCSCheckpointPreserve = "preserve"
+	// vcs queue: --base
+	FlagVCSQueueBase = "base"
+	// vcs queue: --remote
+	FlagVCSQueueRemote = "remote"
+	// vcs queue: --target
+	FlagVCSQueueTarget = "target"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
 	// version: --client
@@ -1157,6 +1163,22 @@ type VCSCheckpointFlags struct {
 func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
 	var f VCSCheckpointFlags
 	fs.BoolVar(&f.Preserve, FlagVCSCheckpointPreserve, false, "Also capture the uncommitted work and print a handle that restores it")
+	return &f
+}
+
+// VCSQueueFlags are the flags declared for `magus vcs queue`.
+type VCSQueueFlags struct {
+	Base   string // --base
+	Remote string // --remote
+	Target string // --target
+}
+
+// BindVCSQueue registers `magus vcs queue`'s flags on fs and returns the destination.
+func BindVCSQueue(fs *flag.FlagSet) *VCSQueueFlags {
+	var f VCSQueueFlags
+	fs.StringVar(&f.Base, FlagVCSQueueBase, "", "The `branch` the queue merges into; defaults to the repository's default branch")
+	fs.StringVar(&f.Remote, FlagVCSQueueRemote, "origin", "The `remote` changes and the base branch are fetched from")
+	fs.StringVar(&f.Target, FlagVCSQueueTarget, "ci", "The `target` `magus affected` validates each staging commit with")
 	return &f
 }
 

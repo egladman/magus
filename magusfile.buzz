@@ -103,6 +103,12 @@ if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
 // supplies the job-log structure AND answers last_green_run, which is what
 // lets `affected ci --plan` inherit a green run's verdict on a low-risk push.
 magus\ci.provider(github);
+
+// The merge queue's host side: `magus vcs queue` lists pull requests with auto-merge
+// enabled, and approves, merges and kicks back through it. Unconditional because nothing
+// calls it except that verb, which needs GITHUB_TOKEN.
+import "spells/github/queue" as github_queue;
+magus\queue.provider(github_queue);
 magus\harness.provider(cursor);
 magus\harness.provider(codex);
 magus\harness.provider(claude);

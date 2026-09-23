@@ -1514,13 +1514,24 @@ until you remove them. List them with sl log --hidden -r "desc('magus preserved
 working copy')". Jujutsu mints nothing, so nothing accumulates.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
-base in yourself on the others, then run resolve.`,
+base in yourself on the others, then run resolve.
+
+queue runs the merge queue once. The provider spell the root magusfile wires with
+magus\queue.provider lists every change carrying merge intent (on GitHub, auto-merge
+enabled). Each one approved at its head commit is staged on the base branch, its
+generated files are regenerated there, and magus affected <target> validates the
+result; on green it merges through the provider, which re-checks approval at the
+tested commit. Changes whose affected closures are disjoint validate together and
+merge independently; overlapping ones stack in queue order and bisect on failure. A
+conflict in a file no target regenerates, or a red gate, kicks the change back with
+the overlap report. It needs a clean git checkout it may move, so run it in CI;
+--dry-run plans and touches nothing.`,
 	// No parent Flags: neither flag belongs to `magus vcs`, which takes none of
 	// its own. They were declared here with the owning subcommand named in the doc
 	// text ("(vcs resolve)", "(vcs add)") because a child could not carry flags,
 	// which put them in one merged Options section on the man page and made a
 	// generated binder for either child bind both.
-	Usage: "magus vcs <add|resolve|checkpoint|merge-driver> [flags]",
+	Usage: "magus vcs <add|resolve|checkpoint|queue|merge-driver> [flags]",
 	Children: []Command{
 		{
 			Name:  "add",
@@ -1545,6 +1556,15 @@ base in yourself on the others, then run resolve.`,
 			},
 		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
+		{
+			Name:  "queue",
+			Short: "Run the merge queue once: stage, regenerate, validate and merge every change carrying merge intent",
+			Flags: []Flag{
+				{Name: "base", Kind: FlagString, Doc: "The `branch` the queue merges into; defaults to the repository's default branch"},
+				{Name: "remote", Kind: FlagString, Default: "origin", Doc: "The `remote` changes and the base branch are fetched from"},
+				{Name: "target", Kind: FlagString, Default: "ci", Doc: "The `target` `magus affected` validates each staging commit with"},
+			},
+		},
 	},
 	Examples: []Example{
 		{"Stage a change without sweeping in build residue", "magus vcs add"},
@@ -1555,6 +1575,8 @@ base in yourself on the others, then run resolve.`,
 		{"Record what a lease was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
 		{"Capture the uncommitted work too, before something risky", "magus vcs checkpoint --preserve"},
+		{"Run the merge queue once", "magus vcs queue"},
+		{"Plan the queue without staging, posting or merging", "magus vcs queue --dry-run"},
 	},
 }
 

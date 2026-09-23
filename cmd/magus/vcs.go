@@ -49,11 +49,13 @@ func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error
 		return vcsCheckpointCmd(ctx, root, rest)
 	case "merge-driver":
 		return mergeDriverCmd(ctx, root, rest)
+	case "queue":
+		return vcsQueueCmd(ctx, root, rest)
 	case "-h", "--help", "help":
 		vcsUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, or merge-driver)", verb)
+		return usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, queue, or merge-driver)", verb)
 	}
 }
 
@@ -78,6 +80,7 @@ func vcsUsage(w io.Writer) {
 	fmt.Fprintln(w, "  add            stage a change the way this workspace's declarations say it should be staged")
 	fmt.Fprintln(w, "  resolve        settle an in-progress merge/rebase's conflicted generated files, then regenerate once")
 	fmt.Fprintln(w, "  checkpoint     print the identity of the working state right now; writes nothing")
+	fmt.Fprintln(w, "  queue          run the merge queue once: stage, regenerate, validate, merge")
 	fmt.Fprintln(w, "  merge-driver   the per-file merge driver git and hg invoke; you do not run this by hand")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run `magus vcs <subcommand> -h` for its own flags.")

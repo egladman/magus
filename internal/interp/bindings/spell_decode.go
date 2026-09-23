@@ -68,6 +68,19 @@ func intField(m map[string]any, key, where string) (int, error) {
 	return 0, fmt.Errorf("%s: field %q is %T, want int", where, key, v)
 }
 
+// boolField reads an optional bool field.
+func boolField(m map[string]any, key, where string) (bool, error) {
+	v, present := m[key]
+	if !present || v == nil {
+		return false, nil
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return false, fmt.Errorf("%s: field %q is %T, want bool", where, key, v)
+	}
+	return b, nil
+}
+
 // strListField reads an optional [str] field, rejecting a non-string element rather
 // than dropping it: a dropped dependency or source glob is a silently wrong cache
 // key, which is the failure this whole decoder exists to prevent.

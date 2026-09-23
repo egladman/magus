@@ -714,6 +714,11 @@ export object review {
     static extern fun provider(spell: {str: any}) > void;
 }
 
+// Where `magus vcs queue` finds the changes waiting to merge. One member, like review: listing changes, checking approval at a commit, posting the magus/queue status, merging and kicking back are reserved names on the provider spell (see spells/queue.go). Running the queue with no provider wired is an error.
+export object queue {
+    static extern fun provider(spell: {str: any}) > void;
+}
+
 // Workspace-level declarations made from the root magusfile.
 export object workspace {
     static extern fun provider(spell: {str: any}) > void;

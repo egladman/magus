@@ -107,6 +107,7 @@ var commandsWithoutOutput = map[string]bool{
 	"server rotate-logs":       true,
 	"server start":             true,
 	"server stop":              true,
+	"vcs queue":                true,
 	"vcs resolve":              true,
 }
 
