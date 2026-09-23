@@ -38,6 +38,7 @@ export function checkLocalStorageAlert(
   try {
     bytes = estimateStorageBytes(area);
   } catch {
+    // not-a-failure: storage that cannot be read cannot be filling up
     return;
   }
   if (bytes < LOCALSTORAGE_WARN_BYTES) return;

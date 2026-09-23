@@ -73,11 +73,16 @@ type Options struct {
 	// Nil builds a private one, which is correct for a single-door server (the stdio MCP
 	// process) and wrong for the daemon, where the daemon sets it.
 	Jobs *job.Store
+
+	// Unavailable, with a nil Magus, is why the workspace is not loaded. Every tool stays
+	// listed and answers it as a tool error, so an agent reads the diagnostic rather than
+	// finding no server. Read per call: the answer moves from failed to loading.
+	Unavailable func() error
 }
 
 func (o Options) validate() error {
-	if o.Magus == nil {
-		return errors.New("mcp: Options.Magus is required")
+	if o.Magus == nil && o.Unavailable == nil {
+		return errors.New("mcp: Options.Magus or Options.Unavailable is required")
 	}
 	return nil
 }

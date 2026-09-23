@@ -389,7 +389,7 @@ func TestCrossProjectOutputReplaysFromCache(t *testing.T) {
 	// does not perturb producer's own source hash and invalidate the entry under test.
 	write("producer/magusfile.buzz", `import "magus";
 import "fs";
-import "project/../site" as site;
+import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles(site.file("generated.txt"));
@@ -447,7 +447,7 @@ func TestCrossProjectOutputMustBeProduced(t *testing.T) {
 	write("site/magusfile.buzz", "")
 	write("producer/magusfile.buzz", `import "magus";
 import "fs";
-import "project/../site" as site;
+import "project/../site";
 
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("own.txt", site.file("generated.txt"));

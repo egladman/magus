@@ -1,0 +1,66 @@
+# magus\guard.spawn's committed-vs-worktree policy, through the real `magus shell` a
+# hook invokes: an uncommitted TIGHTEN applies live, an uncommitted LOOSEN waits for a
+# commit while the committed side still denies, and committing the loosening lets it
+# take effect. Also checks that registering the rule leaves a guard_policy line on the
+# activity trail (internal/guard/policy.go's RecordPolicy).
+#
+# guard_policy_test.go (package magus) used to cover this directly against Inspect, but
+# that package is deliberately free of the Buzz VM (see register_test.go's init), so a
+# magusfile\guard.spawn rule never actually registers there. This script runs the real
+# binary instead, the same as guard_git.txtar does for the VCS rules.
+
+exec git init -q
+exec git config user.email test@example.com
+exec git config user.name Test
+
+# Baseline: the committed rule only advises.
+cp rule-advise.buzz magusfile.buzz
+exec git add magusfile.buzz
+exec git commit -q -m baseline
+
+# (a) TIGHTEN, live: an uncommitted deny in the working tree answers immediately, no
+# commit required.
+cp rule-deny.buzz magusfile.buzz
+stdin spawn.json
+! exec magus shell
+stdout 'deny \[workspace:spawn\]: no spawning here'
+
+# Commit the tightening, so the approved side denies too.
+exec git commit -q -am tighten
+
+# (b) LOOSEN, uncommitted: the working tree now allows, but the committed deny is
+# stricter and still wins until the loosening is committed.
+cp rule-allow.buzz magusfile.buzz
+stdin spawn.json
+! exec magus shell
+stdout 'deny \[workspace:spawn\]: no spawning here'
+
+# (c) Commit the loosening: the approved side catches up and the spawn is allowed.
+exec git commit -q -am loosen
+stdin spawn.json
+exec magus shell
+! stdout 'deny'
+
+# Each change to the effective rules left one guard_policy event on the trail.
+grep '"kind":"guard_policy"' .magus/activity/events.jsonl
+
+-- rule-advise.buzz --
+import "magus";
+
+magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+    return magus\guard.advise("advise from the rule");
+});
+-- rule-deny.buzz --
+import "magus";
+
+magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+    return magus\guard.deny("no spawning here");
+});
+-- rule-allow.buzz --
+import "magus";
+
+magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+    return magus\guard.allow();
+});
+-- spawn.json --
+{"session_id": "s1", "tool_name": "Agent", "tool_input": {"prompt": "find every caller", "subagent_type": "explore"}}

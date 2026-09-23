@@ -134,6 +134,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	guard := vm.NewMap()
 	guard.MapSet("shell", fn("magus.guard.shell", retNull))
 	guard.MapSet("bash", fn("magus.guard.bash", retNull))
+	guard.MapSet("spawn", fn("magus.guard.spawn", retNull))
 	m.MapSet("guard", guard)
 	harness := vm.NewMap()
 	harness.MapSet("provider", fn("magus.harness.provider", retNull))

@@ -92,6 +92,7 @@ export async function fetchRuns(host: string, token: string | null): Promise<Run
       duration_ms: durMillis(o.duration),
     }));
   } catch {
+    // reported: by the daemon transport
     return [];
   }
 }
@@ -110,6 +111,7 @@ export async function fetchRunOutput(
     // valid UTF-8. Decoded here because this viewer renders text.
     return new TextDecoder().decode(resp.body);
   } catch {
+    // reported: by the daemon transport
     return null;
   }
 }
@@ -132,6 +134,7 @@ export async function fetchRunLogs(host: string, token: string | null): Promise<
       size_bytes: Number(i.sizeBytes),
     }));
   } catch {
+    // reported: by the daemon transport
     return [];
   }
 }
@@ -154,6 +157,7 @@ export async function fetchRunJournal(
     );
     return toBinary(JournalSchema, journal);
   } catch {
+    // reported: by the daemon transport
     return null;
   }
 }

@@ -11,7 +11,7 @@ import {
   parseHash,
   daemonAttach,
   resolveDaemonHostOrRemembered,
-  consumeLiveToken,
+  adoptDaemonOrigin,
   wantsDemo,
   logsLink,
 } from "../../lib/daemon";
@@ -604,7 +604,10 @@ const UPDATE_POLL_MS = 15 * 60 * 1000;
 
 function pollForNewVersion(reg: ServiceWorkerRegistration): void {
   const check = () => {
-    reg.update().catch(() => {});
+    reg.update().catch((e: unknown) => {
+      // not-a-failure: an update check that misses (offline, daemon restarting) retries next interval
+      console.debug("sw update check", e);
+    });
   };
   check(); // on boot, so a tab restored from the bfcache is current straight away
   setInterval(check, UPDATE_POLL_MS);
@@ -761,7 +764,11 @@ export function activate(): void {
   window.addEventListener("offline", updateOffline, { signal: sig });
 
   const params = parseHash();
-  consumeLiveToken(params);
+  // adoptDaemonOrigin, not only consumeLiveToken: lib/daemon's adopted-origin flag is per-bundle, so
+  // the shell setting it leaves it false here. With no #port and no Settings address, daemonAttach
+  // then returned null on the console served BY the daemon, and on localhost the remembered-host
+  // fallback rejects the name too, so the dashboard sat on "No daemon connected".
+  adoptDaemonOrigin();
 
   // A `#big-picture` fragment enters the presentation mode with NO user gesture, which is the whole
   // reason it exists: the Fullscreen API requires one, so a TV, an HDMI stick, or a kiosk browser

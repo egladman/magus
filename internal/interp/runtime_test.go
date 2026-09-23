@@ -21,6 +21,57 @@ type rootWorkspace struct {
 
 func (w rootWorkspace) Root() string { return w.root }
 
+// An overlay entry is the more specific answer, so it outranks the reader; a path neither
+// covers still comes from the disk only when no reader was supplied.
+func TestReadSourcePrecedence(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte("disk"), 0o644))
+
+	got, err := readSource(context.Background(), path)
+	require.NoError(t, err)
+	assert.Equal(t, "disk", string(got))
+
+	read := func(string) ([]byte, error) { return []byte("revision"), nil }
+	ctx := WithSourceReader(context.Background(), read)
+	got, err = readSource(ctx, path)
+	require.NoError(t, err)
+	assert.Equal(t, "revision", string(got))
+
+	got, err = readSource(WithOverlay(ctx, map[string]string{path: "overlay"}), path)
+	require.NoError(t, err)
+	assert.Equal(t, "overlay", string(got))
+}
+
+// The id must be the one git itself assigns, or the trail's blob ids name nothing a
+// reader can `git cat-file`.
+func TestGitBlobIDMatchesGit(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "ce013625030ba8dba906f756967f9e9ca394464a", GitBlobID([]byte("hello\n")))
+	assert.Equal(t, "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", GitBlobID(nil))
+}
+
+// A load's log records what the reader actually returned, so a revision's bytes are
+// logged under the revision's id rather than the disk's.
+func TestSourceLogRecordsWhatTheLoadRead(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte("hello\n"), 0o644))
+
+	var log SourceLog
+	_, err := readSource(WithSourceLog(context.Background(), &log), path)
+	require.NoError(t, err)
+	assert.Equal(t, []SourceFile{{Path: path, BlobID: "ce013625030ba8dba906f756967f9e9ca394464a"}}, log.Files())
+
+	var revised SourceLog
+	ctx := WithSourceLog(WithSourceReader(context.Background(), func(string) ([]byte, error) { return nil, nil }), &revised)
+	_, err = readSource(ctx, path)
+	require.NoError(t, err)
+	assert.Equal(t, []SourceFile{{Path: path, BlobID: "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"}}, revised.Files())
+}
+
 func TestMagusSearchPaths(t *testing.T) {
 	t.Parallel()
 	j := filepath.Join
@@ -120,7 +171,7 @@ func TestCheckRemoteSpellImports(t *testing.T) {
 	require.NoError(t, err)
 	declared := types.WithWorkspace(t.Context(), importsWorkspace{rootWorkspace{root: root}, im})
 
-	assert.NoError(t, checkRemoteSpellImports(t.Context(), `import "spells/local" as local;`))
+	assert.NoError(t, checkRemoteSpellImports(t.Context(), `import "spells/local";`))
 	assert.NoError(t, checkRemoteSpellImports(declared, `import "`+lint+`";`))
 	assert.NoError(t, checkRemoteSpellImports(t.Context(), `// import "ghcr.io/team/spells/fmt";`+"\n"), "a comment imports nothing")
 

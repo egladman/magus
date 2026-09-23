@@ -498,6 +498,11 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
+export object SpawnVerdict {
+    decision: str = "",
+    reason: str = "",
+}
+
 export object LeaseCheck {
     target: str = "",
     project: str = "",
@@ -610,6 +615,31 @@ export object Job {
     lastRun: JobRun? = null,
 }
 
+export object SpawnTarget {
+    agent: str = "",
+    idleMs: int? = null,
+    description: str = "",
+    model: str = "",
+    contextTokens: int? = null,
+}
+
+export object SpawnRequest {
+    kind: str = "",
+    host: str = "",
+    session: str = "",
+    model: str = "",
+    agentType: str = "",
+    description: str = "",
+    name: str = "",
+    prompt: str = "",
+    background: bool = false,
+    isolated: bool = false,
+    parent: str = "",
+    role: str = "",
+    lease: Job? = null,
+    target: SpawnTarget? = null,
+}
+
 export object JobOverlap {
     jobA: str = "",
     jobB: str = "",
@@ -693,8 +723,14 @@ export object ci {
 
 // Additive agent-guard rules for this workspace. Strengthen only: they cannot disable a compiled built-in.
 export object guard {
+    static extern fun advise(text: str) > SpawnVerdict;
+    static extern fun allow() > SpawnVerdict;
     static extern fun bash(rule: {str: any}) > void;
+    static extern fun count(key: str) > int;
+    static extern fun deny(text: str) > SpawnVerdict;
+    static extern fun once(key: str) > bool;
     static extern fun shell(rule: {str: any}) > void;
+    static extern fun spawn(rule: Function) > void;
 }
 
 // Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.
@@ -711,11 +747,6 @@ export object secret {
 
 // Where this workspace's changes are discussed. One member: a magusfile says WHERE reviews live and does not conduct one, so opening a review, reading its threads and publishing drafts are reserved names on the provider spell instead (see spells/review.go). Wiring no provider is the ordinary state and never an error: the workspace reviews locally.
 export object review {
-    static extern fun provider(spell: {str: any}) > void;
-}
-
-// Where `magus vcs queue` finds the changes waiting to merge. One member, like review: listing changes, checking approval at a commit, posting the magus/queue status, merging and kicking back are reserved names on the provider spell (see spells/queue.go). Running the queue with no provider wired is an error.
-export object queue {
     static extern fun provider(spell: {str: any}) > void;
 }
 

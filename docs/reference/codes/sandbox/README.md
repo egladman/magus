@@ -117,6 +117,8 @@ Two layers run together:
 - [MGS3012](MGS3012.md): invocation stalled with its project locks held.
 - [MGS3013](MGS3013.md): every build slot held by a step that is itself waiting.
 - [MGS3014](MGS3014.md): gate superseded by a later gate on the same tree.
+- [MGS3016](MGS3016.md): a daemon call against a workspace that failed to load.
+- [MGS3017](MGS3017.md): a daemon call against a workspace still loading.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not

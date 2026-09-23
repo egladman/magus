@@ -453,6 +453,11 @@ func collectMirrors(mod std.Module) ([]string, error) {
 				return nil, fmt.Errorf("namespace %s: %w", ns.Name, err)
 			}
 		}
+		for _, name := range ns.Objects {
+			if err := visit(name); err != nil {
+				return nil, fmt.Errorf("namespace %s: %w", ns.Name, err)
+			}
+		}
 	}
 	return order, nil
 }

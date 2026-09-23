@@ -41,9 +41,9 @@ stderr '--skip applies to the run selection'
 concurrency: 1
 -- magusfile.buzz --
 import "magus";
-import "spells/acme" as acme;
-import "project/api" as api;
-import "project/web" as web;
+import "spells/acme";
+import "project/api";
+import "project/web";
 magus.project({ "spells": [acme] });
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- api/magusfile.buzz --

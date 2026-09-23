@@ -191,6 +191,7 @@ export function mountSharePanel(): SharePanel {
     try {
       encodeToCanvas(canvas, url, 240);
     } catch {
+      // reported: the QR frame shows its failed state, and the link below still works.
       // A payload too large for the encoder should never happen for a LAN URL, but
       // never let a QR failure hide the URL itself - the copy line below still works.
       qrFrame.classList.add("console-shell-share__qr--failed");
@@ -275,6 +276,7 @@ export function mountSharePanel(): SharePanel {
         cache: "no-store",
       });
     } catch {
+      // reported: the toast below
       trigger.disabled = false;
       showToast(
         "Share",
@@ -290,7 +292,7 @@ export function mountSharePanel(): SharePanel {
         const errBody = await res.json();
         if (errBody && typeof errBody.error === "string") msg = errBody.error;
       } catch {
-        /* non-JSON error body: keep the generic message */
+        // reported: a non-JSON error body keeps the generic message the toast below shows
       }
       showToast("Share", msg, "error");
       return;
@@ -300,6 +302,7 @@ export function mountSharePanel(): SharePanel {
     try {
       data = await res.json();
     } catch {
+      // reported: the toast below
       trigger.disabled = false;
       showToast("Share", "The daemon returned an unreadable share response.", "error");
       return;

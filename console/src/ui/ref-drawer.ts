@@ -23,6 +23,7 @@ async function loadRefIndex(signal?: AbortSignal): Promise<RefEntry[] | null> {
   try {
     base = import.meta.url.replace(/[^/]*$/, "");
   } catch {
+    // not-a-failure: no module URL means the candidates resolve against the page instead
     base = "";
   }
   const candidates = base
@@ -35,7 +36,7 @@ async function loadRefIndex(signal?: AbortSignal): Promise<RefEntry[] | null> {
       const data = (await r.json()) as RefEntry[];
       if (Array.isArray(data)) return data;
     } catch {
-      /* try the next candidate */
+      // reported: when no candidate loads, the drawer says "Search needs the docs site."
     }
   }
   return null;
@@ -377,6 +378,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
       try {
         return new URL("../" + rel, window.location.href).href;
       } catch {
+        // not-a-failure: the relative path is the same link, resolved by the browser instead
         return "../" + rel;
       }
     };

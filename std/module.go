@@ -165,6 +165,11 @@ type Namespace struct {
 	// the runtime assembles it, so there is no Impl to generate a trampoline from.
 	// Validation enforces it rather than trusting the author.
 	Methods []Method
+	// Objects names boundary objects the namespace hands to or takes from a CALLBACK the
+	// magusfile registers, which no method signature can name: guard.spawn's argument is a
+	// function, and its parameter type lives only in the author's annotation. Listing
+	// them here is what declares them to the checker.
+	Objects []string
 }
 
 // Method declares one host function bound into the VM.

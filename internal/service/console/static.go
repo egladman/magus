@@ -4,8 +4,15 @@ import (
 	"bytes"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"connectrpc.com/connect"
+
+	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/types"
 )
 
 // consoleCSP is the Content-Security-Policy served with every console HTML document, on BOTH
@@ -34,8 +41,8 @@ const consoleCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'uns
 // The decoupled console is a single shell page that reads its surface from the URL PATH, so a
 // bare /console/<surface>/ request (one of KnownSurfaces) must return the shell (not the static
 // directory listing that physically lives there), so the console's boot router can open that
-// surface. Every real file (the /console/ root index, the bundles, css, assets, and each
-// surface's sub-path files) serves normally through the FileServer.
+// surface. A real file serves through the FileServer only when it is part of the app shell
+// (see shellExtensions); anything else in consoleDir, and any directory listing, is a 404.
 func StaticHandler(consoleDir string) http.Handler {
 	fileServer := http.StripPrefix("/console/", http.FileServer(http.Dir(consoleDir)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +91,44 @@ func StaticHandler(consoleDir string) http.Handler {
 			serveConsoleShell(cw, r, consoleDir)
 			return
 		}
+		if !isShellFile(consoleDir, r.URL.Path) {
+			httpx.FormatJSON.Write(w, r, rpcerr.Error{
+				Code:    connect.CodeNotFound,
+				Reason:  types.ConsoleFileWithheld,
+				Title:   "console file withheld",
+				Message: "the console mount serves only the app shell without a token; read data through the authenticated API",
+			})
+			return
+		}
 		fileServer.ServeHTTP(cw, r)
 	})
+}
+
+// shellExtensions is every file type the app shell is built from. The handler is
+// unauthenticated, and the console dir also holds files that are not shell: the hosted demo's
+// graph JSON is a whole workspace's knowledge graph, notes included. An allowlist, not a
+// denylist, so the next data file the build copies in is refused without anyone naming it.
+var shellExtensions = map[string]bool{
+	".html": true, ".js": true, ".css": true, ".webmanifest": true,
+	".svg": true, ".png": true, ".ico": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
+	".woff": true, ".woff2": true, ".ttf": true, ".otf": true,
+}
+
+// isShellFile reports whether urlPath (under /console/) names a file the unauthenticated
+// handler may serve. A directory request is allowed only when it holds an index.html, which
+// FileServer serves in place of the listing that would otherwise name every file there.
+func isShellFile(consoleDir, urlPath string) bool {
+	name := path.Clean("/" + strings.TrimPrefix(urlPath, "/console/"))
+	for seg := range strings.SplitSeq(name, "/") {
+		if strings.HasPrefix(seg, ".") {
+			return false
+		}
+	}
+	if name == "/" || strings.HasSuffix(urlPath, "/") {
+		fi, err := os.Stat(filepath.Join(consoleDir, filepath.FromSlash(name), "index.html"))
+		return err == nil && fi.Mode().IsRegular()
+	}
+	return shellExtensions[strings.ToLower(path.Ext(name))]
 }
 
 // serveConsoleShell writes the console shell (index.html) for a clean /console/<surface>/ route,

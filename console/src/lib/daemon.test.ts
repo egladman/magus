@@ -6,6 +6,7 @@ import {
   daemonAttach,
   adoptDaemonOrigin,
   isReadOnly,
+  mayLoadBundledDemo,
 } from "./daemon";
 
 // The loopback lock and the #port/LAN-share grammar. validateLoopbackHost is the pure
@@ -68,6 +69,15 @@ test("daemonAttach expands #port to the literal loopback IP, rejecting a bad por
   assert.equal(daemonAttach({}), null); // no attach directive, no origin adoption
 });
 
+// The bundled demo graph is this repo's real graph, notes included: an attached surface whose
+// live connection failed must not fall back to it.
+test("mayLoadBundledDemo is refused under a daemon attach", () => {
+  assert.equal(mayLoadBundledDemo({ demo: "" }), true);
+  assert.equal(mayLoadBundledDemo({ q: "notes" }), true);
+  assert.equal(mayLoadBundledDemo({ port: "7391", demo: "" }), false);
+  assert.equal(mayLoadBundledDemo({ port: "7391", q: "notes" }), false);
+});
+
 // withBrowserGlobals stubs the minimal DOM surface adoptDaemonOrigin/consumeLiveToken touch
 // (storage + history), plus the fuller location they read, for the duration of fn.
 function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
@@ -113,6 +123,8 @@ test("a LAN-share origin resolves the daemon to the page's own LAN origin (not l
       assert.equal(isReadOnly(), true);
       // The device must keep talking to the EXACT LAN IP:port it loaded from - never 127.0.0.1.
       assert.equal(daemonAttach({}), "192.168.1.42:8787");
+      // A daemon-origin page is attached, so the bundled demo is off even with #demo set.
+      assert.equal(mayLoadBundledDemo({ demo: "" }), false);
     },
   );
 });

@@ -805,7 +805,8 @@ func charmCall(e *ast.CallExpr) (string, bool) {
 // spellHandle returns the handle a spell import binds, and ok=true when the import
 // is a spell. Built-in spells (`import "magus/spell/<name>"`) and remote spells
 // (`import "ghcr.io/<...>/<name>"`) bind under the basename; workspace spells are
-// `import "spells/<...>" as <alias>`. An explicit alias wins over the basename.
+// `import "spells/<...>" as <alias>`. An explicit alias wins over the basename;
+// BZZ1008 refuses one that merely repeats it.
 func spellHandle(s *ast.ImportStmt) (string, bool) {
 	switch {
 	case spells.IsEmbeddedImport(s.Path) || spells.IsRemoteImport(s.Path):

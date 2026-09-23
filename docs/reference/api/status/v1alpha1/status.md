@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, statusservice]
 
 StatusService serves the snapshot, and streams it for a live dashboard.
 
-Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Source: [status.proto:187](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L187). Part of the [daemon API](../../index.md).
+Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Source: [status.proto:199](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L199). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -17,7 +17,7 @@ Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.
 
 GetStatus returns the current snapshot.
 
-`POST /magus.status.v1alpha1.StatusService/GetStatus`: unary. Source: [status.proto:189](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L189).
+`POST /magus.status.v1alpha1.StatusService/GetStatus`: unary. Source: [status.proto:201](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L201).
 
 Takes [GetStatusRequest](#getstatusrequest), returns [GetStatusResponse](#getstatusresponse).
 
@@ -25,7 +25,7 @@ Takes [GetStatusRequest](#getstatusrequest), returns [GetStatusResponse](#getsta
 
 StreamStatus pushes a fresh snapshot whenever the pool changes (or on a heartbeat), so a dashboard reflects what is running without polling.
 
-`POST /magus.status.v1alpha1.StatusService/StreamStatus`: server streaming. Source: [status.proto:192](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L192).
+`POST /magus.status.v1alpha1.StatusService/StreamStatus`: server streaming. Source: [status.proto:204](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L204).
 
 Takes [StreamStatusRequest](#streamstatusrequest), returns [StreamStatusResponse](#streamstatusresponse).
 
@@ -35,7 +35,7 @@ Takes [StreamStatusRequest](#streamstatusrequest), returns [StreamStatusResponse
 
 BuildInfo identifies the running magus binary: the version tag, the commit it was built from, the build date, and the full human fingerprint (what `magus --version` prints). Reported so a dashboard shows exactly which daemon it is talking to. All fields are "unknown" for an unstamped dev build.
 
-Source: [status.proto:68](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L68).
+Source: [status.proto:69](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L69).
 
 | Field         | Type   | # | Description                                              |
 | ------------- | ------ | - | -------------------------------------------------------- |
@@ -50,7 +50,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this session plus its real on-disk size. These are running counters (not static config like the cap or immutability), so a dashboard plots hit-rate over time by sampling the stream.
 
-Source: [status.proto:170](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L170).
+Source: [status.proto:182](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L182).
 
 | Field         | Type  | # | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------- | ----- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -67,7 +67,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse (the one-shot), never the live Status frame.
 
-Source: [status.proto:209](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L209).
+Source: [status.proto:221](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L221).
 
 | Field            | Type            | # | Description                                |
 | ---------------- | --------------- | - | ------------------------------------------ |
@@ -79,7 +79,7 @@ Used by: [GetStatus (response)](status.md#getstatus).
 
 ### GetStatusRequest
 
-Source: [status.proto:195](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L195).
+Source: [status.proto:207](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L207).
 
 No fields.
 
@@ -87,7 +87,7 @@ Used by: [GetStatus (request)](status.md#getstatus).
 
 ### GetStatusResponse
 
-Source: [status.proto:196](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L196).
+Source: [status.proto:208](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L208).
 
 | Field                | Type              | # | Description                                                                                                                                                                                                                                                                                                                                                                                                              |
 | -------------------- | ----------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -103,7 +103,7 @@ Lock is one held per-project workspace lock and the process holding it.
 
 A held lock is the NORMAL state of a mutating run, so this is state and never a fault: it must not fail a readiness or liveness check, because a run queued behind a peer is waiting correctly and restarting it only sends it to the back of the queue. It is on the wire because an OS file lock carries no identity of its own, so without the holder a blocked run is indistinguishable from a hung one - and a lock is held for exactly as long as its holder lives, which means one held by a process nobody remembers starting blocks everything else silently and forever.
 
-Source: [status.proto:43](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L43).
+Source: [status.proto:44](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L44).
 
 | Field                 | Type                               | # | Description                                                              |
 | --------------------- | ---------------------------------- | - | ------------------------------------------------------------------------ |
@@ -121,7 +121,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 LockWaiter is one process blocked on a lock. A holder answers "who is working"; a waiter answers "who is stalled because of it", which is the question anyone looking at a queue that is not moving is actually asking. Transient by nature, so a snapshot.
 
-Source: [status.proto:56](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L56).
+Source: [status.proto:57](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L57).
 
 | Field       | Type      | # | Description                                      |
 | ----------- | --------- | - | ------------------------------------------------ |
@@ -137,7 +137,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 Pool is the live concurrency pool - the slots and the work occupying them.
 
-Source: [status.proto:128](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L128).
+Source: [status.proto:129](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L129).
 
 | Field             | Type                                     | #  | Description                                         |
 | ----------------- | ---------------------------------------- | -- | --------------------------------------------------- |
@@ -158,7 +158,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected` dispatch, keyed by its invocation id. It carries the per-target execution state a dashboard renders as a live run row, so the SAME status stream that shows the pool also shows what each run's targets are doing.
 
-Source: [status.proto:79](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L79).
+Source: [status.proto:80](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L80).
 
 | Field        | Type                             | # | Description                                              |
 | ------------ | -------------------------------- | - | -------------------------------------------------------- |
@@ -173,7 +173,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 RunningTarget is one running unit of work in the pool.
 
-Source: [status.proto:142](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L142).
+Source: [status.proto:143](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L143).
 
 | Field        | Type            | # | Description                                                                           |
 | ------------ | --------------- | - | ------------------------------------------------------------------------------------- |
@@ -189,7 +189,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 Service is one long-running shared service the daemon is hosting right now, kept warm across invocations. It carries the derived identity (id/label/command/ports), the live state a dashboard renders, and how many targets currently depend on it.
 
-Source: [status.proto:117](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L117).
+Source: [status.proto:118](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L118).
 
 | Field        | Type            | # | Description                                       |
 | ------------ | --------------- | - | ------------------------------------------------- |
@@ -207,7 +207,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 Status is the live snapshot.
 
-Source: [status.proto:23](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L23).
+Source: [status.proto:24](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L24).
 
 | Field      | Type                         | # | Description                                                  |
 | ---------- | ---------------------------- | - | ------------------------------------------------------------ |
@@ -224,7 +224,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 ### StreamStatusRequest
 
-Source: [status.proto:214](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L214).
+Source: [status.proto:226](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L226).
 
 No fields.
 
@@ -232,7 +232,7 @@ Used by: [StreamStatus (request)](status.md#streamstatus).
 
 ### StreamStatusResponse
 
-Source: [status.proto:215](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L215).
+Source: [status.proto:227](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L227).
 
 | Field    | Type              | # | Description |
 | -------- | ----------------- | - | ----------- |
@@ -244,33 +244,35 @@ Used by: [StreamStatus (response)](status.md#streamstatus).
 
 TargetRun is the execution state of one target within a Run. It advances QUEUED -> RUNNING -> PASSED\|FAILED\|CACHED as the run emits journal events; a finished target carries its output reference and wall-clock duration.
 
-Source: [status.proto:89](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L89).
+Source: [status.proto:90](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L90).
 
-| Field         | Type            | # | Description                                        |
-| ------------- | --------------- | - | -------------------------------------------------- |
-| `project`     | string          | 1 | repo-relative project path                         |
-| `target`      | string          | 2 | target name (as the CLI spells it)                 |
-| `state`       | [State](#state) | 3 |                                                    |
-| `start_time`  | Timestamp       | 4 | when the target began running (unset while QUEUED) |
-| `end_time`    | Timestamp       | 5 | when the target finished (unset while active)      |
-| `output_ref`  | string          | 6 | output reference, once finished                    |
-| `duration_ms` | int64           | 7 | wall-clock duration in ms, once finished           |
+| Field         | Type                               | # | Description                                        |
+| ------------- | ---------------------------------- | - | -------------------------------------------------- |
+| `project`     | string                             | 1 | repo-relative project path                         |
+| `target`      | string                             | 2 | target name (as the CLI spells it)                 |
+| `state`       | [TargetRun.State](#targetrunstate) | 3 |                                                    |
+| `start_time`  | Timestamp                          | 4 | when the target began running (unset while QUEUED) |
+| `end_time`    | Timestamp                          | 5 | when the target finished (unset while active)      |
+| `output_ref`  | string                             | 6 | output reference, once finished                    |
+| `duration_ms` | int64                              | 7 | wall-clock duration in ms, once finished           |
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 
 ### Workspace
 
-Workspace is one workspace the daemon has loaded.
+Workspace is one workspace the daemon holds: loading, loaded, or failed to load.
 
-Source: [status.proto:151](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L151).
+Source: [status.proto:152](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L152).
 
-| Field              | Type            | # | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------ | --------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `root`             | string          | 1 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `load_time`        | Timestamp       | 2 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `last_access_time` | Timestamp       | 3 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `cache`            | [Cache](#cache) | 4 | this workspace's cache activity                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `secret_provider`  | string          | 5 | secret\_provider is the NAME of the provider spell this workspace's magusfile selected; empty means no declaration and the built-in environment provider applies. It exists so a reader can see that credential resolution is wired up and through what - the same config visibility the cache cap gets.  The name and nothing else. No reference list, no value: magus does not store secrets, it reads them through a provider, and publishing what a build CAN reach would be a map of what to go after. |
+| Field              | Type                               | # | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------ | ---------------------------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `root`             | string                             | 1 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `load_time`        | Timestamp                          | 2 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `last_access_time` | Timestamp                          | 3 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `cache`            | [Cache](#cache)                    | 4 | this workspace's cache activity                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `secret_provider`  | string                             | 5 | secret\_provider is the NAME of the provider spell this workspace's magusfile selected; empty means no declaration and the built-in environment provider applies. It exists so a reader can see that credential resolution is wired up and through what - the same config visibility the cache cap gets.  The name and nothing else. No reference list, no value: magus does not store secrets, it reads them through a provider, and publishing what a build CAN reach would be a map of what to go after. |
+| `state`            | [Workspace.State](#workspacestate) | 6 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `error`            | Status                             | 7 | Why the workspace is FAILED; unset in every other state. The same Status a call against it returns. Spelled out because a bare Status here resolves to this package's message.                                                                                                                                                                                                                                                                                                                              |
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 
@@ -280,7 +282,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 Health is the at-a-glance rollup a dashboard shows.
 
-Source: [status.proto:15](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L15).
+Source: [status.proto:16](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L16).
 
 | Value                | # | Description                                             |
 | -------------------- | - | ------------------------------------------------------- |
@@ -291,11 +293,11 @@ Source: [status.proto:15](https://github.com/egladman/magus/blob/main/proto/magu
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 
-### State
+### TargetRun.State
 
 State is where a target sits in its lifecycle. Values carry the STATE\_ prefix because protobuf enum values share their PARENT's scope, so an unprefixed CACHED would collide with any other enum declaring the same name in this package. STATE\_UNSPECIFIED always followed the convention; the rest did not, which buf's ENUM\_VALUE\_PREFIX rule caught once proto's lint target started running. Renaming a value leaves the wire untouched - encoding is by number, and these are unchanged.
 
-Source: [status.proto:97](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L97).
+Source: [status.proto:98](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L98).
 
 | Value               | # | Description                        |
 | ------------------- | - | ---------------------------------- |
@@ -305,6 +307,21 @@ Source: [status.proto:97](https://github.com/egladman/magus/blob/main/proto/magu
 | `STATE_PASSED`      | 3 | finished successfully              |
 | `STATE_FAILED`      | 4 | finished with an error             |
 | `STATE_CACHED`      | 5 | satisfied from cache (no work run) |
+
+Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
+
+### Workspace.State
+
+State is where the daemon's copy of this workspace sits. Output only; values may be added.
+
+Source: [status.proto:154](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L154).
+
+| Value               | # | Description                                                   |
+| ------------------- | - | ------------------------------------------------------------- |
+| `STATE_UNSPECIFIED` | 0 |                                                               |
+| `STATE_LOADING`     | 1 | evaluating magusfiles; resolves on its own                    |
+| `STATE_ACTIVE`      | 2 | loaded; workspace calls are served                            |
+| `STATE_FAILED`      | 3 | load failed, see error; held until a workspace source changes |
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 

@@ -46,7 +46,8 @@ var Magus = Module{
 		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret provider and " +
 		"the credentials read through it, `magus\\harness.provider(<spell>)` an agent-host harness " +
 		"(many hosts; like workspace.provider, unlike cache.remote's one), and `magus\\guard.shell(<rule>)` an additive " +
-		"shell-guard rule (strengthen-only; `magus\\guard.bash` is a deprecated alias). Each provider takes an imported spell handle. " +
+		"shell-guard rule (strengthen-only; `magus\\guard.bash` is a deprecated alias), and `magus\\guard.spawn(<fun>)` the one " +
+		"function the agent guard calls on every spawn and continuation (see [magus\\guard.spawn](../guard-spawn.md)). Each provider takes an imported spell handle. " +
 		"`magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback " +
 		"base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the " +
 		"credential on the way upstream and the child never holds it. It takes an object with " +
@@ -406,7 +407,57 @@ var Magus = Module{
 					Args:   []Arg{{Name: "rule", Type: TypeAnyMap}},
 					Extern: true,
 				},
+				{
+					Name: "spawn",
+					Doc: "Register the one function the agent guard calls on every agent spawn and every " +
+						"continuation of an existing subagent: fun(req: SpawnRequest) > SpawnVerdict. " +
+						"Declared at the top level of the root magusfile, once. Strengthen only: its deny " +
+						"blocks, its advise fills silence, and nothing it returns lifts a built-in deny. A rule " +
+						"that raises or returns something other than a verdict fails open with an advisory " +
+						"naming the failure. When the magusfile is tracked, the committed and the " +
+						"working-tree rule both run and the stricter answer stands. Registering twice, from " +
+						"another project, or with a non-function is MGS1045. magus ships no rule.",
+					Args:   []Arg{{Name: "rule", Type: TypeFunc}},
+					Extern: true,
+				},
+				{
+					Name:    "allow",
+					Doc:     "The verdict a spawn rule returns to add nothing.",
+					Returns: []Ret{{Type: TypeAnyMap, Object: "SpawnVerdict"}},
+					Extern:  true,
+				},
+				{
+					Name:    "advise",
+					Doc:     "The verdict a spawn rule returns to let the call through with text for the agent.",
+					Args:    []Arg{{Name: "text", Type: TypeString}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "SpawnVerdict"}},
+					Extern:  true,
+				},
+				{
+					Name:    "deny",
+					Doc:     "The verdict a spawn rule returns to block the call, with text saying why.",
+					Args:    []Arg{{Name: "text", Type: TypeString}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "SpawnVerdict"}},
+					Extern:  true,
+				},
+				{
+					Name: "once",
+					Doc: "True the first time key is asked in the calling agent's session, false after. " +
+						"Only callable inside a spawn rule while the guard runs it.",
+					Args:    []Arg{{Name: "key", Type: TypeString}},
+					Returns: []Ret{{Type: TypeBool}},
+					Extern:  true,
+				},
+				{
+					Name: "count",
+					Doc: "Adds one to key's tally in the calling agent's session and returns the new " +
+						"total, starting at 1. Only callable inside a spawn rule while the guard runs it.",
+					Args:    []Arg{{Name: "key", Type: TypeString}},
+					Returns: []Ret{{Type: TypeInt}},
+					Extern:  true,
+				},
 			},
+			Objects: []string{"SpawnRequest"},
 		},
 		{
 			Name: "harness",
@@ -513,7 +564,10 @@ var Magus = Module{
 						"Annotate the result `> JobList` for compile-checked field access. " +
 						"Read straight off the workspace already open on the context - no subprocess. " +
 						"Works from a magusfile target and from a `magus buzz` script run inside a " +
-						"workspace; raises MGS1022 only when there is no workspace to read.",
+						"workspace; raises MGS1022 only when there is no workspace to read. " +
+						"Inside a magus\\guard.spawn rule it answers from the rows the guard read for " +
+						"that call, and every other job member raises there: the store is read-only " +
+						"to a rule.",
 					Returns: []Ret{{Type: TypeAnyMap, Object: "JobList"}},
 					Raises:  true,
 					Extern:  true,
@@ -721,7 +775,7 @@ var magusMCPTools = []MCPTool{
 	},
 	{
 		Name: hint.ToolConsolePresent.String(),
-		Doc:  "Return a tokenless link to a local magus console surface. Use this only when a person asked to see the dashboard or related status. The MCP client may present the link as an action; this tool never opens a browser or changes console state.",
+		Doc:  "Return a tokenless link to a local magus console surface, plus `open`: a shell command that opens it signed in by minting the token in the person's own shell. Hand the person `open` to run rather than the bare link, which opens an unauthenticated page. Use this only when a person asked to see the dashboard or related status; this tool never opens a browser or changes console state.",
 		Params: []MCPParam{
 			{Name: "surface", Type: TypeString, Doc: "Console surface to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
 			{Name: "reason", Type: TypeString, Doc: "Optional brief text a compatible MCP client may show with the link."},
@@ -1251,6 +1305,9 @@ type workspaceJobLimits interface {
 // already accepted for v1 (see internal/job/store.go): a magusfile target is just
 // another such process.
 func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error) {
+	if types.HasJobSnapshot(ctx) {
+		return nil, fmt.Errorf("magus\\%s: the job store is read-only here: a guard rule reads the rows the guard already read, through magus\\job.list, and cannot change them", member)
+	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		// NOT errNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
@@ -1281,7 +1338,16 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 // report; types.NewJobList is the same constructor the magus_job MCP tool's
 // "list" op and the console's JobService.ListJobs call, so the three doors cannot
 // disagree about the rows or the overlaps derived from them.
+//
+// Inside a guard rule it answers from the rows the guard pinned, so the rule and the
+// verdict it adds to read one store.
 func MagusListJob(ctx context.Context) (types.JobList, error) {
+	if snap, pinned := types.JobSnapshotFromContext(ctx); pinned {
+		if snap.Err != nil {
+			return types.JobList{}, snap.Err
+		}
+		return types.NewJobList(snap.Rows), nil
+	}
 	store, err := jobStoreFromContext(ctx, "job.list")
 	if err != nil {
 		return types.JobList{}, err

@@ -9,7 +9,7 @@ stdout 'acme lint --fix \.'
 concurrency: 4
 -- magusfile.buzz --
 import "magus";
-import "spells/acme" as acme;
+import "spells/acme";
 magus.project({ "spells": [acme] });
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- spells/acme/spell.buzz --
