@@ -242,13 +242,27 @@ const (
 	// load only warned and carried on, so a file that loaded then can stop the load now,
 	// and the code is what links that failure to the page saying why it changed.
 	UnknownConfigKey DiagnosticCode = "MGS1040"
-	// RemoteSpellUnpinned is an oci:// spell import with no manifest digest. A tag can be
-	// moved, so the bytes a workspace runs could change under an unchanged magusfile.
-	RemoteSpellUnpinned DiagnosticCode = "MGS1041"
+	// RemoteSpellUndeclared is an import of a registry path that magus.yaml does not
+	// declare. The declaration names the tag the lock pins, so without one there is no
+	// digest to verify and nothing to load.
+	RemoteSpellUndeclared DiagnosticCode = "MGS1041"
 	// RemoteSpellDigestMismatch is a pinned spell whose bytes do not hash to the pin:
 	// served that way by a registry, or found that way in the cache while MAGUS_OFFLINE
 	// forbids a fresh pull. Nothing loads.
 	RemoteSpellDigestMismatch DiagnosticCode = "MGS1042"
+	// RemoteSpellLockStale is a declared remote spell magus.lock does not pin, or pins for
+	// a different tag than magus.yaml now tracks. Only the update charm resolves a tag, so
+	// an ordinary run refuses rather than resolving it itself.
+	RemoteSpellLockStale DiagnosticCode = "MGS1043"
+	// SpellOverrideInvalid is a magus.yaml spell override that replaces nothing usable: its
+	// path holds no spell, the spell there has another name than the embedded one it
+	// replaces, or it names an embedded spell this magus does not ship.
+	SpellOverrideInvalid DiagnosticCode = "MGS1044"
+	// GuardSpawnMisdeclared is a magus\guard.spawn registration the workspace cannot use:
+	// one that is not a function, a second one in the same load, or one outside the root
+	// magusfile. The load stops, because a rule that silently did not register is a guard
+	// that looks enforced and is not.
+	GuardSpawnMisdeclared DiagnosticCode = "MGS1045"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -509,7 +523,8 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
-	UnknownConfigKey, RemoteSpellUnpinned, RemoteSpellDigestMismatch,
+	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
+	SpellOverrideInvalid, GuardSpawnMisdeclared,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

@@ -9,6 +9,7 @@ package agent
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -1130,12 +1131,14 @@ func ReinstallHint(id string) string {
 }
 
 // CheckStatuses inspects descriptor-declared skill locations plus AGENTS.md, returning only
-// locations with a Magus install. The result order is deterministic.
-func (c *Catalog) CheckStatuses(dir string) []Status {
+// locations with a Magus install. The result order is deterministic. wired are
+// magusfile-selected harness spell names (see HarnessSkillLocations); a caller with none in
+// scope gets AGENTS.md grading only, since there is no other source of a skill location.
+func (c *Catalog) CheckStatuses(ctx context.Context, dir string, wired ...string) []Status {
 	var out []Status
-	locations, err := HarnessSkillLocations(dir)
+	locations, err := HarnessSkillLocations(ctx, dir, wired...)
 	if err != nil {
-		out = append(out, Status{Location: harnessDirName, Installed: false, Stale: true, Detail: "cannot load harness descriptors: " + err.Error()})
+		out = append(out, Status{Location: "harnesses", Installed: false, Stale: true, Detail: "cannot resolve harness skill locations: " + err.Error()})
 	}
 	for _, location := range locations {
 		// The anchor decides only whether magus is installed HERE; grading is
@@ -1199,23 +1202,27 @@ type HarnessSkillLocation struct {
 	Form Form
 }
 
-// HarnessSkillLocations discovers skill locations from user-owned descriptors.
-// There is no compiled fallback list: adding a collaborator is data, not a release.
-func HarnessSkillLocations(root string) ([]HarnessSkillLocation, error) {
-	descriptors, err := loadHarnesses(root)
+// HarnessSkillLocations discovers skill locations from wired harness spells. There is no
+// compiled fallback list and no compat JSON directory any more: adding a collaborator is
+// data (a spell), not a release, and a harness with no id in wired contributes nothing,
+// same as it contributing no id at all.
+func HarnessSkillLocations(ctx context.Context, root string, wired ...string) ([]HarnessSkillLocation, error) {
+	ids, err := KnownHarnesses(ctx, wired...)
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]string, 0, len(descriptors))
-	for id := range descriptors {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
 	seen := map[string]HarnessSkillLocation{}
 	for _, id := range ids {
-		loaded := descriptors[id]
-		for _, path := range loaded.descriptor.Skills.Paths {
-			location := HarnessSkillLocation{ID: loaded.descriptor.ID, Path: path, Form: loaded.descriptor.Skills.Form}
+		d, _, err := LoadHarness(ctx, root, id)
+		if err != nil {
+			// A wired id that resolves to nothing (spell not registered, e.g. a
+			// caller inspecting a different workspace) has no skill paths to
+			// report; it is not this function's job to fail the whole listing
+			// over one unresolvable entry.
+			continue
+		}
+		for _, path := range d.Skills.Paths {
+			location := HarnessSkillLocation{ID: d.ID, Path: path, Form: d.Skills.Form}
 			if prior, exists := seen[path]; exists {
 				if prior.Form != location.Form {
 					return nil, fmt.Errorf("harnesses %q and %q declare different skill forms for %q", prior.ID, location.ID, path)
@@ -1240,9 +1247,9 @@ func HarnessSkillLocations(root string) ([]HarnessSkillLocation, error) {
 	return locations, nil
 }
 
-// HarnessSkillDirs returns descriptor-declared locations for display-only callers.
-func HarnessSkillDirs(root string) ([]string, error) {
-	locations, err := HarnessSkillLocations(root)
+// HarnessSkillDirs returns wired-harness-declared locations for display-only callers.
+func HarnessSkillDirs(ctx context.Context, root string, wired ...string) ([]string, error) {
+	locations, err := HarnessSkillLocations(ctx, root, wired...)
 	if err != nil {
 		return nil, err
 	}

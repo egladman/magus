@@ -16,8 +16,8 @@ func init() {
 }
 
 // loadHarnessFromSpell builds a HarnessDescriptor by invoking the harness_*
-// contract on a registered spell. A spell that declares none of those ops is a
-// miss (ok=false), so JSON descriptors still serve tests and unmigrated hosts.
+// contract on a registered spell. A spell not registered under id at all is a
+// miss (ok=false); LoadHarness has no other source to fall back to.
 func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
 	drv, ok := project.DefaultSpellRegistry().Lookup(id)
 	if !ok {

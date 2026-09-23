@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -235,4 +237,54 @@ func TestSession_Diagnostics_ReplSuppressesUnusedImportWarning(t *testing.T) {
 
 	got := s.Diagnostics(`import "unused/mod";`)
 	assert.Empty(t, got, "a REPL session must not warn on an import that may be used by a later line")
+}
+
+// TestAllBZZCodesEnumerated guards allBZZCodes against the const block in diagnostics.go: every declared
+// BZZ code must be enumerated, and the counts must match, so a new code cannot silently escape the
+// doc-coverage check below.
+func TestAllBZZCodesEnumerated(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	dir := filepath.Dir(thisFile)
+	src, err := os.ReadFile(filepath.Join(dir, "diagnostics.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := regexp.MustCompile(`diagnostics\.Code = "(BZZ\d+)"`).FindAllStringSubmatch(string(src), -1)
+	if len(declared) == 0 {
+		t.Fatal("no BZZ codes found in diagnostics.go")
+	}
+	enum := map[diagnostics.Code]bool{}
+	for _, c := range allBZZCodes {
+		if enum[c] {
+			t.Errorf("duplicate code %s in allBZZCodes", c)
+		}
+		enum[c] = true
+	}
+	for _, m := range declared {
+		if !enum[diagnostics.Code(m[1])] {
+			t.Errorf("%s is declared but missing from allBZZCodes", m[1])
+		}
+	}
+	if len(allBZZCodes) != len(declared) {
+		t.Errorf("allBZZCodes has %d entries, the const block declares %d", len(allBZZCodes), len(declared))
+	}
+}
+
+// TestEveryBZZCodeHasDocPage keeps a new code from shipping without its lookup page, at exactly the path
+// its docs URL resolves to (docs/codes/<code>.md inside gopherbuzz's own tree).
+func TestEveryBZZCodeHasDocPage(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	dir := filepath.Dir(thisFile)
+	for _, c := range allBZZCodes {
+		path := filepath.Join(dir, "docs", "codes", string(c)+".md")
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s: no doc page at %s", c, path)
+		}
+	}
 }

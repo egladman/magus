@@ -356,7 +356,7 @@ func TestNoteUndeclaredSeedCostReachesASilentRun(t *testing.T) {
 	interactive.SetHintsEnabled(true)
 
 	var buf bytes.Buffer
-	noteUndeclaredSeedCost(&buf, map[string][]string{"silent-run": {".golangci.yml", "dprint.json"}})
+	noteUndeclaredSeedCost(&buf, map[string][]string{"silent-run": {".golangci.yml", "dprint.json"}}, nil)
 	got := buf.String()
 	assert.Contains(t, got, "hint: ["+string(types.UndeclaredSeedingFile)+"]")
 	assert.Contains(t, got, "silent-run (.golangci.yml, dprint.json)", "the run prints a project list and never the changeset, so the files come with it")
@@ -364,12 +364,12 @@ func TestNoteUndeclaredSeedCostReachesASilentRun(t *testing.T) {
 	assert.Contains(t, got, types.CodeURL(types.UndeclaredSeedingFile))
 
 	buf.Reset()
-	noteUndeclaredSeedCost(&buf, nil)
+	noteUndeclaredSeedCost(&buf, nil, nil)
 	assert.Empty(t, buf.String(), "a run with nothing undeclared-only says nothing")
 
 	buf.Reset()
 	interactive.SetHintsEnabled(false)
-	noteUndeclaredSeedCost(&buf, map[string][]string{"hints-off": {"LICENSE"}})
+	noteUndeclaredSeedCost(&buf, map[string][]string{"hints-off": {"LICENSE"}}, nil)
 	assert.Empty(t, buf.String())
 }
 

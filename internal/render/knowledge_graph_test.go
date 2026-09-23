@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/require"
 )
 
 func knowledgeSubgraph() types.KnowledgeGraphOutput {
@@ -152,5 +153,50 @@ func TestWriteKnowledgeGraphMLDeterministic(t *testing.T) {
 	}
 	if a.String() != b.String() {
 		t.Fatal("two writes of the same graph differ")
+	}
+}
+
+// knowledgeClassDefNames are kind_<kind> names from knowledgeKindPalette in
+// knowledge_graph.go.
+var knowledgeClassDefNames = []string{
+	"kind_project",
+	"kind_spell",
+	"kind_target",
+	"kind_op",
+	"kind_charm",
+	"kind_module",
+	"kind_method",
+	"kind_diagnostic",
+	"kind_doc",
+}
+
+// TestKnowledgeMermaidClassDefs asserts WriteKnowledgeMermaid writes a kind_* classDef
+// for every kind in knowledgeKindPalette, via knowledgeGraphIR.
+func TestKnowledgeMermaidClassDefs(t *testing.T) {
+	// Build a KnowledgeGraphOutput with one node of every kind in the palette
+	// so that all kind_* classDefs appear in the output.
+	var nodes []types.KnowledgeNode
+	var links []types.KnowledgeEdge
+	prev := ""
+	for i, k := range []string{
+		types.KindProject, types.KindSpell, types.KindTarget, types.KindOp,
+		types.KindCharm, types.KindModule, types.KindMethod, types.KindDiagnostic,
+		types.KindDoc,
+	} {
+		id := k + ":test"
+		nodes = append(nodes, types.KnowledgeNode{ID: id, Kind: k, Label: k})
+		if i > 0 {
+			links = append(links, types.KnowledgeEdge{Source: prev, Target: id, Relation: "references"})
+		}
+		prev = id
+	}
+	out := types.KnowledgeGraphOutput{Nodes: nodes, Links: links}
+	var buf bytes.Buffer
+	require.NoError(t, WriteKnowledgeMermaid(&buf, out))
+	got := buf.String()
+	for _, name := range knowledgeClassDefNames {
+		require.True(t, strings.Contains(got, "classDef "+name+" "),
+			"WriteKnowledgeMermaid output missing classDef %q - "+
+				"update knowledgeClassDefNames in this test to match knowledge_graph.go", name)
 	}
 }

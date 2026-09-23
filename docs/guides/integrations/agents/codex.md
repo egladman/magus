@@ -84,12 +84,13 @@ Prefer wiring the Codex harness from the root magusfile when you bounce between
 hosts; apply then covers every wired provider:
 
 ```buzz
-import "oci://ghcr.io/egladman/magus/spells/codex@sha256:<digest>" as codex
-magus\harness.provider(codex)
+import "ghcr.io/egladman/magus/spells/codex";
+magus\harness.provider(codex);
 ```
 
-The import is pinned by the digest cd's `spell-publish` step prints for a commit,
-so the harness versions apart from your magus binary; see
+Declare the spell in `magus.yaml` with the tag cd's `spell-publish` step pushed, and
+run your lock target with `:update` to pin its digest in `magus.lock`, so the harness
+versions apart from your magus binary; see
 [Remote spells](../../../reference/remote-spells.md).
 
 ```sh
@@ -102,9 +103,9 @@ the workspace, change only the import path (for example
 `import "harness/codex" as codex`), edit the workspace Buzz, then re-run apply
 and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
-Or target Codex alone (spell or `harnesses/codex.json` fallback):
+Or target Codex alone:
 
 ```sh
 magus agent harness apply --id codex
@@ -241,20 +242,7 @@ This host is a Buzz harness spell. Adapt without Magus source edits by forking
 the spell and changing only the import path; then `magus agent harness apply`
 and `verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
-
-`harnesses/codex.json` remains as a fallback when the magusfile does not wire
-the spell. Recurring Magus-owned fragment merges for that JSON path still use:
-
-```sh
-magus agent improve --apply --id codex
-```
-
-That writes only Magus-owned native `PreToolUse` entries in the workspace-local
-JSON configuration and preserves every other setting. It never writes
-user-level configuration, lifecycle entries, templates, compiled guard rules,
-skills, memory, or `AGENTS.md`. Review the JSON diff, then `magus agent harness
-verify --id codex`.
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
 The `Stop` entry is not a guard. It records where the work stands each time a
 turn ends, which is worth having here in particular: a Codex session that runs
@@ -271,7 +259,7 @@ this checkout: branch and revision, commits not yet on the base ref, the dirty
 tree split into sources, generated outputs and unclaimed paths, the live leases,
 the last recorded run's failures, and where the rules live.
 When repeated guard feedback needs review, the same brief adds one bounded line
-that directs the model to `magus agent improve`; it does not edit memory or
+that directs the model to `magus doctor`; it does not edit memory or
 instructions by itself.
 
 Two variables shape it for this host. `REHYDRATE_FORMAT=json` is required, not

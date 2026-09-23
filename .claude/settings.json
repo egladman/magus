@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task"
+      }
+    ],
     "PreToolUse": [
       {
         "hooks": [
@@ -59,7 +71,7 @@
             "type": "command"
           }
         ],
-        "matcher": "Agent|Task"
+        "matcher": "Agent|Task|SendMessage"
       }
     ],
     "SessionStart": [

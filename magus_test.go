@@ -1452,3 +1452,18 @@ func TestLoadConfigRefusesAnUnknownProfile(t *testing.T) {
 	_, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
 	require.ErrorContains(t, err, `unknown concurrency profile "turbo"`)
 }
+
+// TestTargetLabel renders the scope header a run prints. The empty case is the one
+// worth pinning: a scope that selected nothing says so, rather than rendering as
+// "0 projects" among the plural forms.
+func TestTargetLabel(t *testing.T) {
+	one := []types.Target{{Path: "api", Name: "build"}}
+	several := []types.Target{{Path: "api"}, {Path: "web"}, {Path: "."}}
+
+	assert.Equal(t, "no projects", TargetLabel(nil, ""))
+	assert.Equal(t, "no projects (affected)", TargetLabel(nil, "affected"))
+	assert.Equal(t, "api", TargetLabel(one, ""))
+	assert.Equal(t, "api (affected)", TargetLabel(one, "affected"))
+	assert.Equal(t, "3 projects", TargetLabel(several, ""))
+	assert.Equal(t, "3 projects (stdin paths)", TargetLabel(several, "stdin paths"))
+}

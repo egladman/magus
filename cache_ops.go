@@ -47,6 +47,16 @@ func (m *Magus) LogBase(ctx context.Context, base, vcs string) {
 	m.cache.LogBase(ctx, base, vcs)
 }
 
+// CacheDescription returns the cache-tier header's facts (tier, mode) without
+// logging them. See [cache.Cache.Description]. Empty strings on an Inspect
+// workspace, which has no cache to describe.
+func (m *Magus) CacheDescription() (tier, mode string) {
+	if m.cache == nil {
+		return "", ""
+	}
+	return m.cache.Description()
+}
+
 // PruneCache removes entries older than cutoff and GC-collects orphaned blobs.
 func (m *Magus) PruneCache(ctx context.Context, cutoff time.Time, dryRun bool) (removed int, freed int64, err error) {
 	if m.cache == nil {

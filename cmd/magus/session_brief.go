@@ -202,7 +202,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	brief.Leases = briefLeases(root)
 	brief.Failures = lastRunFailures(root)
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
-	brief.Rules = ruleLocations(root)
+	brief.Rules = ruleLocations(ctx, root, workspaceHarnessNames(ws)...)
 	brief.PromptCache = promptCacheForCheckout(root, time.Now())
 	if base, err := rootmagus.ResolveCacheDir(root, rootmagus.WithLoadedConfig(globalCfg)); err == nil {
 		if feedback, err := trail.RecentGuardFeedback(base, "", briefFeedbackEvents); err == nil {
@@ -379,15 +379,17 @@ func lastRunFailures(root string) []briefFailure {
 
 // ruleLocations names the instruction files and skill directories that exist in this
 // checkout. What EXISTS, never a recommended list: a path magus prints that is not
-// there teaches a reader to ignore the line.
-func ruleLocations(root string) []string {
+// there teaches a reader to ignore the line. wired are magusfile-selected harness
+// spell names (workspaceHarnessNames(ws)); a harness with no id in wired names no
+// skill directory here.
+func ruleLocations(ctx context.Context, root string, wired ...string) []string {
 	var out []string
 	if _, err := os.Stat(filepath.Join(root, agent.AgentsFile)); err == nil {
 		out = append(out, agent.AgentsFile)
 	}
 	// Best-effort display: omit skill dirs when descriptors fail to load rather
 	// than inventing Installed state from an empty list.
-	if dirs, err := agent.HarnessSkillDirs(root); err == nil {
+	if dirs, err := agent.HarnessSkillDirs(ctx, root, wired...); err == nil {
 		for _, dir := range dirs {
 			if info, err := os.Stat(filepath.Join(root, dir)); err == nil && info.IsDir() {
 				out = append(out, dir)

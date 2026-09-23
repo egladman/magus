@@ -158,7 +158,7 @@ allocates heavily, and it is GC-sensitive - its time carries a wide CI run to ru
 Two text-processing workloads added to probe gopherbuzz's string handling head-on
 (its structural soft spot: every string is content-interned, and substrings churn
 the heap). Both are split-free and produce identical results across engines,
-guarded by a cross-engine agreement test (`extra_test.go`).
+guarded by a cross-engine agreement test (`TestExtraStringWorkloadsAgree` in `comparison_test.go`).
 
 - **KmerCount** - slide a 6-wide window over a ~1 KB string, tally the k-mers in a
   map, 50x. Substring extraction + map churn.

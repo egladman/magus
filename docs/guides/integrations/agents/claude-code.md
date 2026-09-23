@@ -53,13 +53,14 @@ Prefer wiring the Claude Code harness from the root magusfile when you bounce
 between hosts; apply then covers every wired provider:
 
 ```buzz
-import "oci://ghcr.io/egladman/magus/spells/claude-code@sha256:<digest>" as claude
-magus\harness.provider(claude)
+import "ghcr.io/egladman/magus/spells/claude-code" as claude;
+magus\harness.provider(claude);
 ```
 
-The import is pinned by the digest cd's `spell-publish` step prints for a commit,
-so the harness versions apart from your magus binary; see
-[Remote spells](../../../reference/remote-spells.md).
+The alias is needed only because `claude-code` is not a Buzz identifier. Declare the
+spell in `magus.yaml` with the tag cd's `spell-publish` step pushed, and run your lock
+target with `:update` to pin its digest in `magus.lock`, so the harness versions apart
+from your magus binary; see [Remote spells](../../../reference/remote-spells.md).
 
 ```sh
 magus agent harness apply
@@ -71,9 +72,9 @@ the workspace, change only the import path (for example
 `import "harness/claude-code" as claude`), edit the workspace Buzz, then re-run
 apply and verify. Details:
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
-Or target Claude Code alone (spell or `harnesses/claude-code.json` fallback):
+Or target Claude Code alone:
 
 ```sh
 magus agent harness apply --id claude-code
@@ -162,26 +163,12 @@ This host is a Buzz harness spell. Adapt without Magus source edits by forking
 the spell and changing only the import path; then `magus agent harness apply`
 and `verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
-[Improving recurring friction](guard.md#improving-recurring-friction).
-
-`harnesses/claude-code.json` remains as a fallback when the magusfile does not
-wire the spell. Recurring Magus-owned fragment merges for that JSON path still
-use:
-
-```sh
-magus agent improve --apply --id claude-code
-```
-
-That writes only Magus-owned native `PreToolUse` entries in the workspace-local
-JSON configuration and preserves every other setting. It never writes
-user-level configuration, templates, compiled guard rules, skills, memory, or
-`AGENTS.md`. Review the JSON diff, then `magus agent harness verify --id
-claude-code`.
+[Recurring guard friction](guard.md#recurring-guard-friction).
 
 ## MCP tool calls
 
 Claude Code's `PreToolUse` also fires for a tool served over MCP, matching
-`mcp__<server>__<tool>`. The shipped descriptor includes a Magus-MCP matcher,
+`mcp__<server>__<tool>`. The shipped spell includes a Magus-MCP matcher,
 so `magus agent harness apply --id claude-code` installs this entry alongside
 the command and file surfaces:
 
@@ -255,15 +242,33 @@ claude-code` installs this entry alongside the surfaces above:
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Agent|Task",
+        "matcher": "Agent|Task|SendMessage",
         "hooks": [
           { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --observes-skill-loads", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }
         ]
       }
     ]
   }
 }
 ```
+
+`SendMessage` is the continuation of a subagent that already exists: a
+`tool_input` carrying `to` and `message`. It reaches the same verdict path as a
+spawn, so a workspace [`magus\guard.spawn`](../../../reference/guard-spawn.md)
+rule sees both. The `PostToolUse` entry judges nothing: the finished call's
+`tool_response.agentId` is the id the host gave the child, and recording it
+against the spawn's `description` is what lets that child's own spawns name
+their parent (`agent_id` on its later hook events). That response field is
+unverified against a live session, and a release that drops it leaves every
+parent empty rather than guessed.
 
 Same script as the MCP surface and for the same reason: a spawn's payload is a
 prompt, a `subagent_type`, and an optional `model`, not one string, so there is no
@@ -370,8 +375,8 @@ outputs and unclaimed paths, the live leases with the command that binds each
 one, the last recorded run's failures with the ref that holds their output, the
 guard wiring, and where the rules live.
 If recurring guard evidence crossed its review threshold, it also receives one
-improvement-review line with `magus agent improve`; it is a proposal, never an
-automatic instruction or memory edit.
+line pointing to `magus doctor`'s recurring-guard-denials check; it states facts,
+never an automatic instruction or memory edit.
 
 ```json
 {

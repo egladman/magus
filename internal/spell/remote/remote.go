@@ -1,12 +1,15 @@
-// Package remote resolves a spell published as an OCI artifact and pinned by its
-// manifest digest:
+// Package remote resolves a spell published as an OCI artifact, imported by its
+// repository path the way a Go import path is its repository:
 //
-//	import "oci://ghcr.io/<owner>/<repo>/spells/<name>@sha256:<digest>" as name;
+//	import "ghcr.io/<owner>/<repo>/spells/<name>";
 //
-// It is the one resolver every spell consumer reaches: a magusfile import, the handle
-// magus\harness.provider receives, and a remote cache backend selector. The artifact
-// is one uncompressed tar layer of the spell directory's tracked files, written by
-// Pack, so publishing the same commit twice yields the same digest.
+// magus.yaml declares the tag each path tracks, magus.lock pins the manifest digest
+// that tag resolved to, and only Relock, which the update charm drives, ever asks a
+// registry what a tag means. Every other load reads the locked digest through
+// LoadImports, the one resolver every spell consumer reaches: a magusfile import, the
+// handle magus\harness.provider receives, and a remote cache backend selector. The
+// artifact is one uncompressed tar layer of the spell directory's tracked files,
+// written by Pack, so publishing the same commit twice yields the same digest.
 package remote
 
 import (
@@ -55,24 +58,25 @@ const maxSpell = 8 << 20
 
 const fetchTimeout = 2 * time.Minute
 
-// Ref is a parsed remote spell import.
+// Ref is a remote spell pinned to one manifest.
 type Ref struct {
-	Import string        // the import path as written
+	Import string        // the import path, e.g. ghcr.io/team/spells/lint
 	OCI    oci.Reference // Digest is always set
 }
 
-// Parse validates a remote spell import. A reference with no manifest digest is
-// MGS1041: a tag can move, so it pins nothing.
-func Parse(importPath string) (Ref, error) {
-	rest := strings.TrimPrefix(importPath, spells.RemotePrefix)
-	if !strings.Contains(rest, "@") {
-		return Ref{}, types.DiagnosticErrorf(types.RemoteSpellUnpinned,
-			"remote spell %q names no manifest digest: a tag can move, so pin it with @sha256:<digest>", importPath)
+// Pinned is the Ref for importPath at the manifest digest pin.
+func Pinned(importPath string, pin digest.Digest) (Ref, error) {
+	if !spells.IsRemoteImport(importPath) {
+		return Ref{}, fmt.Errorf("remote spell %q: not a registry path", importPath)
 	}
-	ref, err := oci.ParseReference(rest)
+	if err := pin.Validate(); err != nil {
+		return Ref{}, fmt.Errorf("remote spell %s: %w", importPath, err)
+	}
+	ref, err := oci.ParseRepository(importPath)
 	if err != nil {
-		return Ref{}, fmt.Errorf("remote spell %q: %w", importPath, err)
+		return Ref{}, fmt.Errorf("remote spell %s: %w", importPath, err)
 	}
+	ref.Digest = pin
 	return Ref{Import: importPath, OCI: ref}, nil
 }
 
@@ -85,20 +89,22 @@ type Options struct {
 	// oci.Client.
 	Username string
 	Password string
+	// Connect, when set, supplies the registry client in place of Client, Username and
+	// Password. It is called only when a pull is needed, so a verified cache entry
+	// resolves no secret.
+	Connect func(ctx context.Context) (*oci.Client, error)
 }
 
-// EntryPath parses importPath, resolves it into the user cache, and returns the
-// local path of its spell.buzz. It is the call every consumer makes.
-func EntryPath(ctx context.Context, importPath string) (string, error) {
-	ref, err := Parse(importPath)
-	if err != nil {
-		return "", err
+// cacheRoot is where verified spells live: opts.CacheRoot, or the user cache.
+func (o Options) cacheRoot() (string, error) {
+	if o.CacheRoot != "" {
+		return o.CacheRoot, nil
 	}
-	dir, err := Resolve(ctx, ref, Options{})
+	base, err := config.UserCacheDir()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("remote spell: locate cache dir: %w", err)
 	}
-	return filepath.Join(dir, entryFile), nil
+	return filepath.Join(base, "magus", "spells"), nil
 }
 
 // verified holds the cache slots this process has already verified, keyed by slot
@@ -115,21 +121,16 @@ var verified sync.Map
 // Safe for concurrent use: a pull lands in a temporary directory renamed into place,
 // and a verified entry is never removed.
 func Resolve(ctx context.Context, ref Ref, opts Options) (string, error) {
-	root := opts.CacheRoot
-	if root == "" {
-		base, err := config.UserCacheDir()
-		if err != nil {
-			return "", fmt.Errorf("remote spell %s: locate cache dir: %w", ref.Import, err)
-		}
-		root = filepath.Join(base, "magus", "spells")
+	root, err := opts.cacheRoot()
+	if err != nil {
+		return "", err
 	}
 	slot := filepath.Join(root, ref.OCI.Digest.Algorithm().String()+"-"+ref.OCI.Digest.Encoded())
 	src := filepath.Join(slot, "src")
 	if _, ok := verified.Load(slot); ok {
 		return src, nil
 	}
-	src, err := resolveSlot(ctx, ref, opts, root, slot)
-	if err != nil {
+	if src, err = resolveSlot(ctx, ref, opts, root, slot); err != nil {
 		return "", err
 	}
 	verified.Store(slot, struct{}{})
@@ -162,7 +163,11 @@ func resolveSlot(ctx context.Context, ref Ref, opts Options, root, slot string) 
 		return "", fmt.Errorf("remote spell %s: %w", ref.Import, err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	if err := pull(ctx, opts.client(), ref, tmp); err != nil {
+	c, err := opts.client(ctx)
+	if err != nil {
+		return "", fmt.Errorf("remote spell %s: %w", ref.Import, err)
+	}
+	if err := pull(ctx, c, ref, tmp); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, slot); err == nil {
@@ -586,8 +591,11 @@ func Unpack(src, dst string) error {
 	return nil
 }
 
-func (o Options) client() *oci.Client {
-	return &oci.Client{HTTP: o.Client, Username: o.Username, Password: o.Password}
+func (o Options) client(ctx context.Context) (*oci.Client, error) {
+	if o.Connect != nil {
+		return o.Connect(ctx)
+	}
+	return &oci.Client{HTTP: o.Client, Username: o.Username, Password: o.Password}, nil
 }
 
 // offline matches internal/registry: MAGUS_OFFLINE set to anything but 0 or false.

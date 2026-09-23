@@ -6,6 +6,25 @@ tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 
 # The guard
 
+## What the guard is
+
+The name follows established access-control terms (NIST SP 800-162,
+<https://nvlpubs.nist.gov/nistpubs/specialpublications/nist.sp.800-162.pdf>).
+Each agent host's hook is the policy enforcement point: it intercepts the tool
+call and applies the verdict it gets back. magus's guard, `magus session
+hook`, is the policy decision point: it decides allow, advise, or deny from
+facts the repository already carries, such as declared outputs, the cache,
+the graph, VCS state, and job leases. The workspace's rules, built in plus
+anything declared in the root magusfile, are its policy. One sentence may
+borrow "shield" as an analogy (Alshiekh et al., Safe Reinforcement Learning
+via Shielding, AAAI 2018,
+<https://cdn.aaai.org/ojs/11797/11797-13-15325-1-2-20201228.pdf>): a shield is a
+monitor that vetoes a learning agent's proposed actions against a spec, and
+the guard plays that role for magus, never choosing an action itself. magus
+never calls a model and never owns the host's loop; see
+[Prior art and terminology](../../../scope.md#prior-art-and-terminology) for
+how this differs from a content-safety guardrail or an agent harness.
+
 Most agent hosts can run a hook before executing a shell command or writing a
 file. magus supplies the rule evaluation; the host supplies the hook that calls
 it. `magus session hook` reads one command or one path, applies the rules, and
@@ -201,6 +220,10 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   bounce between tools). Optional `dialect` selects the mvdan/sh parser variant
   for outer parse when judging rules; the last declared non-empty dialect wins.
   `magus\guard.bash` remains as a deprecated alias that defaults dialect to bash.
+- **A workspace spawn rule** (`magus\guard.spawn(fun)` in the root magusfile): one
+  Buzz function called on every subagent spawn and continuation with a normalized
+  request, answering allow, advise or deny. Strengthen only, like the shell rules.
+  magus ships none; see [magus\guard.spawn](../../../reference/guard-spawn.md).
 
 | dialect | parser                        |
 | ------- | ----------------------------- |
@@ -227,10 +250,10 @@ magus\guard.shell({
     reason: "Prefer the workspace terraform target: magus run plan <project>.",
 })
 
-import "oci://ghcr.io/egladman/magus/spells/cursor@sha256:<digest>" as cursor
-import "oci://ghcr.io/egladman/magus/spells/codex@sha256:<digest>" as codex
-import "oci://ghcr.io/egladman/magus/spells/claude-code@sha256:<digest>" as claude
-import "oci://ghcr.io/egladman/magus/spells/opencode@sha256:<digest>" as opencode
+import "ghcr.io/egladman/magus/spells/cursor";
+import "ghcr.io/egladman/magus/spells/codex";
+import "ghcr.io/egladman/magus/spells/claude-code" as claude;
+import "ghcr.io/egladman/magus/spells/opencode";
 magus\harness.provider(cursor)
 magus\harness.provider(codex)
 magus\harness.provider(claude)
@@ -688,54 +711,45 @@ A host without a hook cannot be observed: no local CLI can discover commands
 another process did not report. The coverage boundary is explicit rather than
 guessed.
 
-## Improving recurring friction
+## Recurring guard friction
 
-The trail is evidence, not automatic self-modification. By default, `magus agent
-improve` is read-only. It deduplicates only repeated stable denial rules (three
-times in one host session, or across two sessions) and proposes a destination:
-discard it, improve a local skill, adapt a host harness, or report an upstream
-issue.
+The trail is evidence, not automatic self-modification. `magus doctor`'s
+recurring-guard-denials check is read-only. It deduplicates repeated stable
+denial rules (three times in one host session, or the same pattern across two
+sessions) and reports the facts: rule, surface, denial count, session count, and
+followed rate. It proposes no destination; a human decides whether to discard
+the pattern, adapt a local skill or host harness, or report an upstream issue.
 
 ```sh
-magus agent improve
-magus agent improve --session <host-session-id> -o json
+magus doctor
 ```
 
 ### Buzz harness spells (preferred)
 
 A harness spell is selected by import. The shipped ones are not compiled into the
-binary: they are published as OCI artifacts and imported pinned by digest (see
-[Remote spells](../../../reference/remote-spells.md)), so moving to a newer harness
-is a pin change, not an upgrade. To adapt one without touching Magus source:
+binary: they are published as OCI artifacts, imported by registry path, and pinned by
+digest in `magus.lock` (see [Remote spells](../../../reference/remote-spells.md)), so
+moving to a newer harness is a lock change, not an upgrade. To adapt one without
+touching Magus source:
 
 1. Copy `spells/harness/<id>/` from the magus repository into the workspace, e.g.
    `harness/<id>/`. Keep the spell's stable host id (`mgs_getName()`).
-2. In the root magusfile, change the pinned `import "oci://..." as host` to
-   `import "harness/<id>" as host`. Leave `magus\harness.provider(host)`.
+2. In `magus.yaml`, replace the registry path with the copy. The import in the root
+   magusfile and `magus\harness.provider(...)` stay exactly as they are:
+
+   ```yaml
+   spells:
+     ghcr.io/egladman/magus/spells/<id>:
+       path: harness/<id>
+   ```
+
 3. Edit the workspace Buzz (matchers, managed fragments, guard command).
 4. `magus agent harness apply` then `magus agent harness verify`. Commit the
-   import change and the forked spell together.
+   `magus.yaml` change and the forked spell together.
 
-That is the ownership switch: Magus ships the default spell; your import path
-chooses which tree apply reads. See the magus-workspace-rules skill section
-"Adapting a Buzz harness".
-
-### JSON descriptors (`improve --apply`)
-
-For hosts still described by `harnesses/<id>.json`, a human may apply
-Magus-owned fragment merges:
-
-```sh
-magus agent improve --apply --id claude-code
-magus agent improve --apply --id codex
-```
-
-`--apply` is the explicit authorization to write. It updates only Magus-owned
-host `PreToolUse` entries in the workspace-local JSON configuration for the
-selected host and preserves all other settings. It never creates or changes a
-user-level host config, compiled guard rules, installed skills, `AGENTS.md`, or
-memory. Review the resulting ordinary config diff; commit it only when that
-workspace keeps its harness in version control.
+That is the ownership switch: Magus ships the default spell; the declaration in
+`magus.yaml` chooses which tree apply reads, and it is the one line a reviewer sees.
+See the magus-workspace-rules skill section "Adapting a Buzz harness".
 
 A later `magus run` request in the same host session is shown as a follow-up,
 not a success: pre-tool hooks cannot observe execution or an exit status. After
@@ -752,7 +766,9 @@ rather than a command or a file path is a lease handoff: it appends an
 `agent_spawn` event and returns `pass` without evaluating a rule, because there
 is no command and no path to judge, and a prompt that merely mentions a denied
 command would otherwise block the lease that describes it. See
-[Leases](leases.md).
+[Leases](leases.md). The spawn rules that do run read session state, and a
+workspace's own [magus\guard.spawn](../../../reference/guard-spawn.md) function
+reads the normalized request; none of them runs the command rules over the prose.
 
 ## Measuring adoption
 

@@ -1,22 +1,38 @@
 package doctor
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func writeDoctorHarness(t *testing.T, root string) {
-	t.Helper()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-host.json"), []byte(`{
+// agentTestHarnessSpell decodes body (the same descriptor JSON shape a
+// harnesses/<id>.json compat file used to carry) and returns a HarnessSpellLoader
+// that answers only for id, standing in for a real harness spell in a test.
+func agentTestHarnessSpell(id, body string) agent.HarnessSpellLoader {
+	var d agent.HarnessDescriptor
+	if err := json.Unmarshal([]byte(body), &d); err != nil {
+		panic(err) // fixture bodies are constants; a decode failure is a test bug
+	}
+	return func(_ context.Context, wantID string) (agent.HarnessDescriptor, string, bool, error) {
+		if wantID != id {
+			return agent.HarnessDescriptor{}, "", false, nil
+		}
+		return d, "spell:" + id, true, nil
+	}
+}
+
+// doctorHarnessDescriptorJSON is the "test-host" fixture body, in the same shape a
+// harnesses/test-host.json compat file used to carry.
+const doctorHarnessDescriptorJSON = `{
   "schema_version": 2,
   "id": "test-host",
   "display": {"name": "Test Host"},
@@ -26,7 +42,18 @@ func writeDoctorHarness(t *testing.T, root string) {
     "path": ["hooks", "before"],
     "entries": [{"match":"run", "commands":[{"type":"command","command":"sh magus-command.sh"}]}]
   }]
-}`), 0o644))
+}`
+
+// writeDoctorHarness registers "test-host" as a fake harness spell (there is no
+// harnesses/*.json compat directory left to scan) and stages the guard stub and
+// fake ./magus every caller of it needs. Callers must pass "test-host" as one of
+// the wired ids the check under test resolves against; nothing discovers it
+// automatically any more. The registration is reset to nil on cleanup rather than
+// restored, since no doctor test relies on a PRIOR test's registration surviving.
+func writeDoctorHarness(t *testing.T, root string) {
+	t.Helper()
+	agent.RegisterHarnessSpellLoader(agentTestHarnessSpell("test-host", doctorHarnessDescriptorJSON))
+	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(nil) })
 	// VerifyHarness now actually runs the wired command (see internal/agent's
 	// harness_probe.go), rather than trusting that "sh magus-command.sh" is
 	// present in the config. This stub is what makes it answer for real: every
@@ -59,7 +86,7 @@ func TestCheckpointWiringAdvisesAGuardedHostThatRecordsNothing(t *testing.T) {
 	root := t.TempDir()
 	writeCheckpointHarness(t, root, guardedHarnessConfig())
 
-	got := checkCheckpointWiring(root)
+	got := checkCheckpointWiring(root, "test-host")
 
 	assert.Equal(t, types.DoctorAdvice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
@@ -70,7 +97,7 @@ func TestCheckpointWiringPassesOnAHostThatRecordsOne(t *testing.T) {
 	body := strings.TrimSuffix(guardedHarnessConfig(), "}") + `,"checkpoint":"magus session checkpoint"}`
 	writeCheckpointHarness(t, root, body)
 
-	got := checkCheckpointWiring(root)
+	got := checkCheckpointWiring(root, "test-host")
 
 	assert.Equal(t, types.DoctorOK, got.Status)
 	assert.Contains(t, got.Message, "1 of 1")
@@ -83,7 +110,7 @@ func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 	body := strings.TrimSuffix(guardedHarnessConfig(), "}") + `,"checkpoint":"magus session checkpoint"}`
 	writeCheckpointHarness(t, root, body)
 
-	got := checkCheckpointWiring(root)
+	got := checkCheckpointWiring(root, "test-host")
 
 	assert.Equal(t, types.DoctorOK, got.Status)
 }
@@ -103,7 +130,7 @@ func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T
 	writeDoctorHarness(t, root)
 	plant(t, root, "host/hooks.json", guardedHarnessConfig())
 
-	got := checkCheckpointWiring(root)
+	got := checkCheckpointWiring(root, "test-host")
 
 	assert.Equal(t, types.DoctorAdvice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
@@ -117,7 +144,7 @@ func TestCheckpointWiringFollowsNamedGuardScripts(t *testing.T) {
 	plant(t, root, "host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command.sh"}]}],"stop":[{"commands":[{"type":"command","command":"sh docs/agents/cursor-hook.sh"}]}]}}`)
 	plant(t, root, "docs/agents/cursor-hook.sh", "#!/bin/sh\n$MAGUS session checkpoint --agent-name cursor\n")
 
-	got := checkCheckpointWiring(root)
+	got := checkCheckpointWiring(root, "test-host")
 
 	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	assert.Contains(t, got.Message, "1 of 1")
@@ -128,7 +155,7 @@ func TestCheckpointWiringIgnoresAConfigThatIsNotMagus(t *testing.T) {
 	writeDoctorHarness(t, root)
 	plant(t, root, "host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./scripts/lint.sh"}]}]}}`)
 
-	got := checkCheckpointWiring(root)
+	got := checkCheckpointWiring(root, "test-host")
 
 	require.Equal(t, types.DoctorOK, got.Status)
 	assert.Contains(t, got.Message, "skipped")

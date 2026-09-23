@@ -20,6 +20,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/types"
 )
 
 // spellRegistry is enough of the distribution API for every spell verb: a token
@@ -215,4 +217,37 @@ func TestRegistryCredentialResolvesThroughTheSecretProvider(t *testing.T) {
 	unset := config.SpellsConfig{Registries: []config.SpellRegistry{{Host: "ghcr.io", Username: "ci", Password: "SPELL_REGISTRY_UNSET"}}}
 	_, _, err = registryCredential(t.Context(), unset, "ghcr.io", secret.New())
 	require.ErrorContains(t, err, "$SPELL_REGISTRY_UNSET is not set")
+}
+
+// The lock walkthrough: a declared spell with no pin fails the frozen check, --update
+// resolves the tag and writes magus.lock, the check then passes, and a pull by the bare
+// import path lands the locked bytes.
+func TestSpellLockThenPullByImportPath(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	reg := newSpellRegistry(t)
+	repo, dir := spellRepo(t)
+	path := reg.host() + "/team/spells/x"
+	pinned := strings.TrimSpace(runSpell(t, repo, "push", dir, path+":v1"))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "magus.yaml"),
+		[]byte("spells:\n  \""+path+"\":\n    tag: v1\n"), 0o644))
+
+	resetStartupSingletons()
+	err := spellCmd(t.Context(), repo, []string{"lock"})
+	require.ErrorIs(t, err, types.RemoteSpellLockStale, "nothing is pinned yet, and the check resolves no tag")
+
+	assert.Equal(t, pinned+"\n", runSpell(t, repo, "lock", "--update"))
+	lock, err := remotespell.ReadLock(repo)
+	require.NoError(t, err)
+	d := digest.Digest(strings.TrimPrefix(pinned, path+"@"))
+	assert.Equal(t, remotespell.Lock{Version: 1, Spells: map[string]remotespell.LockEntry{path: {Tag: "v1", Digest: d}}}, lock)
+
+	var res spellLockResult
+	require.NoError(t, json.Unmarshal([]byte(runSpell(t, repo, "lock", "-o", "json")), &res))
+	assert.Equal(t, spellLockResult{Spells: []spellLockEntry{{Path: path, Tag: "v1", Digest: d}}}, res)
+
+	pulled := strings.Split(strings.TrimSpace(runSpell(t, repo, "pull", path)), "\n")
+	require.Len(t, pulled, 2)
+	assert.Equal(t, pinned, pulled[0], "a bare import path pulls the locked digest")
+	assert.FileExists(t, filepath.Join(pulled[1], "spell.buzz"))
 }

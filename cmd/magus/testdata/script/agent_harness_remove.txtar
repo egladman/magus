@@ -2,6 +2,10 @@
 # undo `harness apply` at all). It deletes only the managed entries and
 # config_defaults values apply wrote, leaves a person's own hooks alone, asks no
 # confirmation, and honors --dry-run.
+#
+# demo-host is a workspace-owned Buzz harness spell (harnesses/*.json compat
+# descriptors are gone; a harness is wired the same way any other provider is,
+# see magus-workspace-rules "Adapting a Buzz harness").
 
 exec magus agent harness apply --id demo-host
 stdout 'updated demo-host harness'
@@ -37,19 +41,27 @@ stdout 'nothing to remove for demo-host harness'
 concurrency: 2
 -- magusfile.buzz --
 import "magus";
+import "spells/demo-host" as demo;
+magus\harness.provider(demo);
 magus.project({"sources": ["*.md"]});
--- harnesses/demo-host.json --
-{
-  "schema_version": 2,
-  "id": "demo-host",
-  "display": {"name": "Demo Host"},
-  "config": {"path": "host/hooks.json"},
-  "config_defaults": {"version": 1},
-  "skills": {"paths": [], "form": "short"},
-  "managed_entries": [{
-    "path": ["hooks", "before"],
-    "entries": [{"match": "run", "commands": [{"type": "command", "command": "sh magus-command.sh"}]}]
-  }]
+-- spells/demo-host/spell.buzz --
+import "magus/spell";
+
+export fun mgs_getName() > str { return "demo-host"; }
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return {"path": "host/hooks.json", "defaults": {"version": 1}};
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return {"paths": [], "form": "short"};
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return [{
+        "path": ["hooks", "before"],
+        "entries": [{"match": "run", "commands": [{"type": "command", "command": "sh magus-command.sh"}]}],
+    }];
 }
 -- magus-command.sh --
 #!/bin/sh

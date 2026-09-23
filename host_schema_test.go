@@ -1,3 +1,5 @@
+// cross-cutting: validates every shipped hook config and guard verdict against its host's schema
+
 package magus
 
 import (

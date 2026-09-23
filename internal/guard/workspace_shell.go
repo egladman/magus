@@ -22,7 +22,8 @@ type WorkspaceShellRule struct {
 }
 
 // workspaceShellPrefix namespaces workspace rule ids on Verdict.Rule so the
-// activity trail and magus agent improve never confuse them with built-ins.
+// activity trail and doctor's recurring-guard-denials check never confuse them
+// with built-ins.
 const workspaceShellPrefix = "workspace:"
 
 // matchWorkspaceShell returns the strongest workspace match for command, or an

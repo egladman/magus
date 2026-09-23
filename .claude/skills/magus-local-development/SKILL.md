@@ -122,7 +122,7 @@ know which one is wrong.
 ## Cursor Grep is a harness problem, not a Cursor Rules file
 
 Do not add `.cursor/rules/*.mdc` for magus behavior. Cursor's always-on prose is
-`AGENTS.md`; enforcement is `harnesses/cursor.json` plus
+`AGENTS.md`; enforcement is the `spells/harness/cursor` Buzz spell plus
 `docs/guides/integrations/agents/cursor-hook.sh`.
 
 The guard already advises repo-wide `rg` / `grep -r` / `find -name` toward

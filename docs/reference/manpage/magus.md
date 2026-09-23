@@ -137,7 +137,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See [**magus-init**(1)](magus-init.md).
 
 **spell**
-: Build, publish, pull and list spells as OCI artifacts pinned by digest. See [**magus-spell**(1)](magus-spell.md).
+: Build, publish, pull and list spells as OCI artifacts, and pin them in magus.lock. See [**magus-spell**(1)](magus-spell.md).
 
 **agent**
 : Manage skills, harnesses, and agent feedback. See [**magus-agent**(1)](magus-agent.md).

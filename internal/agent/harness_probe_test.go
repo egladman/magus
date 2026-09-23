@@ -47,14 +47,12 @@ func bytesTrimNewline(b []byte) []byte {
 	return b
 }
 
-// writeProbeableHarness installs a descriptor named id whose one managed command
+// writeProbeableHarness registers a descriptor named id whose one managed command
 // is command, wired at a path this test controls, and applies it, so
 // VerifyHarness has a real config to read and probeHarnessCommands has a real
 // command string to run.
 func writeProbeableHarness(t *testing.T, root, id, command string) {
 	t.Helper()
-	dir := filepath.Join(root, "harnesses")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
 	body := `{
   "schema_version": 2,
   "id": "` + id + `",
@@ -66,7 +64,7 @@ func writeProbeableHarness(t *testing.T, root, id, command string) {
     "entries": [{"match": "run", "commands": [{"type": "command", "command": "` + command + `"}]}]
   }]
 }`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, id+".json"), []byte(body), 0o644))
+	registerHarnessSpell(t, id, body)
 	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: id})
 	require.NoError(t, err)
 }
