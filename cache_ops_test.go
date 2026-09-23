@@ -24,8 +24,8 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
-	workspace.TextSink().EmitScope(t.Context(), "test", "unit")
-	workspace.TextSink().EmitCharms(t.Context(), "rw")
+	tier, mode := workspace.CacheDescription()
+	assert.Empty(t, tier+mode, "an Inspect workspace has no cache to describe")
 	_, _, err = workspace.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
 	assert.ErrorIs(t, workspace.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)

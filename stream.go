@@ -32,8 +32,7 @@ func WithStreamExtraArgs(args []string) StreamOption {
 	return func(o *streamOpts) { o.run = append(o.run, WithExtraArgs(args)) }
 }
 
-// WithStreamSink routes every batch's progress, and for a JSONL sink its per-target
-// results, through s. See [WithSink].
+// WithStreamSink routes every batch through s, as [WithSink] routes one run.
 func WithStreamSink(s *Sink) StreamOption {
 	return func(o *streamOpts) { o.run = append(o.run, WithSink(s)) }
 }

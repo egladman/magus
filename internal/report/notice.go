@@ -5,48 +5,24 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"os"
 	"sync"
 	"time"
 )
 
-// NewNoticeHandler returns a slog.Handler that writes each record to w as a run.notice
-// envelope, the shape every other line of a -o jsonl run has. It is the fallback for
-// log records no typed event converts: a caller parsing the run meets one record shape
-// on both streams instead of slog's {time,level,msg} beside {schema,type,...}.
+// NewNoticeHandler returns a slog.Handler that turns each record into a [Notice] event
+// and encodes it on enc, so a log record reaches a -o jsonl reader through the same
+// encoder as a notice a sink emits. It is the fallback for log records no typed event
+// converts: a caller parsing the run meets one record shape on both streams instead of
+// slog's {time,level,msg} beside {schema,type,...}.
 //
-// Each record is one synchronous Write of one line. The record's attributes land under
-// "attrs", so an attribute named like an envelope field cannot collide with it. Handlers
-// over the same w do not serialize with each other; use [NewStderrNoticeHandler] for
-// stderr.
-func NewNoticeHandler(w io.Writer, level slog.Leveler) slog.Handler {
-	return &noticeHandler{out: &lockedWriter{w: w}, level: level}
-}
-
-// NewStderrNoticeHandler is [NewNoticeHandler] over os.Stderr, sharing one lock with
-// every other handler it returns, so records from several loggers never interleave.
-func NewStderrNoticeHandler(level slog.Leveler) slog.Handler {
-	return &noticeHandler{out: stderr, level: level}
-}
-
-// stderr is the one writer every stderr notice handler in the process shares.
-var stderr = &lockedWriter{w: os.Stderr}
-
-// lockedWriter serializes whole lines onto w.
-type lockedWriter struct {
-	mu sync.Mutex
-	w  io.Writer
-}
-
-func (l *lockedWriter) writeLine(line []byte) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	_, err := l.w.Write(line)
-	return err
+// The record's attributes land under "attrs", so an attribute named like an envelope
+// field cannot collide with it.
+func NewNoticeHandler(enc *LineEncoder, level slog.Leveler) slog.Handler {
+	return &noticeHandler{enc: enc, level: level}
 }
 
 type noticeHandler struct {
-	out   *lockedWriter
+	enc   *LineEncoder
 	level slog.Leveler
 	attrs []slog.Attr // from WithAttrs, already nested under their groups
 	group []string    // open groups, applied to the record's own attributes
@@ -73,7 +49,7 @@ func (h *noticeHandler) Handle(_ context.Context, r slog.Record) error {
 	if len(attrs) > 0 {
 		n.Attrs = attrs
 	}
-	return h.out.writeLine(envelope{Type: TypeNotice, Body: n}.appendJSONL(nil))
+	return h.enc.Encode(n)
 }
 
 func (h *noticeHandler) WithAttrs(as []slog.Attr) slog.Handler {

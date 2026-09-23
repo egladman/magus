@@ -49,6 +49,7 @@ const (
 	TypeRunSummary              = "run.summary"
 	TypeRunRemote               = "run.remote"
 	TypeRunDry                  = "run.dry"
+	TypeRunDetach               = "run.detach"
 	TypeLockWait                = "lock.wait"
 	TypeLockReleased            = "lock.released"
 	TypeLockSuperseded          = "lock.superseded"
@@ -226,6 +227,16 @@ type RunRemote = cache.RemoteTally
 // run.summary with dry set closes it.
 type RunDry struct{}
 
+// RunDetach is where an invocation handed to the daemon with --detach stands. State is
+// "coalesced" (an identical one was already running, so none was queued), "queued"
+// (handed over, not waited on), "running" (handed over and waited on), "unwatched"
+// (the wait stopped; the run continues), "passed" or "failed".
+type RunDetach struct {
+	Invocation string `json:"invocation,omitempty"`
+	State      string `json:"state"`
+	DurationMs int64  `json:"duration_ms,omitempty"` // passed and failed only
+}
+
 // RunSummary is the end-of-run footer: hit/miss/error counts (or, for a dry run,
 // the planned count) and elapsed wall time.
 type RunSummary struct {
@@ -345,6 +356,7 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RunStep{}):                 TypeRunStep,
 	reflect.TypeOf(RunSummary{}):              TypeRunSummary,
 	reflect.TypeOf(RunDry{}):                  TypeRunDry,
+	reflect.TypeOf(RunDetach{}):               TypeRunDetach,
 	reflect.TypeOf(LockWait{}):                TypeLockWait,
 	reflect.TypeOf(LockReleased{}):            TypeLockReleased,
 	reflect.TypeOf(LockSuperseded{}):          TypeLockSuperseded,
@@ -353,7 +365,8 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(Notice{}):                  TypeNotice,
 }
 
-func typeOf(e any) string { return registry[reflect.TypeOf(e)] }
+// TypeOf returns the record type e is written as, or "" for an unregistered event.
+func TypeOf(e any) string { return registry[reflect.TypeOf(e)] }
 
 // RegisteredTypes returns every event type [Record] accepts, in no fixed order.
 func RegisteredTypes() []reflect.Type {

@@ -18,7 +18,7 @@ import (
 func TestNoticeHandlerWritesNoticeEnvelopes(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	log := slog.New(NewNoticeHandler(&buf, slog.LevelInfo))
+	log := slog.New(NewNoticeHandler(NewLineEncoder(&buf), slog.LevelInfo))
 	log.Debug("cache.dropped")
 	log.With("project", "api").WithGroup("remote").Warn("cache.warn",
 		slog.String("msg", "push failed"), slog.Int("failures", 2), slog.Any("err", errors.New("unreachable")))
@@ -34,7 +34,7 @@ func TestNoticeHandlerWritesNoticeEnvelopes(t *testing.T) {
 func TestNoticeLevelsAreTheDocumentedNames(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	log := slog.New(NewNoticeHandler(&buf, slog.LevelDebug-4))
+	log := slog.New(NewNoticeHandler(NewLineEncoder(&buf), slog.LevelDebug-4))
 	log.Log(context.Background(), slog.LevelDebug-4, "trace")
 	log.Log(context.Background(), slog.LevelError+4, "fatal")
 	assert.Equal(t, `{"schema":5,"type":"run.notice","level":"debug","msg":"trace"}
@@ -55,7 +55,7 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 func TestNoticeHandlerWritesARecordInOneWrite(t *testing.T) {
 	t.Parallel()
 	var w countingWriter
-	slog.New(NewNoticeHandler(&w, slog.LevelInfo)).Info(strings.Repeat("x", 16<<10))
+	slog.New(NewNoticeHandler(NewLineEncoder(&w), slog.LevelInfo)).Info(strings.Repeat("x", 16<<10))
 	require.Len(t, w.writes, 1)
 	assert.True(t, strings.HasSuffix(w.writes[0], "\"}\n"))
 }
@@ -64,7 +64,7 @@ func TestNoticeHandlerWritesARecordInOneWrite(t *testing.T) {
 func TestNoticeHandlerKeepsARecordItCannotEncode(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	slog.New(NewNoticeHandler(&buf, slog.LevelInfo)).Warn("cache.warn", slog.Any("fn", func() {}))
+	slog.New(NewNoticeHandler(NewLineEncoder(&buf), slog.LevelInfo)).Warn("cache.warn", slog.Any("fn", func() {}))
 	line := buf.String()
 	assert.True(t, strings.HasPrefix(line, `{"schema":5,"type":"run.notice","level":"warn","msg":"cache.warn","attrs":{"encode_error":`), line)
 }
@@ -74,7 +74,7 @@ func TestNoticeHandlerKeepsARecordItCannotEncode(t *testing.T) {
 func TestLineNoticesRecordsEachLine(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
-	w := NewLineNotices(context.Background(), NewNoticeHandler(&buf, slog.LevelError), "stdout")
+	w := NewLineNotices(context.Background(), NewNoticeHandler(NewLineEncoder(&buf), slog.LevelError), "stdout")
 	_, _ = fmt.Fprint(w, "one\ntw")
 	_, _ = fmt.Fprint(w, "o\n")
 	assert.Equal(t, `{"schema":5,"type":"run.notice","level":"info","msg":"one","attrs":{"stream":"stdout"}}

@@ -342,27 +342,6 @@ func (c *Cache) RemoteSummary(ctx context.Context) (RemoteTally, bool) {
 	}, true
 }
 
-// LogRemoteSummary accounts for what the remote cache did this run. It is the only
-// place the ZERO case gets stated: a run that never touched a configured remote says so
-// rather than saying nothing, and silence is what made that indistinguishable from
-// working.
-func (c *Cache) LogRemoteSummary(ctx context.Context, s RemoteTally) {
-	attrs := []any{
-		slog.Int64("hits", s.Hits),
-		slog.Int64("misses", s.Misses),
-		slog.Int64("published", s.Published),
-		slog.Int64("failures", s.Failures),
-		slog.Int64("down_bytes", s.DownBytes),
-		slog.Int64("up_bytes", s.UpBytes),
-	}
-	// Warn so a run whose remote degraded cannot end on a line that reads like success.
-	if s.Failures > 0 {
-		c.log.WarnContext(ctx, "cache.remote.summary", attrs...)
-		return
-	}
-	c.log.InfoContext(ctx, "cache.remote.summary", attrs...)
-}
-
 // exportArtifact writes a gzip-tar containing the manifest, its blobs, the captured
 // build log, and the run's portable-ref sidecars (output descriptor + key inputs) for
 // (projectPath, hash). Every non-manifest member is recorded in the signature

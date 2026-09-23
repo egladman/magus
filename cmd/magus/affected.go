@@ -187,15 +187,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		rw, cleanupReport, err := setupJSONLReport(m, opts)
+		sink, closeSink, err := openRunSink(m, opts)
 		if err != nil {
 			return err
 		}
-		defer func() { _ = cleanupReport() }()
-		sink, err := runSink(m, rw)
-		if err != nil {
-			return err
-		}
+		defer func() { _ = closeSink() }()
 		streamCtx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer cancel()
 		streamOpts := []magus.StreamOption{magus.WithStreamSink(sink)}
@@ -250,15 +246,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return err
 	}
 
-	rw, cleanupReport, err := setupJSONLReport(m, opts)
+	sink, closeSink, err := openRunSink(m, opts)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = cleanupReport() }()
-	sink, err := runSink(m, rw)
-	if err != nil {
-		return err
-	}
+	defer func() { _ = closeSink() }()
 
 	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {
@@ -297,7 +289,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		charms = magus.CharmsForCI(charms)
 	}
 	sink.EmitCharms(ctx, strings.Join(charms, ","))
-	sink.EmitCache(ctx)
+	tier, mode := m.CacheDescription()
+	sink.EmitCache(ctx, tier, mode)
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
 		return nil
@@ -396,7 +389,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
-	emitConcurrencyNudge(os.Stderr, m, os.Args[1:], rw)
+	emitConcurrencyNudge(ctx, sink, m, os.Args[1:])
 
 	if chained {
 		return runChain(ctx, m, opts, target, targets, chain, readReturns(target))

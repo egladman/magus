@@ -329,8 +329,8 @@ func isInteractiveTTY() bool {
 // resolver below is what says whether the ref exists.
 var outputRefShape = regexp.MustCompile(`^out[0-9a-f]{8,}$`)
 
-// openXRun loads the workspace and the sink an x run reports through; cleanup closes
-// the -o jsonl report writer, if one was opened.
+// openXRun loads the workspace and the sink an x run reports through; cleanup flushes
+// the sink.
 func openXRun(ctx context.Context, root string) (*magus.Magus, *magus.Sink, func() error, error) {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -340,13 +340,8 @@ func openXRun(ctx context.Context, root string) (*magus.Magus, *magus.Sink, func
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	rw, cleanup, err := setupJSONLReport(m, opts)
+	sink, cleanup, err := openRunSink(m, opts)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-	sink, err := runSink(m, rw)
-	if err != nil {
-		_ = cleanup()
 		return nil, nil, nil, err
 	}
 	return m, sink, cleanup, nil

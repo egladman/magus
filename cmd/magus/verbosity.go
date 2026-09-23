@@ -227,10 +227,10 @@ func applyDisplay() {
 	// comment): general diagnostics go through the process-wide default logger
 	// installed here, not the cache logger those convert, and must not print free
 	// text on stderr while a caller parses this run as JSONL. They land as run.notice
-	// records, the envelope every other line of the run has.
+	// records on the stderr encoder a -o jsonl sink writes its notices through.
 	switch {
 	case global.output == string(FormatJSONL):
-		h = secret.NewRedactingHandler(report.NewStderrNoticeHandler(lvl))
+		h = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), lvl))
 	case globalCfg.Log.Format == "json":
 		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
 	case globalCfg.Log.Format == "text":

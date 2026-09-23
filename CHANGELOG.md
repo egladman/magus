@@ -129,11 +129,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
-- **`-o jsonl` runs emit only records, on stdout and stderr.** Headers, progress,
-  summaries, race diagnostics and lock decisions are typed events beside
-  `run.target.result`; any other log line, or output printed outside a target, is a
-  `run.notice`. `magus x`, `affected --stdin` and `--detach` do the same. Target output
-  stays behind its ref. No record is dropped; the schema is now 5.
+- **`-o jsonl` runs emit only records.** Headers, progress, summaries, race diagnostics
+  and lock decisions are typed events on stdout beside `run.target.result`; notices, other
+  log lines and output printed outside a target are `run.notice` records on stderr.
+  `magus x`, `affected --stdin` and `--detach` (`run.detach`) do the same. No record is
+  dropped; the schema is now 5.
 - **A target's `std\print` is captured with its output.** It is withheld, streamed and
   stored under the target's ref like a subprocess's output, instead of bypassing both.
 - **Breaking: `log.format: jsonl` is refused** from `magus.yaml`, `MAGUS_LOG_FORMAT` and
@@ -222,11 +222,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
 - **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
   keeps `Magus.TailLog`.
-- **Breaking for SDK callers: `WithReport`, `WithReportWriter`, `Magus.LogScope`,
-  `LogCharms`, `LogCache`, `LogBase`, `Magus.CacheDescription`, `ReportWriter.RecordRun*`
-  and `ReportWriter.RecordDiagnostic`.** Build one `Sink` with `Magus.TextSink` or
-  `Magus.JSONLSink`, emit headers through it and pass it with `WithSink`.
-  `ReportWriter.RecordNotice` takes an `slog.Level`.
+- **Breaking for SDK callers: `ReportWriter`, `NewReportWriter`, `WithReport`,
+  `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
+  `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
+  headers through it, pass it with `WithSink` and close it after the run.
 
 ### Fixed
 

@@ -131,69 +131,6 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		assert.Contains(t, out, "reproduce: magus run build api")
 	})
 
-	t.Run("cache.summary", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord(
-			"cache.summary",
-			slog.Int("hits", 3),
-			slog.Int("misses", 1),
-			slog.Int("errors", 0),
-			slog.Int64("elapsed", int64(2*time.Second)),
-		), "3 cached, 1 ran, 0 failed")
-	})
-
-	t.Run("cache.scope", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord(
-			"cache.scope",
-			slog.String("label", "api"),
-			slog.String("source", "cwd"),
-		), "projects: api (cwd)")
-	})
-
-	t.Run("cache.charms", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord(
-			"cache.charms",
-			slog.String("charms", "rw"),
-		), "charms: rw")
-	})
-
-	t.Run("cache.stage ok", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord(
-			"cache.stage",
-			slog.String("label", "magus"), // normalized: root reads as the workspace name, never "."
-			slog.String("target", "lint"),
-			slog.Int64("duration", int64(3100*time.Millisecond)),
-		), "  [pass] magus lint (")
-	})
-
-	t.Run("cache.stage fail", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord(
-			"cache.stage",
-			slog.String("label", "magus"),
-			slog.String("target", "test"),
-			slog.Int64("duration", int64(5*time.Second)),
-			slog.String("error", "go test: exit 1"),
-		), "  [fail] magus test (")
-	})
-
-	// An advisory member's failure is not the composite's, so the row says advisory
-	// rather than leaving a gate reader to reconcile [fail] against a passing run.
-	t.Run("cache.stage advisory", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord(
-			"cache.stage",
-			slog.String("label", "magus"),
-			slog.String("target", "security"),
-			slog.Int64("duration", int64(5*time.Second)),
-			slog.String("error", "govulncheck: exit 1"),
-			slog.Bool("advisory", true),
-		), "  [advisory] magus security (")
-	})
-
 	t.Run("cache.warn", func(t *testing.T) {
 		t.Parallel()
 		assertPlain(t, buildRecord(
@@ -224,50 +161,6 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		assert.Contains(t, out, "running: .:test", "the warning must name what to kill")
 		assert.NotContains(t, out, "cache.memory", "the event name is not the message")
 		assert.NotContains(t, out, "available_mb=", "the figures are already in the sentence")
-	})
-
-	t.Run("cache.dry.banner", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord("cache.dry.banner"), "dry run: commands shown, not executed")
-	})
-
-	// A planned target renders like an executed one: the label on the glyph line,
-	// the target in the repro command underneath. It carries no duration because
-	// nothing ran, which is the only shape difference from cache.hit/cache.miss.
-	t.Run("cache.dry", func(t *testing.T) {
-		t.Parallel()
-		rec := buildRecord(
-			"cache.dry",
-			slog.String("project", "."),
-			slog.String("label", "magus"),
-			slog.String("target", "ci"),
-		)
-		assertPlain(t, rec, "[dry] magus")
-		assertPlain(t, rec, "magus run ci")
-	})
-
-	// The dry footer is the same cache.summary event a real run ends with, so
-	// every output format keeps reporting a footer. Only the wording differs:
-	// nothing executed, so cached/ran/failed would all read 0.
-	t.Run("cache.summary dry", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord(
-			"cache.summary",
-			slog.Bool("dry", true),
-			slog.Int("planned", 3),
-			slog.Int64("elapsed", int64(2*time.Millisecond)),
-		), "summary: dry run, 3 targets would run")
-	})
-
-	// Pluralization is real rather than "target(s)".
-	t.Run("cache.summary dry singular", func(t *testing.T) {
-		t.Parallel()
-		assertPlain(t, buildRecord(
-			"cache.summary",
-			slog.Bool("dry", true),
-			slog.Int("planned", 1),
-			slog.Int64("elapsed", int64(time.Millisecond)),
-		), "1 target would run")
 	})
 
 	t.Run("run.exec", func(t *testing.T) {
@@ -466,7 +359,7 @@ func newTerminalHandler(buf *ttyBuf) *PrettyHandler {
 	return newPrettyHandler(buf, slog.LevelInfo, terminalProbe{})
 }
 
-// TestPrettyHandlerWantsColorRespectsTermDumb pins wantsColor routing through
+// TestPrettyHandlerWantsColorRespectsTermDumb pins WantsColor routing through
 // tty.WantsColor: a TERM=dumb pty is a real terminal by descriptor alone, but
 // understands no escape sequence, so the handler must not color its output.
 // Not parallel: it sets TERM.
@@ -476,10 +369,10 @@ func TestPrettyHandlerWantsColorRespectsTermDumb(t *testing.T) {
 
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
-	assert.True(t, h.wantsColor(), "a capable terminal with NO_COLOR unset wants color")
+	assert.True(t, h.WantsColor(), "a capable terminal with NO_COLOR unset wants color")
 
 	t.Setenv("TERM", "dumb")
-	assert.False(t, h.wantsColor(), "TERM=dumb cannot render color, whatever NO_COLOR says")
+	assert.False(t, h.WantsColor(), "TERM=dumb cannot render color, whatever NO_COLOR says")
 }
 
 // TestPrettyHandlerErrorWritesHeadingToStickyRegion verifies that on a TTY
@@ -517,9 +410,9 @@ func TestPrettyHandlerErrorWritesHeadingToStickyRegion(t *testing.T) {
 	assert.Contains(t, out, "\x1b[1;21r", "scroll margins reserve the bottom rows for the sticky region")
 }
 
-// TestPrettyHandlerSummaryReleasesStickyRegion verifies that a cache.summary
-// record ends the sticky region so the user's shell prompt returns to a
-// clean full-screen terminal.
+// TestPrettyHandlerSummaryReleasesStickyRegion verifies that EndRun ends the
+// sticky region so the user's shell prompt returns to a clean full-screen
+// terminal.
 func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
 	t.Parallel()
 
@@ -539,18 +432,9 @@ func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
 	// whole transcript would see that earlier reset and read it as a teardown
 	// the summary did not perform.
 	before := buf.Len()
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
-		"cache.summary",
-		slog.Int("hits", 3),
-		slog.Int("misses", 1),
-		slog.Int("errors", 1),
-		slog.Int64("elapsed", int64(2*time.Second)),
-	)), "Handle cache.summary")
+	require.NoError(t, h.EndRun(context.Background(), "Summary: 3 cached, 1 ran, 1 failed (2.0s)\n"), "EndRun")
 
 	out := buf.String()[before:]
-	// The writer reports a descriptor and the probe calls it a terminal,
-	// so the summary takes the "Summary:" form. The sticky-region
-	// lifecycle is what this test cares about.
 	assert.Contains(t, out, "3 cached, 1 ran, 1 failed", "summary line present")
 	assert.Regexp(t, `\x1b\[\d+;\d+r`, buf.String(), "DECSTBM was set by the sticky region")
 
@@ -578,13 +462,7 @@ func TestPrettyHandlerSummaryReleasesACleanBand(t *testing.T) {
 		slog.Int("running", 2),
 		slog.Int("queued", 0),
 	)), "Handle cache.pool")
-	require.NoError(t, h.Handle(context.Background(), buildRecord(
-		"cache.summary",
-		slog.Int("hits", 4),
-		slog.Int("misses", 0),
-		slog.Int("errors", 0),
-		slog.Int64("elapsed", int64(time.Second)),
-	)), "Handle cache.summary")
+	require.NoError(t, h.EndRun(context.Background(), "Summary: 4 cached, 0 ran, 0 failed (1.0s)\n"), "EndRun")
 
 	assert.Contains(t, buf.String(), "\x1b[r", "no failures means nothing to hold the rows for")
 }
@@ -840,9 +718,9 @@ func TestPrettyHandlerPrintsAfterCancellation(t *testing.T) {
 	lg := slog.New(NewPrettyHandler(&sink, slog.LevelInfo))
 
 	ctx, cancel := context.WithCancel(t.Context())
-	lg.InfoContext(ctx, "cache.scope", slog.String("label", "before"), slog.String("source", "x"))
+	lg.InfoContext(ctx, "cache.warn", slog.String("msg", "before"))
 	cancel()
-	lg.InfoContext(ctx, "cache.scope", slog.String("label", "after"), slog.String("source", "x"))
+	lg.InfoContext(ctx, "cache.warn", slog.String("msg", "after"))
 
 	out := sink.String()
 	assert.Contains(t, out, "before")
@@ -924,9 +802,8 @@ func failEvent(t *testing.T, h *PrettyHandler, project, target, cause string) {
 
 func summaryEvent(t *testing.T, h *PrettyHandler, errors int) {
 	t.Helper()
-	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.summary",
-		slog.Int("hits", 0), slog.Int("misses", 0), slog.Int("errors", errors),
-		slog.Int64("elapsed", int64(time.Second)))), "summary")
+	require.NoError(t, h.EndRun(context.Background(),
+		fmt.Sprintf("summary: 0 cached, 0 ran, %d failed (1.0s)\n", errors)), "summary")
 }
 
 // docsCascade replays the run this dedup exists for: one stale-anchor failure in
@@ -1123,21 +1000,17 @@ func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
 	h := newTerminalHandler(&buf)
 	ctx := context.Background()
 
-	require.NoError(t, h.Handle(ctx, buildRecord("cache.scope",
-		slog.String("label", "api"), slog.String("source", "vcs"))))
+	h.BeginRun()
 	require.NoError(t, h.Handle(ctx, buildRecord("cache.error",
 		slog.String("project", "api"), slog.String("target", "build"),
 		slog.Int64("duration", int64(time.Second)), slog.String("error", "boom"))))
-	require.NoError(t, h.Handle(ctx, buildRecord("cache.summary",
-		slog.Int("hits", 0), slog.Int("misses", 1), slog.Int("errors", 1),
-		slog.Int64("elapsed", int64(time.Second)))))
+	require.NoError(t, h.EndRun(ctx, "summary: 0 cached, 1 ran, 1 failed (1.0s)\n"))
 	require.Len(t, h.Failures(), 1)
 	firstStart := h.status.start
 	require.False(t, firstStart.IsZero())
 
 	// A second run through the SAME handler.
-	require.NoError(t, h.Handle(ctx, buildRecord("cache.scope",
-		slog.String("label", "api"), slog.String("source", "vcs"))))
+	h.BeginRun()
 
 	assert.Empty(t, h.Failures(), "the previous run's failures must not carry over")
 	assert.Zero(t, h.status.failed, "nor its counters")
@@ -1169,8 +1042,8 @@ func TestNoEscapeSequencesEverReachAPipe(t *testing.T) {
 	h := NewPrettyHandler(&buf, slog.LevelInfo)
 	ctx := context.Background()
 
+	h.BeginRun()
 	for _, rec := range []slog.Record{
-		buildRecord("cache.scope", slog.String("label", "api"), slog.String("source", "vcs")),
 		buildRecord("cache.pool", slog.Int("capacity", 8), slog.Int("running", 3), slog.Int("queued", 1)),
 		buildRecord("lock.waiting", slog.String("project", "api"),
 			slog.String("holder_pid", "4211"), slog.String("holder_command", "magus run build")),
@@ -1183,11 +1056,10 @@ func TestNoEscapeSequencesEverReachAPipe(t *testing.T) {
 			slog.Int64("duration", int64(2*time.Second)), slog.String("error", "exit status 1"),
 			slog.String("ref", "out-7c21"), slog.String("log", "/tmp/magus/logs/api/abc.log")),
 		buildRecord("cache.warn", slog.String("msg", "something worth saying")),
-		buildRecord("cache.summary", slog.Int("hits", 1), slog.Int("misses", 1),
-			slog.Int("errors", 1), slog.Int64("elapsed", int64(3*time.Second))),
 	} {
 		require.NoError(t, h.Handle(ctx, rec), rec.Message)
 	}
+	require.NoError(t, h.EndRun(ctx, "summary: 1 cached, 1 ran, 1 failed (3.0s)\n"))
 
 	out := buf.String()
 	require.NotEmpty(t, out, "the run must still be reported, just plainly")
@@ -1285,7 +1157,7 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 	// A project HEADER names no target, so clicking it must resolve to nothing
 	// rather than to whichever failure happens to sit beneath it. This is the
 	// row the flat-list arithmetic had no concept of.
-	header := s.FindRow(glyph(false, "fail", colRed) + " api")
+	header := s.FindRow(Glyph(false, "fail", colRed) + " api")
 	require.NotZero(t, header)
 	_, ok = h.HitFailure(header)
 	assert.False(t, ok, "a project header is not a failure")
@@ -1293,19 +1165,17 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 
 // TestRecordBoolSurvivesAWrongType guards the logging path against a panic.
 // slog.Value.Bool panics on a kind mismatch, and this runs inside the handler,
-// so a record carrying the wrong type for "dry" would take the process down
+// so a record carrying the wrong type for "active" would take the process down
 // from the one place that is supposed to be reporting problems.
 func TestRecordBoolSurvivesAWrongType(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	h := NewPrettyHandler(&buf, slog.LevelInfo)
 	assert.NotPanics(t, func() {
-		_ = h.Handle(context.Background(), buildRecord("cache.summary",
-			slog.String("dry", "not a bool"),
-			slog.Int("hits", 1), slog.Int("misses", 0), slog.Int("errors", 0),
-			slog.Int64("elapsed", int64(time.Second))))
+		_ = h.Handle(context.Background(), buildRecord("cache.remote.posture",
+			slog.String("backend", "gha"), slog.String("active", "not a bool")))
 	})
-	assert.Contains(t, buf.String(), "1 cached", "and still reports the run")
+	assert.Contains(t, buf.String(), "remote: gha (inactive here", "and still reports the posture")
 }
 
 // TestRecordDurAcceptsBothSpellings guards the silent zero. A caller reaching
@@ -1328,11 +1198,7 @@ func TestRecordDurAcceptsBothSpellings(t *testing.T) {
 func TestPrettyHandlerRefLegend(t *testing.T) {
 	t.Parallel()
 
-	summary := func() slog.Record {
-		return buildRecord("cache.summary",
-			slog.Int("hits", 1), slog.Int("misses", 1), slog.Int("errors", 0),
-			slog.Int64("elapsed", int64(time.Second)))
-	}
+	const footer = "summary: 1 cached, 1 ran, 0 failed (1.0s)\n"
 
 	t.Run("printed once when a ref was minted", func(t *testing.T) {
 		t.Parallel()
@@ -1344,7 +1210,7 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 			slog.Int64("duration", int64(80*time.Millisecond)),
 			slog.String("ref", "out1a2b3c4d5e6f"),
 		)), "miss")
-		require.NoError(t, h.Handle(context.Background(), summary()), "summary")
+		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
 
 		out := buf.String()
 		assert.Contains(t, out, "outputs: magus query output <ref>")
@@ -1358,7 +1224,7 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 		t.Parallel()
 		var buf bytes.Buffer
 		h := newTestHandler(&buf)
-		require.NoError(t, h.Handle(context.Background(), summary()), "summary")
+		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
 		assert.NotContains(t, buf.String(), "outputs:")
 	})
 
@@ -1374,7 +1240,7 @@ func TestPrettyHandlerRefLegend(t *testing.T) {
 			slog.Int64("duration", int64(80*time.Millisecond)),
 			slog.String("ref", "out1a2b3c4d5e6f"),
 		)), "miss")
-		require.NoError(t, h.Handle(context.Background(), summary()), "summary")
+		require.NoError(t, h.EndRun(context.Background(), footer), "summary")
 		for _, vendor := range []string{"claude", "codex", "cursor", "copilot"} {
 			assert.NotContains(t, strings.ToLower(buf.String()), vendor)
 		}

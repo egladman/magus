@@ -100,7 +100,7 @@ func newWriter(f *os.File, dst io.Writer, opts ...Option) *Writer {
 }
 
 func (w *Writer) record(e any) error {
-	typ := typeOf(e)
+	typ := TypeOf(e)
 	if typ == "" {
 		return fmt.Errorf("report: unregistered event type %T", e)
 	}
@@ -246,4 +246,40 @@ func (w *Writer) peekErr() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.lastErr
+}
+
+// LineEncoder writes each event as one JSONL record, synchronously: one Write per
+// record, serialized across goroutines, so a reader sharing the stream never sees half a
+// line. Unlike [Writer] it holds nothing back, which suits a stream written from
+// wherever a log record or notice arises. Safe for concurrent use.
+type LineEncoder struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+// stderrLines is the one encoder over os.Stderr, so records from every handler and sink
+// in the process serialize on one lock.
+var stderrLines = &LineEncoder{w: os.Stderr}
+
+// NewLineEncoder returns an encoder writing to w. For os.Stderr it is always the same
+// one.
+func NewLineEncoder(w io.Writer) *LineEncoder {
+	if w == os.Stderr {
+		return stderrLines
+	}
+	return &LineEncoder{w: w}
+}
+
+// Encode writes e as one record. An unregistered event type is an error and writes
+// nothing; a body that fails to encode is written as a run.notice naming the failure.
+func (l *LineEncoder) Encode(e any) error {
+	typ := TypeOf(e)
+	if typ == "" {
+		return fmt.Errorf("report: unregistered event type %T", e)
+	}
+	line := envelope{Type: typ, Body: e}.appendJSONL(nil)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, err := l.w.Write(line)
+	return err
 }

@@ -49,7 +49,8 @@ type RunOption func(*run)
 type run struct {
 	DryRun            bool
 	Charms            []string       // execution charms propagated via context; "rw" enables mutating targets
-	report            *report.Writer // caller-owned; nil for the text sink. See WithSink
+	sink              *Sink          // nil reports through a text sink on stderr. See WithSink
+	report            *report.Writer // sink's record stream; nil unless its format records
 	NoVolatilityRetry bool
 	BaseRef           string
 	Race              bool     // MGS4001/4002/4004 race diagnostics; near-zero overhead
@@ -59,6 +60,14 @@ type run struct {
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
 	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
+}
+
+// out is the sink the run reports through.
+func (o run) out(m *Magus) *Sink {
+	if o.sink != nil {
+		return o.sink
+	}
+	return m.textSink()
 }
 
 // WithDryRun prints what would run without invoking any handler.
@@ -271,7 +280,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 				hint = "these projects come from a workspace provider, so ci lives on the provider spell: " +
 					"expose a \"ci\" op in its mgs_listTargets and the anchor is satisfied"
 			}
-			m.sinkFor(o.report).emit(ctx, report.Notice{Level: slog.LevelInfo, Message: hint})
+			o.out(m).EmitNotice(ctx, slog.LevelInfo, "", hint)
 			return types.DiagnosticErrorf(types.NoCITarget,
 				"no %q target defined in the selected project(s); it is the anchor %q and %q key off, "+
 					"so this run would do nothing", types.TargetCI, "magus affected ci", "magus affected --plan")
@@ -355,10 +364,10 @@ func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOptio
 		// compute affected set ...)"). RunAffected's real caller is the MCP run_affected
 		// tool, where there is no scope line and an agent would otherwise be told only
 		// that the run passed, with no way to know it had just built the whole workspace.
-		m.sinkFor(o.report).emit(ctx, report.Notice{Level: slog.LevelWarn, Code: string(types.AffectedSetUncomputable), Message: fmt.Sprintf(
+		o.out(m).EmitNotice(ctx, slog.LevelWarn, types.AffectedSetUncomputable, fmt.Sprintf(
 			"affected: could not compute a changed-file set, so EVERY project was selected. "+
 				"This runs a full build, not an incremental one. Reason: %s (see %s)",
-			source, types.CodeURL(types.AffectedSetUncomputable))})
+			source, types.CodeURL(types.AffectedSetUncomputable)))
 	}
 	if len(targets) == 0 {
 		return nil
@@ -1232,7 +1241,7 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 // paths below, and a deferred swap is the only way to make every one of them report the
 // abort rather than the cancellation it surfaced as.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) (err error) {
-	out := m.sinkFor(opts.report)
+	out := opts.out(m)
 	// Ahead of the dry-run branch, not after it: a dry run evaluates the same
 	// target bodies under a tracing context, so without the forwarded args here
 	// it printed the op's own command and silently omitted them, under-reporting
@@ -1774,7 +1783,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 // Attached only in collapse mode (see executeStages), where the project's own
 // subprocess output is withheld. It implements buzz.TargetObserver.
 type stageObserver struct {
-	out   eventSink
+	out   *Sink
 	label string // normalized project display name (never "" or "."); see types.ProjectLabel
 	// policies is the owning project's per-target policy, read for the one thing the
 	// row cannot show without it: which failures the composite carries on past.
@@ -1838,7 +1847,7 @@ func (m *Magus) buildRaceRuntime() *race.Runtime {
 // state. Every offender is reported before it returns.
 func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Project, target string,
 	byPath map[string]*types.Project, handler TargetHandler,
-	out eventSink,
+	out *Sink,
 ) error {
 	// One resolution per project, reused for admission and both snapshots, so the selection
 	// loop and the comparison loops cannot disagree about what the outputs are.
@@ -1928,7 +1937,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 // Target field still carries this label (the best identifier available for which
 // run flagged it), so callers reading it should treat it as a run scope, not a target.
 func checkMissingDependencies(ctx context.Context, allProjects []*types.Project, dispatched map[string]*types.Project,
-	written map[string][]string, scope string, out eventSink,
+	written map[string][]string, scope string, out *Sink,
 ) {
 	if len(written) == 0 {
 		return
@@ -1973,7 +1982,7 @@ func checkMissingDependencies(ctx context.Context, allProjects []*types.Project,
 // single executeStages call can cover several target stages at once (runResolved
 // groups multi-target requests into one call), so a blanket label would misattribute
 // the overlap to a target that may not even be one of the two involved.
-func checkOutputOverlap(ctx context.Context, steps []cache.Step, out eventSink) {
+func checkOutputOverlap(ctx context.Context, steps []cache.Step, out *Sink) {
 	for i := 0; i < len(steps); i++ {
 		if len(steps[i].Outputs) == 0 {
 			continue

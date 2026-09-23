@@ -192,7 +192,7 @@ type statusLine struct {
 // separately the elapsed time, which the band pins to the right edge.
 func (s statusLine) render(now time.Time) (left, elapsed string) {
 	if !s.start.IsZero() {
-		elapsed = fmtDur(now.Sub(s.start))
+		elapsed = FormatDuration(now.Sub(s.start))
 	}
 	var b strings.Builder
 	// The blocked state is NOT rendered here, though this type holds it: the
@@ -300,7 +300,7 @@ func (h *PrettyHandler) band() []tty.Line {
 	// The selection is the one thing that CANNOT be dropped, since it is not
 	// decoration: it says which row a keypress will act on, and without it the
 	// prompt is unusable. Reverse video is not a color, so it stays.
-	color := h.wantsColor()
+	color := h.WantsColor()
 	var dim tty.SGR
 	if color {
 		dim = tty.SGRDim
@@ -342,7 +342,7 @@ func (h *PrettyHandler) band() []tty.Line {
 			// terminal with no color, and repeating it down every branch of a
 			// tree is noise the tree already carries structurally.
 			rows = append(rows, tty.Line{Spans: []tty.Span{
-				{Text: glyph(color, "fail", colRed) + " ", Style: dim},
+				{Text: Glyph(color, "fail", colRed) + " ", Style: dim},
 				{Text: f.Project, Style: dim},
 			}})
 			h.rowFailure = append(h.rowFailure, -1)
@@ -366,7 +366,7 @@ func (h *PrettyHandler) band() []tty.Line {
 			{Text: f.Target, Style: weight},
 		}}
 		if f.Dur > 0 {
-			row.Spans = append(row.Spans, tty.Span{Text: fmtDur(f.Dur), Style: dim, Align: tty.AlignRight})
+			row.Spans = append(row.Spans, tty.Span{Text: FormatDuration(f.Dur), Style: dim, Align: tty.AlignRight})
 		}
 		if selected {
 			for j := range row.Spans {
@@ -616,9 +616,9 @@ func (h *PrettyHandler) Close() error {
 	return h.releaseBand()
 }
 
-// wantsColor reports whether output to this writer should carry ANSI
-// color. It is consulted per record so a late redirect is noticed.
-func (h *PrettyHandler) wantsColor() bool {
+// WantsColor reports whether output to this writer should carry ANSI color. Ask per
+// line rather than once, so a late redirect is noticed. Safe for concurrent use.
+func (h *PrettyHandler) WantsColor() bool {
 	return tty.WantsColor(h.w, h.probe)
 }
 
@@ -684,7 +684,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	// earlier record does not suppress this one's output.
 	h.err = nil
 
-	colorize := h.wantsColor()
+	colorize := h.WantsColor()
 	project := recordStr(r, "project") // real path; used for the runnable repro command
 	label := displayProjectLabel(recordStr(r, "label"), project)
 	dur := recordDur(r, "duration")
@@ -731,13 +731,13 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// Cached: passed without running. Dimmed green so a cache hit reads as
 		// low-signal next to work that actually ran. Cache state lives in the parens,
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
-		h.printf("%s %s (cached, %s%s)\n", glyph(colorize, "pass", colDimGreen), label, fmtDur(dur), remote)
+		h.printf("%s %s (cached, %s%s)\n", Glyph(colorize, "pass", colDimGreen), label, FormatDuration(dur), remote)
 		h.printRepro(project, recordStr(r, "target"))
 		h.printRef(ref)
 		h.status.cached++
 		h.paintStatus()
 	case "cache.miss":
-		h.printf("%s %s (ran, %s%s)\n", glyph(colorize, "pass", colGreen), label, fmtDur(dur), remote)
+		h.printf("%s %s (ran, %s%s)\n", Glyph(colorize, "pass", colGreen), label, FormatDuration(dur), remote)
 		h.printRepro(project, recordStr(r, "target"))
 		h.printRef(ref)
 		h.status.passed++
@@ -756,7 +756,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.status.failed++
 		h.paintStatus()
 	case "cache.warn":
-		h.printf("%s %s\n", glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
+		h.printf("%s %s\n", Glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
 	case "cache.memory":
 		// The sentence as the body, like cache.warn above. Without this arm the
 		// record fell through to handleGeneric and rendered as
@@ -769,7 +769,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// LogMemoryPressure builds msg with every figure it also attaches as an
 		// attribute, plus the running targets, so a trailer would print the same
 		// numbers twice.
-		h.printf("%s %s\n", glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
+		h.printf("%s %s\n", Glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
 	case "cache.pool":
 		// A live occupancy sample, folded into the row pinned at the top of
 		// the sticky region. Deliberately not printed on a non-TTY: this
@@ -780,76 +780,6 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.status.running = recordInt(r, "running")
 		h.status.queued = recordInt(r, "queued")
 		h.paintStatus()
-	case "cache.summary":
-		elapsed := recordDur(r, "elapsed")
-		// A dry run ends with the same footer a real one does (that is the whole
-		// point of routing it through this event), but it cannot borrow the real
-		// wording: nothing executed, so "cached / ran / failed" would all read 0
-		// for a plan that intends to run plenty. Dry-ness is stated here and
-		// nowhere else in the run, so the two outputs differ in one line.
-
-		// Ahead of the counts, because it is the list that turns the one printed
-		// failure back into the full set of targets that stopped.
-		h.printBlocked(colorize)
-
-		lead := "summary: "
-		if colorize {
-			lead = "\nSummary: "
-		}
-		if recordBool(r, "dry") {
-			h.printf("%sdry run, %s would run (%s)\n",
-				lead, plural(recordInt(r, "planned"), "target"), fmtDur(elapsed))
-		} else {
-			h.printf("%s%d cached, %d ran, %d failed (%s)\n",
-				lead, recordInt(r, "hits"), recordInt(r, "misses"), recordInt(r, "errors"), fmtDur(elapsed))
-		}
-		h.printRefLegend(colorize)
-		// End of run: give the leased rows back so the user's shell prompt
-		// returns to a clean full-screen terminal. Safe to call when nothing
-		// was ever painted (idempotent), and ensureLease takes a fresh band if
-		// another run follows in the same process.
-		//
-		// UNLESS there are failures still pinned on a live band. Releasing then
-		// would erase, at the exact moment they became actionable, the list a
-		// reader is about to be offered, so the rows are held and whoever runs
-		// the prompt gives them back. Nothing leaks if no prompt follows: the
-		// process exit path releases every lease regardless.
-		if !h.hasPinnedFailures() || !h.lease.Enabled() {
-			h.fail(h.lease.Release())
-		}
-	case "cache.dry.banner":
-		if colorize {
-			h.printf("%s\n", tty.Colorize("dry run: commands shown, not executed", colDim))
-		} else {
-			h.printf("dry run: commands shown, not executed\n")
-		}
-	case "cache.dry":
-		// Neutral glyph: a dry run has no pass/fail outcome (nothing executes), and
-		// no duration for the same reason. Everything else matches the executed
-		// line (including the repro command underneath), so a plan and a run read
-		// the same way and only the glyph and the footer say which one you got.
-		h.printf("%s %s\n", glyph(colorize, "dry", colDim), label)
-		h.printRepro(recordStr(r, "project"), recordStr(r, "target"))
-	case "cache.scope":
-		// Run start. Everything the band shows is per-RUN, and this handler is
-		// per-PROCESS, so the two have to be separated explicitly or a process
-		// that outlives one run reports the sum of every run it has ever seen.
-		// That is invisible in a one-shot CLI and wrong the moment anything
-		// long-lived (a TUI left open, the daemon) drives more than one.
-		h.resetRun()
-		label := recordStr(r, "label")
-		source := recordStr(r, "source")
-		if source != "" {
-			h.printf("projects: %s (%s)\n", label, source)
-		} else {
-			h.printf("projects: %s\n", label)
-		}
-	case "cache.charms":
-		if charms := recordStr(r, "charms"); charms != "" {
-			h.printf("charms: %s\n", charms)
-		} else {
-			h.printf("charms: (none)\n")
-		}
 	case "cache.remote.posture":
 		// The probe the header cannot make, phrased like the header it follows.
 		state := "inactive here"
@@ -860,22 +790,12 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			onOff(recordBool(r, "verify")), onOff(recordBool(r, "sign")))
 	case "cache.remote.hit":
 		h.printf("  restored %s from the remote cache (%s)\n",
-			displayProjectLabel(label, project), fmtBytesLog(recordInt(r, "bytes")))
+			displayProjectLabel(label, project), FormatBytes(recordInt(r, "bytes")))
 	case "cache.remote.push":
 		h.printf("  published %s to the remote cache (%s)\n",
-			displayProjectLabel(label, project), fmtBytesLog(recordInt(r, "bytes")))
+			displayProjectLabel(label, project), FormatBytes(recordInt(r, "bytes")))
 	case "cache.remote.readonly":
 		h.printf("remote: read-only - a trust set is declared but this machine has no signing key, so nothing is published\n")
-	case "cache.remote.summary":
-		// The ZERO case is the point: a configured remote that did nothing says so,
-		// because silence is what made it indistinguishable from working.
-		h.printf("remote: %d restored, %d published, %d failed (%s down, %s up)\n",
-			recordInt(r, "hits"), recordInt(r, "published"), recordInt(r, "failures"),
-			fmtBytesLog(recordInt(r, "down_bytes")), fmtBytesLog(recordInt(r, "up_bytes")))
-	case "cache.backend":
-		h.printf("cache: %s (%s)\n", recordStr(r, "tier"), recordStr(r, "mode"))
-	case "cache.base":
-		h.printf("base: %s\n", recordStr(r, "base"))
 	case "run.exec":
 		// Every subprocess magus spawns (proc.exec, fork spells) logs through this event
 		// in run.Exec. Rendered as a shell-style echo, indented under the owning
@@ -890,22 +810,52 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		} else {
 			h.printf("  $ %s\n", cmd)
 		}
-	case "cache.stage":
-		// One indented line per magus.needs sub-target as it completes, so a collapsed
-		// project still shows what ran. Project-qualified because stages from concurrently
-		// running projects interleave. A stage always ran, so it is pass/fail only.
-		target := recordStr(r, "target")
-		name, color := "pass", colGreen
-		switch {
-		case recordStr(r, "error") == "":
-		case recordBool(r, "advisory"):
-			name, color = "advisory", colYellow
-		default:
-			name, color = "fail", colRed
-		}
-		h.printf("  %s %s %s (%s)\n", glyph(colorize, name, color), label, target, fmtDur(dur))
 	default:
 		h.handleGeneric(colorize, r)
+	}
+	return h.err
+}
+
+// Print writes text, one or more whole lines, where the run's output scrolls, redacted
+// against ctx. It is how a renderer that composes its own prose shares the terminal with
+// the band this handler paints.
+func (h *PrettyHandler) Print(ctx context.Context, text string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recordCtx = ctx
+	defer func() { h.recordCtx = nil }()
+	h.err = nil
+	h.printf("%s", text)
+	return h.err
+}
+
+// BeginRun clears what the band shows about the previous run. This handler is
+// per-process and the band per-run, so a process that outlives one run (a TUI left
+// open, the daemon) would otherwise report the sum of every run it has seen.
+func (h *PrettyHandler) BeginRun() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.resetRun()
+}
+
+// EndRun prints footer between what the band collected over the run (the targets a
+// failure blocked, ahead of it) and the legend for the output refs printed above it.
+// It then gives the band's rows back so the shell prompt returns to a full-screen
+// terminal, unless failures are still pinned on a live band: releasing those would
+// erase the list at the moment a reader is offered it, so whoever runs the prompt
+// releases them, and the process exit path does if nobody does.
+func (h *PrettyHandler) EndRun(ctx context.Context, footer string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recordCtx = ctx
+	defer func() { h.recordCtx = nil }()
+	h.err = nil
+	colorize := h.WantsColor()
+	h.printBlocked(colorize)
+	h.printf("%s", footer)
+	h.printRefLegend(colorize)
+	if !h.hasPinnedFailures() || !h.lease.Enabled() {
+		h.fail(h.lease.Release())
 	}
 	return h.err
 }
@@ -937,12 +887,12 @@ const (
 	colDim      = tty.SGRDim      // info/debug
 )
 
-// glyph renders a bracketed status glyph like "[pass]" or "[fail]", ASCII only (no
+// Glyph renders a bracketed status glyph like "[pass]" or "[fail]", ASCII only (no
 // Unicode symbols or emoji), colored only on a TTY. pass/fail are the per-target
 // outcome words; cache state (cached vs ran) is shown separately in the line's
 // parenthetical, the orthogonal split every major build tool uses (e.g. Bazel's
 // "(cached) PASSED"). Named to match the doctor command's statusGlyph.
-func glyph(colorize bool, label string, color tty.SGR) string {
+func Glyph(colorize bool, label string, color tty.SGR) string {
 	s := "[" + label + "]"
 	if !colorize {
 		return s
@@ -969,7 +919,7 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	if colorize && attrs != "" {
 		attrs = tty.Colorize(attrs, colDim)
 	}
-	h.printf("%s %s%s\n", glyph(colorize, label, color), r.Message, attrs)
+	h.printf("%s %s%s\n", Glyph(colorize, label, color), r.Message, attrs)
 }
 
 // formatAttrs renders a record's attrs as " key=value" pairs, skipping the noisy
@@ -1079,9 +1029,9 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		// command below, which is the detail the user most needs on the one
 		// path where the terminal is already misbehaving.
 		if f.refused {
-			h.printf("%s %s (not started)\n", glyph(colorize, "fail", colRed), heading)
+			h.printf("%s %s (not started)\n", Glyph(colorize, "fail", colRed), heading)
 		} else {
-			h.printf("%s %s (ran, %s)\n", glyph(colorize, "fail", colRed), heading, fmtDur(dur))
+			h.printf("%s %s (ran, %s)\n", Glyph(colorize, "fail", colRed), heading, FormatDuration(dur))
 		}
 	}
 	if cause != "" {
@@ -1395,7 +1345,9 @@ func recordDur(r slog.Record, key string) time.Duration {
 	return d
 }
 
-func fmtDur(d time.Duration) string {
+// FormatDuration renders d the way every run line does: coarser as it grows, whole
+// seconds from ten on.
+func FormatDuration(d time.Duration) string {
 	switch {
 	case d < time.Microsecond:
 		return fmt.Sprintf("%dns", d.Nanoseconds())
@@ -1408,16 +1360,6 @@ func fmtDur(d time.Duration) string {
 	default:
 		return d.Round(time.Second).String()
 	}
-}
-
-// plural renders a count with its noun, pluralized. Written out rather than
-// emitted as "target(s)": the parenthesized form is a writer refusing to pick,
-// and it lands in output a reader is already scanning under pressure.
-func plural(n int, noun string) string {
-	if n == 1 {
-		return fmt.Sprintf("%d %s", n, noun)
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // recordBool reads a bool attr, defaulting to false when it is absent or not a
@@ -1465,7 +1407,7 @@ func remoteSuffix(remote, total time.Duration) string {
 	if remote < minRemote || total <= 0 || remote*4 < total {
 		return ""
 	}
-	return ", " + fmtDur(remote) + " remote"
+	return ", " + FormatDuration(remote) + " remote"
 }
 
 // notify resolves the band this handler raises notifications into.
@@ -1983,10 +1925,10 @@ func onOff(b bool) string {
 	return "off"
 }
 
-// fmtBytesLog renders a transfer size for a human scanning a run. Base-1024 with
+// FormatBytes renders a transfer size for a human scanning a run. Base-1024 with
 // binary suffixes, matching config_cache.go's fmtBytes rather than inventing a
 // second spelling of the same quantity in one binary.
-func fmtBytesLog(n int) string {
+func FormatBytes(n int) string {
 	switch {
 	case n >= 1<<30:
 		return fmt.Sprintf("%.1f GiB", float64(n)/(1<<30))

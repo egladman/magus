@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,41 +29,56 @@ func outputDst() (io.Writer, func() error, error) {
 	return io.MultiWriter(os.Stdout, f), f.Close, nil
 }
 
-// setupJSONLReport opens the -o jsonl report writer and wires it into m's graph
-// observer; a nil writer and a no-op cleanup for any other format. run.go and
-// affected.go both open the same writer over the same destination, so this is the
-// one place that dance is written.
-func setupJSONLReport(m *magus.Magus, opts OutputOptions) (*magus.ReportWriter, func() error, error) {
-	if opts.Format != outputJSONL {
-		return nil, func() error { return nil }, nil
+// openSink builds the invocation's one sink for its -o format, over stdout (mirrored to
+// --tee) and stderr; close flushes it and closes the tee.
+func openSink(opts OutputOptions) (*magus.Sink, func() error, error) {
+	stdout := io.Writer(os.Stdout)
+	tee := &lazyFile{path: global.tee}
+	if global.tee != "" {
+		stdout = io.MultiWriter(os.Stdout, tee)
 	}
-	w, cleanup, err := outputDst()
+	sink, err := magus.NewSink(magus.Format(opts.Format), stdout, os.Stderr,
+		magus.WithSinkLevel(globalCfg.Log.SlogLevel()), magus.WithSinkFilter(globalCfg.Report.Filter))
 	if err != nil {
 		return nil, nil, err
 	}
-	rw, err := magus.NewReportWriter(w, globalCfg.Report.Filter)
-	if err != nil {
-		_ = cleanup()
-		return nil, nil, err
-	}
-	m.SetGraphObserver(rw.GraphObserver())
-	return rw, func() error {
-		closeErr := rw.Close()
-		cleanupErr := cleanup()
-		if closeErr != nil {
-			return closeErr
-		}
-		return cleanupErr
-	}, nil
+	return sink, func() error { return errors.Join(sink.Close(), tee.Close()) }, nil
 }
 
-// runSink is the invocation's one progress sink: JSONL over rw when -o jsonl opened one
-// (see setupJSONLReport), text otherwise.
-func runSink(m *magus.Magus, rw *magus.ReportWriter) (*magus.Sink, error) {
-	if rw == nil {
-		return m.TextSink(), nil
+// openRunSink is openSink for a command that runs targets on m, which records its graph
+// traversal on the same sink.
+func openRunSink(m *magus.Magus, opts OutputOptions) (*magus.Sink, func() error, error) {
+	sink, closeSink, err := openSink(opts)
+	if err != nil {
+		return nil, nil, err
 	}
-	return m.JSONLSink(rw)
+	m.SetGraphObserver(sink.GraphObserver())
+	return sink, closeSink, nil
+}
+
+// lazyFile opens path for appending on the first write, so a format that keeps stdout
+// empty leaves no --tee file behind. Not safe for concurrent writes.
+type lazyFile struct {
+	path string
+	f    *os.File
+	err  error
+}
+
+func (l *lazyFile) Write(p []byte) (int, error) {
+	if l.f == nil && l.err == nil {
+		l.f, l.err = os.OpenFile(l.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	}
+	if l.err != nil {
+		return 0, fmt.Errorf("--tee: %w", l.err)
+	}
+	return l.f.Write(p)
+}
+
+func (l *lazyFile) Close() error {
+	if l.f == nil {
+		return nil
+	}
+	return l.f.Close()
 }
 
 // emitFormatted renders v with opts to the structured-output destination (stdout,

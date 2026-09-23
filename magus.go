@@ -491,7 +491,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version}
 	if isJSONLLog(cfg.Log) {
-		m.records = secret.NewRedactingHandler(report.NewStderrNoticeHandler(cfg.Log.SlogLevel()))
+		m.records = secret.NewRedactingHandler(report.NewNoticeHandler(report.NewLineEncoder(os.Stderr), cfg.Log.SlogLevel()))
 	}
 	var o workspace.Load
 	for _, fn := range opts {
