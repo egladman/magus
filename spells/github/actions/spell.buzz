@@ -130,6 +130,17 @@ fun rpc(method: str, payload: any) > any !> any {
     return http\post(url, serialize\jsonEncode(payload), headers);
 }
 
+// url_field reads a signed URL out of a Twirp response under its protobuf name
+// (signed_upload_url), which is what the service sends and what BuildKit's type=gha
+// client reads, or else its lowerCamel JSON name, which the official toolkit's decoder
+// also accepts. Reading only the camel name found nothing, and put_artifact took that
+// empty URL for "already stored": every push reported success and uploaded nothing.
+fun url_field(decoded: serialize\Boxed, proto_name: str, json_name: str) > str {
+    final v = decoded.q(proto_name).stringValue();
+    if (v != "") { return v; }
+    return decoded.q(json_name).stringValue();
+}
+
 // snippet bounds a server's response body so a warning stays one readable line. A Twirp
 // error body is a short JSON object; anything longer is an HTML error page whose first
 // characters already say which proxy produced it.
@@ -164,9 +175,9 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     }
     final decoded = serialize\jsonDecode(res["body"]);
     if (!decoded.q("ok").booleanValue()) { return false; }   // ok=false ⇒ miss
-    final loc = decoded.q("signedDownloadUrl").stringValue();
+    final loc = url_field(decoded, "signed_download_url", "signedDownloadUrl");
     if (loc == "") {
-        cache_warn("GetCacheEntryDownloadURL", "ok=true but no signedDownloadUrl");
+        cache_warn("GetCacheEntryDownloadURL", "ok=true but no download URL: {snippet("{res["body"]}")}");
         return false;
     }
     // The download URL is a pre-signed Azure blob URL; it needs no auth header.
@@ -179,7 +190,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
 }
 
 // put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
-// success or when another runner already stored the same key, else false.
+// success or when another runner already stored the same key (a 409), else false.
 export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (!in_actions() or base() == "" or !has_token()) { return false; }
     final io = {};
@@ -195,8 +206,13 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
         cache_warn("CreateCacheEntry", "status {cres["status"]}: {snippet("{cres["body"]}")}");
         return false;
     }
-    final upload = serialize\jsonDecode(cres["body"]).q("signedUploadUrl").stringValue();
-    if (upload == "") { return true; }             // ok=false with no URL ⇒ entry already exists
+    // An existing entry is the 409 above, so ok=false or no URL is a refusal.
+    final created = serialize\jsonDecode(cres["body"]);
+    final upload = url_field(created, "signed_upload_url", "signedUploadUrl");
+    if (!created.q("ok").booleanValue() or upload == "") {
+        cache_warn("CreateCacheEntry", "no upload URL: {snippet("{cres["body"]}")}");
+        return false;
+    }
 
     // 2. Upload the artifact to Azure as a single Put Blob (chunk_size 0 = whole
     //    file, no Content-Range). Azure returns 201 Created on success.
@@ -208,9 +224,9 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
     }
 
     // 3. Commit with the exact byte size. int64 fields are JSON strings in proto3,
-    //    so send sizeBytes as a string.
+    //    so send size_bytes as a string.
     final fres = rpc("FinalizeCacheEntryUpload",
-        {"key": key, "sizeBytes": "{http\byteSize(src)}", "version": CACHE_VERSION});
+        {"key": key, "size_bytes": "{http\byteSize(src)}", "version": CACHE_VERSION});
     if (fres["status"] != 200) {
         cache_warn("FinalizeCacheEntryUpload", "status {fres["status"]}: {snippet("{fres["body"]}")}");
         return false;
@@ -587,6 +603,15 @@ test "the cache service accepts nothing but a 64-character lowercase hex `versio
         final hex = (ch >= "0" and ch <= "9") or (ch >= "a" and ch <= "f");
         assert\isTrue(hex, "character " + ch + " is not lowercase hex");
     }
+}
+
+test "url_field reads the service's protobuf name and still accepts lowerCamel" {
+    final proto = serialize\jsonDecode("\{\"ok\":true,\"signed_upload_url\":\"https://blob/a\"}");
+    assert\equal(url_field(proto, "signed_upload_url", "signedUploadUrl"), "https://blob/a", "protobuf name");
+    final camel = serialize\jsonDecode("\{\"ok\":true,\"signedUploadUrl\":\"https://blob/b\"}");
+    assert\equal(url_field(camel, "signed_upload_url", "signedUploadUrl"), "https://blob/b", "lowerCamel name");
+    final none = serialize\jsonDecode("\{\"ok\":false}");
+    assert\equal(url_field(none, "signed_upload_url", "signedUploadUrl"), "", "absent under both");
 }
 
 test "escapeData keeps a multi-line secret inside one add-mask command" {

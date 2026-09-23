@@ -230,6 +230,19 @@ type ghaEmulator struct {
 	pending   map[string][]byte // key -> uploaded bytes, awaiting finalize
 	committed map[string][]byte // key -> finalized bytes
 	twirpAuth []string          // Authorization seen on each Twirp call, in order
+	// camelCase answers in lowerCamel JSON names. The service answers in protobuf names
+	// (signed_upload_url); the official toolkit's decoder accepts both, so the spell does too.
+	camelCase bool
+	// refuseCreate answers CreateCacheEntry with ok=false, a refused reservation.
+	refuseCreate bool
+}
+
+// urlField names a response field the way this emulator is configured to.
+func (e *ghaEmulator) urlField(proto, camel string) string {
+	if e.camelCase {
+		return camel
+	}
+	return proto
 }
 
 // twirpAuths returns the Authorization headers the Twirp endpoints saw, in order.
@@ -314,13 +327,19 @@ func (e *ghaEmulator) createEntry(w http.ResponseWriter, r *http.Request) {
 	_, exists := e.committed[body.Key]
 	e.mu.Unlock()
 	if exists {
-		// Already stored: v2 reports the conflict as ok=false, no upload URL.
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false})
+		// Twirp's already_exists, which the toolkit reports as "cache already exists".
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"code":"already_exists","msg":"cache entry already exists"}`)
+		return
+	}
+	if e.refuseCreate {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "message": "reservation refused"})
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":              true,
-		"signedUploadUrl": "http://" + r.Host + "/upload/" + body.Key,
+		"ok": true,
+		e.urlField("signed_upload_url", "signedUploadUrl"): "http://" + r.Host + "/upload/" + body.Key,
 	})
 }
 
@@ -340,7 +359,7 @@ func (e *ghaEmulator) upload(w http.ResponseWriter, r *http.Request) {
 func (e *ghaEmulator) finalize(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Key       string `json:"key"`
-		SizeBytes string `json:"sizeBytes"` // int64 is a JSON string in proto3
+		SizeBytes string `json:"size_bytes"` // int64 is a JSON string in proto3
 		Version   string `json:"version"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
@@ -368,7 +387,7 @@ func (e *ghaEmulator) finalize(w http.ResponseWriter, r *http.Request) {
 func (e *ghaEmulator) downloadURL(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Key         string   `json:"key"`
-		RestoreKeys []string `json:"restoreKeys"`
+		RestoreKeys []string `json:"restore_keys"`
 		Version     string   `json:"version"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
@@ -383,9 +402,9 @@ func (e *ghaEmulator) downloadURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":                true,
-		"signedDownloadUrl": "http://" + r.Host + "/blob/" + body.Key,
-		"matchedKey":        body.Key,
+		"ok": true,
+		e.urlField("signed_download_url", "signedDownloadUrl"): "http://" + r.Host + "/blob/" + body.Key,
+		e.urlField("matched_key", "matchedKey"):                body.Key,
 	})
 }
 
@@ -402,7 +421,16 @@ func (e *ghaEmulator) blob(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestGHACacheBackendRoundTrip(t *testing.T) {
-	emu := newGHAEmulator()
+	t.Run("protobuf field names", func(t *testing.T) { ghaRoundTrip(t, newGHAEmulator()) })
+	t.Run("lowerCamel field names", func(t *testing.T) {
+		emu := newGHAEmulator()
+		emu.camelCase = true
+		ghaRoundTrip(t, emu)
+	})
+}
+
+func ghaRoundTrip(t *testing.T, emu *ghaEmulator) {
+	t.Helper()
 	srv := httptest.NewServer(emu.handler())
 	defer srv.Close()
 
@@ -444,6 +472,45 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 		assert.Equal(t, "Bearer test-token", got,
 			"Twirp call %d arrived without the granted credential", i)
 	}
+}
+
+// A reservation the service refuses must fail the push. Reading it as "already stored"
+// reported every push as published while nothing reached the store.
+func TestGHACacheBackendRefusedReservationFailsThePush(t *testing.T) {
+	emu := newGHAEmulator()
+	emu.refuseCreate = true
+	srv := httptest.NewServer(emu.handler())
+	defer srv.Close()
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("ACTIONS_RESULTS_URL", srv.URL+"/")
+	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
+
+	store := ghaBackend(t)
+	ctx := secret.ContextWithResolver(context.Background(), secret.New())
+	err := store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("entry")))
+	require.EqualError(t, err, `remote backend "github-actions" did not store artifact`)
+	emu.mu.Lock()
+	defer emu.mu.Unlock()
+	assert.Empty(t, emu.committed, "a refused reservation stores nothing")
+}
+
+// A second runner publishing the same key meets the service's 409, which is success:
+// the entry it would have written is already there.
+func TestGHACacheBackendExistingEntryIsStored(t *testing.T) {
+	emu := newGHAEmulator()
+	srv := httptest.NewServer(emu.handler())
+	defer srv.Close()
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("ACTIONS_RESULTS_URL", srv.URL+"/")
+	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
+
+	store := ghaBackend(t)
+	ctx := secret.ContextWithResolver(context.Background(), secret.New())
+	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("first"))))
+	require.NoError(t, store.PutArtifact(ctx, "pkg/a", "abc123", bytes.NewReader([]byte("second"))))
+	emu.mu.Lock()
+	defer emu.mu.Unlock()
+	assert.Equal(t, map[string][]byte{"magus-abc123": []byte("first")}, emu.committed)
 }
 
 // Outside GitHub Actions the spell's enabled() op returns false, so the backend
