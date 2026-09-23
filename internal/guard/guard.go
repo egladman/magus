@@ -208,6 +208,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Transport: req.Transport, Session: req.Session, Transcript: req.Transcript, Event: req.Event}
 	isPath := req.IsPath
+	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
+	// there to pin a location.
+	callDir := ""
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -216,6 +219,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// load is a nothing-to-judge envelope that still has to be recorded against the
 		// session that made it, and a session read after the return is read too late.
 		ctx = hookContextAt(ctx, deps, env.Cwd)
+		if filepath.IsAbs(env.Cwd) {
+			callDir = env.Cwd
+		}
 		if who.Session == "" {
 			who.Session = env.Who.Session
 		}
@@ -450,7 +456,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// where the ordering is tested. The cache dir is outermost: what it refuses
 		// outranks every other deny on the line (internal/guard/cache.go).
 		shellD := effectiveDialect(deps.ShellDialect)
-		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input, shellD))
+		if callDir == "" {
+			callDir = location.dir
+		}
+		v := rankOwnBuild(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), ownBuildVerdict(deps, callDir, input, shellD))
+		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
 		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
 		// Outside Evaluate for the same reason the two rules above are: it reads session

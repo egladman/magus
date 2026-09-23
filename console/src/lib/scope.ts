@@ -22,7 +22,8 @@ export function workspaceScope(): string {
   try {
     return sessionStorage.getItem(KEY) ?? ALL_WORKSPACES;
   } catch {
-    return ALL_WORKSPACES; // storage disabled: everything stays daemon-wide, which is the honest fallback
+    // not-a-failure: storage disabled, so everything stays daemon-wide, which is the honest fallback
+    return ALL_WORKSPACES;
   }
 }
 
@@ -31,7 +32,7 @@ export function setWorkspaceScope(root: string): void {
     if (root === ALL_WORKSPACES) sessionStorage.removeItem(KEY);
     else sessionStorage.setItem(KEY, root);
   } catch {
-    // Not durable this session; the event below still moves the live UI.
+    // not-a-failure: not durable this session; the event below still moves the live UI
   }
   window.dispatchEvent(new CustomEvent(EVENT, { detail: root }));
 }

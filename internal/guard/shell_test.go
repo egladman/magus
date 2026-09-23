@@ -203,6 +203,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// question they did not ask.
 		{command: "go -C /elsewhere/repo test ./..."},
 		{command: "go -C ../sibling test ./..."},
+		// go reads -C after the subcommand too, into the same directory, so each spelling
+		// reaches the verdict of the other.
+		{command: "go test -C /elsewhere/repo ./..."},
+		{command: "go build -C=../sibling -o magus ./cmd/magus"},
+		{command: "go test -C libs/gopherbuzz ./...", rule: rawTool(`go test -C libs/gopherbuzz ./...`)},
+		{command: "go --C libs/gopherbuzz test ./...", rule: rawTool(`go --C libs/gopherbuzz test ./...`)},
 		// An unknown flag before the subcommand ends the read rather than guessing
 		// whether the word after it is an operand or the verb. Denying `nx build`
 		// here would name an operation the caller never invoked.
@@ -356,7 +362,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// A cd WITHIN the workspace is denied: name the project instead. A cd into
 		// a temp or scratchpad copy is the throwaway rule above (more specific).
 		{command: "cd libs/gopherbuzz && magus run test .", rule: denyRule{Name: denyRuleCd}},
-		{command: "cd libs/diagnostics", rule: denyRule{Name: denyRuleCd}},
+		// A cd alone on its line relocates nothing after it, and is how a session whose
+		// shell persists moves into its own checkout.
+		{command: "cd libs/diagnostics"},
+		{command: "cd /Users/someone/checkouts/guard-terms"},
+		{command: "cd /Users/someone/checkouts/guard-terms && ./magus run lint .", rule: denyRule{Name: denyRuleCd}},
+		{command: "cd libs/diagnostics; ls", rule: denyRule{Name: denyRuleCd}},
 		{command: "bash -c 'cd /tmp && ls'", rule: denyRule{Name: denyRuleCd}},
 		{command: "(cd libs/diagnostics && ls)", rule: denyRule{Name: denyRuleCd}},
 		// --root is the sanctioned way to mean a different workspace, and a temp

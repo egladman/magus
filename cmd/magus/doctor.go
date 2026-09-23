@@ -279,6 +279,9 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	di.Running = reply.Running
 	di.Queued = reply.Queued
 	for _, w := range reply.Workspaces {
+		if !w.Loaded() {
+			continue
+		}
 		di.Workspaces = append(di.Workspaces, doctor.LoadedWorkspace{
 			Root:       w.Root,
 			LoadedAt:   w.LoadedAt,

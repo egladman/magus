@@ -43,6 +43,7 @@ function copyStyles(target: Document): void {
       style.textContent = rules;
       target.head.append(style);
     } catch {
+      // not-a-failure: a cross-origin sheet hides its rules; it is re-linked by href instead
       if (!sheet.href) continue;
       const link = target.createElement("link");
       link.rel = "stylesheet";

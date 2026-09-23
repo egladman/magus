@@ -2,10 +2,12 @@ package console
 
 import (
 	"net/url"
+	"runtime"
 	"slices"
 	"strings"
 
 	wire "github.com/egladman/magus/internal/handler/viewer"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 )
 
@@ -174,6 +176,37 @@ func SurfaceLink(surface string, fragment ...FragmentParam) string {
 		frag = "#" + strings.Join(parts, "&")
 	}
 	return "/console/" + surface + "/" + frag
+}
+
+// OpenCommand is a shell line that opens link signed in:
+// open "<link>#token=$(magus config token print)", with the platform's opener.
+//
+// The token is a command substitution the reader's own shell expands, so nothing that
+// prints this line ever holds the secret. The link must not carry a token already; it is
+// percent-encoded, so it holds nothing a double-quoted shell word would expand.
+//
+// The command is spelled as this process was invoked, which is right for a CLI line and
+// wrong for a daemon reply read in another directory: that caller uses [OpenCommandAs]
+// with hint.DefaultBinaryName.
+func OpenCommand(link string) string {
+	return OpenCommandAs(link, runtime.GOOS, hint.BinaryName())
+}
+
+// OpenCommandAs is [OpenCommand] for a named GOOS and magus binary spelling.
+func OpenCommandAs(link, goos, bin string) string {
+	sep := "#"
+	if strings.Contains(link, "#") {
+		sep = "&"
+	}
+	opener := "xdg-open"
+	switch goos {
+	case "darwin":
+		opener = "open"
+	case "windows":
+		// start takes its first quoted argument as a window title.
+		opener = `start ""`
+	}
+	return opener + ` "` + link + sep + "token=$(" + hint.ConfigTokenPrint.StringAs(bin) + `)"`
 }
 
 // encodeComponent percent-encodes s the way the browser's encodeURIComponent does, which is what

@@ -1321,7 +1321,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 			fmt.Println(line)
 		}
 		if u := consoleDiffURL(); u != "" {
-			fmt.Printf("open in console: %s\n%s\n", u, authHint)
+			fmt.Printf("open in console: %s\n%s\n", u, authHint(u))
 		}
 	}
 	return nil

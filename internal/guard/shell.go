@@ -392,12 +392,15 @@ func magusCdTargets(command string, d Dialect) []string {
 	return out
 }
 
-// shellUsesCd reports whether the line runs the cd builtin. Parsed commands are
-// preferred so `bash -c 'cd ...'` and a subshell `(cd ... && ...)` are seen the
-// same way as a bare `cd`; the regex is only the unparseable-line fallback.
+// shellUsesCd reports whether the line runs the cd builtin AHEAD of other work. Parsed
+// commands are preferred so `bash -c 'cd ...'` and a subshell `(cd ... && ...)` are seen
+// the same way; the regex is only the unparseable-line fallback.
+//
+// A cd alone on its line passes: it relocates no later command, and on a host whose shell
+// persists across calls it is how a session moves into its own checkout.
 func shellUsesCd(cmds []hint.Invocation, parsed bool, command string) bool {
 	if parsed {
-		return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
+		return len(cmds) > 1 && slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
 			return c.Name == "cd" || filepath.Base(c.Name) == "cd"
 		})
 	}
@@ -646,7 +649,7 @@ func commandPrefix(program string, args []string) []string {
 // `npm -w <pkg> test` and its siblings still walk past their denies. The gap is left open
 // deliberately: a wrong entry here is worse than a missing one.
 var valuedGlobalFlags = map[string]map[string]bool{
-	"go": {"-C": true},
+	"go": {"-C": true, "--C": true},
 }
 
 // afterGlobalFlags drops the options a tool takes BEFORE its subcommand, so a rule matches
@@ -664,6 +667,11 @@ func afterGlobalFlags(program string, args []string) []string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if !strings.HasPrefix(arg, "-") {
+			// go also takes -C as the first flag AFTER its subcommand, into the same
+			// directory, so both spellings have to reach one verdict.
+			if dir, ok := valuedOperand(valued, args[i+1:]); ok && escapesWorkspace(dir) {
+				return nil
+			}
 			return args[i:]
 		}
 		if name, value, joined := strings.Cut(arg, "="); joined {
@@ -684,6 +692,21 @@ func afterGlobalFlags(program string, args []string) []string {
 		i++
 	}
 	return nil
+}
+
+// valuedOperand reads the operand of a valued flag leading args, joined (`-C=dir`) or
+// separate (`-C dir`).
+func valuedOperand(valued map[string]bool, args []string) (string, bool) {
+	if len(args) == 0 {
+		return "", false
+	}
+	if name, value, joined := strings.Cut(args[0], "="); joined && valued[name] {
+		return value, true
+	}
+	if valued[args[0]] && len(args) > 1 {
+		return args[1], true
+	}
+	return "", false
 }
 
 // escapesWorkspace reports a path that names something outside the workspace. Textual: it
