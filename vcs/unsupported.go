@@ -42,9 +42,6 @@ func (jjName) name() string      { return "jj" }
 //   - jj, Bisector: jj has no bisect command.
 //   - hg and sl, RegenHookInstaller and BranchChangeReporter: not built yet, though their
 //     hooks and revsets could answer.
-//   - hg, sl and jj, the capabilities that combine revisions without a checkout: git's
-//     alone so far, though hg and Sapling have bundles, shares and commit, and jj has
-//     workspaces.
 type declines[N backendName] struct{}
 
 func decline[N backendName](c types.VCSCapability) error {
@@ -124,14 +121,6 @@ func (declines[N]) RangeDiff(context.Context, string, string, string, []string) 
 	return "", decline[N](types.CapRangeReporter)
 }
 
-func (declines[N]) RangeFiles(context.Context, string, string, string, []string) ([]string, error) {
-	return nil, decline[N](types.CapRangeReporter)
-}
-
-func (declines[N]) RangeCommits(context.Context, string, string, string, []string) ([]types.Commit, error) {
-	return nil, decline[N](types.CapRangeReporter)
-}
-
 func (declines[N]) IsAncestor(context.Context, string, string, string) (bool, error) {
 	return false, decline[N](types.CapAncestryReporter)
 }
@@ -170,60 +159,4 @@ func (declines[N]) StartMerge(context.Context, string, string) error {
 
 func (declines[N]) AbortMerge(context.Context, string) error {
 	return decline[N](types.CapMergeStarter)
-}
-
-func (declines[N]) Commit(context.Context, string, types.CheckoutCommit) (string, error) {
-	return "", decline[N](types.CapCommitWriter)
-}
-
-func (declines[N]) CommitTree(context.Context, string, types.TreeCommit) (string, error) {
-	return "", decline[N](types.CapCommitWriter)
-}
-
-func (declines[N]) TreeID(context.Context, string, string) (string, error) {
-	return "", decline[N](types.CapTreeReporter)
-}
-
-func (declines[N]) DiffTrees(context.Context, string, string, string) ([]string, error) {
-	return nil, decline[N](types.CapTreeReporter)
-}
-
-func (declines[N]) MergeTrees(context.Context, string, types.TreeMerge) (types.TreeMergeResult, error) {
-	return types.TreeMergeResult{}, decline[N](types.CapTreeMerger)
-}
-
-func (declines[N]) GeneratedPaths(context.Context, string, string, []string) (map[string]bool, error) {
-	return nil, decline[N](types.CapGeneratedPathReporter)
-}
-
-func (declines[N]) CreateCheckout(context.Context, string, string, string) error {
-	return decline[N](types.CapCheckoutProvisioner)
-}
-
-func (declines[N]) RemoveCheckout(context.Context, string, string) error {
-	return decline[N](types.CapCheckoutProvisioner)
-}
-
-func (declines[N]) Checkouts(context.Context, string) ([]string, error) {
-	return nil, decline[N](types.CapCheckoutProvisioner)
-}
-
-func (declines[N]) FetchRef(context.Context, string, string, string) (string, error) {
-	return "", decline[N](types.CapRevisionFetcher)
-}
-
-func (declines[N]) FetchCommit(context.Context, string, string, string) error {
-	return decline[N](types.CapRevisionFetcher)
-}
-
-func (declines[N]) Push(context.Context, string, types.PushLease) error {
-	return decline[N](types.CapPusher)
-}
-
-func (declines[N]) Bundle(context.Context, string, string, types.BundleRange) error {
-	return decline[N](types.CapBundler)
-}
-
-func (declines[N]) Unbundle(context.Context, string, string) error {
-	return decline[N](types.CapBundler)
 }

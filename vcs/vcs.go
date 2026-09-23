@@ -220,45 +220,6 @@ func checkRequiredRevsetRef(refs ...string) error {
 	return nil
 }
 
-// checkCommitID accepts a full lowercase hex object id (SHA-1 or SHA-256), nothing else.
-func checkCommitID(id string) error {
-	if len(id) != 40 && len(id) != 64 {
-		return fmt.Errorf("vcs: %q is not a full object id", id)
-	}
-	for _, c := range id {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return fmt.Errorf("vcs: %q is not a full object id", id)
-		}
-	}
-	return nil
-}
-
-// checkRefName accepts a full ref name: it starts with "refs/", passes git's
-// check-ref-format rules, and holds none of the characters that would let it read as a
-// refspec or a revision expression, so a fetch or a push can only ever name that one ref.
-func checkRefName(ref string) error {
-	bad := func(why string) error { return fmt.Errorf("vcs: refusing ref name %q: %s", ref, why) }
-	rest, ok := strings.CutPrefix(ref, "refs/")
-	if !ok || rest == "" {
-		return bad(`it does not start with "refs/"`)
-	}
-	if i := strings.IndexFunc(ref, func(r rune) bool {
-		return r < 0x20 || r == 0x7f || r == ' ' || strings.ContainsRune(`:+*^~?[\`, r)
-	}); i >= 0 {
-		return bad(fmt.Sprintf("%q is not allowed", ref[i:i+1]))
-	}
-	if strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "//") ||
-		strings.HasSuffix(ref, "/") || strings.HasSuffix(ref, ".") || ref == "@" {
-		return bad("git's check-ref-format refuses it")
-	}
-	for _, part := range strings.Split(rest, "/") {
-		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".lock") {
-			return bad("git's check-ref-format refuses it")
-		}
-	}
-	return nil
-}
-
 // checkRemoteName accepts only what can name a configured remote: no leading "-" or ".",
 // no "/", "\", ":" or whitespace, so the value can never be read as an option, a URL or a
 // path ("." is the repository itself to git).

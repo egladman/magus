@@ -8,10 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **VCS capabilities that combine revisions without a working copy.** `TreeReporter`,
-  `TreeMerger`, `CommitWriter`, `GeneratedPathReporter`, `CheckoutProvisioner`,
-  `RevisionFetcher`, `Pusher` and `Bundler` join `types.VCSDriver`, with `RangeFiles` and
-  `RangeCommits` on `RangeReporter`. git implements every one; none runs a hook or signs.
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records

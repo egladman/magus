@@ -373,25 +373,6 @@ func (v saplingVCS) RemoteURL(ctx context.Context, dir, name string) (string, er
 	return hgFamilyRemoteURL(ctx, "sl", dir, name)
 }
 
-// RangeFiles implements types.RangeReporter; see hgFamilyRangeFiles. --root-relative for
-// the reason DirtyFiles passes it, except with paths, which sl refuses it beside; those run
-// from the repository root instead, where the output is root-relative anyway.
-func (v saplingVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error) {
-	if len(paths) == 0 {
-		return hgFamilyRangeFiles(ctx, "sl", dir, base, head, nil, "--root-relative")
-	}
-	root, err := v.Root(ctx, dir)
-	if err != nil {
-		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
-	}
-	return hgFamilyRangeFiles(ctx, "sl", root, base, head, paths)
-}
-
-// RangeCommits implements types.RangeReporter; see hgFamilyRangeCommits.
-func (v saplingVCS) RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]types.Commit, error) {
-	return hgFamilyRangeCommits(ctx, v, "sl", dir, base, head, paths)
-}
-
 // IsAncestor implements types.AncestryReporter; see hgFamilyIsAncestor.
 func (v saplingVCS) IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error) {
 	return hgFamilyIsAncestor(ctx, "sl", dir, ancestor, descendant)

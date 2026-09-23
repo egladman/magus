@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1081,34 +1080,26 @@ func TestParityRangeDiffScopesToPaths(t *testing.T) {
 // one is a regression, and neither happens by accident. Every backend DECLARES every
 // capability, so this matrix, not the compiler, is where support is written down.
 var capabilityMatrix = map[types.VCSCapability]map[string]bool{
-	types.CapBisector:              {"git": true, "hg": true, "sl": true},
-	types.CapMergeDriverInstaller:  {"git": true, "hg": true, "sl": true},
-	types.CapRefreshHookInstaller:  {"git": true, "hg": true, "sl": true},
-	types.CapDriftHookInstaller:    {"git": true, "hg": true, "sl": true},
-	types.CapRegenHookInstaller:    {"git": true},
-	types.CapRemoteReporter:        {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapRemoteConfigReporter:  {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapDefaultRefReporter:    {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapPushStatusReporter:    {"git": true, "hg": true, "sl": true},
-	types.CapRevTimeReporter:       {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapTrackedFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapIgnoredFileReporter:   {"git": true, "hg": true, "sl": true},
-	types.CapChurnReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapBranchChangeReporter:  {"git": true},
-	types.CapRangeReporter:         {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapAncestryReporter:      {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapConflictResolver:      {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapRevisionFileReader:    {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapRevisionExporter:      {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapMergeStarter:          {"git": true, "hg": true, "sl": true, "jj": true},
-	types.CapCommitWriter:          {"git": true},
-	types.CapTreeReporter:          {"git": true},
-	types.CapTreeMerger:            {"git": true},
-	types.CapGeneratedPathReporter: {"git": true},
-	types.CapCheckoutProvisioner:   {"git": true},
-	types.CapRevisionFetcher:       {"git": true},
-	types.CapPusher:                {"git": true},
-	types.CapBundler:               {"git": true},
+	types.CapBisector:             {"git": true, "hg": true, "sl": true},
+	types.CapMergeDriverInstaller: {"git": true, "hg": true, "sl": true},
+	types.CapRefreshHookInstaller: {"git": true, "hg": true, "sl": true},
+	types.CapDriftHookInstaller:   {"git": true, "hg": true, "sl": true},
+	types.CapRegenHookInstaller:   {"git": true},
+	types.CapRemoteReporter:       {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRemoteConfigReporter: {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapDefaultRefReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapPushStatusReporter:   {"git": true, "hg": true, "sl": true},
+	types.CapRevTimeReporter:      {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapTrackedFileReporter:  {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapIgnoredFileReporter:  {"git": true, "hg": true, "sl": true},
+	types.CapChurnReporter:        {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapBranchChangeReporter: {"git": true},
+	types.CapRangeReporter:        {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapAncestryReporter:     {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapConflictResolver:     {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRevisionFileReader:   {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapRevisionExporter:     {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapMergeStarter:         {"git": true, "hg": true, "sl": true, "jj": true},
 }
 
 // capabilityProbe calls one method. The arguments make a real implementation fail fast
@@ -1122,7 +1113,6 @@ type capabilityProbe struct {
 
 func capabilityProbes(t *testing.T) []capabilityProbe {
 	ctx := t.Context()
-	id := strings.Repeat("a", 40)
 	errOf := func(_ any, err error) error { return err }
 	return []capabilityProbe{
 		{types.CapBisector, "Bisect", func(d types.VCSDriver, dir string) error {
@@ -1151,8 +1141,6 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapChurnReporter, "ChangesByCommit", func(d types.VCSDriver, dir string) error { return errOf(d.ChangesByCommit(ctx, dir, 1, "-x")) }},
 		{types.CapBranchChangeReporter, "BranchChanges", func(d types.VCSDriver, dir string) error { return errOf(d.BranchChanges(ctx, dir, "-x", 1)) }},
 		{types.CapRangeReporter, "RangeDiff", func(d types.VCSDriver, dir string) error { return errOf(d.RangeDiff(ctx, dir, "-x", "-x", nil)) }},
-		{types.CapRangeReporter, "RangeFiles", func(d types.VCSDriver, dir string) error { return errOf(d.RangeFiles(ctx, dir, "-x", "-x", nil)) }},
-		{types.CapRangeReporter, "RangeCommits", func(d types.VCSDriver, dir string) error { return errOf(d.RangeCommits(ctx, dir, "-x", "-x", nil)) }},
 		{types.CapAncestryReporter, "IsAncestor", func(d types.VCSDriver, dir string) error { return errOf(d.IsAncestor(ctx, dir, "-x", "-x")) }},
 		{types.CapConflictResolver, "Conflicts", func(d types.VCSDriver, dir string) error { return errOf(d.Conflicts(ctx, dir)) }},
 		{types.CapConflictResolver, "KeepIncoming", func(d types.VCSDriver, dir string) error { return d.KeepIncoming(ctx, dir, nil) }},
@@ -1165,28 +1153,6 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		}},
 		{types.CapMergeStarter, "StartMerge", func(d types.VCSDriver, dir string) error { return d.StartMerge(ctx, dir, "-x") }},
 		{types.CapMergeStarter, "AbortMerge", func(d types.VCSDriver, dir string) error { return d.AbortMerge(ctx, dir) }},
-		{types.CapCommitWriter, "Commit", func(d types.VCSDriver, dir string) error { return errOf(d.Commit(ctx, dir, types.CheckoutCommit{})) }},
-		{types.CapCommitWriter, "CommitTree", func(d types.VCSDriver, dir string) error { return errOf(d.CommitTree(ctx, dir, types.TreeCommit{})) }},
-		{types.CapTreeReporter, "TreeID", func(d types.VCSDriver, dir string) error { return errOf(d.TreeID(ctx, dir, "-x")) }},
-		{types.CapTreeReporter, "DiffTrees", func(d types.VCSDriver, dir string) error { return errOf(d.DiffTrees(ctx, dir, "-x", "-x")) }},
-		{types.CapTreeMerger, "MergeTrees", func(d types.VCSDriver, dir string) error {
-			return errOf(d.MergeTrees(ctx, dir, types.TreeMerge{Ours: "-x", Theirs: "-x"}))
-		}},
-		{types.CapGeneratedPathReporter, "GeneratedPaths", func(d types.VCSDriver, dir string) error {
-			return errOf(d.GeneratedPaths(ctx, dir, "-x", []string{"a"}))
-		}},
-		{types.CapCheckoutProvisioner, "CreateCheckout", func(d types.VCSDriver, dir string) error { return d.CreateCheckout(ctx, dir, "rel", "-x") }},
-		{types.CapCheckoutProvisioner, "RemoveCheckout", func(d types.VCSDriver, dir string) error { return d.RemoveCheckout(ctx, dir, "rel") }},
-		{types.CapCheckoutProvisioner, "Checkouts", func(d types.VCSDriver, dir string) error { return errOf(d.Checkouts(ctx, dir)) }},
-		{types.CapRevisionFetcher, "FetchRef", func(d types.VCSDriver, dir string) error { return errOf(d.FetchRef(ctx, dir, "-x", "refs/heads/main")) }},
-		{types.CapRevisionFetcher, "FetchCommit", func(d types.VCSDriver, dir string) error { return d.FetchCommit(ctx, dir, "-x", id) }},
-		{types.CapPusher, "Push", func(d types.VCSDriver, dir string) error {
-			return d.Push(ctx, dir, types.PushLease{Remote: "-x", Ref: "refs/heads/main", To: id, Expected: id})
-		}},
-		{types.CapBundler, "Bundle", func(d types.VCSDriver, dir string) error {
-			return d.Bundle(ctx, dir, "rel", types.BundleRange{Head: "-x"})
-		}},
-		{types.CapBundler, "Unbundle", func(d types.VCSDriver, dir string) error { return d.Unbundle(ctx, dir, "rel") }},
 	}
 }
 
@@ -1279,64 +1245,6 @@ func forkedRange(t *testing.T, b parityBackend) (dir, root, base, head string) {
 	c, err = b.drv.FindCommit(t.Context(), dir, "")
 	require.NoErrorf(t, err, "%s FindCommit(head)", b.name)
 	return dir, root, base, c.ID
-}
-
-// RangeFiles is RangeDiff's name list: exactly the files the diff shows, from the merge
-// base, so base's own change never appears.
-func TestParityRangeFilesMatchesRangeDiff(t *testing.T) {
-	eachBackend(t, func(t *testing.T, b parityBackend) {
-		dir, _, base, head := forkedRange(t, b)
-
-		files, err := b.drv.RangeFiles(t.Context(), dir, base, head, nil)
-		require.NoErrorf(t, err, "%s RangeFiles", b.name)
-		slices.Sort(files)
-		assert.Equalf(t, []string{"head-only.txt", "root.txt"}, files, "%s", b.name)
-
-		diff, err := b.drv.RangeDiff(t.Context(), dir, base, head, nil)
-		require.NoError(t, err)
-		for _, f := range files {
-			assert.Containsf(t, diff, f, "%s RangeFiles named %s, which RangeDiff does not show", b.name, f)
-		}
-
-		_, err = b.drv.RangeFiles(t.Context(), dir, base, "no-such-revision", nil)
-		assert.Errorf(t, err, "%s: an unresolvable revision is an error, not an empty list", b.name)
-
-		scoped, err := b.drv.RangeFiles(t.Context(), dir, base, head, []string{"root.txt"})
-		require.NoErrorf(t, err, "%s scoped RangeFiles", b.name)
-		assert.Equalf(t, []string{"root.txt"}, scoped, "%s: paths did not narrow the files", b.name)
-
-		// Empty is not a revision: it would read as the whole history on one backend and as
-		// an error on another.
-		_, err = b.drv.RangeFiles(t.Context(), dir, "", head, nil)
-		assert.Errorf(t, err, "%s: an empty base", b.name)
-		_, err = b.drv.RangeCommits(t.Context(), dir, "", head, nil)
-		assert.Errorf(t, err, "%s: an empty base", b.name)
-		_, _, err = b.drv.RevTime(t.Context(), dir, "-x")
-		assert.Errorf(t, err, "%s: an option-shaped revision", b.name)
-	})
-}
-
-// RangeCommits lists head's own commits newest first, each with its parents, and narrows
-// to the commits touching the given paths.
-func TestParityRangeCommitsNewestFirstWithParents(t *testing.T) {
-	eachBackend(t, func(t *testing.T, b parityBackend) {
-		dir, _, base, head := forkedRange(t, b)
-
-		commits, err := b.drv.RangeCommits(t.Context(), dir, base, head, nil)
-		require.NoErrorf(t, err, "%s RangeCommits", b.name)
-		subjects := make([]string, len(commits))
-		for i, c := range commits {
-			subjects[i] = c.Subject
-			assert.Lenf(t, c.Parents, 1, "%s: %q is a linear commit", b.name, c.Subject)
-		}
-		assert.Equalf(t, []string{"head adds a file", "head edits root"}, subjects, "%s", b.name)
-		assert.Equal(t, head, commits[0].ID)
-
-		scoped, err := b.drv.RangeCommits(t.Context(), dir, base, head, []string{"root.txt"})
-		require.NoErrorf(t, err, "%s scoped RangeCommits", b.name)
-		require.Lenf(t, scoped, 1, "%s: paths did not narrow the commits", b.name)
-		assert.Equal(t, "head edits root", scoped[0].Subject)
-	})
 }
 
 func TestParityIsAncestor(t *testing.T) {

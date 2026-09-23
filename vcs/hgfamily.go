@@ -129,53 +129,6 @@ func exitCode(err error) int {
 	return -1
 }
 
-// hgFamilyRangeFiles is RangeFiles for hg and Sapling: status between ancestor(), the
-// merge base RangeDiff also diffs from, and head. Without --copies a rename is a removal
-// and an add, which is the contract. extra carries sl's --root-relative.
-func hgFamilyRangeFiles(ctx context.Context, prog, dir, base, head string, paths []string, extra ...string) ([]string, error) {
-	if err := checkRequiredRevsetRef(base, head); err != nil {
-		return nil, err
-	}
-	args := append([]string{"status"}, extra...)
-	args = append(args, "--no-status", "--added", "--modified", "--removed",
-		"--rev", "ancestor("+base+","+head+")", "--rev", head)
-	args = append(args, hgFamilyRootPaths(paths)...)
-	out, err := vcsOutput(ctx, dir, prog, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%s status ancestor(%s,%s)-%s: %w", prog, base, head, head, err)
-	}
-	return splitLines([]byte(out)), nil
-}
-
-// hgFamilyRangeCommits is RangeCommits for hg and Sapling. only(head,base) is ascending,
-// and reverse() makes it newest first. "path:" makes each path literal and relative to the
-// repository root, as RangeFiles reports them.
-func hgFamilyRangeCommits(ctx context.Context, v types.VCSDriver, prog, dir, base, head string, paths []string) ([]types.Commit, error) {
-	if err := checkRequiredRevsetRef(base, head); err != nil {
-		return nil, err
-	}
-	args := append([]string{"log", "-r", "reverse(only(" + head + "," + base + "))", "--template", "{node}\n"},
-		hgFamilyRootPaths(paths)...)
-	out, err := vcsOutput(ctx, dir, prog, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%s log only(%s,%s): %w", prog, head, base, err)
-	}
-	return resolveEach(ctx, dir, v, splitLines([]byte(out)))
-}
-
-// hgFamilyRootPaths spells repository-relative paths as literal "path:" patterns after
-// `--`, or nothing when there are none.
-func hgFamilyRootPaths(paths []string) []string {
-	if len(paths) == 0 {
-		return nil
-	}
-	out := []string{"--"}
-	for _, p := range paths {
-		out = append(out, "path:"+p)
-	}
-	return out
-}
-
 // hgFamilyIsAncestor is IsAncestor for hg and Sapling: ancestors() includes the revision
 // itself, and an unknown revision aborts the log rather than matching nothing.
 func hgFamilyIsAncestor(ctx context.Context, prog, dir, ancestor, descendant string) (bool, error) {

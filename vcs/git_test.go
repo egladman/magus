@@ -1835,3 +1835,229 @@ func TestDriverIsReachableHere(t *testing.T) {
 	assert.True(t, driverIsReachableHere(t.Context(), root, `"`+self+`" vcs merge-driver %O`),
 		"a quoted path is unwrapped before comparison")
 }
+
+// isolateGitConfig keeps the developer's own git config out of the production calls a
+// test makes, since gitExec (rightly) inherits it.
+func isolateGitConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+}
+
+func refsOf(t *testing.T, dir string) string {
+	t.Helper()
+	return gitTestOutput(t, dir, "for-each-ref", "--format=%(refname) %(objectname)")
+}
+
+// The affected set: a rename's old path belongs to the project it left, so ChangedFiles and
+// BranchChanges must report it under diff.renames (git's default) too.
+func TestChangedFilesAndBranchChangesReportBothSidesOfARename(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a/moved.txt": "content that survives the move\n"})
+	gitRun(t, dir, "config", "diff.renames", "true")
+	gitRun(t, dir, "branch", "-M", "main")
+	gitRun(t, dir, "checkout", "-q", "-b", "move")
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "b"), 0o755))
+	gitRun(t, dir, "mv", "a/moved.txt", "b/moved.txt")
+	gitRun(t, dir, "commit", "-q", "-m", "move")
+
+	changed, err := gitVCS{}.ChangedFiles(t.Context(), dir, "main")
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"a/moved.txt", "b/moved.txt"}, changed)
+
+	gitRun(t, dir, "checkout", "-q", "main")
+	branches, err := gitVCS{}.BranchChanges(t.Context(), dir, "main", 5)
+	require.NoError(t, err)
+	require.Len(t, branches, 1)
+	assert.ElementsMatch(t, []string{"a/moved.txt", "b/moved.txt"}, branches[0].Paths)
+}
+
+// mergeFixture has base, and two branches off it: "ours" edits line two of f.txt and
+// deletes gone.txt; "theirs" edits the same line and edits gone.txt; "clean" only adds.
+func mergeFixture(t *testing.T) (dir string, revs map[string]string) {
+	t.Helper()
+	isolateGitConfig(t)
+	dir = t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"f.txt": "a\nb\nc\n", "gone.txt": "g\n"})
+	gitRun(t, dir, "branch", "-M", "main")
+	revs = map[string]string{"base": gitTestOutput(t, dir, "rev-parse", "HEAD")}
+	branch := func(name string, edit func()) {
+		gitRun(t, dir, "checkout", "-q", "-b", name, revs["base"])
+		edit()
+		gitRun(t, dir, "add", "-A")
+		gitRun(t, dir, "commit", "-q", "-m", name)
+		revs[name] = gitTestOutput(t, dir, "rev-parse", "HEAD")
+	}
+	branch("ours", func() {
+		writeRepoFile(t, dir, "f.txt", "a\nOURS\nc\n")
+		require.NoError(t, os.Remove(filepath.Join(dir, "gone.txt")))
+	})
+	branch("theirs", func() {
+		writeRepoFile(t, dir, "f.txt", "a\nTHEIRS\nc\n")
+		writeRepoFile(t, dir, "gone.txt", "edited\n")
+	})
+	branch("clean", func() { writeRepoFile(t, dir, "new.txt", "n\n") })
+	return dir, revs
+}
+
+// A merge already underway is not the one StartMerge was asked for. Before, git refused
+// the second merge, and the first merge's MERGE_HEAD made that refusal read as success.
+func TestStartMergeRefusesWhenAMergeIsAlreadyUnderway(t *testing.T) {
+	dir, revs := mergeFixture(t)
+	g := gitVCS{}
+	gitRun(t, dir, "checkout", "-q", revs["ours"])
+	require.NoError(t, g.StartMerge(t.Context(), dir, revs["theirs"]))
+
+	err := g.StartMerge(t.Context(), dir, revs["clean"])
+	require.ErrorContains(t, err, "already in progress")
+	assert.Equal(t, revs["theirs"], gitTestOutput(t, dir, "rev-parse", "MERGE_HEAD"))
+}
+
+// B13: an exported GIT_DIR, which git exports into every hook, must not send magus's own
+// git calls into another repository, the fetch recovery included.
+func TestGitCallsIgnoreAHostileGitDir(t *testing.T) {
+	origin, _ := gitDivergedOrigin(t, 40)
+	clone := gitCloneShallow(t, origin, 1)
+	elsewhere := t.TempDir()
+	gitInitRepo(t, elsewhere, map[string]string{"x.txt": "x\n"})
+	before := refsOf(t, elsewhere)
+
+	t.Run("hostile environment", func(t *testing.T) {
+		t.Setenv("GIT_DIR", filepath.Join(elsewhere, ".git"))
+		t.Setenv("GIT_WORK_TREE", elsewhere)
+		t.Setenv("GIT_INDEX_FILE", filepath.Join(elsewhere, ".git", "index"))
+
+		// ChangedFiles deepens the shallow clone, which fetches a remote-tracking ref.
+		files, err := gitVCS{}.ChangedFiles(t.Context(), clone, "origin/main")
+		require.NoError(t, err)
+		assert.Contains(t, files, "app.txt")
+	})
+
+	assert.Equal(t, before, refsOf(t, elsewhere), "a magus git call wrote into the repository GIT_DIR named")
+	assert.NotEmpty(t, gitTestOutput(t, clone, "for-each-ref", "refs/remotes/origin/main"), "the fetch landed somewhere other than the clone")
+}
+
+// The hardening every call gets, pinned on the command gitExec builds.
+func TestGitExecPinsTheSettingsItsParsersDependOn(t *testing.T) {
+	t.Setenv("GIT_REPLACE_REF_BASE", "refs/elsewhere/")
+	t.Setenv("GIT_ATTR_SOURCE", "HEAD~1")
+	t.Setenv("GIT_GLOB_PATHSPECS", "1")
+	t.Setenv("GIT_SHALLOW_FILE", "/elsewhere")
+	cmd := gitExec(t.Context(), "/repo", gitOpts{Isolated: true, Literal: true}, "status")
+
+	joined := strings.Join(cmd.Args, " ")
+	for _, pin := range []string{"color.ui=false", "color.diff=false", "color.status=false", "core.quotePath=false",
+		"log.showSignature=false", "diff.noprefix=false", "diff.mnemonicPrefix=false",
+		"rerere.enabled=false", "commit.gpgSign=false", "push.gpgSign=false", "core.hooksPath=" + os.DevNull} {
+		assert.Contains(t, joined, pin)
+	}
+	// The user's own checkout keeps its rerere, signing and hooks.
+	plain := strings.Join(gitExec(t.Context(), "/repo", gitOpts{}, "merge").Args, " ")
+	for _, pin := range []string{"rerere.enabled", "gpgSign", "core.hooksPath"} {
+		assert.NotContains(t, plain, pin)
+	}
+	env := strings.Join(cmd.Env, "\n")
+	for _, set := range []string{"GIT_TERMINAL_PROMPT=0", "GIT_NO_REPLACE_OBJECTS=1", "GIT_LITERAL_PATHSPECS=1"} {
+		assert.Contains(t, cmd.Env, set)
+	}
+	for _, gone := range []string{"GIT_REPLACE_REF_BASE=", "GIT_ATTR_SOURCE=", "GIT_GLOB_PATHSPECS=", "GIT_SHALLOW_FILE="} {
+		assert.NotContains(t, env, gone)
+	}
+	assert.Equal(t, gitWaitDelay, cmd.WaitDelay)
+	assert.Equal(t, "/repo", cmd.Dir)
+}
+
+func TestCheckRemoteNameAndRev(t *testing.T) {
+	for _, bad := range []string{"", "-x", ".", "a/b", "https://x", "a b", "a:b"} {
+		assert.Error(t, checkRemoteName(bad), bad)
+	}
+	assert.NoError(t, checkRemoteName("upstream"))
+	assert.Error(t, checkRev("+refs/heads/*:refs/heads/*"))
+	assert.Error(t, checkRev("HEAD:path"))
+	assert.NoError(t, checkRev("origin/main~2"))
+}
+
+// `bisect run` runs the user's test command, which inherits whatever git exports. magus's
+// pins must not reach it: a test that runs git itself would see magus's config, not its own.
+func TestBisectRunCarriesNoMagusPins(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "0\n"})
+	good := gitTestOutput(t, dir, "rev-parse", "HEAD")
+	for i := 1; i <= 2; i++ {
+		writeRepoFile(t, dir, "a.txt", fmt.Sprintf("%d\n", i))
+		gitRun(t, dir, "commit", "-q", "-am", fmt.Sprintf("c%d", i))
+	}
+	dump := filepath.Join(t.TempDir(), "env")
+
+	_, err := gitVCS{}.Bisect(t.Context(), dir, types.BisectOptions{Good: good, TestCmd: "env >> " + dump + "; exit 1"})
+	require.NoError(t, err)
+	env, err := os.ReadFile(dump)
+	require.NoError(t, err)
+	for _, pin := range []string{"color.ui", "GIT_NO_REPLACE_OBJECTS", "GIT_TERMINAL_PROMPT"} {
+		assert.NotContains(t, string(env), pin)
+	}
+}
+
+// The deepening fetch magus makes unasked runs no hook of the user's.
+func TestShallowRecoveryRunsNoHook(t *testing.T) {
+	origin, _ := gitDivergedOrigin(t, 40)
+	clone := gitCloneShallow(t, origin, 1)
+	marker := filepath.Join(t.TempDir(), "hook-ran")
+	hook := fmt.Sprintf("#!/bin/sh\necho ran >> %q\n", marker)
+	require.NoError(t, os.WriteFile(filepath.Join(clone, ".git", "hooks", "reference-transaction"), []byte(hook), 0o755))
+
+	_, err := gitVCS{}.ChangedFiles(t.Context(), clone, "origin/main")
+	require.NoError(t, err)
+	_, statErr := os.Stat(marker)
+	assert.ErrorIs(t, statErr, os.ErrNotExist, "the recovery fetch ran the reference-transaction hook")
+}
+
+// The box's display settings must not change what magus parses: untracked files hidden by
+// status.showUntrackedFiles, a diff produced by an external driver, prefixes dropped by
+// diff.noprefix, and color forced on.
+func TestStatusAndDiffIgnoreDisplayConfig(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	for _, kv := range [][2]string{
+		{"status.showUntrackedFiles", "no"}, {"diff.external", "false"}, {"diff.noprefix", "true"},
+		{"color.diff", "always"}, {"color.status", "always"},
+	} {
+		gitRun(t, dir, "config", kv[0], kv[1])
+	}
+	writeRepoFile(t, dir, "new.txt", "new\n")
+	writeRepoFile(t, dir, "a.txt", "two\n")
+	g := gitVCS{}
+
+	files, err := g.DirtyFiles(t.Context(), dir, nil)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"a.txt", "new.txt"}, files)
+	meta, err := g.Metadata(t.Context(), dir)
+	require.NoError(t, err)
+	assert.True(t, meta.IsDirty)
+
+	diff, err := g.DirtyDiff(t.Context(), dir, nil)
+	require.NoError(t, err)
+	assert.Contains(t, diff, "diff --git a/a.txt b/a.txt")
+	assert.NotContains(t, diff, "\x1b[")
+}
+
+// Asking whether a backend installs a merge driver reads nothing and writes nothing.
+func TestInstallsMergeDriverAsksWithoutEnsuring(t *testing.T) {
+	probe := &ensureRecorder{VCSDriver: gitVCS{}}
+	assert.True(t, installsMergeDriver(probe))
+	assert.False(t, probe.ensured, "the probe called EnsureMergeDriver, which may write")
+	assert.False(t, installsMergeDriver(jjVCS{}))
+}
+
+type ensureRecorder struct {
+	types.VCSDriver
+	ensured bool
+}
+
+func (r *ensureRecorder) EnsureMergeDriver(context.Context, string, []string) (bool, error) {
+	r.ensured = true
+	return false, nil
+}
