@@ -637,22 +637,17 @@ func freshenIndexes(touched []*types.Project, langs map[string]string, probe fun
 		strings.Join(problems, "; "))
 }
 
-// uncoveredNote opens every note naming a project the conformance checks could not see, so a
-// reader of notes (the prompt, the PR advisor) can gather them under the checks' own heading.
-const uncoveredNote = "conformance did not cover project "
-
-// uncoveredNotes names each project with a changed file, other than a declared output, that has
-// no symbol indexer: the conformance checks cannot see it, so their silence says nothing about it.
-func uncoveredNotes(files []types.DiffFile, capable []string) []string {
-	var out []string
+// uncoveredProjects names each project with a changed file, other than a declared output, that
+// has no symbol indexer: the conformance checks cannot see it, so their silence says nothing
+// about it.
+func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUncovered {
+	var out []types.DiffUncovered
 	for _, f := range files {
-		if f.Project == "" || f.Generated() || slices.Contains(capable, f.Project) {
+		if f.Project == "" || f.Generated() || slices.Contains(capable, f.Project) ||
+			slices.ContainsFunc(out, func(u types.DiffUncovered) bool { return u.Project == f.Project }) {
 			continue
 		}
-		note := uncoveredNote + f.Project + ": it has no symbol indexer, so its changes were not compared"
-		if !slices.Contains(out, note) {
-			out = append(out, note)
-		}
+		out = append(out, types.DiffUncovered{Project: f.Project, Reason: "no symbol indexer"})
 	}
 	return out
 }

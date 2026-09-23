@@ -233,14 +233,10 @@ fun parseGate(name: str, fallback: double) > double !> str {
     return v!;
 }
 
-// conformanceNotes are the review's notes about the symbol half: what weakened it, and each
-// touched project it could not see, so a table of findings is never read as covering those.
-export fun conformanceNotes(notes: [str]) > [str] {
-    final kept = mut [<str>];
-    foreach (n in notes) {
-        if (n.startsWith("conformance")) { kept.append(n); }
-    }
-    return kept;
+// uncoveredLine names one touched project the symbol checks could not see, so a table of
+// findings is never read as covering it.
+export fun uncoveredLine(project: str, reason: str) > str {
+    return "Not checked: `" + project + "` (" + reason + ").";
 }
 
 // uncheckedBody is the section when magus could not run the symbol checks at all, which must
@@ -340,7 +336,7 @@ fun main() > void !> any {
     }
     // What weakened the symbol half is said beside its findings, never left to be inferred.
     var caveats = mut [<str>];
-    foreach (n in conformanceNotes(review.notes)) { caveats.append(n); }
+    foreach (u in review.uncovered) { caveats.append(uncoveredLine(u.project, reason: u.reason)); }
     if (!advice\collecting() and advice\env("BASELINE") == "") {
         caveats.append("No baseline graph reached this run, so what the change adds was read from its patch, "
             + "and a symbol whose signature changed was not compared.");
@@ -491,13 +487,9 @@ test "a change that could not be checked never reads as one with nothing to repo
 }
 
 test "a project the checks could not see is named beside the findings" {
-    final notes = conformanceNotes([
-        "no coverage data on changed files",
-        "conformance did not cover project docs: it has no symbol indexer, so its changes were not compared",
-    ]);
-    std\assert(notes.len() == 1, message: "only the symbol half's own notes");
-    final text = body([], rows: [symbolRow("a.go", check: "param-order", message: "m", details: [])], caveats: notes);
-    std\assert(text.indexOf("did not cover project docs") != null, message: "the uncovered project is said");
+    final text = body([], rows: [symbolRow("a.go", check: "param-order", message: "m", details: [])],
+        caveats: [uncoveredLine("docs", reason: "no symbol indexer")]);
+    std\assert(text.indexOf("Not checked: \\`docs\\` (no symbol indexer).") != null, message: "the uncovered project is said");
 }
 
 test "a cell holds whatever a path or message contains" {

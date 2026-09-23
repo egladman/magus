@@ -107,6 +107,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "VCSCheckpoint", Type: reflect.TypeFor[types.VCSCheckpoint](), RuntimeObject: true},
 	// A thrown error's shape, and also returned: Diff.conformanceError is one.
 	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic](), RuntimeObject: true},
+	{Name: "DiffUncovered", Type: reflect.TypeFor[types.DiffUncovered](), RuntimeObject: true},
 	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},

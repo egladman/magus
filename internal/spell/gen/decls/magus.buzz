@@ -210,6 +210,11 @@ export object Diagnostic {
     url: str = "",
 }
 
+export object DiffUncovered {
+    project: str = "",
+    reason: str = "",
+}
+
 export object Diff {
     base: str = "",
     files: [DiffFile] = [],
@@ -219,6 +224,7 @@ export object Diff {
     api: DiffAPI? = null,
     reviewed: DiffReviewed = DiffReviewed{},
     conformanceError: Diagnostic? = null,
+    uncovered: [DiffUncovered] = [],
 }
 
 export object DoctorSummary {

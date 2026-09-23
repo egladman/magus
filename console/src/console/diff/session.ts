@@ -126,6 +126,8 @@ export interface Diff {
   readonly api?: DiffAPI;
   // Why the conformance checks could not run. When set, no symbol carries checks, and that
   // absence means nothing was checked.
+  // Touched projects the conformance checks could not see, and why.
+  readonly uncovered?: readonly { readonly project: string; readonly reason: string }[];
   readonly conformance_error?: {
     readonly code: string;
     readonly message: string;

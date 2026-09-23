@@ -996,6 +996,13 @@ func ObjectDiagnostic(v types.Diagnostic) vm.Value {
 	return out
 }
 
+func ObjectDiffUncovered(v types.DiffUncovered) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
 func ObjectDiff(v types.Diff) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
@@ -1030,6 +1037,11 @@ func ObjectDiff(v types.Diff) vm.Value {
 		optConformanceError = ObjectDiagnostic((*v.ConformanceError))
 	}
 	out.MapSet("conformanceError", optConformanceError)
+	itemsUncovered := make([]vm.Value, len(v.Uncovered))
+	for indexUncovered := range v.Uncovered {
+		itemsUncovered[indexUncovered] = ObjectDiffUncovered(v.Uncovered[indexUncovered])
+	}
+	out.MapSet("uncovered", vm.ListValue(itemsUncovered))
 	return out
 }
 

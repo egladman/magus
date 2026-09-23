@@ -384,6 +384,16 @@ type Diff struct {
 	// no symbol carries Checks, and that absence says nothing was checked, never that nothing
 	// was found.
 	ConformanceError *Diagnostic `json:"conformance_error,omitempty" yaml:"conformance_error,omitempty"`
+	// Uncovered names each project the change touched that the conformance checks could not
+	// see, and why, so their silence is never read as a clean project.
+	Uncovered []DiffUncovered `json:"uncovered,omitempty" yaml:"uncovered,omitempty"`
+}
+
+// DiffUncovered is one touched project the conformance checks did not cover. A coverage fact,
+// not a finding: it says what was not looked at, where a Check says what was found.
+type DiffUncovered struct {
+	Project string `json:"project" yaml:"project"`
+	Reason  string `json:"reason"  yaml:"reason"`
 }
 
 // DiffReviewed is what a reader already got through on an earlier pass over this changeset.

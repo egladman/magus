@@ -55,6 +55,7 @@ import {
   type ViewMode,
 } from "./rows";
 import {
+  conformanceUncovered,
   conformanceUnchecked,
   modeChange,
   order,
@@ -2113,6 +2114,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
       err.textContent = unchecked;
       box.append(err);
       reportFailure("diff", unchecked, "conformance-unchecked");
+    }
+    for (const line of conformanceUncovered(state.session?.diff)) {
+      const note = h("p", "console-diff-overview__note");
+      note.textContent = line;
+      box.append(note);
     }
     for (const n of state.session?.diff?.notes ?? []) {
       const note = h("p", "console-diff-overview__note");

@@ -31,6 +31,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "DiffReviewed", Zero: types.DiffReviewed{}, Encode: func(v any) vm.Value { return ObjectDiffReviewed(v.(types.DiffReviewed)) }},
 	{Name: "DiffSymbol", Zero: types.DiffSymbol{}, Encode: func(v any) vm.Value { return ObjectDiffSymbol(v.(types.DiffSymbol)) }},
 	{Name: "DiffTouch", Zero: types.DiffTouch{}, Encode: func(v any) vm.Value { return ObjectDiffTouch(v.(types.DiffTouch)) }},
+	{Name: "DiffUncovered", Zero: types.DiffUncovered{}, Encode: func(v any) vm.Value { return ObjectDiffUncovered(v.(types.DiffUncovered)) }},
 	{Name: "DoctorReport", Zero: types.DoctorReport{}, Encode: func(v any) vm.Value { return ObjectDoctorReport(v.(types.DoctorReport)) }},
 	{Name: "DoctorSummary", Zero: types.DoctorSummary{}, Encode: func(v any) vm.Value { return ObjectDoctorSummary(v.(types.DoctorSummary)) }},
 	{Name: "DriftResult", Zero: types.DriftResultRecord{}, Encode: func(v any) vm.Value { return ObjectDriftResultRecord(v.(types.DriftResultRecord)) }},

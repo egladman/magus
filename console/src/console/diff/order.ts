@@ -178,6 +178,12 @@ export function conformanceUnchecked(diff: Diff | undefined): string | undefined
   return `Conformance could not check this change: ${code}${e.message}`;
 }
 
+// conformanceUncovered is one line per touched project the conformance checks could not see, so
+// no silence there reads as a clean project.
+export function conformanceUncovered(diff: Diff | undefined): string[] {
+  return (diff?.uncovered ?? []).map((u) => `Conformance did not check ${u.project}: ${u.reason}`);
+}
+
 export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   if (!a) return [];
   const chips: Chip[] = [];

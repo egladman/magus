@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { conformanceUnchecked, order, visibleFiles, settled, stats, riskChips } from "./order";
+import {
+  conformanceUncovered,
+  conformanceUnchecked,
+  order,
+  visibleFiles,
+  settled,
+  stats,
+  riskChips,
+} from "./order";
 import type { DiffFile } from "./parse";
 import type { DiffAnnotation, DiffSession, DiffSymbol } from "./session";
 
@@ -283,6 +291,17 @@ test("a changeset conformance could not check says so, with its code", () => {
     "Conformance could not check this change: [MGS7003] the symbol index could not be brought current",
   );
   assert.equal(conformanceUnchecked({ base: "working" }), undefined, "checked, so nothing to say");
+});
+
+test("each touched project the checks could not see is named", () => {
+  assert.deepEqual(
+    conformanceUncovered({
+      base: "working",
+      uncovered: [{ project: "docs", reason: "no symbol indexer" }],
+    }),
+    ["Conformance did not check docs: no symbol indexer"],
+  );
+  assert.deepEqual(conformanceUncovered({ base: "working" }), []);
 });
 
 test("no annotation yields no chips rather than empty placeholders", () => {

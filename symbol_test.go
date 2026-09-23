@@ -435,7 +435,7 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 
 // A touched project with no indexer is named, so "found nothing" is only ever said about
 // projects that were checked. A regenerated file is not a change of its own.
-func TestUncoveredNotesNameTheProjectsTheChecksCannotSee(t *testing.T) {
+func TestUncoveredProjectsAreTheOnesTheChecksCannotSee(t *testing.T) {
 	files := []types.DiffFile{
 		{Path: "a.go", Project: "."},
 		{Path: "docs/x.md", Project: "docs"},
@@ -444,9 +444,8 @@ func TestUncoveredNotesNameTheProjectsTheChecksCannotSee(t *testing.T) {
 		{Path: "README", Project: ""},
 	}
 
-	assert.Equal(t, []string{
-		"conformance did not cover project docs: it has no symbol indexer, so its changes were not compared",
-	}, uncoveredNotes(files, []string{"."}))
+	assert.Equal(t, []types.DiffUncovered{{Project: "docs", Reason: "no symbol indexer"}},
+		uncoveredProjects(files, []string{"."}))
 }
 
 func TestDiagnosticOfKeepsTheCode(t *testing.T) {

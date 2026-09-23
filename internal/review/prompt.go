@@ -181,10 +181,8 @@ func promptConformance(rev types.Diff) []string {
 			}
 		}
 	}
-	for _, n := range rev.Notes {
-		if strings.HasPrefix(n, "conformance did not cover ") {
-			out = append(out, n)
-		}
+	for _, u := range rev.Uncovered {
+		out = append(out, "not checked: `"+u.Project+"` ("+u.Reason+")")
 	}
 	return out
 }

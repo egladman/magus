@@ -1212,7 +1212,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		}
 	}
 	freshErr := m.freshenSymbolIndexes(ctx, touched)
-	out.Notes = append(out.Notes, uncoveredNotes(out.Files, m.symbolCapableIn(touched))...)
+	out.Uncovered = uncoveredProjects(out.Files, m.symbolCapableIn(touched))
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
