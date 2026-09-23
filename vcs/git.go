@@ -840,13 +840,14 @@ func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 // its call site, so dropping a method would not fail the build, it would silently demote
 // git to whatever the caller's fallback answers ("assume pushed" and no amend command from
 // the drift notice, a named diagnostic instead of a branch-competition report, and so on).
-// git implements all sixteen optional VCSDriver capabilities, so asserting the full set
+// git implements all seventeen optional VCSDriver capabilities, so asserting the full set
 // here is what turns losing one of them into a build failure instead of a regression nobody
 // notices until a caller's fallback quietly fires.
 var (
 	_ types.MergeDriverInstaller = gitVCS{}
 	_ types.RefreshHookInstaller = gitVCS{}
 	_ types.DriftHookInstaller   = gitVCS{}
+	_ types.RegenHookInstaller   = gitVCS{}
 	_ types.RemoteReporter       = gitVCS{}
 	_ types.DefaultRefReporter   = gitVCS{}
 	_ types.PushStatusReporter   = gitVCS{}
@@ -1046,6 +1047,11 @@ var gitRefreshHooks = []string{"post-checkout", "post-merge", "post-rewrite"}
 // block (see types.DriftHookInstaller): both bodies are the same fail-open one-liner as
 // gitRefreshHooks, just addressed to a different job.
 var gitDriftHooks = []string{"post-commit", "pre-push"}
+
+// gitRegenHooks fire when an operation that may have run the merge driver has finished:
+// a merge, a rebase or amend, and the commit that concludes a merge git stopped on (that
+// path fires post-commit, never post-merge).
+var gitRegenHooks = []string{"post-commit", "post-merge", "post-rewrite"}
 
 // InstallMergeDriver writes .gitattributes entries and registers the magus merge driver,
 // both under one repository lock so a concurrent install cannot pair one's attributes
@@ -1541,6 +1547,16 @@ func (v gitVCS) InstallDriftHook(ctx context.Context, root, command string) ([]s
 	// Neither hook needs a guard: post-commit fires only on a real commit, and pre-push
 	// fires only on a real push, unlike post-checkout's dual meaning.
 	return installGitHookSections(ctx, root, gitDriftHooks, driftMarkers, func(string) string {
+		return command + " >/dev/null 2>&1 || true\n"
+	})
+}
+
+// InstallRegenHook implements types.RegenHookInstaller: after it returns, each of
+// gitRegenHooks runs command, fail-open, beside the refresh and drift sections and any
+// hand-written body. It returns the hooks it changed, none when all were current. Same
+// error and locking contract as InstallRefreshHook.
+func (v gitVCS) InstallRegenHook(ctx context.Context, root, command string) ([]string, error) {
+	return installGitHookSections(ctx, root, gitRegenHooks, regenMarkers, func(string) string {
 		return command + " >/dev/null 2>&1 || true\n"
 	})
 }

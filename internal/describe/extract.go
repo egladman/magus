@@ -804,19 +804,17 @@ func charmCall(e *ast.CallExpr) (string, bool) {
 }
 
 // spellHandle returns the handle a spell import binds, and ok=true when the import
-// is a spell. Built-in spells (`import "magus/spell/<name>"`) and remote spells
-// (`import "ghcr.io/<...>/<name>"`) bind under the basename; workspace spells are
-// `import "spells/<...>" as <alias>`. An explicit alias wins over the basename;
-// BZZ1008 refuses one that merely repeats it.
+// is a spell. Built-in spells (`import "magus/spell/<name>"`), remote spells
+// (`import "ghcr.io/<...>/<name>"`) and workspace spells (`import "spells/<...>"`)
+// all bind by value (checker.go's importBindsByValue), so all three default to the
+// basename with no alias; an explicit alias wins over it, and BZZ1008 refuses one
+// that merely repeats it.
 func spellHandle(s *ast.ImportStmt) (string, bool) {
-	switch {
-	case spells.IsEmbeddedImport(s.Path) || spells.IsRemoteImport(s.Path):
+	if spells.IsEmbeddedImport(s.Path) || spells.IsRemoteImport(s.Path) || strings.HasPrefix(s.Path, "spells/") {
 		if s.Alias != "" && s.Alias != "_" {
 			return s.Alias, true
 		}
 		return lastPathSegment(s.Path), true
-	case strings.HasPrefix(s.Path, "spells/") && s.Alias != "" && s.Alias != "_":
-		return s.Alias, true
 	}
 	return "", false
 }

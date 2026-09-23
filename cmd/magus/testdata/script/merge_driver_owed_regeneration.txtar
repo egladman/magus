@@ -1,0 +1,95 @@
+# The merge driver keeps one side of a conflicted generated file and records the
+# regeneration it owes; the regenerate-owed worker, which the post-merge, post-rewrite
+# and post-commit hooks submit to the daemon, runs it once over the finished tree and
+# stages the result. The daemon is off here, so the script runs the worker itself, as
+# the job would.
+#
+# Both operations git can run the driver under are covered: a merge, and a rebase whose
+# pick conflicts on the generated file.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git config merge.magus.driver 'magus vcs merge-driver %O %A %B %L %P'
+exec git checkout -b main
+exec git add magus.yaml magusfile.buzz .gitignore .gitattributes OUT.txt
+exec git commit -m initial
+
+exec git checkout -b other
+cp OUT.other.txt OUT.txt
+exec git commit -am other-side
+
+exec git checkout main
+cp OUT.local.txt OUT.txt
+exec git commit -am local-side
+exec git checkout -b rebased
+
+# --- merge -----------------------------------------------------------------------
+exec git checkout main
+exec git merge --no-edit other
+! stdout 'CONFLICT'
+cmp OUT.txt OUT.local.txt
+
+# The driver recorded the owed run in the git dir and wrote nothing to the tree.
+exists .git/magus-owed-regeneration.json
+grep '"target": "generate"' .git/magus-owed-regeneration.json
+grep '"OUT.txt"' .git/magus-owed-regeneration.json
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+exec magus server regenerate-owed
+stderr 'regenerate-owed: ran magus run generate:rw \.; staged 1 file\(s\)'
+cmp OUT.txt OUT.want.txt
+! exists .git/magus-owed-regeneration.json
+exec git diff --cached --name-only
+stdout '^OUT\.txt$'
+exec git commit --amend --no-edit
+# A dirty tree here would make the rebase below refuse, so the worker must have left
+# nothing but what it staged.
+exec git status --porcelain --untracked-files=no
+! stdout .
+
+# --- rebase ----------------------------------------------------------------------
+exec git checkout rebased
+exec git rebase other
+cmp OUT.txt OUT.other.txt
+exists .git/magus-owed-regeneration.json
+
+exec magus server regenerate-owed
+stderr 'staged 1 file\(s\)'
+cmp OUT.txt OUT.want.txt
+! exists .git/magus-owed-regeneration.json
+
+# Nothing owed: the worker is a no-op, which is what every ordinary post-commit sees.
+exec magus server regenerate-owed
+! stderr .
+
+-- magus.yaml --
+default_charms: [rw]
+-- .gitignore --
+.magus/
+-- .gitattributes --
+# BEGIN magus-generated - do not edit this section manually
+OUT.txt merge=magus linguist-generated
+# END magus-generated
+-- magusfile.buzz --
+import "magus";
+import "fs";
+magus\project({
+    "name": "acme-root",
+    "targets": {
+        "generate": {"skip_cache": "writes on every run; a replay would skip the write"},
+    },
+});
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("OUT.txt");
+    fs\writeFile("OUT.txt", "generated: regenerated\n");
+}
+-- OUT.txt --
+generated: base
+-- OUT.local.txt --
+generated: local
+-- OUT.other.txt --
+generated: other
+-- OUT.want.txt --
+generated: regenerated
