@@ -119,8 +119,8 @@ var denyRuleDocs = []RuleDoc{
 			"A target run persists its whole log either way and prints a ref for it, so capturing the console is redundant."},
 	{Name: string(denyRuleProcessPoll), Decision: "deny",
 		Catches: "a process table inspected to wait on magus work the lock already reports",
-		Why: "A magus run holds a project lock and announces itself, and `magus status --watch=15s` reads that same lock state continuously: holder PID, command, age, waiters. " +
-			"`pgrep`, `pidof` and `ps` invent a second waiter that races the real one, has no bound of its own, and answers a question the lock message already answered."},
+		Why: "A magus run holds a project lock and announces itself, and `magus status --watch=15s` reads that same lock state continuously: holder PID, command, age. " +
+			"`pgrep`, `pidof` and `ps` invent a poll with no bound of its own that answers a question the lock message already answered."},
 	{Name: string(denyRuleRawTool), Decision: "deny",
 		Catches: "a toolchain command a spell already wraps, run outside the cache",
 		Why: "magus covers these exactly and adds cache, sandbox and affected tracking, so the refusal costs nothing: `magus run <target> <project>`, and `magus describe targets -o name` lists what this workspace calls them. " +

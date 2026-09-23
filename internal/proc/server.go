@@ -228,7 +228,7 @@ func (s *Server) IdleFor(now time.Time) (idle time.Duration, busy bool) {
 	}
 	if b := svc.machineBudget; b != nil {
 		m := b.Snapshot()
-		if len(m.Holders) > 0 || len(m.Waiters) > 0 {
+		if len(m.Holders) > 0 {
 			return 0, true
 		}
 	}
@@ -547,7 +547,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 	}
 }
 
-// budgetAcquire answers one poll against the machine budget. A server holding no budget
+// budgetAcquire answers one request against the machine budget. A server holding no budget
 // (a per-process proc server) says so rather than granting: a client that read silence
 // as a grant would run unarbitrated against a daemon that IS arbitrating its peers.
 func (s *service) budgetAcquire(req budgetAcquireRequest, reply *budgetAcquireReply) {
@@ -563,11 +563,11 @@ func (s *service) budgetAcquire(req budgetAcquireRequest, reply *budgetAcquireRe
 		reply.Err = "this server does not arbitrate the machine budget"
 		return
 	}
-	reply.Verdict = s.machineBudget.Request(req.Waiter, req.Claim)
+	reply.Verdict = s.machineBudget.Request(req.Claim)
 }
 
-// budgetRelease returns a granted claim or retires a waiter. Silent on a server with no
-// budget: there is nothing to give back, and a teardown must not fail over it.
+// budgetRelease returns a granted claim. Silent on a server with no budget: there is
+// nothing to give back, and a teardown must not fail over it.
 func (s *service) budgetRelease(req budgetReleaseRequest) {
 	if req.Magic != budgetMagic || s.machineBudget == nil ||
 		(req.Protocol != "" && req.Protocol != protocolV2) {
@@ -575,9 +575,6 @@ func (s *service) budgetRelease(req budgetReleaseRequest) {
 	}
 	if req.ID != "" {
 		s.machineBudget.Release(req.ID)
-	}
-	if req.Waiter != "" {
-		s.machineBudget.Drop(req.Waiter)
 	}
 }
 

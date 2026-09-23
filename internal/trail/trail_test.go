@@ -251,6 +251,29 @@ func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing
 	require.Empty(t, events[0].Lease)
 }
 
+// A continuation is recorded because the caller says so, not because it named a target: a
+// host may address an agent it cannot name, and a spawn may carry one.
+func TestAppendAgentSpawn_ContinueIsExplicit(t *testing.T) {
+	cases := []struct {
+		name  string
+		spawn AgentSpawn
+		want  string
+	}{
+		{"a continue naming no target", AgentSpawn{Continue: true, Context: "carry on"}, ActionAgentContinue},
+		{"a spawn carrying a target", AgentSpawn{Child: "Explore", Target: "a1b2c3", Context: "audit"}, "Explore"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			AppendAgentSpawn(t.Context(), dir, tc.spawn)
+			events, err := ReadRecent(dir, 1)
+			require.NoError(t, err)
+			require.Len(t, events, 1)
+			assert.Equal(t, tc.want, events[0].Action)
+		})
+	}
+}
+
 // TestLeaseFromContext pins the cooperative correlation marker: present, absent, and every shape
 // of malformed or misplaced. A marker that is not the first non-blank line yields no lease, and
 // neither does a malformed one, never a wrong one. The whole contract is that an uncorrelated

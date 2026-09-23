@@ -32,32 +32,120 @@ exec magus run noisy -o json
 stdout '^\{'
 ! stdout 'CHATTER_ON_STDOUT'
 
-# -- -o jsonl: EVERY line on BOTH streams is a parseable JSON object, not just the
-# target's own captured output. The projects/charms/cache header, per-stage progress
-# and the run summary used to print through the cache's pretty logger regardless of
-# -o: a caller parsing this run as JSONL met "projects: ." beside a run.target.result
-# line with no way to tell where one record ended and the next began. Those now route
-# through the same report.Writer as run.target.result (the run.scope/run.charms/
-# run.cache events), and anything this package does not yet convert by name falls back
-# to a plain JSON line on stderr instead of prose (see internal/cache/log.go's
-# jsonlSafetyNetHandler) -- so both checks below hold for ANY message, named or not,
-# present or future, not only the ones this change happened to name.
-exec magus run noisy -o jsonl
+# -- -o jsonl: EVERY line on BOTH streams is a record. The run is UNCACHED and its
+# target composes a member through ctx.needs, so the member executes, prints, and
+# completes as a stage: the shape that used to stream the member's raw output to
+# stderr and emit no run.step, because jsonl did not withhold. Streaming stays on to
+# show a structured run withholds whatever MAGUS_LOG_STREAM says. The output is in
+# the run log behind the ref run.target.result names, not on either stream.
+env MAGUS_LOG_STREAM=1
+exec magus run composite --no-cache -o jsonl
+jsonl-records
 stdout '"type":"run.target.result"'
 stdout '"type":"run.scope"'
-! stdout 'CHATTER_ON_STDOUT'
-! stdout '(?m)^[^{]'
-! stderr '(?m)^[^{]'
+stdout '"type":"run.step".*"target":"member"'
+! stdout 'MEMBER_CHATTER'
+! stderr 'MEMBER_CHATTER'
 
+# -s changes which records a structured run carries, never whether a line is one.
+exec magus run composite --no-cache -o jsonl -s
+jsonl-records
+! stderr 'MEMBER_CHATTER'
+
+# A failing member still leaves both streams parseable: its output is behind the ref.
+! exec magus run broken --no-cache -o jsonl
+jsonl-records run.target.result
+stdout '"type":"run.target.result".*"status":"failed"'
+! stderr 'BROKEN_CHATTER'
+cp stdout broken.jsonl
+
+# A target's notice line that -s bubbles up is a record too, whatever -s does to the
+# log level: text prints it under -s, so dropping it here would lose it.
+exec magus run noticed --no-cache -o jsonl -s
+jsonl-records run.notice
+stderr '"msg":"cache.notice".*"notice":"from the target"'
+
+# Output written outside any target's capture is a record: the magusfile's own print at
+# load, and every target body a dry run evaluates.
+exec magus run noisy --dry-run -o jsonl
+jsonl-records run.dry run.step run.summary run.notice
+stderr '"msg":"LOAD_CHATTER"'
+stderr '"msg":"CHATTER_ON_STDOUT"'
+
+# MGS4002: two projects in one run declaring the same output.
+exec magus run overlap . api --no-cache -o jsonl
+jsonl-records race.output_overlap
+
+# MGS4004: a write into a project the run did not dispatch.
+exec magus run produce . --race=watch --no-cache -o jsonl
+jsonl-records race.missing_dependency
+
+# magus x reproducing a ref reports through the same sink as run: the failed result
+# carries its ref, and the replay notice is a record.
+! exec sh -c 'magus x "$(sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p" broken.jsonl)" -o jsonl'
+jsonl-records run.scope run.target.result
+
+# affected --stdin runs each batch through the sink -o jsonl chose.
+stdin paths.txt
+exec magus affected broken --stdin --no-cache -o jsonl
+jsonl-records run.target.result
+
+-- paths.txt --
+magusfile.buzz
 -- magus.yaml --
 concurrency: 1
 -- magusfile.buzz --
 import "magus";
 import "std";
+import "proc";
 
 magus\project({});
+
+// Runs at load, outside any target's capture.
+std\print("LOAD_CHATTER");
+
+export fun noticed(ctx: magus\Context, args: [str]) > void {
+    std\print("magus:notice: from the target");
+}
+
+export fun overlap(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("api/shared.txt");
+    proc\exec("sh", ["-c", "echo root > api/shared.txt"]);
+}
+
+export fun produce(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("lib/*.txt");
+    proc\exec("sh", ["-c", "echo produced > lib/produced.txt"]);
+}
 
 // Writes to the target's OWN stdout, which is the stream that used to leak.
 export fun noisy(ctx: magus\Context, args: [str]) > void {
     std\print("CHATTER_ON_STDOUT");
 }
+
+export fun member(ctx: magus\Context, args: [str]) > void {
+    std\print("MEMBER_CHATTER");
+}
+
+export fun composite(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(member);
+}
+
+export fun broken(ctx: magus\Context, args: [str]) > void {
+    std\print("BROKEN_CHATTER");
+    throw "broken on purpose";
+}
+-- api/magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({});
+
+export fun overlap(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("shared.txt");
+    proc\exec("sh", ["-c", "echo api > shared.txt"]);
+}
+-- lib/magusfile.buzz --
+import "magus";
+
+magus\project({"sources": ["*.txt"]});

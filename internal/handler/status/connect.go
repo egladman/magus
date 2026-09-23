@@ -34,7 +34,20 @@ type ConnectService struct {
 // satisfied by *console.Service). build stamps the reporting binary's identity onto every
 // snapshot, as the SSE status frame does.
 func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger) *ConnectService {
+	if log == nil {
+		log = slog.Default()
+	}
 	return &ConnectService{src: src, build: build, log: log, interval: defaultStreamInterval}
+}
+
+// liveStatus is statusSnapshotToProto at a serving boundary: a dropped error detail is
+// logged, and the rest of the message still goes out.
+func liveStatus(ctx context.Context, log *slog.Logger, r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
+	s, dropped := statusSnapshotToProto(r, build)
+	if dropped != nil {
+		log.WarnContext(ctx, "status: sending a snapshot without an error detail", slog.String("error", dropped.Error()))
+	}
+	return s
 }
 
 var _ statusv1alpha1connect.StatusServiceHandler = (*ConnectService)(nil)
@@ -45,7 +58,7 @@ var _ statusv1alpha1connect.StatusServiceHandler = (*ConnectService)(nil)
 func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statusv1.GetStatusRequest]) (*connect.Response[statusv1.GetStatusResponse], error) {
 	report := s.src.StatusSnapshot(ctx)
 	resp := &statusv1.GetStatusResponse{
-		Status: statusSnapshotToProto(report, s.build),
+		Status: liveStatus(ctx, s.log, report, s.build),
 		Config: &statusv1.Config{
 			DefaultCharms: report.Config.DefaultCharms,
 			Concurrency:   int32(report.Config.Concurrency.Configured),
@@ -65,7 +78,7 @@ func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statu
 // so Connect tears the RPC down.
 func (s *ConnectService) StreamStatus(ctx context.Context, _ *connect.Request[statusv1.StreamStatusRequest], stream *connect.ServerStream[statusv1.StreamStatusResponse]) error {
 	// Push the initial snapshot immediately so a subscriber renders without waiting a full tick.
-	last := statusSnapshotToProto(s.src.StatusSnapshot(ctx), s.build)
+	last := liveStatus(ctx, s.log, s.src.StatusSnapshot(ctx), s.build)
 	if err := stream.Send(&statusv1.StreamStatusResponse{Status: last}); err != nil {
 		return err
 	}
@@ -77,7 +90,7 @@ func (s *ConnectService) StreamStatus(ctx context.Context, _ *connect.Request[st
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			next := statusSnapshotToProto(s.src.StatusSnapshot(ctx), s.build)
+			next := liveStatus(ctx, s.log, s.src.StatusSnapshot(ctx), s.build)
 			// Skip unchanged snapshots so a quiescent pool does not spam the stream; proto
 			// identity here is structural, so an equal message means nothing a client cares
 			// about moved.

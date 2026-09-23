@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -90,12 +91,10 @@ func TestRoundTripAllTypes(t *testing.T) {
 		RunScope{Label: ".", Source: "3 projects"},
 		RunCharms{Charms: "rw"},
 		RunCache{Tier: "local", Mode: "read+write"},
-		RunBase{Base: "origin/main", VCS: "git"},
+		RunBase{Base: "git diff vs origin/main"},
 		RunStep{Label: "magus", Target: "types-generate", Status: "pass", DurationMs: 695},
 		RunSummary{Hits: 1, Misses: 2, Errors: 0, DurationMs: 1600},
-		LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci"},
-		LockReleased{Project: "."},
-		Notice{Level: "warn", Code: "MGS1028", Message: "projects seeded by changed files nothing declares"},
+		Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "projects seeded by changed files nothing declares"},
 	}
 	for _, e := range events {
 		require.NoError(t, recordAny(w, e), "Record %T", e)
@@ -112,7 +111,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 		TypeVolatility, TypeShardTotal,
 		TypeRunScope, TypeRunCharms, TypeRunCache, TypeRunBase,
 		TypeRunStep, TypeRunSummary,
-		TypeLockWait, TypeLockReleased, TypeNotice,
+		TypeNotice,
 	}
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
@@ -511,14 +510,18 @@ func TestStructuredRunEventTypes(t *testing.T) {
 		{"RunScope no source", RunScope{Label: "."}, TypeRunScope},
 		{"RunCharms", RunCharms{Charms: "rw"}, TypeRunCharms},
 		{"RunCache", RunCache{Tier: "local", Mode: "read+write"}, TypeRunCache},
-		{"RunBase", RunBase{Base: "origin/main", VCS: "git"}, TypeRunBase},
+		{"RunBase", RunBase{Base: "git diff vs origin/main"}, TypeRunBase},
 		{"RunStep pass", RunStep{Label: "magus", Target: "types-generate", Status: "pass", DurationMs: 695}, TypeRunStep},
 		{"RunStep fail", RunStep{Label: "magus", Target: "lint", Status: "fail", DurationMs: 40, Error: "exit status 1"}, TypeRunStep},
+		{"RunStep dry", RunStep{Label: "magus", Project: ".", Target: "build", Status: "dry"}, TypeRunStep},
 		{"RunSummary", RunSummary{Hits: 3, Misses: 1, Errors: 0, DurationMs: 1600}, TypeRunSummary},
 		{"RunSummary dry", RunSummary{Dry: true, Planned: 4, DurationMs: 12}, TypeRunSummary},
-		{"LockWait", LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci", ElapsedMs: 15000}, TypeLockWait},
-		{"LockReleased", LockReleased{Project: "libs/gopherbuzz"}, TypeLockReleased},
-		{"Notice", Notice{Level: "warn", Code: "MGS1028", Message: "projects seeded by changed files nothing declares"}, TypeNotice},
+		{"RunRemote", RunRemote{Hits: 2, Misses: 1, Published: 1, Failures: 1, DownBytes: 2048, UpBytes: 512}, TypeRunRemote},
+		{"RunDry", RunDry{}, TypeRunDry},
+		{"LockSuperseded", LockSuperseded{Project: ".", HolderPID: 4242, Command: "magus run ci"}, TypeLockSuperseded},
+		{"LockSupersedeRefused", LockSupersedeRefused{Project: ".", HolderPID: 4242, Command: "magus run ci", BoundMs: 30000}, TypeLockSupersedeRefused},
+		{"DeterminismUnchecked", DeterminismUnchecked{Project: "api", Target: "build", Error: "open dist: permission denied"}, TypeDeterminismUnchecked},
+		{"Notice", Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "projects seeded by changed files nothing declares"}, TypeNotice},
 	}
 
 	for _, tc := range cases {

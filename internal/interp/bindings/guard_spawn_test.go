@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -212,7 +213,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > any !> any {
 	require.NoError(t, err)
 	facts := hint.NewGate(t.TempDir(), "claude-code/s1")
 	rows := []types.Job{{ID: "guard-facts", State: types.StateRunning}, {ID: "guard-docs", State: types.StateDeclared}}
-	ctx := types.WithJobSnapshot(t.Context(), types.JobSnapshot{Rows: rows})
+	ctx := job.WithSnapshot(t.Context(), job.Snapshot{Rows: rows})
 	tokens := int64(19925)
 
 	cases := []struct {

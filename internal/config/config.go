@@ -234,7 +234,10 @@ type SandboxEnv struct {
 
 // Log controls log output.
 type Log struct {
-	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json jsonl"` // pretty|plain|text|json|jsonl
+	// Format is pretty|plain|text|json. "jsonl" is set only by `-o jsonl`, after
+	// validation: it withholds target output and routes results to the report stream,
+	// which a magus.yaml setting has no stream to route them to.
+	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json"`
 	// Level is the minimum log level; "trace" also enables the startup timing table.
 	Level string `json:"level" yaml:"level" validate:"omitempty,oneof=trace debug info warn error"`
 	// Silent suppresses progress like --quiet, and additionally bounds the failing-project
@@ -784,7 +787,6 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_REPORT_FILTER", "report.filter", "", "Comma-separated +type/-type terms restricting JSONL event emission (e.g. -graph.build,-graph.query)"},
 		{"MAGUS_SANDBOX_ENABLED", "sandbox.enabled", "false", "When 1 or true, confine every subprocess and in-process spell to the workspace + a curated allowlist, scrub the child-process env to a minimum allowlist, and refuse paths outside it. See magus.yaml sandbox.allow and sandbox.env.passthrough for extension"},
 		{"MAGUS_UPDATE_URL", "", "https://eli.gladman.cc/magus/public/release/index.json", "Env-only, no magus.yaml equivalent: override the release index URL for `magus self update`; set to a self-hosted copy of index.json to use a private update channel"},
-		{"MAGUS_NO_WAIT", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, a run that finds a project's workspace lock held by another magus process fails immediately instead of queuing behind it, naming the holder and exiting 75 (EX_TEMPFAIL) so a caller can tell a busy machine from a broken build"},
 		{"MAGUS_NO_BOOTSTRAP_EXEC", "", "false", "Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself"},
 	}
 }

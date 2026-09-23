@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/egladman/magus/internal/rpcerr"
 )
 
 func TestBearerGuard(t *testing.T) {
@@ -27,7 +29,7 @@ func TestBearerGuard(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuard(FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+		BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 
@@ -89,7 +91,7 @@ func TestBearerGuardWithQueryToken(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuardWithQueryToken(FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+		BearerGuardWithQueryToken(rpcerr.FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 	code := func(authHeader, rawQuery string) int { return serve(authHeader, rawQuery).Code }
@@ -111,7 +113,7 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+	BearerGuard(rpcerr.FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
@@ -123,7 +125,7 @@ func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(FormatJSON, reject, okHandler).ServeHTTP(rr, req)
+	BearerGuard(rpcerr.FormatJSON, reject, okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 

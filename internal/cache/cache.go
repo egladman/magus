@@ -49,7 +49,6 @@ type Cache struct {
 	// in Open from the two fields below, which is where the caller's logger exists.
 	machine         *machineGate
 	machineAdmitter MachineAdmitter
-	machineNoWait   bool
 	mutable         bool // true = read+write (default); false = read-only
 	sizeMB          int
 	maxImportBytes  int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
@@ -57,6 +56,7 @@ type Cache struct {
 	logLevel        slog.Level // effective minimum level; used by captureRun
 	silent          bool       // silent output mode: bounded failure dumps + bubbled important lines
 	collapse        bool       // collapse-on-success: withhold live subprocess output, replay it only on failure
+	recordsOnly     bool       // -o jsonl: no free text on the terminal; see WithRecordOnlyOutput
 	hits            atomic.Int64
 	misses          atomic.Int64
 	errs            atomic.Int64
@@ -296,7 +296,6 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 		mutable:  mutable,
 		log:      log,
 		logLevel: defaultLevel,
-		mtimes:   newMtimeStore(dir, log),
 		outputs:  NewOutputStore(dir),
 		// Annotations go to stderr alongside the failure dump they wrap.
 		annotator: annotate.Detect(),
@@ -305,8 +304,10 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	for _, o := range opts {
 		o(c)
 	}
+	// After the options, so its warnings reach the logger the caller chose.
+	c.mtimes = newMtimeStore(dir, c.log)
 	if c.machineAdmitter != nil {
-		c.machine = &machineGate{admit: c.machineAdmitter, noWait: c.machineNoWait, log: c.log}
+		c.machine = &machineGate{admit: c.machineAdmitter, log: c.log}
 	}
 	if err := c.initSigning(); err != nil {
 		return nil, err
@@ -543,7 +544,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// Stderr, not stdout, matching captureRun's miss path: stdout is
 				// reserved for structured output (-o json|yaml|jsonl|template) and
 				// nothing else, so a replayed log on stdout corrupted it on a hit.
-				if c.logLevel < slog.LevelError && len(logData) > 0 {
+				if c.logLevel < slog.LevelError && !c.recordsOnly && len(logData) > 0 {
 					_, _ = os.Stderr.Write(logData)
 				}
 				// A hit regenerated nothing, so reuse the existing ref for this cache
@@ -777,7 +778,8 @@ const maxHintErrChars = 120
 // the cache key, so one line per key per process falls out with no state of its own,
 // and one `magus run` invocation is one process.
 func (c *Cache) emitUnchangedFailureHint(hash string) string {
-	if c.outputs == nil || !interactive.HintsEnabled() {
+	// A record-only run carries the same pointer as run.target.result's next breadcrumbs.
+	if c.outputs == nil || !interactive.HintsEnabled() || c.recordsOnly {
 		return ""
 	}
 	d, err := c.outputs.newestDescriptor(hash)
@@ -950,6 +952,23 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 	}
 	held.machineClaim = true
 	return held.on(ctx), release, nil
+}
+
+// reportRefusal puts a step that was refused before it started on the record a failed
+// step is put on: counted, logged as cache.error, and handed to the result observers.
+// Run's fail does that for a step that ran; a refusal never reaches Run, and the CLI
+// prints no error of its own for an ExitError, so this is the only place it is said.
+func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error) {
+	c.errs.Add(1)
+	c.log.ErrorContext(ctx,
+		"cache.error",
+		slog.String("project", s.ProjectPath),
+		slog.String("label", s.Label),
+		slog.String("target", reproTarget(s)),
+		slog.String("error", types.CauseText(err)),
+		slog.Bool("refused", true),
+	)
+	rc.fireResults(&s, &Result{ProjectPath: s.ProjectPath}, err)
 }
 
 // admit takes the in-process seats a step needs before it executes and puts it on the
@@ -1214,6 +1233,9 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				// spends no failure budget and joins no error, and a run that did nothing
 				// reports success.
 				ran = gctx.Err() == nil
+				if ran {
+					c.reportRefusal(gctx, rc, s, machineErr)
+				}
 				return fail(machineErr)
 			}
 			defer releaseMachine()
@@ -1636,7 +1658,9 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// captured output replayed below. Silent has its own stricter rules, so it takes
 	// precedence and collapse stays off under it.
 	collapse := c.collapse && !c.silent && !quiet
-	withhold := quiet || collapse
+	// A record-only run withholds in every mode: a raw line on either stream is one no
+	// JSONL reader can parse. The failure is carried by run.target.result and its ref.
+	withhold := quiet || collapse || c.recordsOnly
 
 	// A log-path failure fails the run outright rather than degrading silently:
 	// running fn without capture writers, journal step tagging, or failure-dump
@@ -1698,11 +1722,19 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// sole output for an otherwise-silent passing run.
 	if c.silent {
 		for _, msg := range extractNotices(logPath) {
+			if c.recordsOnly {
+				// Past the level gate, which -s raises to error: the text line below
+				// prints whatever the level, and so must its record.
+				r := slog.NewRecord(time.Now(), slog.LevelInfo, "cache.notice", 0)
+				r.AddAttrs(slog.String("project", projectPath), slog.String("notice", msg))
+				_ = c.log.Handler().Handle(ctx, r)
+				continue
+			}
 			_, _ = fmt.Fprintf(os.Stderr, "notice: %s: %s\n", projectPath, msg)
 		}
 	}
 
-	if runErr != nil {
+	if runErr != nil && !c.recordsOnly {
 		// Under GitHub Actions, fold the dump into a collapsible section and
 		// raise the failure itself as an annotation. The dump is verbose and
 		// belongs behind a fold; the annotation is what reaches the pull

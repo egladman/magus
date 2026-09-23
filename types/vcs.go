@@ -348,6 +348,17 @@ type DriftHookInstaller interface {
 	InstallDriftHook(ctx context.Context, root, command string) ([]string, error)
 }
 
+// RegenHookInstaller is an optional capability (sibling of DriftHookInstaller) for
+// VCSDriver implementations that can install a hook firing once a merge, rebase, amend
+// or merge-concluding commit has finished, to run command: the job that regenerates the
+// files the merge driver kept one side of. The driver cannot do it, since it runs while
+// the merge is still writing the tree. Same managed-section and fail-open contract as
+// the other hook installers; callers type-assert and skip a backend without it. It
+// returns the labels of the hooks it installed, for a notice.
+type RegenHookInstaller interface {
+	InstallRegenHook(ctx context.Context, root, command string) ([]string, error)
+}
+
 // RemoteReporter is an optional capability for VCSDriver implementations that can
 // report the repository's default remote URL (e.g. git's "origin" fetch URL). It
 // lets callers derive a forge browse/blob URL for turning a workspace-relative

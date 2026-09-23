@@ -25,9 +25,9 @@ var admitTimeout = 5 * time.Second
 // running here answerable to a magus running in another worktree.
 type DaemonAdmitter struct{ Addr string }
 
-// Request polls the budget on behalf of waiter.
-func (d DaemonAdmitter) Request(ctx context.Context, waiter string, c types.MachineClaim) (types.MachineVerdict, error) {
-	req := budgetAcquireRequest{Magic: budgetMagic, Protocol: protocolV2, Waiter: waiter, Claim: c}
+// Request asks the budget to seat c.
+func (d DaemonAdmitter) Request(ctx context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+	req := budgetAcquireRequest{Magic: budgetMagic, Protocol: protocolV2, Claim: c}
 	reply, err := roundTrip[budgetAcquireReply](ctx, d.Addr, budgetExchange(typeBudgetAcquire, typeBudgetAcquireReply), req)
 	if err != nil {
 		return types.MachineVerdict{}, err
@@ -43,12 +43,6 @@ func (d DaemonAdmitter) Request(ctx context.Context, waiter string, c types.Mach
 // over bookkeeping.
 func (d DaemonAdmitter) Release(ctx context.Context, id string) {
 	req := budgetReleaseRequest{Magic: budgetMagic, Protocol: protocolV2, ID: id}
-	_, _ = roundTrip[budgetReleaseReply](ctx, d.Addr, budgetExchange(typeBudgetRelease, typeBudgetReleaseReply), req)
-}
-
-// Drop retires a waiter that gave up, for the same reason and with the same tolerance.
-func (d DaemonAdmitter) Drop(ctx context.Context, waiter string) {
-	req := budgetReleaseRequest{Magic: budgetMagic, Protocol: protocolV2, Waiter: waiter}
 	_, _ = roundTrip[budgetReleaseReply](ctx, d.Addr, budgetExchange(typeBudgetRelease, typeBudgetReleaseReply), req)
 }
 

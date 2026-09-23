@@ -6,11 +6,14 @@ package report
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"reflect"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -20,7 +23,9 @@ import (
 // v4 prefixed that event and the diagnostic one with "run.": both collided by name
 // with types.StreamEvent, which stamps its own schema number on a line of nearly the
 // same shape.
-const Schema = 4
+// v5 dropped run.base's vcs field and the lock.wait and lock.released events, and a
+// -o jsonl run's stderr moved from slog's {time,level,msg} lines to run.notice records.
+const Schema = 5
 
 // Type values stamped on every event line; stable across versions.
 const (
@@ -33,6 +38,7 @@ const (
 	TypeRaceDetected          = "race.detected"
 	TypeOutputOverlapDetected = "race.output_overlap"
 	TypeDeterminismMismatch   = "race.determinism_mismatch"
+	TypeDeterminismUnchecked  = "race.determinism_unchecked"
 	TypeMissingDependency     = "race.missing_dependency"
 	TypeDiagnosticEmitted     = "run.diagnostic"
 	TypeRunScope              = "run.scope"
@@ -41,8 +47,11 @@ const (
 	TypeRunBase               = "run.base"
 	TypeRunStep               = "run.step"
 	TypeRunSummary            = "run.summary"
-	TypeLockWait              = "lock.wait"
-	TypeLockReleased          = "lock.released"
+	TypeRunRemote             = "run.remote"
+	TypeRunDry                = "run.dry"
+	TypeRunDetach             = "run.detach"
+	TypeLockSuperseded        = "lock.superseded"
+	TypeLockSupersedeRefused  = "lock.supersede_refused"
 	TypeNotice                = "run.notice"
 )
 
@@ -138,6 +147,16 @@ type DeterminismMismatch struct {
 	DifferingPaths []string `json:"differing_paths"`
 }
 
+// DeterminismUnchecked records a project whose byte-stability --race=replay could not
+// check: Globs is set when its declared outputs matched nothing, Error when they could
+// not be hashed. It fails the gate, like a mismatch does.
+type DeterminismUnchecked struct {
+	Project string `json:"project"`
+	Target  string `json:"target"`
+	Globs   string `json:"globs,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 // MissingDependency records a likely missing graph edge: Consumer sources Path but didn't run; Producer wrote it.
 type MissingDependency struct {
 	Consumer string `json:"consumer"`
@@ -179,21 +198,41 @@ type RunCache struct {
 }
 
 // RunBase reports what an affected run's change set was compared against, the
-// "base: ..." header.
+// "base: ..." header. Base already names the VCS ("git diff vs origin/main").
 type RunBase struct {
 	Base string `json:"base"`
-	VCS  string `json:"vcs,omitempty"`
 }
 
 // RunStep reports one sub-target progress line ("[pass] name (695ms)") as it
 // completes -- a magus.needs stage, or a dry-run target that never actually ran.
-// Status is "pass", "fail", "advisory", or "dry".
+// Status is "pass", "fail", "advisory", or "dry". Project is the workspace-relative
+// path, set on a dry step so its repro command can name it.
 type RunStep struct {
 	Label      string `json:"label"`
+	Project    string `json:"project,omitempty"`
 	Target     string `json:"target,omitempty"`
 	Status     string `json:"status"`
 	DurationMs int64  `json:"duration_ms,omitempty"`
 	Error      string `json:"error,omitempty"`
+}
+
+// RunRemote accounts for what the remote cache did this run, once, beside the summary.
+// It is emitted whenever a remote is configured, so all-zero counts mean the run never
+// reached it rather than that nothing was reported.
+type RunRemote = cache.RemoteTally
+
+// RunDry opens a dry run: what follows are the steps it would take, none executed. The
+// run.summary with dry set closes it.
+type RunDry struct{}
+
+// RunDetach is where an invocation handed to the daemon with --detach stands. State is
+// "coalesced" (an identical one was already running, so none was queued), "queued"
+// (handed over, not waited on), "running" (handed over and waited on), "unwatched"
+// (the wait stopped; the run continues), "passed" or "failed".
+type RunDetach struct {
+	Invocation string `json:"invocation,omitempty"`
+	State      string `json:"state"`
+	DurationMs int64  `json:"duration_ms,omitempty"` // passed and failed only
 }
 
 // RunSummary is the end-of-run footer: hit/miss/error counts (or, for a dry run,
@@ -207,30 +246,76 @@ type RunSummary struct {
 	DurationMs int64 `json:"duration_ms"`
 }
 
-// LockWait reports a run blocked on another magus process holding a project's
-// lock -- emitted once when the wait starts and again on each heartbeat while it
-// continues, so a structured reader has the same liveness evidence a text run's
-// repeated line gives a human.
-type LockWait struct {
+// LockSuperseded reports that this gate stopped an earlier gate on the same tree and
+// took its project lock (MGS3014).
+type LockSuperseded struct {
 	Project   string `json:"project"`
 	HolderPID int    `json:"holder_pid,omitempty"`
 	Command   string `json:"command,omitempty"`
-	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
 }
 
-// LockReleased reports that a previously-waited-on project lock freed and this
-// run now proceeds.
-type LockReleased struct {
-	Project string `json:"project"`
+// LockSupersedeRefused reports that this gate asked an earlier gate on the same tree to
+// stop, it did not within BoundMs, and so this run is refused (exit 75) rather than
+// waiting for it. Nothing was superseded.
+type LockSupersedeRefused struct {
+	Project   string `json:"project"`
+	HolderPID int    `json:"holder_pid,omitempty"`
+	Command   string `json:"command,omitempty"`
+	BoundMs   int64  `json:"bound_ms"`
 }
 
 // Notice is a free-form advisory line -- a hint, warning, or one-time banner --
 // that has no dedicated event type of its own. Code is the diagnostic code (e.g.
-// an MGS####) when the notice carries one.
+// an MGS####) when the notice carries one, and Message does not repeat it. Attrs
+// carries the fields of a log record no typed event converts (see [NewNoticeHandler]).
+//
+// Level is written as "debug", "info", "warn" or "error" (see [LevelName]).
 type Notice struct {
-	Level   string `json:"level"` // "info" | "warn"
-	Code    string `json:"code,omitempty"`
-	Message string `json:"msg"`
+	Level   slog.Level
+	Code    string
+	Message string
+	Attrs   map[string]any
+}
+
+// noticeWire is Notice as a line carries it.
+type noticeWire struct {
+	Level   string         `json:"level"`
+	Code    string         `json:"code,omitempty"`
+	Message string         `json:"msg"`
+	Attrs   map[string]any `json:"attrs,omitempty"`
+}
+
+// MarshalJSON writes Level by name.
+func (n Notice) MarshalJSON() ([]byte, error) {
+	return json.Marshal(noticeWire{Level: LevelName(n.Level), Code: n.Code, Message: n.Message, Attrs: n.Attrs})
+}
+
+// UnmarshalJSON reads a line [Notice.MarshalJSON] wrote.
+func (n *Notice) UnmarshalJSON(b []byte) error {
+	var w noticeWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	var l slog.Level
+	if err := l.UnmarshalText([]byte(w.Level)); err != nil {
+		return fmt.Errorf("report: notice level: %w", err)
+	}
+	*n = Notice{Level: l, Code: w.Code, Message: w.Message, Attrs: w.Attrs}
+	return nil
+}
+
+// LevelName is the name a record carries for l: one of debug, info, warn and error, with
+// anything below debug (magus's trace) reading as debug and anything past error as error.
+func LevelName(l slog.Level) string {
+	switch {
+	case l < slog.LevelInfo:
+		return "debug"
+	case l < slog.LevelWarn:
+		return "info"
+	case l < slog.LevelError:
+		return "warn"
+	}
+	return "error"
 }
 
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
@@ -244,6 +329,7 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RaceDetected{}):          TypeRaceDetected,
 	reflect.TypeOf(OutputOverlapDetected{}): TypeOutputOverlapDetected,
 	reflect.TypeOf(DeterminismMismatch{}):   TypeDeterminismMismatch,
+	reflect.TypeOf(DeterminismUnchecked{}):  TypeDeterminismUnchecked,
 	reflect.TypeOf(MissingDependency{}):     TypeMissingDependency,
 	reflect.TypeOf(RunScope{}):              TypeRunScope,
 	reflect.TypeOf(RunCharms{}):             TypeRunCharms,
@@ -251,12 +337,25 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(RunBase{}):               TypeRunBase,
 	reflect.TypeOf(RunStep{}):               TypeRunStep,
 	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
-	reflect.TypeOf(LockWait{}):              TypeLockWait,
-	reflect.TypeOf(LockReleased{}):          TypeLockReleased,
+	reflect.TypeOf(RunDry{}):                TypeRunDry,
+	reflect.TypeOf(RunDetach{}):             TypeRunDetach,
+	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
+	reflect.TypeOf(LockSupersedeRefused{}):  TypeLockSupersedeRefused,
+	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }
 
-func typeOf(e any) string { return registry[reflect.TypeOf(e)] }
+// TypeOf returns the record type e is written as, or "" for an unregistered event.
+func TypeOf(e any) string { return registry[reflect.TypeOf(e)] }
+
+// RegisteredTypes returns every event type [Record] accepts, in no fixed order.
+func RegisteredTypes() []reflect.Type {
+	out := make([]reflect.Type, 0, len(registry))
+	for t := range registry {
+		out = append(out, t)
+	}
+	return out
+}
 
 // Record appends one event to w; no-op when w is nil. Unknown event types return an error.
 // Under default (non-blocking) policy a full queue drops the event; use [WithBlockOnFull] for lossless capture.

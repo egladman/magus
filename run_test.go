@@ -20,6 +20,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -46,11 +47,10 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	require.True(t, p.TargetPolicies["security"].Advisory, "the fixture declares an advisory target")
 
 	var out bytes.Buffer
-	c, err := cache.Open(t.Context(), t.TempDir(),
-		cache.WithLogger(slog.New(cache.NewPrettyHandler(&out, slog.LevelInfo))))
-	require.NoError(t, err, "cache.Open")
+	sink, err := NewSink(FormatText, io.Discard, &out)
+	require.NoError(t, err, "NewSink")
 
-	obs := stageObserver{cache: c, label: "fixture", policies: policiesOf(p)}
+	obs := stageObserver{out: sink, label: "fixture", policies: policiesOf(p)}
 	obs.TargetEnd(t.Context(), "security", time.Second, errors.New("govulncheck: exit 1"))
 	obs.TargetEnd(t.Context(), "test", time.Second, errors.New("go test: exit 1"))
 
@@ -144,6 +144,71 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 
 	require.NoError(t, m.Run(ctx, targets, WithRace()), "third run (--race)")
 	assert.Equal(t, int32(2), calls.Load(), "--race run: a cached target must still genuinely re-execute")
+}
+
+// TestRun_MachineRefusalReachesTheReport pins the -o jsonl half of a machine refusal: a
+// run whose only step the budget refused must still say so on the report stream, as a
+// failed target result and as an MGS3009 diagnostic, both naming the holder.
+func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	const spellName = "zzz-machine-refusal-spell"
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			t.Error("a refused target must not run")
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	// A pid that is alive for the whole test, so the budget does not reap the claim.
+	holderPID := os.Getppid()
+	budget := cache.NewMachineBudget(10_000, 4)
+	held := budget.Request(types.MachineClaim{
+		Project: ".", Target: "ci", Slots: 4, PID: holderPID, Dir: "/elsewhere/checkout",
+	})
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg),
+		workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	var stream, notices bytes.Buffer
+	sink, err := NewSink(FormatJSONL, &stream, &notices)
+	require.NoError(t, err)
+	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithSink(sink))
+	require.NoError(t, sink.Close(), "flush the stream before reading it")
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated, "the CLI and the daemon read the exit status off the error")
+	assert.Equal(t, cache.ExitCodeMachineBusy, stated.ExitCode())
+
+	holder := fmt.Sprintf("held by pid %d (root) ci, in /elsewhere/checkout", holderPID)
+	var result report.TargetResult
+	var diag report.DiagnosticEmitted
+	for line := range bytes.Lines(stream.Bytes()) {
+		var head struct {
+			Type string `json:"type"`
+		}
+		require.NoError(t, json.Unmarshal(line, &head))
+		switch head.Type {
+		case report.TypeTargetResult:
+			require.NoError(t, json.Unmarshal(line, &result))
+		case report.TypeDiagnosticEmitted:
+			require.NoError(t, json.Unmarshal(line, &diag))
+		}
+	}
+	assert.Equal(t, "failed", result.Status, "stream:\n%s", stream.String())
+	assert.Contains(t, result.Error, holder)
+	assert.Equal(t, string(types.MachineBudgetExhausted), diag.Code, "stream:\n%s", stream.String())
+	assert.Equal(t, ".:build", diag.Unit)
+	assert.Contains(t, diag.Message, holder)
 }
 
 // TestRun_NoCacheReexecutesAndRefreshesEntry guards the A7 fix: magus run
@@ -884,13 +949,6 @@ func TestExpandAffectedSignalsFallbackWithoutVCS(t *testing.T) {
 	require.NotEmpty(t, source, "source carries the reason, which is what the warning shows the user")
 }
 
-func TestWithReportWriter(t *testing.T) {
-	var buf bytes.Buffer
-	var r run
-	WithReportWriter(&buf)(&r)
-	assert.Same(t, &buf, r.ReportWriter, "WithReportWriter: run.ReportWriter not set to provided writer")
-}
-
 func TestRunOptions(t *testing.T) {
 	var r run
 	WithDryRun()(&r)
@@ -1002,9 +1060,10 @@ type recordedOutputOverlap struct {
 func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutputOverlap {
 	t.Helper()
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf)
-	checkOutputOverlap(steps, w)
-	require.NoError(t, w.Close())
+	sink, err := NewSink(FormatJSONL, &buf, io.Discard)
+	require.NoError(t, err)
+	checkOutputOverlap(t.Context(), steps, sink)
+	require.NoError(t, sink.Close())
 
 	var out []recordedOutputOverlap
 	dec := json.NewDecoder(&buf)
@@ -1082,9 +1141,10 @@ func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf)
-	checkMissingDependencies([]*types.Project{consumer}, map[string]*types.Project{}, written, "3 projects", w)
-	require.NoError(t, w.Close())
+	sink, err := NewSink(FormatJSONL, &buf, io.Discard)
+	require.NoError(t, err)
+	checkMissingDependencies(t.Context(), []*types.Project{consumer}, map[string]*types.Project{}, written, "3 projects", sink)
+	require.NoError(t, sink.Close())
 
 	var evs []recordedMissingDependency
 	dec := json.NewDecoder(&buf)

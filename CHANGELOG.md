@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   branches and revisions, check a merge, build, export and import a stage, predict a
   merged tree, and update a branch with a lease. git implements them; jj, hg and Sapling
   return a `types.UnsupportedError` that unwraps to `errors.ErrUnsupported`.
+- **A merge's kept generated files regenerate after it finishes.** The merge driver records
+  the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
+  a `regenerate-owed` job that runs each once, deepest project first, and stages the
+  result; it prints the amend command and never amends. `magus doctor` reports an unsettled
+  record (`owed-regeneration`).
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
@@ -46,7 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **MGS3013: a slot pool that cannot free a slot is refused within seconds.** The refusal
   names every holder and what it waits on.
 - **MGS3014: a newer gate supersedes an older one on the same tree.** The earlier `ci` run
-  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs still wait.
+  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs are refused
+  immediately instead, like any other contention.
 - **Tools declare `observe` probes; ops declare external effects.** An observation keys
   only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
   `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
@@ -73,9 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   receives advisories and wires `SessionStart` on `compact`, Cursor's write guard moves to
   `preToolUse`, and OpenCode joins advisories by `callID`. Guard template v12: re-copy
   installed copies.
-- **Shipped hook configs are validated against each host's schema.** Schemas are vendored
-  under `testdata/hosts/` with provenance in `SOURCES.md`; `HOST_SCHEMAS_MODE=verify`
-  re-fetches them.
 - **MGS1028 surfaces where it costs.** The run that reruns an undeclared seeding file names
   it before starting (`undeclared_seeds` in `-o json`), and an undeclared build input rings
   the console's notification center.
@@ -119,22 +122,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **magus never waits on another magus invocation.** A workspace lock or machine budget
+  held by another invocation refuses immediately (exit 75), naming the holder.
+  `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
+  other, as do the nested runs of one root invocation. `--watch` retries on the next
+  change.
 - **A daemon whose workspace fails to load keeps serving and says why.** The console,
   `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
   `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
   workspace reloads when a `.buzz` file or `magus.yaml` changes.
-- **The daemon refuses a request as `google.rpc.Status` JSON in the route's protocol.**
-  A Connect service answers Connect's envelope; every other route, `/mcp` included, answers
+- **The daemon's guards refuse a request as `google.rpc.Status` JSON in the route's protocol.**
+  A Connect service answers Connect's envelope; every other route, `/mcp` included,
   AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
-- **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
-  projects/charms/cache header, per-stage progress, the run summary and lock-wait
-  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
-  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
-  yet converted falls back to a plain JSON line instead of prose.
+- **`-o jsonl` runs emit only records.** Headers, progress, summaries, race diagnostics
+  and lock decisions are typed events on stdout beside `run.target.result`; notices, other
+  log lines and output printed outside a target are `run.notice` records on stderr.
+  `magus x`, `affected --stdin` and `--detach` (`run.detach`) do the same. No record is
+  dropped; the schema is now 5.
+- **A target's `std\print` is captured with its output.** It is withheld, streamed and
+  stored under the target's ref like a subprocess's output, instead of bypassing both.
+- **Breaking: `log.format: jsonl` is refused** from `magus.yaml`, `MAGUS_LOG_FORMAT` and
+  `--log-format`. It withheld per-target results with no stream to carry them; `-o jsonl`
+  is the one way to select it.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination
   and confidence labels are gone. A human reads the evidence and decides.
@@ -179,19 +192,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   path.
 - **MGS3010 defers a redundant `ci` gate regardless of load.** `--no-redundancy-check`
   runs it anyway.
-- **A failing `magus doctor` no longer cancels CI shards.** The final gate carries its
-  verdict and reports every verdict it holds.
-- **The Go coverage badge spans every platform.** The denominator is enumerated from
-  source; the numerator unions committed per-platform records refreshed with `magus run
-  coverage-badge:rw .`. The 70% floor stays per-platform.
-- **One coverage badge per language.** TypeScript merges the console and
-  libs/textsearch.
 - **The PR advice comment leads with files no project claims.**
 - **MAGUS.md is formatted with the repo's other Markdown.**
 - **The MCP tool catalog is generated from the `std.Magus` descriptor.**
 - **Upstream-wait messages back off** (15s, 30s, 1m, 2m, …) and name both targets.
 - **An ambiguous output ref prints a count and three examples.**
-- **Cursor hook schemas come from Cursor's own validator.**
 - **The agent surface stops promising a checkpoint restore.** A checkpoint records a
   digest, not the patch; magus-vcs-hygiene covers recovering work.
 - **"Handoff journal" is renamed to memory** across the command, docs and manpage.
@@ -218,11 +223,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
 - **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
   keeps `Magus.TailLog`.
+- **Breaking for SDK callers: `ReportWriter`, `NewReportWriter`, `WithReport`,
+  `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
+  `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
+  headers through it, pass it with `WithSink` and close it after the run.
 
 ### Fixed
 
-- **The daemon API reference matches the protos again.** The committed descriptor set
-  predated the last proto change, so the activity reference described an older API.
+- **A failed spell import names its magusfile.** A workspace failure located no file for
+  an import error, and an error built without a relative path rendered `magusfile: exec :`.
+- **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts
+  merge.
+- **"Cannot check byte-stability" is recorded.** It fails the gate, and a `-o jsonl` run
+  now carries it as `race.determinism_unchecked` with its error.
+- **A broken working tree no longer switches off the approved spawn rule.** The committed
+  `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
+  it too slowly denies. A skipped rule says what applied. A workspace advise joins a
+  built-in one, and the idle clock follows the agent's id.
+- **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
+  wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
+  its message and Help link. Health reports down when every workspace failed, and the
+  Windows sign-in line is PowerShell's `Start-Process`.
+- **A run the machine's build budget refuses says so.** It exited 75 with nothing after
+  the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
+  cause naming the holder, and `-o jsonl` emits the `run.target.result` and
+  `run.diagnostic` records.
 - **The graph links a target to a workspace spell imported without an alias.**
   `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
   `magus path` and `magus explain` missed every op it runs.
@@ -263,10 +288,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   provenance only; per-file digests keep it honest.
 - **A shared step no longer inherits one caller's timeout.** It runs under the
   invocation's cancellation. MGS3012 lists what was still admitted.
-- **A failed release publish can be finished without re-tagging.** Re-cutting a matching
-  manifest is idempotent, and `release-index` cuts from the published assets, verified
-  against SHA256SUMS.
-- **Both release-index jobs install Node.** v0.4.3's publish died regenerating docs.
 - **Generated output no longer depends on the build.** magus requires
   `GOEXPERIMENT=jsonv2` and refuses to build without it.
 - **A failed remote-cache exchange names the step that failed.**

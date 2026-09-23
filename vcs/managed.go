@@ -15,9 +15,10 @@ import (
 	"github.com/gofrs/flock"
 )
 
-// managedMarkers names one kind of magus-managed section. Three kinds, not one:
-// generated-output routing, graph-refresh hooks, and drift-notice hooks must coexist in
-// the same file (.gitattributes, .hg/hgrc, .sl/config, or a shell hook).
+// managedMarkers names one kind of magus-managed section. Four kinds, not one:
+// generated-output routing, graph-refresh hooks, drift-notice hooks, and owed-regeneration
+// hooks must coexist in the same file (.gitattributes, .hg/hgrc, .sl/config, or a shell
+// hook).
 //
 // Matchers use begin alone (a prefix of the opening LINE), so a section written by an
 // older magus whose banner wording differed is still found and rewritten rather than
@@ -28,6 +29,7 @@ var (
 	generatedMarkers = managedMarkers{begin: "# BEGIN magus-generated", end: "# END magus-generated"}
 	refreshMarkers   = managedMarkers{begin: "# BEGIN magus-refresh", end: "# END magus-refresh"}
 	driftMarkers     = managedMarkers{begin: "# BEGIN magus-drift-notice", end: "# END magus-drift-notice"}
+	regenMarkers     = managedMarkers{begin: "# BEGIN magus-regenerate-owed", end: "# END magus-regenerate-owed"}
 )
 
 // section wraps body, which ends in a newline, in m's banner and end lines.

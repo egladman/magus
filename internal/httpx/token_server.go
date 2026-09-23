@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
+
+	"github.com/egladman/magus/internal/rpcerr"
 )
 
 // TokenServer is a running loopback server on an ephemeral 127.0.0.1 port for one browser
@@ -37,7 +39,7 @@ func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServ
 	t := &TokenServer{srv: s, token: hex.EncodeToString(raw), done: make(chan struct{})}
 	verify := SingleTokenVerifier(func() (string, error) { return t.token, nil })
 	for pattern, h := range routes {
-		s.Handle(pattern, RequireLoopbackPeer(CORS(origin)(BearerGuardWithQueryToken(FormatJSON, verify, h))))
+		s.Handle(pattern, RequireLoopbackPeer(CORS(origin)(BearerGuardWithQueryToken(rpcerr.FormatJSON, verify, h))))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancel = cancel

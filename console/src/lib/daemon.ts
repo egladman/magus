@@ -1,5 +1,5 @@
 import { errMessage, errName } from "./guards";
-import { reportFailure } from "./notifications";
+import { reportFailure, type NotifyLink } from "./notifications";
 // daemon.ts - the ONE audited module for addressing and talking to a magus daemon.
 //
 // Every surface (dashboard, graph explorer, log viewer, activity, the shell) imports
@@ -746,6 +746,46 @@ export function reportHttpStatus(host: string, what: string, status: number): vo
   );
 }
 
+// Refusal is what a person needs from a daemon error body: its message, and the Help link naming
+// the MGS code's page when the body carries one.
+export interface Refusal {
+  message: string;
+  help?: NotifyLink;
+}
+
+const helpDetailType = "type.googleapis.com/google.rpc.Help";
+
+// parseRefusal reads a decoded /api/ error body in AIP-193's HTTP/1.1+JSON shape,
+// {"error":{"code","message","status","details"}}. Null for any other shape, so the caller keeps
+// its own message rather than showing a raw body.
+export function parseRefusal(body: unknown): Refusal | null {
+  if (typeof body !== "object" || body === null) return null;
+  const err = (body as { error?: unknown }).error;
+  if (typeof err !== "object" || err === null) return null;
+  const { message, details } = err as { message?: unknown; details?: unknown };
+  if (typeof message !== "string" || message === "") return null;
+  const refusal: Refusal = { message };
+  for (const d of Array.isArray(details) ? details : []) {
+    if (
+      typeof d !== "object" ||
+      d === null ||
+      (d as { "@type"?: unknown })["@type"] !== helpDetailType
+    )
+      continue;
+    const links = (d as { links?: unknown }).links;
+    const first: unknown = Array.isArray(links) ? links[0] : undefined;
+    if (typeof first !== "object" || first === null) continue;
+    const { description, url } = first as { description?: unknown; url?: unknown };
+    if (typeof url === "string" && url !== "")
+      refusal.help = {
+        label: typeof description === "string" && description !== "" ? description : "Help",
+        href: url,
+      };
+    break;
+  }
+  return refusal;
+}
+
 // makeFailureInterceptor reports every failed call, a server stream's mid-stream failure included:
 // that one surfaces while the caller iterates, after next() has already returned.
 function makeFailureInterceptor(host: string): Interceptor {
@@ -809,10 +849,15 @@ export function signalAuthLost(host: string): void {
 
 // signInCommand is the shell line that opens url signed in. The token is a substitution the reader's
 // shell expands, so the page never holds or displays it. The opener follows the browser's platform,
-// which is the machine a loopback daemon runs on.
+// which is the machine a loopback daemon runs on. Windows gets PowerShell's opener, since cmd.exe
+// never expands $(...).
 export function signInCommand(url: string, platform = browserPlatform()): string {
   const sep = url.includes("#") ? "&" : "#";
-  const opener = /mac/i.test(platform) ? "open" : /win/i.test(platform) ? 'start ""' : "xdg-open";
+  const opener = /mac/i.test(platform)
+    ? "open"
+    : /win/i.test(platform)
+      ? "Start-Process"
+      : "xdg-open";
   return opener + ' "' + url + sep + 'token=$(magus config token print)"';
 }
 
