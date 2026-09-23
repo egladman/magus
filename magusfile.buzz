@@ -2743,9 +2743,12 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     //   internal/{registry,selfupdate}    the two go:embed'd key rings, which are a
     //                                     compile-time input exactly as the skills
     //                                     directory above is
+    //   **/*.lock                         conventions_test holds every line-per-entry
+    //                                     lockfile to sorted order
     ctx.readsFiles("**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h",
                    "go.mod", "go.sum", "go.work", "go.work.sum",
                    "**/*.buzz", "mise.toml", "magus.yaml",
+                   "**/*.lock",
                    "docs/**/*.md", "internal/agent/skills/**",
                    "internal/agent/agents-section.md", "CHANGELOG.md",
                    "internal/hint/testdata/*", "internal/job/testdata/*",
