@@ -16,7 +16,7 @@ import (
 const hostDecls = `export extern fun request(method: str, url: str, body: str = "", headers: {str: str} = {<str: str>}) > {str: any} !> any;
 `
 
-// maxBody bounds a response a provider reads: forge answers are small, and an
+// maxBody bounds a response a provider reads: API answers are small, and an
 // unbounded read is a memory hazard for a job that holds a write credential.
 const maxBody = 32 << 20
 

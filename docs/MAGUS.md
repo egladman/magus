@@ -53,11 +53,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
 | module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS1002`, `MGS1028`, `MGS3010`                                                                                             |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS1002`, `MGS3009`, `MGS1028`                                                                                             |
 | doc        |     400+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |
 | dir        |     200+ | `magus query kind=dir`        | `docs/reference/rules`, `docs/reference/codes/magusfile`, `docs/reference/buzz`                                             |
 | file       |     300+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
-| function   |    1000+ | `magus query kind=function`   | `main`, `tail`, `main`                                                                                                      |
+| function   |    1000+ | `magus query kind=function`   | `main`, `tail`, `apiBase`                                                                                                   |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
 | rationale  |        7 | `magus query kind=rationale`  | `TODO`, `TODO`, `WHY`                                                                                                       |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `github.com/davecgh/go-spew`                                                       |

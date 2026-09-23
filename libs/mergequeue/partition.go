@@ -1,7 +1,8 @@
 package mergequeue
 
-// Partition splits changes into groups with pairwise disjoint affected sets, preserving
-// queue order inside each group and ordering groups by their first change.
+// Partition splits changes into groups with pairwise disjoint affected sets, keeping a
+// stacked change in the group of the change beneath it, preserving queue order inside
+// each group and ordering groups by their first change.
 //
 // Cost is linear in the summed affected-set sizes: each unit is indexed once to the
 // first change that reached it, and later changes union with that owner. No pair of
@@ -44,13 +45,21 @@ func Partition(changes []Change) [][]Change {
 	}
 
 	owner := make(map[string]int)
+	byID := make(map[string]int, len(changes))
 	for i, c := range changes {
+		byID[c.ID] = i
 		for _, u := range c.Affected {
 			if o, ok := owner[u]; ok {
 				union(o, i)
 				continue
 			}
 			owner[u] = i
+		}
+	}
+	// A stacked change lands after the one beneath it whatever their keys say.
+	for i, c := range changes {
+		if j, ok := byID[c.Below]; ok {
+			union(j, i)
 		}
 	}
 

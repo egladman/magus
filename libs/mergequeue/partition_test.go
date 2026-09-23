@@ -7,18 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func ids(groups [][]Change) [][]string {
-	var out [][]string
-	for _, g := range groups {
-		var row []string
-		for _, c := range g {
-			row = append(row, c.ID)
-		}
-		out = append(out, row)
-	}
-	return out
-}
-
 func TestPartitionSeparatesDisjointSetsAndKeepsQueueOrder(t *testing.T) {
 	got := Partition([]Change{change("1", "a"), change("2", "b"), change("3", "a", "c")})
 	assert.Equal(t, [][]string{{"1", "3"}, {"2"}}, ids(got))
@@ -40,6 +28,14 @@ func TestPartitionNeverAssumesIndependenceItCannotProve(t *testing.T) {
 func TestPartitionOfAChangeAffectingNothingStandsAlone(t *testing.T) {
 	empty := Change{ID: "2", Head: head("2"), Affected: []string{}}
 	assert.Equal(t, [][]string{{"1"}, {"2"}}, ids(Partition([]Change{change("1", "a"), empty})))
+}
+
+// A stacked change lands after the one beneath it, so they share a partition even
+// when their keys do not.
+func TestPartitionKeepsAStackTogether(t *testing.T) {
+	child := change("2", "b")
+	child.Below = "1"
+	assert.Equal(t, [][]string{{"1", "2"}, {"3"}}, ids(Partition([]Change{change("1", "a"), child, change("3", "c")})))
 }
 
 func TestPartitionOfNothingIsNothing(t *testing.T) {

@@ -14,23 +14,23 @@ import (
 
 // The entries of a [VerdictDir].
 const (
-	PlanFile    = "plan.json"    // the plan the verdicts were decided against
-	VerdictFile = "verdict.json" // one change's verdict, in the change's subdirectory
-	StageFile   = "stage.export" // a green change's stage, as its [ExportFunc] wrote it
-	DoneFile    = ".done"        // no more verdicts will arrive
+	PlanFile      = "plan.json"        // the plan the verdicts were decided against
+	VerdictFile   = "verdict.json"     // one change's verdict, in the change's subdirectory
+	CandidateFile = "candidate.export" // a green change's candidate, as its [ExportFunc] wrote it
+	DoneFile      = ".done"            // no more verdicts will arrive
 )
 
 // VerdictDir carries verdicts from validation to apply through a directory, which a CI
 // system can ship between jobs as artifacts: validation records into it and an [Applier]
 // polls it. It holds [PlanFile], and per decided change a subdirectory named by its id
-// holding [VerdictFile] and, for a green change, [StageFile]. Every entry appears by
+// holding [VerdictFile] and, for a green change, [CandidateFile]. Every entry appears by
 // rename, so a reader never sees a partial one; a name starting with "." is in progress,
 // which is why [CheckID] refuses ids that start with one.
 //
 // A VerdictDir that polls must not be copied after its first Poll.
 type VerdictDir struct {
 	Path string
-	// Export writes a green verdict's stage beside it. Nil records verdicts alone.
+	// Export writes a green verdict's candidate beside it. Nil records verdicts alone.
 	Export ExportFunc
 	// Follow keeps polling until DoneFile appears; without it the directory is read once
 	// and taken as complete.
@@ -147,7 +147,7 @@ var (
 	_ VerdictSource = (*VerdictDir)(nil)
 )
 
-// Record writes v under d.Path, exporting its stage for a green change. Safe for
+// Record writes v under d.Path, exporting its candidate for a green change. Safe for
 // concurrent use with distinct changes.
 func (d *VerdictDir) Record(ctx context.Context, v Verdict) error {
 	if err := CheckID(v.Change.ID); err != nil {
@@ -161,9 +161,9 @@ func (d *VerdictDir) Record(ctx context.Context, v Verdict) error {
 		return err
 	}
 	defer os.RemoveAll(tmp) // a no-op once renamed into place
-	if v.Decision == DecisionMerge && v.Stage != "" && d.Export != nil {
-		if err := d.Export(ctx, filepath.Join(tmp, StageFile), v.BaseCommit, v.Stage); err != nil {
-			return fmt.Errorf("export stage %s: %w", v.Stage, err)
+	if v.Decision == DecisionMerge && v.Candidate != "" && d.Export != nil {
+		if err := d.Export(ctx, filepath.Join(tmp, CandidateFile), v.BaseCommit, v.Candidate); err != nil {
+			return fmt.Errorf("export candidate %s: %w", v.Candidate, err)
 		}
 	}
 	if err := writeSynced(filepath.Join(tmp, VerdictFile), v); err != nil {
@@ -234,10 +234,10 @@ func (d *VerdictDir) Poll(context.Context) ([]Verdict, bool, error) {
 		if v.Change.ID != id {
 			return nil, false, fmt.Errorf("%s holds the verdict on %q", filepath.Join(d.Path, id), v.Change.ID)
 		}
-		stage := filepath.Join(d.Path, id, StageFile)
-		switch _, err := os.Stat(stage); {
+		cand := filepath.Join(d.Path, id, CandidateFile)
+		switch _, err := os.Stat(cand); {
 		case err == nil:
-			v.StageFile = stage
+			v.CandidateFile = cand
 		case !errors.Is(err, fs.ErrNotExist):
 			return nil, false, err
 		}

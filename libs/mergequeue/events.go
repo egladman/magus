@@ -13,7 +13,7 @@ type EventKind string
 const (
 	EventPartition EventKind = "partition" // planning grouped Changes into Partition
 	EventDecided   EventKind = "decided"   // planning or validation settled Change
-	EventGate      EventKind = "gate"      // a gate started on Change's stage Commit at Depth
+	EventGate      EventKind = "gate"      // a gate started on Change's candidate Commit at Depth
 	EventMerged    EventKind = "merged"    // an Applier merged Change at Commit
 	EventKicked    EventKind = "kicked"    // an Applier kicked Change back
 	EventWaiting   EventKind = "waiting"   // an Applier left Change queued for a later run
@@ -29,6 +29,7 @@ type Event struct {
 	Partition  *int      `json:"partition,omitempty"`
 	Changes    []string  `json:"changes,omitempty"`
 	Decision   Decision  `json:"decision,omitempty"`
+	Code       Code      `json:"code,omitempty"`
 	Reason     string    `json:"reason,omitempty"`
 	Commit     string    `json:"commit,omitempty"`
 	Depth      int       `json:"depth,omitempty"`

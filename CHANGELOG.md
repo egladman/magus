@@ -9,14 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **The merge queue is a separate library, `libs/mergequeue`; `magus vcs queue` is gone.**
-  Its `mergequeue` CLI reads JSON, reports JSONL, and merges each green stage once the
-  changes beneath it have. Its `client` package answers the queue's host interfaces with
-  magus's `vcs` package and Go SDK; `plan --affected <command>` serves other build tools.
-  `magus affected --plan` prints `affected` and `unbounded_by`.
-- **The `vcs` package can stage speculative merges.** `RevisionFetcher` and `Stager` fetch
-  branches and revisions, check a merge, build, export and import a stage, predict a
-  merged tree, and update a branch with a lease. git implements them; jj, hg and Sapling
-  return a `types.UnsupportedError` that unwraps to `errors.ErrUnsupported`.
+  Its `mergequeue` CLI reads JSON, reports JSONL, and merges each green candidate once
+  the changes beneath it have, with the change's own merge method. Its `client` package
+  answers the queue's `VCS` with magus's `vcs` package and its `BuildFacts` with the Go
+  SDK; `plan --affected <command>` serves other build tools. `magus affected --plan`
+  prints `affected` and `unbounded_by`.
+- **The merge queue lands stacked changes.** A change carrying another queued or landed
+  change's head is stacked on it: it validates and lands after it, its own delta measured
+  from that head, and waits without blame when the one beneath is kicked back. Stacks use
+  one merge method; a stack on GitHub is queued by a `queue: <method>` label on its top
+  and lands in one call where the provider lands stacks atomically.
+- **Every wait and kick-back carries a code.** Verdicts, events and `kick_back` name one of
+  a closed set (`WAIT_NOT_APPROVED`, `KICK_CONFLICT`, ...) beside the files at issue, and
+  the GitHub provider writes them under its comment for a workflow to read.
+- **A review covers a merge of the base into a change only when regeneration reproduces
+  it.** A file marked generated gets no exemption of its own; validation regenerates it at
+  that merge and records what the review covers.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the

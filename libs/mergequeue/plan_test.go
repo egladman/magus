@@ -14,62 +14,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func verdicts(p Plan) map[string]Verdict {
-	out := map[string]Verdict{}
-	for _, v := range p.Verdicts {
-		out[v.Change.ID] = v
-	}
-	return out
-}
-
 func TestPlanHoldsTheUnapprovedAndKicksBackForksAndBaseConflicts(t *testing.T) {
-	st := newStager(map[string][]string{"1": {"app/a"}, "2": {"lib/b"}, "3": {"web/c"}, "4": {"api/d"}, "5": {"x/e"}})
-	st.conflicts[[2]string{"base", "2"}] = []string{"lib/b"}
-	moved := head("new")
-	host := &readHost{approval: func(c Change) Approval {
-		switch c.ID {
-		case "1":
-			return Approval{Head: c.Head, Reason: "0 of 1 approvals at this commit"}
-		case "3":
-			return Approval{Approved: true, Head: moved}
-		}
-		return Approval{Approved: true, Head: c.Head}
-	}}
-	fork := change("5", "x")
-	fork.Fork = true
-	in := Changes{Schema: SchemaChanges, Base: "main", Changes: []Change{
-		change("1", "app"), change("2", "lib"), change("3", "web"), change("4", "api"), fork,
-	}}
-	pl := NewPlanner(st)
-	pl.Provider, pl.Parallel = host, 4
-	p, err := pl.Run(context.Background(), in)
-	require.NoError(t, err)
+	w := newWorld(t, map[string]string{"app/a": "a\n", "lib/b": "b\n"})
+	w.push(w.commit(w.base, "main moves lib/b", map[string]*string{"lib/b": str("main\n")}))
+	unapproved := w.open("1", w.commit(w.base, "one", map[string]*string{"app/a": str("1\n")}))
+	conflicting := w.open("2", w.commit(w.base, "two", map[string]*string{"lib/b": str("2\n")}))
+	moved := w.open("3", w.commit(w.base, "three", map[string]*string{"web/c": str("3\n")}))
+	w.open("4", w.commit(w.base, "four", map[string]*string{"api/d": str("4\n")}))
+	w.open("5", w.commit(w.base, "five", map[string]*string{"x/e": str("5\n")}), func(c *Change) { c.Fork, c.Branch = true, "" })
+	w.p.approvedAt["1"] = w.base
+	in := w.changes()
+	newHead := w.commit(moved.Head, "three again", map[string]*string{"web/c": str("33\n")})
+	w.m.set(branchRef("pr3"), newHead)
 
-	assert.Equal(t, base, p.BaseCommit)
+	p, err := w.planner(0).Run(context.Background(), in)
+	require.NoError(t, err)
+	assert.Equal(t, w.main(), p.BaseCommit)
 	assert.Equal(t, 1, p.Depth, "depth 0 means 1")
 	assert.Equal(t, [][]string{{"4"}}, ids(p.Partitions))
 	assert.Equal(t, []string{"1", "2", "3", "5"}, idsOf(p.Verdicts), "verdicts keep queue order though admission runs side by side")
-	v := verdicts(p)
-	assert.Equal(t, Verdict{Change: in.Changes[0], Decision: DecisionWait, Reason: "not approved at " + short(head("1")) + ": 0 of 1 approvals at this commit"}, v["1"])
+	v := verdictsByID(p)
+	assert.Equal(t, Verdict{Change: unapproved, Decision: DecisionWait, Code: CodeNotApproved,
+		Reason: "not approved at " + short(unapproved.Head) + ": 0 of 1 approvals at this commit"}, v["1"])
 	assert.Equal(t, DecisionKick, v["2"].Decision)
+	assert.Equal(t, CodeConflict, v["2"].Code)
+	assert.Equal(t, []string{"lib/b"}, v["2"].Paths)
 	assert.Contains(t, v["2"].Report, "`lib/b`")
-	assert.Contains(t, v["2"].Report, "abc123 an earlier change")
-	assert.Equal(t, moved, v["3"].Change.Head, "the wait is reported on the new head")
-	assert.Equal(t, DecisionKick, v["5"].Decision)
+	assert.Equal(t, []string{short(w.main()) + " main moves lib/b"}, v["2"].With, "the base commits that touched it")
+	assert.Equal(t, conflicting.Head, v["2"].Change.Head)
+	assert.Equal(t, newHead, v["3"].Change.Head, "the wait is reported on the new head")
+	assert.Equal(t, CodeHeadMoved, v["3"].Code)
+	assert.Equal(t, CodeRefused, v["5"].Code)
 	assert.Equal(t, forkReport, v["5"].Report)
-	assert.NotContains(t, host.calls, "approval 5", "a fork is refused before anyone is asked about it")
-}
-
-func idsOf(vs []Verdict) []string {
-	var out []string
-	for _, v := range vs {
-		out = append(out, v.Change.ID)
-	}
-	return out
 }
 
 func TestPlanAsksTheAffectedHookOnlyForChangesWithoutASet(t *testing.T) {
-	st := newStager(map[string][]string{"1": {"app/a.go"}, "2": {"lib/b.go"}, "3": {"magusfile.buzz"}})
+	w := newWorld(t, map[string]string{"app/a.go": "a\n"})
+	w.open("1", w.commit(w.base, "one", map[string]*string{"app/a.go": str("1\n")}), func(c *Change) { c.Affected = nil })
+	w.open("2", w.commit(w.base, "two", map[string]*string{"lib/b.go": str("2\n")}), func(c *Change) { c.Affected = []string{"lib"} })
+	w.open("3", w.commit(w.base, "three", map[string]*string{"magusfile.buzz": str("3\n")}), func(c *Change) { c.Affected = nil })
 	var (
 		mu    sync.Mutex
 		asked []string
@@ -83,13 +66,10 @@ func TestPlanAsksTheAffectedHookOnlyForChangesWithoutASet(t *testing.T) {
 		}
 		return []string{strings.Split(paths[0], "/")[0]}, "", nil
 	}
-	in := Changes{Schema: SchemaChanges, Base: "main", Changes: []Change{
-		{ID: "1", Head: head("1")}, change("2", "lib"), {ID: "3", Head: head("3")},
-	}}
 	var events bytes.Buffer
-	pl := NewPlanner(st)
-	pl.Facts, pl.Depth, pl.Parallel, pl.Events = factsFunc(affected), 2, 4, NewEvents(&events)
-	p, err := pl.Run(context.Background(), in)
+	pl := w.planner(2)
+	pl.Facts, pl.Events = factsFunc(affected), NewEvents(&events)
+	p, err := pl.Run(context.Background(), w.changes())
 	require.NoError(t, err)
 	slices.Sort(asked)
 	assert.Equal(t, []string{"1:app/a.go", "3:magusfile.buzz"}, asked)
@@ -104,26 +84,73 @@ func TestPlanAsksTheAffectedHookOnlyForChangesWithoutASet(t *testing.T) {
 }
 
 func TestPlanStopsWhenTheAffectedHookFails(t *testing.T) {
-	st := newStager(map[string][]string{"1": {"app/a.go"}})
-	broken := func(context.Context, Change, []string) ([]string, string, error) {
+	w := newWorld(t, map[string]string{"a": "a\n"})
+	w.open("1", w.commit(w.base, "one", map[string]*string{"a": str("1\n")}), func(c *Change) { c.Affected = nil })
+	pl := w.planner(1)
+	pl.Facts = factsFunc(func(context.Context, Change, []string) ([]string, string, error) {
 		return nil, "", errors.New("exit status 2")
-	}
-	pl := NewPlanner(st)
-	pl.Facts = factsFunc(broken)
-	_, err := pl.Run(context.Background(), Changes{Schema: SchemaChanges, Base: "main", Changes: []Change{{ID: "1", Head: head("1")}}})
-	require.EqualError(t, err, "affected set of #1: exit status 2", "misconfiguration is an error, never an unbounded guess")
+	})
+	_, err := pl.Run(context.Background(), w.changes())
+	require.EqualError(t, err, "affected set of #1 (change 1): exit status 2", "misconfiguration is an error, never an unbounded guess")
 }
 
-func TestPlanRefusesAProviderThatReportsNoHead(t *testing.T) {
-	pl := NewPlanner(newStager(nil))
-	pl.Provider = &readHost{approval: func(Change) Approval { return Approval{Approved: true} }}
-	_, err := pl.Run(context.Background(), Changes{Schema: SchemaChanges, Base: "main", Changes: []Change{change("1", "a")}})
-	require.EqualError(t, err, "approval of #1: the provider reported no head")
+// noHead is a provider that omits where a change's head is.
+type noHead struct{ *modelProvider }
+
+func (n noHead) ApprovalAt(ctx context.Context, c Change, commit string) (Approval, error) {
+	a, err := n.modelProvider.ApprovalAt(ctx, c, commit)
+	a.Head = ""
+	return a, err
+}
+
+// noMethod is a provider that omits how a change lands.
+type noMethod struct{ *modelProvider }
+
+func (n noMethod) ApprovalAt(ctx context.Context, c Change, commit string) (Approval, error) {
+	a, err := n.modelProvider.ApprovalAt(ctx, c, commit)
+	a.Method = ""
+	return a, err
+}
+
+func TestPlanRefusesAProviderThatReportsNoHeadOrNoMethod(t *testing.T) {
+	w := newWorld(t, map[string]string{"a": "a\n"})
+	w.open("1", w.commit(w.base, "one", map[string]*string{"a": str("1\n")}))
+	pl := w.planner(1)
+	pl.Provider = noHead{w.p}
+	_, err := pl.Run(context.Background(), w.changes())
+	require.EqualError(t, err, "approval of #1 (change 1): the provider reported no head")
+	pl.Provider = noMethod{w.p}
+	_, err = pl.Run(context.Background(), w.changes())
+	require.EqualError(t, err, `approval of #1 (change 1): the provider reported base "main" and merge method ""; both are required`)
 }
 
 func TestPlanRefusesInputGitCouldReadAsAnOption(t *testing.T) {
 	bad := change("1", "a")
 	bad.Branch = "--delete"
-	_, err := NewPlanner(newStager(nil)).Run(context.Background(), Changes{Schema: SchemaChanges, Base: "main", Changes: []Change{bad}})
+	_, err := NewPlanner(newModel()).Run(context.Background(), Changes{Schema: SchemaChanges, Base: "main", Changes: []Change{bad}})
 	require.EqualError(t, err, `changes[0]: #1: branch: "--delete" starts with '-'`)
+}
+
+func TestPlanRefusesAMethodTheRepositoryDoesNotAllowAndWaitsOnWhatAlreadyLanded(t *testing.T) {
+	w := newWorld(t, map[string]string{"a": "a\n"})
+	w.p.caps.Methods = []MergeMethod{MethodSquash}
+	w.open("1", w.commit(w.base, "one", map[string]*string{"a": str("1\n")}), func(c *Change) { c.Method = MethodRebase })
+	landed := w.commit(w.base, "two", map[string]*string{"b": str("2\n")})
+	w.push(landed)
+	w.open("2", landed)
+	v := verdictsByID(w.plan(1))
+	assert.Equal(t, CodeRefused, v["1"].Code)
+	assert.Contains(t, v["1"].Reason, "does not allow the rebase merge method")
+	assert.Equal(t, CodeMerged, v["2"].Code)
+}
+
+// A provider that describes itself wrongly is misconfigured, and planning stops there.
+func TestPlanRefusesAProviderThatAllowsNoMethod(t *testing.T) {
+	w := newWorld(t, map[string]string{"a": "a\n"})
+	w.p.caps.Methods = nil
+	_, err := w.planner(1).Run(context.Background(), w.changes())
+	require.EqualError(t, err, "the provider allows no merge method")
+	w.p.caps = Capabilities{StackMerge: "sometimes", Methods: []MergeMethod{MethodSquash}}
+	_, err = w.planner(1).Run(context.Background(), w.changes())
+	require.ErrorContains(t, err, `describes stack merging as "sometimes"`)
 }

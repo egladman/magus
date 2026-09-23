@@ -17,12 +17,18 @@ const (
 	SchemaEvent   = "mergequeue.event/v1"
 )
 
+// MaxStackDepth bounds how many unlanded changes one change may be stacked on.
+const MaxStackDepth = 16
+
 // Changes is the queue's input: the changes carrying merge intent, in queue order.
 type Changes struct {
 	Schema  string   `json:"schema"`
 	Base    string   `json:"base"`             // branch the queue merges into
 	Remote  string   `json:"remote,omitempty"` // remote the provider was asked about
 	Changes []Change `json:"changes"`
+	// Landed are recently merged changes an open one may be stacked on. Planning
+	// checks each one's commit is on the base before relying on it.
+	Landed []Landed `json:"landed,omitempty"`
 }
 
 // Decision is what the queue decided for one change.
@@ -37,18 +43,74 @@ const (
 	DecisionWait Decision = "wait"
 )
 
-// Plan is what validation stages and an [Applier] merges against.
+// Code says why a change waits or was kicked back, from a closed set a provider and a
+// workflow can act on. A WAIT_ code goes with [DecisionWait], a KICK_ code with
+// [DecisionKick].
+type Code string
+
+const (
+	CodeNotApproved   Code = "WAIT_NOT_APPROVED"   // no approval at the commit a review of its head covers
+	CodeHeadMoved     Code = "WAIT_HEAD_MOVED"     // its head moved since it was listed or validated
+	CodeBehind        Code = "WAIT_BEHIND"         // a change beneath it did not merge, or it was not validated this run
+	CodeConflictAhead Code = "WAIT_CONFLICT_AHEAD" // it conflicts with a change ahead of it, which merges first
+	CodeRevalidate    Code = "WAIT_REVALIDATE"     // what it was validated on is no longer what it would merge onto
+	CodeBranchMoved   Code = "WAIT_BRANCH_MOVED"   // its branch moved or was deleted before an update commit could land
+	CodeHostRefused   Code = "WAIT_HOST_REFUSED"   // the provider refused the merge
+	CodeMerged        Code = "WAIT_MERGED"         // its head is already on the base
+	CodeParent        Code = "WAIT_PARENT"         // the change it is stacked on has not landed
+	CodeParentKicked  Code = "WAIT_PARENT_KICKED"  // the change it is stacked on was kicked back
+	CodeRestack       Code = "WAIT_RESTACK"        // it is not built on the head of the change it says it is stacked on
+	CodeRetarget      Code = "WAIT_RETARGET"       // it targets another branch than the queue's base
+	CodeMethodChanged Code = "WAIT_METHOD_CHANGED" // its merge method changed since validation
+
+	CodeConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
+	CodeRed      Code = "KICK_RED"      // the gate was red on its candidate
+	CodeRefused  Code = "KICK_REFUSED"  // something the author has to fix that is neither
+)
+
+// Decision is the decision c goes with, or "" for a code outside the set.
+func (c Code) Decision() Decision {
+	switch c {
+	case CodeNotApproved, CodeHeadMoved, CodeBehind, CodeConflictAhead, CodeRevalidate, CodeBranchMoved,
+		CodeHostRefused, CodeMerged, CodeParent, CodeParentKicked, CodeRestack, CodeRetarget, CodeMethodChanged:
+		return DecisionWait
+	case CodeConflict, CodeRed, CodeRefused:
+		return DecisionKick
+	}
+	return ""
+}
+
+// Plan is what validation builds candidates for and an [Applier] merges against.
 type Plan struct {
 	Schema     string `json:"schema"`
 	Base       string `json:"base"`
-	BaseCommit string `json:"base_commit"` // tip of Base every stage is built on
-	// Depth is how many stages of one partition validate at once.
+	Remote     string `json:"remote,omitempty"` // remote the provider names its repository by
+	BaseCommit string `json:"base_commit"`      // tip of Base every candidate is built on
+	// Depth is how many candidates of one partition validate at once.
 	Depth int `json:"depth"`
-	// Partitions hold the admitted changes in queue order. Changes in one partition
-	// stack; separate partitions share no affected unit and never wait on each other.
+	// Partitions hold the admitted changes in queue order, every change after the one
+	// it is stacked on. Changes in one partition stack; separate partitions share no
+	// affected unit and never wait on each other.
 	Partitions [][]Change `json:"partitions"`
 	// Verdicts are the changes planning settled without validating them.
 	Verdicts []Verdict `json:"verdicts,omitempty"`
+	// Landed are the landed changes planning checked against the base, which an
+	// Applier reads again when a rebased head's approval has to be carried over.
+	Landed []Landed `json:"landed,omitempty"`
+}
+
+// heads is every head a planned change may be stacked on.
+func (p Plan) heads() []string {
+	var out []string
+	for _, l := range p.Landed {
+		out = append(out, l.Head)
+	}
+	for _, g := range p.Partitions {
+		for _, c := range g {
+			out = append(out, c.Head)
+		}
+	}
+	return out
 }
 
 // Find returns the partition holding id and its position there.
@@ -70,25 +132,56 @@ type Verdict struct {
 	BaseCommit string   `json:"base_commit,omitempty"`
 	Change     Change   `json:"change"`
 	Decision   Decision `json:"decision"`
+	Code       Code     `json:"code,omitempty"` // set on every wait and kick
 	Reason     string   `json:"reason,omitempty"`
 	Report     string   `json:"report,omitempty"` // kick-back body
+	Paths      []string `json:"paths,omitempty"`  // the files a kick-back is about
+	With       []string `json:"with,omitempty"`   // base-branch commits touching Paths
 	// After is the change validated beneath this one, empty at the bottom of its
 	// partition. An Applier holds a change whose After did not merge.
 	After string `json:"after,omitempty"`
-	// Onto is the commit the stage was built onto: BaseCommit at the bottom of a
-	// partition, else After's stage.
+	// Onto is the commit the candidate was built onto: BaseCommit at the bottom of a
+	// partition, else After's candidate.
 	Onto string `json:"onto,omitempty"`
-	// Stage is the validated staging commit: base plus every change beneath this one
-	// plus this one, derived files regenerated.
-	Stage   string `json:"stage,omitempty"`
-	Message string `json:"message,omitempty"` // squash body: the change's own commits
-	// Depth is the stage's speculation depth when its gate started: 1 ran on validated
-	// commits alone, 2 on top of one unvalidated stage, and so on.
+	// Candidate is the validated merge commit: base plus every change beneath this one
+	// plus this one, generated files regenerated.
+	Candidate string      `json:"candidate,omitempty"`
+	Method    MergeMethod `json:"method,omitempty"`  // the merge method it was validated under
+	Message   string      `json:"message,omitempty"` // squash body: the change's own commits
+	// Reviewed is the commit a review of the head covers, when that took proving that
+	// the head's generated files are what regeneration produces from reviewed sources.
+	Reviewed string `json:"reviewed,omitempty"`
+	// Depth is the candidate's speculation depth when its gate started: 1 ran on
+	// validated commits alone, 2 on top of one unvalidated candidate, and so on.
 	Depth      int   `json:"depth,omitempty"`
 	DurationMS int64 `json:"duration_ms,omitempty"` // gate wall time
 
-	// StageFile is the file holding Stage's commits, set by whoever read the verdict.
-	StageFile string `json:"-"`
+	// CandidateFile is the file holding Candidate's commits, set by whoever read the
+	// verdict.
+	CandidateFile string `json:"-"`
+}
+
+func (v Verdict) kick() Kick {
+	return Kick{Code: v.Code, Report: v.Report, Paths: v.Paths, With: v.With, Candidate: v.Candidate}
+}
+
+func (v Verdict) check() error {
+	if err := v.Change.Check(); err != nil {
+		return err
+	}
+	switch v.Decision {
+	case DecisionMerge:
+		if v.Code != "" {
+			return fmt.Errorf("a merge verdict on %s carries code %q", v.Change.Label(), v.Code)
+		}
+		return nil
+	case DecisionKick, DecisionWait:
+		if got := v.Code.Decision(); got != v.Decision {
+			return fmt.Errorf("a %s verdict on %s carries code %q", v.Decision, v.Change.Label(), v.Code)
+		}
+		return nil
+	}
+	return fmt.Errorf("unknown decision %q", v.Decision)
 }
 
 // ReadChanges decodes and checks a [Changes] document.
@@ -107,7 +200,7 @@ func (c Changes) check() error {
 	if err := CheckBranch(c.Base); err != nil {
 		return fmt.Errorf("base: %w", err)
 	}
-	seen := make(map[string]bool, len(c.Changes))
+	seen := make(map[string]bool, len(c.Changes)+len(c.Landed))
 	for i, ch := range c.Changes {
 		if err := ch.Check(); err != nil {
 			return fmt.Errorf("changes[%d]: %w", i, err)
@@ -116,6 +209,28 @@ func (c Changes) check() error {
 			return fmt.Errorf("changes[%d]: id %q appears twice", i, ch.ID)
 		}
 		seen[ch.ID] = true
+	}
+	for i, l := range c.Landed {
+		if err := l.check(); err != nil {
+			return fmt.Errorf("landed[%d]: %w", i, err)
+		}
+		if seen[l.ID] {
+			return fmt.Errorf("landed[%d]: id %q appears twice", i, l.ID)
+		}
+		seen[l.ID] = true
+	}
+	return nil
+}
+
+func (l Landed) check() error {
+	if err := CheckID(l.ID); err != nil {
+		return err
+	}
+	if !isObjectID(l.Head) || !isObjectID(l.Commit) {
+		return fmt.Errorf("#%s: head %q and commit %q must be full commit ids", l.ID, l.Head, l.Commit)
+	}
+	if !l.Method.valid() {
+		return fmt.Errorf("#%s: merge method %q; want merge, squash or rebase", l.ID, l.Method)
 	}
 	return nil
 }
@@ -154,10 +269,17 @@ func (p Plan) check() error {
 		return nil
 	}
 	for _, g := range p.Partitions {
+		ahead := make(map[string]bool, len(g))
 		for _, c := range g {
+			// A change merges after the one it is stacked on, so that one is earlier in
+			// the same partition.
+			if c.Below != "" && !ahead[c.Below] {
+				return fmt.Errorf("%s is stacked on #%s, which is not ahead of it in its partition", c.Label(), c.Below)
+			}
 			if err := add(c); err != nil {
 				return err
 			}
+			ahead[c.ID] = true
 		}
 	}
 	for _, v := range p.Verdicts {
@@ -166,6 +288,14 @@ func (p Plan) check() error {
 		}
 		if v.Decision != DecisionKick && v.Decision != DecisionWait {
 			return fmt.Errorf("planning decides %q for %s; it only kicks back or waits", v.Decision, v.Change.Label())
+		}
+		if err := v.check(); err != nil {
+			return err
+		}
+	}
+	for _, l := range p.Landed {
+		if err := l.check(); err != nil {
+			return fmt.Errorf("landed: %w", err)
 		}
 	}
 	return nil
@@ -177,13 +307,8 @@ func ReadVerdict(r io.Reader) (Verdict, error) {
 	if err := decode(r, SchemaVerdict, &v, &v.Schema); err != nil {
 		return Verdict{}, err
 	}
-	if err := v.Change.Check(); err != nil {
+	if err := v.check(); err != nil {
 		return Verdict{}, fmt.Errorf("%s: %w", SchemaVerdict, err)
-	}
-	switch v.Decision {
-	case DecisionMerge, DecisionKick, DecisionWait:
-	default:
-		return Verdict{}, fmt.Errorf("%s: unknown decision %q", SchemaVerdict, v.Decision)
 	}
 	return v, nil
 }
@@ -226,16 +351,22 @@ func decode(r io.Reader, schema string, v any, got *string) error {
 }
 
 // Check reports whether c can be handed to a version control system and used as a
-// directory name: an id [CheckID] accepts, a full commit id as head, and refs and
-// branches in the strict grammar [CheckBranch] names. Every field reaches a VCS command
-// line, so a value that could read as an option or a refspec is refused here rather than
-// quoted there.
+// directory name: an id [CheckID] accepts, full commit ids as head and stack base, refs
+// and branches in the strict grammar [CheckBranch] names, and a merge method. Every
+// field reaches a VCS command line, so a value that could read as an option or a
+// refspec is refused here rather than quoted there.
 func (c Change) Check() error {
 	if err := CheckID(c.ID); err != nil {
 		return err
 	}
 	if !isObjectID(c.Head) {
 		return fmt.Errorf("%s: head %q is not a full commit id", c.Label(), c.Head)
+	}
+	if c.StackBase != "" && !isObjectID(c.StackBase) {
+		return fmt.Errorf("%s: stack base %q is not a full commit id", c.Label(), c.StackBase)
+	}
+	if !c.Method.valid() {
+		return fmt.Errorf("%s: merge method %q; want merge, squash or rebase", c.Label(), c.Method)
 	}
 	if c.Ref != "" {
 		if !strings.HasPrefix(c.Ref, "refs/") {
@@ -251,6 +382,14 @@ func (c Change) Check() error {
 		}
 		if err := CheckBranch(b.v); err != nil {
 			return fmt.Errorf("%s: %s: %w", c.Label(), b.name, err)
+		}
+	}
+	for _, id := range []struct{ name, v string }{{"parent", c.Parent}, {"below", c.Below}} {
+		if id.v == "" {
+			continue
+		}
+		if err := CheckID(id.v); err != nil {
+			return fmt.Errorf("%s: %s: %w", c.Label(), id.name, err)
 		}
 	}
 	return nil

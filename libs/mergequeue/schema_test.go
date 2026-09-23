@@ -12,7 +12,7 @@ import (
 func TestPlanRoundTrips(t *testing.T) {
 	p := Plan{Schema: SchemaPlan, Base: "main", BaseCommit: base, Depth: 3,
 		Partitions: [][]Change{{change("1", "a")}},
-		Verdicts:   []Verdict{{Change: change("2"), Decision: DecisionWait, Reason: "r"}}}
+		Verdicts:   []Verdict{waiting("2")}}
 	var buf bytes.Buffer
 	require.NoError(t, WritePlan(&buf, p))
 	got, err := ReadPlan(&buf)
@@ -21,7 +21,7 @@ func TestPlanRoundTrips(t *testing.T) {
 }
 
 func TestVerdictRoundTripsWithItsSchemaStamped(t *testing.T) {
-	v := Verdict{BaseCommit: base, Change: change("1", "a"), Decision: DecisionMerge, Onto: base, Stage: "s", Depth: 1}
+	v := Verdict{BaseCommit: base, Change: change("1", "a"), Decision: DecisionMerge, Onto: base, Candidate: "s", Method: MethodSquash, Depth: 1}
 	var buf bytes.Buffer
 	require.NoError(t, WriteVerdict(&buf, v))
 	got, err := ReadVerdict(&buf)
@@ -36,13 +36,46 @@ func TestReadChangesRefusesAnotherSchemaAndAChangeWithoutAHead(t *testing.T) {
 	_, err = ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v1", "base": "main", "changes": [{"id": "1"}]}`))
 	require.ErrorContains(t, err, `changes[0]: #1: head "" is not a full commit id`)
 	got, err := ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v1", "base": "main",
-		"changes": [{"id": "1", "head": "` + head("1") + `", "affected": ["a"]}, {"id": "2", "head": "` + head("2") + `", "affected": null}]}`))
+		"changes": [{"id": "1", "head": "` + head("1") + `", "method": "squash", "affected": ["a"]},
+		            {"id": "2", "head": "` + head("2") + `", "method": "merge", "affected": null}]}`))
 	require.NoError(t, err)
 	assert.True(t, got.Changes[0].Proven())
 	assert.False(t, got.Changes[1].Proven(), "null is unknown, not empty")
+	_, err = ReadChanges(strings.NewReader(`{"schema": "mergequeue.changes/v1", "base": "main", "changes": [{"id": "1", "head": "` + head("1") + `"}]}`))
+	require.ErrorContains(t, err, `#1: merge method ""; want merge, squash or rebase`, "a provider default the queue cannot see is no method")
 }
 
-// An id names a directory the verdicts are written to, so ".." once made the stages
+// A code is how a provider and a workflow act on a verdict, so one that contradicts the
+// decision it rides on is refused rather than acted on.
+func TestReadVerdictRefusesACodeThatContradictsItsDecision(t *testing.T) {
+	for _, v := range []Verdict{
+		{Change: change("1"), Decision: DecisionKick, Code: CodeBehind},
+		{Change: change("1"), Decision: DecisionWait, Code: CodeRed},
+		{Change: change("1"), Decision: DecisionWait},
+		{Change: change("1"), Decision: DecisionMerge, Code: CodeRed},
+	} {
+		var buf bytes.Buffer
+		require.NoError(t, WriteVerdict(&buf, v))
+		_, err := ReadVerdict(&buf)
+		require.ErrorContains(t, err, "carries code", "%s %s", v.Decision, v.Code)
+	}
+}
+
+func TestReadPlanRefusesAChangeAheadOfWhatItIsStackedOn(t *testing.T) {
+	child := change("2", "a")
+	child.Below = "1"
+	for _, p := range []Plan{
+		{Base: "main", BaseCommit: base, Depth: 1, Partitions: [][]Change{{child, change("1", "a")}}},
+		{Base: "main", BaseCommit: base, Depth: 1, Partitions: [][]Change{{change("1", "a")}, {child}}},
+	} {
+		var buf bytes.Buffer
+		require.NoError(t, WritePlan(&buf, p))
+		_, err := ReadPlan(&buf)
+		require.ErrorContains(t, err, "is stacked on #1, which is not ahead of it in its partition")
+	}
+}
+
+// An id names a directory the verdicts are written to, so ".." would make the
 // directory's parent the target of a RemoveAll.
 func TestReadChangesRefusesIDsThatEscapeTheirDirectory(t *testing.T) {
 	for _, id := range []string{"..", ".", "a/b", `a\b`, ".hidden", "-x", ""} {

@@ -21,10 +21,10 @@ func TestHostRequestSendsHeadersAndReturnsStatusAndBody(t *testing.T) {
 	src := strings.NewReplacer(
 		`import "std";`, `import "std";
 import "mergequeue";`,
-		`export fun kick_back(io: {str: any}) > bool {
-    return io["report"] == "report";`, `export fun kick_back(io: {str: any}) > bool !> any {
+		`export fun retarget(io: {str: any}) > bool {
+    return io["base"] == "main";`, `export fun retarget(io: {str: any}) > bool !> any {
     final res = mergequeue\request("POST", url: "`+srv.URL+`", body: "hi", headers: {"Authorization": "Bearer t"});
     return res["status"] == 201 and res["body"] == "POST Bearer t hi";`,
 	).Replace(script)
-	require.NoError(t, open(t, src).KickBack(context.Background(), change, headA, ""))
+	require.NoError(t, open(t, src).Retarget(context.Background(), change, "main"))
 }

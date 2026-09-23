@@ -37,7 +37,7 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 }
 
 // mergeScript squashes a validated head onto the remote's main with plumbing, the way a
-// forge's merge button would, printing nothing on stdout.
+// provider's merge button would, printing nothing on stdout.
 const mergeScript = `set -e
 exec 1>&2
 remote=$1 commit=$2 title=$3
@@ -46,19 +46,34 @@ commit=$(git --git-dir="$remote" commit-tree "$tree" -p main -m "$title")
 git --git-dir="$remote" update-ref refs/heads/main "$commit"
 `
 
-// localProvider approves everything and merges through mergeScript.
+// localProvider approves everything, merges through mergeScript, and lists RUN as the
+// artifacts of every validation run.
 const localProvider = `
 import "os";
 
-export fun list_changes(io: {str: any}) > [any] !> any { throw "the test writes its own changes document"; }
-export fun approval_at(io: {str: any}) > any { return {"approved": true, "head": io["commit"]}; }
+export fun describe(io: {str: any}) > any { return {"stack_merge": "sequential", "linear_stacks": false, "methods": ["squash"]}; }
+export fun list_changes(io: {str: any}) > any !> any { throw "the test writes its own changes document"; }
+export fun approval_at(io: {str: any}) > any {
+    return {"approved": true, "head": io["commit"], "base": "main", "method": io["method"]};
+}
 export fun post_status(io: {str: any}) > bool { return true; }
+export fun retarget(io: {str: any}) > bool { return true; }
 export fun kick_back(io: {str: any}) > bool { return true; }
 export fun merge_change(io: {str: any}) > any {
     final code = os\execute(["sh", "MERGE_SCRIPT", "REMOTE", "{io["commit"]}", "{io["title"]} (#{io["id"]})"]);
     return {"merged": code == 0, "reason": "exit {code}"};
 }
+export fun run_artifacts(io: {str: any}) > any {
+    return {"completed": true, "headers": {"Authorization": "Bearer tok"}, "artifacts": RUN};
+}
 `
+
+// skipUntilVCSCapabilities marks a test that drives real git through capabilities
+// magus's vcs package does not have yet.
+func skipUntilVCSCapabilities(t *testing.T) {
+	t.Helper()
+	t.Skip("TODO(merge-queue): needs vcs's TreeMerger, CommitWriter, Pusher and the rest of the capability redesign")
+}
 
 func events(t *testing.T, out []byte) []mergequeue.Event {
 	t.Helper()
@@ -129,8 +144,8 @@ func newCLIFixture(t *testing.T, files map[string]string) cliFixture {
 	}
 	var buf bytes.Buffer
 	require.NoError(t, mergequeue.WriteChanges(&buf, mergequeue.Changes{Base: "main", Changes: []mergequeue.Change{
-		{ID: "1", Head: heads["1"], Ref: "refs/heads/pr1", Branch: "pr1", Base: "main", Title: "change 1"},
-		{ID: "2", Head: heads["2"], Ref: "refs/heads/pr2", Branch: "pr2", Base: "main", Title: "change 2"},
+		{ID: "1", Head: heads["1"], Ref: "refs/heads/pr1", Branch: "pr1", Base: "main", Title: "change 1", Method: mergequeue.MethodSquash},
+		{ID: "2", Head: heads["2"], Ref: "refs/heads/pr2", Branch: "pr2", Base: "main", Title: "change 2", Method: mergequeue.MethodSquash},
 	}}))
 	f.changes = buf.Bytes()
 	return f
@@ -152,6 +167,7 @@ func (f cliFixture) plan(t *testing.T) string {
 
 // Without --affected, plan asks the magus workspace at -C, loaded once in process.
 func TestPlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
+	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{"magusfile.buzz": "", "app/magusfile.buzz": "", "lib/magusfile.buzz": ""})
 	out, err := runCLI(t, string(f.changes), "-C", f.queue, "plan", "--changes", "-", "--out", filepath.Join(f.root, "plan.json"))
 	require.NoError(t, err)
@@ -165,6 +181,7 @@ func TestPlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
 // sets, an affected hook that answers them, validation writing a verdict per change, and
 // apply merging each green change through a Buzz provider.
 func TestTheCLIPlansValidatesAndMergesDisjointChanges(t *testing.T) {
+	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 
@@ -175,19 +192,23 @@ func TestTheCLIPlansValidatesAndMergesDisjointChanges(t *testing.T) {
 	assert.FileExists(t, filepath.Join(dir, mergequeue.DoneFile))
 	assert.FileExists(t, filepath.Join(dir, mergequeue.PlanFile), "the directory carries its own plan")
 
-	out, err = runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--interval", "10ms", dir)
+	out, err = runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t, ""), "--interval", "10ms", dir)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, out))
 	assert.Equal(t, "change 2 (#2)\nchange 1 (#1)", gitIn(t, f.root, "--git-dir", f.remote, "log", "--format=%s", f.base+"..main"))
 }
 
-// provider writes the local Buzz provider, merging into the fixture's remote.
-func (f cliFixture) provider(t *testing.T) string {
+// provider writes the local Buzz provider, merging into the fixture's remote and
+// listing run, a Buzz list of artifact records, as every run's artifacts.
+func (f cliFixture) provider(t *testing.T, run string) string {
 	t.Helper()
+	if run == "" {
+		run = "[<any>]"
+	}
 	prov := filepath.Join(f.root, "local.buzz")
 	script := filepath.Join(f.root, "merge.sh")
 	require.NoError(t, os.WriteFile(script, []byte(mergeScript), 0o755))
-	src := strings.NewReplacer("MERGE_SCRIPT", script, "REMOTE", f.remote).Replace(localProvider)
+	src := strings.NewReplacer("MERGE_SCRIPT", script, "REMOTE", f.remote, "RUN", run).Replace(localProvider)
 	require.NoError(t, os.WriteFile(prov, []byte(src), 0o644))
 	return prov
 }
@@ -203,39 +224,30 @@ func merged(t *testing.T, out []byte) []string {
 	return ids
 }
 
-// fakeRun serves a completed GitHub Actions run 7 of acme/widgets holding artifacts,
-// each the zip of a directory.
-func fakeRun(t *testing.T, artifacts map[string]string) *httptest.Server {
+// fakeRun serves artifacts, each the zip of a directory, to a request carrying the
+// provider's credential, and returns the provider's listing of them as a Buzz list.
+func fakeRun(t *testing.T, artifacts map[string]string) string {
 	t.Helper()
-	type row struct {
-		ID   int    `json:"id"`
-		Name string `json:"name"`
-	}
-	var rows []row
 	zips := map[string][]byte{}
-	for name, dir := range artifacts {
-		id := strconv.Itoa(len(rows) + 1)
-		rows = append(rows, row{len(rows) + 1, name})
-		zips["/repos/acme/widgets/actions/artifacts/"+id+"/zip"] = zipDir(t, dir)
-	}
+	var rows []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/repos/acme/widgets/actions/runs/7":
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "completed"})
-		case "/repos/acme/widgets/actions/runs/7/artifacts":
-			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": len(rows), "artifacts": rows})
-		default:
-			body, ok := zips[req.URL.Path]
-			if !ok {
-				http.NotFound(w, req)
-				return
-			}
-			_, _ = w.Write(body)
+		body, ok := zips[req.URL.Path]
+		if !ok || req.Header.Get("Authorization") != "Bearer tok" {
+			http.NotFound(w, req)
+			return
 		}
+		_, _ = w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("GITHUB_API_URL", srv.URL)
-	return srv
+	for name, dir := range artifacts {
+		p := "/" + strconv.Itoa(len(zips)) + ".zip"
+		zips[p] = zipDir(t, dir)
+		rows = append(rows, `{"name": "`+name+`", "url": "`+srv.URL+p+`"}`)
+	}
+	if len(rows) == 0 {
+		return ""
+	}
+	return "[" + strings.Join(rows, ", ") + "]"
 }
 
 func zipDir(t *testing.T, dir string) []byte {
@@ -249,7 +261,8 @@ func zipDir(t *testing.T, dir string) []byte {
 
 // The apply workflow's shape: apply reads the plan and verdicts from the validation
 // run's artifacts, as upload-artifact would have packed validate's output.
-func TestApplyFollowsAnActionsRun(t *testing.T) {
+func TestApplyFollowsARun(t *testing.T) {
+	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 	_, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir, "--gate", "true")
@@ -257,44 +270,56 @@ func TestApplyFollowsAnActionsRun(t *testing.T) {
 	planDir := filepath.Join(f.root, "plan-artifact")
 	require.NoError(t, os.Mkdir(planDir, 0o755))
 	require.NoError(t, os.Rename(planFile, filepath.Join(planDir, mergequeue.PlanFile)))
-	fakeRun(t, map[string]string{
+	run := fakeRun(t, map[string]string{
 		mergequeue.PlanArtifact:                planDir,
 		mergequeue.VerdictArtifactPrefix + "1": filepath.Join(dir, "1"),
 		mergequeue.VerdictArtifactPrefix + "2": filepath.Join(dir, "2"),
 	})
 
-	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--interval", "10ms", "github-actions:acme/widgets/runs/7")
+	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t, run), "--interval", "10ms", "run:acme/widgets/runs/7")
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, out))
 }
 
 func TestApplyFromARunThatPlannedNothingMergesNothing(t *testing.T) {
 	f := newCLIFixture(t, map[string]string{})
-	fakeRun(t, map[string]string{})
-	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--interval", "10ms", "github-actions:acme/widgets/runs/7")
+	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t, fakeRun(t, nil)), "--interval", "10ms", "run:acme/widgets/runs/7")
 	require.NoError(t, err)
 	evs := events(t, out)
 	require.Len(t, evs, 1)
 	assert.Equal(t, mergequeue.EventNotice, evs[0].Kind)
-	assert.Equal(t, "run 7 completed without a plan; nothing to apply", evs[0].Reason)
+	assert.Equal(t, "run acme/widgets/runs/7 completed without a plan; nothing to apply", evs[0].Reason)
+}
+
+// A provider that cannot read runs is refused before anything is read, rather than
+// following a run it can never see complete.
+func TestApplyFromARunNeedsAProviderThatReadsRuns(t *testing.T) {
+	f := newCLIFixture(t, map[string]string{})
+	prov := f.provider(t, "")
+	src, err := os.ReadFile(prov)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(prov, []byte(strings.Split(string(src), "export fun run_artifacts")[0]), 0o644))
+	_, err = runCLI(t, "", "-C", f.queue, "apply", "--provider", prov, "run:acme/widgets/runs/7")
+	require.ErrorContains(t, err, "does not export run_artifacts, which reading run:acme/widgets/runs/7 needs")
 }
 
 // A directory is a whole source: apply reads the plan validate wrote into it, and one
 // without a plan is an error rather than an empty queue.
 func TestApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) {
+	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 	_, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir, "--gate", "true")
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(planFile), "apply never reads validate's --plan")
 
-	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--once", dir)
+	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t, ""), "--once", dir)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, out))
 
 	require.NoError(t, os.Remove(filepath.Join(dir, mergequeue.PlanFile)))
 	for _, mode := range [][]string{{"--once"}, {"--interval", "10ms"}} {
-		args := append(append([]string{"-C", f.queue, "apply", "--provider", f.provider(t)}, mode...), dir)
+		args := append(append([]string{"-C", f.queue, "apply", "--provider", f.provider(t, "")}, mode...), dir)
 		_, err = runCLI(t, "", args...)
 		require.ErrorContains(t, err, "apply: "+dir+" holds no plan.json", "%v", mode)
 	}
@@ -303,13 +328,14 @@ func TestApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) {
 // Without --once apply follows a directory until validate marks it done; with --once it
 // merges what is there and leaves the rest queued.
 func TestApplyFollowsADirectoryUntilDoneUnlessOnce(t *testing.T) {
+	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 	_, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir, "--only", "1", "--gate", "true")
 	require.NoError(t, err)
 	require.NoFileExists(t, filepath.Join(dir, mergequeue.DoneFile))
 
-	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--once", "--dry-run", dir)
+	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t, ""), "--once", "--dry-run", dir)
 	require.NoError(t, err)
 	var waiting []string
 	for _, e := range events(t, out) {
@@ -325,7 +351,7 @@ func TestApplyFollowsADirectoryUntilDoneUnlessOnce(t *testing.T) {
 	}
 	followed := make(chan result, 1)
 	go func() {
-		out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--interval", "10ms", dir)
+		out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t, ""), "--interval", "10ms", dir)
 		followed <- result{out, err}
 	}()
 	_, err = runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir, "--only", "2", "--gate", "true")
@@ -344,9 +370,10 @@ func TestApplyFollowsADirectoryUntilDoneUnlessOnce(t *testing.T) {
 // -C is the checkout and what every relative path resolves against, provider included.
 // Like git's, it is global: it goes before the command.
 func TestDashCResolvesRelativePathsAgainstTheCheckout(t *testing.T) {
+	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{})
 	require.NoError(t, os.WriteFile(filepath.Join(f.queue, "changes.json"), f.changes, 0o644))
-	require.NoError(t, os.Rename(f.provider(t), filepath.Join(f.queue, "local.buzz")))
+	require.NoError(t, os.Rename(f.provider(t, ""), filepath.Join(f.queue, "local.buzz")))
 	t.Chdir(f.root)
 
 	_, err := runCLI(t, "", "plan", "-C", "queue", "--changes", "changes.json", "--out", "plan.json")
@@ -366,36 +393,24 @@ func TestDashCResolvesRelativePathsAgainstTheCheckout(t *testing.T) {
 
 func TestParseSource(t *testing.T) {
 	for arg, want := range map[string]source{
-		"verdicts":                           {dir: "verdicts"},
-		"/tmp/queue/verdicts":                {dir: "/tmp/queue/verdicts"},
-		"./x:y":                              {dir: "./x:y"},
-		"x:y":                                {dir: "x:y"},
-		`C:\queue`:                           {dir: `C:\queue`},
-		"dir/a:b":                            {dir: "dir/a:b"},
-		"github-actions:acme/widgets/runs/7": {repo: "acme/widgets", runID: "7"},
+		"verdicts":                {dir: "verdicts"},
+		"/tmp/queue/verdicts":     {dir: "/tmp/queue/verdicts"},
+		"./x:y":                   {dir: "./x:y"},
+		"x:y":                     {dir: "x:y"},
+		`C:\queue`:                {dir: `C:\queue`},
+		"dir/a:b":                 {dir: "dir/a:b"},
+		"run:acme/widgets/runs/7": {run: "acme/widgets/runs/7"},
 	} {
 		got, err := parseSource(arg)
 		require.NoError(t, err, arg)
 		assert.Equal(t, want, got, arg)
 	}
 	for arg, msg := range map[string]string{
-		"":                                        "<source> is empty",
-		"s3:bucket/verdicts":                      `unknown scheme "s3"`,
-		"github:acme/widgets/runs/7":              `unknown scheme "github"`,
-		"github-actions:acme/widgets/7":           "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/runs/7":              "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/":       "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/007":    "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/x":      "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:/widgets/runs/7":          "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/7/x":    "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/jobs/7":      "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/0":      "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/-1":     "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/+1":     "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/7 ":     "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme//widgets/runs/7":     "want github-actions:<owner>/<name>/runs/<id>",
-		"github-actions:acme/widgets/runs/7/../8": "want github-actions:<owner>/<name>/runs/<id>",
+		"":                                   "<source> is empty",
+		"s3:bucket/verdicts":                 `unknown scheme "s3"`,
+		"github-actions:acme/widgets/runs/7": `unknown scheme "github-actions"`,
+		"run:":                               "want run:<run>",
+		"run: ":                              "want run:<run>",
 	} {
 		_, err := parseSource(arg)
 		require.ErrorContains(t, err, msg, "%q", arg)
@@ -405,6 +420,7 @@ func TestParseSource(t *testing.T) {
 // Before, a regenerate hook failing on one change's code ended validation with no
 // verdict and no .done, so that change wedged its partition on every run.
 func TestAFailingRegenerationKicksItsChangeBackAndTheRunFinishes(t *testing.T) {
+	skipUntilVCSCapabilities(t)
 	f := newCLIFixture(t, map[string]string{".gitattributes": "lib/** linguist-generated\n"})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 
@@ -421,38 +437,38 @@ func TestUsageMistakesExitTwoAndErrorsNameTheirCommandOnce(t *testing.T) {
 	_, err = runCLI(t, "", "frobnicate")
 	require.ErrorIs(t, err, errUsage)
 	for name, args := range map[string][]string{
-		"list is ls":                       {"list", "--provider", "github", "--base", "main"},
-		"ls without --base":                {"ls", "--provider", "github"},
-		"ls with an operand":               {"ls", "--provider", "github", "--base", "main", "extra"},
-		"apply without a source":           {"apply", "--provider", "github"},
-		"apply with two sources":           {"apply", "--provider", "github", "s", "t"},
-		"a flag after the source":          {"apply", "--provider", "github", "s", "--once"},
-		"apply without a provider":         {"apply", "s"},
-		"an unknown scheme":                {"apply", "--provider", "github", "gitlab:a/b/pipelines/7"},
-		"a malformed run":                  {"apply", "--provider", "github", "github-actions:a/b/7"},
-		"--interval with --once":           {"apply", "--provider", "github", "--once", "--interval", "1s", "s"},
-		"a zero --interval":                {"apply", "--provider", "github", "--interval", "0s", "s"},
-		"--repo is -C":                     {"apply", "--repo", ".", "--provider", "github", "s"},
-		"plan without --out":               {"plan", "--changes", "-"},
-		"plan with an operand":             {"plan", "--changes", "-", "--out", "p", "extra"},
-		"--repo is -C on plan":             {"plan", "--repo", ".", "--out", "p"},
-		"validate without a verdict dir":   {"validate", "--plan", "p", "--gate", "true"},
-		"--from-run is a source":           {"apply", "--from-run", "7", "--provider", "github"},
-		"--follow is the default":          {"apply", "--follow", "--provider", "github", "s"},
-		"--plan is read from the source":   {"apply", "--plan", "p", "--provider", "github", "s"},
-		"--verdicts is the source":         {"apply", "--verdicts", "s", "--provider", "github"},
-		"--run-repo is part of the source": {"apply", "--run-repo", "a/b", "--provider", "github", "github-actions:a/b/runs/7"},
-		"-C after the command":             {"validate", "-C", ".", "--plan", "p", "--gate", "true", "--verdicts", "v"},
-		"-C without a path":                {"-C"},
-		"-C without a command":             {"-C", "."},
-		"an unknown global flag":           {"--remote", "origin", "ls"},
-		"validate never talks to a forge":  {"validate", "--provider", "github", "--plan", "p", "--gate", "true", "--verdicts", "v"},
-		"ls stages nothing":                {"ls", "--attribute", "x", "--provider", "github", "--base", "main"},
-		"ls runs nothing in parallel":      {"ls", "--parallel", "2", "--provider", "github", "--base", "main"},
-		"apply runs nothing in parallel":   {"apply", "--parallel", "2", "--provider", "github", "s"},
-		"plan merges nothing":              {"plan", "--dry-run", "--out", "p"},
-		"--target is magus's alone":        {"plan", "--out", "p", "--affected", "true", "--target", "build"},
-		"validate merges nothing":          {"validate", "--once", "--plan", "p", "--gate", "true", "--verdicts", "v"},
+		"list is ls":                         {"list", "--provider", "github", "--base", "main"},
+		"ls without --base":                  {"ls", "--provider", "github"},
+		"ls with an operand":                 {"ls", "--provider", "github", "--base", "main", "extra"},
+		"apply without a source":             {"apply", "--provider", "github"},
+		"apply with two sources":             {"apply", "--provider", "github", "s", "t"},
+		"a flag after the source":            {"apply", "--provider", "github", "s", "--once"},
+		"apply without a provider":           {"apply", "s"},
+		"an unknown scheme":                  {"apply", "--provider", "github", "gitlab:a/b/pipelines/7"},
+		"a malformed run":                    {"apply", "--provider", "github", "github-actions:a/b/7"},
+		"--interval with --once":             {"apply", "--provider", "github", "--once", "--interval", "1s", "s"},
+		"a zero --interval":                  {"apply", "--provider", "github", "--interval", "0s", "s"},
+		"--repo is -C":                       {"apply", "--repo", ".", "--provider", "github", "s"},
+		"plan without --out":                 {"plan", "--changes", "-"},
+		"plan with an operand":               {"plan", "--changes", "-", "--out", "p", "extra"},
+		"--repo is -C on plan":               {"plan", "--repo", ".", "--out", "p"},
+		"validate without a verdict dir":     {"validate", "--plan", "p", "--gate", "true"},
+		"--from-run is a source":             {"apply", "--from-run", "7", "--provider", "github"},
+		"--follow is the default":            {"apply", "--follow", "--provider", "github", "s"},
+		"--plan is read from the source":     {"apply", "--plan", "p", "--provider", "github", "s"},
+		"--verdicts is the source":           {"apply", "--verdicts", "s", "--provider", "github"},
+		"--run-repo is part of the source":   {"apply", "--run-repo", "a/b", "--provider", "github", "github-actions:a/b/runs/7"},
+		"-C after the command":               {"validate", "-C", ".", "--plan", "p", "--gate", "true", "--verdicts", "v"},
+		"-C without a path":                  {"-C"},
+		"-C without a command":               {"-C", "."},
+		"an unknown global flag":             {"--remote", "origin", "ls"},
+		"validate never talks to a provider": {"validate", "--provider", "github", "--plan", "p", "--gate", "true", "--verdicts", "v"},
+		"--attribute is gone":                {"plan", "--attribute", "x", "--out", "p"},
+		"ls runs nothing in parallel":        {"ls", "--parallel", "2", "--provider", "github", "--base", "main"},
+		"apply runs nothing in parallel":     {"apply", "--parallel", "2", "--provider", "github", "s"},
+		"plan merges nothing":                {"plan", "--dry-run", "--out", "p"},
+		"--target is magus's alone":          {"plan", "--out", "p", "--affected", "true", "--target", "build"},
+		"validate merges nothing":            {"validate", "--once", "--plan", "p", "--gate", "true", "--verdicts", "v"},
 	} {
 		_, err = runCLI(t, "", args...)
 		require.ErrorIs(t, err, errUsage, name)

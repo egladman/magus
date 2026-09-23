@@ -1,7 +1,7 @@
 package mergequeue
 
 // This file runs the queue's hooks as shell command lines: the gate and the regeneration
-// on each staging commit, and the affected hook during planning.
+// on each candidate, and the affected hook during planning.
 //
 // A hook's failure is sorted by what it says about the change. A normal non-zero exit
 // is the change's: a red gate, or a regeneration refused. ExitTempFail is retried and
@@ -28,9 +28,9 @@ const (
 	EnvChange     = "MERGEQUEUE_CHANGE"      // the change's id
 	EnvHead       = "MERGEQUEUE_HEAD"        // the change's head commit
 	EnvBase       = "MERGEQUEUE_BASE"        // the branch the queue merges into
-	EnvBaseCommit = "MERGEQUEUE_BASE_COMMIT" // the commit every stage is built on
-	EnvOnto       = "MERGEQUEUE_ONTO"        // the commit this stage was built onto
-	EnvStage      = "MERGEQUEUE_STAGE"       // the staging commit being gated
+	EnvBaseCommit = "MERGEQUEUE_BASE_COMMIT" // the commit every partition starts on
+	EnvOnto       = "MERGEQUEUE_ONTO"        // the commit this candidate was built onto
+	EnvCandidate  = "MERGEQUEUE_CANDIDATE"   // the candidate being gated
 )
 
 // scrubbed are credentials no hook sees: a gate runs the changes' code, and a token in
@@ -135,9 +135,9 @@ func runHook(ctx context.Context, c hookCommand) error {
 // SIGKILL or SIGTERM: a shell reports a signal death as 128 plus the signal.
 func signalled(code int) bool { return code == 130 || code == 137 || code == 143 }
 
-// CommandGate is a [Gate] running line in each staging commit's checkout. Exit status 0
-// is green and a normal failing exit is red. line's output goes to log, each line tagged
-// with its stage; a nil log discards it.
+// CommandGate is a [Gate] running line in each candidate's checkout. Exit status 0 is
+// green and a normal failing exit is red. line's output goes to log, each line tagged
+// with its candidate; a nil log discards it.
 func CommandGate(line string, plan Plan, log *HookLog) Gate {
 	return commandGate{line: line, base: plan.Base, baseCommit: plan.BaseCommit, log: log}
 }
@@ -147,31 +147,31 @@ type commandGate struct {
 	log                    *HookLog
 }
 
-func (g commandGate) Validate(ctx context.Context, s Stage, onto string, c Change) (GateResult, error) {
-	label := "[" + short(s.Commit) + " #" + c.ID + "] "
+func (g commandGate) Validate(ctx context.Context, cand Candidate, onto string, c Change) (GateResult, error) {
+	label := "[" + short(cand.Commit) + " #" + c.ID + "] "
 	out := g.log.Prefixed(label)
 	defer out.Close()
 	err := runHook(ctx, hookCommand{
 		Line: g.line,
-		Dir:  s.Dir,
+		Dir:  cand.Dir,
 		Env: []string{EnvChange + "=" + c.ID, EnvHead + "=" + c.Head, EnvBase + "=" + g.base,
-			EnvBaseCommit + "=" + g.baseCommit, EnvOnto + "=" + onto, EnvStage + "=" + s.Commit},
+			EnvBaseCommit + "=" + g.baseCommit, EnvOnto + "=" + onto, EnvCandidate + "=" + cand.Commit},
 		Stdout: out,
 		Stderr: out,
 	})
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
-		return GateResult{Summary: fmt.Sprintf("`%s` exited %d on the staging commit `%s`; the queue log's lines prefixed %q name what failed.",
-			g.line, failed.code, short(s.Commit), strings.TrimSpace(label))}, nil
+		return GateResult{Summary: fmt.Sprintf("`%s` exited %d on the candidate `%s`; the queue log's lines prefixed %q name what failed.",
+			g.line, failed.code, short(cand.Commit), strings.TrimSpace(label))}, nil
 	case err != nil:
-		return GateResult{}, fmt.Errorf("gate on the staging commit `%s`: %w", short(s.Commit), err)
+		return GateResult{}, fmt.Errorf("gate on the candidate `%s`: %w", short(cand.Commit), err)
 	}
 	return GateResult{Green: true}, nil
 }
 
-// CommandRegenerate is a [RegenerateFunc] running line in a stage's checkout with the
-// derived paths on stdin, one per line. A normal failing exit is a *[RefusedError]: the
+// CommandRegenerate is a [RegenerateFunc] running line in a checkout with the generated
+// paths on stdin, one per line. A normal failing exit is a *[RefusedError]: the
 // change's code did not regenerate.
 func CommandRegenerate(line string, plan Plan, log *HookLog) RegenerateFunc {
 	return func(ctx context.Context, dir, onto string, c Change, paths []string) error {

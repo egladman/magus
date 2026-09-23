@@ -6,7 +6,7 @@
 //	mergequeue validate --plan plan.json --gate 'magus affected ci --base "$MERGEQUEUE_ONTO"' \
 //	                    --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"' --verdicts verdicts
 //	mergequeue apply    --provider github verdicts
-//	mergequeue apply    --provider github github-actions:acme/widgets/runs/"$RUN_ID"
+//	mergequeue apply    --provider github run:acme/widgets/runs/"$RUN_ID"
 //
 // -C <path>, before the command, runs it as if started in <path>. The checkout's version
 // control goes through magus's vcs package, and plan asks the magus workspace there for
@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -107,12 +106,12 @@ func usage(w io.Writer) {
 Commands:
   ls        ask the provider for the changes carrying merge intent; prints a
             mergequeue.changes/v1 document
-  plan      check approval, drop what conflicts with the base, partition by affected
-            set; writes a mergequeue.plan/v1 document
-  validate  stage and gate a plan's changes; writes the plan and a
+  plan      check approval, find stacks, drop what conflicts with the base, partition
+            by affected set; writes a mergequeue.plan/v1 document
+  validate  build and gate a candidate per change; writes the plan and a
             mergequeue.verdict/v1 per change the moment it is decided (read access only)
-  apply     merge the green verdicts <source> holds as they arrive, each change as its
-            own commit (holds the write credential; runs no change's code)
+  apply     merge the green verdicts <source> holds as they arrive, each change with its
+            own merge method (holds the write credential; runs no change's code)
 
 -C <path> runs the command as if started in <path>: the checkout the queue works in,
 and what every relative path resolves against.
@@ -124,20 +123,20 @@ Run 'mergequeue <command> -h' for its flags. Every command prints JSONL events
 
 // sourceUsage documents apply's operand; parseSource implements it.
 const sourceUsage = `<source> is where apply reads the plan and the verdicts:
-  <dir>                                     the directory validate --verdicts wrote
-  github-actions:<owner>/<name>/runs/<id>   the artifacts of GitHub Actions run <id>
+  <dir>        the directory validate --verdicts wrote
+  run:<run>    the artifacts of a validation run, <run> as the provider names it
+               (github: <owner>/<name>/runs/<id>)
 Text before the first ":" that reads as a URL scheme of two or more characters is
 one, and an unknown scheme is an error; write ./<dir> for a directory named like one.
 `
 
-const actionsScheme = "github-actions"
+const runScheme = "run"
 
-// source is apply's operand: a verdict directory, or a GitHub Actions run whose
-// artifacts hold one. Exactly one of dir and runID is set.
+// source is apply's operand: a verdict directory, or a validation run whose artifacts
+// hold one. Exactly one of dir and run is set.
 type source struct {
-	dir   string
-	repo  string // owner/name of the run's repository
-	runID string
+	dir string
+	run string // what the provider's run_artifacts reads
 }
 
 // parseSource reads arg by the grammar in sourceUsage. A one-letter scheme is a
@@ -150,14 +149,13 @@ func parseSource(arg string) (source, error) {
 	if !ok || len(scheme) < 2 || !isScheme(scheme) {
 		return source{dir: arg}, nil
 	}
-	if scheme != actionsScheme {
+	if scheme != runScheme {
 		return source{}, fmt.Errorf("source %q: unknown scheme %q; write ./%s for a directory", arg, scheme, arg)
 	}
-	parts := strings.Split(spec, "/")
-	if len(parts) != 4 || parts[0] == "" || parts[1] == "" || parts[2] != "runs" || !isRunID(parts[3]) {
-		return source{}, fmt.Errorf("source %q: want %s:<owner>/<name>/runs/<id>", arg, actionsScheme)
+	if strings.TrimSpace(spec) == "" {
+		return source{}, fmt.Errorf("source %q: want %s:<run>", arg, runScheme)
 	}
-	return source{repo: parts[0] + "/" + parts[1], runID: parts[3]}, nil
+	return source{run: spec}, nil
 }
 
 // isScheme applies RFC 3986's scheme syntax.
@@ -173,11 +171,6 @@ func isScheme(s string) bool {
 	return s != ""
 }
 
-func isRunID(s string) bool {
-	n, err := strconv.ParseUint(s, 10, 64)
-	return err == nil && n > 0 && strconv.FormatUint(n, 10) == s
-}
-
 // path resolves a relative path argument against -C, as git -C and go -C do.
 func (e *env) path(p string) string {
 	if p == "" || p == "-" || filepath.IsAbs(p) {
@@ -186,10 +179,9 @@ func (e *env) path(p string) string {
 	return filepath.Join(e.dir, p)
 }
 
-// openRepo opens the checkout at -C; scratch is where stages are built, empty for a
-// command that builds none.
-func (e *env) openRepo(ctx context.Context, remote, attribute, scratch string) (*client.Repo, error) {
-	return client.NewRepo(ctx, client.Config{Root: e.dir, Remote: remote, Attribute: attribute, Scratch: scratch})
+// openRepo opens the checkout at -C.
+func (e *env) openRepo(ctx context.Context, remote string) (*client.Repo, error) {
+	return client.NewRepo(ctx, client.Config{Root: e.dir, Remote: remote})
 }
 
 func (e *env) openProvider(ctx context.Context, spec string) (*provider.Script, error) {
@@ -200,11 +192,7 @@ func (e *env) openProvider(ctx context.Context, spec string) (*provider.Script, 
 }
 
 func remoteFlag(fs *flag.FlagSet) *string {
-	return fs.String("remote", "origin", "remote name or URL changes and the base are fetched from")
-}
-
-func attributeFlag(fs *flag.FlagSet) *string {
-	return fs.String("attribute", client.DefaultAttribute, "path attribute marking derived files, read at the base commit")
+	return fs.String("remote", "origin", "name of the configured remote changes and the base are fetched from")
 }
 
 // parse parses a command's flags and exactly the operands named, returning them in
@@ -287,7 +275,7 @@ func ls(ctx context.Context, e *env, args []string) error {
 	if err := e.required("ls", flagValue{"provider", spec}, flagValue{"base", base}); err != nil {
 		return err
 	}
-	repo, err := e.openRepo(ctx, *remote, "", "")
+	repo, err := e.openRepo(ctx, *remote)
 	if err != nil {
 		return err
 	}
@@ -304,23 +292,24 @@ func ls(ctx context.Context, e *env, args []string) error {
 	if err != nil {
 		return err
 	}
+	changes.Base, changes.Remote = base, url
 	// One line, so a document on stdout is itself a JSONL record.
-	return mergequeue.WriteChanges(e.stdout, mergequeue.Changes{Base: base, Remote: url, Changes: changes})
+	return mergequeue.WriteChanges(e.stdout, changes)
 }
 
 func plan(ctx context.Context, e *env, args []string) error {
 	var changesFile, spec, affected, target, out string
-	var remote, attribute *string
+	var remote *string
 	var depth, parallel int
 	_, fs, err := e.parse("plan", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&changesFile, "changes", "-", "the mergequeue.changes/v1 document, or \"-\" for stdin")
 		fs.StringVar(&spec, "provider", "", "provider to check approval at each head with; empty admits every change unchecked")
 		fs.StringVar(&affected, "affected", "", "command printing a change's affected set from its paths on stdin, for a build tool other than magus; without it the magus workspace at -C answers")
 		fs.StringVar(&target, "target", "ci", "magus target the affected set is computed for")
-		fs.IntVar(&depth, "depth", 3, "stages of one partition that validate at once")
+		fs.IntVar(&depth, "depth", 3, "candidates of one partition that validate at once")
 		fs.IntVar(&parallel, "parallel", runtime.NumCPU(), "changes admitted, and affected hooks run, at once")
 		fs.StringVar(&out, "out", "", "file to write the mergequeue.plan/v1 document to")
-		remote, attribute = remoteFlag(fs), attributeFlag(fs)
+		remote = remoteFlag(fs)
 	})
 	if err != nil {
 		return helpOK(err)
@@ -338,7 +327,7 @@ func plan(ctx context.Context, e *env, args []string) error {
 	if err != nil {
 		return err
 	}
-	repo, err := e.openRepo(ctx, *remote, *attribute, "")
+	repo, err := e.openRepo(ctx, *remote)
 	if err != nil {
 		return err
 	}
@@ -397,20 +386,19 @@ func writeFile(file string, write func(io.Writer) error) error {
 	return f.Close()
 }
 
-// validate takes no --provider: it runs the changes' code, so it never talks to the
-// forge.
+// validate takes no --provider: it runs the changes' code, so it never talks to one.
 func validate(ctx context.Context, e *env, args []string) (err error) {
 	var planFile, gate, regenerate, only, dirPath string
-	var remote, attribute *string
+	var remote *string
 	var parallel int
 	if _, _, err := e.parse("validate", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&planFile, "plan", "", "the mergequeue.plan/v1 document")
-		fs.StringVar(&gate, "gate", "", "command run in each staging commit's checkout; exit 0 is green")
-		fs.StringVar(&regenerate, "regenerate", "", "command run in a staging commit's checkout when the change touched derived files, listed on stdin")
-		fs.StringVar(&only, "only", "", "validate this one change; its partition's changes beneath it are staged but not gated")
-		fs.IntVar(&parallel, "parallel", runtime.NumCPU(), "stages built or gated at once across every partition")
+		fs.StringVar(&gate, "gate", "", "command run in each candidate's checkout; exit 0 is green")
+		fs.StringVar(&regenerate, "regenerate", "", "command run in a checkout with the generated files to rewrite listed on stdin")
+		fs.StringVar(&only, "only", "", "validate this one change; its partition's changes beneath it are merged under it but not gated")
+		fs.IntVar(&parallel, "parallel", runtime.NumCPU(), "candidates built or gated at once across every partition")
 		fs.StringVar(&dirPath, "verdicts", "", "directory the plan and the verdicts are written to, one subdirectory per change; apply reads it as its <source>")
-		remote, attribute = remoteFlag(fs), attributeFlag(fs)
+		remote = remoteFlag(fs)
 	}); err != nil {
 		return helpOK(err)
 	}
@@ -435,24 +423,26 @@ func validate(ctx context.Context, e *env, args []string) (err error) {
 	if err := dir.WritePlan(pl); err != nil {
 		return err
 	}
-	// Outside the checkout: stages under it would be discovered as a second copy of it.
+	// Outside the checkout: candidates under it would be discovered as a second copy of it.
 	scratch, err := os.MkdirTemp("", "mergequeue-")
 	if err != nil {
 		return err
 	}
-	repo, err := e.openRepo(ctx, *remote, *attribute, scratch)
+	repo, err := e.openRepo(ctx, *remote)
 	if err != nil {
 		_ = os.RemoveAll(scratch)
 		return err
 	}
 	defer func() {
 		_ = os.RemoveAll(scratch)
-		_ = repo.Prune(context.WithoutCancel(ctx))
+		_ = repo.RemoveCheckouts(context.WithoutCancel(ctx), scratch)
 	}()
-	dir.Export = repo.ExportStage
+	dir.Export = func(ctx context.Context, file, baseCommit, cand string) error {
+		return repo.Bundle(ctx, file, mergequeue.BundleRange{Base: baseCommit, Head: cand})
+	}
 	log := mergequeue.NewHookLog(e.stderr)
 	v := mergequeue.NewValidator(repo, mergequeue.CommandGate(gate, pl, log), dir)
-	v.Only, v.Parallel, v.Events = only, parallel, mergequeue.NewEvents(e.stdout)
+	v.Only, v.Parallel, v.Scratch, v.Events = only, parallel, scratch, mergequeue.NewEvents(e.stdout)
 	if regenerate != "" {
 		v.Regenerate = mergequeue.CommandRegenerate(regenerate, pl, log)
 	}
@@ -466,8 +456,8 @@ type planSource interface {
 }
 
 func apply(ctx context.Context, e *env, args []string) error {
-	var spec, statusContext string
-	var remote, attribute *string
+	var spec, statusContext, committer string
+	var remote *string
 	var once, dryRun bool
 	var interval time.Duration
 	operands, fs, err := e.parse("apply", args, func(fs *flag.FlagSet) {
@@ -481,7 +471,8 @@ func apply(ctx context.Context, e *env, args []string) error {
 		fs.BoolVar(&once, "once", false, "apply what <source> holds now and stop, rather than following it until it is complete")
 		fs.DurationVar(&interval, "interval", 10*time.Second, "how often apply reads <source> while following it")
 		fs.BoolVar(&dryRun, "dry-run", false, "report what would merge; call nothing on the provider")
-		remote, attribute = remoteFlag(fs), attributeFlag(fs)
+		fs.StringVar(&committer, "committer", "", `"Name <email>" committing each update commit; its author is the change's; empty is the queue's own`)
+		remote = remoteFlag(fs)
 	}, "source")
 	if err != nil {
 		return helpOK(err)
@@ -499,12 +490,19 @@ func apply(ctx context.Context, e *env, args []string) error {
 	if err != nil {
 		return e.usageError("apply", "%v", err)
 	}
+	who, err := parsePerson(committer)
+	if err != nil {
+		return e.usageError("apply", "--committer: %v", err)
+	}
 	p, err := e.openProvider(ctx, spec)
 	if err != nil {
 		return err
 	}
 	defer p.Close()
-	repo, err := e.openRepo(ctx, *remote, *attribute, "")
+	if src.run != "" && !p.ReadsRuns() {
+		return fmt.Errorf("provider %q does not export run_artifacts, which reading run:%s needs", spec, src.run)
+	}
+	repo, err := e.openRepo(ctx, *remote)
 	if err != nil {
 		return err
 	}
@@ -513,16 +511,13 @@ func apply(ctx context.Context, e *env, args []string) error {
 	if src.dir != "" {
 		from = &mergequeue.VerdictDir{Path: e.path(src.dir), Follow: !once, Interval: interval}
 	} else {
-		// Stages are imported while applying, so the unpacked run lives only as long.
+		// Candidates are imported while applying, so the unpacked run lives only as long.
 		tmp, err := os.MkdirTemp("", "mergequeue-apply-")
 		if err != nil {
 			return err
 		}
 		defer os.RemoveAll(tmp)
-		from = &mergequeue.ActionsRun{
-			API: os.Getenv("GITHUB_API_URL"), Repo: src.repo, RunID: src.runID, Token: readToken(),
-			Path: tmp, Follow: !once, Interval: interval, Events: events,
-		}
+		from = &mergequeue.RunFollower{Reader: p, Run: src.run, Path: tmp, Follow: !once, Interval: interval, Events: events}
 	}
 	pl, planned, err := from.Plan(ctx)
 	if err != nil {
@@ -533,24 +528,29 @@ func apply(ctx context.Context, e *env, args []string) error {
 	case src.dir != "":
 		return fmt.Errorf("%s holds no %s; mergequeue validate --verdicts writes one", e.path(src.dir), mergequeue.PlanFile)
 	case once:
-		events.Emit(mergequeue.Event{Kind: mergequeue.EventNotice, Reason: "run " + src.runID + " has uploaded no plan yet; nothing to apply"})
+		events.Emit(mergequeue.Event{Kind: mergequeue.EventNotice, Reason: "run " + src.run + " has uploaded no plan yet; nothing to apply"})
 		return nil
 	default:
-		events.Emit(mergequeue.Event{Kind: mergequeue.EventNotice, Reason: "run " + src.runID + " completed without a plan; nothing to apply"})
+		events.Emit(mergequeue.Event{Kind: mergequeue.EventNotice, Reason: "run " + src.run + " completed without a plan; nothing to apply"})
 		return nil
 	}
 	a := mergequeue.NewApplier(p, repo, from)
-	a.StatusContext, a.Interval, a.DryRun, a.Events = statusContext, interval, dryRun, events
+	a.StatusContext, a.Interval, a.DryRun, a.Committer, a.Events = statusContext, interval, dryRun, who, events
 	return a.Run(ctx, pl)
 }
 
-// readToken picks the credential the GitHub provider reads with: the apply job's
-// MERGEQUEUE_TOKEN where it holds one, else GITHUB_TOKEN.
-func readToken() string {
-	if t := os.Getenv("MERGEQUEUE_TOKEN"); t != "" {
-		return t
+// parsePerson reads "Name <email>"; empty is the zero Person.
+func parsePerson(s string) (mergequeue.Person, error) {
+	if s == "" {
+		return mergequeue.Person{}, nil
 	}
-	return os.Getenv("GITHUB_TOKEN")
+	name, rest, ok := strings.Cut(s, " <")
+	email, closed := strings.CutSuffix(rest, ">")
+	name = strings.TrimSpace(name)
+	if !ok || !closed || name == "" || email == "" || strings.ContainsAny(email, "<> ") {
+		return mergequeue.Person{}, fmt.Errorf("%q is not \"Name <email>\"", s)
+	}
+	return mergequeue.Person{Name: name, Email: email}, nil
 }
 
 func helpOK(err error) error {

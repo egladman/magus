@@ -20,21 +20,21 @@ var (
 
 func init() { retryDelay = time.Millisecond }
 
-func TestGateRunsInTheStageWithTheQueuesEnvironment(t *testing.T) {
+func TestGateRunsInTheCandidateWithTheQueuesEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	var log bytes.Buffer
-	g := CommandGate(`echo "$MERGEQUEUE_CHANGE $MERGEQUEUE_ONTO $MERGEQUEUE_STAGE $MERGEQUEUE_BASE $MERGEQUEUE_BASE_COMMIT" > seen; test -f ok`, hookPlan, NewHookLog(&log))
+	g := CommandGate(`echo "$MERGEQUEUE_CHANGE $MERGEQUEUE_ONTO $MERGEQUEUE_CANDIDATE $MERGEQUEUE_BASE $MERGEQUEUE_BASE_COMMIT" > seen; test -f ok`, hookPlan, NewHookLog(&log))
 
-	res, err := g.Validate(context.Background(), Stage{Commit: "s1", Dir: dir}, "onto1", hookChange)
+	res, err := g.Validate(context.Background(), Candidate{Commit: "s1", Dir: dir}, "onto1", hookChange)
 	require.NoError(t, err)
 	assert.False(t, res.Green)
-	assert.Contains(t, res.Summary, "exited 1 on the staging commit `s1`; the queue log's lines prefixed \"[s1 #7]\" name what failed.")
+	assert.Contains(t, res.Summary, "exited 1 on the candidate `s1`; the queue log's lines prefixed \"[s1 #7]\" name what failed.")
 	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
 	require.NoError(t, err)
 	assert.Equal(t, "7 onto1 s1 main "+hookPlan.BaseCommit+"\n", string(seen))
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "ok"), nil, 0o644))
-	res, err = g.Validate(context.Background(), Stage{Commit: "s1", Dir: dir}, "onto1", hookChange)
+	res, err = g.Validate(context.Background(), Candidate{Commit: "s1", Dir: dir}, "onto1", hookChange)
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 }
@@ -47,17 +47,17 @@ func TestHooksNeverSeeTheQueuesCredentials(t *testing.T) {
 	t.Setenv("KEPT", "yes")
 	dir := t.TempDir()
 	g := CommandGate(`echo "[$MERGEQUEUE_TOKEN][$GITHUB_TOKEN][$KEPT]" > seen`, hookPlan, nil)
-	_, err := g.Validate(context.Background(), Stage{Commit: "s", Dir: dir}, "o", hookChange)
+	_, err := g.Validate(context.Background(), Candidate{Commit: "s", Dir: dir}, "o", hookChange)
 	require.NoError(t, err)
 	seen, err := os.ReadFile(filepath.Join(dir, "seen"))
 	require.NoError(t, err)
 	assert.Equal(t, "[][][yes]\n", string(seen))
 }
 
-func TestGateTagsEveryOutputLineWithItsStage(t *testing.T) {
+func TestGateTagsEveryOutputLineWithItsCandidate(t *testing.T) {
 	var log bytes.Buffer
 	g := CommandGate(`printf 'one\ntwo\n'; echo three >&2; printf 'no newline'`, hookPlan, NewHookLog(&log))
-	_, err := g.Validate(context.Background(), Stage{Commit: "0123456789abcdef", Dir: t.TempDir()}, "b", hookChange)
+	_, err := g.Validate(context.Background(), Candidate{Commit: "0123456789abcdef", Dir: t.TempDir()}, "b", hookChange)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"[0123456789ab #7] one", "[0123456789ab #7] two", "[0123456789ab #7] three", "[0123456789ab #7] no newline"},
 		strings.Split(strings.TrimSpace(log.String()), "\n"))
@@ -65,12 +65,12 @@ func TestGateTagsEveryOutputLineWithItsStage(t *testing.T) {
 
 func TestGateRunsATemporaryFailureAgainRatherThanCallingItRed(t *testing.T) {
 	g := CommandGate(`echo x >> tries; test "$(wc -l < tries)" -ge 3 || exit 75`, hookPlan, nil)
-	res, err := g.Validate(context.Background(), Stage{Commit: "s", Dir: t.TempDir()}, "b", hookChange)
+	res, err := g.Validate(context.Background(), Candidate{Commit: "s", Dir: t.TempDir()}, "b", hookChange)
 	require.NoError(t, err)
 	assert.True(t, res.Green)
 
-	_, err = CommandGate(`exit 75`, hookPlan, nil).Validate(context.Background(), Stage{Commit: "s", Dir: t.TempDir()}, "b", hookChange)
-	require.EqualError(t, err, "gate on the staging commit `s`: `exit 75` exited 75 (temporary failure) 3 times",
+	_, err = CommandGate(`exit 75`, hookPlan, nil).Validate(context.Background(), Candidate{Commit: "s", Dir: t.TempDir()}, "b", hookChange)
+	require.EqualError(t, err, "gate on the candidate `s`: `exit 75` exited 75 (temporary failure) 3 times",
 		"a machine that stays busy stops the run instead of kicking the author back")
 }
 
@@ -78,7 +78,7 @@ func TestGateRunsATemporaryFailureAgainRatherThanCallingItRed(t *testing.T) {
 // a red gate and the author was kicked back.
 func TestAGateKilledByASignalIsTheMachinesFailure(t *testing.T) {
 	for _, line := range []string{`kill -KILL $$`, `sh -c 'kill -KILL $$'; exit $?`, `exit 143`} {
-		res, err := CommandGate(line, hookPlan, nil).Validate(context.Background(), Stage{Commit: "s", Dir: t.TempDir()}, "b", hookChange)
+		res, err := CommandGate(line, hookPlan, nil).Validate(context.Background(), Candidate{Commit: "s", Dir: t.TempDir()}, "b", hookChange)
 		require.ErrorContains(t, err, "the machine failed, not the change", line)
 		assert.False(t, res.Green)
 	}

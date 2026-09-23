@@ -1,7 +1,7 @@
 // magusfile.buzz for mergequeue, a Go module (github.com/egladman/magus/libs/mergequeue)
 // at libs/mergequeue: a speculative, partitioned merge queue with its own CLI. It requires
 // the magus module and nothing in magus imports it back, because a queue owns checkouts
-// (staging commits, applying) and magus never does: magus's vcs package supplies the
+// (candidates, applying) and magus never does: magus's vcs package supplies the
 // operations and its Go SDK the affected sets, both through the client package, while the
 // root package imports nothing of magus.
 //

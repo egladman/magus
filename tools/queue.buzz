@@ -2,12 +2,12 @@
 // queue-apply.yaml carry no shell of their own. Each step is one invocation:
 //
 //	QUEUE_STEP=build     magus buzz tools/queue.buzz   compile mergequeue; put it and mise's Go on PATH
-//	QUEUE_STEP=plan      magus buzz tools/queue.buzz   plan the queue; write the stage matrix (DEPTH)
+//	QUEUE_STEP=plan      magus buzz tools/queue.buzz   plan the queue; write the validation matrix (DEPTH)
 //	QUEUE_STEP=validate  magus buzz tools/queue.buzz   validate one change of the plan (CHANGE)
 //	QUEUE_STEP=apply     magus buzz tools/queue.buzz   merge what validation run RUN uploads onto MAIN
 //
 // The step is an environment variable because `magus buzz` passes a script no
-// arguments; every input is one too. The decisions (which stages the matrix holds,
+// arguments; every input is one too. The decisions (which changes the matrix holds,
 // each command's argv, whether anything merged) are pure functions tested at the
 // bottom; the process calls are not, since exercising them means running the queue.
 //
@@ -41,9 +41,9 @@ fun need(name: str) > str !> any {
     return v;
 }
 
-// stageIDs lists the changes the plan gives a stage job: the first `depth` of each
-// partition. The rest wait for the run the next merge starts.
-export fun stageIDs(plan: str) > [str] !> any {
+// validatedIDs lists the changes the plan gives a validation job: the first `depth` of
+// each partition. The rest wait for the run the next merge starts.
+export fun validatedIDs(plan: str) > [str] !> any {
     final doc = serialize\jsonDecode(plan);
     final depth = doc.q("depth").integerValue();
     final ids = mut [<str>];
@@ -58,7 +58,7 @@ export fun stageIDs(plan: str) > [str] !> any {
     return ids;
 }
 
-// outputs renders the plan job's $GITHUB_OUTPUT lines: the stage matrix and its size.
+// outputs renders the plan job's $GITHUB_OUTPUT lines: the validation matrix and its size.
 export fun outputs(ids: [str]) > str {
     final include = mut [<{str: str}>];
     foreach (id in ids) {
@@ -81,10 +81,11 @@ export fun validateArgs(dir: str, change: str) > [str] {
 }
 
 // applyArgs polls every 15s: each poll is two API requests on the job's Actions token,
-// which GitHub limits to 1,000 an hour per repository.
+// which GitHub limits to 1,000 an hour per repository. The queue commits an update
+// commit it pushes to a queued branch; its author is the branch head's author.
 export fun applyArgs(run: str, repo: str) > [str] {
     return ["apply", "--provider", "github", "--status-context", "magus/queue", "--interval", "15s",
-        "github-actions:{repo}/runs/{run}"];
+        "--committer", "magus-queue <magus-queue@users.noreply.github.com>", "run:{repo}/runs/{run}"];
 }
 
 // tip reads the commit off `git ls-remote <remote> <ref>`; empty when the ref is absent.
@@ -129,7 +130,7 @@ fun plan() > void !> any {
     final changes = capture("mergequeue", args: ["ls", "--provider", "github", "--base", "main"]);
     fs\writeFile(dir + "/changes.json", content: changes + "\n");
     proc\exec("mergequeue", args: planArgs(dir, depth: need("DEPTH")), opts: {});
-    final ids = stageIDs(fs\readFile(dir + "/plan.json"));
+    final ids = validatedIDs(fs\readFile(dir + "/plan.json"));
     fs\appendFile(need("GITHUB_OUTPUT"), content: outputs(ids));
 }
 
@@ -145,10 +146,6 @@ fun apply() > void !> any {
     final branch = need("MAIN");
     final repo = need("GITHUB_REPOSITORY");
     final args = applyArgs(need("RUN"), repo: repo);
-    // The committer of a regeneration pushed to a queued branch; its author is the
-    // branch head's author.
-    proc\exec("git", args: ["config", "user.name", "magus-queue"], opts: {});
-    proc\exec("git", args: ["config", "user.email", "magus-queue@users.noreply.github.com"], opts: {});
     final before = mainTip(branch);
     final applied = proc\exec("mergequeue", args: args, opts: {"allow_failure": true});
     // A failed apply still dispatches main's runs for whatever merged before it stopped.
@@ -191,19 +188,19 @@ fun planDoc(depth: int, partitions: [[str]]) > str {
     return encode({"schema": "mergequeue.plan/v1", "depth": depth, "partitions": groups});
 }
 
-test "each partition gives its first depth changes a stage" {
-    final ids = stageIDs(planDoc(2, partitions: [["1", "2", "3"], ["4"]]));
+test "each partition gives its first depth changes a validation job" {
+    final ids = validatedIDs(planDoc(2, partitions: [["1", "2", "3"], ["4"]]));
     assert\equal(ids, want: ["1", "2", "4"], message: "depth 2 over partitions of three and one");
 }
 
-test "a plan with no partitions stages nothing" {
-    assert\equal(stageIDs(`{"depth": 3, "partitions": null}`).len(), want: 0, message: "null partitions");
-    assert\equal(stageIDs(`{"depth": 3}`).len(), want: 0, message: "absent partitions");
+test "a plan with no partitions validates nothing" {
+    assert\equal(validatedIDs(`{"depth": 3, "partitions": null}`).len(), want: 0, message: "null partitions");
+    assert\equal(validatedIDs(`{"depth": 3}`).len(), want: 0, message: "absent partitions");
 }
 
 test "outputs render a compact matrix and its count" {
-    assert\equal(outputs(["1", "4"]), want: `matrix={"include":[{"change":"1"},{"change":"4"}]}` + "\ncount=2\n", message: "two stages");
-    assert\equal(outputs([<str>]), want: `matrix={"include":[]}` + "\ncount=0\n", message: "no stages");
+    assert\equal(outputs(["1", "4"]), want: `matrix={"include":[{"change":"1"},{"change":"4"}]}` + "\ncount=2\n", message: "two jobs");
+    assert\equal(outputs([<str>]), want: `matrix={"include":[]}` + "\ncount=0\n", message: "no jobs");
 }
 
 test "validation hooks see MERGEQUEUE_ONTO unexpanded" {
@@ -215,7 +212,7 @@ test "validation hooks see MERGEQUEUE_ONTO unexpanded" {
 
 test "apply follows the validation run as its source" {
     assert\equal(applyArgs("99", repo: "o/r"), want: ["apply", "--provider", "github", "--status-context", "magus/queue",
-        "--interval", "15s", "github-actions:o/r/runs/99"], message: "argv");
+        "--interval", "15s", "--committer", "magus-queue <magus-queue@users.noreply.github.com>", "run:o/r/runs/99"], message: "argv");
 }
 
 test "plan args carry the depth and leave the affected sets to the workspace" {
