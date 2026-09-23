@@ -234,7 +234,10 @@ type SandboxEnv struct {
 
 // Log controls log output.
 type Log struct {
-	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json jsonl"` // pretty|plain|text|json|jsonl
+	// Format is pretty|plain|text|json. "jsonl" is set only by `-o jsonl`, after
+	// validation: it withholds target output and routes results to the report stream,
+	// which a magus.yaml setting has no stream to route them to.
+	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json"`
 	// Level is the minimum log level; "trace" also enables the startup timing table.
 	Level string `json:"level" yaml:"level" validate:"omitempty,oneof=trace debug info warn error"`
 	// Silent suppresses progress like --quiet, and additionally bounds the failing-project
