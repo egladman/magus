@@ -392,8 +392,23 @@ type Diff struct {
 // DiffUncovered is one touched project the conformance checks did not cover. A coverage fact,
 // not a finding: it says what was not looked at, where a Check says what was found.
 type DiffUncovered struct {
-	Project string `json:"project" yaml:"project"`
-	Reason  string `json:"reason"  yaml:"reason"`
+	Project string              `json:"project" yaml:"project"`
+	Reason  DiffUncoveredReason `json:"reason"  yaml:"reason"`
+}
+
+// DiffUncoveredReason is why the conformance checks could not see a touched project.
+type DiffUncoveredReason string
+
+// DiffUncoveredNoIndexer is a project bound to no spell with a symbol indexer, so the index
+// holds nothing of it to compare.
+const DiffUncoveredNoIndexer DiffUncoveredReason = "no-indexer"
+
+// Sentence renders the reason for a reader; an unknown value renders as itself.
+func (v DiffUncoveredReason) Sentence() string {
+	if v == DiffUncoveredNoIndexer {
+		return "no symbol indexer"
+	}
+	return string(v)
 }
 
 // DiffReviewed is what a reader already got through on an earlier pass over this changeset.

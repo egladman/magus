@@ -261,6 +261,11 @@ var boundaryEnums = []boundaryEnum{
 			{"notIndexed", "not-indexed"}},
 	},
 	{
+		Name:  "DiffUncoveredReason",
+		Type:  reflect.TypeFor[types.DiffUncoveredReason](),
+		Cases: []enumCase{{"none", ""}, {"noIndexer", "no-indexer"}},
+	},
+	{
 		Name: "TargetRunState",
 		Type: reflect.TypeFor[types.TargetRunState](),
 		Cases: []enumCase{{"none", ""}, {"queued", "queued"}, {"running", "running"}, {"passed", "passed"},

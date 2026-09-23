@@ -647,7 +647,7 @@ func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUnc
 			slices.ContainsFunc(out, func(u types.DiffUncovered) bool { return u.Project == f.Project }) {
 			continue
 		}
-		out = append(out, types.DiffUncovered{Project: f.Project, Reason: "no symbol indexer"})
+		out = append(out, types.DiffUncovered{Project: f.Project, Reason: types.DiffUncoveredNoIndexer})
 	}
 	return out
 }

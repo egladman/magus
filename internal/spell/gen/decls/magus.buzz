@@ -212,7 +212,7 @@ export object Diagnostic {
 
 export object DiffUncovered {
     project: str = "",
-    reason: str = "",
+    reason: DiffUncoveredReason = DiffUncoveredReason.none,
 }
 
 export object Diff {

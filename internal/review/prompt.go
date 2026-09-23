@@ -182,7 +182,7 @@ func promptConformance(rev types.Diff) []string {
 		}
 	}
 	for _, u := range rev.Uncovered {
-		out = append(out, "not checked: `"+u.Project+"` ("+u.Reason+")")
+		out = append(out, "not checked: `"+u.Project+"` ("+u.Reason.Sentence()+")")
 	}
 	return out
 }

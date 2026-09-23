@@ -33,7 +33,13 @@ export function modeChange(file: DiffFile): string | null {
   if (oldMode === undefined || newMode === undefined || oldMode === newMode) return null;
   return `mode ${oldMode} -> ${newMode}`;
 }
-import type { Diff, DiffAnnotation, DiffSession, ReviewChange } from "./session";
+import type {
+  Diff,
+  DiffAnnotation,
+  DiffSession,
+  DiffUncoveredReason,
+  ReviewChange,
+} from "./session";
 
 export interface OrderedFile {
   readonly file: DiffFile;
@@ -181,8 +187,14 @@ export function conformanceUnchecked(diff: Diff | undefined): string | undefined
 // conformanceUncovered is one line per touched project the conformance checks could not see, so
 // no silence there reads as a clean project.
 export function conformanceUncovered(diff: Diff | undefined): string[] {
-  return (diff?.uncovered ?? []).map((u) => `Conformance did not check ${u.project}: ${u.reason}`);
+  return (diff?.uncovered ?? []).map(
+    (u) => `Conformance did not check ${u.project}: ${UNCOVERED_REASON[u.reason] ?? u.reason}`,
+  );
 }
+
+const UNCOVERED_REASON: Record<DiffUncoveredReason, string> = {
+  "no-indexer": "no symbol indexer",
+};
 
 export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   if (!a) return [];

@@ -103,7 +103,7 @@ func TestPromptCarriesConformanceChecks(t *testing.T) {
 	assert.NotContains(t, renderPrompt(t, types.Diff{Base: "main"}, nil), "## Conformance", "no finding, no section")
 
 	uncovered := renderPrompt(t, types.Diff{Base: "main", Uncovered: []types.DiffUncovered{
-		{Project: "docs", Reason: "no symbol indexer"},
+		{Project: "docs", Reason: types.DiffUncoveredNoIndexer},
 	}}, nil)
 	assert.Contains(t, uncovered, "## Conformance", "an unchecked project is named under the checks' heading")
 	assert.Contains(t, uncovered, "- not checked: `docs` (no symbol indexer)")

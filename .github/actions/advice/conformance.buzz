@@ -234,9 +234,12 @@ fun parseGate(name: str, fallback: double) > double !> str {
 }
 
 // uncoveredLine names one touched project the symbol checks could not see, so a table of
-// findings is never read as covering it.
+// findings is never read as covering it. reason is a DiffUncoveredReason value; one this script
+// does not know yet renders as itself.
 export fun uncoveredLine(project: str, reason: str) > str {
-    return "Not checked: `" + project + "` (" + reason + ").";
+    var why = reason;
+    if (reason == "no-indexer") { why = "no symbol indexer"; }
+    return "Not checked: `" + project + "` (" + why + ").";
 }
 
 // uncheckedBody is the section when magus could not run the symbol checks at all, which must
@@ -488,7 +491,7 @@ test "a change that could not be checked never reads as one with nothing to repo
 
 test "a project the checks could not see is named beside the findings" {
     final text = body([], rows: [symbolRow("a.go", check: "param-order", message: "m", details: [])],
-        caveats: [uncoveredLine("docs", reason: "no symbol indexer")]);
+        caveats: [uncoveredLine("docs", reason: "no-indexer")]);
     std\assert(text.indexOf("Not checked: \\`docs\\` (no symbol indexer).") != null, message: "the uncovered project is said");
 }
 

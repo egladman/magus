@@ -117,6 +117,10 @@ export interface DiffAnnotation {
 // hardest: the reader looked, and then the file moved under them.
 export type ReviewReadState = "read" | "unread" | "stale";
 
+// DiffUncoveredReason mirrors the DiffUncoveredReason constants: why the conformance checks
+// could not see a touched project.
+export type DiffUncoveredReason = "no-indexer";
+
 export interface Diff {
   readonly base: string;
   readonly files?: readonly DiffAnnotation[];
@@ -126,13 +130,16 @@ export interface Diff {
   readonly api?: DiffAPI;
   // Why the conformance checks could not run. When set, no symbol carries checks, and that
   // absence means nothing was checked.
-  // Touched projects the conformance checks could not see, and why.
-  readonly uncovered?: readonly { readonly project: string; readonly reason: string }[];
   readonly conformance_error?: {
     readonly code: string;
     readonly message: string;
     readonly url?: string;
   };
+  // Touched projects the conformance checks could not see, and why.
+  readonly uncovered?: readonly {
+    readonly project: string;
+    readonly reason: DiffUncoveredReason;
+  }[];
 }
 
 export interface DiffComment {

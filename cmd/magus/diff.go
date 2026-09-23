@@ -1330,7 +1330,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 		fmt.Printf("\nerror: conformance could not check this change: %s\n", diagnosticLine(*e))
 	}
 	for _, u := range rev.Uncovered {
-		fmt.Printf("\nconformance did not check %s: %s\n", u.Project, u.Reason)
+		fmt.Printf("\nconformance did not check %s: %s\n", u.Project, u.Reason.Sentence())
 	}
 	// Notes name what could NOT be measured. Surfaced rather than swallowed, so an empty
 	// column reads as "nothing was measured" rather than as "nothing depends on this".

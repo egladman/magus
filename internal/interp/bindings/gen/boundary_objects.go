@@ -999,7 +999,7 @@ func ObjectDiagnostic(v types.Diagnostic) vm.Value {
 func ObjectDiffUncovered(v types.DiffUncovered) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
-	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("reason", vm.StrValue(string(v.Reason)))
 	return out
 }
 

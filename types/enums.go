@@ -75,6 +75,12 @@ func (v SymbolIndexFreshness) Values() []string { return symbolIndexFreshnesses.
 func (v SymbolIndexFreshness) Valid() bool      { return symbolIndexFreshnesses.Valid(v) }
 func (v SymbolIndexFreshness) String() string   { return enum.String(v) }
 
+var diffUncoveredReasons = enum.Set[DiffUncoveredReason]{"no-indexer"}
+
+func (v DiffUncoveredReason) Values() []string { return diffUncoveredReasons.Strings() }
+func (v DiffUncoveredReason) Valid() bool      { return diffUncoveredReasons.Valid(v) }
+func (v DiffUncoveredReason) String() string   { return enum.String(v) }
+
 var targetRunStates = enum.Set[TargetRunState]{"queued", "running", "passed", "failed", "cached"}
 
 func (v TargetRunState) Values() []string { return targetRunStates.Strings() }

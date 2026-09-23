@@ -444,7 +444,7 @@ func TestUncoveredProjectsAreTheOnesTheChecksCannotSee(t *testing.T) {
 		{Path: "README", Project: ""},
 	}
 
-	assert.Equal(t, []types.DiffUncovered{{Project: "docs", Reason: "no symbol indexer"}},
+	assert.Equal(t, []types.DiffUncovered{{Project: "docs", Reason: types.DiffUncoveredNoIndexer}},
 		uncoveredProjects(files, []string{"."}))
 }
 

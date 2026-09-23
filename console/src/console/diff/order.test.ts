@@ -297,7 +297,7 @@ test("each touched project the checks could not see is named", () => {
   assert.deepEqual(
     conformanceUncovered({
       base: "working",
-      uncovered: [{ project: "docs", reason: "no symbol indexer" }],
+      uncovered: [{ project: "docs", reason: "no-indexer" }],
     }),
     ["Conformance did not check docs: no symbol indexer"],
   );
