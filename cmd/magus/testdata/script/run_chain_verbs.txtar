@@ -94,7 +94,7 @@ concurrency: 2
 -- magusfile.buzz --
 import "magus";
 import "proc";
-import "spells/acme" as acme;
+import "spells/acme";
 magus.project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("dist/*.txt");

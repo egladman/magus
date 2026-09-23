@@ -16,8 +16,14 @@ diff
 doctor
 fatal
 guard
+guard.advise
+guard.allow
 guard.bash
+guard.count
+guard.deny
+guard.once
 guard.shell
+guard.spawn
 harness
 harness.provider
 hasCharm

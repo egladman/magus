@@ -132,3 +132,24 @@ func TestSemverCompareOrdersThreeWay(t *testing.T) {
 	_, err = SemverCompare(ctx, "1.0.0", "nonsense")
 	assert.Error(t, err)
 }
+
+func TestSemverParse(t *testing.T) {
+	ctx := context.Background()
+
+	got, err := SemverParse(ctx, "1.2.3-rc.1+build5")
+	require.NoError(t, err)
+	assert.Equal(t, types.SemverVersion{
+		Major: 1, Minor: 2, Patch: 3,
+		Prerelease: "rc.1", Metadata: "build5", Original: "1.2.3-rc.1+build5",
+	}, got)
+
+	// Input is lenient and Original keeps the text as written, which is what lets a
+	// caller round-trip a tag it read from the VCS.
+	got, err = SemverParse(ctx, "v1.2")
+	require.NoError(t, err)
+	assert.Equal(t, types.SemverVersion{Major: 1, Minor: 2, Original: "v1.2"}, got)
+
+	_, err = SemverParse(ctx, "not-a-version")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "semver.parse")
+}

@@ -58,7 +58,7 @@ export fun helper() > str { return text.value(); }`)
 func TestProjectImportFileResolver(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a/magusfile.buzz", `import "magus";
-import "project/../b" as b;
+import "project/../b";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(b.file("go.mod"));
 }`)
@@ -521,7 +521,7 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
 func TestProjectImportResolvesInRunMode(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a/magusfile.buzz", `import "magus";
-import "project/../b" as b;
+import "project/../b";
 export fun go(ctx: magus\Context, args: [str]) > void {}`)
 	writeFile(t, root, "b/magusfile.buzz", `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
@@ -542,7 +542,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}`)
 func TestProjectImportHandleNeedsAndDirectCall(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a/magusfile.buzz", `import "magus";
-import "project/../b" as b;
+import "project/../b";
 export fun go(ctx: magus\Context, args: [str]) > void {
     ctx.needs(b.build);
     b.build();

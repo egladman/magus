@@ -42,7 +42,7 @@ type shareError struct {
 // active one. consoleDir is the built console served to the phone; when it is
 // empty (no build found), the endpoint fails with a clear, actionable message
 // rather than opening a listener that would 404 the app.
-func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded map[string]http.Handler, log *slog.Logger) http.Handler {
+func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded map[string]share.Route, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)

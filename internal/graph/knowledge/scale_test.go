@@ -1,3 +1,5 @@
+// cross-cutting: scale invariants across query, blast radius and warm load on one large graph
+
 package knowledge
 
 import (

@@ -25,13 +25,14 @@ var bzz = diagnostics.New(func(c diagnostics.Code) string { return bzzDocsBase +
 // lookup handle for a documented failure, not a completeness checkbox.
 const (
 	// Type-check errors (checker.go).
-	UndefinedName    diagnostics.Code = "BZZ1001" // reference to a variable or function that is not in scope
-	UndefinedType    diagnostics.Code = "BZZ1002" // reference to a type name that is not defined
-	NonBoolCondition diagnostics.Code = "BZZ1003" // an if/while/for condition whose type is not bool
-	ArgumentError    diagnostics.Code = "BZZ1004" // a call with the wrong count, an unknown/duplicate name, or a missing argument
-	TypeMismatch     diagnostics.Code = "BZZ1005" // an assignment, return, yield, or operand whose type does not match what is expected
-	UnhandledRaise   diagnostics.Code = "BZZ1006" // a call to a !> function from a caller that neither declares !> nor catches it
-	UnknownMember    diagnostics.Code = "BZZ1007" // access to a member an imported module does not export
+	UndefinedName        diagnostics.Code = "BZZ1001" // reference to a variable or function that is not in scope
+	UndefinedType        diagnostics.Code = "BZZ1002" // reference to a type name that is not defined
+	NonBoolCondition     diagnostics.Code = "BZZ1003" // an if/while/for condition whose type is not bool
+	ArgumentError        diagnostics.Code = "BZZ1004" // a call with the wrong count, an unknown/duplicate name, or a missing argument
+	TypeMismatch         diagnostics.Code = "BZZ1005" // an assignment, return, yield, or operand whose type does not match what is expected
+	UnhandledRaise       diagnostics.Code = "BZZ1006" // a call to a !> function from a caller that neither declares !> nor catches it
+	UnknownMember        diagnostics.Code = "BZZ1007" // access to a member an imported module does not export
+	RedundantImportAlias diagnostics.Code = "BZZ1008" // an import alias equal to the name the import would bind anyway
 
 	// Session / runtime errors (session.go).
 	UnresolvedImport diagnostics.Code = "BZZ2001" // an import that cannot be resolved to a module or file
@@ -49,6 +50,7 @@ const (
 // TestAllBZZCodesEnumerated; it is the source of truth for the doc-coverage drift test.
 var allBZZCodes = []diagnostics.Code{
 	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch, UnhandledRaise, UnknownMember,
+	RedundantImportAlias,
 	UnresolvedImport, FiberMisuse,
 	UnusedImport, StringAccumulation,
 }

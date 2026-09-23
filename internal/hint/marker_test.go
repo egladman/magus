@@ -2,6 +2,7 @@ package hint
 
 import (
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -234,4 +235,75 @@ func TestDerivedSessionsDoNotCollide(t *testing.T) {
 	assert.Equal(t, "full", first.Once(testKindA, "full"), "the first window is told")
 	assert.Empty(t, first.Once(testKindA, "full"), "and held on its repeat")
 	assert.Equal(t, "full", second.Once(testKindA, "full"), "a second window is a second session")
+}
+
+// TestCountTalliesPerSessionAndKind pins the scope a workspace spawn rule's count helper
+// promises: one tally per session and kind, starting at 1.
+func TestCountTalliesPerSessionAndKind(t *testing.T) {
+	base := t.TempDir()
+	a := NewGate(base, "session-a")
+	assert.Equal(t, 1, a.Count(testKindA))
+	assert.Equal(t, 2, a.Count(testKindA))
+	assert.Equal(t, 1, a.Count(testKindB), "another kind keeps its own tally")
+	assert.Equal(t, 1, NewGate(base, "session-b").Count(testKindA), "another session starts over")
+	assert.Equal(t, 3, a.Count(testKindA))
+}
+
+// TestCountGivesRacingCallersDistinctTotals is the reason the tally is an append offset
+// rather than a read followed by a write: parallel hook processes must not all read 1.
+func TestCountGivesRacingCallersDistinctTotals(t *testing.T) {
+	base := t.TempDir()
+	const callers = 16
+
+	var wg sync.WaitGroup
+	got := make([]int, callers)
+	start := make(chan struct{})
+	for i := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			got[i] = NewGate(base, "session-1").Count(testKindA)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	slices.Sort(got)
+	want := make([]int, callers)
+	for i := range want {
+		want[i] = i + 1
+	}
+	assert.Equal(t, want, got)
+}
+
+// TestCountSpeaksAsFirstWhenItCannotRemember matches Once's fail-open direction.
+func TestCountSpeaksAsFirstWhenItCannotRemember(t *testing.T) {
+	g := NewGate("", "session-1")
+	assert.Equal(t, 1, g.Count(testKindA))
+	assert.Equal(t, 1, g.Count(testKindA))
+}
+
+// TestTouchRecordsTheLastSighting covers the clock a continue's idle time is read from.
+func TestTouchRecordsTheLastSighting(t *testing.T) {
+	g := testGate(t, "session-1")
+	_, seen := g.LastSeen(testKindC)
+	require.False(t, seen, "nothing recorded yet")
+
+	g.Touch(testKindC)
+	first, seen := g.LastSeen(testKindC)
+	require.True(t, seen)
+
+	aged := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(g.markerPath(testKindC), aged, aged))
+	was, _ := g.LastSeen(testKindC)
+	assert.WithinDuration(t, aged, was, time.Second)
+
+	g.Touch(testKindC)
+	now, seen := g.LastSeen(testKindC)
+	require.True(t, seen)
+	assert.False(t, now.Before(first), "a second touch moves the clock forward again")
+
+	_, seen = NewGate("", "session-1").LastSeen(testKindC)
+	assert.False(t, seen, "no cache dir means nothing was ever recorded")
 }

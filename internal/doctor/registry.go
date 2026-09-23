@@ -316,7 +316,7 @@ var allChecks = []checkDef{
 	},
 	{
 		Name:           "graph-bounds",
-		Doc:            "the committed knowledge graph holds no node naming a location outside the workspace",
+		Doc:            "the knowledge graph holds no node naming a location outside the workspace",
 		Evidence:       types.EvidenceInferred,
 		NeedsWorkspace: true,
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkGraphBounds() },

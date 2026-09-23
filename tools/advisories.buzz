@@ -1,0 +1,212 @@
+// advisories.buzz - advisory scanning that fails only on findings you can act on today.
+//
+// `pnpm audit` answers "does a known advisory match this tree?" with an exit code. A build
+// gate needs a different answer: "is there anything I can do about it right now?" Those
+// two come apart constantly:
+//
+//   - An advisory drops and the maintainer publishes a patch the same day. Every pnpm
+//     project here sets minimumReleaseAge, so that patch is NOT installable for ten days -
+//     deliberately, because "everyone rush to install the fix" is itself an attack shape.
+//     For those ten days the exit code says FAIL and no action clears it.
+//   - The advisory sits in a transitive dev dependency four levels down with no patched
+//     release at all.
+//
+// A gate that fails on something nobody can fix gets muted rather than fixed. Six stale
+// skip_cache workarounds in this repo started that way.
+//
+// So this splits the findings:
+//   BLOCKING - a patched version exists AND is old enough for our own policy to install
+//              it. Someone can act today, so the build fails.
+//   DEFERRED - the patch is inside the cooling window, or none exists. Printed loudly on
+//              every run, never fatal, and it becomes BLOCKING by itself the day the patch
+//              matures. Nothing to remember, nothing to snooze, no allowlist to rot.
+//
+// This is the part a task orchestrator with a real language can do and a YAML `run:` step
+// cannot. The scanner gives you JSON and an exit code; deciding what that MEANS for this
+// build belongs to the build, written in something that can express it.
+
+import "std";
+import "proc";
+import "encoding/json";
+import "semver";
+import "time";
+// Used by the test blocks, which run under buzz_test now that it globs tools/.
+import "assert";
+
+// coolingHours mirrors minimumReleaseAge in each project's pnpm-workspace.yaml (14400
+// minutes). Restated as a duration rather than read from there, because the value lives in
+// four files and this one number is what the advisory arithmetic needs. Drift is safe in the
+// direction that matters: a LONGER value here only defers more findings, and can never
+// fail a build over a patch the install would have refused anyway.
+final coolingHours = "-240h";
+
+// isBlockingSeverity reports whether a severity is worth failing over at all. moderate and
+// low are reported and never fatal: the noise floor of a dependency tree lives there, and
+// a gate that cries about it teaches people to stop reading it.
+fun isBlockingSeverity(severity: str) > bool {
+    return severity == "high" or severity == "critical";
+}
+
+test "an advisory range is honored whole, not reduced to its floor" {
+    // The minimist shape, and the regression that motivated this test: a derived
+    // floor of ">= 0.2.1" reported the VULNERABLE 1.2.5 as patched. The range must
+    // be used as written.
+    final patched = ">=0.2.1 <1.0.0 || >=1.2.6";
+    assert\isFalse(semver\satisfies("1.2.5", constraint: patched),
+        message: "1.2.5 is inside the vulnerable window, not patched");
+    assert\isTrue(semver\satisfies("1.2.6", constraint: patched),
+        message: "1.2.6 is the patch");
+    assert\isTrue(semver\satisfies("0.5.0", constraint: patched),
+        message: "the lower branch of the range still counts");
+}
+
+test "semver takes npm range syntax directly, so nothing needs deriving" {
+    assert\isTrue(semver\satisfies("1.5.0", constraint: "^1.2.3"), message: "caret");
+    assert\isFalse(semver\satisfies("1.5.0", constraint: "~1.2.3"), message: "tilde");
+    assert\isTrue(semver\satisfies("1.2.6", constraint: ">=1.2.3"), message: "plain lower bound");
+    // "<0.0.0" is how the advisory database says "no patch exists"; it is short
+    // circuited before this point, but it must not match anything if it gets here.
+    assert\isFalse(semver\satisfies("9.9.9", constraint: "<0.0.0"), message: "no patch published");
+}
+
+// hasInstallablePatch reports whether any published version of pkg satisfies the
+// advisory's patched range AND is old enough to clear the cooling period - that is,
+// whether a fix could land today.
+//
+// `pnpm view <pkg> time --json` returns a version -> ISO-8601 map plus the non-version
+// keys "created" and "modified", which are skipped. A version that fails to parse is
+// skipped rather than fatal: an odd tag upstream must not take a build down.
+fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
+    // "<0.0.0" is the advisory database's way of saying no patch has been published.
+    if (patched == "" or patched == "<0.0.0") {
+        return false;
+    }
+    final res = proc\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
+        opts: {"allow_failure": true});
+    if (res.code != 0) {
+        return false; // registry unreachable: defer rather than fail on a network blip
+    }
+
+    final now = time\parse("2006-01-02T15:04:05Z", value: time\nowIso());
+    final cutoff = time\add(now, duration: coolingHours);
+    // The advisory's patched range is used AS the constraint, underived.
+    //
+    // Two earlier shapes were both wrong. `">= " + patched.replace(">=", ...)` built
+    // `">= ^1.2.3"` for a caret range, which semver\satisfies RAISES on. Replacing
+    // that with a derived floor fixed the caret and broke something worse: taking
+    // only the first version token DISCARDS the rest of the range, so
+    // `">=0.2.1 <1.0.0 || >=1.2.6"` became `">= 0.2.1"` and reported the VULNERABLE
+    // 1.2.5 as an installable patch (measured). `"<1.2.3"` inverted outright.
+    //
+    // semver\satisfies accepts npm range syntax directly - caret, tilde, bounded, and
+    // ||-joined were all measured against this workspace's binary - so there is
+    // nothing to derive. Validate it once here rather than per candidate, so an
+    // unusable range is reported instead of silently deferring the advisory.
+    try {
+        _ = semver\satisfies(installed, constraint: patched);
+    } catch (e) {
+        std\print("audit: {pkg}: patched range \"{patched}\" is not a usable constraint; treating as no installable patch");
+        return false;
+    }
+
+    // A candidate must be reachable from where the tree actually sits, which means
+    // the SAME MAJOR as the installed version.
+    //
+    // Without this the gate fails over patches nothing can install. nanoid is the
+    // worked example: the advisory patches at ">=3.3.17", the tree is on 3.3.16
+    // via stylelint -> postcss, and 3.3.17 was four days old against a ten-day
+    // cooling period - so pnpm refused it outright. But ">=3.3.17" also matches
+    // nanoid 4, 5 and 6, majors published long enough ago to clear cooling, so the
+    // check found one and reported a fix "this policy would install today". It
+    // would not: postcss pins the 3.x range, and no override can move a transitive
+    // dependency across a major its dependent does not accept.
+    //
+    // A major bump is therefore deferred, deliberately and permanently. It is not
+    // a thing this gate can be right about: it needs the dependent to widen its
+    // range, which is a human change, and the gate's contract is to fail only on
+    // what is actionable TODAY. It stays printed loudly on every run.
+    final installedMajor = std\parseInt(installed.split(".")[0]) ?? 0;
+    final nextMajor = "{installedMajor + 1}.0.0";
+
+    foreach (version, published in json\parse(res.stdout)) {
+        if (version == "created" or version == "modified") {
+            continue;
+        }
+        try {
+            if (!semver\satisfies(version, constraint: patched)) {
+                continue;
+            }
+            if (installedMajor > 0 and !semver\satisfies(version, constraint: "< " + nextMajor)) {
+                continue; // a different major: not reachable without a dependent change
+            }
+            if (time\parse("2006-01-02T15:04:05.000Z", value: published) <= cutoff) {
+                return true; // a fix exists and our own policy would let it in
+            }
+        } catch (e) {
+            // Only an unparsable VERSION or timestamp reaches here now - the
+            // constraint was validated once above, so this can no longer swallow a
+            // range bug for every candidate at once.
+            continue
+        }
+    }
+    return false;
+}
+
+// audit scans the current project and fails ONLY on findings that are actionable today.
+// Everything else is printed and carried. Throws to fail the calling target.
+export fun audit() > void !> any {
+    final res = proc\exec("pnpm", args: ["audit", "--json"], dir: ".",
+        opts: {"allow_failure": true});
+    if (res.code == 0) {
+        std\print("audit: no advisories match this tree");
+        return;
+    }
+
+    final report = json\parse(res.stdout);
+    if (report["advisories"] == null) {
+        std\print("audit: report carried no advisory detail; treating as clean");
+        return;
+    }
+
+    var blocking = mut [<str>];
+    var deferred = mut [<str>];
+
+    foreach (id, adv in report["advisories"]) {
+        final severity = adv["severity"] ?? "unknown";
+        final pkg = adv["module_name"] ?? "unknown";
+        final patched = adv["patched_versions"] ?? "";
+        final where = pkg + " (" + severity + "): " + (adv["title"] ?? "");
+
+        // The version the tree is actually on, which bounds what a fix could be.
+        // Absent (an advisory with no findings) leaves it empty and the major
+        // check off, which is the old behavior.
+        var installed = "";
+        if (adv["findings"] != null and adv["findings"].len() > 0) {
+            installed = adv["findings"][0]["version"] ?? "";
+        }
+
+        if (!isBlockingSeverity(severity)) {
+            deferred.append(where + " - below the failing threshold");
+        } else if (hasInstallablePatch(pkg, patched, installed)) {
+            blocking.append(where + " - fix available: upgrade to " + patched);
+        } else {
+            deferred.append(where + " - patched " + patched + " is inside the cooling"
+                + " period, unpublished, or only on a major this tree cannot reach");
+        }
+    }
+
+    foreach (d in deferred) {
+        std\print("audit [deferred] " + d);
+    }
+    if (deferred.len() > 0) {
+        std\print("audit: deferred findings are NOT actionable today. Each one starts"
+            + " failing this gate on its own once a patch clears the cooling period.");
+    }
+
+    if (blocking.len() > 0) {
+        foreach (b in blocking) {
+            std\print("audit [BLOCKING] " + b);
+        }
+        throw "audit: an advisory has a fix this policy would install today; upgrade it";
+    }
+}

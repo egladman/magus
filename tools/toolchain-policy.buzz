@@ -5,7 +5,7 @@
 // one: `import "project/.." as root` exposes only a project's `export fun` targets, read
 // statically from the AST so an import can never trigger a VM load and recurse - so an
 // exported VALUE there reads as null and the key is silently skipped. The better one:
-// a policy several projects share is a shared module, which is how tools/audit.buzz is
+// a policy several projects share is a shared module, which is how tools/advisories.buzz is
 // already shared by console, docs, and evals. Nothing here is inherited by position in
 // the tree; a project that wants these writes the import.
 //

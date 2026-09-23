@@ -64,6 +64,11 @@ enum Kind {
   // names which of the three it was. OUTCOME_ERROR means the run failed, which is the one
   // kind here where the outcome is a fact about the work rather than about the recording.
   KIND_RUN = 12;
+  // The effective workspace guard rules changed. action is loaded, tightened, loosen_pending,
+  // committed or removed; the request blob names each source file by its working-tree and
+  // approved git blob ids, never its body. Written only on a change, so these rows read as the
+  // lineage of the workspace's policy, and a verdict event's policy digest points at one.
+  KIND_GUARD_POLICY = 13;
 }
 
 // Outcome is how the action ended.

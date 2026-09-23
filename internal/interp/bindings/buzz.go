@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -74,7 +75,13 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
 	// its basename.
 	builtins := spell.Builtins()
+	imports := remotespell.ImportsFromContext(ctx)
 	for name := range builtins {
+		// Native modules win over the resolver, so a declared override must not be
+		// registered here or the resolver below would never see its import.
+		if _, overridden := imports.Override(spells.ModulePath(name)); overridden {
+			continue
+		}
 		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
 	}
 	// Host-registered spells (the magusfile spell in internal/interp/magusfile.go,
@@ -100,7 +107,13 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		if v, ok := resolveProjectImport(ctx, importPath, ext); ok {
 			return v, true
 		}
-		return resolveLocalSpellImport(ctx, importPath)
+		if dir, ok := imports.Override(importPath); ok {
+			return resolveOverrideImport(ctx, imports, importPath, dir)
+		}
+		if spells.IsRemoteImport(importPath) {
+			return resolveRemoteSpellImport(ctx, imports, importPath)
+		}
+		return resolveLocalSpellImport(ctx, imports, importPath)
 	})
 }
 
@@ -146,7 +159,7 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 	magus.MapSet("review", buildReview(ctx, obs))
 	magus.MapSet("workspace", buildWorkspace(ctx, obs))
 	magus.MapSet("job", buildJob(obs))
-	guard := buildGuard(ctx, obs)
+	guard := buildGuard(ctx, sess, obs)
 	harness := buildHarness(ctx, obs)
 	magus.MapSet("guard", guard)
 	magus.MapSet("harness", harness)
@@ -244,6 +257,7 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 		ci.MapSet("provider", magusfileOnly(obs, `magus\ci.provider`))
 		guard.MapSet("shell", magusfileOnly(obs, `magus\guard.shell`))
 		guard.MapSet("bash", magusfileOnly(obs, `magus\guard.bash`))
+		guard.MapSet("spawn", magusfileOnly(obs, `magus\guard.spawn`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
 	}
 	return magus

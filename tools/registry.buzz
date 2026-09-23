@@ -4,7 +4,7 @@
 // This is Buzz rather than Go on purpose, and docs/scope.md is where the reason is
 // written down: "The binary supplies primitives. You supply knowledge about the
 // world." Which upstream to read, which of its fields matter, and what counts as
-// stale are knowledge about the world. They belong beside tools/audit.buzz, in a
+// stale are knowledge about the world. They belong beside tools/advisories.buzz, in a
 // file anyone can read and change without rebuilding magus - not compiled into the
 // binary where changing them means cutting a release.
 //

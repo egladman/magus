@@ -28,8 +28,9 @@ const PRECACHE = [
   BASE + "graph/explorer.js",
   BASE + "graph/graph.css",
   BASE + "graph/scaffold.html",
-  BASE + "graph/knowledge-graph.json",
-  BASE + "graph/target-graph.json",
+  // Not the demo graph JSON: a daemon refuses to serve it (it is a workspace's data), and one
+  // failed entry fails addAll, so the worker would never install on a daemon origin. The hosted
+  // demo still caches it on first view through the network-first branch below.
   BASE + "dashboard/dashboard.js",
   BASE + "dashboard/dashboard.css",
   BASE + "dashboard/scaffold.html",
@@ -51,6 +52,10 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // never touch daemon/loopback or cross-origin
+  // On the daemon's own origin the API is same-origin too, and cache-first would replay a stale
+  // /readyz or buffer the endless /api/v1/events stream. Only the console's own files are the shell.
+  // sw.js stays uncached so the page can read the build the daemon serves (lib/sw.ts).
+  if (!url.pathname.startsWith(BASE) || url.pathname === BASE + "sw.js") return;
   if (url.pathname.endsWith("/graph/knowledge-graph.json") || url.pathname.endsWith("/graph/target-graph.json")) {
     e.respondWith(
       fetch(req).then((res) => {

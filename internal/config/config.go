@@ -34,7 +34,7 @@ type Config struct {
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
 
 	// ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores, 8), the default) or aggressive (every core).
-	ConcurrencyProfile string `json:"concurrency_profile" yaml:"concurrency_profile" validate:"omitempty,oneof=conservative balanced aggressive"`
+	ConcurrencyProfile types.ConcurrencyProfile `json:"concurrency_profile" yaml:"concurrency_profile"`
 
 	// MaxFailures bounds how many projects may fail before a run stops starting
 	// more. Zero, the default, is unlimited: a batch runs everything it can and
@@ -154,6 +154,51 @@ type SpellsConfig struct {
 	// its import path here with a reason permits the shadow deliberately. `magus
 	// doctor` flags an entry whose shadow no longer exists, so stale reasons are pruned.
 	AllowShadow []ShadowAck `json:"allow_shadow" yaml:"allow_shadow"`
+	// Registries are the credentials `magus spell` verbs present to a container
+	// registry, one entry per host. A registry with no entry is reached anonymously.
+	Registries []SpellRegistry `json:"registries" yaml:"registries" validate:"unique=Host,dive"`
+	// Imports declares spells by the path a magusfile imports them under, so an entry
+	// reads like the import it answers:
+	//
+	//	spells:
+	//	  ghcr.io/team/spells/lint:
+	//	    tag: "1.4"            # a remote spell; magus.lock pins its digest
+	//	  magus/spell/go:
+	//	    path: spells/go       # a workspace copy replaces the embedded spell
+	//
+	// Inline beside allow_shadow and registries rather than under a key of its own; a
+	// spell path always has a slash, so it can never be mistaken for either.
+	Imports map[string]SpellImport `json:",inline" yaml:",inline"`
+}
+
+// SpellImport declares one spell import path. Exactly one field is set: Tag for a
+// remote spell, which only the update charm resolves, or Path for a workspace
+// directory that replaces an embedded or remote spell, the way Go's replace does.
+type SpellImport struct {
+	Tag  string `json:"tag,omitempty" yaml:"tag,omitempty"`
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+}
+
+// SpellRegistry authenticates to one registry host. Password is a secret REFERENCE,
+// never the value: it resolves through the workspace's selected secret provider
+// exactly as magus\secret.read does, so under the built-in provider it names an
+// environment variable (GITHUB_TOKEN for ghcr.io in Actions), and under a provider
+// spell it is that provider's own path.
+type SpellRegistry struct {
+	// Host is the registry as a reference spells it: "ghcr.io", "localhost:5000".
+	Host     string `json:"host" yaml:"host" validate:"required,registry_host"`
+	Username string `json:"username" yaml:"username" validate:"required"`
+	Password string `json:"password" yaml:"password" validate:"required"`
+}
+
+// Registry returns the entry for host, and whether there is one.
+func (s SpellsConfig) Registry(host string) (SpellRegistry, bool) {
+	for _, r := range s.Registries {
+		if r.Host == strings.ToLower(host) {
+			return r, true
+		}
+	}
+	return SpellRegistry{}, false
 }
 
 // ShadowAck acknowledges one intentional spell shadow. Name is the import path the
@@ -189,7 +234,7 @@ type SandboxEnv struct {
 
 // Log controls log output.
 type Log struct {
-	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json"` // pretty|plain|text|json
+	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json jsonl"` // pretty|plain|text|json|jsonl
 	// Level is the minimum log level; "trace" also enables the startup timing table.
 	Level string `json:"level" yaml:"level" validate:"omitempty,oneof=trace debug info warn error"`
 	// Silent suppresses progress like --quiet, and additionally bounds the failing-project

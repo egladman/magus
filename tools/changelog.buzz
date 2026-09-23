@@ -32,7 +32,7 @@ export fun needsEntry(path: str) > bool {
     // holds this repository's own graphs and test mocks, which move with any magusfile edit.
     final exemptDirs = [
         ".claude/", ".codex/", ".cursor/", ".github/workflows/", "benchmarks/", "blog/",
-        "cmd/magus-", "gen/", "hack/", "harnesses/", "notes/", "releases/", "tapes/", "tools/",
+        "cmd/magus-", "gen/", "hack/", "notes/", "releases/", "tapes/", "tools/",
     ];
     foreach (dir in exemptDirs) {
         if (path.startsWith(dir)) { return false; }

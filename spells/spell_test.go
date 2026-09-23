@@ -223,3 +223,29 @@ func TestSpellServiceTargets(t *testing.T) {
 	// An empty WithServiceTargets is a no-op: it leaves the map nil.
 	assert.False(t, NewSpell("go", WithServiceTargets()).IsServiceTarget("build"))
 }
+
+func TestIsRemoteImport(t *testing.T) {
+	for path, want := range map[string]bool{
+		"ghcr.io/egladman/magus/spells/go": true,
+		"localhost:5000/team/spells/lint":  true,
+		"127.0.0.1:5000/team/lint":         true,
+		"spells/harness/cursor":            false,
+		"magus/spell/go":                   false,
+		"./tools/drift":                    false,
+		"../shared/lint":                   false,
+		"ghcr.io":                          false, // a host alone names no repository
+		"ghcr.io/":                         false,
+		"https://example.com/x":            false,
+		"localhost:/x":                     false,
+		"buzz:os":                          false,
+	} {
+		assert.Equal(t, want, IsRemoteImport(path), path)
+	}
+}
+
+func TestIsEmbeddedImport(t *testing.T) {
+	assert.True(t, IsEmbeddedImport("magus/spell/go"))
+	assert.False(t, IsEmbeddedImport("magus"))
+	assert.False(t, IsEmbeddedImport("spells/go"))
+	assert.False(t, IsEmbeddedImport("ghcr.io/egladman/magus/spells/go"))
+}

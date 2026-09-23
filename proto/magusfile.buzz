@@ -13,8 +13,8 @@ import "magus";
 import "magus/spell/buf";
 // Handles for the two projects buf.gen.yaml writes the TS client into, so generate can name
 // their trees as its own outputs (see below).
-import "project/../docs" as docs;
-import "project/../console" as console;
+import "project/../docs";
+import "project/../console";
 // The shared generated-file gate (tools/drift.buzz) and the fs helpers it takes paths from.
 import "../tools/drift" as drift;
 import "fs";

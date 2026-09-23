@@ -1642,3 +1642,55 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
 	return out
 }
+
+func ObjectSpawnTarget(v types.SpawnTarget) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("agent", vm.StrValue(v.Agent))
+	optIdleMs := vm.Null
+	if v.IdleMs != nil {
+		optIdleMs = vm.IntValue(int64((*v.IdleMs)))
+	}
+	out.MapSet("idleMs", optIdleMs)
+	out.MapSet("description", vm.StrValue(v.Description))
+	out.MapSet("model", vm.StrValue(v.Model))
+	optContextTokens := vm.Null
+	if v.ContextTokens != nil {
+		optContextTokens = vm.IntValue(int64((*v.ContextTokens)))
+	}
+	out.MapSet("contextTokens", optContextTokens)
+	return out
+}
+
+func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("kind", vm.StrValue(string(v.Kind)))
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("model", vm.StrValue(v.Model))
+	out.MapSet("agentType", vm.StrValue(v.AgentType))
+	out.MapSet("description", vm.StrValue(v.Description))
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("prompt", vm.StrValue(v.Prompt))
+	out.MapSet("background", vm.BoolValue(v.Background))
+	out.MapSet("isolated", vm.BoolValue(v.Isolated))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("role", vm.StrValue(string(v.Role)))
+	optLease := vm.Null
+	if v.Lease != nil {
+		optLease = ObjectJob((*v.Lease))
+	}
+	out.MapSet("lease", optLease)
+	optTarget := vm.Null
+	if v.Target != nil {
+		optTarget = ObjectSpawnTarget((*v.Target))
+	}
+	out.MapSet("target", optTarget)
+	return out
+}
+
+func ObjectSpawnVerdict(v types.SpawnVerdict) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("decision", vm.StrValue(string(v.Decision)))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}

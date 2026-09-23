@@ -221,10 +221,17 @@ func applyDisplay() {
 
 	opts := &slog.HandlerOptions{Level: lvl, AddSource: addSource}
 	var h slog.Handler
-	switch globalCfg.Log.Format {
-	case "json":
+	// -o jsonl reads global.output directly rather than globalCfg.Log.Format (which
+	// finalizeConfig also points at "jsonl", for the CACHE logger -- see its
+	// comment): general diagnostics go through the process-wide default logger
+	// installed here, not the cache logger those convert, and must not print free
+	// text on stderr while a caller parses this run as JSONL.
+	switch {
+	case global.output == string(FormatJSONL):
 		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
-	case "text":
+	case globalCfg.Log.Format == "json":
+		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
+	case globalCfg.Log.Format == "text":
 		h = secret.NewRedactingHandler(slog.NewTextHandler(os.Stderr, opts))
 	default: // pretty, plain
 		// Render general diagnostics through the same compact handler as cache

@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -622,15 +623,21 @@ func TestDisplayPath(t *testing.T) {
 	})
 }
 
-// rootStubWorkspace is a types.WorkspaceReader stub that answers Root() with a
-// fixed value; every other method panics via the embedded nil interface if
-// exercised, which no path in TestDisplayPath does.
+// rootStubWorkspace is a types.WorkspaceReader stub that answers Root() (and,
+// when set, Harnesses()) with a fixed value; every other method panics via the
+// embedded nil interface if exercised, which no path in TestDisplayPath does.
 type rootStubWorkspace struct {
 	types.WorkspaceReader
-	root string
+	root      string
+	harnesses []string
 }
 
 func (r rootStubWorkspace) Root() string { return r.root }
+
+// Harnesses satisfies the unexported interface workspaceHarnesses probes for; a
+// zero-value harnesses field means "nothing wired", matching every stub literal
+// that predates this field.
+func (r rootStubWorkspace) Harnesses() []string { return r.harnesses }
 
 func TestCheckConfigFile(t *testing.T) {
 	xdgDir := t.TempDir()
@@ -868,58 +875,67 @@ func TestCheckNearDuplicateServices(t *testing.T) {
 	})
 }
 
-// TestCheckGraphBounds pins the sibling of the escaping-symlink check: the committed
-// graph must not name a location outside the workspace. A real graph carried 93 such
+// TestCheckGraphBounds pins the sibling of the escaping-symlink check: the graph
+// must not name a location outside the workspace. A real graph carried 93 such
 // nodes, put there by a language indexer reporting document paths for the dependencies it
 // resolved.
 func TestCheckGraphBounds(t *testing.T) {
-	write := func(t *testing.T, body string) string {
-		t.Helper()
-		root := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "knowledge-graph.json"), []byte(body), 0o644))
-		return root
-	}
-
-	t.Run("no committed graph passes", func(t *testing.T) {
-		got := checkGraphBounds(t.TempDir())
-		assert.Equal(t, types.DoctorOK, got.Status)
-	})
-
 	t.Run("in-workspace nodes pass", func(t *testing.T) {
-		root := write(t, `{"nodes":[
-			{"id":"file:cmd/magus/vcs.go","kind":"file","label":"cmd/magus/vcs.go","source":"cmd/magus/vcs.go"},
-			{"id":"dir:cmd/magus","kind":"dir","label":"cmd/magus","source":"cmd/magus"}]}`)
-		got := checkGraphBounds(root)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		got := checkGraphBounds([]types.KnowledgeNode{
+			{ID: "file:cmd/magus/vcs.go", Kind: "file", Label: "cmd/magus/vcs.go", Source: "cmd/magus/vcs.go"},
+			{ID: "dir:cmd/magus", Kind: "dir", Label: "cmd/magus", Source: "cmd/magus"},
+		})
+		assert.Equal(t, types.DoctorCheck{
+			Name:    "graph-bounds",
+			Status:  types.DoctorOK,
+			Message: "2 graph node(s); none name a path outside the workspace",
+		}, got)
 	})
 
 	t.Run("escaping dir node fails", func(t *testing.T) {
-		root := write(t, `{"nodes":[
-			{"id":"dir:../../../../../Library/Caches/go-build/01","kind":"dir","label":"../../../../../Library/Caches/go-build/01","source":"../../../../../Library/Caches/go-build/01"}]}`)
-		got := checkGraphBounds(root)
-		assert.Equal(t, types.DoctorFail, got.Status)
-		assert.Contains(t, got.Details, "dir:../../../../../Library/Caches/go-build/01")
+		const escape = "../../../../../Library/Caches/go-build/01"
+		got := checkGraphBounds([]types.KnowledgeNode{{ID: "dir:" + escape, Kind: "dir", Label: escape, Source: escape}})
+		assert.Equal(t, types.DoctorCheck{
+			Name:    "graph-bounds",
+			Status:  types.DoctorFail,
+			Message: "1 graph node(s) name a location outside the workspace; the graph is rendered into the docs site and shared through the remote cache, so they leak a local machine's layout",
+			Details: []string{"dir:" + escape},
+		}, got)
 	})
 
 	t.Run("path carried only in the label is still caught", func(t *testing.T) {
 		// The overlay shards (@coverage, @vcs) mint partial nodes with no Source, so a
 		// check reading Source alone would wave these through.
-		root := write(t, `{"nodes":[{"id":"file:../escape.go","kind":"file","label":"../escape.go"}]}`)
-		got := checkGraphBounds(root)
+		got := checkGraphBounds([]types.KnowledgeNode{{ID: "file:../escape.go", Kind: "file", Label: "../escape.go"}})
 		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, []string{"file:../escape.go"}, got.Details)
 	})
 
 	t.Run("import specifiers are exempt", func(t *testing.T) {
 		// An import node's ID is the specifier a source file literally wrote, so it
 		// records what the code says rather than a path magus resolved.
-		root := write(t, `{"nodes":[{"id":"import:../../badge","kind":"import","label":"../../badge"}]}`)
-		got := checkGraphBounds(root)
+		got := checkGraphBounds([]types.KnowledgeNode{{ID: "import:../../badge", Kind: "import", Label: "../../badge"}})
 		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 
-	t.Run("unreadable graph fails loudly", func(t *testing.T) {
-		got := checkGraphBounds(write(t, "not json"))
-		assert.Equal(t, types.DoctorFail, got.Status)
+	t.Run("no graph supplied is skipped, not passed", func(t *testing.T) {
+		r := &runner{}
+		assert.Equal(t, types.DoctorCheck{
+			Name:     "graph-bounds",
+			Status:   types.DoctorOK,
+			Evidence: types.EvidenceUnknown,
+			Message:  "no knowledge graph supplied; skipped",
+		}, r.checkGraphBounds())
+	})
+
+	t.Run("a graph that fails to build fails loudly", func(t *testing.T) {
+		r := &runner{opts: options{graphNodes: func(context.Context) ([]types.KnowledgeNode, error) {
+			return nil, errors.New("boom")
+		}}}
+		assert.Equal(t, types.DoctorCheck{
+			Name:    "graph-bounds",
+			Status:  types.DoctorFail,
+			Message: "could not build the knowledge graph: boom",
+		}, r.checkGraphBounds())
 	})
 }

@@ -13,7 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 func addr(s string) netip.Addr { return netip.MustParseAddr(s) }
@@ -178,7 +181,7 @@ func TestManagerServesGuardedRoutesWithToken(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
+	sess, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -223,13 +226,13 @@ func TestManagerSupersedeRevokesOldToken(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	first, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
+	first, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	oldToken := tokenFromURL(t, first.URL)
 
-	second, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
+	second, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -262,7 +265,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	if _, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0); err != nil {
+	if _, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0); err != nil {
 		t.Fatalf("Start first: %v", err)
 	}
 	first, ok := m.Active()
@@ -271,7 +274,7 @@ func TestCloseIfOnlyClosesMatchingFingerprint(t *testing.T) {
 	}
 
 	// Supersede: the second Start replaces the first under the lock.
-	second, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
+	second, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start second: %v", err)
 	}
@@ -306,7 +309,7 @@ func TestManagerCloseKillsListener(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
+	sess, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -322,7 +325,7 @@ func TestManagerTTLClosesListener(t *testing.T) {
 	m := newTestManager(t, ctx, 150*time.Millisecond)
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
+	sess, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -364,7 +367,7 @@ func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 	m := newTestManager(t, ctx, time.Minute, WithTrailDir(trailDir))
 	consoleDir := consoleDirFixture(t)
 
-	sess, err := m.Start(consoleDir, map[string]http.Handler{"/api/v1/status": okHandler}, 0)
+	sess, err := m.Start(consoleDir, map[string]Route{"/api/v1/status": {Handler: okHandler}}, 0)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -460,7 +463,7 @@ func waitClosed(t *testing.T, url string) {
 // a test can present arbitrary remote hosts (impossible over a single loopback IP)
 // and thereby exercise the device-binding reject path end to end.
 func serveGuarded(g *sessionGuard, remoteAddr string) (int, string) {
-	h := g.admit(okHandler)
+	h := g.admit(httpx.FormatJSON, okHandler)
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
 	r.RemoteAddr = remoteAddr
 	w := httptest.NewRecorder()
@@ -494,8 +497,22 @@ func TestSessionGuardBindsFirstDeviceRejectsOthers(t *testing.T) {
 	if code != http.StatusForbidden {
 		t.Fatalf("second device: got %d, want 403", code)
 	}
-	if got := strings.TrimSpace(body); got != shareBoundOtherDeviceMsg {
-		t.Fatalf("403 body = %q, want %q", got, shareBoundOtherDeviceMsg)
+	var refused struct {
+		Error struct {
+			Message string `json:"message"`
+			Status  string `json:"status"`
+			Details []struct {
+				Reason string `json:"reason"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(body), &refused); err != nil {
+		t.Fatalf("403 body %q is not JSON: %v", body, err)
+	}
+	if got := refused.Error; got.Status != "PERMISSION_DENIED" ||
+		!strings.Contains(got.Message, shareBoundOtherDeviceMsg) ||
+		len(got.Details) == 0 || got.Details[0].Reason != string(types.ShareBoundToAnotherDevice) {
+		t.Fatalf("403 body = %s, want PERMISSION_DENIED naming %q with reason %s", body, shareBoundOtherDeviceMsg, types.ShareBoundToAnotherDevice)
 	}
 	// The bound device is unaffected by the rejected replay: still served.
 	if code, _ := serveGuarded(g, "10.0.0.5:51002"); code != http.StatusOK {

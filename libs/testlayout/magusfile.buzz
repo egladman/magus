@@ -86,7 +86,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // What this target EDITS, restated. Not writesFiles: dprint, gofmt and go-mod-tidy
     // amend authored files rather than producing them, so the bytes stay off the
     // snapshot/replay path. The Go half is here because of the replacement above, and it
-    // was missing; see the same block in libs/commentdash for what that cost.
+    // was missing; see the same block in libs/coldread for what that cost.
     //
     // The markdown glob mirrors this project's dprint.json `includes` (./**/*.md); keep
     // the two in step.

@@ -117,6 +117,13 @@ const (
 	// It carries the REFERENCE, the host and the header, never the value, which is not
 	// resolved at declaration time and must not be resolved to log it.
 	KindCredentialGrant Kind = "credential_grant" //nolint:gosec // G101: an event-kind discriminator whose name contains "credential", not a credential
+
+	// KindGuardPolicy records that the effective workspace guard rules changed: first
+	// loaded, tightened by an edit that is live, loosened by one waiting on approval,
+	// settled by approval, or removed. Written only on a change, so the lineage of a
+	// workspace's policy reads as one row per step. The request blob carries each source
+	// path with its working-tree and approved git blob ids, never a source body.
+	KindGuardPolicy Kind = "guard_policy"
 )
 
 // Outcome values; map to the wire Outcome enum.
@@ -157,6 +164,12 @@ type Event struct {
 	// VerdictRef is the grd blob holding a guard deny in full, when the reader was shown
 	// the short repeat form instead. Named here so rotation keeps the blob the deny cites.
 	VerdictRef string `json:"verdict_ref,omitempty"`
+	// PolicyDigest names the workspace guard rule set in force when a verdict was reached,
+	// the join from a verdict to the guard_policy event that introduced its rules.
+	PolicyDigest string `json:"policy_digest,omitempty"`
+	// DecidedBy is which side reached a verdict: builtin, worktree, or approved. Empty on
+	// a pass, which nothing decided.
+	DecidedBy string `json:"decided_by,omitempty"`
 }
 
 // UnmarshalJSON decodes an event, reading a duration written under either spelling.
@@ -229,6 +242,9 @@ type AgentCommand struct {
 	PreauthorizedBy string
 	// VerdictRef is the grd blob a repeat deny cites; see Event.VerdictRef.
 	VerdictRef string
+	// PolicyDigest and DecidedBy link the verdict to the rules that reached it; see Event.
+	PolicyDigest string
+	DecidedBy    string
 }
 
 const agentCommandSchemaVersion = 1
@@ -337,6 +353,8 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		ResponseBytes: respBytes,
 		VerdictRef:    command.VerdictRef,
 		Preview:       preview,
+		PolicyDigest:  command.PolicyDigest,
+		DecidedBy:     command.DecidedBy,
 	})
 }
 
@@ -366,6 +384,10 @@ type AgentSpawn struct {
 	Child         string
 	Context       string
 	DeclaredModel string
+	// PolicyDigest and DecidedBy link the spawn's verdict to the rules that reached it;
+	// see Event.
+	PolicyDigest string
+	DecidedBy    string
 }
 
 const agentSpawnSchemaVersion = 1
@@ -446,6 +468,8 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Outcome:      OutcomeOK,
 		RequestRef:   reqRef,
 		RequestBytes: reqBytes,
+		PolicyDigest: spawn.PolicyDigest,
+		DecidedBy:    spawn.DecidedBy,
 	})
 }
 

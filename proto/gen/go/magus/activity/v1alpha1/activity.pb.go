@@ -85,6 +85,11 @@ const (
 	// names which of the three it was. OUTCOME_ERROR means the run failed, which is the one
 	// kind here where the outcome is a fact about the work rather than about the recording.
 	Kind_KIND_RUN Kind = 12
+	// The effective workspace guard rules changed. action is loaded, tightened, loosen_pending,
+	// committed or removed; the request blob names each source file by its working-tree and
+	// approved git blob ids, never its body. Written only on a change, so these rows read as the
+	// lineage of the workspace's policy, and a verdict event's policy digest points at one.
+	Kind_KIND_GUARD_POLICY Kind = 13
 )
 
 // Enum value maps for Kind.
@@ -103,6 +108,7 @@ var (
 		10: "KIND_NOTES",
 		11: "KIND_FILE_CHANGE",
 		12: "KIND_RUN",
+		13: "KIND_GUARD_POLICY",
 	}
 	Kind_value = map[string]int32{
 		"KIND_UNSPECIFIED":      0,
@@ -118,6 +124,7 @@ var (
 		"KIND_NOTES":            10,
 		"KIND_FILE_CHANGE":      11,
 		"KIND_RUN":              12,
+		"KIND_GUARD_POLICY":     13,
 	}
 )
 
@@ -828,7 +835,7 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\aPayload\x12\x12\n" +
 	"\x04body\x18\x01 \x01(\fR\x04body\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes*\x9b\x02\n" +
+	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes*\xb2\x02\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12KIND_MCP_TOOL_CALL\x10\x01\x12\f\n" +
@@ -844,7 +851,8 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"KIND_NOTES\x10\n" +
 	"\x12\x14\n" +
 	"\x10KIND_FILE_CHANGE\x10\v\x12\f\n" +
-	"\bKIND_RUN\x10\f*E\n" +
+	"\bKIND_RUN\x10\f\x12\x15\n" +
+	"\x11KIND_GUARD_POLICY\x10\r*E\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

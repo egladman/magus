@@ -74,6 +74,8 @@ type machineGate struct {
 	noWait bool
 	log    *slog.Logger
 	lost   sync.Once
+	// queued is set once any step in this run waited on the budget.
+	queued atomic.Bool
 	// notify replaces the stderr writes when set, so a test observes the wait without
 	// a terminal.
 	notify func(string)
@@ -115,6 +117,12 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 	return g.wait(ctx, waiter, c, v)
 }
 
+// MachineQueued reports whether any step of this Cache has waited on the machine budget.
+// False when no budget is wired.
+func (c *Cache) MachineQueued() bool {
+	return c.machine != nil && c.machine.queued.Load()
+}
+
 // blindToOwnAncestry reports a run that is inside a magus process tree and cannot say
 // which invocations it is under. MAGUS_LEVEL says a magus started this one; an empty
 // ancestry says we cannot tell which claims are our parent's.
@@ -131,6 +139,7 @@ func blindToOwnAncestry(ctx context.Context) bool {
 // and repeats on a heartbeat, because a queued run with nothing on screen is
 // indistinguishable from a hung one.
 func (g *machineGate) wait(ctx context.Context, waiter string, c types.MachineClaim, first types.MachineVerdict) (func(), error) {
+	g.queued.Store(true)
 	g.say(machineWaitingMessage(c, first))
 	started := time.Now()
 	poll := time.NewTicker(machinePollEvery)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/egladman/magus/internal/graph/url"
+	"github.com/egladman/magus/internal/service/console"
 )
 
 // graph_link.go holds the shared seam for the "view this in the Graph Explorer"
@@ -11,8 +12,11 @@ import (
 // hint rather than probing and omitting the line.
 
 // authHint is the second line every call site prints under the link. The link is
-// deliberately UNAUTHENTICATED, so this names the one command that completes it.
-const authHint = "(append &token=$(magus config token print) to open it authenticated)"
+// deliberately UNAUTHENTICATED and every console route needs a token, so this is the
+// command a person runs to open it signed in.
+func authHint(link string) string {
+	return "open it signed in: " + console.OpenCommand(link)
+}
 
 // liveExplorerLink formats a daemon-origin Graph Explorer deep-link (served by the
 // running daemon from http://<host>/console/graph/) with the caller's directives

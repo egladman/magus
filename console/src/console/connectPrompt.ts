@@ -6,7 +6,15 @@
 //
 // Nothing here connects or retries on its own. Every way forward is a control the reader presses.
 
-import { parseHash, resolveDaemonHostOrRemembered, wantsDemo } from "../lib/daemon";
+import {
+  AUTH_LOST_EVENT,
+  getLiveToken,
+  parseHash,
+  resolveDaemonHostOrRemembered,
+  signInCommand,
+  wantsDemo,
+} from "../lib/daemon";
+import { reportFailure } from "../lib/notifications";
 import { subscribeDefaultHost } from "../lib/settings";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 import type { ConnectionState } from "./status";
@@ -161,6 +169,10 @@ export interface DaemonNeed {
 // DOM at init sees real dimensions. Nothing polls: an applied address is the only trigger. Once
 // open, the surface stays open whatever the connection does, and its own inline prompt answers a
 // drop. With need undefined, module is returned unchanged.
+//
+// With an address but NO TOKEN it shows the sign-in page instead: every daemon route needs a bearer
+// token, so an unauthenticated surface could only render empty. A daemon that refuses the token
+// later (AUTH_LOST_EVENT, raised by lib/daemon on a 401) tears the surface down and returns here.
 export function requireDaemon<S, Q>(
   module: PageModule<S, Q>,
   need: DaemonNeed | undefined,
@@ -169,8 +181,7 @@ export function requireDaemon<S, Q>(
   return {
     id: module.id,
     title: module.title,
-    activate: async (host) =>
-      daemonAvailable() ? module.activate(host) : connectPage(module, host, need),
+    activate: async (host) => gatedPage(module, host, need, ready()),
   };
 }
 
@@ -180,13 +191,33 @@ function daemonAvailable(): boolean {
   return wantsDemo(parseHash()) || resolveDaemonHostOrRemembered() !== null;
 }
 
-function connectPage<S, Q>(
-  module: PageModule<S, Q>,
-  host: HTMLElement,
-  need: DaemonNeed,
-): PageController<S, Q> {
+// signInRequired: a daemon is there, but nothing here can authenticate to it. Demo needs no daemon.
+//
+// A page on a plain-http origin was served by a daemon: the hosted console is https, and the daemon
+// serves http only. Such a page opened from a tokenless link resolves no host (origin adoption needs
+// a token), so without this it read "No daemon connected" while standing on the daemon.
+export function signInRequired(): boolean {
+  if (wantsDemo(parseHash()) || getLiveToken() !== null) return false;
+  return daemonAvailable() || location.protocol === "http:";
+}
+
+function ready(): boolean {
+  return daemonAvailable() && !signInRequired();
+}
+
+// surfaceURL is the clean /console/<surface>/ address of this surface on the page's own origin,
+// keeping a #port= attach so the signed-in link reaches the same daemon.
+export function surfaceURL(surface: string): string {
+  const path = location.pathname;
+  const at = path.indexOf("/console/");
+  const base = at >= 0 ? path.slice(0, at + "/console/".length) : "/console/";
+  const port = parseHash().port;
+  return location.origin + base + surface + "/" + (port ? "#port=" + port : "");
+}
+
+function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
   const page = h("div", "pf-v6-c-empty-state");
-  page.dataset.connectPage = module.id;
+  page.dataset.connectPage = id;
   const content = h("div", "pf-v6-c-empty-state__content");
   const header = h("div", "pf-v6-c-empty-state__header");
   const titleBox = h("div", "pf-v6-c-empty-state__title");
@@ -200,9 +231,52 @@ function connectPage<S, Q>(
   header.append(titleBox);
   content.append(header, slots.message, slots.actions);
   page.append(content);
-  renderConnectPrompt(slots, { connection: "none" }, { purpose: need.purpose });
-  host.replaceChildren(page);
+  return { page, slots };
+}
 
+// renderSignIn writes the sign-in state: why the surface cannot show anything, and the one command
+// that fixes it. notice says why a signed-in page came back here (a refused token).
+export function renderSignIn(slots: EmptyStateSlots, surface: string, notice?: string): void {
+  delete slots.actions.dataset.connectPrompt;
+  slots.title.textContent = "Sign in to this daemon";
+  slots.message.textContent =
+    (notice ? notice + " " : "") +
+    "Every console route needs a token, and this page has none, so it cannot show anything true yet. Run this; it opens this page signed in. The token is read by your shell, never shown here.";
+  const way = h("div");
+  way.dataset.emptyWay = "";
+  const label = h("span", undefined, "Open it signed in");
+  label.dataset.emptyWayLabel = "";
+  const cmd = signInCommand(surfaceURL(surface));
+  const command = h("pre");
+  command.dataset.emptyCmd = "";
+  command.dataset.signInCommand = "";
+  command.append(h("code", undefined, cmd));
+  const row = h("div");
+  row.dataset.emptyWayActions = "";
+  const copy = wayButton("pf-m-primary", "Copy command", () => {
+    navigator.clipboard.writeText(cmd).then(
+      () => {
+        copy.textContent = "Copied";
+      },
+      (e: unknown) =>
+        reportFailure(
+          "Sign-in",
+          "Could not copy the command (" + String(e) + "). Select it and copy it by hand.",
+          "signin:copy",
+        ),
+    );
+  });
+  row.append(copy, daemonGuideLink());
+  way.append(label, command, row);
+  slots.actions.replaceChildren(way, demoWay());
+}
+
+function gatedPage<S, Q>(
+  module: PageModule<S, Q>,
+  host: HTMLElement,
+  need: DaemonNeed,
+  openNow: boolean,
+): PageController<S, Q> {
   let inner: PageController<S, Q> | null = null;
   let opening = false;
   let closed = false;
@@ -210,10 +284,17 @@ function connectPage<S, Q>(
   const titleListeners = new Set<(title: string | null) => void>();
   let innerTitleUnsub: (() => void) | null = null;
 
-  const open = (): void => {
-    if (closed || inner || opening || !daemonAvailable() || host.closest("[hidden]")) return;
+  const showGate = (notice?: string): void => {
+    const { page, slots } = gatePage(module.id);
+    if (signInRequired()) renderSignIn(slots, module.id, notice);
+    else renderConnectPrompt(slots, { connection: "none" }, { purpose: need.purpose });
+    host.replaceChildren(page);
+  };
+
+  // force skips the hidden-pane check: the tile activates a surface only once its pane is shown.
+  const open = (force = false): void => {
+    if (closed || inner || opening || !ready() || (!force && host.closest("[hidden]"))) return;
     opening = true;
-    unsubscribeHost();
     host.replaceChildren();
     void module.activate(host).then((controller) => {
       opening = false;
@@ -231,7 +312,23 @@ function connectPage<S, Q>(
       });
     });
   };
-  const unsubscribeHost = subscribeDefaultHost(open);
+  const unsubscribeHost = subscribeDefaultHost(() => open());
+
+  const onAuthLost = (): void => {
+    if (closed || !signInRequired()) return;
+    if (inner) {
+      innerTitleUnsub?.();
+      innerTitleUnsub = null;
+      inner.deactivate();
+      inner = null;
+      for (const fn of titleListeners) fn(null);
+    }
+    showGate("The daemon refused this page's token: it expired or was revoked.");
+  };
+  document.addEventListener(AUTH_LOST_EVENT, onAuthLost);
+
+  if (openNow) open(true);
+  else showGate();
 
   // The tile reads docTitle once, before the surface exists, so it gets a stable source that
   // forwards the surface's once it opens.
@@ -260,6 +357,7 @@ function connectPage<S, Q>(
     deactivate() {
       closed = true;
       unsubscribeHost();
+      document.removeEventListener(AUTH_LOST_EVENT, onAuthLost);
       innerTitleUnsub?.();
       titleListeners.clear();
       if (inner) inner.deactivate();

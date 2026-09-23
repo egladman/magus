@@ -22,7 +22,7 @@ import (
 // advice, and the spell catalog, all of which live in the CLI rather than in the rules.
 func guardDependencies() guard.Dependencies {
 	shellRules, shellDialect := loadWorkspaceShellRules(context.Background())
-	return guard.Dependencies{
+	deps := guard.Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 			if root == "" {
 				return inspectWorkspace(ctx, "")
@@ -47,6 +47,52 @@ func guardDependencies() guard.Dependencies {
 		Spells:           project.DefaultSpellRegistry().All,
 		SymbolDefined:    symbolDefinedForGuard,
 		HeadCommit:       headCommitForGuard,
+		CheckoutBase:     checkoutBaseForGuard,
+	}
+	if m := loadedWorkspace(context.Background()); m != nil {
+		deps.SpawnRule = m.SpawnRule()
+		deps.ApprovedSpawnRule = m.ApprovedSpawnRule
+		deps.Policy = func() guard.PolicyState { return guardPolicyState(m) }
+	}
+	return deps
+}
+
+// loadedWorkspace is the memoized workspace the hook's rules read, nil when it does not
+// load. Unloadable is nil for the reason loadWorkspaceShellRules gives: a magusfile typo
+// must not take down every hook, so the built-ins run alone.
+func loadedWorkspace(ctx context.Context) *magus.Magus {
+	ws, err := inspectWorkspace(ctx, "")
+	if err != nil {
+		return nil
+	}
+	m, _ := ws.(*magus.Magus)
+	return m
+}
+
+// guardPolicyState describes the loaded workspace's guard rules for the trail's lineage.
+// The approved ids are left to a callback, since reading them runs a process per file and
+// the lineage asks only when the policy moved.
+func guardPolicyState(m *magus.Magus) guard.PolicyState {
+	policy := m.GuardPolicy()
+	return guard.PolicyState{
+		Digest:     policy.Digest,
+		ShellRules: policy.ShellRules,
+		SpawnRule:  policy.SpawnRule,
+		Sources: func(ctx context.Context) []guard.PolicySource {
+			paths := make([]string, len(policy.Sources))
+			for i, s := range policy.Sources {
+				paths[i] = s.Path
+			}
+			approved := m.ApprovedBlobIDs(ctx, paths)
+			if approved == nil {
+				return nil
+			}
+			out := make([]guard.PolicySource, len(policy.Sources))
+			for i, s := range policy.Sources {
+				out[i] = guard.PolicySource{Path: s.Path, Worktree: s.BlobID, Approved: approved[s.Path]}
+			}
+			return out
+		},
 	}
 }
 
@@ -77,6 +123,21 @@ func headCommitForGuard(ctx context.Context) string {
 	return meta.Short
 }
 
+// checkoutBaseForGuard answers the checkout at root as `magus vcs checkpoint -o name`
+// prints it, or "" when it cannot be read. Resolved by root rather than through
+// inspectWorkspace, which is memoized for one root and the hook may name another.
+func checkoutBaseForGuard(ctx context.Context, root string) string {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return ""
+	}
+	cp, err := vcs.Checkpoint(ctx, root, res, false)
+	if err != nil {
+		return ""
+	}
+	return checkpointToken(cp)
+}
+
 // symbolDefinedForGuard answers the one question that lets the guard deny a symbol
 // search: does refs return the same sites this grep is reaching for.
 //
@@ -104,12 +165,8 @@ func symbolDefinedForGuard(ident string) (defined, definitive bool) {
 // Missing or unloadable is empty so a magusfile typo cannot take down every
 // shell hook (built-ins still apply).
 func loadWorkspaceShellRules(ctx context.Context) ([]guard.WorkspaceShellRule, guard.Dialect) {
-	ws, err := inspectWorkspace(ctx, "")
-	if err != nil {
-		return nil, ""
-	}
-	m, ok := ws.(*magus.Magus)
-	if !ok {
+	m := loadedWorkspace(ctx)
+	if m == nil {
 		return nil, ""
 	}
 	src := m.ShellRules()

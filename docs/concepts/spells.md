@@ -142,6 +142,17 @@ import "spells/ruby" as rb;
 magus\project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); return true; });
 ```
 
+### Remote spell
+
+A spell published to a container registry as an OCI artifact, imported by its
+repository path the way a Go import names its repository. `magus.yaml` declares the tag
+it tracks, `magus.lock` pins the manifest digest, and it loads offline once cached. The
+agent harness spells ship this way. See [Remote spells](../reference/remote-spells.md).
+
+```buzz
+import "ghcr.io/<owner>/<repo>/spells/ruby" as rb;
+```
+
 ## Composing spells
 
 Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-types `magus/spell` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.

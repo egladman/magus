@@ -42,7 +42,7 @@ import "proc";
 // through a replace directive, so authkit has to be built before admin is: the
 // handle is what puts that in the graph, and what makes the last act of the
 // recording narrow to these two rather than to whatever happened to be dirty.
-import "project/../../libs/authkit" as authkit;
+import "project/../../libs/authkit";
 
 magus\project({
     "spells": [go],

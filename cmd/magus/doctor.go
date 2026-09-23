@@ -63,7 +63,17 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 	// Query daemon status for the daemon-related checks. Non-fatal on failure.
 	daemonInfo := buildDaemonInfo(ctx)
 
-	dopts := []doctor.Option{doctor.WithConfig(globalCfg), doctor.WithDaemonInfo(daemonInfo), doctor.WithSkillCatalog(agentSkills)}
+	dopts := []doctor.Option{
+		doctor.WithConfig(globalCfg), doctor.WithDaemonInfo(daemonInfo), doctor.WithSkillCatalog(agentSkills),
+		doctor.WithGraphNodes(func(ctx context.Context) ([]types.KnowledgeNode, error) {
+			// Domain-only: the graph `graph export` renders into the docs site.
+			g, err := loadKnowledgeGraph(ctx, root, false, false, false)
+			if err != nil {
+				return nil, err
+			}
+			return g.Nodes(), nil
+		}),
+	}
 	if probe {
 		dopts = append(dopts, doctor.WithProbe())
 	}
@@ -269,6 +279,9 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	di.Running = reply.Running
 	di.Queued = reply.Queued
 	for _, w := range reply.Workspaces {
+		if !w.Loaded() {
+			continue
+		}
 		di.Workspaces = append(di.Workspaces, doctor.LoadedWorkspace{
 			Root:       w.Root,
 			LoadedAt:   w.LoadedAt,

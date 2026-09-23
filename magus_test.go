@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/spells"
@@ -860,7 +861,7 @@ func TestCrossFileInputs(t *testing.T) {
 	write("lib/go.mod", "module lib\n")
 	// The consumer declares a cross-project AND a same-project input on the same target.
 	write("consumer/app/main.go", "package app\n")
-	write("consumer/magusfile.buzz", `import "project/../lib" as lib;
+	write("consumer/magusfile.buzz", `import "project/../lib";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(lib.file("go.mod"), "app/**");
 }
@@ -1175,6 +1176,27 @@ func floorWorkspace(t *testing.T, constraint string) string {
 	return root
 }
 
+// A load joins one error per failing file; each is its own diagnostic. A coded type error
+// needs the magusfile bindings, which cmd/magus links; its registry test covers that case.
+func TestWorkspaceLoadFailureLocatesEachJoinedFile(t *testing.T) {
+	err := fmt.Errorf("magus: repo: %w", errors.Join(
+		&interp.ExecError{Path: "/repo/a/magusfile.buzz", Err: errors.New("buzz: line 2:1: expected identifier")},
+		&interp.ExecError{Path: "/elsewhere/spell.buzz", Err: errors.New("buzz: line 5:4: unexpected }")},
+	))
+	assert.Equal(t, &types.WorkspaceFailure{
+		Message: err.Error(),
+		Diagnostics: []types.SourceDiagnostic{
+			{File: "a/magusfile.buzz", Line: 2, Column: 1, Message: "expected identifier"},
+			{File: "/elsewhere/spell.buzz", Line: 5, Column: 4, Message: "unexpected }"},
+		},
+	}, WorkspaceLoadFailure("/repo", err))
+}
+
+func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
+	err := errors.New("daemon: load config /repo: magus.yaml: unknown key")
+	assert.Equal(t, &types.WorkspaceFailure{Message: err.Error()}, WorkspaceLoadFailure("/repo", err))
+}
+
 // The wiring, not the comparison: internal/ward covers the semver logic, and this
 // covers that magus.yaml's required_version actually reaches it. That path is easy to
 // break invisibly: the field carries `cli:"-"`, so it is absent from the generated
@@ -1379,14 +1401,14 @@ func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
 func TestApplyEnv_VolatilityEnabledTrue(t *testing.T) {
 	t.Setenv("MAGUS_VOLATILITY_ENABLED", "true")
 	cfg := config.Defaults()
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
 	assert.True(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=true: Volatility.Enabled should be true")
 }
 
 func TestApplyEnv_VolatilityEnabledFalse(t *testing.T) {
 	t.Setenv("MAGUS_VOLATILITY_ENABLED", "false")
 	cfg := config.Defaults()
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
 	assert.False(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=false: Volatility.Enabled should be false")
 }
 
@@ -1396,7 +1418,7 @@ func TestApplyEnvToConfig(t *testing.T) {
 	t.Setenv("MAGUS_DRY_RUN", "1")
 
 	cfg := config.Defaults()
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
 
 	assert.False(t, cfg.Cache.WriteEnabled())
 	assert.Equal(t, 6, cfg.Concurrency)
@@ -1406,6 +1428,42 @@ func TestApplyEnvToConfig(t *testing.T) {
 func TestApplyEnv_SandboxEnabled(t *testing.T) {
 	t.Setenv("MAGUS_SANDBOX_ENABLED", "true")
 	cfg := config.Defaults()
-	configgen.ApplyEnv(&cfg, os.Getenv)
+	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
 	assert.True(t, cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED=true: Sandbox.Enabled should be true")
+}
+
+// The environment overwrites fields after the yaml is validated, so an SDK load has to
+// validate again: an unknown profile must be a config error, never a value that reaches
+// the limiter.
+func TestLoadConfigValidatesTheEnvironment(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("concurrency_profile: balanced\n"), 0o644))
+	t.Setenv("MAGUS_CONCURRENCY_PROFILE", "turbo")
+
+	_, err := loadConfig(root)
+	require.ErrorContains(t, err, `MAGUS_CONCURRENCY_PROFILE: unknown concurrency profile "turbo"`)
+}
+
+// yaml reaches the same door as env and flags, so a misspelled profile stops the load.
+func TestLoadConfigRefusesAnUnknownProfile(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("concurrency_profile: turbo\n"), 0o644))
+
+	_, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
+	require.ErrorContains(t, err, `unknown concurrency profile "turbo"`)
+}
+
+// TestTargetLabel renders the scope header a run prints. The empty case is the one
+// worth pinning: a scope that selected nothing says so, rather than rendering as
+// "0 projects" among the plural forms.
+func TestTargetLabel(t *testing.T) {
+	one := []types.Target{{Path: "api", Name: "build"}}
+	several := []types.Target{{Path: "api"}, {Path: "web"}, {Path: "."}}
+
+	assert.Equal(t, "no projects", TargetLabel(nil, ""))
+	assert.Equal(t, "no projects (affected)", TargetLabel(nil, "affected"))
+	assert.Equal(t, "api", TargetLabel(one, ""))
+	assert.Equal(t, "api (affected)", TargetLabel(one, "affected"))
+	assert.Equal(t, "3 projects", TargetLabel(several, ""))
+	assert.Equal(t, "3 projects (stdin paths)", TargetLabel(several, "stdin paths"))
 }

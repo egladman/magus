@@ -497,6 +497,22 @@ const (
 	FlagShellTranscript = "transcript"
 	// shell: --transport
 	FlagShellTransport = "transport"
+	// spell build: --out
+	FlagSpellBuildOut = "out"
+	// spell build: --source
+	FlagSpellBuildSource = "source"
+	// spell lock: --update
+	FlagSpellLockUpdate = "update"
+	// spell ls: --username
+	FlagSpellLsUsername = "username"
+	// spell pull: --username
+	FlagSpellPullUsername = "username"
+	// spell push: --source
+	FlagSpellPushSource = "source"
+	// spell push: --tag
+	FlagSpellPushTag = "tag"
+	// spell push: --username
+	FlagSpellPushUsername = "username"
 	// status: --W
 	FlagStatusW = "W"
 	// status: --c
@@ -1640,6 +1656,73 @@ func BindInit(fs *flag.FlagSet) *InitFlags {
 	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
 	fs.BoolVar(&f.Force, FlagInitForce, false, "Overwrite an existing config file")
 	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
+	return &f
+}
+
+// SpellBuildFlags are the flags declared for `magus spell build`.
+type SpellBuildFlags struct {
+	Out    string // --out
+	Source string // --source
+}
+
+// BindSpellBuild registers `magus spell build`'s flags on fs and returns the destination.
+func BindSpellBuild(fs *flag.FlagSet) *SpellBuildFlags {
+	var f SpellBuildFlags
+	fs.StringVar(&f.Out, FlagSpellBuildOut, "", "Also write the packed layer (an uncompressed tar) to this file")
+	fs.StringVar(&f.Source, FlagSpellBuildSource, "", "The org.opencontainers.image.source URL; default: the VCS remote as https")
+	return &f
+}
+
+// SpellPushFlags are the flags declared for `magus spell push`.
+//
+// It does NOT carry --tag: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type SpellPushFlags struct {
+	Username string // --username
+	Source   string // --source
+}
+
+// BindSpellPush registers `magus spell push`'s flags on fs and returns the destination.
+func BindSpellPush(fs *flag.FlagSet) *SpellPushFlags {
+	var f SpellPushFlags
+	fs.StringVar(&f.Username, FlagSpellPushUsername, "", "The registry username; the password is then read from stdin, overriding spells.registries")
+	fs.StringVar(&f.Source, FlagSpellPushSource, "", "The org.opencontainers.image.source URL; default: the VCS remote as https")
+	return &f
+}
+
+// SpellPullFlags are the flags declared for `magus spell pull`.
+type SpellPullFlags struct {
+	Username string // --username
+}
+
+// BindSpellPull registers `magus spell pull`'s flags on fs and returns the destination.
+func BindSpellPull(fs *flag.FlagSet) *SpellPullFlags {
+	var f SpellPullFlags
+	fs.StringVar(&f.Username, FlagSpellPullUsername, "", "The registry username; the password is then read from stdin, overriding spells.registries")
+	return &f
+}
+
+// SpellLsFlags are the flags declared for `magus spell ls`.
+type SpellLsFlags struct {
+	Username string // --username
+}
+
+// BindSpellLs registers `magus spell ls`'s flags on fs and returns the destination.
+func BindSpellLs(fs *flag.FlagSet) *SpellLsFlags {
+	var f SpellLsFlags
+	fs.StringVar(&f.Username, FlagSpellLsUsername, "", "The registry username; the password is then read from stdin, overriding spells.registries")
+	return &f
+}
+
+// SpellLockFlags are the flags declared for `magus spell lock`.
+type SpellLockFlags struct {
+	Update bool // --update
+}
+
+// BindSpellLock registers `magus spell lock`'s flags on fs and returns the destination.
+func BindSpellLock(fs *flag.FlagSet) *SpellLockFlags {
+	var f SpellLockFlags
+	fs.BoolVar(&f.Update, FlagSpellLockUpdate, false, "Ask the registry what each declared tag names now, and rewrite magus.lock")
 	return &f
 }
 

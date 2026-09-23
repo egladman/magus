@@ -10,7 +10,6 @@ import (
 func TestParseFilter_Nil_AdmitsAll(t *testing.T) {
 	f, err := ParseFilter(nil)
 	require.NoError(t, err)
-	// nil signals admit-all.
 	assert.Nil(t, f, "ParseFilter(nil) should return nil to signal admit-all")
 }
 

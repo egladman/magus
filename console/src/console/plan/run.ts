@@ -232,6 +232,7 @@ async function unknownTargetDetail(res: Response): Promise<string> {
   try {
     return (await res.text()).trim();
   } catch {
+    // not-a-failure: the caller already reports the refused run; this only adds the daemon's words
     return "";
   }
 }

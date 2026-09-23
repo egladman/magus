@@ -1639,3 +1639,23 @@ func TestCheckUndeclaredCharms(t *testing.T) {
 	assert.NoError(t, checkUndeclaredCharms(ctx, []string{"relock"}, map[string]struct{}{"relock": {}}))
 	assert.NoError(t, checkUndeclaredCharms(ctx, []string{"typo", types.CharmUpdate}, map[string]struct{}{}))
 }
+
+// TestCharmsForCI: both write-granting charms come off a ci run. rw so a
+// check-only target stays check-only, and update so ci verifies the pinned upstream
+// state rather than refreshing it against today's registry.
+func TestCharmsForCI(t *testing.T) {
+	assert.Equal(t, []string{"race", "coverage"},
+		CharmsForCI([]string{"race", types.CharmReadWrite, "coverage", types.CharmUpdate}))
+	assert.Empty(t, CharmsForCI([]string{types.CharmReadWrite}))
+	assert.Nil(t, CharmsForCI(nil))
+
+	// A non-canonical spelling strips too, and it has to be tested from the OUTSIDE: a ci
+	// run receives whatever spelling the caller passed, and CharmsForCI is the last place
+	// that can canonicalize it before the charm survives into a gate that must not write.
+	assert.Equal(t, []string{"race"}, CharmsForCI([]string{"race", "UPDATE"}))
+
+	// The input is not mutated: the caller's RunOptions keep the charms it set.
+	given := []string{types.CharmReadWrite, "race"}
+	CharmsForCI(given)
+	assert.Equal(t, []string{types.CharmReadWrite, "race"}, given)
+}

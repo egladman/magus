@@ -66,7 +66,7 @@ export function castSigil(svg: string, ms = CAST_MS): Promise<boolean> {
     try {
       len = path?.getTotalLength() ?? 0;
     } catch {
-      // happy-dom and older engines have no geometry; the sigil still appears, just undrawn.
+      // not-a-failure: happy-dom and older engines have no geometry; the sigil appears undrawn
       len = 0;
     }
     if (path && len > 0) {

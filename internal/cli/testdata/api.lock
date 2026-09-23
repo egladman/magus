@@ -242,6 +242,7 @@ subcommand self
 subcommand server
 subcommand session
 subcommand shell
+subcommand spell
 subcommand status
 subcommand vcs
 subcommand version
