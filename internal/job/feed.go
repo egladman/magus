@@ -100,7 +100,8 @@ type FeedEvent struct {
 	WritePath string
 	// Action is what happened, in the kind's own vocabulary: the path for a file event,
 	// the tool label for a tool call, the rendered command for a run.
-	Action  string
+	Action string
+	// Actor is the recorded origin rendered as one label (types.Origin.Label).
 	Actor   string
 	Host    string
 	Session string
@@ -165,7 +166,7 @@ func ToolEvents(events []trail.Event) []FeedEvent {
 			Kind:     FeedTool,
 			Job:      e.Lease,
 			Action:   e.Action,
-			Actor:    e.Actor,
+			Actor:    e.Label(),
 			Host:     e.Host,
 			Session:  e.Session,
 			Decision: decisionOf(e),

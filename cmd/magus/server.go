@@ -1147,7 +1147,6 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
-			Actor:     "daemon",
 			Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
 			Workspace: m.Root(),
 			Action:    "review.said",
@@ -1171,7 +1170,6 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	trail.Append(ctx, m.CacheDir(), trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindJob,
-		Actor:     "daemon",
 		Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
 		Workspace: m.Root(),
 		Action:    "review.merged",

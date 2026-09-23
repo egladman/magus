@@ -132,19 +132,19 @@ const (
 	OutcomeError = "error"
 )
 
-// Event is one recorded action, the on-disk atom of the trail. The envelope (Ts/Kind/Actor/
+// Event is one recorded action, the on-disk atom of the trail. The envelope (Ts/Kind/Origin/
 // Action/Outcome) is common to every kind; the payload refs point into the blob store so a large
 // body never bloats the line. Field names are snake_case and match the journal's Event where
 // they overlap (Ts, DurationMs).
 //
-// The origin's Host and Session duplicate what an agent-hook event also records in its
+// Who acted is the [types.Origin], one field per channel, rather than one string a reader must
+// guess the kind of. Its Host and Session duplicate what an agent-hook event also records in its
 // request blob, and that duplication is deliberate: a reader grouping a page of 200 rows by
 // agent host must not have to fetch 200 blobs to do it. They stay short, so the "lines stay
 // small" invariant holds. [Append] stamps the OS account on every event.
 type Event struct {
 	Ts           int64  `json:"ts"`                   // unix milliseconds at the action's start
 	Kind         Kind   `json:"kind"`                 // one of the Kind* constants
-	Actor        string `json:"actor"`                // who: an agent id, "daemon", a user
 	UserAgent    string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
 	types.Origin `json:",inline"`
 	Workspace    string `json:"workspace,omitempty"` // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
@@ -205,8 +205,8 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 // AgentCommand is the normalized, host-independent observation an agent hook contributes to the
 // trail. Command and Path are mutually exclusive in the supplied hooks: the former is a shell-tool
 // invocation, the latter a file-edit invocation. Host integrations may omit identity fields when
-// their hook event does not expose them; the event remains attributable to the generic "agent"
-// actor rather than pretending to know more than the host supplied.
+// their hook event does not expose them; the event is then unattributed rather than pretending
+// to know more than the host supplied.
 // Transcript is the host's own record of the session this observation came from, as an
 // absolute path on the machine that produced it. It is a POINTER, never content: the trail
 // stays a record of paths and timings, and a reader who wants what was actually said opens
@@ -221,7 +221,6 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 // usually empty: a hook observes a command, not a lease, so nothing in the host event names
 // one and [AppendAgentCommand] falls back to the environment channel.
 type AgentCommand struct {
-	Actor     string
 	Workspace string
 	// EntryPoint is where the observation entered magus; empty records a hook.
 	EntryPoint types.EntryPoint
@@ -334,10 +333,6 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	if action == "" {
 		action = "command"
 	}
-	actor := command.Actor
-	if actor == "" {
-		actor = "agent"
-	}
 	preview := "observed"
 	if command.Decision != "" {
 		preview = "guard: " + command.Decision
@@ -345,7 +340,6 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	Append(ctx, base, Event{
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentCommand,
-		Actor:         actor,
 		Origin:        hookOrigin(command.EntryPoint, command.Host, command.Session, command.Agent),
 		Workspace:     command.Workspace,
 		Action:        action,
@@ -379,7 +373,6 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // its coverage vocabulary (deny=model, advise=model, pass=none), and a bare Model field here
 // would read as one more of those instead of a spawn's own claim.
 type AgentSpawn struct {
-	Actor     string
 	Workspace string
 	Host      string
 	Session   string
@@ -495,14 +488,9 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	case action == "":
 		action = ActionAgentSpawn
 	}
-	actor := spawn.Actor
-	if actor == "" {
-		actor = "agent"
-	}
 	Append(ctx, base, Event{
 		Ts:           time.Now().UnixMilli(),
 		Kind:         KindAgentSpawn,
-		Actor:        actor,
 		Origin:       hookOrigin(types.EntryPointHook, spawn.Host, spawn.Session, spawn.Agent),
 		Workspace:    spawn.Workspace,
 		Action:       action,
@@ -777,10 +765,10 @@ func Rotate(base string) { rotate(base, maxEvents) }
 
 // minEventBytes is a floor on one serialized event line, used to skip the read entirely when the
 // file is too small to hold maxEvents of them. It is a SOUND bound rather than a guess: Ts, Kind,
-// Actor, Action and Outcome have no omitempty, so even an all-empty event marshals to about 65
-// bytes plus a newline. Rounding down to 64 keeps the check conservative: it can only ever decide
-// to look when it did not need to, never to skip when it did.
-const minEventBytes = 64
+// Action and Outcome have no omitempty, so even an all-empty event marshals to 43 bytes plus a
+// newline. Rounding down to 40 keeps the check conservative: it can only ever decide to look when
+// it did not need to, never to skip when it did.
+const minEventBytes = 40
 
 // perKindFloor is how many of a kind's newest events survive a rotate regardless of how loud
 // its neighbors are.
@@ -1006,8 +994,8 @@ func ValidRef(ref string) bool {
 
 // redactEvent masks every free-text field on an event.
 //
-// The structural fields are deliberately left alone: Kind, Outcome, Actor, Host, Session,
-// Workspace, Lease and the blob refs are enumerated values, identities and content addresses, none
+// The structural fields are deliberately left alone: Kind, Outcome, the Origin, Workspace,
+// Lease and the blob refs are enumerated values, identities and content addresses, none
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing, the same reasoning that leaves slog
 // attribute KEYS alone in internal/secret. Lease is the one of those derived from free text (a

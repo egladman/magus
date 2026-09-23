@@ -339,7 +339,7 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, trail.KindAgentCommand, got.Kind)
-	assert.Equal(t, "agent", got.Actor)
+	assert.Equal(t, types.EntryPointHook, got.EntryPoint, "a piped call is the hook's")
 	assert.Equal(t, "/repo/magus", got.Workspace)
 	assert.Equal(t, "shell.command", got.Action)
 	assert.Equal(t, "guard: deny", got.Preview)
@@ -368,7 +368,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, trail.KindAgentCommand, got.Kind)
-	assert.Equal(t, "agent", got.Actor)
+	assert.Equal(t, types.EntryPointHook, got.EntryPoint)
 	assert.Equal(t, "file.write", got.Action)
 	assert.Equal(t, "guard: advise", got.Preview)
 	body, err := trail.ReadBlob(dir, got.RequestRef)
@@ -413,7 +413,6 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	got.RequestBytes, got.ResponseBytes = 0, 0
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentCommand,
-		Actor:     "agent",
 		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "shell.command",
@@ -609,7 +608,6 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentSpawn,
-		Actor:     "agent",
 		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "Explore",

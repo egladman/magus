@@ -478,7 +478,6 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	ev := trail.Event{
 		Ts:         time.Now().Add(-dur).UnixMilli(),
 		Kind:       trail.KindJob,
-		Actor:      "daemon",
 		Origin:     types.Origin{EntryPoint: types.EntryPointDaemon},
 		Workspace:  root,
 		Action:     job.ActionString(args),

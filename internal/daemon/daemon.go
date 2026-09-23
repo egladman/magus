@@ -577,11 +577,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// The audit interceptor classifies every RPC on this service by its leading verb
 			// (internal/handler/trailrpc) and records the mutating ones (CreateToken and
 			// RevokeToken today) to the trail, so a browser-reachable mint or revoke is always
-			// audited. The actor is stamped "operator" from the mount tier (this surface is
-			// cli-guarded), never read from a caller-supplied field. Reads (ListTokens) are not
-			// recorded. See internal/handler/trailrpc for the pattern and the arch-test ratchet
-			// that keeps it honest.
-			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindTokenLifecycle))
+			// audited. The record names the credential the bearer guard verified, never a
+			// caller-supplied field. Reads (ListTokens) are not recorded. See
+			// internal/handler/trailrpc for the pattern and the arch-test ratchet that keeps it
+			// honest.
+			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindTokenLifecycle))
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit, connectReadMax)
 			f.server.Handle(tokenPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyCLIBearer, tokenHandler))
 			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
@@ -597,9 +597,9 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// trusted HTML.
 			// Audit every memory RPC to the trail, READS included (WithAuditReads): unlike the token
 			// service, inspecting the agent's own working notes is itself worth recording, so List/Get
-			// are audited alongside the edits. The actor is stamped "operator" from the mount tier, never
-			// caller-supplied. The agent/MCP door onto the same files is audited separately.
-			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindMemory, trailrpc.WithAuditReads()))
+			// are audited alongside the edits, each naming the credential that made it. The agent/MCP
+			// door onto the same files is audited separately.
+			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindMemory, trailrpc.WithAuditReads()))
 			memoryPath, memoryHandler := memoryv1alpha1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit, connectReadMax)
 			f.server.Handle(memoryPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleBearer, memoryHandler))
 			log.InfoContext(ctx, "[BRIDGE] memory service mounted", slog.String("path", memoryPath))
@@ -617,7 +617,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// listener behind the standard bearer guard like the memory service beside it.
 			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
 			// private store: this is the only door that serves notes nothing else attributes.
-			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindNotes, trailrpc.WithAuditReads()))
+			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, trailrpc.WithAuditReads()))
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit, connectReadMax)
 			f.server.Handle(notesPath, f.siteGuarded(rpcerr.FormatConnect, auth.VerifyConsoleReadBearer, notesHandler))
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
@@ -705,7 +705,7 @@ type frame struct {
 // siteGuarded is the chain every console data route mounts behind. CORS sits between
 // rebind and bearer so a tokenless OPTIONS preflight is answered, while a hosted-PWA
 // Origin still clears rebind first. format is the mounted handler's own protocol.
-func (f frame) siteGuarded(format rpcerr.Format, verify func(string) bool, h http.Handler) http.Handler {
+func (f frame) siteGuarded(format rpcerr.Format, verify func(string) (string, bool), h http.Handler) http.Handler {
 	return httpx.GuardRebind(format, f.siteAllowed, f.cors(httpx.BearerGuard(format, verify, h)))
 }
 

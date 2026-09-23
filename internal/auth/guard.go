@@ -34,6 +34,15 @@ import (
 // into a console URL was accepted at /mcp, meaning a leaked console link reached the
 // whole agent tool surface. Neither is true now.
 
+// CLICredential is the name every verifier reports for the cli token. The cli token is
+// one unnamed file, so this names the credential, not whoever holds it.
+const CLICredential = "cli"
+
+// Every verifier below reports the NAME of the credential presented matched: the cli
+// token as [CLICredential], a connector or console token as the name it was minted
+// with. The name is what the trail records, so a viewer and the cli token are told
+// apart; it proves possession of that credential, not who holds it.
+
 // VerifyMCPBearer reports whether presented may use /mcp: the retrievable cli token
 // OR a non-expired named connector token. Both tiers are re-read from disk on every
 // call, so a rotate, create, or revoke takes effect without restarting the daemon,
@@ -41,68 +50,72 @@ import (
 //
 // A CONSOLE token is rejected here by construction (it is not consulted), so a
 // credential handed to a browser cannot reach the agent tool surface.
-func VerifyMCPBearer(presented string) bool {
-	if VerifyCLIBearer(presented) {
-		return true
+func VerifyMCPBearer(presented string) (credential string, ok bool) {
+	if name, ok := VerifyCLIBearer(presented); ok {
+		return name, true
 	}
-	if store, err := LoadConnectorStore(); err == nil && store.VerifyScope(presented, ScopeMCP) {
-		return true
-	}
-	return false
+	return verifyStored(presented, ScopeMCP)
 }
 
 // VerifyConsoleBearer reports whether presented may use the console surfaces: /api/
 // and the console Connect services.
 //
-// It accepts the operator tier or a non-expired token minted with ScopeConsole. A
+// It accepts the cli token or a non-expired token minted with ScopeConsole. A
 // CONNECTOR token is rejected: it is scoped to /mcp, and the scan skips it.
 //
-// The operator token stays valid on both surfaces deliberately: it is the bootstrap
+// The cli token stays valid on both surfaces deliberately: it is the bootstrap
 // credential and the CLI's own reads depend on it. That is a named exception, not a
 // residue of the old single-tier design.
-func VerifyConsoleBearer(presented string) bool {
-	if VerifyCLIBearer(presented) {
-		return true
+func VerifyConsoleBearer(presented string) (credential string, ok bool) {
+	if name, ok := VerifyCLIBearer(presented); ok {
+		return name, true
 	}
-	if store, err := LoadConnectorStore(); err == nil && store.VerifyScope(presented, ScopeConsole) {
-		return true
-	}
-	return false
+	return verifyStored(presented, ScopeConsole)
 }
 
-// VerifyConsoleReadBearer guards the console's READ surface: the operator tier, a
-// full console token, or a viewer token (ScopeConsoleRead).
+// VerifyConsoleReadBearer guards the console's READ surface: the cli token, a full
+// console token, or a viewer token (ScopeConsoleRead).
 //
 // A viewer token is accepted HERE and nowhere else, which is what makes it a viewer:
 // the mutating console mounts (JobService, MemoryService, the share trigger) use
 // VerifyConsoleBearer, which does not consult ScopeConsoleRead, so a leaked viewer
 // credential can read the console and change nothing. A full console token is
 // accepted too: the write tier is a superset of the read tier, not a sibling.
-func VerifyConsoleReadBearer(presented string) bool {
-	if VerifyConsoleBearer(presented) {
-		return true
+func VerifyConsoleReadBearer(presented string) (credential string, ok bool) {
+	if name, ok := VerifyConsoleBearer(presented); ok {
+		return name, true
 	}
-	if store, err := LoadConnectorStore(); err == nil && store.VerifyScope(presented, ScopeConsoleRead) {
-		return true
-	}
-	return false
+	return verifyStored(presented, ScopeConsoleRead)
 }
 
-// VerifyCLIBearer reports whether presented is exactly the retrievable cli
-// token, the OPERATOR tier and nothing else. Connector and share tokens never
-// match here. It exists as its own narrow verifier so privileged mounts (token
-// management) can be guarded at the guard level rather than trusting a handler
-// to re-check the caller's class; both surface verifiers compose it as their
-// bootstrap tier. The token is re-read from disk on every call (rotation takes
-// effect immediately) and a load error fails closed.
-func VerifyCLIBearer(presented string) bool {
+// verifyStored matches presented against the named tokens of one scope, failing closed
+// when the store will not load.
+func verifyStored(presented string, scope ClientScope) (string, bool) {
+	store, err := LoadConnectorStore()
+	if err != nil {
+		return "", false
+	}
+	return store.VerifyScope(presented, scope)
+}
+
+// VerifyCLIBearer reports whether presented is exactly the retrievable cli token and
+// nothing else, naming it [CLICredential]. Connector and share tokens never match
+// here. It exists as its own narrow verifier so privileged mounts (token management)
+// can be guarded at the guard level rather than trusting a handler to re-check the
+// caller's class; both surface verifiers compose it as their bootstrap tier. The
+// token is re-read from disk on every call (rotation takes effect immediately) and a
+// load error fails closed.
+func VerifyCLIBearer(presented string) (credential string, ok bool) {
 	tok, err := Load()
 	if err != nil {
-		return false
+		return "", false
 	}
 	got := sha256.Sum256([]byte(presented))
 	want := sha256.Sum256([]byte(tok))
-	return subtle.ConstantTimeCompare(got[:], want[:]) == 1
+	if subtle.ConstantTimeCompare(got[:], want[:]) != 1 {
+		return "", false
+	}
+	return CLICredential, true
 }
 
 // Resolve loads the MCP bearer token, generating and persisting one on first

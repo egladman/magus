@@ -101,7 +101,7 @@ func (s *Service) WatchActivityEvents(ctx context.Context, req *connect.Request[
 		case <-tick.C:
 			fresh := cursor.Next(jobstore.Ascending(readMerged(s.loaded(), maxWindow)))
 			for _, e := range fresh {
-				if !matchFilter(e, filter) {
+				if !matchFilter(e, e.Label(), filter) {
 					continue
 				}
 				if err := stream.Send(wireEvent(e)); err != nil {
@@ -128,7 +128,7 @@ func (s *Service) WatchActivityEvents(ctx context.Context, req *connect.Request[
 func (s *Service) history(past []trail.Event, filter *activityv1.ActivityQuery) []*activityv1.ActivityEvent {
 	out := make([]*activityv1.ActivityEvent, 0, len(past))
 	for _, e := range past {
-		if matchFilter(e, filter) {
+		if matchFilter(e, e.Label(), filter) {
 			out = append(out, wireEvent(e))
 		}
 	}
@@ -219,7 +219,7 @@ func matchWire(e *activityv1.ActivityEvent, q *activityv1.ActivityQuery) bool {
 			}
 		}
 	}
-	return matchFilter(probe, q)
+	return matchFilter(probe, e.GetActor(), q)
 }
 
 // fromWire is the narrow slice of a wire event matchFilter reads, so one filter serves both
@@ -228,7 +228,6 @@ func matchWire(e *activityv1.ActivityEvent, q *activityv1.ActivityQuery) bool {
 func fromWire(e *activityv1.ActivityEvent) trail.Event {
 	return trail.Event{
 		Ts:     e.GetTime().AsTime().UnixMilli(),
-		Actor:  e.GetActor(),
 		Origin: types.Origin{Session: e.GetSession()},
 		Action: e.GetAction(),
 		Lease:  e.GetUnit(),

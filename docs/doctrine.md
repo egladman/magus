@@ -268,9 +268,9 @@ when magus automates a decision and when it hands the decision to you.
 ### Agents propose, humans dispose
 
 An agent surface can suggest work; it cannot accept it. magus records
-authorship from the surface that performed the write, so a change made through
-the agent surface carries an agent's name no matter what the writer reports
-about itself. Interrupting a person costs attention, and the suggestion
+authorship from the surface that performed the write, so a change carries the
+origin the channel delivered (the OS account, the entry point, the credential
+or host) no matter what the writer reports about itself. Interrupting a person costs attention, and the suggestion
 operation reflects that: it requires a stated reason before the proposal
 reaches anyone. The job store is ordinarily written by agents, unlike the
 attention events `notify` raises, because an attention event is addressed to a

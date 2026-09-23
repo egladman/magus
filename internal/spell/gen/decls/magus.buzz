@@ -539,6 +539,7 @@ export object Origin {
     host: str = "",
     session: str = "",
     agent: str = "",
+    credential: str = "",
 }
 
 export object JobResultValidation {

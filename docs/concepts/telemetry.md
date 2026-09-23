@@ -164,7 +164,7 @@ what it counts, not for the whole surface.
 | -------------------------------------- | ---------- | ---------------- | --------------------------------------- | -------------------------------------------------- |
 | `magus.lease.registrations`            | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on |
 | `magus.attention.disposition.duration` | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed |
-| `magus.review.remarks`                 | counter    | `{remark}`       | `author ∈ {human, agent}`               | A remark drafted on a change                       |
+| `magus.review.remarks`                 | counter    | `{remark}`       | `author ∈ {unattributed, agent}`        | A remark drafted on a change                       |
 | `magus.review.publishes`               | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed     |
 
 `verdict` on registrations is `match`, `revision-match`, `diverged` or `unknown`;

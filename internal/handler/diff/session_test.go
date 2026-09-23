@@ -278,7 +278,7 @@ func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "why"}, types.DiffAuthorHuman)
+	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "why"}, types.DiffAuthorUnattributed)
 
 	w := post(t, h, `{"op":"publish"}`)
 	if w.Code != http.StatusBadGateway {
@@ -486,7 +486,7 @@ func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Body: "no line"}, types.DiffAuthorHuman)
+	store.AddComment(root, types.DiffComment{Path: "a.go", Body: "no line"}, types.DiffAuthorUnattributed)
 
 	w := post(t, h, `{"op":"publish"}`)
 	if w.Code != http.StatusBadGateway {
@@ -533,8 +533,8 @@ func TestPublishMarksExactlyTheDraftsThatLeft(t *testing.T) {
 	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorHuman)
-	store.AddComment(root, types.DiffComment{Path: "b.go", Body: "no line"}, types.DiffAuthorHuman)
+	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorUnattributed)
+	store.AddComment(root, types.DiffComment{Path: "b.go", Body: "no line"}, types.DiffAuthorUnattributed)
 	store.AddComment(root, types.DiffComment{Path: "c.go", Line: 9, Body: "agent"}, types.DiffAuthorAgent)
 
 	w := post(t, h, `{"op":"publish","summary":"self-review"}`)
@@ -564,7 +564,7 @@ func TestPublishingWithEverythingAlreadySentIsNotAnError(t *testing.T) {
 	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorHuman)
+	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorUnattributed)
 
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"publish"}`).Code)
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"publish"}`).Code)
@@ -664,9 +664,9 @@ func TestDiscardRemovesOnlyAnUnsentHumanDraft(t *testing.T) {
 	store := changeset.NewStore("")
 	h := NewSessionHandler(SessionOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
-	mine := store.AddComment(root, types.DiffComment{Path: "a.go", Line: 1, Body: "mine"}, types.DiffAuthorHuman)
+	mine := store.AddComment(root, types.DiffComment{Path: "a.go", Line: 1, Body: "mine"}, types.DiffAuthorUnattributed)
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 2, Body: "theirs"}, types.DiffAuthorAgent)
-	sent := store.AddComment(root, types.DiffComment{Path: "a.go", Line: 3, Body: "sent"}, types.DiffAuthorHuman)
+	sent := store.AddComment(root, types.DiffComment{Path: "a.go", Line: 3, Body: "sent"}, types.DiffAuthorUnattributed)
 	store.MarkPublished(root, sent.Comments[len(sent.Comments)-1].ID)
 
 	ids := map[string]string{}

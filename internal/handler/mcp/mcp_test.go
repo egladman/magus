@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -123,7 +124,8 @@ func TestWrapCapturesExchange(t *testing.T) {
 	ev := events[0]
 
 	assert.Equal(t, trail.KindMCPToolCall, ev.Kind)
-	assert.Equal(t, "test-agent", ev.Actor)
+	assert.Equal(t, "test-agent", ev.Host, "the MCP client's own name is its host label")
+	assert.Equal(t, types.EntryPointMCP, ev.EntryPoint)
 	assert.Equal(t, "claude-code/1.2.3", ev.UserAgent, "the session User-Agent is recorded on the event")
 	assert.Equal(t, "magus_query", ev.Action)
 	assert.Equal(t, trail.OutcomeOK, ev.Outcome)

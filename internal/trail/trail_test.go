@@ -38,7 +38,7 @@ func seedEvents(t *testing.T, base string, n int) []Event {
 	events := make([]Event, 0, n)
 	var buf []byte
 	for i := 1; i <= n; i++ {
-		e := Event{Ts: int64(i), Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK}
+		e := Event{Ts: int64(i), Kind: KindMCPToolCall, Action: "t", Outcome: OutcomeOK}
 		events = append(events, e)
 		line, err := json.Marshal(e)
 		require.NoError(t, err)
@@ -50,9 +50,9 @@ func seedEvents(t *testing.T, base string, n int) []Event {
 
 func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	dir := t.TempDir()
-	Append(t.Context(), dir, Event{Ts: 1, Kind: KindMCPToolCall, Actor: "a", Action: "query", Outcome: OutcomeOK})
-	Append(t.Context(), dir, Event{Ts: 2, Kind: KindTokenLifecycle, Actor: "cli", Action: "connector.create", Outcome: OutcomeOK})
-	Append(t.Context(), dir, Event{Ts: 3, Kind: KindJob, Actor: "daemon", Workspace: "/ws", Action: "graph build", Outcome: OutcomeError, Error: "boom"})
+	Append(t.Context(), dir, Event{Ts: 1, Kind: KindMCPToolCall, Action: "query", Outcome: OutcomeOK})
+	Append(t.Context(), dir, Event{Ts: 2, Kind: KindTokenLifecycle, Action: "connector.create", Outcome: OutcomeOK})
+	Append(t.Context(), dir, Event{Ts: 3, Kind: KindJob, Workspace: "/ws", Action: "graph build", Outcome: OutcomeError, Error: "boom"})
 
 	events, err := ReadRecent(dir, 10)
 	if err != nil {
@@ -102,7 +102,6 @@ func TestAppend_EmptyBaseIsNoop(t *testing.T) {
 func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{
-		Actor:     "session:abc123",
 		Workspace: "/repo/magus",
 		Host:      "codex",
 		Session:   "abc123",
@@ -117,7 +116,6 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	require.Len(t, events, 1)
 	event := events[0]
 	require.Equal(t, KindAgentCommand, event.Kind)
-	require.Equal(t, "session:abc123", event.Actor)
 	// Host and session ride the event LINE as well as the request blob, so a reader can group a
 	// page of observations by host without a blob fetch per row.
 	require.Equal(t, "codex", event.Host)
@@ -156,7 +154,7 @@ func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	require.Empty(t, events)
 }
 
-func TestAppendAgentCommand_PathUsesFallbackActorAndAction(t *testing.T) {
+func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: "advise", Context: "record the decision"})
 
@@ -164,7 +162,8 @@ func TestAppendAgentCommand_PathUsesFallbackActorAndAction(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
-	require.Equal(t, "agent", event.Actor)
+	require.Equal(t, types.EntryPointHook, event.EntryPoint)
+	require.Empty(t, event.Session, "no host session means unattributed, never a default party")
 	require.Equal(t, "command", event.Action)
 	require.Equal(t, "guard: advise", event.Preview)
 
@@ -212,7 +211,6 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	event.Ts, event.RequestRef, event.RequestBytes = 0, "", 0
 	require.Equal(t, Event{
 		Kind:      KindAgentSpawn,
-		Actor:     "agent",
 		Origin:    StampOrigin(t.Context(), types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
 		Workspace: "/repo/magus",
 		Action:    "Explore",
@@ -247,7 +245,7 @@ func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing
 	events, err = ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	require.Equal(t, "agent", events[0].Actor)
+	require.Equal(t, types.EntryPointHook, events[0].EntryPoint)
 	require.Equal(t, "agent.spawn", events[0].Action, "an unlabelled callee still says a spawn happened")
 	require.Empty(t, events[0].Lease)
 }
@@ -553,8 +551,8 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
 	// Whole-struct assertions on the window edges (ReadRecent is newest-first).
-	require.Equal(t, Event{Ts: int64(maxEvents + 5), Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK}, got[0])
-	require.Equal(t, Event{Ts: 6, Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK}, got[len(got)-1])
+	require.Equal(t, Event{Ts: int64(maxEvents + 5), Kind: KindMCPToolCall, Action: "t", Outcome: OutcomeOK}, got[0])
+	require.Equal(t, Event{Ts: 6, Kind: KindMCPToolCall, Action: "t", Outcome: OutcomeOK}, got[len(got)-1])
 }
 
 // TestRotate_SkipsTheReadWhenTheFileIsTooSmall pins the stat fast path, which is what makes an
@@ -596,7 +594,7 @@ func TestRotate_EmptyBaseIsNoop(t *testing.T) {
 func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 	var lines []string
 	line := func(kind Kind, ts int) string {
-		b, err := json.Marshal(Event{Ts: int64(ts), Kind: kind, Actor: "a", Action: "x", Outcome: OutcomeOK})
+		b, err := json.Marshal(Event{Ts: int64(ts), Kind: kind, Action: "x", Outcome: OutcomeOK})
 		require.NoError(t, err)
 		return string(b)
 	}
@@ -628,7 +626,7 @@ func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 func TestSelectKept_SingleKindIsPlainTruncation(t *testing.T) {
 	var lines []string
 	for i := 1; i <= 100; i++ {
-		b, err := json.Marshal(Event{Ts: int64(i), Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK})
+		b, err := json.Marshal(Event{Ts: int64(i), Kind: KindMCPToolCall, Action: "t", Outcome: OutcomeOK})
 		require.NoError(t, err)
 		lines = append(lines, string(b))
 	}
@@ -686,7 +684,6 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 	Append(ctx, base, Event{
 		Ts:      time.Now().UnixMilli(),
 		Kind:    KindAgentCommand,
-		Actor:   "agent",
 		Action:  "curl -H 'Authorization: Bearer " + credential + "'",
 		Outcome: OutcomeOK,
 		Preview: "sent " + credential,
@@ -694,7 +691,6 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 	})
 
 	AppendAgentCommand(ctx, base, AgentCommand{
-		Actor:   "agent",
 		Event:   "pre-tool",
 		Tool:    "Bash",
 		Command: "deploy --token " + credential,
@@ -733,7 +729,7 @@ func TestTrailKeepsStructuralFields(t *testing.T) {
 	Append(ctx, base, Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      KindAgentCommand,
-		Actor:     "agent-7",
+		Origin:    types.Origin{Host: "agent-7"},
 		Workspace: "/repos/magus",
 		Action:    "Bash",
 		Outcome:   OutcomeOK,

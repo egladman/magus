@@ -201,7 +201,6 @@ func recordHarnessChange(ctx context.Context, root, verb string, update agent.Ha
 	trail.Append(ctx, base, trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindConfigChange,
-		Actor:     "cli",
 		Origin:    types.Origin{EntryPoint: types.EntryPointCLI},
 		Workspace: root,
 		Action:    "harness." + verb,

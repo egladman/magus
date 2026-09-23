@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/httpx"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sessions"
@@ -14,17 +15,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// consoleSessionHost stamps the disposing session as having been driven by the console.
+// consoleSessionHost stamps the disposing invocation as having come through the console.
 //
-// sessions.SessionStart.Host names the surface that drove a session, and the CLI leaves it
-// empty because nothing on its run path knows the answer: "not known", never "a human".
-// This route DOES know: it is reachable only from the console, so the surface is a fact at
-// the moment of the write rather than something inferred later from an absence. Recording
-// it positively is what keeps that inference from being needed at all.
-//
-// The value is not an agent host ("claude", "cursor", ...) and is not meant to be mistaken
-// for one. It says a person acted through their own surface, which is the whole distinction
-// docs/doctrine.md's "Manual on purpose" row turns on.
+// sessions.InvocationStart.Host names the surface that drove an invocation, and the CLI
+// leaves it empty because nothing on its run path knows the answer. This route DOES know
+// its surface, so it is recorded as a fact at the moment of the write, beside the
+// credential the bearer guard verified. Neither says a person acted: any process of the
+// account can read a console token, so the record names the door and the credential, and
+// the OS user says whose account it was.
 const consoleSessionHost = "console"
 
 // Handler serves /api/v1/attention: the blocks agents have raised in this repository
@@ -42,9 +40,9 @@ const consoleSessionHost = "console"
 // automation door. There is deliberately no dispose-all, no expiry and no filter that could
 // clear the queue without reading it.
 //
-// Authorship rides the ROUTE, never the payload, the same rule DiffSessionHandler states: an
-// agent reaches magus through MCP and cannot arrive here, so a write that lands here came from
-// the console and is stamped [consoleSessionHost] without trusting anything the caller sent.
+// Authorship rides the ROUTE and the verified credential, never the payload, the same rule
+// DiffSessionHandler states: a write that lands here is stamped [consoleSessionHost] and the
+// credential's name without trusting anything the caller sent.
 type Handler struct {
 	handler.Base
 	root    string
@@ -131,7 +129,11 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req, err := sessions.DisposeRequest(dir, body.ID, body.Reason, sessions.InvocationStart{
-		Origin:    trail.StampOrigin(r.Context(), types.Origin{EntryPoint: types.EntryPointRPC, Host: consoleSessionHost}),
+		Origin: trail.StampOrigin(r.Context(), types.Origin{
+			EntryPoint: types.EntryPointRPC,
+			Host:       consoleSessionHost,
+			Credential: httpx.CredentialFromContext(r.Context()),
+		}),
 		Workspace: h.root,
 		Version:   h.version,
 	})

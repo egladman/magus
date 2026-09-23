@@ -432,21 +432,21 @@ func indexConnector(tokens []ConnectorToken, q string) (int, error) {
 }
 
 // VerifyScope reports whether presented is a valid, non-expired connector token
-// minted for scope. It rejects a malformed or checksum-failing token OFFLINE before
-// any hash work, then compares SHA-256 digests with subtle.ConstantTimeCompare
-// against every non-expired stored record carrying that scope. Expired records never
-// match, and neither does a token minted for a different surface; that filter is
-// what keeps the tiers disjoint rather than merely labeled.
-func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) bool {
+// minted for scope, and the name it was minted with. It rejects a malformed or
+// checksum-failing token OFFLINE before any hash work, then compares SHA-256 digests
+// with subtle.ConstantTimeCompare against every non-expired stored record carrying
+// that scope. Expired records never match, and neither does a token minted for a
+// different surface; that filter is what keeps the tiers disjoint rather than merely
+// labeled.
+func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) (name string, ok bool) {
 	if !validTokenFormat(presented) {
-		return false
+		return "", false
 	}
 	sum := sha256.Sum256([]byte(presented))
 	got := []byte(hex.EncodeToString(sum[:]))
 	now := time.Now()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	match := false
 	for _, t := range s.tokens {
 		if t.expired(now) || t.EffectiveScope() != scope {
 			continue
@@ -454,10 +454,10 @@ func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) bool {
 		// Keep scanning even after a match so total work does not depend on
 		// WHICH record matched (defense in depth; the set is tiny anyway).
 		if subtle.ConstantTimeCompare([]byte(t.SHA256), got) == 1 {
-			match = true
+			name, ok = t.Name, true
 		}
 	}
-	return match
+	return name, ok
 }
 
 // mintToken generates a fresh connector token in the mgs_ format: a 256-bit

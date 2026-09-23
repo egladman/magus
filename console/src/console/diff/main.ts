@@ -919,10 +919,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       el.dataset.author = row.comment.author;
       if (row.comment.resolved) el.dataset.resolved = "";
       const who = h("span", "console-diff-row__who");
-      // The agent's own label when it gave one, else the role. Attribution is stamped by the
-      // daemon from the transport, so this is reporting who wrote it rather than repeating a
-      // claim the writer made about itself.
-      who.textContent = row.comment.author === "agent" ? row.comment.agent_name || "agent" : "you";
+      // The agent's own label when it gave one; otherwise the OS account the daemon recorded,
+      // which says whose account wrote the remark and never claims it was a person.
+      who.textContent =
+        row.comment.author === "agent"
+          ? row.comment.agent_name || "agent"
+          : row.comment.origin?.user || "unattributed";
       // Rendered the same way a colleague's remark is: a draft that reads differently here than
       // it will on the review is a draft you cannot proofread.
       const body = h("span", "console-diff-row__comment console-diff-md");
@@ -2520,7 +2522,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // the published set from the session rather than from the request, so this is the same
   // filter stated on both sides rather than a rule one side could relax.
   const drafts = (): DiffComment[] =>
-    (state.session?.comments ?? []).filter((c) => c.author === "human" && !c.published);
+    (state.session?.comments ?? []).filter((c) => c.author === "unattributed" && !c.published);
 
   // composePublish shows the batch that is about to leave and asks for the line that heads it.
   //

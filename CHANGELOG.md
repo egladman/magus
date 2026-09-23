@@ -120,6 +120,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The trail names the credential, not "operator", and drops `actor`.** Each event records
+  `credential` (the verified token's name: `cli`, a connector or console token's name,
+  `share`) and the MCP client as `host`; the wire's `actor` is a label rendered from them.
+  Review comments from the console are `unattributed`, not `human`, and carry their origin.
 - **"Session" now means only the host's conversation; magus's per-process id is an
   invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
   `invocations`, `invocation` and `session`. Store records use `invocation` and

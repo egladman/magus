@@ -274,7 +274,9 @@ func (m *Manager) Start(consoleDir string, guarded map[string]Route, ttl time.Du
 
 	// The verifier is bound to THIS session's token only. A new session builds a
 	// new closure over a new token, so an old link cannot authenticate here.
-	verify := func(presented string) bool { return tok.Verify(presented, time.Now()) }
+	verify := func(presented string) (string, bool) {
+		return auth.ShareCredential, tok.Verify(presented, time.Now())
+	}
 	mux := http.NewServeMux()
 	// Static console: unauthenticated. The app shell is not a secret; it reads the
 	// fragment token and replays it as a bearer on the guarded API routes below. It is
@@ -483,8 +485,7 @@ func (g *sessionGuard) recordFirstUse(r *http.Request) {
 	go trail.Append(trailCtx, g.m.trailDir, trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindTokenLifecycle,
-		Actor:     "share-guest",
-		Origin:    types.Origin{EntryPoint: types.EntryPointRPC},
+		Origin:    types.Origin{EntryPoint: types.EntryPointRPC, Credential: auth.ShareCredential},
 		Action:    "share.open",
 		Outcome:   trail.OutcomeOK,
 		UserAgent: ua,

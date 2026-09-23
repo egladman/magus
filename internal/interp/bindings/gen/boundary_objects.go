@@ -1350,6 +1350,7 @@ func ObjectOrigin(v types.Origin) vm.Value {
 	out.MapSet("host", vm.StrValue(v.Host))
 	out.MapSet("session", vm.StrValue(v.Session))
 	out.MapSet("agent", vm.StrValue(v.Agent))
+	out.MapSet("credential", vm.StrValue(v.Credential))
 	return out
 }
 

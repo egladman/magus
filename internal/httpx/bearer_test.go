@@ -121,12 +121,28 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 // returns false denies access regardless of the presented token.
 func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 	t.Parallel()
-	reject := func(string) bool { return false }
+	reject := func(string) (string, bool) { return "", false }
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
 	BearerGuard(rpcerr.FormatJSON, reject, okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+// The guard hands the handler the name of the credential it verified, so a record of the
+// request can say which credential made it without trusting anything the caller sent.
+func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
+	t.Parallel()
+	named := func(presented string) (string, bool) { return "console-1", presented == "good" }
+	var seen string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = CredentialFromContext(r.Context())
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/x", nil)
+	req.Header.Set("Authorization", "Bearer good")
+	BearerGuard(rpcerr.FormatJSON, named, next).ServeHTTP(httptest.NewRecorder(), req)
+	assert.Equal(t, "console-1", seen)
+	assert.Empty(t, CredentialFromContext(t.Context()), "no guard, no credential")
 }
 
 func TestBearerToken(t *testing.T) {

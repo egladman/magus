@@ -284,7 +284,7 @@ export function demoSession(): DiffSession {
         // The new-side line the remark hangs on, which is what a host anchors an inline
         // comment to. Inside hunk 0's range (+14,14), so the batch can place it.
         line: 22,
-        author: "human",
+        author: "unattributed",
         body: "Audience is repeated on the wire. Does a token minted for two services verify at both, or is the first one authoritative?",
         resolved: false,
       },
@@ -302,7 +302,7 @@ export function demoSession(): DiffSession {
         path: "apps/dashboard/src/api/session.ts",
         hunk: 0,
         line: 41,
-        author: "human",
+        author: "unattributed",
         body: "canReach was the only reader of scope, so this is the whole web-side change.",
         resolved: true,
         // Already sent, so the showcase has both states side by side: what the reader still
@@ -408,7 +408,7 @@ export function applyDemoPublish(session: DiffSession): DiffSession {
   return {
     ...session,
     comments: (session.comments ?? []).map((c) =>
-      c.author === "human" ? { ...c, published: true } : c,
+      c.author === "unattributed" ? { ...c, published: true } : c,
     ),
   };
 }
@@ -486,8 +486,8 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
       const comments = session.comments ?? [];
       return {
         ...session,
-        // Author is "human" by construction, the same way the daemon stamps it from the
-        // transport: this op arrived from the console, and nothing in the payload can say
+        // Author is "unattributed" by construction, the same way the daemon stamps it from the
+        // route: this op arrived from the console, and nothing in the payload can say
         // otherwise.
         comments: [
           ...comments,
@@ -496,7 +496,7 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
             path: op.path,
             hunk: op.hunk,
             line: op.line,
-            author: "human",
+            author: "unattributed",
             body: op.body,
             resolved: false,
           },
@@ -509,7 +509,7 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
       return {
         ...session,
         comments: (session.comments ?? []).filter(
-          (c) => !(c.id === op.id && c.author === "human" && !c.published),
+          (c) => !(c.id === op.id && c.author === "unattributed" && !c.published),
         ),
       };
     case "resolve":

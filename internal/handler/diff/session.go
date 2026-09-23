@@ -19,11 +19,13 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -318,11 +320,12 @@ func scopePaths(r *http.Request) []string {
 
 // SessionHandler serves the live paired-review session.
 //
-// Every write here is stamped DiffAuthorHuman, because this route is only reachable from
-// the console and the CLI. The agent's half lives on the MCP surface and is stamped
-// DiffAuthorAgent there. Authorship is decided by WHICH ROUTE the write arrived on and
-// never by the payload, which is what makes it unforgeable: an agent cannot reach this
-// handler, so it cannot post as the person.
+// Every write here is stamped DiffAuthorUnattributed with the request's origin: the OS
+// account and the credential the bearer guard verified. The agent's half lives on the MCP
+// surface and is stamped DiffAuthorAgent there. The stamp is decided by WHICH ROUTE the
+// write arrived on and never by the payload, but the route does not prove a person: any
+// process of the account can read a console or cli token, so the origin records which
+// credential wrote the remark rather than claiming who held it.
 //
 // It is one route with an `op` rather than five, because these are all small mutations of one
 // object and a client applies them from one place: a keypress handler. Five routes would be
@@ -414,7 +417,7 @@ func (h *SessionHandler) publish(ctx context.Context, req reviewSessionRequest) 
 	}
 	var drafts, unplaceable []types.DiffComment
 	for _, c := range sess.Comments {
-		if c.Author != types.DiffAuthorHuman || c.Published {
+		if c.Author != types.DiffAuthorUnattributed || c.Published {
 			continue
 		}
 		if c.Line == 0 {
@@ -543,9 +546,9 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		// hunk in the terminal viewer does. One rule, two surfaces: the reader chooses where
 		// to read and magus does not care which they picked.
 		//
-		// Only a mark arriving HERE mints one. This route is the human's, and the MCP surface
-		// has no way to write it; see Store.MarkViewed for why a restored session must not
-		// mint on its own.
+		// Only a mark arriving HERE mints one. This route is the review route, and the MCP
+		// surface has no way to write it; see Store.MarkViewed for why a restored session
+		// must not mint on its own.
 		h.mintReceipt(r.Context(), finished)
 	case "comment":
 		// The anchor is CAPTURED here rather than accepted from the request. The server holds the
@@ -555,9 +558,13 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		sess = h.Sessions.AddComment(h.Root, types.DiffComment{
 			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body,
 			Anchor: h.Sessions.Anchor(h.Root, req.Path, req.Line),
-		}, types.DiffAuthorHuman)
+			Origin: trail.StampOrigin(r.Context(), types.Origin{
+				EntryPoint: types.EntryPointRPC,
+				Credential: httpx.CredentialFromContext(r.Context()),
+			}),
+		}, types.DiffAuthorUnattributed)
 		if h.Telemetry != nil {
-			h.Telemetry.RecordReviewRemark(r.Context(), string(types.DiffAuthorHuman))
+			h.Telemetry.RecordReviewRemark(r.Context(), string(types.DiffAuthorUnattributed))
 		}
 	case "seen":
 		// The reader's claim that these threads were put in front of them, which is the ONLY

@@ -39,8 +39,41 @@ type Origin struct {
 	Session string `json:"session,omitempty" yaml:"session,omitempty"`
 	// Agent is the host's subagent id within Session, empty for the main conversation.
 	Agent string `json:"agent,omitempty" yaml:"agent,omitempty"`
+	// Credential is the name of the bearer credential a daemon request presented, as
+	// the daemon verified it. It proves possession of that credential, not who holds it.
+	Credential string `json:"credential,omitempty" yaml:"credential,omitempty"`
 }
 
 // Attributed reports whether a host delivered a session for this record. False is
 // "unattributed", which is a fact about the channel and says nothing about who acted.
 func (o Origin) Attributed() bool { return o.Session != "" }
+
+// Label renders the origin as one phrase for a row head: "eli", "eli via <host>",
+// "eli via credential console-1", "daemon". It is "unattributed" when no channel named
+// anything. A reader that needs one field reads that field, never this.
+func (o Origin) Label() string {
+	if o.EntryPoint == EntryPointDaemon {
+		return string(EntryPointDaemon)
+	}
+	label := o.User
+	for _, via := range []string{o.Host, credentialPhrase(o.Credential)} {
+		switch {
+		case via == "":
+		case label == "":
+			label = via
+		default:
+			label += " via " + via
+		}
+	}
+	if label == "" {
+		return "unattributed"
+	}
+	return label
+}
+
+func credentialPhrase(name string) string {
+	if name == "" {
+		return ""
+	}
+	return "credential " + name
+}

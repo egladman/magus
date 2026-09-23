@@ -9,8 +9,10 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -253,6 +255,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 			Hunk:      hunk,
 			Body:      body,
 			AgentName: strings.TrimSpace(paramString(req.Params, "agent_name", "")),
+			Origin:    trail.StampOrigin(ctx, types.Origin{Credential: httpx.CredentialFromContext(ctx)}),
 		}, types.DiffAuthorAgent)
 		// The author here is transport-stamped, never read off the payload, which is what makes
 		// it safe as an attribute: it says which DOOR the remark came through, and the agent's

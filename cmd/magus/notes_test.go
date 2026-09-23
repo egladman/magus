@@ -131,7 +131,7 @@ func TestCaptureKeepsWhatColleaguesSaid(t *testing.T) {
 		ID:   "rev-1",
 		AsOf: "patch-1",
 		Comments: []types.DiffComment{
-			{Path: "a.go", Hunk: 1, Author: types.DiffAuthorHuman, Body: "mine"},
+			{Path: "a.go", Hunk: 1, Author: types.DiffAuthorUnattributed, Body: "mine"},
 		},
 	}
 	threads := []types.ReviewThread{
@@ -160,7 +160,7 @@ func TestCaptureWithNoThreadsIsStillATranscript(t *testing.T) {
 	sess := &types.DiffSession{
 		ID: "rev-1",
 		Comments: []types.DiffComment{
-			{Path: "a.go", Author: types.DiffAuthorHuman, Body: "mine"},
+			{Path: "a.go", Author: types.DiffAuthorUnattributed, Body: "mine"},
 		},
 	}
 	n, err := captureFromSession(sess, nil, "review", nil).Note("cap")
@@ -176,7 +176,7 @@ func TestCaptureReadsTheStoreWhenNoDaemonIsRunning(t *testing.T) {
 	root := filepath.Join(cache, "ws")
 	written := changeset.NewStore(cache)
 	written.Attach(root, "main", types.Diff{Base: "main"}, "asof")
-	written.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorHuman)
+	written.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "mine"}, types.DiffAuthorUnattributed)
 
 	sess := storedDiffSession(cache, "diff --git a/a.go b/a.go\n")
 	require.Len(t, sess.Comments, 1, "the drafts the store persisted are the transcript")

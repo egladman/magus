@@ -125,7 +125,7 @@ func TestCommentAuthorIsStampedNotClaimed(t *testing.T) {
 	s := NewStore("")
 	s.Attach("/w", "working", types.Diff{}, "")
 	got := s.AddComment("/w",
-		types.DiffComment{Path: "a.go", Body: "hi", Author: types.DiffAuthorHuman},
+		types.DiffComment{Path: "a.go", Body: "hi", Author: types.DiffAuthorUnattributed},
 		types.DiffAuthorAgent)
 	require.Len(t, got.Comments, 1)
 	assert.Equal(t, types.DiffAuthorAgent, got.Comments[0].Author,
@@ -297,7 +297,7 @@ func TestHumanDraftsSurviveARestart(t *testing.T) {
 	first.AddComment(root, types.DiffComment{
 		Path: "a.go", Hunk: 0, Body: "this is the bit reviewers always ask about",
 		Anchor: types.CommentAnchor{Digest: "d1", Quote: "\treturn nil"},
-	}, types.DiffAuthorHuman)
+	}, types.DiffAuthorUnattributed)
 	first.AddComment(root, types.DiffComment{
 		Path: "b.go", Hunk: 2, Body: "agent noise from the pairing session",
 	}, types.DiffAuthorAgent)
@@ -321,8 +321,8 @@ func TestAPublishedCommentIsNotRestoredAsADraft(t *testing.T) {
 
 	first := NewStore(dir)
 	first.Attach(root, "main", types.Diff{}, "asof1")
-	first.AddComment(root, types.DiffComment{Path: "a.go", Body: "sent"}, types.DiffAuthorHuman)
-	first.AddComment(root, types.DiffComment{Path: "b.go", Body: "still mine"}, types.DiffAuthorHuman)
+	first.AddComment(root, types.DiffComment{Path: "a.go", Body: "sent"}, types.DiffAuthorUnattributed)
+	first.AddComment(root, types.DiffComment{Path: "b.go", Body: "still mine"}, types.DiffAuthorUnattributed)
 	first.MarkPublished(root, "c1")
 
 	second := NewStore(dir)
@@ -339,7 +339,7 @@ func TestAPublishedCommentIsNotRestoredAsADraft(t *testing.T) {
 func TestDraftsAreMemoryOnlyWithoutAStateDir(t *testing.T) {
 	s := NewStore("")
 	s.Attach("/ws", "main", types.Diff{}, "a")
-	s.AddComment("/ws", types.DiffComment{Path: "a.go", Body: "x"}, types.DiffAuthorHuman)
+	s.AddComment("/ws", types.DiffComment{Path: "a.go", Body: "x"}, types.DiffAuthorUnattributed)
 	assert.Len(t, NewStore("").Attach("/ws", "main", types.Diff{}, "a").Comments, 0)
 }
 
@@ -353,14 +353,14 @@ func TestACommentIDIsNeverReusedAfterAGap(t *testing.T) {
 	first := NewStore(dir)
 	first.Attach(root, "main", types.Diff{}, "a")
 	for _, body := range []string{"one", "two", "three"} {
-		first.AddComment(root, types.DiffComment{Path: "a.go", Body: body}, types.DiffAuthorHuman)
+		first.AddComment(root, types.DiffComment{Path: "a.go", Body: body}, types.DiffAuthorUnattributed)
 	}
 	// The middle one leaves the file, which is what makes the set sparse.
 	first.MarkPublished(root, "c2")
 
 	second := NewStore(dir)
 	second.Attach(root, "main", types.Diff{}, "b")
-	sess := second.AddComment(root, types.DiffComment{Path: "b.go", Body: "four"}, types.DiffAuthorHuman)
+	sess := second.AddComment(root, types.DiffComment{Path: "b.go", Body: "four"}, types.DiffAuthorUnattributed)
 
 	seen := map[string]string{}
 	for _, c := range sess.Comments {
@@ -419,7 +419,7 @@ func TestTrackHunksRelocatesADraftWhoseCodeMoved(t *testing.T) {
 	sess := s.AddComment(root, types.DiffComment{
 		Path: "a.go", Hunk: 0, Line: 12, Body: "why is this not a pointer",
 		Anchor: s.Anchor(root, "a.go", 12),
-	}, types.DiffAuthorHuman)
+	}, types.DiffAuthorUnattributed)
 	require.Len(t, sess.Comments, 1)
 	require.Equal(t, "\treturn x", sess.Comments[0].Anchor.Quote, "the server captured what the reader saw")
 
@@ -448,7 +448,7 @@ func TestTrackHunksLeavesAPublishedRemarkWhereItWasSent(t *testing.T) {
 	s.AddComment(root, types.DiffComment{
 		Path: "a.go", Line: 1, Body: "sent already", Published: true,
 		Anchor: types.CommentAnchor{Quote: "a"},
-	}, types.DiffAuthorHuman)
+	}, types.DiffAuthorUnattributed)
 
 	s.TrackHunks(root, []FileHunks{{Path: "a.go", Hunks: []Hunk{
 		{Lines: []string{" z", " a", " b"}, Digest: "d2", NewStart: 1, NewCount: 3},

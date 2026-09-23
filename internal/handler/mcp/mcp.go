@@ -21,6 +21,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
@@ -329,10 +330,11 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 
 		dur := time.Since(start)
 		ev := trail.Event{
-			Ts:            start.UnixMilli(),
-			Kind:          trail.KindMCPToolCall,
-			Actor:         agentID,
-			Origin:        types.Origin{EntryPoint: types.EntryPointMCP},
+			Ts:   start.UnixMilli(),
+			Kind: trail.KindMCPToolCall,
+			// The client names itself in the MCP handshake; the credential is the one the
+			// bearer guard verified, absent over stdio.
+			Origin:        types.Origin{EntryPoint: types.EntryPointMCP, Host: agentID, Credential: httpx.CredentialFromContext(ctx)},
 			UserAgent:     o.UserAgent,
 			Action:        toolName,
 			Outcome:       trail.OutcomeOK,

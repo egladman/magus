@@ -120,10 +120,6 @@ func recordDenial(ctx context.Context, p *Policy, access, path string, err error
 		// Set only on a lease-narrowed policy, so a reader can tell a boundary a lease
 		// declared for itself from the workspace default every run already has.
 		Lease: lease,
-		// The magusfile is what asked, and no identity below this layer knows who ran it.
-		// Naming a person or an agent magus cannot identify would be worse than naming the
-		// file that made the request.
-		Actor: "magusfile",
 		// Reads as a sentence where the console renders it: "Sandbox denied read of <path>."
 		Action:  access + " of " + path,
 		Outcome: trail.OutcomeError,

@@ -343,9 +343,9 @@ func (s *Store) completedBy(root, digest string, viewed []string) string {
 	return path
 }
 
-// AddComment attaches a remark. author is stamped by the CALLER from the transport the write
-// arrived on (never from the request body), which is what stops an agent posting as the
-// human. See types.DiffAuthor.
+// AddComment attaches a remark. author is stamped by the CALLER from the route the write
+// arrived on (never from the request body), so a writer cannot choose it. See
+// types.DiffAuthor.
 func (s *Store) AddComment(root string, c types.DiffComment, author types.DiffAuthor) *types.DiffSession {
 	out := s.mutate(root, func(sess *types.DiffSession) {
 		c.Author = author
@@ -392,13 +392,13 @@ func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffSessio
 // DiscardDraft removes a remark that has not been sent, so a reader can back out of one the
 // way they can back out of a staged setting.
 //
-// UNPUBLISHED and HUMAN only. A published remark exists somewhere a colleague may already have
+// UNPUBLISHED review-route drafts only. A published remark exists somewhere a colleague may already have
 // replied to, and deleting the local copy would not unsay it; it would only hide it from the
 // person who wrote it. An agent's remark is not the reader's to delete.
 func (s *Store) DiscardDraft(root, id string) *types.DiffSession {
 	out := s.mutate(root, func(sess *types.DiffSession) {
 		for i, c := range sess.Comments {
-			if c.ID != id || c.Published || c.Author != types.DiffAuthorHuman {
+			if c.ID != id || c.Published || c.Author != types.DiffAuthorUnattributed {
 				continue
 			}
 			sess.Comments = slices.Delete(sess.Comments, i, i+1)
@@ -496,7 +496,7 @@ func (s *Store) persistDrafts(root string) {
 			// An agent's remark belongs to the pairing session and dies with it. A published
 			// one lives on the host now, and re-sending it from a restored draft would post it
 			// twice.
-			if c.Author == types.DiffAuthorHuman && !c.Published {
+			if c.Author == types.DiffAuthorUnattributed && !c.Published {
 				keep = append(keep, c)
 			}
 		}

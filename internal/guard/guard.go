@@ -1064,16 +1064,11 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	if input == "" || location.cacheDir == "" {
 		return
 	}
-	// A call typed at a terminal is the CLI's, not a hook's, and is not recorded as an agent.
-	entry, actor := trail.EntryPointFromContext(ctx), "agent"
-	if entry != "" && entry != types.EntryPointHook {
-		actor = string(entry)
-	}
 	command := trail.AgentCommand{
-		PolicyDigest:    policyDigest,
-		DecidedBy:       decidedBy(verdict),
-		Actor:           actor,
-		EntryPoint:      entry,
+		PolicyDigest: policyDigest,
+		DecidedBy:    decidedBy(verdict),
+		// A call typed at a terminal entered through the CLI, not a hook.
+		EntryPoint:      trail.EntryPointFromContext(ctx),
 		Workspace:       location.workspace,
 		Host:            who.Host,
 		Session:         who.Session,
@@ -1125,7 +1120,6 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Continue:      req.IsContinue,
 		Target:        rec.target,
 		RuleFailures:  rec.ruleFailures,
-		Actor:         "agent",
 		Workspace:     location.workspace,
 		Host:          who.Host,
 		Session:       who.Session,

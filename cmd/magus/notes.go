@@ -1006,10 +1006,10 @@ func captureFromSession(sess *types.DiffSession, threads []types.ReviewThread, t
 // thing it must not.
 func commentAuthor(c types.DiffComment) string {
 	if c.Author != types.DiffAuthorAgent {
-		// "reviewer", not the "human" the enum spells, and not a name. The session records
-		// that a person wrote this and never which person, so a name would be invented; and
-		// "You" would be a lie to everyone except the one reader who captured it, which is
-		// exactly the wrong reader to optimize a committed note for.
+		// "reviewer", not a name. The session records which route and credential wrote this,
+		// never which person, so a name would be invented; and "You" would be a lie to
+		// everyone except the one reader who captured it, which is exactly the wrong reader to
+		// optimize a committed note for.
 		return "reviewer"
 	}
 	if c.AgentName == "" {

@@ -35,6 +35,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -100,13 +101,14 @@ func WithAuditReads() Option {
 }
 
 // Interceptor records every MUTATING unary call on the service it wraps to the trail under trailDir, with
-// the server-stamped actor and the given kind (one wire Kind per mounted service: the token service is
-// all token_lifecycle). Reads are not recorded by default (the trail is for consequential actions, not
+// the given kind (one wire Kind per mounted service: the token service is all token_lifecycle) and the
+// name of the credential the bearer guard verified, read from the request context rather than from any
+// field the caller sent. Reads are not recorded by default (the trail is for consequential actions, not
 // queries); pass WithAuditReads to also record read verbs, as the memory service does.
 // Recording is best-effort and post-hoc: it never blocks or fails the RPC (trail.Append swallows I/O
 // errors, matching the trail's "never a precondition for the action it records" contract), and a failed
 // mutation is still recorded, with its error, because an attempted revoke is itself worth auditing.
-func Interceptor(trailDir, actor string, kind trail.Kind, opts ...Option) connect.Interceptor {
+func Interceptor(trailDir string, kind trail.Kind, opts ...Option) connect.Interceptor {
 	var cfg options
 	for _, o := range opts {
 		o(&cfg)
@@ -120,8 +122,7 @@ func Interceptor(trailDir, actor string, kind trail.Kind, opts ...Option) connec
 				ev := trail.Event{
 					Ts:         start.UnixMilli(),
 					Kind:       kind,
-					Actor:      actor,
-					Origin:     types.Origin{EntryPoint: types.EntryPointRPC},
+					Origin:     types.Origin{EntryPoint: types.EntryPointRPC, Credential: httpx.CredentialFromContext(ctx)},
 					Action:     method,
 					Outcome:    trail.OutcomeOK,
 					DurationMs: time.Since(start).Milliseconds(),

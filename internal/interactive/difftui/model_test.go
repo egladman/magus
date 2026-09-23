@@ -532,7 +532,7 @@ func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+new"}, Digest: "d0"},
 		}}},
-		Comments: []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorHuman, Body: "mine"}},
+		Comments: []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorUnattributed, Body: "mine"}},
 		Threads:  []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "theirs"}},
 	})
 

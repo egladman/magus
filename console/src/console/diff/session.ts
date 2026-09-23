@@ -115,11 +115,23 @@ export interface Diff {
   readonly api?: DiffAPI;
 }
 
+export interface CommentOrigin {
+  readonly user?: string;
+  readonly entry_point?: string;
+  readonly host?: string;
+  readonly credential?: string;
+}
+
 export interface DiffComment {
   readonly id: string;
   readonly path: string;
   readonly hunk: number;
-  readonly author: "human" | "agent";
+  // The door the remark came through, stamped by the daemon. "unattributed" is the review
+  // route: a draft its reader may publish or discard. It does not say a person wrote it.
+  readonly author: "unattributed" | "agent";
+  // Where the write came from: the OS account, the entry point, and the credential or MCP
+  // client that carried it.
+  readonly origin?: CommentOrigin;
   readonly agent_name?: string;
   readonly body: string;
   readonly resolved: boolean;
