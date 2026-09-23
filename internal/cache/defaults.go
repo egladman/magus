@@ -12,28 +12,41 @@ import (
 // config; see ProfileConcurrency.
 func DefaultConcurrency() int { return ProfileConcurrency(types.ProfileBalanced) }
 
-// ProfileConcurrency returns the width a configured profile names on this machine.
-// MAGUS_CONCURRENCY, when set to a positive int, overrides every profile.
-//
-// On a GitHub-hosted runner the core count is 4 whatever NumCPU says: the runner reports
-// its host's CPUs while giving the job a slice, so NumCPU over-subscribes badly there.
+// EffectiveProfile resolves the profile a run actually sizes under. An explicit
+// profile passes through unchanged; an unset one (the zero value) becomes aggressive
+// under the generic CI environment variable: GitHub Actions, GitLab CI, CircleCI and
+// Buildkite all set CI=true, so this needs no per-provider branching. A CI runner has
+// nothing else competing for its cores or its memory, unlike a laptop also running an
+// editor and a browser, so balanced's headroom serves no one there; aggressive claims
+// what the job already has exclusive use of. Outside CI an unset profile stays "",
+// which ConcurrencyProfile.Width and mem.BudgetMB both read as balanced.
 //
 // This is the one place magus names a CI provider outside a spell, and it
 // is startup ordering that forces it: the limiter is built before the
 // magusfile is evaluated (see cmd/magus/main.go), so the CI provider spell
 // that would otherwise answer this is not loaded yet. Everything else
 // provider-specific lives in a spell; see internal/ci/annotate.
+//
+// ProfileConcurrency and the machine budget's memory sizing (cmd/magus/main.go,
+// mem.BudgetMB) both call this rather than probing CI themselves, so the aggressive
+// profile claims cores and memory under the same rule.
+func EffectiveProfile(profile types.ConcurrencyProfile) types.ConcurrencyProfile {
+	if profile == "" && os.Getenv("CI") == "true" {
+		return types.ProfileAggressive
+	}
+	return profile
+}
+
+// ProfileConcurrency returns the width a configured profile names on this machine.
+// MAGUS_CONCURRENCY, when set to a positive int, overrides every profile; an explicit
+// profile (config, env, or flag) overrides EffectiveProfile's own CI default in turn.
 func ProfileConcurrency(profile types.ConcurrencyProfile) int {
 	if v := os.Getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}
 	}
-	cores := runtime.NumCPU()
-	if os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("RUNNER_ENVIRONMENT") != "self-hosted" {
-		cores = 4
-	}
-	return profile.Width(cores)
+	return EffectiveProfile(profile).Width(runtime.NumCPU())
 }
 
 // ResolveConcurrency returns the width a run actually gets: an explicit configured value

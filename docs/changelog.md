@@ -124,6 +124,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **CI defaults to using every core, and every core's worth of memory.** An
+  unconfigured `concurrency_profile` resolves to `aggressive` under the generic
+  `CI=true` (GitHub Actions, GitLab CI, CircleCI, Buildkite, ...) instead of
+  `balanced`; explicit `MAGUS_CONCURRENCY`, `concurrency`, or `concurrency_profile`
+  from config, env, or a flag all still win. The GitHub-hosted 4-core hard-code is
+  removed: `runtime.NumCPU()` reports the standard runner's real 4 vCPUs accurately,
+  so nothing was gained by overriding it, and a larger runner now gets its real core
+  count instead of being clamped to 4. The machine budget's memory reservation now
+  follows the same profile: `balanced` and `conservative` still reserve a quarter of
+  memory for the OS and everything else sharing the machine, but `aggressive` takes
+  every usable megabyte down to a fixed 512 MiB floor for the kernel and its page
+  cache, no percentage held back.
 - **magus never waits on another magus invocation.** A workspace lock or machine budget
   held by another invocation refuses immediately (exit 75), naming the holder.
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each

@@ -18,8 +18,12 @@ import (
 //
 // Tests that care about a value still set it themselves with t.Setenv, which runs
 // after this and restores afterwards; defaults_test.go does exactly that for
-// MAGUS_CONCURRENCY and GITHUB_ACTIONS. Clearing here rather than per-test also keeps
-// t.Parallel available, which t.Setenv would forbid.
+// MAGUS_CONCURRENCY and CI. CI is cleared here too, not just per-test: this suite is
+// itself RUN BY ci.yaml, so without this every test touching ProfileConcurrency's
+// unconfigured-profile default would silently pick aggressive on a PR and balanced
+// locally, the same class of environment-dependent flake MAGUS_CACHE_WRITE_ENABLED
+// caused above. Clearing here rather than per-test also keeps t.Parallel available,
+// which t.Setenv would forbid.
 // MAGUS_LEVEL and MAGUS_INVOCATION_ANCESTORS are cleared for the same reason and they
 // are the sharpest case of it: this suite is RUN BY magus, so the test binary is a magus
 // child and inherits both. The machine gate reads them to decide whether a run is nested
@@ -32,7 +36,7 @@ import (
 func TestMain(m *testing.M) {
 	for _, k := range []string{
 		"MAGUS_CACHE_WRITE_ENABLED", "MAGUS_CACHE_SIZE_MB",
-		"MAGUS_LEVEL", "MAGUS_INVOCATION_ANCESTORS",
+		"MAGUS_LEVEL", "MAGUS_INVOCATION_ANCESTORS", "CI",
 	} {
 		_ = os.Unsetenv(k)
 	}
