@@ -41,7 +41,7 @@ func withSessionJournal(ctx context.Context, handlers []slog.Handler, root, verb
 	if forwarded := proc.LeaseFromContext(ctx); forwarded != "" {
 		spawn = trail.Spawn{Lease: forwarded}
 	}
-	h := sessions.NewFactHandler(root, sessions.SessionStart{
+	h := sessions.NewFactHandler(root, sessions.InvocationStart{
 		Origin:       trail.LocalOrigin(ctx),
 		Workspace:    root,
 		Command:      strings.Join(append([]string{verb}, args...), " "),

@@ -40,7 +40,7 @@ func raise(t *testing.T, dir, agentSession, message string) string {
 		Source:  "claude/Notification",
 		Where:   "/repo",
 		Message: message,
-	}, sessions.SessionStart{Workspace: "/repo"})
+	}, sessions.InvocationStart{Workspace: "/repo"})
 	if err != nil {
 		t.Fatalf("open request: %v", err)
 	}

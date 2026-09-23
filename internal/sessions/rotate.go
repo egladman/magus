@@ -9,7 +9,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 )
 
-// DefaultRetention is how long a session file outlives its newest fact. [Open]
+// DefaultRetention is how long a invocation file outlives its newest fact. [Open]
 // prunes with it; a caller that wants a different window calls [Prune] directly.
 //
 // There is no config key and no environment variable behind this on purpose: the
@@ -18,10 +18,10 @@ import (
 // workspace-level setting is a decision to take once, not a knob to add ahead of it.
 const DefaultRetention = 30 * 24 * time.Hour
 
-// Prune deletes whole session files whose newest fact is older than retain.
+// Prune deletes whole invocation files whose newest fact is older than retain.
 //
 // Deleting is all it does. Nothing here rolls a file over, renames one, or truncates
-// one: a session file is append-only or absent, and a truncation would produce a
+// one: a invocation file is append-only or absent, and a truncation would produce a
 // third state (a file whose beginning is missing) that no reader in this package is
 // written to expect. A retain of zero or less disables pruning entirely.
 //
@@ -31,7 +31,7 @@ const DefaultRetention = 30 * 24 * time.Hour
 //
 // # The attention exemption
 //
-// An attention request is raised in one session's file and disposed of in another's
+// An attention request is raised in one invocation's file and disposed of in another's
 // (see [Attention]), so the records of one request routinely straddle two files that
 // age out at different times. Deleting one of the pair changes what the queue says:
 //
@@ -54,9 +54,9 @@ const DefaultRetention = 30 * 24 * time.Hour
 // Rule 1 does pin, for as long as the request stays open, which is the intended trade.
 func Prune(dir string, retain time.Duration) { prune(dir, retain, "") }
 
-// prune is [Prune] with the caller's own session file held back. Open passes its
-// session file so a writer can never delete the file it is about to append to,
-// whatever the clock or a reused session id says.
+// prune is [Prune] with the caller's own invocation file held back. Open passes its
+// invocation file so a writer can never delete the file it is about to append to,
+// whatever the clock or a reused invocation id says.
 func prune(dir string, retain time.Duration, keep string) {
 	if retain <= 0 {
 		return
@@ -119,7 +119,7 @@ func prune(dir string, retain time.Duration, keep string) {
 		}
 		// last stays zero for a file with no decodable record, which reads as older
 		// than any cutoff and deletes it. That is the right answer: it is the file of
-		// a session that recorded nothing anybody can still use.
+		// an invocation that recorded nothing anybody can still use.
 		if _, ok := stale[name]; ok && last < cutoffMs {
 			candidates[name] = true
 		}
@@ -154,7 +154,7 @@ func prune(dir string, retain time.Duration, keep string) {
 
 	for name := range candidates {
 		path := filepath.Join(dir, name)
-		// A session idle past the window can still wake up and append. Re-stat so a
+		// An invocation idle past the window can still wake up and append. Re-stat so a
 		// file that grew after the fold was read survives: the decision to delete it
 		// was made about contents it no longer has.
 		info, err := os.Stat(path)

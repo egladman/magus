@@ -181,7 +181,7 @@ func attentionDispose(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.SessionStart{
+	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointCLI),
 		Workspace: root,
 		Version:   version,
@@ -201,11 +201,11 @@ func attentionDispose(root string, args []string) error {
 	if opts.Format != outputText {
 		return emitFormatted(opts, req)
 	}
-	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from session %s\n",
+	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from invocation %s\n",
 		req.ID,
 		orDash(formatDur(time.Since(time.UnixMilli(req.OpenedMs)))),
 		orDash(req.Source),
-		req.Session)
+		req.Invocation)
 	fmt.Fprintf(os.Stdout, "  %s\n", attentionOneLine(req.Message))
 	if reason != "" {
 		fmt.Fprintf(os.Stdout, "  reason: %s\n", reason)
@@ -278,7 +278,7 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		Lease:   trail.LeaseFromEnv(),
 		Message: ev.Message,
 	}
-	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.SessionStart{
+	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointHook),
 		Workspace: root,
 		Version:   version,

@@ -428,7 +428,8 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 		// store the checkout-relative path, and only events loaded before they did
 		// still need reducing here.
 		out = append(out, knowledge.AgentContact{
-			Session: rec.Session,
+			// A loaded event is filed under the host session, so that is its invocation id.
+			Session: rec.Invocation,
 			Path:    vcs.CheckoutRelative(ev.Text),
 			Read:    ev.Kind == sessions.EventFileRead,
 			Write:   ev.Kind == sessions.EventFileWrite,

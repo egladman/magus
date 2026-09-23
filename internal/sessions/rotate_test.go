@@ -212,7 +212,7 @@ func TestOpenPrunesTheStore(t *testing.T) {
 		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
 	})
 
-	_, err := Open(dir, "current", SessionStart{Workspace: "/repo"})
+	_, err := Open(dir, "current", InvocationStart{Workspace: "/repo"})
 	require.NoError(t, err)
 
 	assert.Empty(t, storedSessions(t, dir))
@@ -228,7 +228,7 @@ func TestOpenNeverPrunesItsOwnSessionFile(t *testing.T) {
 		attRecord(t, "resumed", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
 	})
 
-	w, err := Open(dir, "resumed", SessionStart{})
+	w, err := Open(dir, "resumed", InvocationStart{})
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
 
@@ -272,7 +272,7 @@ func TestReadAllTreatsAFileThatVanishedMidFoldAsAbsent(t *testing.T) {
 	fold, err := ReadAll(dir)
 	require.NoError(t, err, "a pruned file must not fail the fold")
 	assert.Len(t, fold.Records, 1)
-	assert.Equal(t, 1, fold.Sessions, "a file that is no longer there is not a session anybody can read")
+	assert.Equal(t, 1, fold.Invocations, "a file that is no longer there is not an invocation anybody can read")
 	assert.Zero(t, fold.Skipped, "pruning is not damage")
 }
 

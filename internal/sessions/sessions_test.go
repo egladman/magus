@@ -16,7 +16,7 @@ func TestAppendReadRoundTrip(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := Open(dir, "sess1", SessionStart{Workspace: "/repo", Command: "run build"})
+	w, err := Open(dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build"})
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 12}))
 
@@ -24,9 +24,9 @@ func TestAppendReadRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, fold.Records, 2, "the first append also writes the session-start record")
 	assert.Zero(t, fold.Skipped)
-	assert.Equal(t, 1, fold.Sessions)
+	assert.Equal(t, 1, fold.Invocations)
 
-	assert.Equal(t, Record{V: SchemaVersion, Session: "sess1", Seq: 1, Kind: KindSessionStart, Ts: fold.Records[0].Ts, Payload: fold.Records[0].Payload}, fold.Records[0])
+	assert.Equal(t, Record{V: SchemaVersion, Invocation: "sess1", Seq: 1, Kind: KindInvocationStart, Ts: fold.Records[0].Ts, Payload: fold.Records[0].Payload}, fold.Records[0])
 	assert.Equal(t, uint64(2), fold.Records[1].Seq)
 
 	var got TargetResult
@@ -40,13 +40,13 @@ func TestOpenWritesNothingUntilTheFirstFact(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := Open(dir, "sess1", SessionStart{})
+	w, err := Open(dir, "sess1", InvocationStart{})
 	require.NoError(t, err)
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Empty(t, fold.Records)
-	assert.Zero(t, fold.Sessions)
+	assert.Zero(t, fold.Invocations)
 
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
 	fold, err = ReadAll(dir)
@@ -62,7 +62,7 @@ func TestAppendBoundsAnOversizedAttentionMessage(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := Open(dir, "sess1", SessionStart{})
+	w, err := Open(dir, "sess1", InvocationStart{})
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindAttentionOpen, AttentionOpen{
 		Request: "att-1",
@@ -101,9 +101,9 @@ func TestReadAllSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
 	path := filepath.Join(dir, "sess1.jsonl")
 
 	body := strings.Join([]string{
-		`{"v":1,"session":"sess1","seq":1,"kind":"target_result","ts":1,"payload":{"target":"build","outcome":"pass"}}`,
-		`{"v":1,"session":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"` + strings.Repeat("x", maxLineBytes*2) + `"}}`,
-		`{"v":1,"session":"sess1","seq":3,"kind":"target_result","ts":3,"payload":{"target":"lint","outcome":"pass"}}`,
+		`{"v":1,"invocation":"sess1","seq":1,"kind":"target_result","ts":1,"payload":{"target":"build","outcome":"pass"}}`,
+		`{"v":1,"invocation":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"` + strings.Repeat("x", maxLineBytes*2) + `"}}`,
+		`{"v":1,"invocation":"sess1","seq":3,"kind":"target_result","ts":3,"payload":{"target":"lint","outcome":"pass"}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -127,8 +127,8 @@ func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
 	path := filepath.Join(dir, "sess1.jsonl")
 
 	body := strings.Join([]string{
-		`{"v":1,"session":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"` + strings.Repeat("x", maxLineBytes*2) + `"}}`,
-		`{"v":1,"session":"sess1","seq":2,"kind":"attention_open","ts":2,"payload":{"request":"att-small","outcome":"waiting","message":"needs a decision"}}`,
+		`{"v":1,"invocation":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"` + strings.Repeat("x", maxLineBytes*2) + `"}}`,
+		`{"v":1,"invocation":"sess1","seq":2,"kind":"attention_open","ts":2,"payload":{"request":"att-small","outcome":"waiting","message":"needs a decision"}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -144,17 +144,17 @@ func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
 
 // A session id is reached twice whenever it is reused (a resumed agent session, a
 // retried command), and the second writer has to continue the numbering rather than
-// restart it, or (Session, Seq) stops identifying one record.
+// restart it, or (Invocation, Seq) stops identifying one record.
 func TestOpenResumesTheSequenceOfAnExistingSession(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	first, err := Open(dir, "sess1", SessionStart{Command: "run build"})
+	first, err := Open(dir, "sess1", InvocationStart{Command: "run build"})
 	require.NoError(t, err)
 	require.NoError(t, first.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 	require.NoError(t, first.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
 
-	second, err := Open(dir, "sess1", SessionStart{Command: "run lint"})
+	second, err := Open(dir, "sess1", InvocationStart{Command: "run lint"})
 	require.NoError(t, err)
 	require.NoError(t, second.Append(KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
 
@@ -167,14 +167,14 @@ func TestOpenResumesTheSequenceOfAnExistingSession(t *testing.T) {
 		seqs = append(seqs, rec.Seq)
 	}
 	assert.Equal(t, []uint64{1, 2, 3, 4, 5}, seqs, "the second writer continues the numbering instead of reusing seq 1")
-	assert.Equal(t, KindSessionStart, fold.Records[0].Kind)
-	assert.Equal(t, KindSessionStart, fold.Records[3].Kind)
+	assert.Equal(t, KindInvocationStart, fold.Records[0].Kind)
+	assert.Equal(t, KindInvocationStart, fold.Records[3].Kind)
 }
 
 func TestOpenRejectsASessionIDThatCouldEscapeTheStore(t *testing.T) {
 	t.Parallel()
 	for _, id := range []string{"", "../escape", "a/b", "."} {
-		_, err := Open(t.TempDir(), id, SessionStart{})
+		_, err := Open(t.TempDir(), id, InvocationStart{})
 		require.Error(t, err, "session id %q", id)
 		assert.Contains(t, err.Error(), "sessions:")
 	}
@@ -187,9 +187,9 @@ func TestFoldSeesEveryWriterInTheStore(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	left, err := Open(dir, "wt-left", SessionStart{Workspace: "/repo/a"})
+	left, err := Open(dir, "wt-left", InvocationStart{Workspace: "/repo/a"})
 	require.NoError(t, err)
-	right, err := Open(dir, "wt-right", SessionStart{Workspace: "/repo/b"})
+	right, err := Open(dir, "wt-right", InvocationStart{Workspace: "/repo/b"})
 	require.NoError(t, err)
 
 	require.NoError(t, left.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
@@ -198,12 +198,12 @@ func TestFoldSeesEveryWriterInTheStore(t *testing.T) {
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
-	assert.Equal(t, 2, fold.Sessions)
+	assert.Equal(t, 2, fold.Invocations)
 	assert.Len(t, fold.Records, 5)
 
 	seen := map[string]int{}
 	for _, rec := range fold.Records {
-		seen[rec.Session]++
+		seen[rec.Invocation]++
 	}
 	assert.Equal(t, map[string]int{"wt-left": 3, "wt-right": 2}, seen)
 
@@ -211,7 +211,7 @@ func TestFoldSeesEveryWriterInTheStore(t *testing.T) {
 	require.Len(t, sessions, 2)
 	byID := map[string]Summary{}
 	for _, s := range sessions {
-		byID[s.Session] = s
+		byID[s.Invocation] = s
 	}
 	assert.Equal(t, "/repo/a", byID["wt-left"].Workspace)
 	assert.Equal(t, "/repo/b", byID["wt-right"].Workspace)
@@ -219,19 +219,19 @@ func TestFoldSeesEveryWriterInTheStore(t *testing.T) {
 	assert.Len(t, byID["wt-right"].Targets, 1)
 }
 
-// Ordering is by (Ts, Session, Seq). The tie-break matters more than the timestamp:
+// Ordering is by (Ts, Invocation, Seq). The tie-break matters more than the timestamp:
 // two worktrees appending in one millisecond must still fold to one stable order.
 func TestFoldOrdersByTimeThenSessionThenSeq(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
 	writeRaw(t, dir, "beta", []Record{
-		{V: 1, Session: "beta", Seq: 1, Kind: KindTargetResult, Ts: 100},
-		{V: 1, Session: "beta", Seq: 2, Kind: KindTargetResult, Ts: 100},
+		{V: 1, Invocation: "beta", Seq: 1, Kind: KindTargetResult, Ts: 100},
+		{V: 1, Invocation: "beta", Seq: 2, Kind: KindTargetResult, Ts: 100},
 	})
 	writeRaw(t, dir, "alpha", []Record{
-		{V: 1, Session: "alpha", Seq: 1, Kind: KindTargetResult, Ts: 100},
-		{V: 1, Session: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
+		{V: 1, Invocation: "alpha", Seq: 1, Kind: KindTargetResult, Ts: 100},
+		{V: 1, Invocation: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
 	})
 
 	fold, err := ReadAll(dir)
@@ -239,7 +239,7 @@ func TestFoldOrdersByTimeThenSessionThenSeq(t *testing.T) {
 
 	var order []string
 	for _, rec := range fold.Records {
-		order = append(order, rec.Session+"/"+string(rune('0'+rec.Seq)))
+		order = append(order, rec.Invocation+"/"+string(rune('0'+rec.Seq)))
 	}
 	assert.Equal(t, []string{"alpha/1", "beta/1", "beta/2", "alpha/2"}, order)
 }
@@ -250,14 +250,14 @@ func TestReadAllToleratesACorruptTail(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := Open(dir, "sess1", SessionStart{})
+	w, err := Open(dir, "sess1", InvocationStart{})
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
 
 	path := filepath.Join(dir, "sess1.jsonl")
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
-	_, err = f.WriteString(`{"v":1,"session":"sess1","seq":3,"kind":"target_res`)
+	_, err = f.WriteString(`{"v":1,"invocation":"sess1","seq":3,"kind":"target_res`)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
@@ -277,11 +277,11 @@ func TestReadAllCountsEveryUnusableLine(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":1,"session":"sess1","seq":1,"kind":"target_result","ts":1}`,
+		`{"v":1,"invocation":"sess1","seq":1,"kind":"target_result","ts":1}`,
 		`not json at all`,
 		``, // a blank line is not damage; it is skipped without counting
 		`{"v":1,"seq":2,"kind":"target_result","ts":2}`, // no session: unattributable
-		`{"v":1,"session":"sess1","seq":3,"ts":3}`,      // no kind: uninterpretable
+		`{"v":1,"invocation":"sess1","seq":3,"ts":3}`,   // no kind: uninterpretable
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -298,9 +298,9 @@ func TestUnknownKindsAndFieldsAreIgnoredNotRejected(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":1,"session":"sess1","seq":1,"kind":"session_start","ts":10,"payload":{"workspace":"/repo","invented_field":"ignored"}}`,
-		`{"v":9,"session":"sess1","seq":2,"kind":"attention_requested","ts":20,"payload":{"whatever":true}}`,
-		`{"v":1,"session":"sess1","seq":3,"kind":"target_result","ts":30,"payload":{"target":"build","outcome":"pass","future":1}}`,
+		`{"v":1,"invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo","invented_field":"ignored"}}`,
+		`{"v":9,"invocation":"sess1","seq":2,"kind":"attention_requested","ts":20,"payload":{"whatever":true}}`,
+		`{"v":1,"invocation":"sess1","seq":3,"kind":"target_result","ts":30,"payload":{"target":"build","outcome":"pass","future":1}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -321,16 +321,16 @@ func TestUnknownKindsAndFieldsAreIgnoredNotRejected(t *testing.T) {
 func TestSummarizeOrdersMostRecentFirst(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeRaw(t, dir, "old", []Record{{V: 1, Session: "old", Seq: 1, Kind: KindTargetResult, Ts: 100}})
-	writeRaw(t, dir, "new", []Record{{V: 1, Session: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
-	writeRaw(t, dir, "mid", []Record{{V: 1, Session: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
+	writeRaw(t, dir, "old", []Record{{V: 1, Invocation: "old", Seq: 1, Kind: KindTargetResult, Ts: 100}})
+	writeRaw(t, dir, "new", []Record{{V: 1, Invocation: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
+	writeRaw(t, dir, "mid", []Record{{V: 1, Invocation: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 
 	var ids []string
 	for _, s := range Summarize(fold) {
-		ids = append(ids, s.Session)
+		ids = append(ids, s.Invocation)
 	}
 	assert.Equal(t, []string{"new", "mid", "old"}, ids)
 }
@@ -341,7 +341,7 @@ func TestLeaseSurvivesTheStoreOnBothPayloads(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := Open(dir, "sess1", SessionStart{Workspace: "/repo", Command: "run build", Lease: "fleet/f3"})
+	w, err := Open(dir, "sess1", InvocationStart{Workspace: "/repo", Command: "run build", Lease: "fleet/f3"})
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Lease: "fleet/f3"}))
 
@@ -349,7 +349,7 @@ func TestLeaseSurvivesTheStoreOnBothPayloads(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, fold.Records, 2)
 
-	var start SessionStart
+	var start InvocationStart
 	require.NoError(t, json.Unmarshal(fold.Records[0].Payload, &start))
 	assert.Equal(t, "fleet/f3", start.Lease)
 
@@ -369,8 +369,8 @@ func TestTraceContextSurvivesTheStoreAndSummarizes(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	parent := SessionStart{Workspace: "/repo", Command: "run build", SpanID: "00f067aa0ba902b7"}
-	child := SessionStart{
+	parent := InvocationStart{Workspace: "/repo", Command: "run build", SpanID: "00f067aa0ba902b7"}
+	child := InvocationStart{
 		Workspace:    "/repo",
 		Command:      "run test",
 		Lease:        "fleet/f3",
@@ -379,7 +379,7 @@ func TestTraceContextSurvivesTheStoreAndSummarizes(t *testing.T) {
 		ParentSpanID: "00f067aa0ba902b7",
 		Spawner:      "claude code",
 	}
-	for id, start := range map[string]SessionStart{"sess1": parent, "sess2": child} {
+	for id, start := range map[string]InvocationStart{"sess1": parent, "sess2": child} {
 		w, err := Open(dir, id, start)
 		require.NoError(t, err)
 		require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
@@ -389,7 +389,7 @@ func TestTraceContextSurvivesTheStoreAndSummarizes(t *testing.T) {
 	require.NoError(t, err)
 	byID := make(map[string]Summary)
 	for _, s := range Summarize(fold) {
-		byID[s.Session] = s
+		byID[s.Invocation] = s
 	}
 	require.Len(t, byID, 2)
 
@@ -406,8 +406,8 @@ func TestASessionWrittenWithoutALeaseStillReads(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":1,"session":"sess1","seq":1,"kind":"session_start","ts":10,"payload":{"workspace":"/repo"}}`,
-		`{"v":1,"session":"sess1","seq":2,"kind":"target_result","ts":20,"payload":{"target":"build","outcome":"pass"}}`,
+		`{"v":1,"invocation":"sess1","seq":1,"kind":"invocation_start","ts":10,"payload":{"workspace":"/repo"}}`,
+		`{"v":1,"invocation":"sess1","seq":2,"kind":"target_result","ts":20,"payload":{"target":"build","outcome":"pass"}}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -427,7 +427,7 @@ func TestReadAllMissingStoreIsEmptyNotAnError(t *testing.T) {
 	fold, err := ReadAll(filepath.Join(t.TempDir(), "never-created"))
 	require.NoError(t, err, "no session has run yet is not a failure")
 	assert.Empty(t, fold.Records)
-	assert.Zero(t, fold.Sessions)
+	assert.Zero(t, fold.Invocations)
 }
 
 // Worktrees of one repo must resolve to one store, or a fact recorded in one is
@@ -491,12 +491,12 @@ func TestLoadEventsDedupsOnHostSessionRef(t *testing.T) {
 		loadable("s2", "h1", "r1", 30),
 	}
 
-	first, err := LoadEvents(dir, events, SessionStart{})
+	first, err := LoadEvents(dir, events, InvocationStart{})
 	require.NoError(t, err)
 	assert.Equal(t, LoadResult{Loaded: 3, ByKind: map[string]int{EventFileRead: 3}}, first,
 		"r1 under two sessions is two events")
 
-	second, err := LoadEvents(dir, events, SessionStart{})
+	second, err := LoadEvents(dir, events, InvocationStart{})
 	require.NoError(t, err)
 	assert.Equal(t, LoadResult{Deduped: 3, ByKind: map[string]int{}}, second,
 		"a dedup run reports no kinds: the breakdown counts what was written")
@@ -507,11 +507,11 @@ func TestLoadEventsDedupsOnHostSessionRef(t *testing.T) {
 	assert.Len(t, AgentEvents(fold, "s2"), 1)
 }
 
-// The host label is the join SessionStart.Host documents as missing, so a loaded
+// The host label is the join InvocationStart.Host documents as missing, so a loaded
 // session has to carry it on the session record and not only on its events.
-func TestLoadEventsRecordsTheHostOnTheSessionStart(t *testing.T) {
+func TestLoadEventsRecordsTheHostOnTheInvocationStart(t *testing.T) {
 	dir := t.TempDir()
-	_, err := LoadEvents(dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, SessionStart{Workspace: "/tmp/ws"})
+	_, err := LoadEvents(dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, InvocationStart{Workspace: "/tmp/ws"})
 	require.NoError(t, err)
 
 	fold, err := ReadAll(dir)
@@ -519,7 +519,29 @@ func TestLoadEventsRecordsTheHostOnTheSessionStart(t *testing.T) {
 	summaries := Summarize(fold)
 	require.Len(t, summaries, 1)
 	assert.Equal(t, "h1", summaries[0].Host)
+	assert.Equal(t, "s1", summaries[0].Session, "a load names the host session the events came from")
 	assert.Equal(t, 1, summaries[0].Events)
+}
+
+// A run no host delivered a session for lists with its invocation id and no session: the
+// two ids are never the same field.
+func TestSummaryKeepsTheInvocationApartFromTheHostSession(t *testing.T) {
+	dir := t.TempDir()
+	w, err := Open(dir, "inv1", InvocationStart{Command: "run build"})
+	require.NoError(t, err)
+	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	summaries := Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "inv1", summaries[0].Invocation)
+	assert.Empty(t, summaries[0].Session)
+
+	raw, err := os.ReadFile(filepath.Join(dir, "inv1"+fileExt))
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"invocation":"inv1"`)
+	assert.Contains(t, string(raw), `"kind":"invocation_start"`)
 }
 
 // NewestEventMs reads the HOST's timestamp: a store loaded today from a month-old
@@ -529,7 +551,7 @@ func TestNewestEventMsReadsTheHostTimestamp(t *testing.T) {
 	_, err := LoadEvents(dir, []LoadEvent{
 		loadable("s1", "h1", "r1", 10),
 		loadable("s1", "h1", "r2", 900),
-	}, SessionStart{})
+	}, InvocationStart{})
 	require.NoError(t, err)
 
 	fold, err := ReadAll(dir)
@@ -550,8 +572,8 @@ func TestValidEventKind(t *testing.T) {
 	assert.False(t, ValidEventKind(""))
 }
 
-func TestValidSessionIDRefusesAPathSeparator(t *testing.T) {
-	assert.True(t, ValidSessionID("8f1c-2d4e_9"))
-	assert.False(t, ValidSessionID("../escape"))
-	assert.False(t, ValidSessionID(""))
+func TestValidIDRefusesAPathSeparator(t *testing.T) {
+	assert.True(t, ValidID("8f1c-2d4e_9"))
+	assert.False(t, ValidID("../escape"))
+	assert.False(t, ValidID(""))
 }

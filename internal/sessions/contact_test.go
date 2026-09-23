@@ -32,7 +32,7 @@ func contactStore(t *testing.T, events ...contact) string {
 			AtMs: e.atMs, Text: e.path, Denied: e.denied,
 		}})
 	}
-	_, err := LoadEvents(dir, loaded, SessionStart{Workspace: t.TempDir(), Command: "test"})
+	_, err := LoadEvents(dir, loaded, InvocationStart{Workspace: t.TempDir(), Command: "test"})
 	require.NoError(t, err)
 	return dir
 }

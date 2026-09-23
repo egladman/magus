@@ -21,7 +21,7 @@ import (
 // worker goroutine that finished each target.
 type FactHandler struct {
 	dir   string
-	start SessionStart
+	start InvocationStart
 
 	mu     sync.Mutex
 	writer *Writer
@@ -29,18 +29,18 @@ type FactHandler struct {
 }
 
 // NewFactHandler builds the capture handler that records an invocation's target results
-// as session facts under root's store. start describes the invocation and is written as
-// the KindSessionStart record ahead of the first fact.
+// as facts under root's store. start describes the invocation and is written as the
+// KindInvocationStart record ahead of the first fact.
 //
 // It returns nil (a nil slog.Handler interface, safe to compare) when the store cannot
 // be resolved, which the fan-out treats as "no handler": a machine with no usable state
 // directory still runs builds.
 //
 // It lives HERE rather than in the CLI because the daemon executes adopted runs itself
-// (cmd/magus/main.go dispatchAdopted), so "who produces a session fact" is not a
+// (cmd/magus/main.go dispatchAdopted), so "who produces an invocation's facts" is not a
 // CLI-only question. start.Lease is read by the CALLER for that reason; see
 // cmd/magus/journal_hook.go, which documents what the daemon gets wrong today.
-func NewFactHandler(root string, start SessionStart) slog.Handler {
+func NewFactHandler(root string, start InvocationStart) slog.Handler {
 	dir, err := Dir(root)
 	if err != nil {
 		return nil
@@ -55,10 +55,10 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 	if !ok || e.Kind != journal.KindResult || e.Target == "" {
 		return nil
 	}
-	// The invocation id IS the session id. Reusing it rather than minting a second
-	// identifier is what keeps a session fact joinable to the execution journal that
+	// The journal's invocation id files the facts. Reusing it rather than minting a
+	// second identifier is what keeps a fact joinable to the execution journal that
 	// produced it; an event without one is unattributable, so it is dropped rather
-	// than filed under an invented session.
+	// than filed under an invented id.
 	if e.Inv == "" {
 		return nil
 	}

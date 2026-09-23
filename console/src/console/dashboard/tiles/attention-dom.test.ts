@@ -24,7 +24,7 @@ import type { StatusView } from "../state";
 function request(openedMs: number): AttentionRequest {
   return {
     id: "att-0123456789ab",
-    session: "agent-1",
+    invocation: "inv-1",
     opened_ms: openedMs,
     outcome: "waiting",
     severity: "",

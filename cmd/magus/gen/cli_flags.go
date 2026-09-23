@@ -1316,8 +1316,8 @@ type SessionFlags struct {
 func BindSession(fs *flag.FlagSet) *SessionFlags {
 	var f SessionFlags
 	fs.BoolVar(&f.Brief, FlagSessionBrief, false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
-	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many sessions (0 for all)")
-	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
+	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many invocations (0 for all)")
+	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 	return &f
 }
 

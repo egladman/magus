@@ -120,6 +120,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **"Session" now means only the host's conversation; magus's per-process id is an
+  invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
+  `invocations`, `invocation` and `session`. Store records use `invocation` and
+  `invocation_start`; files written before this read as skipped lines.
 - **A record with no host claim is unattributed, never "a person".** `magus shell` typed at
   a terminal records `entry_point: cli`, no session, and no longer `actor: "agent"`; its
   terminal window keys fire-once notices but is not recorded as a session. The OS user

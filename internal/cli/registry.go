@@ -1560,14 +1560,16 @@ base in yourself on the others, then run resolve.`,
 
 var sessionCommand = Command{
 	Name:        "session",
-	Short:       "What sessions did and what they are blocked on: humans read and dispose, hosts write",
-	Description: "One family over the repository's session store: list what sessions ran, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all.",
+	Short:       "What magus invocations did and what agents are blocked on: humans read and dispose, hosts write",
+	Description: "One family over the repository's session store: list what magus invocations ran and the host session each ran in, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all.",
 	Tags:        []string{"cli", "magus session", "sessions", "attention", "history", "worktrees", "agents", "guard"},
 	Long: `One noun over the repository's session store, with a human side and a
 machine side.
 
-Humans read it. The bare command lists past magus sessions with the targets
-each one ran and how those runs ended; ` + "`session attention`" + ` lists the requests
+Humans read it. The bare command lists past magus invocations with the targets
+each one ran and how those runs ended, the OS user that ran it, and the host
+session it ran in (a dash when no host delivered one: the invocation is
+unattributed); ` + "`session attention`" + ` lists the requests
 agents have raised - work blocked on input or on approval - and
 ` + "`session dispose`" + ` closes one. Nothing closes a request automatically: there is
 no expiry, no severity inference and no auto-dispose flag, because a request
@@ -1590,8 +1592,8 @@ rather than failing the read.
 
 The listing takes --limit to bound by count and --since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
-against each session's last fact, not its first, so a long session that is
-still working stays listed however long ago it began.
+against each invocation's last fact, not its first, so a long one that is still
+working stays listed however long ago it began.
 
 --brief answers the listing's own question, where does the work stand, for a
 model instead of a person. It prints this checkout read off disk: branch and
@@ -1605,11 +1607,11 @@ session-start event and hand the model state instead of prose.`,
 	Usage: "magus session [ls] [flags]",
 	Flags: []Flag{
 		{Name: "brief", Kind: FlagBool, Doc: "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)"},
-		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many sessions (0 for all)"},
-		{Name: "since", Kind: FlagString, Doc: "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
+		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many invocations (0 for all)"},
+		{Name: "since", Kind: FlagString, Doc: "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
 	},
 	Children: []Command{
-		{Name: "ls", Short: "List past sessions and the targets they ran (the default)"},
+		{Name: "ls", Short: "List past magus invocations and the targets they ran (the default)"},
 		{
 			Name:        "load",
 			Short:       "Load a normalized agent-session event stream from a host transcript",
@@ -1786,7 +1788,7 @@ none. This is the only command that opens one.`,
 		},
 	},
 	Examples: []Example{
-		{"Show recent sessions", "magus session"},
+		{"Show recent invocations", "magus session"},
 		{"Show today's work", "magus session --since 24h"},
 		{"Hand a compacted session this checkout's state", "magus session --brief"},
 		{"Full session records as JSON", "magus session -o json"},

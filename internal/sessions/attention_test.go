@@ -18,7 +18,7 @@ func attRecord(t *testing.T, session string, seq uint64, ts int64, kind string, 
 	t.Helper()
 	raw, err := json.Marshal(payload)
 	require.NoError(t, err)
-	return Record{V: SchemaVersion, Session: session, Seq: seq, Kind: kind, Ts: ts, Payload: raw}
+	return Record{V: SchemaVersion, Invocation: session, Seq: seq, Kind: kind, Ts: ts, Payload: raw}
 }
 
 func openPayload(id, message string) AttentionOpen {
@@ -82,14 +82,14 @@ func TestAttentionOpenAppearsInTheQueue(t *testing.T) {
 	open := AttentionQueue(fold)
 	require.Len(t, open, 1)
 	assert.Equal(t, AttentionRequest{
-		ID:       "att-1",
-		Session:  "agent1",
-		OpenedMs: 100,
-		Outcome:  "waiting",
-		Severity: "warning",
-		Source:   "agent/claude",
-		Where:    "/repo",
-		Message:  "waiting on a decision",
+		ID:         "att-1",
+		Invocation: "agent1",
+		OpenedMs:   100,
+		Outcome:    "waiting",
+		Severity:   "warning",
+		Source:     "agent/claude",
+		Where:      "/repo",
+		Message:    "waiting on a decision",
 	}, open[0])
 }
 
@@ -199,7 +199,7 @@ func TestAttentionRoundTripsThroughTheStore(t *testing.T) {
 	}
 	block.Request = RequestID("agent1", block)
 
-	agent, err := Open(dir, "agent1", SessionStart{Workspace: "/repo", Command: "notify"})
+	agent, err := Open(dir, "agent1", InvocationStart{Workspace: "/repo", Command: "notify"})
 	require.NoError(t, err)
 	require.NoError(t, agent.Append(KindAttentionOpen, block))
 
@@ -210,14 +210,14 @@ func TestAttentionRoundTripsThroughTheStore(t *testing.T) {
 	assert.Equal(t, block.Request, open[0].ID)
 	assert.Equal(t, "permission", open[0].Outcome)
 
-	human, err := Open(dir, "human1", SessionStart{Workspace: "/repo", Command: "attention dispose"})
+	human, err := Open(dir, "human1", InvocationStart{Workspace: "/repo", Command: "attention dispose"})
 	require.NoError(t, err)
 	require.NoError(t, human.Append(KindAttentionDispose, AttentionDispose{Request: block.Request, Note: "pushed it myself"}))
 
 	fold, err = ReadAll(dir)
 	require.NoError(t, err)
 	assert.Empty(t, AttentionQueue(fold))
-	assert.Equal(t, 2, fold.Sessions)
+	assert.Equal(t, 2, fold.Invocations)
 
 	sessions := Summarize(fold)
 	require.Len(t, sessions, 2)
@@ -258,7 +258,7 @@ func TestSourceLabelMatchesWhatRequestIDDigests(t *testing.T) {
 func TestOpenRequestWritesOneRequestAndReportsIt(t *testing.T) {
 	dir := t.TempDir()
 
-	id, opened, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{Workspace: "/repo"})
+	id, opened, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{Workspace: "/repo"})
 	require.NoError(t, err)
 	assert.True(t, opened)
 	assert.Equal(t, RequestID("sess-1", blocked("needs a decision")), id)
@@ -270,11 +270,11 @@ func TestOpenRequestWritesOneRequestAndReportsIt(t *testing.T) {
 func TestOpenRequestIsANoOpForABlockAlreadyOpen(t *testing.T) {
 	dir := t.TempDir()
 
-	first, opened, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{})
+	first, opened, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
 	require.NoError(t, err)
 	require.True(t, opened)
 
-	again, opened, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{})
+	again, opened, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
 	require.NoError(t, err)
 	assert.False(t, opened, "the block was already queued")
 	assert.Equal(t, first, again, "a re-fire is addressable by the id already in the queue")
@@ -286,13 +286,13 @@ func TestOpenRequestIsANoOpForABlockAlreadyOpen(t *testing.T) {
 func TestOpenRequestRaisesABlockAgainAfterItWasDisposed(t *testing.T) {
 	dir := t.TempDir()
 
-	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{})
+	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
 	require.NoError(t, err)
-	_, err = DisposeRequest(dir, id, "answered", SessionStart{})
+	_, err = DisposeRequest(dir, id, "answered", InvocationStart{})
 	require.NoError(t, err)
 	require.Empty(t, queueIDs(t, dir))
 
-	again, opened, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{})
+	again, opened, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
 	require.NoError(t, err)
 	assert.True(t, opened)
 	assert.Equal(t, id, again)
@@ -302,10 +302,10 @@ func TestOpenRequestRaisesABlockAgainAfterItWasDisposed(t *testing.T) {
 func TestDisposeRequestClosesItAndReportsWhatTheStoreRecorded(t *testing.T) {
 	dir := t.TempDir()
 
-	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{})
+	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
 	require.NoError(t, err)
 
-	req, err := DisposeRequest(dir, id, "approved by hand", SessionStart{Workspace: "/repo"})
+	req, err := DisposeRequest(dir, id, "approved by hand", InvocationStart{Workspace: "/repo"})
 	require.NoError(t, err)
 	assert.Equal(t, id, req.ID)
 	assert.True(t, req.Disposed)
@@ -319,12 +319,12 @@ func TestDisposeRequestClosesItAndReportsWhatTheStoreRecorded(t *testing.T) {
 func TestDisposeRequestRefusesAnAlreadyClosedRequest(t *testing.T) {
 	dir := t.TempDir()
 
-	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{})
+	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
 	require.NoError(t, err)
-	first, err := DisposeRequest(dir, id, "answered", SessionStart{})
+	first, err := DisposeRequest(dir, id, "answered", InvocationStart{})
 	require.NoError(t, err)
 
-	_, err = DisposeRequest(dir, id, "answered again", SessionStart{})
+	_, err = DisposeRequest(dir, id, "answered again", InvocationStart{})
 	var disposed *DisposedError
 	require.ErrorAs(t, err, &disposed)
 	assert.Equal(t, id, disposed.ID)
@@ -334,10 +334,10 @@ func TestDisposeRequestRefusesAnAlreadyClosedRequest(t *testing.T) {
 func TestDisposeRequestAcceptsAnUnambiguousPrefix(t *testing.T) {
 	dir := t.TempDir()
 
-	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{})
+	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
 	require.NoError(t, err)
 
-	req, err := DisposeRequest(dir, id[:8], "", SessionStart{})
+	req, err := DisposeRequest(dir, id[:8], "", InvocationStart{})
 	require.NoError(t, err)
 	assert.Equal(t, id, req.ID, "the prefix resolves to the full id, and the record names that")
 }
@@ -345,9 +345,9 @@ func TestDisposeRequestAcceptsAnUnambiguousPrefix(t *testing.T) {
 func TestResolveRequestIDReportsEveryCandidateForAnAmbiguousPrefix(t *testing.T) {
 	dir := t.TempDir()
 
-	first, _, err := OpenRequest(dir, "sess-1", blocked("one"), SessionStart{})
+	first, _, err := OpenRequest(dir, "sess-1", blocked("one"), InvocationStart{})
 	require.NoError(t, err)
-	second, _, err := OpenRequest(dir, "sess-2", blocked("two"), SessionStart{})
+	second, _, err := OpenRequest(dir, "sess-2", blocked("two"), InvocationStart{})
 	require.NoError(t, err)
 
 	fold, err := ReadAll(dir)
@@ -382,12 +382,12 @@ func TestResolveRequestIDPrefersAnExactID(t *testing.T) {
 func TestResolveRequestIDSeesDisposedRequests(t *testing.T) {
 	dir := t.TempDir()
 
-	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), SessionStart{})
+	id, _, err := OpenRequest(dir, "sess-1", blocked("needs a decision"), InvocationStart{})
 	require.NoError(t, err)
-	_, err = DisposeRequest(dir, id, "", SessionStart{})
+	_, err = DisposeRequest(dir, id, "", InvocationStart{})
 	require.NoError(t, err)
 
-	_, err = DisposeRequest(dir, id[:8], "", SessionStart{})
+	_, err = DisposeRequest(dir, id[:8], "", InvocationStart{})
 	var disposed *DisposedError
 	assert.ErrorAs(t, err, &disposed, "a prefix that resolves to a closed request reports the closure")
 }
@@ -403,13 +403,13 @@ func TestResolveRequestIDReportsNothingMatchedAsErrNoRequest(t *testing.T) {
 }
 
 // The suffix is what keeps two processes that started in the same millisecond from
-// sharing a session file, which is the collision the underlying invocation id cannot
+// sharing an invocation file, which is the collision the underlying invocation id cannot
 // rule out on its own.
-func TestNewIDIsAValidSessionIDAndCarriesAProcessSuffix(t *testing.T) {
+func TestNewIDIsAValidIDAndCarriesAProcessSuffix(t *testing.T) {
 	t.Parallel()
 
 	id := NewID()
-	assert.True(t, sessionRE.MatchString(id), "the id names the session file, so it must not escape the store")
+	assert.True(t, ValidID(id), "the id names the invocation's file, so it must not escape the store")
 
 	_, suffix, found := strings.Cut(id, "-")
 	require.True(t, found, "the id carries a per-process suffix")
@@ -423,14 +423,14 @@ func TestNewIDIsAValidSessionIDAndCarriesAProcessSuffix(t *testing.T) {
 func TestTwoDisposalsRecordTwoSessions(t *testing.T) {
 	dir := t.TempDir()
 
-	first, _, err := OpenRequest(dir, "sess-1", blocked("one"), SessionStart{})
+	first, _, err := OpenRequest(dir, "sess-1", blocked("one"), InvocationStart{})
 	require.NoError(t, err)
-	second, _, err := OpenRequest(dir, "sess-2", blocked("two"), SessionStart{})
+	second, _, err := OpenRequest(dir, "sess-2", blocked("two"), InvocationStart{})
 	require.NoError(t, err)
 
-	a, err := DisposeRequest(dir, first, "", SessionStart{})
+	a, err := DisposeRequest(dir, first, "", InvocationStart{})
 	require.NoError(t, err)
-	b, err := DisposeRequest(dir, second, "", SessionStart{})
+	b, err := DisposeRequest(dir, second, "", InvocationStart{})
 	require.NoError(t, err)
 	assert.NotEqual(t, a.DisposedBy, b.DisposedBy)
 }

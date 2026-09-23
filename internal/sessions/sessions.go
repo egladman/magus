@@ -1,5 +1,9 @@
-// Package sessions is the append-only record of what magus sessions did, kept
+// Package sessions is the append-only record of what magus invocations did, kept
 // where every worktree of a repository can read it.
+//
+// An INVOCATION is one magus process's facts, filed under its own id. A SESSION is
+// only ever the host's conversation, which an invocation's origin may name; the store
+// keeps the name `magus session` gives it because that is the question a reader asks.
 //
 // It is a third store beside the two that already exist, and SCOPE is what tells
 // the three apart:
@@ -8,8 +12,8 @@
 //     invocation emitted (exec, output, result), discarded with that invocation.
 //   - internal/trail is the ACTIVITY TRAIL, scoped to a machine: consequential
 //     actions taken against the daemon.
-//   - this package holds SESSIONS, scoped to a repository: the durable facts of a
-//     session, folded across worktrees. It answers "what has been happening in this
+//   - this package holds INVOCATIONS, scoped to a repository: the durable facts of
+//     each, folded across worktrees. It answers "what has been happening in this
 //     repo lately", which neither of the others can, because one is per-run and the
 //     other is per-daemon.
 //
@@ -21,7 +25,7 @@
 // Records are grow-only. Nothing here mutates or rewrites a record, which is what
 // makes concurrent producers in different worktrees safe without a lock: on a LOCAL
 // filesystem a POSIX append of one short line is atomic, so two magus processes
-// appending to two session files (or the same one) cannot interleave a line.
+// appending to two invocation files (or the same one) cannot interleave a line.
 //
 // A network mount is outside that guarantee. NFS and SMB implement O_APPEND by
 // seeking on the client, so two hosts appending to one file there can interleave
@@ -29,7 +33,7 @@
 // setups magus is built for; where it is not, an interleave surfaces as a line no
 // reader can decode and lands in [Fold.Skipped], never as a record that lies.
 //
-// A file, however, is not grow-only: [Prune] deletes whole session files whose
+// A file, however, is not grow-only: [Prune] deletes whole invocation files whose
 // newest fact has aged out, and [Open] runs it opportunistically so the store bounds
 // itself without a daemon. Two rules keep that from destroying history a reader is
 // still using (a still-open attention request pins every file naming it, and a
@@ -67,11 +71,11 @@ import (
 // newer store degrades to showing less instead of refusing to read.
 const SchemaVersion = 1
 
-// Kinds of fact a session records. A reader must tolerate a kind it does not know:
-// the set grows, and a session written by a newer magus is still readable.
+// Kinds of fact an invocation records. A reader must tolerate a kind it does not know:
+// the set grows, and an invocation written by a newer magus is still readable.
 const (
-	KindSessionStart = "session_start"
-	KindTargetResult = "target_result"
+	KindInvocationStart = "invocation_start"
+	KindTargetResult    = "target_result"
 )
 
 // Outcome values on a [TargetResult].
@@ -84,16 +88,17 @@ const (
 // record it does not understand straight through; the field is the schema's escape
 // hatch, and decoding it eagerly would turn an unknown kind into a parse error.
 type Record struct {
-	V       int             `json:"v"`
-	Session string          `json:"session"`
-	Seq     uint64          `json:"seq"` // monotonic within a session, from 1
-	Kind    string          `json:"kind"`
-	Ts      int64           `json:"ts"` // unix milliseconds
-	Payload json.RawMessage `json:"payload,omitempty"`
+	V          int             `json:"v"`
+	Invocation string          `json:"invocation"`
+	Seq        uint64          `json:"seq"` // monotonic within an invocation, from 1
+	Kind       string          `json:"kind"`
+	Ts         int64           `json:"ts"` // unix milliseconds
+	Payload    json.RawMessage `json:"payload,omitempty"`
 }
 
-// SessionStart is the payload of the first fact a session writes: who is running
-// magus, and against what.
+// InvocationStart is the payload of the first fact an invocation writes: who is running
+// magus, and against what. Its origin's Session is the host's conversation, when a host
+// delivered one.
 //
 // The origin's User, UID and Transport are read by the writing process itself. Host is
 // the agent host that drove the session, as its wiring named itself, and is EMPTY from the
@@ -103,14 +108,14 @@ type Record struct {
 //
 // Lease, TraceID, ParentSpanID and Spawner are what the spawning tool CLAIMED, recorded
 // verbatim off the environment (trail.SpawnFromEnv); nothing here corroborates one and no
-// verdict reads one. Attribution is cooperative, so empty means the session claimed
+// verdict reads one. Attribution is cooperative, so empty means the invocation claimed
 // nothing: it is unattributed, and User still says whose account ran it.
 //
-// SpanID is the exception and the one identity magus asserts: this session mints it
+// SpanID is the exception and the one identity magus asserts: this invocation mints it
 // (trail.NewSpanID). A child that reports this value as its ParentSpanID is what makes
-// ancestry readable across sessions, so no chain of ancestors is stored anywhere: the
+// ancestry readable across invocations, so no chain of ancestors is stored anywhere: the
 // relation is derived from records, the way a process tree is derived from PPIDs.
-type SessionStart struct {
+type InvocationStart struct {
 	types.Origin `json:",inline"`
 	Workspace    string `json:"workspace,omitempty"`
 	Command      string `json:"command,omitempty"`
@@ -123,12 +128,12 @@ type SessionStart struct {
 }
 
 // TargetResult is the payload of one target finishing. Replayed distinguishes a
-// cache hit from work that actually ran, which is the difference between a session
+// cache hit from work that actually ran, which is the difference between an invocation
 // that did something and one that confirmed something.
 //
-// Lease repeats the producing session's [SessionStart.Lease] rather than being read off the
-// envelope, because a fact is routinely read on its own: the activity drawer joins one target
-// result to a lease without holding the session-start record that opened the file.
+// Lease repeats the producing invocation's [InvocationStart.Lease] rather than being read
+// off the envelope, because a fact is routinely read on its own: the activity drawer joins
+// one target result to a lease without holding the start record that opened the file.
 type TargetResult struct {
 	Target     string `json:"target"`
 	Project    string `json:"project,omitempty"`
@@ -167,9 +172,9 @@ func (r *TargetResult) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// sessionRE is the session-id shape, which doubles as the session file's basename:
-// it must not be able to escape the store directory.
-var sessionRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+// idRE is the shape of an id that names a store file: it must not be able to escape the
+// store directory.
+var idRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 const fileExt = ".jsonl"
 
@@ -194,57 +199,56 @@ func Dir(root string) (string, error) {
 	return dir, nil
 }
 
-// Writer appends facts for one session. It is safe for concurrent use.
+// Writer appends facts for one invocation. It is safe for concurrent use.
 type Writer struct {
-	path    string
-	session string
+	path       string
+	invocation string
 
 	mu    sync.Mutex
 	seq   uint64
-	start SessionStart
+	start InvocationStart
 	begun bool
 }
 
-// Open prepares a writer for session id under dir, which is created if absent.
+// Open prepares a writer for invocation id under dir, which is created if absent.
 //
-// It writes NOTHING: the session file appears with the first fact, and start is
-// emitted as the KindSessionStart record just ahead of it. A magus command that
-// produces no facts therefore leaves no session entry at all, rather than a
-// session that only ever says it began.
+// It writes NOTHING: the invocation's file appears with the first fact, and start is
+// emitted as the KindInvocationStart record just ahead of it. A magus command that
+// produces no facts therefore leaves no entry at all, rather than an invocation that
+// only ever says it began.
 //
 // Opening also prunes the store at [DefaultRetention], which is what keeps a
 // grow-only store bounded without a daemon or a cron: every producer opens, so
 // every producer pays a little of the housekeeping. It is best-effort and cannot
 // fail the open; see [Prune].
 //
-// A session id that already has a file is RESUMED rather than restarted: see
-// [Writer.resume].
-func Open(dir, session string, start SessionStart) (*Writer, error) {
-	if !ValidSessionID(session) {
-		return nil, fmt.Errorf("sessions: session id %q must be alphanumeric with - and _ (it names the session file); mint one with journal.NewInvocationID", session)
+// An id that already has a file is RESUMED rather than restarted: see [Writer.resume].
+func Open(dir, invocation string, start InvocationStart) (*Writer, error) {
+	if !ValidID(invocation) {
+		return nil, fmt.Errorf("sessions: invocation id %q must be alphanumeric with - and _ (it names the invocation's file); mint one with journal.NewInvocationID", invocation)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("sessions: create store %s: %w", dir, err)
 	}
-	prune(dir, DefaultRetention, session+fileExt)
-	w := &Writer{path: filepath.Join(dir, session+fileExt), session: session, start: start}
+	prune(dir, DefaultRetention, invocation+fileExt)
+	w := &Writer{path: filepath.Join(dir, invocation+fileExt), invocation: invocation, start: start}
 	w.resume()
 	return w, nil
 }
 
-// resume continues the numbering an earlier writer left in the session file.
+// resume continues the numbering an earlier writer left in the file.
 //
-// Two processes reach one file whenever a session id is reused: a retried command, a
-// daemon and a CLI sharing an invocation id. Starting every writer at seq 1 makes
-// (Session, Seq) stop identifying one record: the second process stamps numbers the
+// Two processes reach one file whenever an id is reused: a retried command, a daemon and
+// a CLI sharing an invocation id. Starting every writer at seq 1 makes
+// (Invocation, Seq) stop identifying one record: the second process stamps numbers the
 // first already used, and the fold's tie-break then interleaves two runs' facts
 // arbitrarily within a millisecond.
 //
-// It seeds the sequence only. The resumed writer still emits its own session-start,
-// because it is a different invocation with its own command line, and the store
-// says so rather than inheriting the first one's.
+// It seeds the sequence only. The resumed writer still emits its own start record,
+// because it is a different process with its own command line, and the store says so
+// rather than inheriting the first one's.
 //
-// A fresh session, which is the common case, costs one failed open: the file does
+// A fresh invocation, which is the common case, costs one failed open: the file does
 // not exist until the first fact.
 func (w *Writer) resume() {
 	records, _, _ := readFile(w.path)
@@ -258,7 +262,7 @@ func (w *Writer) resume() {
 // Append records one fact. payload is marshaled as the record's payload object; a
 // nil payload writes the fact with none.
 //
-// The first call also writes the session-start record, so seq 1 is always the start.
+// The first call also writes the start record, so seq 1 is always the start.
 // An [AttentionOpen] payload is stored with its Message clamped to
 // [MaxMessageBytes]. Errors are returned rather than swallowed, but callers on the
 // run path must not fail a build over one: a store that can break a build is worse
@@ -276,7 +280,7 @@ func (w *Writer) Append(kind string, payload any) error {
 	defer w.mu.Unlock()
 
 	if !w.begun {
-		if err := w.write(KindSessionStart, w.start); err != nil {
+		if err := w.write(KindInvocationStart, w.start); err != nil {
 			return err
 		}
 		w.begun = true
@@ -287,7 +291,7 @@ func (w *Writer) Append(kind string, payload any) error {
 // write appends one line. The caller holds w.mu, which is what keeps seq in step
 // with the order lines land in the file.
 func (w *Writer) write(kind string, payload any) error {
-	rec := Record{V: SchemaVersion, Session: w.session, Seq: w.seq + 1, Kind: kind, Ts: time.Now().UnixMilli()}
+	rec := Record{V: SchemaVersion, Invocation: w.invocation, Seq: w.seq + 1, Kind: kind, Ts: time.Now().UnixMilli()}
 	if payload != nil {
 		raw, err := json.Marshal(payload)
 		if err != nil {
@@ -300,7 +304,7 @@ func (w *Writer) write(kind string, payload any) error {
 		return fmt.Errorf("sessions: encode %s record: %w", kind, err)
 	}
 
-	// Opened and closed per append rather than held: a session's facts are
+	// Opened and closed per append rather than held: an invocation's facts are
 	// low-frequency, and a long-lived handle would need a close nobody on the CLI
 	// path is positioned to run. See internal/trail, which made the same trade.
 	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -315,32 +319,32 @@ func (w *Writer) write(kind string, payload any) error {
 	return nil
 }
 
-// Fold is the union of every session file in one store, ordered.
+// Fold is the union of every invocation file in one store, ordered.
 type Fold struct {
-	// Records are ordered by (Ts, Session, Seq). Session and Seq break the tie
+	// Records are ordered by (Ts, Invocation, Seq). Invocation and Seq break the tie
 	// because wall-clock alone cannot: two worktrees appending in the same
 	// millisecond would otherwise order differently on each read.
 	Records []Record
 
-	// Sessions counts the session files read, INCLUDING any that contributed no
-	// usable record: the difference between "no sessions" and "sessions nobody
-	// could parse" is the thing a reader most needs to see.
-	Sessions int
+	// Invocations counts the files read, INCLUDING any that contributed no usable
+	// record: the difference between "no invocations" and "invocations nobody could
+	// parse" is the thing a reader most needs to see.
+	Invocations int
 
-	// Skipped counts lines that were not a decodable record. A session file is
+	// Skipped counts lines that were not a decodable record. A file is
 	// written by a process that can be killed mid-line, so a truncated tail is
 	// expected, not corruption to report as an error. A line longer than the reader's
 	// budget counts here too, and costs only itself: the records after it still load.
 	Skipped int
 }
 
-// ReadAll folds every session file under dir.
+// ReadAll folds every invocation file under dir.
 //
-// A missing store is an empty Fold and no error: no session has run yet. An
+// A missing store is an empty Fold and no error: nothing has run yet. An
 // undecodable line is skipped and counted in Skipped rather than failing the read,
 // so one killed process cannot make the whole history unreadable. A file listed by
 // the directory but gone by the time it is opened was pruned by another process
-// mid-fold; it counts as neither a session nor damage. Only an unreadable DIRECTORY
+// mid-fold; it counts as neither an invocation nor damage. Only an unreadable DIRECTORY
 // is an error.
 func ReadAll(dir string) (Fold, error) {
 	var fold Fold
@@ -359,7 +363,7 @@ func ReadAll(dir string) (Fold, error) {
 		if vanished {
 			continue
 		}
-		fold.Sessions++
+		fold.Invocations++
 		fold.Records = append(fold.Records, records...)
 		fold.Skipped += skipped
 	}
@@ -367,7 +371,7 @@ func ReadAll(dir string) (Fold, error) {
 	return fold, nil
 }
 
-// sortRecords puts a fold in the (Ts, Session, Seq) order every reader downstream is
+// sortRecords puts a fold in the (Ts, Invocation, Seq) order every reader downstream is
 // specified against; [Attention]'s collapse rules in particular are defined over it.
 // Anything that assembles a [Fold] outside [ReadAll] has to apply it too.
 func sortRecords(records []Record) {
@@ -375,7 +379,7 @@ func sortRecords(records []Record) {
 		if c := cmp.Compare(a.Ts, b.Ts); c != 0 {
 			return c
 		}
-		if c := strings.Compare(a.Session, b.Session); c != 0 {
+		if c := strings.Compare(a.Invocation, b.Invocation); c != 0 {
 			return c
 		}
 		return cmp.Compare(a.Seq, b.Seq)
@@ -389,7 +393,7 @@ func sortRecords(records []Record) {
 // skipped like any other unusable line, and only itself.
 const maxLineBytes = 1 << 20
 
-// readFile decodes one session file, returning what it could read, how many lines it
+// readFile decodes one invocation file, returning what it could read, how many lines it
 // could not, and whether the file was not there at all.
 //
 // The vanished case is separated from the unreadable one because pruning can delete a
@@ -420,7 +424,7 @@ func readFile(path string) (records []Record, skipped int, vanished bool) {
 			skipped++
 		} else if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
 			var rec Record
-			if json.Unmarshal(trimmed, &rec) != nil || rec.Session == "" || rec.Kind == "" {
+			if json.Unmarshal(trimmed, &rec) != nil || rec.Invocation == "" || rec.Kind == "" {
 				skipped++
 			} else {
 				records = append(records, rec)
@@ -460,9 +464,11 @@ func readLine(br *bufio.Reader, limit int) ([]byte, bool, error) {
 	}
 }
 
-// Summary is one session as a reader meets it: who, when, and what it ran.
+// Summary is one invocation as a reader meets it: who, when, and what it ran. Session is
+// the host's conversation it ran in, empty when no host delivered one.
 type Summary struct {
-	Session      string         `json:"session"`
+	Invocation   string         `json:"invocation"`
+	Session      string         `json:"session,omitempty"`
 	User         string         `json:"user,omitempty"`
 	Host         string         `json:"host,omitempty"`
 	Lease        string         `json:"lease,omitempty"`
@@ -479,32 +485,32 @@ type Summary struct {
 	Targets      []TargetResult `json:"targets,omitempty"`
 }
 
-// Summarize groups a fold into one entry per session, most recent activity first.
+// Summarize groups a fold into one entry per invocation, most recent activity first.
 //
 // A record whose kind this build does not know still counts toward Facts and still
-// advances LastMs: a session that did something magus cannot yet describe is
-// still a session that was active, and hiding it would be a worse lie than showing
-// it with an empty target list.
+// advances LastMs: an invocation that did something magus cannot yet describe is
+// still one that was active, and hiding it would be a worse lie than showing it with
+// an empty target list.
 func Summarize(fold Fold) []Summary {
-	order := make([]string, 0, fold.Sessions)
-	byID := make(map[string]*Summary, fold.Sessions)
+	order := make([]string, 0, fold.Invocations)
+	byID := make(map[string]*Summary, fold.Invocations)
 
 	for _, rec := range fold.Records {
-		s := byID[rec.Session]
+		s := byID[rec.Invocation]
 		if s == nil {
-			s = &Summary{Session: rec.Session, StartedMs: rec.Ts}
-			byID[rec.Session] = s
-			order = append(order, rec.Session)
+			s = &Summary{Invocation: rec.Invocation, StartedMs: rec.Ts}
+			byID[rec.Invocation] = s
+			order = append(order, rec.Invocation)
 		}
 		s.Facts++
 		if rec.Ts > s.LastMs {
 			s.LastMs = rec.Ts
 		}
 		switch rec.Kind {
-		case KindSessionStart:
-			var start SessionStart
+		case KindInvocationStart:
+			var start InvocationStart
 			if json.Unmarshal(rec.Payload, &start) == nil {
-				s.User, s.Host, s.Workspace, s.Command, s.Lease = start.User, start.Host, start.Workspace, start.Command, start.Lease
+				s.Session, s.User, s.Host, s.Workspace, s.Command, s.Lease = start.Session, start.User, start.Host, start.Workspace, start.Command, start.Lease
 				s.TraceID, s.SpanID, s.ParentSpanID, s.Spawner = start.TraceID, start.SpanID, start.ParentSpanID, start.Spawner
 			}
 		case KindTargetResult:
@@ -527,8 +533,9 @@ func Summarize(fold Fold) []Summary {
 
 // The second producer of this store, beside the run path: a host transcript,
 // normalized outside magus and loaded through `magus session load`. It is what
-// closes the join [SessionStart.Host] names as missing, because a loaded session
-// is keyed by the HOST's session id and carries the host's own label.
+// closes the join [InvocationStart.Host] names as missing: a loaded file is keyed by
+// the HOST's session id, so its invocation id is that id, and its start carries the
+// host's own label and session.
 //
 // Only the storage side lives here. Extraction is a per-host recipe magus does
 // not ship, and re-judging a command belongs beside the guard rules that judge
@@ -645,11 +652,11 @@ type LoadResult struct {
 // tracking where it stopped, and the store is what makes that cheap instead of
 // duplicative.
 //
-// start supplies the fields a session record carries beyond the events
-// themselves; Host is overwritten per session from the events, since that is the
+// start supplies the fields a start record carries beyond the events themselves;
+// Host and Session are overwritten per session from the events, since that is the
 // join this store exists to record. Events are written in the order given, so a
 // caller that wants them ordered orders them first.
-func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult, error) {
+func LoadEvents(dir string, events []LoadEvent, start InvocationStart) (LoadResult, error) {
 	// The one operation in this package that is NOT append-only, and therefore the one
 	// that needs a lock. Everything else appends a line, which POSIX makes atomic on a
 	// local filesystem; this reads the whole store to build a dedup set and then appends
@@ -684,9 +691,9 @@ func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult,
 		}
 		w := writers[ev.Session]
 		if w == nil {
-			sessionStart := start
-			sessionStart.Host, sessionStart.Session = ev.Event.Host, ev.Session
-			if w, err = Open(dir, ev.Session, sessionStart); err != nil {
+			loadStart := start
+			loadStart.Host, loadStart.Session = ev.Event.Host, ev.Session
+			if w, err = Open(dir, ev.Session, loadStart); err != nil {
 				return result, err
 			}
 			writers[ev.Session] = w
@@ -755,10 +762,11 @@ func EachAgentEvent(fold Fold) iter.Seq2[string, AgentEvent] {
 			if json.Unmarshal(rec.Payload, &ev) != nil {
 				continue
 			}
-			key := eventKey(rec.Session, ev)
+			// A load files each host session under its own id, so the invocation IS the session.
+			key := eventKey(rec.Invocation, ev)
 			prev, dup := merged[key]
 			if !dup {
-				merged[key], order = LoadEvent{Session: rec.Session, Event: ev}, append(order, key)
+				merged[key], order = LoadEvent{Session: rec.Invocation, Event: ev}, append(order, key)
 				continue
 			}
 			prev.Event.NextServed = mergeIDs(prev.Event.NextServed, ev.NextServed)
@@ -809,8 +817,8 @@ func NewestEventMs(fold Fold) int64 {
 	return newest
 }
 
-// ValidSessionID reports whether id can name a session file, and is exported so a
-// loader can refuse a host id before writing half a stream. The rule is the file
-// name's, which is why it is strict: an id that could contain a separator could
-// escape the store directory.
-func ValidSessionID(id string) bool { return sessionRE.MatchString(id) }
+// ValidID reports whether id can name a store file: an invocation id, or the host
+// session id a load files under. It is exported so a loader can refuse a host id before
+// writing half a stream. The rule is the file name's, which is why it is strict: an id
+// that could contain a separator could escape the store directory.
+func ValidID(id string) bool { return idRE.MatchString(id) }

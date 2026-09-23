@@ -88,7 +88,7 @@ func boundMessage(s string) string {
 
 // AttentionDispose is the payload of a person closing a request.
 //
-// The disposing session is the enclosing [Record.Session]; repeating it in the
+// The disposing invocation is the enclosing [Record.Invocation]; repeating it in the
 // payload would be a second copy of one fact, free to disagree with the envelope.
 type AttentionDispose struct {
 	Request string `json:"request"`
@@ -125,19 +125,19 @@ func RequestID(session string, o AttentionOpen) string {
 // AttentionRequest is one request as a reader meets it: what was raised, and whether
 // anybody has disposed of it.
 type AttentionRequest struct {
-	ID       string `json:"id"`
-	Session  string `json:"session"` // the session that raised it
-	OpenedMs int64  `json:"opened_ms"`
-	Outcome  string `json:"outcome"`
-	Severity string `json:"severity,omitempty"`
-	Source   string `json:"source,omitempty"`
-	Where    string `json:"where,omitempty"`
-	Lease    string `json:"lease,omitempty"`
-	Message  string `json:"message"`
+	ID         string `json:"id"`
+	Invocation string `json:"invocation"` // the invocation that raised it
+	OpenedMs   int64  `json:"opened_ms"`
+	Outcome    string `json:"outcome"`
+	Severity   string `json:"severity,omitempty"`
+	Source     string `json:"source,omitempty"`
+	Where      string `json:"where,omitempty"`
+	Lease      string `json:"lease,omitempty"`
+	Message    string `json:"message"`
 
 	Disposed   bool   `json:"disposed"`
 	DisposedMs int64  `json:"disposed_ms,omitempty"`
-	DisposedBy string `json:"disposed_by,omitempty"` // the session that closed it
+	DisposedBy string `json:"disposed_by,omitempty"` // the invocation that closed it
 	Note       string `json:"note,omitempty"`
 	// Disposes counts the dispose records naming this id since it was last raised.
 	// The FIRST one closed the request and is the one reported above; a count over 1
@@ -163,7 +163,7 @@ type AttentionRequest struct {
 //     kind this build does not know.
 //
 // "First" is well defined because [ReadAll] has already ordered the fold by
-// (Ts, Session, Seq). Records are consumed in that order and must not be handed to
+// (Ts, Invocation, Seq). Records are consumed in that order and must not be handed to
 // this function out of it; the returned slice is sorted separately, by when each
 // request was last raised.
 func Attention(fold Fold) []AttentionRequest {
@@ -187,15 +187,15 @@ func Attention(fold Fold) []AttentionRequest {
 				order = append(order, open.Request)
 			}
 			*req = AttentionRequest{
-				ID:       open.Request,
-				Session:  rec.Session,
-				OpenedMs: rec.Ts,
-				Outcome:  open.Outcome,
-				Severity: open.Severity,
-				Source:   open.Source,
-				Where:    open.Where,
-				Lease:    open.Lease,
-				Message:  open.Message,
+				ID:         open.Request,
+				Invocation: rec.Invocation,
+				OpenedMs:   rec.Ts,
+				Outcome:    open.Outcome,
+				Severity:   open.Severity,
+				Source:     open.Source,
+				Where:      open.Where,
+				Lease:      open.Lease,
+				Message:    open.Message,
 			}
 		case KindAttentionDispose:
 			var dispose AttentionDispose
@@ -212,7 +212,7 @@ func Attention(fold Fold) []AttentionRequest {
 			}
 			req.Disposed = true
 			req.DisposedMs = rec.Ts
-			req.DisposedBy = rec.Session
+			req.DisposedBy = rec.Invocation
 			req.Note = dispose.Note
 		}
 	}
@@ -284,7 +284,7 @@ type DisposedError struct {
 }
 
 func (e *DisposedError) Error() string {
-	return fmt.Sprintf("request %s was already disposed by session %s at %s",
+	return fmt.Sprintf("request %s was already disposed by invocation %s at %s",
 		e.ID, e.DisposedBy, time.UnixMilli(e.DisposedMs).Format(time.RFC3339))
 }
 
@@ -347,10 +347,10 @@ func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
 // one per attempt. A block that was raised, disposed, and has come back opens again;
 // see [Attention] for why.
 //
-// start describes the writing invocation; its Command is set here, and the session id is
-// minted by [NewID]. The returned id is the request's, addressable whether or not this
-// call wrote anything.
-func OpenRequest(dir, agentSession string, open AttentionOpen, start SessionStart) (id string, opened bool, err error) {
+// start describes the writing invocation; its Command is set here, and its id is minted
+// by [NewID]. The returned id is the request's, addressable whether or not this call
+// wrote anything.
+func OpenRequest(dir, agentSession string, open AttentionOpen, start InvocationStart) (id string, opened bool, err error) {
 	open.Request = RequestID(agentSession, open)
 	fold, err := ReadAll(dir)
 	if err != nil {
@@ -378,15 +378,14 @@ func OpenRequest(dir, agentSession string, open AttentionOpen, start SessionStar
 // reporting success here would credit this caller with a closure it did not perform.
 // Unresolvable refs surface as [ErrNoRequest] or [AmbiguousRequestError].
 //
-// The disposal writes its OWN session, because a disposal IS its own invocation: it is
-// what makes the store say which run of magus closed the request, and start's origin says
-// whose account it ran as and through which entry point. start describes it; its Command
-// is set here.
+// The disposal writes its OWN invocation file: it is what makes the store say which run
+// of magus closed the request, and start's origin says whose account it ran as and
+// through which entry point. start describes it; its Command is set here.
 //
 // The returned request is re-read from the store rather than patched in memory: the
-// disposal's timestamp and session are whatever landed on disk, and a hand-assembled
+// disposal's timestamp and invocation are whatever landed on disk, and a hand-assembled
 // answer could disagree with what every other worktree is about to read.
-func DisposeRequest(dir, ref, reason string, start SessionStart) (AttentionRequest, error) {
+func DisposeRequest(dir, ref, reason string, start InvocationStart) (AttentionRequest, error) {
 	fold, err := ReadAll(dir)
 	if err != nil {
 		return AttentionRequest{}, err

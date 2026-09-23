@@ -189,7 +189,7 @@ func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r1", AtMs: 100, Text: "types/impact.go"}},
 		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventShellCommand, Ref: "r2", AtMs: 200, Program: "go"}},
 		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r4", AtMs: 400, Text: "late.go"}},
-	}, sessions.SessionStart{})
+	}, sessions.InvocationStart{})
 	require.NoError(t, err)
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
@@ -216,7 +216,7 @@ func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
 		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileWrite, Ref: "r2", AtMs: 200, Text: "magus.go"}},
 		{Session: "s2", Event: sessions.AgentEvent{Host: "codex", Kind: sessions.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go"}},
-	}, sessions.SessionStart{})
+	}, sessions.InvocationStart{})
 	require.NoError(t, err)
 
 	rev := types.Diff{Files: []types.DiffFile{{Path: "magus.go"}, {Path: "untouched.go"}}}

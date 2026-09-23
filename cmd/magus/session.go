@@ -89,17 +89,17 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
 	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
 	fmt.Fprintln(os.Stderr, "       magus session checkpoint [--note <text>]")
-	fmt.Fprintln(os.Stderr, "       magus session hook [flags]      # machine: guard verdicts, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent sessions")
-	fmt.Fprintln(os.Stderr, "did across every worktree of this repository, `session show` reports one of")
-	fmt.Fprintln(os.Stderr, "them in full, `session attention` lists the blocks agents raised, and")
+	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent magus")
+	fmt.Fprintln(os.Stderr, "invocations did across every worktree of this repository, each with the host")
+	fmt.Fprintln(os.Stderr, "session it ran in when a host delivered one; `session show` reports one host")
+	fmt.Fprintln(os.Stderr, "session in full, `session attention` lists the blocks agents raised, and")
 	fmt.Fprintln(os.Stderr, "`session dispose` closes one - nothing closes a request automatically.")
 	fmt.Fprintln(os.Stderr, "Humans write it too: `session checkpoint` records where work stands before")
-	fmt.Fprintln(os.Stderr, "you put it down. Agent hosts write it from hooks, through `session hook`")
-	fmt.Fprintln(os.Stderr, "and `session notify`, and `session load` takes a normalized event stream")
-	fmt.Fprintln(os.Stderr, "extracted from a host's own transcript.")
+	fmt.Fprintln(os.Stderr, "you put it down. Agent hosts write it from hooks, through `session notify`,")
+	fmt.Fprintln(os.Stderr, "and `session load` takes a normalized event stream extracted from a host's")
+	fmt.Fprintln(os.Stderr, "own transcript.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "`session --brief` answers the same question the listing opens with, for a")
 	fmt.Fprintln(os.Stderr, "session rather than a person: where this checkout stands, read off disk, for")
@@ -108,15 +108,15 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
 }
 
-// sessionList shows what recent magus sessions did, folded across every worktree of
+// sessionList shows what recent magus invocations did, folded across every worktree of
 // this repository.
 func sessionList(ctx context.Context, root string, args []string) error {
 	var limit int
 	var since string
 	var brief bool
 	rest, err := cmdParse("session", args, func(fs *flag.FlagSet) {
-		fs.IntVar(&limit, "limit", sessionsDefaultLimit, "Show at most this many sessions (0 for all)")
-		fs.StringVar(&since, "since", "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
+		fs.IntVar(&limit, "limit", sessionsDefaultLimit, "Show at most this many invocations (0 for all)")
+		fs.StringVar(&since, "since", "", "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 		fs.BoolVar(&brief, "brief", false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
 	})
 	if err != nil {
@@ -129,7 +129,7 @@ func sessionList(ctx context.Context, root string, args []string) error {
 		return sessionBriefCmd(ctx, root)
 	}
 	if limit < 0 {
-		return usagef("magus session: --limit must be zero or more (got %d); 0 lists every session", limit)
+		return usagef("magus session: --limit must be zero or more (got %d); 0 lists every invocation", limit)
 	}
 	cutoff, err := parseSince(since)
 	if err != nil {
@@ -164,12 +164,12 @@ func sessionList(ctx context.Context, root string, args []string) error {
 	case outputName:
 		names := make([]string, 0, len(summaries))
 		for _, s := range summaries {
-			names = append(names, s.Session)
+			names = append(names, s.Invocation)
 		}
 		return emitNames(names)
 	}
 	out := map[string]any{
-		"sessions":    summaries,
+		"invocations": summaries,
 		"checkpoints": sessions.LatestCheckpoints(fold),
 		"skipped":     fold.Skipped,
 		"store":       dir,
@@ -184,19 +184,22 @@ func sessionList(ctx context.Context, root string, args []string) error {
 }
 
 // filtered says a --since cutoff was applied, which is what separates an empty store
-// from a store whose sessions are all older than the window. Reporting the second as the
-// first sends a person looking for a broken producer.
+// from a store whose invocations are all older than the window. Reporting the second as
+// the first sends a person looking for a broken producer.
+//
+// INVOCATION is magus's own id for the process; SESSION is the host's conversation it
+// ran in, a dash when no host delivered one.
 func renderSessionsText(ctx context.Context, root string, summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
 	renderCheckpoints(ctx, root, os.Stdout, sessions.LatestCheckpoints(fold))
 	if len(summaries) == 0 {
 		if filtered {
-			fmt.Fprintf(os.Stdout, "no sessions in that window; %s holds %d session file(s)\n", dir, fold.Sessions)
-			fmt.Fprintln(os.Stdout, "widen --since, or drop it to list every session")
+			fmt.Fprintf(os.Stdout, "no invocations in that window; %s holds %d invocation file(s)\n", dir, fold.Invocations)
+			fmt.Fprintln(os.Stdout, "widen --since, or drop it to list every invocation")
 			return nil
 		}
 		// An empty store is the normal state before any run, so this says how facts
 		// get there rather than reporting a fault.
-		fmt.Fprintf(os.Stdout, "no sessions recorded yet in %s\n", dir)
+		fmt.Fprintf(os.Stdout, "no invocations recorded yet in %s\n", dir)
 		fmt.Fprintln(os.Stdout, "magus records one as soon as a `"+hint.Run.String()+"` finishes a target in any worktree of this repository")
 		return nil
 	}
@@ -205,14 +208,15 @@ func renderSessionsText(ctx context.Context, root string, summaries []sessions.S
 	bySpan := make(map[string]string, len(summaries))
 	for _, s := range summaries {
 		if s.SpanID != "" {
-			bySpan[s.SpanID] = s.Session
+			bySpan[s.SpanID] = s.Invocation
 		}
 	}
-	fmt.Fprintln(tw, "SESSION\tLAST\tUSER\tHOST\tLEASE\tSPAWNER\tPARENT\tFACTS\tEVENTS\tTARGETS")
+	fmt.Fprintln(tw, "INVOCATION\tLAST\tSESSION\tUSER\tHOST\tLEASE\tSPAWNER\tPARENT\tFACTS\tEVENTS\tTARGETS")
 	for _, s := range summaries {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
-			s.Session,
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
+			s.Invocation,
 			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"),
+			orDash(s.Session),
 			orDash(s.User),
 			orDash(s.Host),
 			orDash(s.Lease),
@@ -342,16 +346,16 @@ func checkpointWhere(c sessions.Checkpoint) string {
 	return b.String()
 }
 
-// sessionParent names the session a span id belongs to, falling back to the raw id when this
-// store holds no record of it. The id is the honest answer rather than a blank: the parent may
+// sessionParent names the invocation a span id belongs to, falling back to the raw id when
+// this store holds no record of it. The id is the honest answer rather than a blank: the parent may
 // have run in a repository this store does not cover, or before the retention window, and
 // "unknown to magus" is a different fact from "spawned by nobody".
 //
-// Resolved for the TEXT view only. -o json carries the ids, because a consumer joining sessions
-// wants the identity rather than this reader's guess at a name for it.
+// Resolved for the TEXT view only. -o json carries the ids, because a consumer joining
+// invocations wants the identity rather than this reader's guess at a name for it.
 func sessionParent(bySpan map[string]string, parentSpanID string) string {
-	if session, ok := bySpan[parentSpanID]; ok {
-		return session
+	if invocation, ok := bySpan[parentSpanID]; ok {
+		return invocation
 	}
 	return parentSpanID
 }
@@ -420,11 +424,11 @@ func parseSince(raw string) (time.Time, error) {
 	return time.Time{}, usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
 }
 
-// sessionsSince drops the sessions whose last fact predates cutoff.
+// sessionsSince drops the invocations whose last fact predates cutoff.
 //
-// It filters on LastMs rather than StartedMs so a long-lived session that is still
-// working stays listed. The alternative hides exactly the session a person asking "what
-// is happening lately" most wants: one that began before the window and has not stopped.
+// It filters on LastMs rather than StartedMs so a long-lived invocation that is still
+// working stays listed. The alternative hides exactly the one a person asking "what is
+// happening lately" most wants: one that began before the window and has not stopped.
 func sessionsSince(summaries []sessions.Summary, cutoff time.Time) []sessions.Summary {
 	if cutoff.IsZero() {
 		return summaries
@@ -561,7 +565,7 @@ func sessionLoad(root string, args []string) error {
 	}
 	cacheDir, _ := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(cacheDir))
-	result, err := sessions.LoadEvents(dir, summary.Events, sessions.SessionStart{
+	result, err := sessions.LoadEvents(dir, summary.Events, sessions.InvocationStart{
 		Origin:    localOrigin(types.EntryPointCLI),
 		Workspace: root,
 		Command:   "session load",
@@ -676,7 +680,7 @@ func validateLoadEvent(ev loadEvent) string {
 	case !sessions.ValidEventKind(ev.Kind):
 		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(sessions.EventKinds, ", "))
 	}
-	if !sessions.ValidSessionID(ev.Session) {
+	if !sessions.ValidID(ev.Session) {
 		return fmt.Sprintf("session id %q must be alphanumeric with - and _ (it names the session file)", ev.Session)
 	}
 	return ""

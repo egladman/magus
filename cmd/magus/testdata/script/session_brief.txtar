@@ -25,7 +25,7 @@ stdout '"rules"'
 # The listing is untouched: --brief is a second reading of the same store's question,
 # not a replacement for it.
 exec magus session
-stdout 'no sessions recorded yet'
+stdout 'no invocations recorded yet'
 
 -- magus.yaml --
 concurrency: 2

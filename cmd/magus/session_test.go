@@ -53,9 +53,9 @@ func sessionsLeaseCell(t *testing.T, out, session string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		// SESSION, date, time, USER, HOST, LEASE, SPAWNER, PARENT, FACTS, EVENTS, TARGETS...
-		if len(fields) > 5 && fields[0] == session {
-			return fields[5]
+		// INVOCATION, date, time, SESSION, USER, HOST, LEASE, SPAWNER, PARENT, FACTS, EVENTS, TARGETS...
+		if len(fields) > 6 && fields[0] == session {
+			return fields[6]
 		}
 	}
 	t.Fatalf("no row for session %q in:\n%s", session, out)
@@ -137,7 +137,7 @@ func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
 		Source:  "claude/Notification",
 		Where:   root,
 		Message: "needs the deploy key",
-	}, sessions.SessionStart{Workspace: root})
+	}, sessions.InvocationStart{Workspace: root})
 	require.NoError(t, err)
 	require.True(t, opened)
 
@@ -158,7 +158,7 @@ func TestSessionsRejectsANegativeLimit(t *testing.T) {
 	err := sessionCmd(context.Background(), t.TempDir(), []string{"--limit=-1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "zero or more")
-	assert.Contains(t, err.Error(), "0 lists every session", "the error names the value that means what -1 was reaching for")
+	assert.Contains(t, err.Error(), "0 lists every invocation", "the error names the value that means what -1 was reaching for")
 }
 
 func TestParseSinceAcceptsBothSpellings(t *testing.T) {
@@ -226,13 +226,13 @@ func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
 	out := captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "2099-01-01T00:00:00Z"}))
 	})
-	assert.Contains(t, out, "no sessions in that window")
-	assert.NotContains(t, out, "no sessions recorded yet")
+	assert.Contains(t, out, "no invocations in that window")
+	assert.NotContains(t, out, "no invocations recorded yet")
 
 	out = captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "24h"}))
 	})
-	assert.Contains(t, out, "invOld", "a session inside the window is still listed")
+	assert.Contains(t, out, "invOld", "an invocation inside the window is still listed")
 }
 
 // loadStream writes lines to a file and loads them, returning what the command

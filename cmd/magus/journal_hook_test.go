@@ -74,7 +74,9 @@ func TestWithSessionJournalRecordsAffectedResults(t *testing.T) {
 
 	summaries := sessions.Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, "inv1", summaries[0].Session, "the invocation id is the session id")
+	assert.Equal(t, "inv1", summaries[0].Invocation, "the journal's invocation id files the facts")
+	assert.Empty(t, summaries[0].Session, "a CLI run is in no host session")
+	assert.Equal(t, trail.LocalOrigin(context.Background()).User, summaries[0].User, "the start records the OS account that ran it")
 	assert.Equal(t, "affected ci --base main", summaries[0].Command)
 	assert.Equal(t, root, summaries[0].Workspace)
 	assert.Equal(t, []sessions.TargetResult{
@@ -84,7 +86,7 @@ func TestWithSessionJournalRecordsAffectedResults(t *testing.T) {
 	}, summaries[0].Targets)
 
 	require.Len(t, fold.Records, 4, "one session-start plus one fact per result")
-	assert.Equal(t, sessions.KindSessionStart, fold.Records[0].Kind)
+	assert.Equal(t, sessions.KindInvocationStart, fold.Records[0].Kind)
 	assert.Equal(t, uint64(1), fold.Records[0].Seq)
 }
 
