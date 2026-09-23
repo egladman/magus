@@ -22,8 +22,9 @@ on:
     types: [auto_merge_enabled, synchronize]
   pull_request_review:
     types: [submitted]
-  # Every landing moves the base the rest of the queue waits on. The landing credential
-  # is not the Actions token, so its merges start this.
+  # Every landing moves the base the rest of the queue waits on. Landing merges with the
+  # Actions token, which starts no workflow, so queue-land.yaml dispatches this instead;
+  # push covers a merge made any other way.
   push:
     branches: [main]
   workflow_dispatch:

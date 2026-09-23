@@ -15,9 +15,9 @@
 // MERGEQUEUE_TOKEN when the environment carries it, else GITHUB_TOKEN: the validation
 // side runs pull-request code and holds only a read-only Actions token. The three writes
 // use MERGEQUEUE_TOKEN and nothing else, so a job that does not hold the write
-// credential cannot write by accident. It is a GitHub App installation token or a
-// fine-grained token with contents, pull requests and commit statuses write; unlike the
-// Actions token, its merges start the workflows on the base branch.
+// credential cannot write by accident. It needs contents, pull requests and commit
+// statuses write; the landing job's own Actions token is enough, and since its merges
+// start no workflow, that job dispatches the base branch's runs itself.
 //
 // The queue posts success on its status only after a merge, so its credential must be
 // a bypass actor for that required status. Nothing else can satisfy it, which is what

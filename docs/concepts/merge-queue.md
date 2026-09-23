@@ -195,9 +195,14 @@ time:
    `validate --only <id>` job per change up to the depth of each partition. Each job
    uploads its verdict as an artifact the moment it finishes.
 2. `queue-land.yaml` starts when validation is requested (`workflow_run: requested`), from
-   main's definition with its own secret, and downloads each verdict artifact as it
-   appears, while validation is still running. `land --follow` lands each change whose
-   predecessors have landed; `.done` is written once the validation run completes.
+   main's definition with a write-scoped Actions token, and downloads each verdict
+   artifact as it appears, while validation is still running. `land --follow` lands each
+   change whose predecessors have landed; `.done` is written once the validation run
+   completes.
+
+The landing token is the job's own, so no long-lived secret exists. A merge made with
+the Actions token starts no workflow, so once anything lands the job dispatches main's
+CI, CD and the queue's next run itself.
 
 Before each merge, landing predicts the tree main will carry. A file that both the stage
 and something landed since the stage was built changed, such as a root index two
@@ -206,8 +211,8 @@ and is restaged on the next run.
 
 The queue's status reads `pending` while it asks for a merge and `success` only once the
 change has merged. A required status that went green first would let anyone merge the
-change onto whatever main had become, so branch protection must let the landing
-credential bypass that status; nothing else can satisfy it.
+change onto whatever main had become, so branch protection must let the GitHub Actions
+app bypass that status; nothing else can satisfy it.
 
 Why not have validation post a `magus/queue` status per stage and trigger landing on
 the status event? Posting a status needs `statuses: write` in the job that runs

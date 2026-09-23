@@ -16,11 +16,11 @@ name: Queue land
 # at the validated head and that the tree it will land differs from the approved change
 # only in derived files; after each, it stops unless main carries the validated tree.
 #
-# MAGUS_QUEUE_TOKEN is the write credential: a fine-grained token (or a GitHub App
-# installation token) with contents, pull requests and commit statuses write on this
-# repository. Its merges start ci.yaml and cd.yaml on main; the Actions token's would not.
-# The queue posts success on magus/queue only after a merge, so this credential must be
-# a bypass actor for that required status; nothing else can satisfy it.
+# The write credential is this job's own Actions token, so no long-lived secret exists.
+# Its pushes and merges start no workflow, so once anything lands the job dispatches
+# ci.yaml, cd.yaml and the queue's next run on main itself. The queue posts success on magus/queue only after
+# a merge, so the GitHub Actions app must be a bypass actor for that required status;
+# nothing else can satisfy it.
 
 on:
   workflow_run:
@@ -32,8 +32,10 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
-  actions: read # follow the validation run and download its artifacts
+  contents: write # merge, and push a regeneration onto a queued branch
+  pull-requests: write # comment on a kick-back and disable its auto-merge
+  statuses: write # magus/queue
+  actions: write # follow the validation run, download its artifacts, dispatch main's runs
 
 env:
   MISE_SAFE: '1'
@@ -51,8 +53,8 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           filter: blob:none
-          # A regeneration is pushed to a queued branch with the write credential.
-          token: ${{ secrets.MAGUS_QUEUE_TOKEN }}
+          # A regeneration is pushed to a queued branch with this job's token.
+          token: ${{ github.token }}
 
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
@@ -74,8 +76,9 @@ jobs:
       - name: Land each stage as it goes green
         env:
           GH_TOKEN: ${{ github.token }}
-          MERGEQUEUE_TOKEN: ${{ secrets.MAGUS_QUEUE_TOKEN }}
+          MERGEQUEUE_TOKEN: ${{ github.token }}
           RUN: ${{ github.event.workflow_run.id }}
+          MAIN: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           q="$RUNNER_TEMP/queue"
@@ -115,6 +118,15 @@ jobs:
             wait "$follower"
             exit 0
           fi
+          before=$(git ls-remote origin "refs/heads/$MAIN" | cut -f1)
+          # A failed land still dispatches main's runs for whatever landed before it.
+          rc=0
           mergequeue land --plan "$q/plan.json" --verdicts "$q/verdicts" --provider github \
-            --status-context magus/queue --follow --interval 10s
+            --status-context magus/queue --follow --interval 10s || rc=$?
           wait "$follower"
+          if [ "$(git ls-remote origin "refs/heads/$MAIN" | cut -f1)" != "$before" ]; then
+            gh workflow run ci.yaml --repo "$GITHUB_REPOSITORY" --ref "$MAIN"
+            gh workflow run cd.yaml --repo "$GITHUB_REPOSITORY" --ref "$MAIN"
+            gh workflow run queue.yaml --repo "$GITHUB_REPOSITORY" --ref "$MAIN"
+          fi
+          exit "$rc"
