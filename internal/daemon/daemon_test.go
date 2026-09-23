@@ -19,6 +19,7 @@ import (
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -614,5 +615,93 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 		require.NoError(t, err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("daemon did not shut down")
+	}
+}
+
+// TestServeUnloadedRefusesEveryLoadedConnectService derives, from a REAL loaded daemon's own
+// mounted patterns, every Connect service prefix that reads the workspace (StatusService
+// excepted, since it needs none), then asserts an unloaded daemon refuses each one with the
+// load error rather than a bare 404. workspaceServices is a hand-kept list; this catches it
+// drifting out of sync with what Serve actually mounts, rather than trusting the list to
+// describe itself.
+func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := fixtureWorkspace(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m, err := magus.Open(ctx, root)
+	require.NoError(t, err)
+
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	loadedPort := freePort(t)
+	loadedAddr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), loadedPort)
+	loaded := New(mcp.Options{Magus: m, Version: "test", HTTPAddr: loadedAddr, HealthRoutes: map[string]http.Handler{"/readyz": ok}})
+	loadedMounted := make(chan []string, 1)
+	loaded.onMounted = func(p []string) { loadedMounted <- p }
+	loadedErr := make(chan error, 1)
+	go func() { loadedErr <- loaded.Serve(ctx) }()
+	loadedBase := fmt.Sprintf("http://127.0.0.1:%d", loadedPort)
+	waitReady(t, loadedBase+"/readyz")
+	loadedPatterns := <-loadedMounted
+
+	// A Connect service is mounted as a path-prefix pattern whose first segment is the
+	// fully-qualified service name (it contains a "."); every other mount here is a plain
+	// JSON route or the console shell.
+	var services []string
+	for _, p := range loadedPatterns {
+		name, _, cut := strings.Cut(strings.TrimPrefix(p, "/"), "/")
+		if !cut || !strings.Contains(name, ".") || name == statusv1alpha1connect.StatusServiceName {
+			continue
+		}
+		services = append(services, name)
+	}
+	require.NotEmpty(t, services, "the loaded daemon must mount at least one workspace Connect service")
+
+	failure := &types.WorkspaceFailure{Message: "magusfile: exec magusfile.buzz: [BZZ1005] ..."}
+	unloadedPort := freePort(t)
+	unloadedAddr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), unloadedPort)
+	unloaded := NewUnloaded(mcp.Options{Version: "test", HTTPAddr: unloadedAddr, HealthRoutes: map[string]http.Handler{"/readyz": ok}},
+		Unloaded{Root: "/repo", Err: func() rpcerr.Error { return rpcerr.WorkspaceFailed("/repo", failure) }})
+	unloadedErr := make(chan error, 1)
+	go func() { unloadedErr <- unloaded.Serve(ctx) }()
+	unloadedBase := fmt.Sprintf("http://127.0.0.1:%d", unloadedPort)
+	waitReady(t, unloadedBase+"/readyz")
+
+	cli, err := auth.Load()
+	require.NoError(t, err)
+
+	for _, name := range services {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, unloadedBase+"/"+name+"/Probe", strings.NewReader("{}"))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+cli)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		if !assert.NotEqual(t, http.StatusNotFound, resp.StatusCode, "%s: workspaceServices is missing this mount", name) {
+			continue
+		}
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "%s: %s", name, body)
+		var got struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		require.NoError(t, json.Unmarshal(body, &got), "%s: %s", name, body)
+		assert.Equal(t, "failed_precondition", got.Code, name)
+		assert.Contains(t, got.Message, "[MGS3016]", name)
+	}
+
+	cancel()
+	for _, errCh := range []chan error{loadedErr, unloadedErr} {
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("daemon did not shut down")
+		}
 	}
 }
