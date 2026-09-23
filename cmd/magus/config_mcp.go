@@ -158,7 +158,7 @@ func configMCPConnectorList(args []string) error {
 		fmt.Fprintln(os.Stderr, "no connector tokens; create one with `"+hint.ConfigMCPConnectorCreate.String()+"`")
 		return nil
 	}
-	return tokenTable(conns, time.Now())
+	return tokenTable(conns)
 }
 
 func configMCPConnectorRevoke(args []string) error {
@@ -208,7 +208,7 @@ func parseExpiry(now time.Time, s string) (time.Time, error) {
 	case s == "":
 		return now.Add(auth.DefaultTokenTTL), nil
 	case strings.EqualFold(s, "never"):
-		return time.Time{}, fmt.Errorf("invalid --expires %q: a token must expire; the maximum is 366d", s)
+		return time.Time{}, outOfBound(s)
 	}
 
 	var d time.Duration
@@ -219,7 +219,7 @@ func parseExpiry(now time.Time, s string) (time.Time, error) {
 		}
 		// Checked before multiplying, so a huge day count cannot wrap int64 nanoseconds.
 		if days > int(auth.MaxTokenTTL/(24*time.Hour)) {
-			return time.Time{}, fmt.Errorf("invalid --expires %q: a token lives at most 366d", s)
+			return time.Time{}, outOfBound(s)
 		}
 		d = time.Duration(days) * 24 * time.Hour
 	} else {
@@ -229,13 +229,17 @@ func parseExpiry(now time.Time, s string) (time.Time, error) {
 		}
 		d = parsed
 	}
-	switch {
-	case d <= 0:
-		return time.Time{}, fmt.Errorf("invalid --expires %q: must be a positive lifetime", s)
-	case d > auth.MaxTokenTTL:
-		return time.Time{}, fmt.Errorf("invalid --expires %q: a token lives at most 366d", s)
+	if d <= 0 || d > auth.MaxTokenTTL {
+		return time.Time{}, outOfBound(s)
 	}
 	return now.Add(d), nil
+}
+
+// outOfBound is the --expires refusal for a lifetime a token cannot have: the same
+// TokenLifetimeOutOfRange a mint returns, matching auth.ErrTokenLifetime.
+func outOfBound(s string) error {
+	return types.WrapDiagnostic(types.TokenLifetimeOutOfRange, auth.ErrTokenLifetime,
+		"invalid --expires %q: a token must expire, more than 0 and at most 366d out", s)
 }
 
 // mintToken mints a stored token from the CLI. The shell is the user, so the minter is the
@@ -285,23 +289,15 @@ func printMinted(cmd string, secret string, rec auth.Token) {
 	fmt.Fprintln(os.Stderr, "This secret is shown once and cannot be retrieved later. Store it now.")
 }
 
-// tokenTable prints stored tokens: never a secret or a hash, only what identifies each.
-func tokenTable(toks []auth.Token, now time.Time) error {
+// tokenTable prints stored tokens: never a secret or a hash, only what identifies each. The
+// store's List has already removed the expired ones.
+func tokenTable(toks []auth.Token) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tID\tGRANT\tCREATED\tEXPIRES")
 	for _, t := range toks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Grant, t.Created.Format("2006-01-02"), expiresColumn(t, now))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Grant, t.Created.Format("2006-01-02"), t.Expires.Format("2006-01-02"))
 	}
 	return tw.Flush()
-}
-
-// expiresColumn renders a token's expiry for a listing.
-func expiresColumn(t auth.Token, now time.Time) string {
-	col := t.Expires.Format("2006-01-02")
-	if t.Expired(now) {
-		col += " (expired)"
-	}
-	return col
 }
 
 // matchesToken reports whether q names one of toks by exact name, or by an exact or prefix id:

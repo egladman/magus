@@ -162,7 +162,7 @@ func configConsoleTokenList(args []string) error {
 		fmt.Fprintln(os.Stderr, "no console tokens; create one with `"+hint.ConfigConsoleTokenCreate.String()+"`")
 		return nil
 	}
-	return tokenTable(toks, time.Now())
+	return tokenTable(toks)
 }
 
 func configConsoleTokenRevoke(args []string) error {

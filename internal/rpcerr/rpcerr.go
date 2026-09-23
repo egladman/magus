@@ -71,10 +71,11 @@ var titles = map[types.DiagnosticCode]string{
 	types.BearerMissing:             "no bearer token presented",
 	types.MethodNotAllowed:          "method not allowed",
 	types.ConsoleNotBuilt:           "console not built",
-	types.ShareUnavailable:          "share could not open",
+	types.ShareUnavailable:          "share listener unavailable",
 	types.GrantInsufficient:         "grant below the route's need",
 	types.OperatorTokenFormat:       "operator token predates the class prefix",
 	types.TokenStoreTooOld:          "token store predates grants",
+	types.TokenLifetimeOutOfRange:   "token lifetime outside its bound",
 }
 
 // Error returns the rendered message, so an Error can travel as a Go error.

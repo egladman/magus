@@ -117,10 +117,97 @@ func TestMintRefusesALifetimeOutsideTheBound(t *testing.T) {
 	} {
 		_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "x", Grant: types.GrantConsole, Expires: exp})
 		assert.ErrorIs(t, err, ErrTokenLifetime, name)
+		assert.ErrorIs(t, err, types.TokenLifetimeOutOfRange, name)
 	}
 	_, rec, err := store.Mint(types.GrantOperator, MintRequest{Name: "max", Grant: types.GrantConsole, Expires: now.Add(MaxTokenTTL - time.Minute)})
 	require.NoError(t, err)
 	assert.WithinDuration(t, now.Add(MaxTokenTTL-time.Minute), rec.Expires, time.Second, "the expiry asked for is the expiry stored")
+}
+
+// expireOnDisk rewinds name's stored expiry into the past, as time passing would.
+func expireOnDisk(t *testing.T, dir, name string) {
+	t.Helper()
+	path := filepath.Join(dir, name+".json")
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var rec tokenRecord
+	require.NoError(t, json.Unmarshal(b, &rec))
+	rec.Expires = time.Now().Add(-time.Minute).UTC()
+	b, err = json.Marshal(rec)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, b, 0o600))
+}
+
+// Expired tokens do not pile up: the next List or Mint deletes their files, and leaves every
+// live token alone.
+func TestExpiredTokensAreRemovedByListAndMint(t *testing.T) {
+	store := isolatedStore(t)
+	exp := time.Now().Add(time.Hour)
+	for _, name := range []string{"old", "older", "live"} {
+		_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: name, Grant: types.GrantViewer, Expires: exp})
+		require.NoError(t, err)
+	}
+	expireOnDisk(t, store.dir, "old")
+	expireOnDisk(t, store.dir, "older")
+
+	byList, err := LoadStore()
+	require.NoError(t, err)
+	names := func(toks []Token) []string {
+		var out []string
+		for _, tok := range toks {
+			out = append(out, tok.Name)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"live"}, names(byList.List()))
+	for _, name := range []string{"old", "older"} {
+		assert.NoFileExists(t, filepath.Join(store.dir, name+".json"))
+	}
+	assert.FileExists(t, filepath.Join(store.dir, "live.json"))
+
+	// Mint removes them too, and an expired token's name is free again.
+	expireOnDisk(t, store.dir, "live")
+	byMint, err := LoadStore()
+	require.NoError(t, err)
+	_, rec, err := byMint.Mint(types.GrantOperator, MintRequest{Name: "live", Grant: types.GrantConsole, Expires: exp})
+	require.NoError(t, err)
+	fresh, err := LoadStore()
+	require.NoError(t, err)
+	assert.Equal(t, []Token{rec}, fresh.List())
+	leftovers, err := filepath.Glob(filepath.Join(store.dir, ".prune-*"))
+	require.NoError(t, err)
+	assert.Empty(t, leftovers)
+}
+
+// A snapshot that still holds an expired token must not delete a live token minted under the
+// same name since: the file is checked before it is removed, and put back.
+func TestPruneNeverDeletesALiveTokenThatReusedTheName(t *testing.T) {
+	store := isolatedStore(t)
+	exp := time.Now().Add(time.Hour)
+	_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConsole, Expires: exp})
+	require.NoError(t, err)
+	expireOnDisk(t, store.dir, "laptop")
+	stale, err := LoadStore() // holds the expired "laptop"
+	require.NoError(t, err)
+
+	require.NoError(t, os.Remove(filepath.Join(store.dir, "laptop.json")))
+	secret, live, err := isolatedStoreAt(t, store.dir).Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConsole, Expires: exp})
+	require.NoError(t, err)
+
+	assert.Empty(t, stale.List(), "the stale expired entry leaves the snapshot")
+	fresh, err := LoadStore()
+	require.NoError(t, err)
+	got, ok := fresh.Lookup(secret)
+	require.True(t, ok, "the live token that reused the name survives the prune")
+	assert.Equal(t, live.ID, got.ID)
+}
+
+// isolatedStoreAt is a second handle on the same directory, as another process would hold.
+func isolatedStoreAt(t *testing.T, dir string) *Store {
+	t.Helper()
+	tokens, err := readTokenDir(dir)
+	require.NoError(t, err)
+	return &Store{dir: dir, tokens: tokens}
 }
 
 func TestMintRefusesAnInvalidOrEmptyGrant(t *testing.T) {

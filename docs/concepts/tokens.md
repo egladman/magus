@@ -100,8 +100,10 @@ A token is never granted more than its minter holds. That is one check,
   `console=read`.
 
 Every stored token expires. `--expires never` is refused, and so is a lifetime
-past 366 days: nothing is shortened to fit. `magus doctor` names any token that
-expires within 14 days.
+past 366 days, or a share link past 24 hours:
+[MGS9018](../reference/codes/auth/MGS9018.md), and nothing is shortened to fit.
+`magus doctor` names any token that expires within 14 days, and an expired
+token's file is deleted the next time the store is listed or minted into.
 
 ## Console links
 

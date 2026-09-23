@@ -43,6 +43,7 @@ func TestMintShareFollowsTheMintingRule(t *testing.T) {
 	for _, ttl := range []time.Duration{0, -time.Minute, 59 * time.Second, MaxShareTTL + time.Second, 90 * 24 * time.Hour} {
 		_, _, err := MintShare(types.GrantOperator, ttl)
 		assert.ErrorIs(t, err, ErrShareLifetime, ttl.String())
+		assert.ErrorIs(t, err, types.TokenLifetimeOutOfRange, "one code for a token or a link outside its bound: %s", ttl)
 	}
 	_, tok, err := MintShare(types.GrantOperator, MaxShareTTL)
 	require.NoError(t, err)

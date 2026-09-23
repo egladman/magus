@@ -21,9 +21,10 @@ const expiringSoon = 14 * 24 * time.Hour
 
 // checkTokens reports the daemon's credentials. It FAILS on what stops a credential working
 // with an error the reader must act on: an operator token file that is not mgo_, a token store
-// written before grants, a secret file looser than 0600. It ADVISES when a stored token has
-// expired or expires within expiringSoon, and when the magus state dir is readable by other
-// accounts. An absent operator token is normal: the daemon mints one on start.
+// written before grants, a secret file looser than 0600. It ADVISES when a stored token
+// expires within expiringSoon, and when the magus state dir is readable by other accounts.
+// Reading the store removes expired tokens. An absent operator token is normal: the daemon
+// mints one on start.
 func (*runner) checkTokens() types.DoctorCheck {
 	const name = "tokens"
 	var (
@@ -51,14 +52,8 @@ func (*runner) checkTokens() types.DoctorCheck {
 			if nearest.IsZero() || t.Expires.Before(nearest) {
 				nearest = t.Expires
 			}
-			revoke := hint.ConfigConsoleTokenRevoke
-			if t.Grant.MCP != types.LevelNone {
-				revoke = hint.ConfigMCPConnectorRevoke
-			}
-			switch left := t.Expires.Sub(now); {
-			case left <= 0:
-				advice = append(advice, fmt.Sprintf("token %q (%s) expired %s; revoke it: %s", t.Name, t.Grant, t.Expires.Format("2006-01-02"), revoke.With(t.Name)))
-			case left <= expiringSoon:
+			// List has already removed the expired ones.
+			if left := t.Expires.Sub(now); left <= expiringSoon {
 				days := fmt.Sprintf("%dd", int(left.Hours())/24)
 				if left < 24*time.Hour {
 					days = "<1d"

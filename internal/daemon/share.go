@@ -76,7 +76,7 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			refuseShare(w, r, rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.GrantInsufficient, Message: err.Error()}, log)
 			return
 		case errors.Is(err, auth.ErrShareLifetime):
-			refuseShare(w, r, rpcerr.Error{Code: connect.CodeInvalidArgument, Reason: types.ShareUnavailable, Message: err.Error()}, log)
+			refuseShare(w, r, rpcerr.Error{Code: connect.CodeInvalidArgument, Reason: types.TokenLifetimeOutOfRange, Message: err.Error()}, log)
 			return
 		case err != nil:
 			// A missing LAN interface (the common case) is a client-actionable

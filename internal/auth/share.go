@@ -41,7 +41,8 @@ func MintShare(minter types.Grant, ttl time.Duration) (secret string, tok ShareT
 		return "", ShareToken{}, fmt.Errorf("%w: a share link needs %s, the minter holds %q", ErrExceedsGrant, types.GrantShare, minter.String())
 	}
 	if ttl < MinShareTTL || ttl > MaxShareTTL {
-		return "", ShareToken{}, fmt.Errorf("%w: asked for %s", ErrShareLifetime, ttl)
+		return "", ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
+			"auth: a share link lives between 1 minute and 24 hours; asked for %s", ttl)
 	}
 	secret, err = mintSecret(types.ClassShare)
 	if err != nil {

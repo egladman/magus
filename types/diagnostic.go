@@ -507,6 +507,9 @@ const (
 	// TokenStoreTooOld is a stored token written before grants existed, which this magus
 	// refuses rather than guess a grant for.
 	TokenStoreTooOld DiagnosticCode = "MGS9017"
+	// TokenLifetimeOutOfRange is a stored token or a share link asked to live outside its
+	// bound, never included: refused rather than shortened.
+	TokenLifetimeOutOfRange DiagnosticCode = "MGS9018"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -572,7 +575,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	NoAuthToken, TokenNameExists, TokenNotFound,
 	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
 	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
-	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld,
+	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

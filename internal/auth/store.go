@@ -1,10 +1,12 @@
 package auth
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -46,6 +48,13 @@ var (
 	// ErrTokenNotFound is a revoke that matched no token.
 	ErrTokenNotFound = errors.New("auth: no matching token")
 )
+
+// lifetimeError refuses a stored token asked to live for asked: not positive, or past
+// MaxTokenTTL. It matches ErrTokenLifetime under errors.Is.
+func lifetimeError(asked time.Duration) error {
+	return types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrTokenLifetime,
+		"auth: a token must expire, at most 366 days out; asked for %s", asked.Round(time.Second))
+}
 
 // Token is one stored token's record: never the secret.
 type Token struct {
@@ -221,19 +230,66 @@ func sortTokens(tokens []Token) {
 	sort.Slice(tokens, func(i, j int) bool { return tokens[i].Name < tokens[j].Name })
 }
 
-// List returns every stored token, sorted by name. The slice is a copy.
+// List returns every unexpired stored token, sorted by name, after removing the expired ones
+// from disk (see prune). The slice is a copy.
 func (s *Store) List() []Token {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.prune(time.Now())
 	return slices.Clone(s.tokens)
+}
+
+// prune deletes every expired record in the snapshot from disk and from the snapshot. The
+// caller holds s.mu. Each removal is reported at debug; one that fails, or that finds a live
+// token in the file, is reported at warn and never drops a live token.
+func (s *Store) prune(now time.Time) {
+	kept := s.tokens[:0]
+	for _, t := range s.tokens {
+		if !t.Expired(now) {
+			kept = append(kept, t)
+			continue
+		}
+		if err := s.removeExpired(t); err != nil {
+			slog.WarnContext(context.Background(), "auth: could not remove an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.String("error", err.Error()))
+			kept = append(kept, t)
+			continue
+		}
+		slog.DebugContext(context.Background(), "auth: removed an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.Time("expired", t.Expires))
+	}
+	s.tokens = kept
+}
+
+// removeExpired deletes t's file only if the file still holds t. The file is first moved
+// aside, so a token minted under the same name since this snapshot was read is checked
+// rather than deleted, and put back when it is not t. Either way t is gone from disk, as it
+// is when the file is already missing.
+func (s *Store) removeExpired(t Token) error {
+	path := filepath.Join(s.dir, t.Name+".json")
+	aside := filepath.Join(s.dir, ".prune-"+t.ID)
+	if err := os.Rename(path, aside); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	var rec tokenRecord
+	data, err := os.ReadFile(aside)
+	if err == nil && json.Unmarshal(data, &rec) == nil && rec.SHA256 == t.SHA256 {
+		return os.Remove(aside)
+	}
+	if err := os.Link(aside, path); err != nil {
+		return fmt.Errorf("%s changed while it was pruned and could not be put back; it is at %s: %w", path, aside, err)
+	}
+	return os.Remove(aside)
 }
 
 // Mint stores a new token and returns its secret, which cannot be recovered afterwards.
 // minter is the grant of whoever asks: the CLI passes [types.GrantOperator] (the shell is the
 // user), and a daemon handler passes the grant of the credential its request verified as. It
 // refuses, in order: an invalid grant, a grant not Within minter (ErrExceedsGrant), a grant of
-// nothing, an expiry outside (now, now+MaxTokenTTL] (ErrTokenLifetime), and a name that is
-// invalid or taken (ErrTokenExists). Nothing is clamped.
+// nothing, an expiry outside (now, now+MaxTokenTTL] (ErrTokenLifetime, coded
+// TokenLifetimeOutOfRange), and a name that is invalid or taken (ErrTokenExists). Nothing is
+// clamped. Before writing it removes every expired token, as List does.
 func (s *Store) Mint(minter types.Grant, req MintRequest) (secret string, rec Token, err error) {
 	if err := req.Grant.Valid(); err != nil {
 		return "", Token{}, fmt.Errorf("auth: %w", err)
@@ -246,12 +302,17 @@ func (s *Store) Mint(minter types.Grant, req MintRequest) (secret string, rec To
 	}
 	now := time.Now()
 	if !req.Expires.After(now) || req.Expires.After(now.Add(MaxTokenTTL)) {
-		return "", Token{}, ErrTokenLifetime
+		return "", Token{}, lifetimeError(req.Expires.Sub(now))
 	}
 	name := strings.TrimSpace(req.Name)
 	if err := dropin.ValidName(name); err != nil {
 		return "", Token{}, fmt.Errorf("auth: token %w", err)
 	}
+	// Expired tokens go before the new one is written, so a mint never leaves them behind
+	// and an expired token's name is free again.
+	s.mu.Lock()
+	s.prune(now)
+	s.mu.Unlock()
 
 	secret, err = mintSecret(types.ClassToken)
 	if err != nil {
