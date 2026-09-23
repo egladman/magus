@@ -249,10 +249,10 @@ func (m *Magus) explainStale(err error) error {
 	return ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion)
 }
 
-// LoadFailure describes err, a failed Open of root, as the daemon reports a FAILED
+// WorkspaceLoadFailure describes err, a failed Open of root, as the daemon reports a FAILED
 // workspace: the error as rendered, plus the source position of each failing file that has
 // one. A position outside root keeps its absolute path.
-func LoadFailure(root string, err error) *types.WorkspaceFailure {
+func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
 	f := &types.WorkspaceFailure{Message: err.Error()}
 	for _, branch := range joinedBranches(err) {
 		d, ok := buzz.DiagnosticOf(branch)

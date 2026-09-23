@@ -596,9 +596,9 @@ func TestAnchorReproducesTheAutoHeadingID(t *testing.T) {
 	}
 }
 
-func TestLeaf(t *testing.T) {
-	assert.Equal(t, "Token", leaf("magus.token.v1.Token"))
-	assert.Equal(t, "Token", leaf("Token"))
+func TestLeafName(t *testing.T) {
+	assert.Equal(t, "Token", leafName("magus.token.v1.Token"))
+	assert.Equal(t, "Token", leafName("Token"))
 }
 
 func TestLocalNameKeepsTheParentOfANestedType(t *testing.T) {

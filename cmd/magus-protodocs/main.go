@@ -749,7 +749,10 @@ func escapeMD(s string) string {
 	return strings.NewReplacer("|", `\|`, "_", `\_`).Replace(s)
 }
 
-func leaf(qualified string) string {
+// leafName is the last dot-separated segment of a qualified name: "Token" from
+// "magus.token.v1.Token". Compact display text where a collision between two same-named
+// nested types is only cosmetic; localName is the one anchors and headings need instead.
+func leafName(qualified string) string {
 	if i := strings.LastIndexByte(qualified, '.'); i >= 0 {
 		return qualified[i+1:]
 	}
@@ -757,7 +760,7 @@ func leaf(qualified string) string {
 }
 
 // localName is a type's name within its package, a nested type keeping its parent:
-// "magus.status.v1alpha1.Workspace.State" is "Workspace.State". The leaf alone collides
+// "magus.status.v1alpha1.Workspace.State" is "Workspace.State". leafName alone collides
 // when two messages each nest a State, and so would their headings and anchors. Package
 // segments are lowercase and type names are not, which is where the package ends.
 func localName(qualified string) string {
@@ -767,7 +770,7 @@ func localName(qualified string) string {
 			return strings.Join(parts[i:], ".")
 		}
 	}
-	return leaf(qualified)
+	return leafName(qualified)
 }
 
 // anchor is the heading id goldmark's auto-heading-id extension would assign to a `### name`
@@ -1170,8 +1173,8 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 		}
 		fmt.Fprintf(&b, "`POST /%s.%s/%s`: %s. Source: %s.\n\n", s.Package, s.Name, m.Name, m.kind(), sourceLink(s.File, m.Line))
 		fmt.Fprintf(&b, "Takes %s, returns %s.\n\n",
-			a.typeLink(leaf(m.Input), m.Input, s.Package, path),
-			a.typeLink(leaf(m.Output), m.Output, s.Package, path))
+			a.typeLink(leafName(m.Input), m.Input, s.Package, path),
+			a.typeLink(leafName(m.Output), m.Output, s.Package, path))
 	}
 
 	msgNames, enumNames := a.reachableFrom(s.Package, seedsOf(s))
