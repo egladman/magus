@@ -485,11 +485,13 @@ records. `.github/workflows/pr.yaml` checks two things about every pull request:
   the lowercase imperative this repository writes, with no trailing period, in 100
   bytes at most. `feat(git): install version-controlled buzz hooks` passes;
   `Add git hooks.` does not. Check one with `magus run pr-title . -- "<title>"`.
-- **A change users can notice adds a `CHANGELOG.md` entry** under
-  `[Unreleased]`. Docs, tests, workflows, repository tooling and plans do not need
-  one; `tools/changelog.buzz` lists what is exempt. When a change needs none
-  anyway, a maintainer labels the pull request `no-changelog`. Check a branch
-  with `magus run pr-changelog .`.
+- **A `feat`, `fix` or `perf` change to shipped code adds a `CHANGELOG.md`
+  entry** under `[Unreleased]`, as does any title marked breaking with `!`.
+  Every other type passes without one, and so do changes that touch only docs,
+  tests, workflows, repository tooling and plans; `tools/changelog.buzz` lists
+  what does not ship. A change no user can notice is not a `feat`, `fix` or
+  `perf`, so retitle it rather than add an entry. Check a branch with
+  `magus run pr-changelog . -- "<title>"`.
 
 Your branch's own commits are squashed away, so they keep the lowercase
 imperative style with no prefix. `magus run git-hooks-install .` installs this

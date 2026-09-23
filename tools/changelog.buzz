@@ -4,21 +4,55 @@
 namespace changelog;
 
 import "std";
+import "tools/commits" as commits;
 
-// The label that waives the entry. A label rather than a line in the pull request body:
-// the body becomes the squash commit's message, and only someone with triage rights can
-// add a label, so a waiver is a maintainer's call rather than the author's.
-export fun optOutLabel() > str {
-    return "no-changelog";
+// problem returns "" when a pull request titled title, changing the repository-relative
+// paths in changed and adding the [Unreleased] bullets in added (see addedEntries), passes,
+// and otherwise the reason it fails, phrased to be printed as is.
+//
+// An entry is owed only when the title's type is feat, fix or perf, or the title is marked
+// breaking, AND a changed path ships. The title is the author's claim about what a user
+// notices; the paths keep a feat that only moved tests from owing one. There is no waiver:
+// a change no user notices is retitled rather than excused.
+export fun problem(title: str, changed: [str], added: [str]) > str {
+    final titleProblem = commits\problem(title);
+    if (titleProblem != "") {
+        return "title \"{title}\" does not say whether an entry is owed: {titleProblem}";
+    }
+    final shipped = owed(title, changed: changed);
+    if (shipped.len() == 0 or added.len() > 0) {
+        return "";
+    }
+    var listed = shipped.join("\n  ");
+    if (shipped.len() > 10) {
+        listed = shipped.sub(0, len: 10).join("\n  ") + "\n  ...and {shipped.len() - 10} more";
+    }
+    return "\"{title}\" changes {shipped.len()} shipped path(s) and CHANGELOG.md's [Unreleased] "
+        + "section gained no entry. Add a bullet under the fitting heading; if no user can notice "
+        + "the change, its type is not feat, fix or perf, so retitle it.\n  " + listed;
 }
 
-// needsEntry reports whether a change to path, relative to the repository root, is one a
-// user of a released magus could notice.
+// owed returns the paths in changed that make a pull request titled title owe an entry:
+// the shipped ones when the title's type is feat, fix or perf or it is marked breaking,
+// and none otherwise.
+export fun owed(title: str, changed: [str]) > [str] {
+    if (!commits\isBreaking(title) and ["feat", "fix", "perf"].indexOf(commits\typeOf(title)) == null) {
+        return [<str>];
+    }
+    var shipped = mut [<str>];
+    foreach (path in changed) {
+        if (ships(path)) { shipped.append(path); }
+    }
+    return shipped;
+}
+
+// ships reports whether a change to path, relative to the repository root, reaches a user
+// of a released magus.
 //
-// Everything is shipped unless listed here. Failing closed means a new top-level directory
-// asks for an entry until someone decides otherwise, and the label covers the rest.
+// Everything ships unless listed here. Failing closed means a new top-level directory
+// counts as shipped until someone decides otherwise.
 // .github/actions is NOT exempt: other workspaces `uses:` those actions.
-export fun needsEntry(path: str) > bool {
+export fun ships(path: str) > bool {
     if (path.endsWith(".md") or path.endsWith("_test.go") or path.endsWith(".test.ts")) {
         return false;
     }
@@ -69,22 +103,57 @@ export fun addedEntries(baseBody: str, headBody: str) > [str] {
     return added;
 }
 
-test "shipped code needs an entry and the exempt paths do not" {
-    std\assert(needsEntry("internal/cache/key.go"), message: "engine code");
-    std\assert(needsEntry("spells/golang/spell.buzz"), message: "a built-in spell");
-    std\assert(needsEntry(".github/actions/advice/action.yml"), message: "an action other workspaces use");
-    std\assert(needsEntry("docs/guides/integrations/agents/magus-command.buzz"), message: "a guard template a harness runs");
-    std\assert(needsEntry("go.mod"), message: "dependencies ship in the binary");
-    std\assert(!needsEntry("docs/concepts/targets.md"), message: "docs");
-    std\assert(!needsEntry("internal/agent/skills/magus-run/SKILL.md"), message: "markdown anywhere");
-    std\assert(!needsEntry("internal/cache/key_test.go"), message: "a Go test");
-    std\assert(!needsEntry("cmd/magus/testdata/run.txtar"), message: "testdata");
-    std\assert(!needsEntry(".github/workflows/ci.yaml"), message: "a workflow");
-    std\assert(!needsEntry("libs/gopherbuzz/magusfile.buzz"), message: "a project's build");
-    std\assert(!needsEntry("cmd/magus-utils/release.go"), message: "a repository tool");
-    std\assert(!needsEntry("docs/render.buzz"), message: "the docs renderer");
-    std\assert(!needsEntry("gen/target-graph.json"), message: "the repository's own graph");
-    std\assert(needsEntry("cmd/magus/gen/cli_flags.go"), message: "generated code in the binary");
+test "engine code ships and the exempt paths do not" {
+    std\assert(ships("internal/cache/key.go"), message: "engine code");
+    std\assert(ships("spells/golang/spell.buzz"), message: "a built-in spell");
+    std\assert(ships(".github/actions/advice/action.yml"), message: "an action other workspaces use");
+    std\assert(ships("docs/guides/integrations/agents/magus-command.buzz"), message: "a guard template a harness runs");
+    std\assert(ships("go.mod"), message: "dependencies ship in the binary");
+    std\assert(!ships("docs/concepts/targets.md"), message: "docs");
+    std\assert(!ships("internal/agent/skills/magus-run/SKILL.md"), message: "markdown anywhere");
+    std\assert(!ships("internal/cache/key_test.go"), message: "a Go test");
+    std\assert(!ships("cmd/magus/testdata/run.txtar"), message: "testdata");
+    std\assert(!ships(".github/workflows/ci.yaml"), message: "a workflow");
+    std\assert(!ships("libs/gopherbuzz/magusfile.buzz"), message: "a project's build");
+    std\assert(!ships("cmd/magus-utils/release.go"), message: "a repository tool");
+    std\assert(!ships("docs/render.buzz"), message: "the docs renderer");
+    std\assert(!ships("gen/target-graph.json"), message: "the repository's own graph");
+    std\assert(ships("cmd/magus/gen/cli_flags.go"), message: "generated code in the binary");
+}
+
+test "a feat touching shipped paths without an entry fails" {
+    final got = problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: [<str>]);
+    std\assert(got.startsWith("\"feat(cache): add a key\" changes 1 shipped path(s)"), message: got);
+    std\assert(got.endsWith("\n  internal/cache/key.go"), message: "names the shipped path");
+    std\assert(problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: ["- **A key.**"]) == "",
+        message: "an entry covers it");
+}
+
+test "a refactor touching shipped paths passes" {
+    std\assert(problem("refactor(cache): split the key", changed: ["internal/cache/key.go"], added: [<str>]) == "",
+        message: "refactor");
+    foreach (kind in ["build", "chore", "ci", "docs", "revert", "test"]) {
+        std\assert(problem("{kind}: tidy", changed: ["internal/cache/key.go"], added: [<str>]) == "", message: kind);
+    }
+}
+
+test "a feat touching only tests passes" {
+    std\assert(problem("feat: cover the key", changed: ["internal/cache/key_test.go", "cmd/magus/testdata/run.txtar"],
+        added: [<str>]) == "", message: "nothing shipped");
+}
+
+test "a breaking chore touching shipped paths fails" {
+    final got = problem("chore!: drop go 1.24", changed: ["go.mod", "docs/install.md"], added: [<str>]);
+    std\assert(got.endsWith("retitle it.\n  go.mod"), message: got);
+    std\assert(problem("perf: skip a probe", changed: ["internal/cache/key.go"], added: [<str>]) != "", message: "perf owes one");
+    std\assert(problem("fix: keep the key", changed: ["internal/cache/key.go"], added: [<str>]) != "", message: "fix owes one");
+}
+
+test "a title that is not a conventional subject is a failure, not a pass" {
+    final got = problem("Refactor the cache", changed: ["internal/cache/key.go"], added: [<str>]);
+    std\assert(got.startsWith("title \"Refactor the cache\" does not say whether an entry is owed: no `<type>: ` prefix"),
+        message: got);
+    std\assert(problem("", changed: [<str>], added: [<str>]) != "", message: "an empty title");
 }
 
 test "only bullets the branch added count as an entry" {

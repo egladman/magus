@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
 	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/types"
 )
@@ -79,7 +80,7 @@ func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 // supersession in both directions: it may take a lock from an earlier gate on this same
 // tree, and a later one may take its locks (MGS3014). See projectLocker.acquire for
 // which other contentions queue and which are refused.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool) (*projectHold, error) {
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
@@ -92,7 +93,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
 	}
-	var lopts []lockerOption
+	lopts := []lockerOption{withReportWriter(rw)}
 	if gate {
 		lopts = append(lopts, asGate())
 	}
@@ -215,6 +216,11 @@ type projectLocker struct {
 	// cannot suppress any of them: a decision made without explanation is the failure
 	// they exist to prevent.
 	out io.Writer
+	// rw is the run's record stream under a recording format (-o jsonl); when non-nil
+	// the supersede decisions go there as typed events instead of the prose lines above,
+	// which would otherwise be free text on a stream a caller is parsing. The lock is
+	// taken before Run wraps ctx with the writer, so it is threaded in directly.
+	rw *report.Writer
 }
 
 // lockPollEvery paces the two acquires that wait on another process's flock, which has no
@@ -237,6 +243,12 @@ type lockerOption func(*projectLocker)
 
 // asGate marks this invocation the workspace's gate. See projectLocker.gate.
 func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
+
+// withReportWriter records the supersede decisions on w instead of printing them. nil is
+// a no-op, so callers can pass the run's writer unconditionally.
+func withReportWriter(w *report.Writer) lockerOption {
+	return func(l *projectLocker) { l.rw = w }
+}
 
 // writingTo redirects the lock's decision lines, for a test that reads them.
 func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
@@ -798,17 +810,27 @@ func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath strin
 		if ctx.Err() != nil {
 			return false, fmt.Errorf("workspace lock: gave up waiting for %s: %w", projectPath, ctx.Err())
 		}
-		p := projectPath
-		if p == "" {
-			p = "."
-		}
-		// TODO(#261): emit through the run's one output sink, so -o jsonl gets a record
-		// here rather than free text on stderr.
-		fmt.Fprintf(l.out, "magus: the earlier gate on project %s did not stop within %s; refusing instead of waiting for it.\n", p, supersedeYieldBound)
+		l.emitSupersedeRefused(projectPath, holder)
 		return false, nil
 	}
 	l.emitSuperseded(ctx, projectPath, holder)
 	return true, nil
+}
+
+// emitSupersedeRefused says the earlier gate did not stop within the bound, so this run
+// is refused: a record of its own, because nothing was superseded.
+func (l *projectLocker) emitSupersedeRefused(projectPath string, holder processRecord) {
+	p := projectPath
+	if p == "" {
+		p = "."
+	}
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.LockSupersedeRefused{
+			Project: p, HolderPID: holder.PID, Command: holder.Command, BoundMs: supersedeYieldBound.Milliseconds(),
+		})
+		return
+	}
+	fmt.Fprintf(l.out, "magus: the earlier gate on project %s did not stop within %s; refusing instead of waiting for it.\n", p, supersedeYieldBound)
 }
 
 // emitSuperseded states the decision, once, on the run that made it. It is a decision and
@@ -818,6 +840,10 @@ func (l *projectLocker) emitSuperseded(ctx context.Context, projectPath string, 
 	p := projectPath
 	if p == "" {
 		p = "."
+	}
+	if l.rw != nil {
+		_ = report.Record(l.rw, report.LockSuperseded{Project: p, HolderPID: holder.PID, Command: holder.Command})
+		return
 	}
 	fmt.Fprintf(l.out, "magus: superseded the earlier gate on project %s%s; its verdict would have described a tree that has since changed.\n",
 		p, heldBy(holder.describe()))

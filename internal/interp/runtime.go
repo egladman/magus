@@ -756,11 +756,11 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 				return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
 			}
 		}
-		// The module resolver has no error channel, so a remote spell is fetched and
-		// verified here, where a bad pin can stop the load with its code.
+		// The module resolver has no error channel, so an undeclared remote spell import
+		// is refused here, where the load can stop naming the entry to add.
 		if err := checkRemoteSpellImports(ctx, code); err != nil {
 			_ = buzzSess.Close()
-			return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
+			return nil, &ImportError{Path: path, rel: rel, Err: err}
 		}
 		// Reject a call magus no longer binds before Exec, so the magusfile fails at
 		// load naming the migration rather than at run time as "null is not callable"
@@ -775,7 +775,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		// so it wins over Exec's own error.
 		if err := importErrs.take(); err != nil {
 			_ = buzzSess.Close()
-			return nil, fmt.Errorf("magusfile: %s: %w", rel, err)
+			return nil, &ImportError{Path: path, rel: rel, Err: err}
 		}
 		if execErr != nil {
 			_ = buzzSess.Close()
@@ -1054,6 +1054,32 @@ type ExecError struct {
 	Err  error
 }
 
-func (e *ExecError) Error() string { return fmt.Sprintf("magusfile: exec %s: %v", e.rel, e.Err) }
+func (e *ExecError) Error() string {
+	return fmt.Sprintf("magusfile: exec %s: %v", displayPath(e.rel, e.Path), e.Err)
+}
 
 func (e *ExecError) Unwrap() error { return e.Err }
+
+// ImportError is a magusfile whose imports failed to bind. Err may join one error per
+// failed import, which is why the file lives here: a caller splitting Err into its
+// branches would otherwise lose it.
+type ImportError struct {
+	// Path is the importing magusfile's absolute path.
+	Path string
+	rel  string
+	Err  error
+}
+
+func (e *ImportError) Error() string {
+	return fmt.Sprintf("magusfile: %s: %v", displayPath(e.rel, e.Path), e.Err)
+}
+
+func (e *ImportError) Unwrap() error { return e.Err }
+
+// displayPath is rel, or abs for an error built without a workspace-relative name.
+func displayPath(rel, abs string) string {
+	if rel != "" {
+		return rel
+	}
+	return abs
+}

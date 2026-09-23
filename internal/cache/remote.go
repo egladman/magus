@@ -313,30 +313,33 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 		slog.Duration("duration", time.Since(putStart)))
 }
 
-// LogRemoteSummary accounts for what the remote cache did this run, reading the
-// run-scoped counters off ctx. It is the only place the ZERO case gets stated: a run
-// that never touched a configured remote says so rather than saying nothing, and
-// silence is what made that indistinguishable from working.
-func (c *Cache) LogRemoteSummary(ctx context.Context) {
+// RemoteTally is what the remote cache did during one run. Its JSON is the body of the
+// report stream's run.remote record.
+type RemoteTally struct {
+	Hits      int64 `json:"hits"`
+	Misses    int64 `json:"misses"`
+	Published int64 `json:"published"`
+	Failures  int64 `json:"failures"`
+	DownBytes int64 `json:"down_bytes"`
+	UpBytes   int64 `json:"up_bytes"`
+}
+
+// RemoteSummary reads the run-scoped remote counters off ctx. It reports false when no
+// remote is configured or ctx carries no counters (a caller outside Magus.Run); a
+// configured remote the run never touched reports true with every count zero.
+func (c *Cache) RemoteSummary(ctx context.Context) (RemoteTally, bool) {
 	stats := remoteStatsFrom(ctx)
 	if c.remote == nil || stats == nil {
-		return
+		return RemoteTally{}, false
 	}
-	fails := stats.fails.Load()
-	attrs := []any{
-		slog.Int64("hits", stats.hits.Load()),
-		slog.Int64("misses", stats.misses.Load()),
-		slog.Int64("published", stats.puts.Load()),
-		slog.Int64("failures", fails),
-		slog.Int64("down_bytes", stats.down.Load()),
-		slog.Int64("up_bytes", stats.up.Load()),
-	}
-	// Warn so a run whose remote degraded cannot end on a line that reads like success.
-	if fails > 0 {
-		c.log.WarnContext(ctx, "cache.remote.summary", attrs...)
-		return
-	}
-	c.log.InfoContext(ctx, "cache.remote.summary", attrs...)
+	return RemoteTally{
+		Hits:      stats.hits.Load(),
+		Misses:    stats.misses.Load(),
+		Published: stats.puts.Load(),
+		Failures:  stats.fails.Load(),
+		DownBytes: stats.down.Load(),
+		UpBytes:   stats.up.Load(),
+	}, true
 }
 
 // exportArtifact writes a gzip-tar containing the manifest, its blobs, the captured
