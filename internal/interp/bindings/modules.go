@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -167,8 +168,16 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...Modu
 	// the same bare names (their Bind reads back and merges) or install fresh. One
 	// registration path: gopherbuzz's stdlib and magus's own modules are both
 	// buzz.Modules applied through Session.Provide.
-	buzzstd.RegisterWithOutput(sess, cfg.scriptOut)
-	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules(cfg.modules)...)
+	//
+	// A print goes to the captured stdout on ctx when there is one: a target's print is
+	// its output, withheld, streamed and stored under its ref like a subprocess's.
+	env := buzz.ModuleEnv{Ctx: ctx, OutFunc: func(ctx context.Context) io.Writer {
+		if stdout, _, ok := run.CapturedOutput(ctx); ok {
+			return stdout
+		}
+		return cfg.scriptOut
+	}}
+	_ = sess.Provide(env, slices.Concat(buzzstd.Modules, magusModules(cfg.modules))...)
 }
 
 // registerMagusModules installs the magus module surface a Buzz session sees: Buzz's

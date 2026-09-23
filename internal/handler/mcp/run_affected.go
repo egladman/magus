@@ -31,19 +31,19 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req spells.InvokeRequest) 
 	base := paramString(req.Params, "base", "")
 	dryRun := paramBool(req.Params, "dry_run", false)
 
-	var buf bytes.Buffer
-	rw, err := magus.NewReportWriter(&buf, nil)
+	var records, notices bytes.Buffer
+	sink, err := magus.NewSink(magus.FormatJSONL, &records, &notices)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	// Route graph events to this request's writer via context, not the shared
+	// Route graph events to this request's sink via context, not the shared
 	// workspace observer: the daemon serves concurrent requests on one *Magus,
 	// and a process-global observer would interleave their graph events.
-	ctx = types.ContextWithGraphObserver(ctx, rw.GraphObserver())
+	ctx = types.ContextWithGraphObserver(ctx, sink.GraphObserver())
 
 	charms := effectiveCharms(parsed.Charms, t.opts.Config.DefaultCharms)
 
-	runOpts := []magus.RunOption{magus.WithReport(rw)}
+	runOpts := []magus.RunOption{magus.WithSink(sink)}
 	if dryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
 	}
@@ -58,9 +58,9 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req spells.InvokeRequest) 
 	runErr := t.opts.Magus.RunAffected(ctx, parsed.Name, runOpts...)
 	dur := time.Since(start)
 
-	// Close the writer to flush the drain goroutine before parsing.
-	_ = rw.Close()
-	events := parseRunEvents(&buf)
+	// Close the sink to flush the drain goroutine before parsing.
+	_ = sink.Close()
+	events := parseRunEvents(&records, &notices)
 	out := runResult{
 		OK:         runErr == nil,
 		Charms:     charms,

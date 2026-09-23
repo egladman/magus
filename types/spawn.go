@@ -148,15 +148,16 @@ func (d *SpawnDecision) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// rank orders decisions by strictness, so merging two verdicts keeps the stricter.
+// rank orders decisions by strictness, so merging two verdicts keeps the stricter. An
+// undeclared decision ranks as deny: a verdict nobody can read must not pass as allow.
 func (d SpawnDecision) rank() int {
 	switch d {
-	case SpawnDeny:
-		return 2
+	case "", SpawnAllow:
+		return 0
 	case SpawnAdvise:
 		return 1
 	}
-	return 0
+	return 2
 }
 
 // SpawnRequest is what a magus\guard.spawn rule is handed: one agent spawn or

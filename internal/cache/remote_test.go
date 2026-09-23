@@ -630,8 +630,8 @@ func (errRemote) GetArtifact(context.Context, string, string) (io.ReadCloser, er
 // Called on every run, and most runs have no remote at all.
 func TestRemoteSummaryToleratesNoBackendAndNoStats(t *testing.T) {
 	c := testCacheDir(t)
-	assert.NotPanics(t, func() { c.LogRemoteSummary(WithRemoteStats(t.Context())) },
-		"local-only run: backend nil")
-	assert.NotPanics(t, func() { c.LogRemoteSummary(t.Context()) },
-		"no stats on ctx: a caller outside Magus.Run")
+	_, ok := c.RemoteSummary(WithRemoteStats(t.Context()))
+	assert.False(t, ok, "local-only run: backend nil")
+	_, ok = c.RemoteSummary(t.Context())
+	assert.False(t, ok, "no stats on ctx: a caller outside Magus.Run")
 }

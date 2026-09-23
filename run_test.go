@@ -47,11 +47,10 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	require.True(t, p.TargetPolicies["security"].Advisory, "the fixture declares an advisory target")
 
 	var out bytes.Buffer
-	c, err := cache.Open(t.Context(), t.TempDir(),
-		cache.WithLogger(slog.New(cache.NewPrettyHandler(&out, slog.LevelInfo))))
-	require.NoError(t, err, "cache.Open")
+	sink, err := NewSink(FormatText, io.Discard, &out)
+	require.NoError(t, err, "NewSink")
 
-	obs := stageObserver{cache: c, label: "fixture", policies: policiesOf(p)}
+	obs := stageObserver{out: sink, label: "fixture", policies: policiesOf(p)}
 	obs.TargetEnd(t.Context(), "security", time.Second, errors.New("govulncheck: exit 1"))
 	obs.TargetEnd(t.Context(), "test", time.Second, errors.New("go test: exit 1"))
 
@@ -180,8 +179,11 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
-	var stream bytes.Buffer
-	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithReportWriter(&stream))
+	var stream, notices bytes.Buffer
+	sink, err := NewSink(FormatJSONL, &stream, &notices)
+	require.NoError(t, err)
+	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithSink(sink))
+	require.NoError(t, sink.Close(), "flush the stream before reading it")
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
 	var stated interface{ ExitCode() int }
 	require.ErrorAs(t, err, &stated, "the CLI and the daemon read the exit status off the error")
@@ -968,13 +970,6 @@ func TestExpandAffectedSignalsFallbackWithoutVCS(t *testing.T) {
 	require.NotEmpty(t, source, "source carries the reason, which is what the warning shows the user")
 }
 
-func TestWithReportWriter(t *testing.T) {
-	var buf bytes.Buffer
-	var r run
-	WithReportWriter(&buf)(&r)
-	assert.Same(t, &buf, r.ReportWriter, "WithReportWriter: run.ReportWriter not set to provided writer")
-}
-
 func TestRunOptions(t *testing.T) {
 	var r run
 	WithDryRun()(&r)
@@ -1086,9 +1081,10 @@ type recordedOutputOverlap struct {
 func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutputOverlap {
 	t.Helper()
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf)
-	checkOutputOverlap(steps, w)
-	require.NoError(t, w.Close())
+	sink, err := NewSink(FormatJSONL, &buf, io.Discard)
+	require.NoError(t, err)
+	checkOutputOverlap(t.Context(), steps, sink)
+	require.NoError(t, sink.Close())
 
 	var out []recordedOutputOverlap
 	dec := json.NewDecoder(&buf)
@@ -1166,9 +1162,10 @@ func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 	written := map[string][]string{"producer": {"/ws/consumer/generated.go"}}
 
 	var buf bytes.Buffer
-	w := report.NewWriter(&buf)
-	checkMissingDependencies([]*types.Project{consumer}, map[string]*types.Project{}, written, "3 projects", w)
-	require.NoError(t, w.Close())
+	sink, err := NewSink(FormatJSONL, &buf, io.Discard)
+	require.NoError(t, err)
+	checkMissingDependencies(t.Context(), []*types.Project{consumer}, map[string]*types.Project{}, written, "3 projects", sink)
+	require.NoError(t, sink.Close())
 
 	var evs []recordedMissingDependency
 	dec := json.NewDecoder(&buf)
