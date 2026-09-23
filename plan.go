@@ -3,6 +3,9 @@ package magus
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
@@ -35,8 +38,10 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	}
 
 	var (
-		targets []types.Target
-		source  string
+		targets   []types.Target
+		source    string
+		changed   []string
+		unbounded string
 	)
 	if opts.ChangedPaths != nil {
 		result, err := m.AffectedFromPaths(ctx, opts.ChangedPaths)
@@ -47,13 +52,30 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		for i, path := range result.Affected {
 			targets[i] = types.Target{Path: path, Name: target, Files: result.FilesBySeed[path]}
 		}
-		source = "stdin paths"
+		source, changed = "stdin paths", opts.ChangedPaths
 	} else {
-		var err error
-		targets, source, _, err = m.ExpandAffected(ctx, target, opts.BaseRef)
+		var (
+			fellBack bool
+			res      *types.AffectedResult
+			err      error
+		)
+		targets, source, fellBack, res, err = m.ExpandAffectedSet(ctx, target, opts.BaseRef)
 		if err != nil {
 			return types.ShardPlan{}, err
 		}
+		if fellBack {
+			unbounded = source
+		} else if res != nil {
+			changed = res.Changed
+		}
+	}
+	affected := make([]string, len(targets))
+	for i, t := range targets {
+		affected[i] = t.Path
+	}
+	slices.Sort(affected)
+	if unbounded == "" {
+		unbounded = unboundedBy(changed, affected)
 	}
 
 	projects := make([]*types.Project, 0, len(targets))
@@ -123,5 +145,27 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		MaxParallel: maxParallel,
 		Sufficient:  f.SufficientShards(projects),
 		OverBudget:  overBudget,
+		Affected:    affected,
+		Unbounded:   unbounded,
 	}, nil
+}
+
+// unboundedBy says why the closure computed from changed is not a proof, or "" when it
+// is. The closure comes from the declarations as they stand, so a change set that edits
+// them (any Buzz source, since a magusfile can import it, or the workspace config and
+// lockfile) can add an edge the closure never saw.
+func unboundedBy(changed, affected []string) string {
+	for _, p := range changed {
+		switch filepath.Base(p) {
+		case "magus.yaml", "magus.yml", "magus.lock":
+			return p + " changes the declarations the affected set was computed from"
+		}
+		if strings.HasSuffix(p, ".buzz") {
+			return p + " changes the declarations the affected set was computed from"
+		}
+	}
+	if len(affected) == 0 && len(changed) > 0 {
+		return "no project claims " + changed[0]
+	}
+	return ""
 }

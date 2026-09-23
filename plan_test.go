@@ -38,6 +38,28 @@ func TestPlanFromChangedPaths(t *testing.T) {
 	assert.Contains(t, planned, "api")
 	assert.NotContains(t, planned, "web", "an unaffected project must not be sharded")
 	assert.Positive(t, plan.MaxParallel)
+	assert.Contains(t, plan.Affected, "api")
+	assert.NotContains(t, plan.Affected, "web")
+	assert.Empty(t, plan.Unbounded, "a Go edit cannot move the declarations")
+
+	edit, err := m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/magusfile.buzz"}, MaxShards: -1})
+	require.NoError(t, err)
+	assert.Equal(t, "api/magusfile.buzz changes the declarations the affected set was computed from", edit.Unbounded)
+}
+
+func TestUnboundedNamesWhatTheClosureCannotVouchFor(t *testing.T) {
+	for _, tc := range []struct {
+		changed, affected []string
+		want              string
+	}{
+		{[]string{"api/main.go"}, []string{"api"}, ""},
+		{[]string{"api/main.go", "magus.lock"}, []string{"api"}, "magus.lock changes the declarations the affected set was computed from"},
+		{[]string{"spells/go/spell.buzz"}, []string{"."}, "spells/go/spell.buzz changes the declarations the affected set was computed from"},
+		{[]string{"stray.txt"}, nil, "no project claims stray.txt"},
+		{nil, nil, ""},
+	} {
+		assert.Equal(t, tc.want, unboundedBy(tc.changed, tc.affected), "%v", tc.changed)
+	}
 }
 
 // TestPlanCapsCrossShardConcurrency: the runner-pool budget only ever narrows the
