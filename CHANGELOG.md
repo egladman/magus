@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A merge's kept generated files regenerate after it finishes.** The merge driver records
+  the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
+  a `regenerate-owed` job that runs each once, deepest project first, and stages the
+  result; it prints the amend command and never amends. `magus doctor` reports an unsettled
+  record (`owed-regeneration`).
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
@@ -37,7 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **MGS3013: a slot pool that cannot free a slot is refused within seconds.** The refusal
   names every holder and what it waits on.
 - **MGS3014: a newer gate supersedes an older one on the same tree.** The earlier `ci` run
-  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs still wait.
+  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs are refused
+  immediately instead, like any other contention.
 - **Tools declare `observe` probes; ops declare external effects.** An observation keys
   only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
   `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
@@ -110,6 +116,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **magus never waits on another magus invocation.** A workspace lock or machine budget
+  held by another invocation refuses immediately (exit 75), naming the holder.
+  `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
+  other, as do the nested runs of one root invocation. `--watch` retries on the next
+  change.
+- **Enum case sets are hand-written; no `_gen.go` file remains.** Each closed string
+  type declares its cases once, and the `magus-utils enums` generator is gone. A test
+  holds the Buzz boundary registry to each type's set.
 - **A daemon whose workspace fails to load keeps serving and says why.** The console,
   `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
@@ -122,9 +136,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
 - **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
-  projects/charms/cache header, per-stage progress, the run summary and lock-wait
-  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
-  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
+  projects/charms/cache header, per-stage progress and the run summary are now typed
+  events (`run.scope`, `run.step`, `run.summary`, `run.notice`) on the same stream as
+  `run.target.result`; anything not
   yet converted falls back to a plain JSON line instead of prose.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination
@@ -220,6 +234,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
   its message and Help link. Health reports down when every workspace failed, and the
   Windows sign-in line is PowerShell's `Start-Process`.
+- **A run the machine's build budget refuses says so.** It exited 75 with nothing after
+  the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
+  cause naming the holder, and `-o jsonl` emits the `run.target.result` and
+  `run.diagnostic` records.
 - **The daemon API reference matches the protos again.** The committed descriptor set
   predated the last proto change, so the activity reference described an older API.
 - **The graph links a target to a workspace spell imported without an alias.**

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"strings"
 	"testing"
@@ -221,6 +222,34 @@ func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
 type machineBusyStub struct{ error }
 
 func (machineBusyStub) ExitCode() int { return cache.ExitCodeMachineBusy }
+
+// TestExitCodeOfPrintsWhatNoOneElseDid pins which of the two exit-75 refusals exitCodeOf
+// prints. A contended workspace lock is refused before any step exists, so this line is
+// the only place it is ever said. A machine refusal is an ExitError the cache already
+// logged beside the step it refused (cache's TestRunAllReportsAMachineRefusal), so
+// printing it here too would say it twice.
+func TestExitCodeOfPrintsWhatNoOneElseDid(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	lock := lockContendedStub{errors.New("magus: project . is locked by another magus process (held by pid 41221 magus run test in /elsewhere); not waiting")}
+	assert.Equal(t, 75, exitCodeOf(fmt.Errorf("run: %w", lock)))
+	assert.Contains(t, logged.String(), "held by pid 41221 magus run test in /elsewhere")
+
+	logged.Reset()
+	refused := types.ExitError{Code: cache.ExitCodeMachineBusy,
+		Err: types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting (root) test")}
+	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(fmt.Errorf("run: %w", refused)))
+	assert.Empty(t, logged.String())
+}
+
+// lockContendedStub has the shape of the root package's unexported lockContendedError:
+// a plain error that states 75 and is not an ExitError.
+type lockContendedStub struct{ error }
+
+func (lockContendedStub) ExitCode() int { return 75 }
 
 func (e machineBusyStub) Unwrap() error { return e.error }
 

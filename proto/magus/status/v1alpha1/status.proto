@@ -35,31 +35,20 @@ message Status {
 // Lock is one held per-project workspace lock and the process holding it.
 //
 // A held lock is the NORMAL state of a mutating run, so this is state and never a
-// fault: it must not fail a readiness or liveness check, because a run queued behind
-// a peer is waiting correctly and restarting it only sends it to the back of the
-// queue. It is on the wire because an OS file lock carries no identity of its own, so
-// without the holder a blocked run is indistinguishable from a hung one - and a lock
-// is held for exactly as long as its holder lives, which means one held by a process
-// nobody remembers starting blocks everything else silently and forever.
+// fault: it must not fail a readiness or liveness check. It is on the wire because an
+// OS file lock carries no identity of its own, so without the holder a refused run
+// cannot say who refused it - and a lock is held for exactly as long as its holder
+// lives, which means one held by a process nobody remembers starting refuses every
+// other run until someone finds it.
 message Lock {
+  reserved 6;                                    // was repeated LockWaiter waiters; a contended lock refuses rather than queuing
+  reserved "waiters";
   string project = 1;                            // workspace-relative path; "." is the root
   int32 pid = 2;                                 // holder's process id
   string command = 3;                            // holder's argv, for recognizing what it is
   string dir = 4;                                // holder's working directory; a path that no longer exists means abandoned
   google.protobuf.Timestamp acquire_time = 5;    // when the holder took it; age is the signal a human reads
-  repeated LockWaiter waiters = 6;               // processes blocked on this lock right now
   int32 stale_after_seconds = 7;                 // when to read this holder as possibly abandoned rather than busy
-}
-
-// LockWaiter is one process blocked on a lock. A holder answers "who is working"; a
-// waiter answers "who is stalled because of it", which is the question anyone looking
-// at a queue that is not moving is actually asking. Transient by nature, so a snapshot.
-message LockWaiter {
-  string project = 1;                  // reserved for a flattened view; empty inside Lock
-  int32 pid = 2;
-  string command = 3;
-  string dir = 4;
-  google.protobuf.Timestamp wait_time = 5; // when it began waiting
 }
 
 // BuildInfo identifies the running magus binary: the version tag, the commit it was built

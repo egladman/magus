@@ -453,8 +453,8 @@ func printMachineStatus(w io.Writer, m *types.MachineSnapshot) {
 	if m.BudgetSlots > 0 {
 		fmt.Fprintf(w, "  slots   %d of %d held\n", m.HeldSlots, m.BudgetSlots)
 	}
-	claim := func(prefix string, c types.MachineClaimant) {
-		line := fmt.Sprintf("  %s %s %s  pid %d", prefix, c.Project, c.Target, c.PID)
+	for _, c := range m.Holders {
+		line := fmt.Sprintf("  held  %s %s  pid %d", c.Project, c.Target, c.PID)
 		if c.MemoryMB > 0 {
 			line += "  " + cache.FormatMB(c.MemoryMB)
 		}
@@ -466,14 +466,8 @@ func printMachineStatus(w io.Writer, m *types.MachineSnapshot) {
 			fmt.Fprintln(w, "      in "+c.Dir)
 		}
 	}
-	for _, h := range m.Holders {
-		claim("held ", h)
-	}
-	for _, wt := range m.Waiters {
-		claim("queued", wt)
-	}
-	if len(m.Holders) == 0 && len(m.Waiters) == 0 {
-		fmt.Fprintln(w, "  nothing is holding or waiting for the machine budget")
+	if len(m.Holders) == 0 {
+		fmt.Fprintln(w, "  nothing is holding the machine budget")
 	}
 }
 
@@ -1107,7 +1101,7 @@ func truncate(s string, n int) string {
 //
 // Held is normal, so this is never styled as a failure. Age is the column that
 // matters: seconds means a peer is mid-run, days means a holder nobody remembers
-// starting, and every other run is waiting behind it.
+// starting, and every other run is being refused by it.
 func printLockStatus(w io.Writer, locks []types.StatusLock) {
 	if len(locks) == 0 {
 		return
@@ -1127,17 +1121,6 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 		fmt.Fprintln(w, line)
 		if l.Dir != "" {
 			fmt.Fprintln(w, "    in "+l.Dir)
-		}
-		// The other half of a stalled queue: who is blocked behind this holder.
-		for _, wt := range l.Waiters {
-			line := fmt.Sprintf("    waiting: pid %d", wt.PID)
-			if !wt.WaitTime.IsZero() {
-				line += "  " + formatDur(time.Since(wt.WaitTime))
-			}
-			if wt.Command != "" {
-				line += "  " + wt.Command
-			}
-			fmt.Fprintln(w, line)
 		}
 	}
 }

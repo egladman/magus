@@ -28,11 +28,18 @@ type MachineClaim struct {
 	Ancestors []string `json:"ancestors,omitempty" yaml:"ancestors,omitempty"`
 }
 
-// MachineClaimant is one step's hold on, or place in the queue for, the machine budget.
-//
-// One type for both because a reader asks the same question of each (who is this, and
-// where), and the only difference is which list it appears in. Since is when the claim
-// was granted, or when the waiter first asked.
+// Run is the outermost invocation the claim runs underneath, or its own when it has no
+// ancestors; "" for an unstamped claim. Claims sharing a run belong to one invocation
+// tree, the siblings of one fan-out.
+func (c MachineClaim) Run() string {
+	if len(c.Ancestors) > 0 {
+		return c.Ancestors[0]
+	}
+	return c.Invocation
+}
+
+// MachineClaimant is one step's hold on the machine budget. Since is when the claim was
+// granted.
 type MachineClaimant struct {
 	Project  string    `json:"project" yaml:"project"`
 	Target   string    `json:"target" yaml:"target"`
@@ -50,9 +57,12 @@ type MachineVerdict struct {
 	ID      string `json:"id,omitempty" yaml:"id,omitempty"`
 	// Fits is false when no state of the machine admits this claim, so waiting is a
 	// hang rather than a queue.
-	Fits        bool              `json:"fits" yaml:"fits"`
+	Fits bool `json:"fits" yaml:"fits"`
+	// OwnRun is set on a claim that is not granted but would fit beside every claim
+	// outside its own process and run. What keeps it out will be released by the
+	// requester's own run, so the requester waits rather than refusing.
+	OwnRun      bool              `json:"own_run,omitzero" yaml:"own_run,omitempty"`
 	Holders     []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
-	Ahead       int               `json:"ahead,omitzero" yaml:"ahead,omitempty"` // waiters queued in front of this one
 	BudgetMB    int               `json:"budget_mb,omitzero" yaml:"budget_mb,omitempty"`
 	HeldMB      int               `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
 	BudgetSlots int               `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
@@ -66,8 +76,6 @@ type MachineSnapshot struct {
 	HeldMB      int `json:"held_mb,omitzero" yaml:"held_mb,omitempty"`
 	BudgetSlots int `json:"budget_slots,omitzero" yaml:"budget_slots,omitempty"`
 	HeldSlots   int `json:"held_slots,omitzero" yaml:"held_slots,omitempty"`
-	// Holders are the steps running against the budget; Waiters are the ones queued for
-	// it, oldest first.
+	// Holders are the steps running against the budget, oldest first.
 	Holders []MachineClaimant `json:"holders,omitempty" yaml:"holders,omitempty"`
-	Waiters []MachineClaimant `json:"waiters,omitempty" yaml:"waiters,omitempty"`
 }

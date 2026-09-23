@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 12757
-skill_short_bytes: 8552
+skill_full_bytes: 12719
+skill_short_bytes: 8514
 ---
 
 # magus-run
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `69fa8fc871e9` |
+| `skill-content` | `10516fd69709` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -199,13 +199,13 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles).
 
-## When a target is waiting on another magus process
+## When another magus process holds the project
 
-Do not write `sleep`/`ps`/`pgrep` polling loops or invent a second waiter. The
-lock message already names the holder, and `magus status --watch=15s` reads that
-same lock state continuously: holder PID, command, directory, age, and waiters.
-Keep the status watch attached until the lock releases, then let the queued
-target continue. A long-running target is not evidence of a hang by itself.
+A run whose project lock or machine budget another magus invocation holds exits
+75 at once, naming the holder. Do not write `sleep`/`ps`/`pgrep` polling loops.
+`magus status --watch=15s` reads that same lock state continuously: holder PID,
+command, directory, and age. Re-run once the lock releases. A long-running
+holder is not evidence of a hang by itself.
 The guard denies `pgrep`, `pidof`, and `ps` for this reason.
 
 ```sh
@@ -448,13 +448,13 @@ Each target's result line mints an output reference id (`out1a2b3c`).
    availability, cycles) when failures look environmental rather than caused by
    your change.
 
-## When a target is waiting on another magus process
+## When another magus process holds the project
 
-Do not write `sleep`/`ps`/`pgrep` polling loops or invent a second waiter. The
-lock message already names the holder, and `magus status --watch=15s` reads that
-same lock state continuously: holder PID, command, directory, age, and waiters.
-Keep the status watch attached until the lock releases, then let the queued
-target continue. A long-running target is not evidence of a hang by itself.
+A run whose project lock or machine budget another magus invocation holds exits
+75 at once, naming the holder. Do not write `sleep`/`ps`/`pgrep` polling loops.
+`magus status --watch=15s` reads that same lock state continuously: holder PID,
+command, directory, and age. Re-run once the lock releases. A long-running
+holder is not evidence of a hang by itself.
 The guard denies `pgrep`, `pidof`, and `ps` for this reason.
 
 ```sh

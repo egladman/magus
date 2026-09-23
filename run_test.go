@@ -20,6 +20,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -144,6 +145,68 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 
 	require.NoError(t, m.Run(ctx, targets, WithRace()), "third run (--race)")
 	assert.Equal(t, int32(2), calls.Load(), "--race run: a cached target must still genuinely re-execute")
+}
+
+// TestRun_MachineRefusalReachesTheReport pins the -o jsonl half of a machine refusal: a
+// run whose only step the budget refused must still say so on the report stream, as a
+// failed target result and as an MGS3009 diagnostic, both naming the holder.
+func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	const spellName = "zzz-machine-refusal-spell"
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			t.Error("a refused target must not run")
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	// A pid that is alive for the whole test, so the budget does not reap the claim.
+	holderPID := os.Getppid()
+	budget := cache.NewMachineBudget(10_000, 4)
+	held := budget.Request(types.MachineClaim{
+		Project: ".", Target: "ci", Slots: 4, PID: holderPID, Dir: "/elsewhere/checkout",
+	})
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg),
+		workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	var stream bytes.Buffer
+	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "build"}}, WithReportWriter(&stream))
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated, "the CLI and the daemon read the exit status off the error")
+	assert.Equal(t, cache.ExitCodeMachineBusy, stated.ExitCode())
+
+	holder := fmt.Sprintf("held by pid %d (root) ci, in /elsewhere/checkout", holderPID)
+	var result report.TargetResult
+	var diag report.DiagnosticEmitted
+	for line := range bytes.Lines(stream.Bytes()) {
+		var head struct {
+			Type string `json:"type"`
+		}
+		require.NoError(t, json.Unmarshal(line, &head))
+		switch head.Type {
+		case report.TypeTargetResult:
+			require.NoError(t, json.Unmarshal(line, &result))
+		case report.TypeDiagnosticEmitted:
+			require.NoError(t, json.Unmarshal(line, &diag))
+		}
+	}
+	assert.Equal(t, "failed", result.Status, "stream:\n%s", stream.String())
+	assert.Contains(t, result.Error, holder)
+	assert.Equal(t, string(types.MachineBudgetExhausted), diag.Code, "stream:\n%s", stream.String())
+	assert.Equal(t, ".:build", diag.Unit)
+	assert.Contains(t, diag.Message, holder)
 }
 
 // TestRun_NoCacheReexecutesAndRefreshesEntry guards the A7 fix: magus run

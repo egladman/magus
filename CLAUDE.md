@@ -53,9 +53,8 @@ round, while a red PR from a risk you knowingly deferred is the system working.
 
 - Regenerate in the SAME commit as the source change that invalidated the output.
 - Generated output lives in a `gen/` dir and carries no suffix, so the directory
-  is the signal. The exception is a generated METHOD set (`types/enum_gen.go`,
-  `spells/enum_gen.go`), which Go forces into its receiver's package; reach for
-  `_gen.go` only for a method set.
+  is the signal. No exceptions: Go forces methods into their receiver's package, so
+  a method set is written by hand, never generated (see `types/enums.go`).
 - Language-level changes in `libs/gopherbuzz/` must match upstream Buzz behavior.
 - Buzz is tested with in-file `test "..." {}` blocks via `magus buzz -t <file>`,
   adding `--embedded` for files written for the magusfile engine (parsing is
@@ -84,8 +83,8 @@ round, while a red PR from a risk you knowingly deferred is the system working.
 
 - `magus.go` + root `*.go`: public API and composition root (`Open`, `Inspect`)
 - `types/`: pure domain types; near-leaf. Of magus it imports `spells`,
-  `libs/diagnostics` (deliberate and one-way, see `spells/doc.go`) and
-  `internal/json`, and it reaches no filesystem, process or network.
+  `libs/diagnostics` (deliberate and one-way, see `spells/doc.go`), `internal/json`
+  and its own leaf `types/enum`, and it reaches no filesystem, process or network.
   `TestTypesStaysPureDomain` enforces that, so this line is a signpost rather
   than the rule. A type a magusfile or script reads lives HERE, not behind an
   alias in the package that computes it.

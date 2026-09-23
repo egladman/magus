@@ -225,6 +225,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkMergeDriverLoads() },
 	},
 	{
+		Name:           "owed-regeneration",
+		Doc:            "whether a merge kept one side of a generated file whose regeneration has not run",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkOwedRegeneration() },
+	},
+	{
 		Name:           "guard-binary",
 		Doc:            "which magus an agent-host guard hook would execute, and whether it predates the tree",
 		Evidence:       types.EvidenceMeasured,

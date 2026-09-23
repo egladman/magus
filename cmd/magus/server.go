@@ -59,6 +59,8 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverCheckReview(ctx, root, rest)
 	case job.NameCheckDrift:
 		return serverCheckDrift(ctx, root, rest)
+	case job.NameRegenerateOwed:
+		return serverRegenerateOwed(ctx, root, rest)
 	default:
 		return usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
 	}
@@ -217,6 +219,7 @@ func serverStart(ctx context.Context, args []string) error {
 
 	installRefreshHooks(ctx)
 	installDriftHooks(ctx)
+	installRegenHooks(ctx)
 
 	// Start the MCP HTTP server alongside the daemon so MCP clients can
 	// connect without a separate process. No-op when mcp.enabled=false.
