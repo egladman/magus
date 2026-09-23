@@ -43,13 +43,15 @@ only look is the caller's knowledge, never magus's.
 
 --agent-name, --session, --transcript, and --event are attribution, not policy.
 They record who produced the observation on the activity event, and the verdict
-never reads them. All are optional and unvalidated, including the host name,
-which is an opaque label the caller chooses rather than a set magus knows: a
-magus that enumerated hosts would need a release per host, and a caller that
-cannot extract a session id must still be able to get a verdict.
+never reads what they say. The host name is an opaque label rather than a set
+magus knows: a magus that enumerated hosts would need a release per host, and a
+caller that cannot extract a session id must still be able to get a verdict.
 
 --transport names the form of the hook calling, such as sh or buzz, as that form
-declares it. With --agent-name and --session it names the CALLER that the
+declares it. Installed hook glue passes it, and glue that passes it without
+--agent-name is refused with MGS3019: the configuration "magus agent harness
+apply" writes names the host, so a call that does not is a stale or hand-written
+config, never defaulted to one host. With --agent-name and --session it names the CALLER that the
 once-per-session notices and the full text of a repeated deny are kept for, as
 one key, host/transport/session. A session id alone is not enough: two hosts can
 present the same id, and two forms of one hook wired into a session are two
@@ -77,7 +79,7 @@ not block every tool call.
 ## Options
 
 **--agent-name** *string*
-: Name of the agent host this invocation came from (attribution only)
+: Name of the agent host this invocation came from (attribution only); required with --transport
 
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)
@@ -104,7 +106,7 @@ not block every tool call.
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
 
 **--transport** *string*
-: The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session
+: The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3019)
 
 ## Exit status
 

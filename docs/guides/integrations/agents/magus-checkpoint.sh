@@ -18,8 +18,11 @@
 # the rest; nothing in the payload becomes the note, because a note is a sentence
 # a person writes. It prints NOTHING and always exits 0. Override:
 #
-#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the checkpoint
 #   __MAGUS_BIN   path to the binary, when it is not on PATH
+#
+# REQUIRED argument: `--agent-name <host>`, the host recorded alongside the checkpoint,
+# which the configuration `magus agent harness apply` writes on the command. Without it
+# nothing is recorded and a coded message (MGS3019) goes to stderr.
 #
 # A host whose envelope spells those fields differently passes them as flags
 # instead - `--session` and `--transcript` outrank the envelope - and a host that
@@ -35,13 +38,24 @@
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.
 #
-# magus-guard-template: 16
+# magus-guard-template: 17
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to observe, and a record
 # of where the work stopped is worth strictly less than the work.
 
-[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
+if [ -z "$agent_name" ]; then
+  printf '%s\n' "magus-checkpoint.sh: [MGS3019] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
+  exit 0
+fi
 # Prefer the workspace's own ./magus over PATH, found by walking UP to the
 # magusfile: a hook runs in the host's session directory, which is not always the
 # workspace root. The command template carries the full reasoning.
@@ -66,6 +80,6 @@ fi
 # usage, and that would otherwise reach the host as this hook's response every
 # time a session ends. The absence shows up where it is actionable instead - as
 # an empty checkpoint list in `magus session`.
-"$__MAGUS_BIN" session checkpoint --agent-name "$__MAGUS_AGENT_NAME" >/dev/null 2>&1
+"$__MAGUS_BIN" session checkpoint --agent-name "$agent_name" >/dev/null 2>&1
 
 exit 0

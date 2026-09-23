@@ -53,6 +53,15 @@ concurrency:
 permissions:
   contents: read  # default; publish overrides to write
 
+env:
+  # Wires the github-actions CI provider in magusfile.buzz (job-log groups and
+  # annotations). magus is told it runs under Actions, never detects it.
+  CI_PROVIDER: github-actions
+  # Stamped into every binary as `magus version`'s built_by, and matched against the
+  # job_workflow_ref a keyless signature carries. magusfile.buzz reads this rather
+  # than the runner's GITHUB_WORKFLOW_REF, so only a build told its pedigree claims one.
+  BUILT_BY: ${{ github.workflow_ref }}
+
 jobs:
   # One job per native runner. Each builds its own platform's static binary, and the
   # dynamically-linked one too when include_dynamic_builds is set. Static cross-compiles
@@ -515,5 +524,5 @@ jobs:
         # a v0.5.0-rc.1 goes to the version tag alone, and an UNTAGGED commit is refused
         # outright rather than guessed at. The derivation lives in the magusfile's channel(),
         # not in YAML, so this step and the prerelease flag on the release below cannot
-        # disagree about what is being shipped.
-        run: magus run image-build:cd,tagged --no-default-charms
+        # disagree about what is being shipped. gha adds the job summary of what was pushed.
+        run: magus run image-build:cd,tagged,gha --no-default-charms

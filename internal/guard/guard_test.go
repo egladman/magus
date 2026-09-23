@@ -10,6 +10,7 @@ import (
 	// project.DefaultSpellRegistry().All() in testDependencies below runs against a registry
 	// nothing ever populated, and every raw-tool test would match against an empty
 	// catalog. See internal/interp/bindings/spell.go's init.
+	"github.com/egladman/magus/internal/agent"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/project"
@@ -165,4 +166,37 @@ func TestGuardGradesTwoSessionsInOneCheckoutSeparately(t *testing.T) {
 	})
 	assert.Equal(t, two.ID, second.Lease, "session two is graded under its own row, in the same checkout")
 	assert.NotEqual(t, first.Lease, second.Lease)
+}
+
+// TestHostUnnamedRefusesWithTheCodeAndTheRemedy pins the whole verdict: a deny, never an
+// ask or a pass, carrying MGS3019 and the command that fixes it, and naming no transport so
+// the sh and Buzz forms of one template reply byte for byte alike.
+func TestHostUnnamedRefusesWithTheCodeAndTheRemedy(t *testing.T) {
+	t.Parallel()
+	got := hostUnnamed()
+	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: got.Reason}, got)
+	assert.Contains(t, got.Reason, string(types.HookHostUnnamed))
+	assert.Contains(t, got.Reason, "--agent-name")
+	assert.Contains(t, got.Reason, "magus agent harness apply")
+	assert.NotContains(t, got.Reason, "buzz")
+}
+
+// TestJudgeRefusesInstalledGlueThatNamesNoHost is the refusal reached through Judge, before
+// any rule or dependency is consulted: zero Dependencies would fail a rule's lookup, so a
+// verdict equal to hostUnnamed's proves nothing past the check ran.
+func TestJudgeRefusesInstalledGlueThatNamesNoHost(t *testing.T) {
+	t.Parallel()
+	for _, host := range []string{"", "  "} {
+		got := Judge(context.Background(), Dependencies{}, Request{Input: "ls", Transport: "sh", Host: host})
+		assert.Equal(t, hostUnnamed(), got, "host %q", host)
+	}
+}
+
+// TestJudgeLeavesCallersWithoutATransportAlone keeps the refusal to installed glue. A person
+// running `magus shell` names no transport and no host, and is judged as before.
+func TestJudgeLeavesCallersWithoutATransportAlone(t *testing.T) {
+	t.Parallel()
+	got := Judge(context.Background(), testDependencies(), Request{Input: ""})
+	assert.Equal(t, "pass", got.Decision, "an empty input from a person passes")
+	assert.NotContains(t, got.Reason, string(types.HookHostUnnamed))
 }

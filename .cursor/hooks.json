@@ -2,33 +2,33 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh"
+        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor"
       }
     ],
     "postToolUse": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh",
+        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor",
         "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch"
       },
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh",
+        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor",
         "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|WebSearch|WebFetch"
       }
     ],
     "preToolUse": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh",
+        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor",
         "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit"
       }
     ],
     "sessionEnd": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh"
+        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor"
       }
     ],
     "subagentStart": [
       {
-        "command": "sh docs/guides/integrations/agents/cursor-hook.sh"
+        "command": "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name cursor"
       }
     ]
   },

@@ -30,6 +30,9 @@ on:
 # env: false here as everywhere else and exports nothing to the steps.
 env:
   GOEXPERIMENT: jsonv2
+  # Wires the github-actions CI provider in magusfile.buzz (job-log groups and
+  # annotations). magus is told it runs under Actions, never detects it.
+  CI_PROVIDER: github-actions
 
 permissions:
   contents: read

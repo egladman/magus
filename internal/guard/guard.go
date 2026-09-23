@@ -164,7 +164,8 @@ type Request struct {
 	Observe bool
 	// Lease is the job row this call acts as; empty falls back to the bound marker.
 	Lease string
-	// The attribution the caller knows about itself. No verdict reads any of it.
+	// The attribution the caller knows about itself. No verdict reads what it SAYS; Judge
+	// reads only whether installed glue (a non-empty Transport) named a Host at all.
 	Host string
 	// Transport is the form of the installed hook that called, such as sh or buzz, as
 	// that form declares it. Two forms wired into one session are two callers.
@@ -215,12 +216,35 @@ type Verdict struct {
 	Lease string `json:"lease,omitempty"`
 }
 
+// hostUnnamed refuses a call from installed hook glue that did not say which agent host
+// it answers. The glue picks the reply its host can parse from that name, so a call
+// without it cannot be answered correctly for any host, and defaulting to one would
+// hand another host a reply it drops, which on some hosts runs the call unguarded.
+//
+// The reason names no transport, so the sh and Buzz forms of one template reply alike.
+func hostUnnamed() Verdict {
+	return Verdict{
+		SchemaVersion: agent.GuardSchemaVersion,
+		Decision:      "deny",
+		Reason: types.FormatDiagnostic(types.HookHostUnnamed,
+			"this hook did not pass --agent-name, so magus cannot tell which agent host it is "+
+				"answering, and nothing was judged. Run `magus agent harness apply` to rewrite "+
+				"the host's hook configuration; the commands it writes name the host."),
+	}
+}
+
 // Judge evaluates one request against this workspace's rules and reports the verdict.
+//
+// A request from installed glue (Transport set) that names no Host is refused with
+// MGS3019 before anything is judged.
 //
 // An EMPTY input passes: a wrapper that hands the hook nothing must not have every tool
 // call blocked. The caller owns the opposite case, a payload that failed to READ, because
 // nothing here saw it.
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
+	if req.Transport != "" && strings.TrimSpace(req.Host) == "" {
+		return hostUnnamed()
+	}
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Transport: req.Transport, Session: req.Session, Transcript: req.Transcript, Event: req.Event}

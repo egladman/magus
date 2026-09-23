@@ -76,8 +76,18 @@ fun claude_buzz_command(script: str, flags: [str]) > str {
     return base + " -- " + flags.join(" ");
 }
 
+// claude_named_command is a glue command that names this host: `--agent-name` and the
+// spell's own mgs_getName(), the one identity the glue acts on. Rendered here, from the
+// declaration, so the name on the command cannot drift from the harness it belongs to;
+// the glue refuses a call without it (MGS3019) rather than guessing a host.
+fun claude_named_command(script: str, flags: [str]) > str {
+    final named = mut ["--agent-name", mgs_getName()];
+    foreach (flag in flags) { named.append(flag); }
+    return claude_buzz_command(script, flags: named);
+}
+
 fun claude_glue_command(surface: str, flags: [str]) > str {
-    return claude_buzz_command("magus-{surface}", flags: flags);
+    return claude_named_command("magus-{surface}", flags: flags);
 }
 
 // The Bash, MCP and Skill matchers all take this one string. Their payloads differ, but a
@@ -130,7 +140,7 @@ fun claude_rehydrate_command() > str {
 }
 
 fun claude_checkpoint_command() > str {
-    return claude_buzz_command("magus-checkpoint", flags: [<str>]);
+    return claude_named_command("magus-checkpoint", flags: [<str>]);
 }
 
 fun claude_command_hook(cmd: str) > {str: any} {
@@ -304,8 +314,21 @@ test "the spawn entry also sees every continuation" {
 test "the one per-entry flag rides after the argv separator" {
     // Only the spawn surface declares a capability, and it is the only entry that differs
     // from the bare guard command at all.
-    assert\equal(claude_agent_command(), claude_guard_command() + " -- --observes-skill-loads",
+    assert\equal(claude_agent_command(), claude_guard_command() + " --observes-skill-loads",
         "the spawn entry is the guard command plus one forwarded flag");
+}
+
+test "every glue entry names this host, and the rehydrate wrapper takes no argument" {
+    // The glue reads the host from this argument and nowhere else, and refuses a call
+    // without it, so every entry that reaches the glue carries the declaration's own name.
+    final named = " -- --agent-name {mgs_getName()}";
+    assert\isTrue(claude_guard_command().endsWith(named), "command, mcp and skill surfaces");
+    assert\isTrue(claude_path_command().endsWith(named), "path surface");
+    assert\isTrue(claude_observe_command().endsWith(named), "read surface");
+    assert\isTrue(claude_checkpoint_command().endsWith(named), "Stop checkpoint");
+    assert\isTrue(claude_agent_command().indexOf(named) != null, "spawn surface");
+    assert\isTrue(claude_rehydrate_command().indexOf("--agent-name") == null,
+        "rehydrate reads no host, and would report the argument as unsupported");
 }
 
 // The spawn entry claims loads are REPORTED, and only the skill matcher reports them. Left

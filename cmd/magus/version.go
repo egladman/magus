@@ -25,8 +25,8 @@ var (
 	version   = unknownVersion
 	commit    = unknownVersion
 	buildDate = unknownVersion
-	// builtBy is the CI workflow that produced this binary ($GITHUB_WORKFLOW_REF),
-	// empty for a local build. A CLAIM, not proof (a signature is what proves
+	// builtBy is the CI workflow that produced this binary, as the build was told it
+	// (release.yaml passes its workflow ref in BUILT_BY), empty for a local build. A CLAIM, not proof (a signature is what proves
 	// provenance), but empty is the honest default, so a local build never asserts a
 	// pedigree it does not have. For a keyless-signed artifact it should equal the
 	// job_workflow_ref in the certificate, which is what makes the two cross-checkable.

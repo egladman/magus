@@ -25,20 +25,29 @@ fun codex_skills_paths() > [str] {
     return [".agents/skills"];
 }
 
+// codex_named_command runs one sh glue script with `--agent-name` and this spell's own
+// mgs_getName(), the one identity the glue acts on. Rendered here, from the declaration,
+// so the name on the command cannot drift from the harness it belongs to; the glue
+// refuses a call without it (MGS3019) rather than guessing a host. env is a per-entry
+// variable prefix, which works here because Codex runs a hook command through a shell.
+fun codex_named_command(script: str, env: str) > str {
+    return "{env}sh docs/guides/integrations/agents/{script}.sh --agent-name {mgs_getName()}";
+}
+
 fun codex_guard_command() > str {
-    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-command.sh";
+    return codex_named_command("magus-command", env: "");
 }
 
 fun codex_path_command() > str {
-    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-path.sh";
+    return codex_named_command("magus-path", env: "");
 }
 
 fun codex_observe_command() > str {
-    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-observe.sh";
+    return codex_named_command("magus-observe", env: "");
 }
 
 fun codex_mcp_command() > str {
-    return "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-command.sh";
+    return codex_named_command("magus-command", env: "HOST_EVENT_RAW=1 ");
 }
 
 fun codex_rehydrate_command() > str {
@@ -46,7 +55,7 @@ fun codex_rehydrate_command() > str {
 }
 
 fun codex_checkpoint_command() > str {
-    return "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh";
+    return codex_named_command("magus-checkpoint", env: "");
 }
 
 fun codex_command_hook(cmd: str, status: str) > {str: any} {
@@ -210,8 +219,21 @@ test "harness_skills installs both forms under .agents/skills" {
     assert\equal(paths[0], ".agents/skills", "Codex reads .agents/skills");
 }
 
-test "guard commands name the shared templates with __MAGUS_AGENT_NAME=codex" {
-    assert\isTrue(codex_guard_command().indexOf("__MAGUS_AGENT_NAME=codex") != null, "command surface stamps agent name");
+test "every glue command names this host on its argv, and rehydrate takes none" {
+    final named = " --agent-name {mgs_getName()}";
+    assert\isTrue(codex_guard_command().endsWith(named), "command surface");
+    assert\isTrue(codex_path_command().endsWith(named), "path surface");
+    assert\isTrue(codex_observe_command().endsWith(named), "read surface");
+    assert\isTrue(codex_mcp_command().endsWith(named), "mcp surface");
+    assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
+    assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
+    foreach (cmd in [codex_guard_command(), codex_path_command(), codex_observe_command(),
+            codex_mcp_command(), codex_checkpoint_command()]) {
+        assert\isTrue(cmd.indexOf("AGENT_NAME=") == null, "the host rides on argv, never in the environment: {cmd}");
+    }
+}
+
+test "guard commands name the shared templates" {
     assert\isTrue(codex_guard_command().indexOf("magus-command.sh") != null, "command surface");
     assert\isTrue(codex_path_command().indexOf("magus-path.sh") != null, "path surface");
     assert\isTrue(codex_observe_command().indexOf("magus-observe.sh") != null, "read observe");

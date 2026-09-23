@@ -24,11 +24,14 @@
 //   HOST_EVENT_PATH  dot-path to the read path inside your host's event
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
-//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
 //   __MAGUS_BIN  path to the binary, when it is not on PATH
 //
+// REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
+// observation, which the configuration `magus agent harness apply` writes on the
+// command. Without it nothing is recorded and MGS3019 goes to stderr.
+//
 // The defaults are Claude Code's event shape, matching its two siblings. A
-// different host overrides the dot-paths and passes its own __MAGUS_AGENT_NAME.
+// different host overrides the dot-paths.
 //
 // NO magus-guard-coverage line, and that absence is deliberate rather than an
 // oversight: a coverage declaration states how much of a VERDICT a host can
@@ -36,7 +39,7 @@
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 16
+// magus-guard-template: 17
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -141,23 +144,36 @@ fun warn(message: str) > void {
     io\stderr.write("magus-observe.buzz: {message}\n") catch void;
 }
 
-// This surface declares no flags, and parses its argv anyway: an argument arriving here
-// means the wiring meant something by it, and reading none at all accepted that silently.
-fun reportArgv(args: [str]) > void {
-    final parsed = flags\parse(args, switches: [<str>], valued: [<str>]) catch null;
-    if (parsed == null) { return; }
+// The host this entry is wired into, the one argument this surface takes; see
+// AGENT_NAME_FLAG in magus-command.buzz.
+final AGENT_NAME_FLAG = "--agent-name";
+
+// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// reports every other argument: an argument arriving here means the wiring meant
+// something by it, and reading none at all accepted that silently.
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares none. "
+        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 fun main(args: [str]) > void {
-    reportArgv(args);
+    // No host, no record, and a coded line on stderr rather than a guess: an observation
+    // filed under the wrong host is wrong, and a silent gap is invisible.
+    final agentName = agentNameOf(args);
+    if (agentName == "") {
+        warn("[MGS3019] this hook was not given --agent-name, so nothing was recorded. "
+            + "Run `magus agent harness apply` to rewrite the host's hook configuration; "
+            + "the commands it writes name the host.");
+        return;
+    }
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
-    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
 
     // An absent observer is SILENT, where an absent guard is loud.
     //

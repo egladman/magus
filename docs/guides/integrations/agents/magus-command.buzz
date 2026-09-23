@@ -27,6 +27,12 @@
 // declares about itself. Everything else is still an environment variable, because
 // it is a property of the HOST rather than of one entry, and a host sets it once.
 //
+//   -- --agent-name <host>  REQUIRED: the host this entry is wired into, the harness
+//                    spell's own name, which the configuration `magus agent harness
+//                    apply` writes on every command. It is the ONLY place this file
+//                    learns the host: never the event's shape, never the environment,
+//                    never a default. Without it `magus shell` refuses the call
+//                    (MGS3019), so a hand-written config that omits it fails loudly
 //   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
 //                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
 //                    that also matches its host's skill tool passes
@@ -48,7 +54,6 @@
 //                    front of the PERSON through the host's own approval prompt
 //   __MAGUS_NO_ADVISE  set it when the host has no context-injection channel, so
 //                    an advise renders nothing rather than a reply it rejects
-//   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
 //   __MAGUS_BIN  path to the binary, when it is not on PATH
 //   __MAGUS_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
 //                    host can choose its own fail-open or fail-closed stance
@@ -63,10 +68,11 @@
 //
 // The defaults are Claude Code's event and response shape.
 //
-// __MAGUS_AGENT_NAME and the session are ATTRIBUTION, not policy. magus records them on
-// its activity event so a reader can tell which host produced an observation;
+// The host name and the session are ATTRIBUTION to magus, not policy. magus records them
+// on its activity event so a reader can tell which host produced an observation;
 // neither one can change the verdict, and a host whose event carries no session
-// id records none and is judged exactly the same.
+// id records none and is judged exactly the same. This file does read the host name for
+// one thing, which reply shape its host can parse, and that is why it must be given.
 //
 // __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 // magus's own configuration surface, so a variable this template invents must stay
@@ -102,7 +108,7 @@
 // wired to magus-command.sh. The arms ship ahead of the wiring for the same reason
 // the deny arm shipped ahead of its first rule, so a Codex config can move to Buzz
 // without a window where a decision renders as nothing.
-// magus-guard-template: 16
+// magus-guard-template: 17
 // magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
 // claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
@@ -186,6 +192,10 @@ final ENVELOPE_PREFIX = "\{";
 // host's skill tool. Policy stays in the workspace's own rules, where a reader can see it
 // and magus can change it without every installed config being edited.
 final SUPPORTED_FLAGS = ["--observes-skill-loads"];
+
+// The host this entry is wired into. Valued, and read by this file rather than forwarded
+// as one of SUPPORTED_FLAGS, because the file needs it too: it picks the ask arm.
+final AGENT_NAME_FLAG = "--agent-name";
 
 fun envOr(name: str, fallback: str) > str {
     final value = env\get(name) catch "";
@@ -272,12 +282,6 @@ fun wholeEvent(event: any?, dotPath: str, toolPath: str) > bool {
     final value = dig(event, dotPath: dotPath);
     if (value == null) { return true; }
     return !(value is str);
-}
-
-fun hasKey(event: any?, key: str) > bool {
-    final m = event as? {str: any};
-    if (m == null) { return false; }
-    return m![key] != null;
 }
 
 // trimTrailingNewlines matches shell command substitution, which drops every
@@ -428,7 +432,7 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
 // supports, and decides for itself that an argument it did not declare is reported and
 // dropped rather than refused, because a misconfigured entry must not block work.
 fun shellFlags(args: [str]) > [str] {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [<str>]) catch null;
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) {
         // Unreachable while every supported flag is a switch, and caught anyway: NOTHING
         // here may raise, and a `catch` that exists only for that is cheaper than a
@@ -448,6 +452,14 @@ fun shellFlags(args: [str]) > [str] {
         if (parsed!.values[name] != null) { supported.append(name); }
     }
     return supported;
+}
+
+// agentNameOf is the host this entry names on its argv, or "" when it names none. Empty is
+// not defaulted: `magus shell` refuses installed glue that names no host (MGS3019).
+fun agentNameOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return ""; }
+    return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
 
 // warn names the file, because a host reports a hook's stderr with the entry's matcher at
@@ -599,19 +611,10 @@ fun noticeReply(eventName: str, text: str) > str {
 // askBranch picks the ask arm for the host that sent this event. Only a reply this
 // file assembled may claim --renders-ask; see the header for why Codex never receives
 // permissionDecision "ask".
-fun askBranch(event: any?, codexNamed: bool, codexInferred: bool, pushRule: str?) > str {
+fun askBranch(event: any?, codex: bool, pushRule: str?) > str {
     final declared = env\get("HOST_ASK_BRANCH") catch "";
     if (declared != "") { return declared; }
-    if (!codexNamed and !codexInferred) { return ASK_CLAUDE; }
-    // Only a wiring that NAMED itself Codex may render an ask as context the agent is free
-    // to skip. Inferring the host from a `turn_id` key is a guess over an envelope nobody
-    // schema-types, and the two ways of being wrong are not equal: the context arm turns an
-    // ask into a note that is silently ignored, while the deny arm turns it into a refusal
-    // the person can act on. A host that adds `turn_id` therefore costs a deny, not a pass.
-    if (!codexNamed) {
-        return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT,
-            with: "this event looks like Codex but the wiring never said so, and only a config that sets __MAGUS_AGENT_NAME=codex is taken at its word here");
-    }
+    if (!codex) { return ASK_CLAUDE; }
     final blocker = codexPromptBlocker(event, pushRule: pushRule);
     if (blocker == "") { return ASK_CODEX_PROMPTS; }
     return ASK_CODEX_BLOCKED.replace(BLOCKER_SLOT, with: blocker);
@@ -651,7 +654,7 @@ fun main(args: [str]) > void {
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
-    final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
+    final agentName = agentNameOf(args);
     // Overridable alongside the other dot-paths rather than fixed: a host that points
     // HOST_EVENT_PATH at a field it DOES populate for MCP calls loses the namespace test
     // otherwise, and gets that field judged as a shell command.
@@ -668,14 +671,10 @@ fun main(args: [str]) > void {
     var pushRule: str? = null;
     if (!rawEvent) { pushRule = pushRuleFor(field(event, dotPath: eventPath)); }
 
-    // Codex is recognized by its event as well as by name, so a Codex wiring that forgot
-    // __MAGUS_AGENT_NAME still never receives permissionDecision "ask", which it would run
-    // unasked. turn_id is a required field of Codex's published PreToolUse input and of its
-    // PermissionRequest input; no vendored Claude Code or Cursor schema names it.
-    //
-    // The two are kept apart rather than or-ed, because askBranch trusts them differently.
-    final codexNamed = agentName == "codex";
-    final codexInferred = hasKey(event, key: "turn_id");
+    // Codex is the host the entry names, never one the event's shape suggests: see
+    // AGENT_NAME_FLAG. An entry that names no host gets MGS3019 from magus, whatever arm
+    // is assembled here.
+    final codex = agentName == "codex";
 
     var response = env\get("HOST_RESPONSE") catch "";
     var rendersAsk = [<str>];
@@ -683,7 +682,7 @@ fun main(args: [str]) > void {
         response = permissionResponse(pushRule);
         rendersAsk = ["--renders-ask"];
     } else if (response == "") {
-        response = DENY_HEAD + askBranch(event, codexNamed: codexNamed, codexInferred: codexInferred, pushRule: pushRule)
+        response = DENY_HEAD + askBranch(event, codex: codex, pushRule: pushRule)
             + adviseBranch() + PASS_AND_ADVISE_TAIL + UNKNOWN_DECISION;
         rendersAsk = ["--renders-ask"];
     }

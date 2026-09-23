@@ -401,7 +401,12 @@ const (
 	WorkspaceLoadFailed DiagnosticCode = "MGS3016"
 	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
 	// transient twin of MGS3016: the same call succeeds once the load finishes.
-	WorkspaceStillLoading     DiagnosticCode = "MGS3017"
+	WorkspaceStillLoading DiagnosticCode = "MGS3017"
+	// HookHostUnnamed is a call from installed hook glue that names no agent host. The
+	// configuration `magus agent harness apply` writes passes the host explicitly, so a
+	// call without one comes from a hand-written or stale config, and it is refused
+	// rather than defaulted to one host.
+	HookHostUnnamed           DiagnosticCode = "MGS3019"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -538,7 +543,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
-	WorkspaceLoadFailed, WorkspaceStillLoading,
+	WorkspaceLoadFailed, WorkspaceStillLoading, HookHostUnnamed,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

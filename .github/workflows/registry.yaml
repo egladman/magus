@@ -32,6 +32,11 @@ concurrency:
   group: registry
   cancel-in-progress: false
 
+env:
+  # Wires the github-actions CI provider in magusfile.buzz (job-log groups and
+  # annotations). magus is told it runs under Actions, never detects it.
+  CI_PROVIDER: github-actions
+
 jobs:
   build:
     name: Aggregate, sign, and open a pull request

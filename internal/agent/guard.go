@@ -155,7 +155,14 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // the glue moved together: a config written for this version wires no HOST_EVENT_RAW, and
 // a copy that predates it then selects `null` on every MCP call, spawn and skill load, so
 // those surfaces stop being judged with nothing anywhere saying so.
-const GuardTemplateVersion = 16
+// 17: the host is named on the hook command, `--agent-name <host>`, rendered from the
+// harness spell's own mgs_getName(), and read from there ONLY. __MAGUS_AGENT_NAME is gone,
+// no template defaults to claude-code, and none infers Codex from an event's turn_id.
+// installed glue that names no host is refused with MGS3019 instead of answered in a
+// guessed host's dialect. This bumps because the CONFIG and the glue moved together: a
+// config written for 16 sets the environment variable a 17 copy never reads, so every
+// call it makes is refused until `magus agent harness apply` rewrites it.
+const GuardTemplateVersion = 17
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

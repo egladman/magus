@@ -225,25 +225,29 @@ it - a composite action's `run:` steps do not see them either:
       }
 ```
 
-Everywhere else the spell reports itself disabled: it probes `GITHUB_ACTIONS` first and
-skips fetch and push entirely off a runner, so a magusfile carrying this line stays a
-no-op on a laptop. No remote calls, nothing to configure, nothing to turn off.
+A job that exports neither variable misses every read and stores nothing, and so does a
+laptop. The spell never checks whether it runs under Actions: the exported credentials are
+what switch it on (see [Told, never guessed](../../doctrine.md#told-never-guessed)).
 
 See [Remote cache](../../concepts/cache/remote.md) for what gets stored, how entries are
 keyed, and the guarantees a shared cache does and does not give you.
 
 ## Credentials
 
-The same spell carries a [secret provider](../../concepts/secrets.md). Select it only
-under Actions, since it resolves the environment a workflow injects:
+The same spell carries a [secret provider](../../concepts/secrets.md). Select it when the
+workflow asks for it, since it resolves the environment a workflow injects:
 
 ```buzz
 import "spells/github/actions" as github;
 
-if (os\env("GITHUB_ACTIONS") == "true") {
+if (os\env("SECRET_PROVIDER") == "github-actions") {
     magus\secret.provider(github);
 }
 ```
+
+and set `SECRET_PROVIDER: github-actions` in the workflow's `env:`. Selected, it prints
+`::add-mask::` for every value it resolves wherever it runs, so do not select it on a
+laptop.
 
 You do not have to. With no provider selected, magus's built-in one already reads the
 environment, which is the only way to reach a repository secret - an Actions secret is
@@ -289,11 +293,21 @@ reports a successful login without ever authenticating.
 
 ## Annotations and folded logs
 
-The same spell teaches magus how GitHub renders a job log:
+The same spell teaches magus how GitHub renders a job log. Wire it when the workflow asks:
 
 ```buzz
-magus\ci.provider(github);
+if (os\env("CI_PROVIDER") == "github-actions") {
+    magus\ci.provider(github);
+}
 ```
+
+```yaml
+env:
+  CI_PROVIDER: github-actions
+```
+
+Neither magus nor the spell detects Actions. Wired, the spell writes workflow commands to
+stdout wherever it runs, which is why the wiring waits for the workflow to ask.
 
 Failures become `::error::` annotations that surface inline on the pull request, and each
 target's output folds into its own group. A declared provider wins over magus's built-ins,

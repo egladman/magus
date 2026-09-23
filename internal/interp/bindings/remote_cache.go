@@ -56,8 +56,8 @@ type spellRemoteBackend struct {
 }
 
 // Active probes the spell's optional enabled() op once and caches the result, so
-// a backend that no-ops outside its environment (e.g. the github spell outside GitHub
-// Actions) costs one probe per build, not one per cache operation. A spell that
+// a backend that reports itself inactive (e.g. the s3 spell without a bucket
+// configured) costs one probe per build, not one per cache operation. A spell that
 // declares no enabled() op is treated as always active. A probe *error* is not
 // cached: it's not a definitive "inactive" (a VM/network hiccup would otherwise
 // disable the remote cache for the whole build), so the next call re-probes.

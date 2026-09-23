@@ -117,6 +117,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **magus is told where it runs; it never detects it.** The CI provider spells stop
+  checking `GITHUB_ACTIONS`/`GITLAB_CI`; wire them under a setting the workflow sets.
+  `TestNoEnvironmentSniffing` enforces it.
+- **Hook glue names its host on the command (guard template 17).** Each glue command
+  carries `--agent-name <host>`, rendered from the harness spell's name.
+  `__MAGUS_AGENT_NAME`, the `claude-code` default and Codex detection from `turn_id` are
+  gone; a hook with no name is refused (MGS3019). Re-run `magus agent harness apply`.
 - **magus never waits on another magus invocation.** A workspace lock or machine budget
   held by another invocation refuses immediately (exit 75), naming the holder.
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each

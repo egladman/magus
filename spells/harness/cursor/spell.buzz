@@ -28,8 +28,11 @@ fun cursor_config_defaults() > {str: int} {
 
 fun cursor_skills_form() > str { return "short"; }
 
+// The script reads the host from `--agent-name` and nowhere else, and refuses a call
+// without it (MGS3019), so the name is this spell's own mgs_getName(), rendered from the
+// declaration rather than written into the script.
 fun cursor_guard_command() > str {
-    return "sh docs/guides/integrations/agents/cursor-hook.sh";
+    return "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name {mgs_getName()}";
 }
 
 fun cursor_event_names() > [str] {
@@ -157,6 +160,7 @@ test "guard command is the shipped Cursor script, not agent hook" {
     assert\isTrue(cmd.startsWith("sh "), "host runs the script via sh");
     assert\isTrue(cmd.indexOf("cursor-hook.sh") != null, "names the Cursor guard template");
     assert\isTrue(cmd.indexOf("docs/guides/integrations/agents/") != null, "lives with the other host glue");
+    assert\isTrue(cmd.endsWith(" --agent-name {mgs_getName()}"), "names this host on its argv");
 }
 
 test "harness_entries covers every Cursor event magus uses" {

@@ -406,7 +406,6 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 	srv := httptest.NewServer(emu.handler())
 	defer srv.Close()
 
-	t.Setenv("GITHUB_ACTIONS", "true") // enabled() gate
 	t.Setenv("ACTIONS_RESULTS_URL", srv.URL+"/")
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
 
@@ -416,7 +415,7 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 	// resolver that is an error rather than a silent unauthenticated request, which is
 	// the correct behaviour and why the test has to look like production here.
 	ctx := secret.ContextWithResolver(context.Background(), secret.New())
-	require.True(t, store.Active(ctx), "Active() = false under GITHUB_ACTIONS=true, want true")
+	require.True(t, store.Active(ctx), "a wired provider is active")
 	entry := bytes.Repeat([]byte{0x00, 0x1f, 0x8b, 0xff}, 10)
 
 	rc, err := store.GetArtifact(ctx, "pkg/a", "abc123")
@@ -446,17 +445,20 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 	}
 }
 
-// Outside GitHub Actions the spell's enabled() op returns false, so the backend
-// reports inactive and the cache skips it entirely — no remote calls.
-func TestGHACacheBackendInactiveOutsideGHA(t *testing.T) {
-	t.Setenv("GITHUB_ACTIONS", "")
+// TestGHACacheBackendIsToldNotGuessed pins that the spell never asks whether it runs
+// under Actions: GITHUB_ACTIONS changes nothing, and a job that exports no cache
+// service credentials misses every read without a remote call.
+func TestGHACacheBackendIsToldNotGuessed(t *testing.T) {
+	t.Setenv("GITHUB_ACTIONS", "true")
+	t.Setenv("ACTIONS_RESULTS_URL", "")
+	t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
 	store := ghaBackend(t)
-	require.False(t, store.Active(context.Background()), "Active() = true outside GitHub Actions, want false")
+	require.True(t, store.Active(context.Background()), "a wired provider is active wherever it runs")
 	rc, err := store.GetArtifact(context.Background(), "pkg/a", "abc123")
 	require.NoError(t, err, "GetArtifact")
 	if rc != nil {
 		_ = rc.Close()
-		t.Fatal("expected miss when not running under GitHub Actions")
+		t.Fatal("expected a miss without the cache service credentials")
 	}
 }
 

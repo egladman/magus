@@ -69,9 +69,13 @@ the worker has to export - see
 [wiring a lease into a worker](leases.md#wiring-the-lease-into-a-worker).
 
 The fastest start is to copy [`magus-command.sh`](guard-templates.md) and
-set its override variables: `HOST_EVENT_PATH`, `HOST_RESPONSE`,
-`__MAGUS_AGENT_NAME`, and the two unavailable-response variables. That gets you
-the missing-binary and broken-binary handling without writing it again.
+set its override variables: `HOST_EVENT_PATH`, `HOST_RESPONSE`, and the two
+unavailable-response variables. Name your host on the command itself,
+`sh magus-command.sh --agent-name <your host>`: the template reads the host from that
+argument and nowhere else, and refuses a call without it
+([MGS3019](../../../reference/codes/sandbox/MGS3019.md)) rather than answering in
+another host's dialect. That gets you the missing-binary and broken-binary handling
+without writing it again.
 
 Three decisions are yours to make:
 
@@ -178,7 +182,7 @@ Wire any event that means a human is needed to `magus session notify`; see [Atte
 
 Wire whatever event fires when a session ends to
 [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh), passing your
-host's name as `__MAGUS_AGENT_NAME`. `magus session` lists what it records.
+host's name as `--agent-name <your host>`. `magus session` lists what it records.
 
 The requirements are close to nothing, which is deliberate. magus reads the
 revision, branch and dirtiness from the tree itself, so a host that emits no

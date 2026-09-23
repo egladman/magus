@@ -14,11 +14,11 @@
 # Save to .cursor/hooks/cursor-hook.sh, chmod +x, and point them at it:
 #
 #   {"version": 1, "hooks": {
-#     "beforeShellExecution": [{"command": "./.cursor/hooks/cursor-hook.sh"}],
-#     "preToolUse":   [{"matcher": "Write|StrReplace|Delete|Edit|NotebookEdit", "command": "./.cursor/hooks/cursor-hook.sh"}],
-#     "postToolUse":  [{"matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "./.cursor/hooks/cursor-hook.sh"}],
-#     "subagentStart": [{"command": "./.cursor/hooks/cursor-hook.sh"}],
-#     "sessionEnd":   [{"command": "./.cursor/hooks/cursor-hook.sh"}]}}
+#     "beforeShellExecution": [{"command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}],
+#     "preToolUse":   [{"matcher": "Write|StrReplace|Delete|Edit|NotebookEdit", "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}],
+#     "postToolUse":  [{"matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}],
+#     "subagentStart": [{"command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}],
+#     "sessionEnd":   [{"command": "./.cursor/hooks/cursor-hook.sh --agent-name cursor"}]}}
 #
 # Self-contained on purpose. The other hosts' templates delegate to
 # magus-command.sh, but Cursor would then need three files downloaded to
@@ -42,15 +42,16 @@
 # is the price of the split, and it is why the activity trail carries two rows per
 # call on this host and one everywhere else.
 #
-# Every call passes --agent-name cursor so the observation magus records says which
-# host produced it. Cursor carries conversation_id on every hook and session_id on
+# Every call passes on the --agent-name this script was given (`--agent-name cursor`, from
+# the configuration `magus agent harness apply` writes) so the observation magus records
+# says which host produced it; a config that names none is refused (MGS3019). Cursor carries conversation_id on every hook and session_id on
 # the session ones, so the session is attributable too; neither can change a verdict.
 #
 # Coverage declarations, machine-read by the host-parity gate - see the longer
 # note in magus-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
-# magus-guard-template: 16
+# magus-guard-template: 17
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
 # magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none ask=none
@@ -86,6 +87,17 @@ while [ -n "$guard_root" ] && [ -z "$__MAGUS_BIN" ]; do
   guard_root=${guard_root%/*}
 done
 [ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
+
+# The host this entry is wired into, from the entry's own argv and nowhere else; the
+# configuration `magus agent harness apply` writes passes `--agent-name cursor`.
+agent_name=
+while [ $# -gt 0 ]; do
+  case $1 in
+    --agent-name) agent_name=${2-}; [ $# -ge 2 ] && shift; shift ;;
+    --agent-name=*) agent_name=${1#--agent-name=}; shift ;;
+    *) shift ;;
+  esac
+done
 
 # stdin is a pipe and drains once, so the event is read into a variable and every
 # field is selected from that. `// empty` keeps a hook without a field at the empty
@@ -151,6 +163,23 @@ if [ -z "$event_name" ]; then
   fi
 fi
 
+# A config that names no host is refused, never defaulted: the gating events are denied,
+# and every event says why on stderr. The write and shell gates are where an unguarded
+# call would slip through, so they fail closed here rather than allowing.
+if [ -z "$agent_name" ]; then
+  unnamed="[MGS3019] this hook was not given --agent-name, so nothing was judged. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host."
+  printf 'cursor-hook.sh: %s\n' "$unnamed" >&2
+  case $event_name in
+  beforeShellExecution | preToolUse)
+    printf '{"permission":"deny","user_message":"%s","agent_message":"%s"}' "$unnamed" "$unnamed"
+    ;;
+  subagentStart)
+    printf '%s' '{"permission":"allow"}'
+    ;;
+  esac
+  exit 0
+fi
+
 # The two replies Cursor reads. A deny carries BOTH messages: user_message is shown
 # to the person and agent_message reaches the model. Neither is delivered on an
 # allow, which is why the advisory lives on a different event.
@@ -189,7 +218,7 @@ guard_notice_once() {
 guard() {
   guard_input=$1
   shift
-  printf '%s' "$guard_input" | "$__MAGUS_BIN" shell --agent-name cursor \
+  printf '%s' "$guard_input" | "$__MAGUS_BIN" shell --agent-name "$agent_name" \
     --session "$session" --transcript "$transcript" "$@"
 }
 
@@ -280,7 +309,7 @@ sessionEnd)
   # Not a guard. It records the revision, branch and dirtiness of the tree when a
   # session ends, so whoever comes back reads `magus session` instead of
   # reconstructing where the work stopped. It prints nothing and judges nothing.
-  "$__MAGUS_BIN" session checkpoint --agent-name cursor \
+  "$__MAGUS_BIN" session checkpoint --agent-name "$agent_name" \
     --session "$session" --transcript "$transcript" >/dev/null 2>&1
   exit 0
   ;;
@@ -295,7 +324,7 @@ subagentStart)
       session_id: (.parent_conversation_id // .conversation_id // ""),
       transcript_path: (.transcript_path // ""),
       tool_input: {prompt: (.task // ""), subagent_type: (.subagent_type // "")}
-    }' 2>/dev/null | "$__MAGUS_BIN" shell --agent-name cursor >/dev/null 2>&1
+    }' 2>/dev/null | "$__MAGUS_BIN" shell --agent-name "$agent_name" >/dev/null 2>&1
   printf '%s' '{"permission":"allow"}'
   exit 0
   ;;

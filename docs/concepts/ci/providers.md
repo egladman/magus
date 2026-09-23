@@ -37,21 +37,30 @@ matching. Everything else crosses into the spell at most once per failure.
 
 ## Wiring one up
 
-A provider is an ordinary spell, selected in your magusfile:
+A provider is an ordinary spell, selected in your magusfile when the caller asks for it:
 
 ```buzz
 import "spells/github/actions" as github;
 
-magus\ci.provider(github);
+if (os\env("CI_PROVIDER") == "github-actions") {
+    magus\ci.provider(github);
+}
+```
+
+and the workflow asks, in its `env:`:
+
+```yaml
+env:
+  CI_PROVIDER: github-actions
 ```
 
 magus ships two: `spells/github/actions` (which also carries the Actions remote
 cache provider - one spell per vendor, two contracts) and `spells/gitlab/ci`.
 
-Wiring one unconditionally is the intended usage. A provider reports whether it
-is active, magus probes that once per run, and an inactive provider costs
-nothing - so the same magusfile works on your laptop, in GitHub Actions, and on a
-system neither of them knows about.
+Neither magus nor a shipped provider detects which CI system it runs under. A wired
+provider writes its markers wherever it runs, so the same command behaves the same on a
+laptop and in a job, and the only thing that differs is what the caller asked for. See
+[Told, never guessed](../../doctrine.md#told-never-guessed).
 
 ## What magus does with it
 
@@ -184,5 +193,6 @@ folds an id, `os\env` reads the runner environment, `std\print` writes a marker.
 Method names are `camelCase` even where the [module reference](../../reference/buzz/index.md)
 declares them otherwise, and namespace access is a backslash.
 
-Gate everything on `enabled()`. A provider that returns false outside its own
-system makes an unconditional `magus\ci.provider(...)` free everywhere else.
+Do not make `enabled()` detect the CI system. It answers whether the provider has
+what it was configured with, and most providers need no `enabled()` at all: the
+magusfile wires them only when the caller asks.

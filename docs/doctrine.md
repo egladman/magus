@@ -369,6 +369,46 @@ fixed cap, or a flag documented as repeatable that silently keeps the last
 value, is the same defect as the ignored setting. It just fails later, and
 reads as a lie rather than an oversight.
 
+### Told, never guessed
+
+magus does not guess where it runs in order to change what it does. It does not
+read `CI`, `GITHUB_ACTIONS` or `GITLAB_CI`, probe for a container, or work out
+which agent host is calling, and then pick a default, a result, or which
+provider or feature is on. When a caller needs different behavior, the caller
+asks for it: a flag, a charm, a key in `magus.yaml`, or a variable the workflow
+sets on purpose. The same command does the same work on a laptop, on a runner
+and inside an agent's shell.
+
+The owner's words, when this was written down: "We should never be doing
+environment sniffing, ever. Thinking that we're smarter than the developer, or
+trying to be too clever, is incredibly dangerous."
+
+The danger is the same one the previous entry names, arriving from the other
+side. A guess is a setting nobody wrote. It cannot be read in the file the
+reader is already looking at, it cannot be turned off without first learning
+it exists, and it is wrong exactly where the environment differs from the one
+its author pictured: a self-hosted runner that looks hosted, a laptop with
+`CI=true` exported by a test harness, an agent host that happens to share a
+field name with another. A command that passed locally and failed in CI because
+magus noticed it was in CI is the worst kind of red, because the difference is
+invisible in both places.
+
+Two things are not guessing. The first is adapting to the terminal in front of
+the person: whether a stream is a terminal, what kind and how big, whether it
+is reached over ssh, and which window a once-only notice belongs to. That
+decides how magus talks to them (color, links, hover, which prompt it can
+show), never what work it does. The second is reading the input a caller
+actually sent: a flag, an argument, the event a hook was handed. `NO_COLOR`
+belongs with them: a person set it to say what they want.
+
+An agent host is a caller like any other, so it says who it is. The hook
+configuration `magus agent harness apply` writes names the host explicitly, and
+a hook invoked without that name is refused rather than defaulted to one host.
+
+`TestNoEnvironmentSniffing` in `conventions_test.go` fails the build when code
+reads a CI, hosting or agent-host variable outside a short list of inputs read
+after the caller chose them, and the failure says to take a flag instead.
+
 ### Automation you can interrogate
 
 Each automated verdict has a lens that shows its inputs. `affected --explain`
@@ -514,6 +554,7 @@ removed, with what decided each and where to check it.
 | a model adapter                                                        | never built; the one extension seam that is absent rather than sealed                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [Scope](scope.md#where-others-drew-it)                                                                                   |
 | a paid tier, an account, a capability behind either                    | never built; there is nothing to upsell                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Scope](scope.md#the-line)                                                                                               |
 | generating code your build depends on                                  | never built; nothing magus writes into your repository has to exist for `magus run build` to work                                                                                                                                                                                                                                                                                                                                                                                                                                | [Scope](scope.md#the-line)                                                                                               |
+| detecting where magus runs, to pick a default or an output             | removed: each shipped CI provider's check for its own system, the build provenance and job summary read from the runner unasked, and the agent host guessed from an event's shape or defaulted when unnamed; each became a flag, a charm, a setting the workflow passes, or the host name the generated hook configuration carries                                                                                                                                                                                               | `TestNoEnvironmentSniffing`                                                                                              |
 
 Two of those rows record a measurement that killed an idea somebody wanted,
 which is the only reason the rest of the list is worth anything. A ledger of
