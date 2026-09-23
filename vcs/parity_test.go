@@ -3,6 +3,7 @@
 package vcs
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1100,4 +1101,81 @@ func TestParityRangeDiffScopesToPaths(t *testing.T) {
 		assert.Containsf(t, diff, "keep.txt", "%s scoped RangeDiff dropped the requested path", b.name)
 		assert.NotContainsf(t, diff, "drop.txt", "%s scoped RangeDiff did not narrow to the given path", b.name)
 	})
+}
+
+// The staging capabilities are git's alone today. Every backend declares them anyway, so a
+// caller asking jj to stage learns which backend and which method refused, through the
+// standard errors.ErrUnsupported, rather than meeting a failed type assertion. Stubs run
+// no binary, so this covers all four on a machine with only git.
+func TestParityStagingCapabilitiesAnswerOrRefuseByName(t *testing.T) {
+	staged := map[string]bool{"git": true}
+	for _, b := range parityBackends() {
+		t.Run(b.name, func(t *testing.T) {
+			fetcher, ok := b.drv.(types.RevisionFetcher)
+			require.Truef(t, ok, "%s does not declare RevisionFetcher", b.name)
+			stager, ok := b.drv.(types.Stager)
+			require.Truef(t, ok, "%s does not declare Stager", b.name)
+
+			ctx, dir := t.Context(), t.TempDir()
+			rev := strings.Repeat("a", 40)
+			calls := map[string]func() error{
+				"RevisionFetcher.FetchBranch": func() error {
+					_, err := fetcher.FetchBranch(ctx, dir, dir, "main")
+					return err
+				},
+				"RevisionFetcher.FetchRevision": func() error { return fetcher.FetchRevision(ctx, dir, dir, rev, "") },
+				"RevisionFetcher.LookupRemote": func() error {
+					_, _, err := fetcher.LookupRemote(ctx, dir, "origin")
+					return err
+				},
+				"Stager.ChangedSince": func() error {
+					_, err := stager.ChangedSince(ctx, dir, rev, rev)
+					return err
+				},
+				"Stager.CheckMerge": func() error { return stager.CheckMerge(ctx, dir, "linguist-generated", rev, rev) },
+				"Stager.ReviewTarget": func() error {
+					_, err := stager.ReviewTarget(ctx, dir, "linguist-generated", rev, rev)
+					return err
+				},
+				"Stager.BuildStage": func() error {
+					_, err := stager.BuildStage(ctx, dir, types.StageSpec{Dir: filepath.Join(dir, "s"), Derived: "linguist-generated",
+						Base: rev, Onto: rev, Rev: rev, Message: "m", Author: types.Person{Name: "n", Email: "e"}})
+					return err
+				},
+				"Stager.RemoveStage": func() error { return stager.RemoveStage(ctx, dir, filepath.Join(dir, "s")) },
+				"Stager.PruneStages": func() error { return stager.PruneStages(ctx, dir) },
+				"Stager.CommitSubjects": func() error {
+					_, err := stager.CommitSubjects(ctx, dir, rev, rev)
+					return err
+				},
+				"Stager.ExportStage": func() error { return stager.ExportStage(ctx, dir, filepath.Join(dir, "f"), rev, rev) },
+				"Stager.ImportStage": func() error { return stager.ImportStage(ctx, dir, filepath.Join(dir, "f")) },
+				"Stager.PredictMerge": func() error {
+					_, err := stager.PredictMerge(ctx, dir, rev, rev, rev, rev)
+					return err
+				},
+				"Stager.UpdateBranch": func() error {
+					_, err := stager.UpdateBranch(ctx, dir, dir, types.BranchUpdate{Derived: "linguist-generated",
+						Base: rev, Tip: rev, Head: rev, Tree: rev, Message: "m"})
+					return err
+				},
+				"Stager.TreeOf": func() error {
+					_, err := stager.TreeOf(ctx, dir, rev)
+					return err
+				},
+			}
+			for capability, call := range calls {
+				err := call()
+				if staged[b.name] {
+					assert.Falsef(t, errors.Is(err, errors.ErrUnsupported), "%s %s: %v", b.name, capability, err)
+					continue
+				}
+				require.Errorf(t, err, "%s %s", b.name, capability)
+				assert.Truef(t, errors.Is(err, errors.ErrUnsupported), "%s %s: %v does not unwrap to errors.ErrUnsupported", b.name, capability, err)
+				assert.Truef(t, errors.Is(err, types.ErrVCSUnsupported), "%s %s: %v does not unwrap to ErrVCSUnsupported", b.name, capability, err)
+				assert.Containsf(t, err.Error(), b.name, "%s %s: the error does not name the backend", b.name, capability)
+				assert.Containsf(t, err.Error(), capability, "%s %s: the error does not name the capability", b.name, capability)
+			}
+		})
+	}
 }

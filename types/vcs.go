@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -686,6 +687,143 @@ type MergeStarter interface {
 	// state. Callers start from a clean tree so this cannot discard uncommitted work.
 	AbortMerge(ctx context.Context, root string) error
 }
+
+// UnsupportedError is what a backend returns from a capability method it declares but
+// cannot perform. It unwraps to both errors.ErrUnsupported and ErrVCSUnsupported.
+type UnsupportedError struct {
+	Backend    string // the driver's Name(), such as "jj"
+	Capability string // interface and method, such as "Stager.BuildStage"
+}
+
+func (e *UnsupportedError) Error() string {
+	return "vcs: " + e.Backend + " does not support " + e.Capability
+}
+
+func (e *UnsupportedError) Unwrap() []error {
+	return []error{errors.ErrUnsupported, ErrVCSUnsupported}
+}
+
+// RevisionFetcher is an optional capability for VCSDriver implementations that can fetch
+// revisions from a remote into the local store without touching any working copy.
+type RevisionFetcher interface {
+	// FetchBranch fetches branch from remote, a configured remote's name or a URL, and
+	// returns the commit at its tip. It records the tip where no other fetch writes, so
+	// concurrent calls in one repository do not race.
+	FetchBranch(ctx context.Context, root, remote, branch string) (string, error)
+	// FetchRevision makes rev, a full revision id, present locally. A non-empty ref is
+	// fetched first; when it no longer leads to rev, rev itself is fetched. A revision
+	// already present fetches nothing.
+	FetchRevision(ctx context.Context, root, remote, rev, ref string) error
+	// LookupRemote returns the URL of the remote configured as name. ok is false, with no
+	// error, when no remote has that name, so a caller holding a URL can use it as given.
+	LookupRemote(ctx context.Context, root, name string) (url string, ok bool, err error)
+}
+
+// Stager is an optional capability for VCSDriver implementations that can build
+// speculative merge commits ("stages") in scratch checkouts, carry them between
+// repositories, and land one on a branch: the version-control half of a merge queue.
+//
+// A derived file is one a regeneration rewrites. Methods that settle conflicts take
+// derived, the path attribute marking such files (linguist-generated in git), and read it
+// at a revision the caller names, never at the revision being merged, so a change cannot
+// declare its own sources derived. A conflict in a derived file is left for regeneration;
+// one in any other file is a *MergeConflictError.
+//
+// Every revision argument is a full revision id; none is read as an option.
+type Stager interface {
+	// ChangedSince lists the paths rev changes since its merge base with onto.
+	ChangedSince(ctx context.Context, root, onto, rev string) ([]string, error)
+	// CheckMerge merges rev onto onto without a checkout, reading derived at onto.
+	CheckMerge(ctx context.Context, root, derived, onto, rev string) error
+	// ReviewTarget returns the commit a review of head covers. A head that merges a commit
+	// already on tip into its first parent, and differs from that merge only in files tip
+	// marks derived, adds nothing a reviewer did not see: its first parent's review target
+	// covers it. Any other head is its own.
+	ReviewTarget(ctx context.Context, root, derived, tip, head string) (string, error)
+	// BuildStage builds s in a new checkout at s.Dir and returns the stage's commit. Safe
+	// for concurrent use with distinct directories. On error the checkout is removed.
+	BuildStage(ctx context.Context, root string, s StageSpec) (string, error)
+	// RemoveStage removes the checkout at dir; its commits stay in the store.
+	RemoveStage(ctx context.Context, root, dir string) error
+	// PruneStages forgets stage checkouts whose directories no longer exist.
+	PruneStages(ctx context.Context, root string) error
+	// CommitSubjects returns the subject of each non-merge commit reachable from head and
+	// not from base, oldest first.
+	CommitSubjects(ctx context.Context, root, base, head string) ([]string, error)
+	// ExportStage writes stage, and every commit beneath it that base lacks, to file.
+	ExportStage(ctx context.Context, root, file, base, stage string) error
+	// ImportStage loads what ExportStage wrote into the store, creating no branch or ref.
+	ImportStage(ctx context.Context, root, file string) error
+	// PredictMerge returns the tree tip carries once the change validated at stage merges:
+	// stage's changes since base, merged onto tip. onto is the commit stage was built
+	// onto. A path that both stage and what reached tip since onto changed is a
+	// combination nobody validated, reported as a *MergeConflictError.
+	PredictMerge(ctx context.Context, root, base, tip, onto, stage string) (string, error)
+	// UpdateBranch returns the commit whose merge onto u.Tip yields u.Tree: u.Head when a
+	// plain merge already does, else an update commit with parents u.Head and u.Tip,
+	// authored by u.Head's author, pushed to u.Branch on remote leased at u.Head.
+	//
+	// A tree differing from the plain merge outside derived files is a *NotDerivedError.
+	// An update with no u.Branch is ErrNoBranch; a branch that moved or was deleted is
+	// ErrBranchMoved.
+	UpdateBranch(ctx context.Context, root, remote string, u BranchUpdate) (string, error)
+	// TreeOf returns rev's tree id.
+	TreeOf(ctx context.Context, root, rev string) (string, error)
+}
+
+// StageSpec describes one stage for Stager.BuildStage.
+type StageSpec struct {
+	Dir     string // the checkout to create; it must not exist, and lies outside root
+	Derived string // path attribute marking derived files
+	Base    string // revision derived is read at
+	Onto    string // revision the stage is built onto
+	Rev     string // revision merged onto Onto
+	Message string // the merge commit's message
+	// Author authors and commits every stage commit at a fixed date, so the same inputs
+	// yield the same commit in every repository that builds them.
+	Author Person
+	// Regenerate rewrites the derived files in the checkout at dir, given the derived
+	// paths Rev touched or conflicted in. Its error is returned as it stands. A rewrite of
+	// a file Base does not mark derived is a *NotDerivedError. Nil leaves derived files as
+	// merged.
+	Regenerate func(ctx context.Context, dir string, paths []string) error
+}
+
+// BranchUpdate describes one update for Stager.UpdateBranch.
+type BranchUpdate struct {
+	Derived string // path attribute marking derived files
+	Base    string // revision derived is read at
+	Tip     string // the base branch's tip the update merges in
+	Head    string // the branch's expected head; the push is leased on it
+	Branch  string // branch the update commit is pushed to; empty when none may be
+	Tree    string // tree the merge must yield
+	Message string // the update commit's message
+}
+
+// MergeConflictError reports a merge that conflicts in files not marked derived.
+type MergeConflictError struct {
+	Paths []string // the conflicted files, repository-relative
+	With  []string // commits on the other side that changed them, "<short id> <subject>"
+}
+
+func (e *MergeConflictError) Error() string {
+	return "vcs: merge conflicts in " + strings.Join(e.Paths, ", ")
+}
+
+// NotDerivedError reports files that changed where only derived files may.
+type NotDerivedError struct{ Paths []string }
+
+func (e *NotDerivedError) Error() string {
+	return "vcs: not derived: " + strings.Join(e.Paths, ", ")
+}
+
+var (
+	// ErrNoBranch is Stager.UpdateBranch needing an update commit with no branch to push.
+	ErrNoBranch = errors.New("vcs: an update commit is needed and no branch may take it")
+	// ErrBranchMoved is Stager.UpdateBranch's lease refusing a branch that moved or was
+	// deleted since the expected head.
+	ErrBranchMoved = errors.New("vcs: the branch moved or was deleted")
+)
 
 // Status is the working tree's uncommitted state: whether it is clean, and which paths
 // changed. It replaces the pair of vcs.is_dirty / vcs.dirty_files at the Buzz boundary,

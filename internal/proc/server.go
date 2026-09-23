@@ -711,7 +711,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 	// RunAll against the same shared Limiter. Holding our slot for the whole
 	// forwarded run would steal one slot from that pool per adopted child and
 	// inflate Status.Running, so yield it for the duration of the handler and
-	// reacquire before returning (mirrors client.RunChildSync's Yield).
+	// reacquire before returning (mirrors RunChildSync's Yield).
 	if err := s.lim.Yield(ctx, func() error { return s.handler(ctx, req.Args) }); err != nil {
 		if errors.Is(err, ErrNotAdoptable) { // propagate so client falls back to local execution
 			return err
