@@ -36,15 +36,15 @@ const (
 //
 // Advice, never a failure: the magusfile figure stays a human's to write, and a
 // deliberate ceiling above the measured peak is a legitimate thing to declare.
-func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.DoctorCheck {
+func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Check {
 	const name = "memory-declarations"
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
 		// Advice, not OK: the check could not RUN, which is a different answer from
 		// "everything agrees" and the reader needs to know which one they got.
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorAdvice,
+		return types.Check{
+			Name: name, Status: types.CheckAdvice,
 			Message: "run history is unreadable, so declarations could not be checked against what magus measured",
 			Details: []string{err.Error()},
 		}
@@ -53,8 +53,8 @@ func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Doctor
 	// fresh clone rather than an error. Saying so beats "everything agrees", which
 	// claims a comparison that never happened.
 	if len(h.Projects) == 0 {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: "no targets have run yet, so there is nothing to compare declarations against",
 		}
 	}
@@ -79,16 +79,16 @@ func (r *runner) checkMemoryDeclarations(projects []*types.Project) types.Doctor
 	}
 
 	if len(details) == 0 {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: "every measured target agrees with what it declares",
 		}
 	}
 	slices.Sort(details)
 	details = slices.Compact(details)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:   name,
-		Status: types.DoctorAdvice,
+		Status: types.CheckAdvice,
 		Message: fmt.Sprintf(
 			"%d target(s) declare memory that disagrees with what magus measured; admission is only as good as the declarations it arbitrates (see %s)",
 			len(details), types.CodeURL(types.MemoryDeclarationDrift)),

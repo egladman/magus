@@ -124,17 +124,13 @@ export object DriftResult {
     files: [Path] = [],
 }
 
-export object DiffNaming {
-    check: str = "",
-    summary: str = "",
-    score: double = 0.0,
-    headline: bool = false,
-    pattern: str = "",
-    shape: str = "",
-    members: int = 0,
-    cohort: int = 0,
-    examples: [str] = [],
-    outliers: [str] = [],
+export object Check {
+    name: str = "",
+    status: CheckStatus = CheckStatus.none,
+    message: str = "",
+    details: [str] = [],
+    evidence: str = "",
+    fix: [str] = [],
 }
 
 export object DiffSymbol {
@@ -149,7 +145,7 @@ export object DiffSymbol {
     qualified: str = "",
     signature: str = "",
     baseSignature: str = "",
-    naming: [DiffNaming] = [],
+    checks: [Check] = [],
 }
 
 export object DiffTouch {
@@ -218,15 +214,6 @@ export object Diff {
     reviewed: DiffReviewed = DiffReviewed{},
 }
 
-export object DoctorCheck {
-    name: str = "",
-    status: DoctorCheckStatus = DoctorCheckStatus.none,
-    message: str = "",
-    details: [str] = [],
-    evidence: str = "",
-    fix: [str] = [],
-}
-
 export object DoctorSummary {
     ok: int = 0,
     fail: int = 0,
@@ -236,7 +223,7 @@ export object DoctorSummary {
 
 export object DoctorReport {
     workspace: str = "",
-    checks: [DoctorCheck] = [],
+    checks: [Check] = [],
     summary: DoctorSummary = DoctorSummary{},
 }
 

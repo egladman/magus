@@ -44,15 +44,15 @@ const (
 // Advice, never a failure. How much headroom a runaway guard should carry is a
 // judgment about the worst machine the target will ever run on, which magus has not
 // seen.
-func (r *runner) checkTimeoutDeclarations(projects []*types.Project) types.DoctorCheck {
+func (r *runner) checkTimeoutDeclarations(projects []*types.Project) types.Check {
 	const name = "timeout-declarations"
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
 		// Advice, not OK: the check could not RUN, which is a different answer from
 		// "everything agrees" and the reader needs to know which one they got.
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorAdvice,
+		return types.Check{
+			Name: name, Status: types.CheckAdvice,
 			Message: "run history is unreadable, so declared timeouts could not be checked against what magus measured",
 			Details: []string{err.Error()},
 		}
@@ -76,22 +76,22 @@ func (r *runner) checkTimeoutDeclarations(projects []*types.Project) types.Docto
 	}
 
 	if declared == 0 {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: "no target declares a timeout, so every target is unbounded",
 		}
 	}
 	if len(details) == 0 {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: fmt.Sprintf("%d declared timeout(s) still bracket what magus measured", declared),
 		}
 	}
 	slices.Sort(details)
 	details = slices.Compact(details)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:   name,
-		Status: types.DoctorAdvice,
+		Status: types.CheckAdvice,
 		Message: fmt.Sprintf(
 			"%d of %d declared timeout(s) no longer describe the target; a ceiling is only a guard while it brackets real runs (see %s)",
 			len(details), declared, types.CodeURL(types.TimeoutDeclarationDrift)),

@@ -49,12 +49,19 @@ import (
 // tools' opinions of one changeset.
 func diffCmd(ctx context.Context, root string, args []string) error {
 	var rf *gen.DiffFlags
+	var gates types.DiffOptions
 	rest, err := cmdParse("diff", args, func(fs *flag.FlagSet) {
 		rf = gen.BindDiff(fs)
+		fs.Float64Var(&gates.MinShare, gen.FlagDiffConformanceMinShare, 0,
+			"The share of a conformance norm's declarations, above 0 and at most 1, that must agree before it is reported (default 0.8)")
 		fs.Usage = func() { diffUsage(os.Stderr) }
 	})
 	if err != nil {
 		return err
+	}
+	gates.MinCohort = rf.ConformanceMinCohort
+	if gates.MinCohort < 0 || gates.MinShare < 0 || gates.MinShare > 1 {
+		return usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
 	}
 	// EVERY positional is a path that narrows the changeset, whichever source it came from.
 	// The source itself is always a flag (--rev, --patch, or the working tree by default),
@@ -131,7 +138,12 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	}
 	tui := wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
 
-	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, tui, rf.Impact, scopePaths) }
+	if tui && (gates.MinCohort != 0 || gates.MinShare != 0) {
+		// The viewer can join a daemon's review, which ran with the daemon's gates, so the
+		// flags could not be honored there.
+		return usagef("magus diff: --conformance-min-cohort and --conformance-min-share apply to the printed report; add --no-tui")
+	}
+	render := func() error { return renderDiff(ctx, m, src, opts, rf, gates, root, tui, rf.Impact, scopePaths) }
 	if rf.Watch {
 		return watchDiff(ctx, m, render)
 	}
@@ -353,7 +365,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus, paths []strin
 // impact is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, rootOverride string, tui, impact bool, scopePaths []string) error {
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, gates types.DiffOptions, rootOverride string, tui, impact bool, scopePaths []string) error {
 	patch, base, err := src.readPatch(ctx, m, scopePaths)
 	if err != nil {
 		return err
@@ -400,7 +412,8 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	if tui {
 		return runDiffTUI(ctx, m, content, patch, base, paths, rf.Generated)
 	}
-	rev, err := annotateDiff(ctx, m, content, paths, base, rf.Baseline)
+	gates.Patch = patch
+	rev, err := annotateDiff(ctx, m, content, paths, base, rf.Baseline, gates)
 	if err != nil {
 		return err
 	}
@@ -544,13 +557,10 @@ const branchOverlapLimit = 20
 // the CLI said nothing" happens.
 //
 // baselinePath, when set, is a `graph export --symbols -o json` the changed symbols are
-// compared against for the API delta.
-func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base, baselinePath string) (types.Diff, error) {
-	var rev types.Diff
-	var err error
-	if baselinePath == "" {
-		rev, err = m.Diff(ctx, paths)
-	} else {
+// compared against for the API delta. opts carries the changeset's patch and the conformance
+// gates.
+func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base, baselinePath string, opts types.DiffOptions) (types.Diff, error) {
+	if baselinePath != "" {
 		var baseline types.KnowledgeGraphOutput
 		raw, rerr := os.ReadFile(baselinePath)
 		if rerr != nil {
@@ -560,8 +570,9 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 			return types.Diff{}, fmt.Errorf("magus diff: decode --baseline %s (expected `%s` output): %w",
 				baselinePath, hint.GraphExport.With("--symbols", "-o", "json"), uerr)
 		}
-		rev, err = m.DiffAgainst(ctx, paths, baseline, baselinePath)
+		opts.Baseline, opts.BaselineLabel = &baseline, baselinePath
 	}
+	rev, err := m.DiffWith(ctx, paths, opts)
 	if err != nil {
 		return types.Diff{}, err
 	}
@@ -752,7 +763,7 @@ func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedCont
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
 	}
-	rev, err := annotateDiff(ctx, m, content, paths, base, "")
+	rev, err := annotateDiff(ctx, m, content, paths, base, "", types.DiffOptions{Patch: patch})
 	if err != nil {
 		return types.Diff{}, nil, nil, err
 	}
@@ -1206,6 +1217,11 @@ func diffUsage(w io.Writer) {
 		"a `"+hint.GraphExport.With("--symbols", "-o", "json")+"` of the base, which adds what each changed symbol did to the API",
 		"and the smallest semver bump that proves. Signatures are compared as the indexer rendered them,",
 		"so the base must come from the same indexers this tree is indexed with.")
+	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-cohort ",
+		"how many declarations a conformance norm needs before a changed symbol is compared against it (default 5)")
+	tty.ProseItem(w, tty.SystemProbe, "  --conformance-min-share  ",
+		"the share of a norm's declarations, above 0 and at most 1, that must agree (default 0.8).",
+		"Both apply to the printed report, not the viewer.")
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
@@ -1437,13 +1453,9 @@ func diffFileFacts(f types.DiffFile) []string {
 			}
 		}
 	}
-	// Headlines only: the ranked evidence below them is for `-o json`, and a report line that is
-	// usually a weak guess is a line readers learn to skip.
 	for _, s := range f.Symbols {
-		for _, n := range s.Naming {
-			if n.Headline {
-				facts = append(facts, "NAMING "+n.Summary)
-			}
+		for _, c := range s.Checks {
+			facts = append(facts, "CONFORMANCE "+c.Message)
 		}
 	}
 	if n := f.ReachOr(0); f.Reach != nil && n > 0 {
@@ -1634,7 +1646,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	if base == "" {
 		base = "main"
 	}
-	sections, failed, err := runLocalAdvisors(ctx, m, base)
+	sections, failed, err := runLocalAdvisors(ctx, m, base, rev)
 	p.Advisors, p.AdvisorNotes = sections, failed
 	if err != nil {
 		p.AdvisorNotes = append(p.AdvisorNotes, fmt.Sprintf("advisors did not run: %v", err))
@@ -2499,11 +2511,19 @@ var localAdvisors = []string{
 //
 // Not safe for concurrent use: the advisors read their inputs with os\env, so the two
 // local-mode variables are set process-wide for the duration of the call.
-func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string) ([]adviceSection, []string, error) {
+//
+// rev is the review this run already computed. It is handed to the advisors that read one
+// (advice.buzz's review, through adviceReviewEnv), so none of them diffs the tree again.
+func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev types.Diff) ([]adviceSection, []string, error) {
 	dir := filepath.Join(m.Root(), adviceDirRel)
 	if _, err := os.Stat(dir); err != nil {
 		return nil, []string{fmt.Sprintf("no advisors in this workspace: %s is not readable (%v)", dir, err)}, nil
 	}
+	restore, err := shareReview(rev)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer restore()
 
 	// The advisors ask magus about the workspace (magus\describeFile, magus\diff,
 	// magus\affectedImpact), which reads it off the context the way `magus buzz` does.
@@ -2591,6 +2611,41 @@ func setAdviceEnv(base string) (func(), error) {
 			}
 			_ = os.Setenv(name, *was)
 		}
+	}, nil
+}
+
+// adviceReviewEnv names the file holding the run's one review, which advice.buzz's review
+// reads in place of a fresh magus\diff. The action's review step sets the same name on the
+// forge.
+const adviceReviewEnv = "ADVICE_REVIEW"
+
+// shareReview writes rev where the advisors read it and returns the restore, which removes
+// the file and puts the variable back as it was.
+func shareReview(rev types.Diff) (func(), error) {
+	f, err := os.CreateTemp("", "magus-advice-review-*.json")
+	if err != nil {
+		return func() {}, fmt.Errorf("magus diff: save the review for the advisors: %w", err)
+	}
+	werr := json.NewEncoder(f).Encode(rev)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		_ = os.Remove(f.Name())
+		return func() {}, fmt.Errorf("magus diff: save the review for the advisors: %w", werr)
+	}
+	had, set := os.LookupEnv(adviceReviewEnv)
+	if err := os.Setenv(adviceReviewEnv, f.Name()); err != nil {
+		_ = os.Remove(f.Name())
+		return func() {}, fmt.Errorf("magus diff: set %s: %w", adviceReviewEnv, err)
+	}
+	return func() {
+		if set {
+			_ = os.Setenv(adviceReviewEnv, had)
+		} else {
+			_ = os.Unsetenv(adviceReviewEnv)
+		}
+		_ = os.Remove(f.Name())
 	}, nil
 }
 

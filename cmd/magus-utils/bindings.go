@@ -625,7 +625,7 @@ func (e *buzzValueEmitter) value(w *bytes.Buffer, value, path string, t reflect.
 
 	switch t.Kind() {
 	case reflect.String:
-		// A NAMED string (types.DoctorCheckStatus, types.TargetRunState) is a distinct
+		// A NAMED string (types.CheckStatus, types.TargetRunState) is a distinct
 		// Go type, so it needs the conversion every numeric case already makes. Plain
 		// string is emitted bare rather than as string(s), which is redundant and what
 		// the unconvert linter exists to catch.

@@ -116,7 +116,7 @@ which is not a question a working tree can answer.
 | `blast-radius`          | the change reaches a large share of the workspace, with the chain that pulled each project in                                                            |
 | `doctor`                | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                                                                |
 | `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                                                          |
-| `conformance`           | a new target or symbol is named or sized unlike what the rest of the workspace has for the same work or declaration shape                                |
+| `conformance`           | a new target, or a symbol the change adds, renames or re-signs, departs from what the rest of the workspace does with the same work or declaration       |
 | `missing-target`        | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                                                        |
 | `api-surface`           | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
 | `first-contribution`    | the author has no merged pull request here yet                                                                                                           |
@@ -126,6 +126,34 @@ which is not a question a working tree can answer.
 `blast-radius` takes a `fanout-share` (default `0.5`): the share of the workspace a
 change must reach before it says anything. It is a share rather than a count because
 five projects is most of a small workspace and a rounding error in a large one.
+
+## Conformance on code
+
+The symbol half of `conformance` reads `magus diff`'s `checks` on each symbol the change
+adds, renames or re-signs. Every check derives its norm from the workspace's own symbol
+index, needs `conformance-min-cohort` declarations agreeing at `conformance-min-share` or
+more (the same two inputs as the target half, default 5 and 0.8), never counts the change's
+own new names toward a norm, and states a fact with its counts rather than a rule:
+
+| check             | it reports                                                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `naming-affix`    | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry |
+| `name-collision`  | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                               |
+| `interface-size`  | an interface, added or grown, with far more methods than those declared beside it                                           |
+| `rename-leftover` | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                             |
+| `param-order`     | a function taking two parameters in the reverse of the order most functions in its scope that take both do                  |
+
+The checks read what every language's index holds (names, kinds, scopes, references) and,
+where a language reports it, the declaration's shape: `interface-size` needs a language
+whose index reports interface members, and `param-order` one whose index renders parameter
+names (Go and TypeScript today).
+
+A `baseline` sharpens this half as it sharpens `api-surface`. With one, what the change
+adds, renames and re-signs is read from the two indexes. Without one it is read from the
+change's own patch: a symbol is new when its definition line is an added line that no
+removed line in the patch names, and a re-signed symbol is not compared at all. When the
+workflow's baseline step fails, the section says so under its findings rather than quietly
+reporting less.
 
 ## The bump is a floor
 

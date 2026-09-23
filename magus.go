@@ -1166,7 +1166,7 @@ func statusLinePath(line string) string {
 // reader must be able to tell "nothing depends on this" from "nothing was measured", which is
 // what Notes is for.
 func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
-	return m.diff(ctx, paths, diffConfig{})
+	return m.DiffWith(ctx, paths, types.DiffOptions{})
 }
 
 func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types.Diff, error) {
@@ -1299,24 +1299,51 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			f.Coverage = &cov
 		}
 	}
-	var changes map[string]string
+	in := conformanceInput{minCohort: cfg.minCohort, minShare: cfg.minShare, patch: cfg.patch}
 	if cfg.baseline != nil {
 		if indexed {
-			changes = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
+			in.changes, in.removed = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
 		} else {
 			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
 		}
 	}
 	if indexed {
-		committed := func(path string) (string, bool) {
-			text, err := m.FileAt(ctx, "", path)
-			return text, err == nil
-		}
-		attachNaming(byPath, graph, changes, committed, m.declaredOutput(ctx))
+		m.conformance(ctx, &out, byPath, graph, paths, cfg, in)
 	}
 
 	out.SortForReading()
 	return out, nil
+}
+
+// conformance runs the conformance checks for diff, reporting in out.Notes whatever kept them
+// from running, and what they fell back to.
+func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[string]*types.DiffFile,
+	graph *knowledge.Graph, paths []string, cfg diffConfig, in conformanceInput,
+) {
+	if in.changes == nil {
+		if cfg.baseline != nil {
+			out.Notes = append(out.Notes, "conformance: the baseline could not be compared, so what the change adds was read from its patch, which cannot tell a re-signed symbol from an unchanged one")
+		}
+		if !cfg.patchGiven {
+			patch, err := m.WorkingDiff(ctx, paths)
+			if err != nil {
+				out.Notes = append(out.Notes, "conformance checks skipped: the working tree's patch could not be read: "+err.Error())
+				return
+			}
+			in.patch = patch
+		}
+	}
+	generated, err := m.generatedFiles(ctx, graph)
+	if err != nil {
+		out.Notes = append(out.Notes, "conformance checks skipped: generated files could not be classified: "+err.Error())
+		return
+	}
+	in.generated = generated
+	in.read = func(path string) (string, bool) {
+		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
+		return string(b), err == nil
+	}
+	attachConformance(byPath, graph, in)
 }
 
 // authorEditedProjects narrows a seed set to the projects a PERSON changed something in.

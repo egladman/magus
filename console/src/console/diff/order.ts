@@ -250,14 +250,14 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
     }
   }
 
-  const naming = (a.symbols ?? []).flatMap((s) => (s.naming ?? []).filter((n) => n.headline));
-  if (naming.length > 0) {
+  const checks = (a.symbols ?? []).flatMap((s) => s.checks ?? []);
+  if (checks.length > 0) {
     chips.push({
-      text: naming.length === 1 ? "naming" : `${naming.length} naming`,
+      text: checks.length === 1 ? "conformance" : `${checks.length} conformance`,
       tone: "info",
       title:
-        naming.map((n) => n.summary.replaceAll("`", "")).join(". ") +
-        ". Derived from how the rest of the workspace names the same shape: evidence, not a rule.",
+        checks.map((c) => (c.message ?? c.name).replaceAll("`", "")).join(". ") +
+        ". Derived from how the rest of the workspace declares the same kind of thing: evidence, not a rule.",
     });
   }
 

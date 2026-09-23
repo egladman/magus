@@ -161,48 +161,48 @@ type DiffSymbol struct {
 	// rendered no declaration.
 	Signature     string `json:"signature,omitempty"      yaml:"signature,omitempty"`
 	BaseSignature string `json:"base_signature,omitempty" yaml:"base_signature,omitempty"`
-	// Naming is how a symbol this change adds or re-signs sits against what the rest of the
-	// workspace calls the same shape of thing, best first. Empty when nothing disagrees.
-	Naming []DiffNaming `json:"naming,omitempty" yaml:"naming,omitempty"`
+	// Checks are what the conformance checks found about a symbol this change adds, renames or
+	// re-signs: each a fact about how the rest of the workspace declares the same kind of
+	// thing, with its counts, reported as CheckAdvice. Only findings that clear the checks' own
+	// bar appear, strongest first.
+	Checks []Check `json:"checks,omitempty" yaml:"checks,omitempty"`
 }
 
-// The DiffNaming checks. Each is derived from the workspace's own symbol index and never
-// declared, so a finding is evidence for the author to weigh rather than a rule to satisfy.
+// DiffOptions is what a review reads beyond its changed paths.
+type DiffOptions struct {
+	// Patch is the changeset's unified diff. Without a Baseline it is what tells a symbol the
+	// change adds from one it only edits, so a review of anything but the working tree passes
+	// its own; empty reads the working tree's.
+	Patch string `json:"-" yaml:"-"`
+	// Baseline is a `magus graph export --symbols` of the revision the change started from,
+	// which fills DiffSymbol.Change and Diff.API; BaselineLabel names it for the reader.
+	Baseline      *KnowledgeGraphOutput `json:"-" yaml:"-"`
+	BaselineLabel string                `json:"-" yaml:"-"`
+	// MinCohort and MinShare are the conformance checks' silence gates: how many declarations
+	// a norm needs, and the share that must agree. Zero takes 5 and 0.8.
+	MinCohort int     `json:"-" yaml:"-"`
+	MinShare  float64 `json:"-" yaml:"-"`
+}
+
+// The conformance checks, by Check.Name. Each derives its norm from the workspace's own symbol
+// index and never from a declared rule, so a finding is evidence for the author to weigh.
 const (
-	// DiffNamingAffix is a name that misses a word run most declarations of its shape carry:
-	// EntryPointFrom where 33 of 35 context readers end in FromContext.
-	DiffNamingAffix = "affix"
-	// DiffNamingBinding is a name the workspace already gives another meaning: a target, spell or
-	// other entity of that exact name, or a head word its other carriers use differently.
-	DiffNamingBinding = "binding"
-	// DiffNamingSize is an interface with far more methods than those declared beside it.
-	DiffNamingSize = "size"
+	// CheckNamingAffix is a name missing the word run (a leading or trailing pair of words)
+	// that most declarations of its shape sharing a word with it carry.
+	CheckNamingAffix = "naming-affix"
+	// CheckNameCollision is a top-level name that a target, spell, op, charm or diagnostic of
+	// the workspace already carries.
+	CheckNameCollision = "name-collision"
+	// CheckInterfaceSize is an interface with far more methods than those declared beside it.
+	// It needs a language whose index reports interface members.
+	CheckInterfaceSize = "interface-size"
+	// CheckRenameLeftover is a renamed symbol whose former name still appears in the files
+	// that reference it.
+	CheckRenameLeftover = "rename-leftover"
+	// CheckParamOrder is a function taking two parameters in the reverse of the order most
+	// functions in its scope that take both do.
+	CheckParamOrder = "param-order"
 )
-
-// DiffNaming is one observation about a changed symbol's name, with the evidence behind it.
-type DiffNaming struct {
-	// Check is one of the DiffNaming constants.
-	Check string `json:"check" yaml:"check"`
-	// Summary is the finding in one line.
-	Summary string `json:"summary" yaml:"summary"`
-	// Score is how strongly the workspace's own evidence disagrees with the name, from 0 to 1.
-	Score float64 `json:"score" yaml:"score"`
-	// Headline marks one of the few strongest findings of the change. The rest are ranked
-	// evidence, shown and never asserted.
-	Headline bool `json:"headline,omitempty" yaml:"headline,omitempty"`
-	// Pattern is the norm the evidence shows: `<X>FromContext`, `5 methods or fewer`, or the
-	// reused name.
-	Pattern string `json:"pattern" yaml:"pattern"`
-	// Shape is the declaration shape the norm was measured over, as the language's reader
-	// renders it; empty when the language reports none and families formed on kind alone.
-	Shape string `json:"shape,omitempty" yaml:"shape,omitempty"`
-	// Members of Cohort carry Pattern.
-	Members int `json:"members" yaml:"members"`
-	Cohort  int `json:"cohort"  yaml:"cohort"`
-	// Examples name a few that carry Pattern, Outliers a few that do not.
-	Examples []string `json:"examples,omitempty" yaml:"examples,omitempty"`
-	Outliers []string `json:"outliers,omitempty" yaml:"outliers,omitempty"`
-}
 
 // DiffChurn is how often this file has been changing, and whether that is accelerating.
 //

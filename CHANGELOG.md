@@ -8,11 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **`magus diff` flags a new name that breaks a convention the workspace already follows.**
-  Derived from the symbol index in any language: a two-word affix most same-shape
-  declarations share (`EntryPointFrom` beside 33 `<X>FromContext`), a type name already
-  meaning something else, an oversized interface. `DiffSymbol.naming` carries it to the
-  report, TUI, console, `--prompt` and the `conformance` advisor.
+- **`magus diff` reports where a changed symbol departs from how the workspace declares the
+  same kind of thing:** a missed naming pattern, a name a target already has, an oversized
+  interface, a rename's leftover old name, or reversed parameters. Each is a `Check` on
+  `DiffSymbol.checks` stating the workspace's own counts, gated by
+  `--conformance-min-cohort` and `--conformance-min-share`.
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
@@ -118,6 +118,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`types.DoctorCheck` is `types.Check`, and `DoctorCheckStatus` is `CheckStatus`** (with
+  `CheckOK`, `CheckFail` and `CheckAdvice`): a conformance finding is the same record. Go
+  names only; JSON keys and proto messages are unchanged. `magus\diff` gains `opts.from`,
+  reading a saved review, so the PR advisors compute one diff per run.
 - **magus never waits on another magus invocation.** A workspace lock or machine budget
   held by another invocation refuses immediately (exit 75), naming the holder.
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each

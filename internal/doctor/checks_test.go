@@ -72,9 +72,9 @@ func TestCacheYieldExemptsSkipCacheTargets(t *testing.T) {
 
 	got := r.checkCacheYield(projects)
 
-	assert.Equal(t, types.DoctorCheck{
+	assert.Equal(t, types.Check{
 		Name:    "cache-yield",
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: "no target is running uncached (1 declared skip_cache)",
 	}, got, "the charm suffix must not defeat the policy lookup, and the exemption stays visible")
 }
@@ -94,7 +94,7 @@ func TestCacheYieldStillReportsUndeclaredTargets(t *testing.T) {
 
 	got := r.checkCacheYield(projects)
 
-	require.Equal(t, types.DoctorFail, got.Status)
+	require.Equal(t, types.CheckFail, got.Status)
 	require.Len(t, got.Details, 2, "one finding plus the advice line")
 	assert.Contains(t, got.Details[0], "docs build: 9 runs, 0 cached")
 	assert.NotContains(t, strings.Join(got.Details, "\n"), "generate",
@@ -111,7 +111,7 @@ func TestCacheYieldAdviceNamesBothCauses(t *testing.T) {
 	r := &runner{root: dir, ws: stubWorkspace{}}
 	got := r.checkCacheYield(nil)
 
-	require.Equal(t, types.DoctorFail, got.Status)
+	require.Equal(t, types.CheckFail, got.Status)
 	advice := got.Details[len(got.Details)-1]
 	assert.Contains(t, advice, "wider than it reads", "the footprint cause")
 	assert.Contains(t, advice, "volatile state", "the version-stamp cause")
@@ -171,9 +171,9 @@ func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(repo)})
 
-	assert.Equal(t, types.DoctorCheck{
+	assert.Equal(t, types.Check{
 		Name:    "dead-output-globs",
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: "no dead output globs",
 	}, got, "a committed generated tree is not evidence the project was built")
 }
@@ -189,7 +189,7 @@ func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
 
-	assert.Equal(t, types.DoctorFail, got.Status)
+	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Equal(t,
 		[]string{`console: output glob "dist/**" matched no files while the project's other outputs did`},
 		got.Details,
@@ -207,7 +207,7 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(dir)})
 
-	assert.Equal(t, types.DoctorFail, got.Status)
+	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Equal(t,
 		[]string{`console: output glob "gen/**" matched no files while the project's other outputs did`},
 		got.Details)
@@ -227,7 +227,7 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"format":   {{Glob: "gen/**"}},
 			},
 		}})
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Equal(t,
 			[]string{`docs: output glob "gen/**" is declared by format and generate`},
 			got.Details, "owners are sorted so the message is stable")
@@ -241,9 +241,9 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"build-mermaid": {{Glob: "gen/assets/mermaid.js"}},
 			},
 		}})
-		assert.Equal(t, types.DoctorCheck{
+		assert.Equal(t, types.Check{
 			Name:    "output-ownership",
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: "every declared output has one owning target",
 		}, got, "distinct globs are not an overlap, even nested ones")
 	})
@@ -255,7 +255,7 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"generate": {{Glob: "gen/**"}, {Glob: "gen/**"}},
 			},
 		}})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 	})
 }
 
@@ -303,7 +303,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		root := t.TempDir()
 		t.Setenv("PATH", t.TempDir()) // empty: no magus anywhere
 		c := checkGuardWiring(context.Background(), root, testProbeBudget)
-		require.Equal(t, types.DoctorFail, c.Status)
+		require.Equal(t, types.CheckFail, c.Status)
 		assert.Contains(t, c.Message, "no ./magus and no magus on PATH")
 	})
 
@@ -312,7 +312,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeGuardProbeStub(t, root, "#!/bin/sh\nexit 0\n")
 
 		c := checkGuardWiring(context.Background(), root, testProbeBudget)
-		require.Equal(t, types.DoctorFail, c.Status)
+		require.Equal(t, types.CheckFail, c.Status)
 		assert.Contains(t, c.Message, "did not return a deny")
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, joined, "rebuild: magus run build .")
@@ -323,7 +323,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeGuardProbeStub(t, root, denyingProbeStub)
 
 		c := checkGuardWiring(context.Background(), root, testProbeBudget)
-		require.Equal(t, types.DoctorAdvice, c.Status)
+		require.Equal(t, types.CheckAdvice, c.Status)
 		assert.Contains(t, c.Message, "no harness descriptor found")
 		assert.Contains(t, strings.Join(c.Details, "\n"), "magus\\harness.provider")
 	})
@@ -334,7 +334,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeCheckpointHarness(t, root, guardedHarnessConfig())
 
 		c := checkGuardWiring(context.Background(), root, testProbeBudget, "test-host")
-		require.Equal(t, types.DoctorOK, c.Status)
+		require.Equal(t, types.CheckOK, c.Status)
 		assert.Contains(t, c.Details, filepath.Join(root, "host", "hooks.json"))
 	})
 
@@ -344,7 +344,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
 		c := checkGuardWiring(context.Background(), root, testProbeBudget, "test-host")
-		require.Equal(t, types.DoctorFail, c.Status)
+		require.Equal(t, types.CheckFail, c.Status)
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, c.Message, "harness wiring is incomplete")
 		assert.Contains(t, joined, "missing managed entry")
@@ -363,9 +363,9 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "evals", NoLanguage: "polyglot harness; no single pack describes it"},
 			{Path: "api", Spell: "go"},
 		})
-		assert.Equal(t, types.DoctorCheck{
+		assert.Equal(t, types.Check{
 			Name:    "language-coverage",
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: "every project matched a spell or declared no_language (1 exempt)",
 		}, got)
 	})
@@ -375,7 +375,7 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "evals", NoLanguage: "polyglot harness; no single pack describes it"},
 			{Path: "forgot-the-import"},
 		})
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		assert.Equal(t, []string{"forgot-the-import"}, got.Details)
 	})
 }
@@ -497,7 +497,7 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	got := r.checkSelfStalingOutputs(nil)
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.True(t,
 		strings.Contains(got.Message, "skipped") ||
 			strings.Contains(got.Message, "no VCS") ||
@@ -554,7 +554,7 @@ func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
-	require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
+	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
 	assert.Equal(t, []string{".golangci.yml"}, got.Details,
 		"main.go is declared, and the untracked coverage.out is a different problem")
 	assert.Contains(t, got.Message, "MGS1028")
@@ -570,7 +570,7 @@ func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
-	assert.NotEqual(t, types.DoctorFail, got.Status, "this check must never gate a build")
+	assert.NotEqual(t, types.CheckFail, got.Status, "this check must never gate a build")
 }
 
 // TestUndeclaredSeedingFilesClearsOnceDeclared is the other half of the fix line:
@@ -584,7 +584,7 @@ func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{p})
 
-	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 }
 
 // TestUndeclaredSeedingFilesWithoutVCS degrades rather than guesses: with nothing to
@@ -596,7 +596,7 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
-	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 }
 
 // TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs is MGS1029: the expansion
@@ -611,7 +611,7 @@ func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 
 	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
 
-	require.Equal(t, types.DoctorFail, got.Status, got.Message)
+	require.Equal(t, types.CheckFail, got.Status, got.Message)
 	require.Len(t, got.Details, 1, "only the glob reaching into gen/ is unmatchable")
 	assert.Contains(t, got.Details[0], "proto/gen/*.binpb")
 	assert.Contains(t, got.Details[0], `prunes "gen"`)
@@ -631,7 +631,7 @@ func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
 
 	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
 
-	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	assert.Empty(t, got.Details)
 }
 
@@ -643,7 +643,7 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills()
 
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "skipped")
 	})
 
@@ -653,7 +653,7 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills()
 
-		require.Equal(t, types.DoctorAdvice, got.Status)
+		require.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, strings.Join(got.Details, "\n"), "magus agent install")
 		assert.Empty(t, got.Fix, "install into WHICH directory is the developer's choice, so there is nothing to apply")
 	})
@@ -669,7 +669,7 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills()
 
-		require.Equal(t, types.DoctorFail, got.Status)
+		require.Equal(t, types.CheckFail, got.Status)
 		assert.Equal(t, []string{"agent", "harness", "install", "--id", "test-host"}, got.Fix)
 	})
 }
@@ -686,7 +686,7 @@ func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
 
-	require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
+	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
 	assert.Equal(t, []string{"libs/leaf/MAGUS.md is libs/leaf's output and .'s source"}, got.Details)
 }
 
@@ -700,7 +700,7 @@ func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
 
-	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 }
 
 // A pattern output is not reported, which is the decidability line MGS4002 draws: whether two globs
@@ -714,7 +714,7 @@ func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
 
-	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 }
 
 // loadOneEvent puts a single event into the session store for root, dated at.
@@ -737,7 +737,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 
 		got := (&runner{root: t.TempDir()}).checkSessionLoad()
 
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, got.Message, "has ever been loaded")
 		assert.Contains(t, got.Details[len(got.Details)-1], "magus session load")
 	})
@@ -749,7 +749,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 
 		got := (&runner{root: root}).checkSessionLoad()
 
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, got.Message, "30 days old")
 	})
 
@@ -760,7 +760,7 @@ func TestCheckSessionLoadStates(t *testing.T) {
 
 		got := (&runner{root: root}).checkSessionLoad()
 
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 	})
 }
 
@@ -823,7 +823,7 @@ func TestSameStepWritesCheck(t *testing.T) {
 
 	t.Run("an unordered reader fails", func(t *testing.T) {
 		got := r.checkSameStepWrites([]*types.Project{sameStepFixture(false)})
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		require.Len(t, got.Details, 1)
 		assert.Equal(t,
 			`root: ci runs . coverage-badge, which reads "**/*.go", alongside . mocks-generate, which writes "**/mocks/*.go", and needs neither from the other (refused at run time)`,
@@ -833,9 +833,9 @@ func TestSameStepWritesCheck(t *testing.T) {
 
 	t.Run("the ctx.needs edge silences it", func(t *testing.T) {
 		got := r.checkSameStepWrites([]*types.Project{sameStepFixture(true)})
-		assert.Equal(t, types.DoctorCheck{
+		assert.Equal(t, types.Check{
 			Name:    "same-step-writes",
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: "no composed target runs a reader and a writer of the same files unordered",
 		}, got)
 	})
@@ -846,12 +846,12 @@ func TestSameStepWritesCheck(t *testing.T) {
 		// whole-project over-approximation, and an overlap through a guess is not a
 		// finding a FAIL may rest on.
 		p.TargetInputs = nil
-		assert.Equal(t, types.DoctorOK, r.checkSameStepWrites([]*types.Project{p}).Status)
+		assert.Equal(t, types.CheckOK, r.checkSameStepWrites([]*types.Project{p}).Status)
 	})
 
 	t.Run("a project with no composed target is not a project with no answer", func(t *testing.T) {
 		got := r.checkSameStepWrites([]*types.Project{{Path: "docs", Name: "docs"}})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 	})
 }
 
@@ -887,7 +887,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
 			spells.Tool{Probe: probe, Observe: probe}))
 
-		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		require.Equal(t, types.CheckFail, got.Status, got.Message)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "govulncheck -version")
 		assert.Contains(t, got.Message, "MGS1037")
@@ -903,7 +903,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 			Observe: spells.Command{Bin: "trivy", Args: []string{"version", "--format", "json"}},
 		}))
 
-		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 
 	t.Run("same command with a key -> ok", func(t *testing.T) {
@@ -913,7 +913,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 			Probe: probe, Observe: probe, Key: spells.VersionKey{UpTo: spells.VersionPatch},
 		}))
 
-		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 
 	t.Run("observe with no probe -> ok", func(t *testing.T) {
@@ -924,13 +924,13 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
 			spells.Tool{Observe: probe}))
 
-		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 }
 
 func TestCheckJSONCodec(t *testing.T) {
 	got := (&runner{}).checkJSONCodec()
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.True(t, strings.HasPrefix(got.Message, "encoding/json "), got.Message)
 }
 
@@ -945,13 +945,13 @@ func (g graphStubWorkspace) Graph() (*types.Graph, error) { return nil, g.err }
 
 func TestCheckGraphCycles(t *testing.T) {
 	ok := (&runner{ws: graphStubWorkspace{}}).checkGraphCycles()
-	assert.Equal(t, types.DoctorOK, ok.Status)
+	assert.Equal(t, types.CheckOK, ok.Status)
 	assert.Equal(t, "no cycles detected", ok.Message)
 
 	// The graph builder is what detects a cycle, so its error IS the finding and has
 	// to reach the report rather than being replaced with a generic message.
 	bad := (&runner{ws: graphStubWorkspace{err: errors.New("cycle: a -> b -> a")}}).checkGraphCycles()
-	assert.Equal(t, types.DoctorFail, bad.Status)
+	assert.Equal(t, types.CheckFail, bad.Status)
 	assert.Equal(t, "cycle: a -> b -> a", bad.Message)
 }
 
@@ -960,19 +960,19 @@ func TestCheckGraphCycles(t *testing.T) {
 func TestCheckConcurrencySizing(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "4")
 
-	sized := func(n int) types.DoctorCheck {
+	sized := func(n int) types.Check {
 		return (&runner{opts: options{cfg: config.Config{Concurrency: n}}}).checkConcurrencySizing()
 	}
 
 	t.Run("unset", func(t *testing.T) {
 		got := sized(0)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "unset; sized to this machine (4)")
 	})
 
 	t.Run("matches the machine", func(t *testing.T) {
 		got := sized(4)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "4, which is what this machine sizes to")
 	})
 
@@ -980,7 +980,7 @@ func TestCheckConcurrencySizing(t *testing.T) {
 	// cannot tell it apart from a stale one.
 	t.Run("undersized", func(t *testing.T) {
 		got := sized(2)
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, got.Message, "undersized")
 		assert.Contains(t, got.Message, "leaves capacity idle")
 		assert.Equal(t, []string{"config", "set", "key=concurrency,value=4"}, got.Fix)
@@ -990,7 +990,7 @@ func TestCheckConcurrencySizing(t *testing.T) {
 	// points at the cause.
 	t.Run("oversized", func(t *testing.T) {
 		got := sized(16)
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, got.Message, "oversized")
 		assert.Contains(t, got.Message, "contend rather than finish sooner")
 		assert.Equal(t, []string{"config", "set", "key=concurrency,value=4"}, got.Fix)
@@ -1002,7 +1002,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 
 	t.Run("no daemon", func(t *testing.T) {
 		got := (&runner{}).checkWorkspaceRegistration()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "no loaded workspaces in daemon", got.Message)
 	})
 
@@ -1024,7 +1024,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}, {Root: "/other", LastAccess: loaded}},
 		}}}
 		got := r.checkWorkspaceRegistration()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "loaded in daemon")
 		assert.Contains(t, got.Message, "(2 workspace(s) total)")
 		require.Len(t, got.Details, 2)
@@ -1040,7 +1040,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 			Workspaces: []LoadedWorkspace{{Root: "/elsewhere", LastAccess: loaded}},
 		}}}
 		got := r.checkWorkspaceRegistration()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "not yet loaded in daemon")
 	})
 
@@ -1089,21 +1089,21 @@ func TestIsSocketAlive(t *testing.T) {
 func TestCheckStaleSockets(t *testing.T) {
 	t.Run("no socket directory configured", func(t *testing.T) {
 		got := (&runner{}).checkStaleSockets()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "no socket directory", got.Message)
 	})
 
 	t.Run("socket directory does not exist", func(t *testing.T) {
 		r := &runner{opts: options{daemonInfo: &DaemonInfo{SockDir: filepath.Join(t.TempDir(), "absent")}}}
 		got := r.checkStaleSockets()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "no socket directory", got.Message)
 	})
 
 	t.Run("empty directory", func(t *testing.T) {
 		r := &runner{opts: options{daemonInfo: &DaemonInfo{SockDir: t.TempDir()}}}
 		got := r.checkStaleSockets()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "0 live socket(s)", got.Message)
 	})
 
@@ -1118,7 +1118,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "magus-dir.sock"), 0o755))
 
 		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "2 stale socket(s)", got.Message)
 		require.Len(t, got.Details, 2)
 		for _, d := range got.Details {
@@ -1133,7 +1133,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "magus-b.sock"))
 
 		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "multiple daemons running")
 		require.Len(t, got.Details, 2)
 		for _, d := range got.Details {
@@ -1150,7 +1150,7 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
 
 		got := (&runner{opts: options{daemonInfo: &DaemonInfo{SockDir: dir}}}).checkStaleSockets()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "1 live socket(s)", got.Message)
 	})
 }
@@ -1163,13 +1163,13 @@ func TestCheckStaleShadowAcks(t *testing.T) {
 
 	t.Run("nothing acknowledged", func(t *testing.T) {
 		got := (&runner{}).checkStaleShadowAcks()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "no allow_shadow entries", got.Message)
 	})
 
 	t.Run("workspace not loaded", func(t *testing.T) {
 		got := (&runner{opts: options{cfg: acks}}).checkStaleShadowAcks()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "workspace not loaded", got.Message)
 	})
 
@@ -1178,7 +1178,7 @@ func TestCheckStaleShadowAcks(t *testing.T) {
 	t.Run("every ack is stale", func(t *testing.T) {
 		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}, opts: options{cfg: acks}}
 		got := r.checkStaleShadowAcks()
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "2 allow_shadow entr(ies) no longer match a real shadow")
 		require.Len(t, got.Details, 2)
 		// Sorted, so the report does not reorder between runs over the same config.
@@ -1249,7 +1249,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		touchAt(t, bin, now.Add(-time.Hour))
 
 		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "stale rules")
 		require.Len(t, got.Details, 3)
 		assert.Contains(t, got.Details[1], filepath.FromSlash("main.go"))
@@ -1265,7 +1265,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		touchAt(t, bin, now)
 
 		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "hook would run ./magus")
 	})
 
@@ -1278,7 +1278,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		t.Setenv("PATH", dir)
 
 		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "no ./magus built")
 		assert.Contains(t, got.Message, fake)
 	})
@@ -1286,7 +1286,7 @@ func TestCheckGuardBinary(t *testing.T) {
 	t.Run("no binary anywhere", func(t *testing.T) {
 		withoutPathMagus(t)
 		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "a guard hook is unenforced")
 		assert.Equal(t, []string{"build one: magus run build ."}, got.Details)
 	})
@@ -1299,7 +1299,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		plant(t, root, "magus", "not a binary\n")
 
 		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "no ./magus and no magus on PATH")
 	})
 }
@@ -1469,7 +1469,7 @@ func TestCheckObserverRecording(t *testing.T) {
 	// people to ignore the check.
 	t.Run("nothing recorded", func(t *testing.T) {
 		got := (&runner{root: t.TempDir()}).checkObserverRecording()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "no agent activity recorded yet")
 	})
 
@@ -1481,7 +1481,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.write", observerMinSample-1)
 
 		got := (&runner{root: root}).checkObserverRecording()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "too few to judge")
 		assert.Contains(t, got.Message, strconv.Itoa(observerMinSample-1)+" observation(s)")
 	})
@@ -1494,7 +1494,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "shell.command", 40)
 
 		got := (&runner{root: root}).checkObserverRecording()
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "NOT ONE read")
 		require.NotEmpty(t, got.Details)
 		assert.Contains(t, got.Details[0], "writes: 20")
@@ -1510,7 +1510,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.write", 60)
 
 		got := (&runner{root: root}).checkObserverRecording()
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, got.Message, "too sparse to explain a change")
 		assert.Contains(t, got.Message, "5 read(s) against 60 write(s)")
 	})
@@ -1521,7 +1521,7 @@ func TestCheckObserverRecording(t *testing.T) {
 		observe(t, root, "file.write", 10)
 
 		got := (&runner{root: root}).checkObserverRecording()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "recording: 60 read(s), 10 write(s)")
 	})
 }

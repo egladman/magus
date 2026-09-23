@@ -44,7 +44,7 @@ func TestRetryDeclarationsReportsRetriesThatRescueNothing(t *testing.T) {
 		}),
 	})
 
-	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "retried 4 recorded failure(s) and rescued none")
 	assert.Contains(t, got.Details[0], "the suite shares a port with the dev server",
@@ -60,7 +60,7 @@ func TestRetryDeclarationsIsQuietWhenARetryRescuedARun(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -71,7 +71,7 @@ func TestRetryDeclarationsWaitsForEnoughRetries(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -88,7 +88,7 @@ func TestRetryDeclarationsIgnoresFailuresThatWereNeverRetried(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {RetryOnVolatile: true}}),
 	})
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -99,6 +99,6 @@ func TestRetryDeclarationsIsQuietWithoutADeclaration(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {}}),
 	})
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "no target declares retry_on_volatile")
 }

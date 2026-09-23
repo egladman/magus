@@ -25,7 +25,7 @@ func TestCheckGuardBinaryAdvisesWhenAWiredCommandNamesAMissingOwnBinary(t *testi
 
 	got := (&runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}).checkGuardBinary()
 
-	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "cannot launch in a live session")
 	assert.Contains(t, got.Details[0], filepath.FromSlash("host/hooks.json"))
 }
@@ -40,7 +40,7 @@ func TestCheckGuardBinaryPassesWhenAWiredCommandNamesTheBareBinary(t *testing.T)
 
 	got := (&runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}).checkGuardBinary()
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "no ./magus built")
 }
 

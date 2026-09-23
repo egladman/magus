@@ -235,16 +235,12 @@ test("no churn data renders no churn chip", () => {
   assert.equal(chips.filter((c) => c.text.includes("commit")).length, 0);
 });
 
-// Ranked evidence stays in `magus diff -o json`; only a headline earns a chip.
-test("a naming headline earns a chip and weaker evidence does not", () => {
-  const naming = (headline: boolean, summary: string) => ({
-    check: "affix",
-    summary,
-    score: headline ? 0.67 : 0.3,
-    headline,
-    pattern: "<X>FromContext",
-    members: 8,
-    cohort: 9,
+test("conformance checks on a symbol earn one chip carrying each message", () => {
+  const check = (name: string, message: string) => ({
+    name,
+    status: "advice",
+    message,
+    evidence: "inferred",
   });
   const chips = riskChips(
     ann("trail.go", {
@@ -255,20 +251,22 @@ test("a naming headline earns a chip and weaker evidence does not", () => {
           ref_count: 0,
           file_count: 0,
           external_file_count: 0,
-          naming: [
-            naming(true, "`EntryPointFrom`: 8 of 9 functions are named `<X>FromContext`"),
-            naming(false, "a weaker guess"),
+          checks: [
+            check("naming-affix", "`EntryPointFrom`: 8 of 9 functions are named `<X>FromContext`"),
+            check("param-order", "`EntryPointFrom` takes `b` before `a`"),
           ],
         },
       ],
     }),
   );
-  const chip = chips.find((c) => c.text === "naming");
-  assert.ok(chip, "the headline is shown");
-  assert.match(chip.title, /^EntryPointFrom: 8 of 9 functions are named <X>FromContext\. /);
-  assert.doesNotMatch(chip.title, /weaker guess/);
+  const chip = chips.find((c) => c.text === "2 conformance");
+  assert.ok(chip, "both findings are counted");
+  assert.match(
+    chip.title,
+    /^EntryPointFrom: 8 of 9 functions are named <X>FromContext\. EntryPointFrom takes b before a\. /,
+  );
   assert.equal(
-    riskChips(ann("quiet.go", { symbols: [] })).find((c) => c.text === "naming"),
+    riskChips(ann("quiet.go", { symbols: [] })).find((c) => c.text.endsWith("conformance")),
     undefined,
   );
 });

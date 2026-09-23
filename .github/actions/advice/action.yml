@@ -178,14 +178,16 @@ inputs:
     description: >
       A `magus graph export --symbols -o json` of the revision this pull request started
       from, which api-surface reads to say what each changed symbol did to the API and the
-      smallest semver bump that proves.
+      smallest semver bump that proves, and conformance reads to tell a symbol the change
+      adds, renames or re-signs from one it only edits.
 
       Signatures are compared as the indexer rendered them, so the base must be indexed with
       the same indexers as the head, and ideally in the same checkout: two environments
       render one declaration differently and every difference reads as a changed signature.
 
       Without it api-surface reports who can see the change and claims no bump, which is
-      what it did before a baseline was possible.
+      what it did before a baseline was possible, and conformance reads what is new from the
+      patch, compares no re-signed symbol, and says so under its findings.
     required: false
     default: ''
   pr-number:
@@ -334,6 +336,26 @@ runs:
         PR_BASE: ${{ inputs.base-ref }}
         PR_HEAD_SHA: ${{ inputs.head-sha }}
       run: magus buzz "$GITHUB_ACTION_PATH/skip-cache.buzz"
+
+    # One review for every advisor that reads it: conformance and api-surface would otherwise
+    # each compute the same `magus diff`. advice\review reads ADVICE_REVIEW when it is set.
+    - name: Read the change once for the advisors that review it
+      if: inputs.pr-number != '' && (inputs.conformance == 'true' || inputs.api-surface == 'true')
+      shell: bash
+      env:
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+        BASELINE: ${{ inputs.baseline }}
+        MIN_COHORT: ${{ inputs.conformance-min-cohort }}
+        MIN_SHARE: ${{ inputs.conformance-min-share }}
+      run: |
+        set -euo pipefail
+        git fetch --no-tags origin "+refs/heads/$PR_BASE:refs/remotes/origin/$PR_BASE"
+        args=(--generated --rev "origin/$PR_BASE...$PR_HEAD_SHA")
+        args+=(--conformance-min-cohort "$MIN_COHORT" --conformance-min-share "$MIN_SHARE")
+        if [ -n "$BASELINE" ]; then args+=(--baseline "$BASELINE"); fi
+        magus diff "${args[@]}" -o json --tee "$RUNNER_TEMP/advice-review.json" -q > /dev/null
+        echo "ADVICE_REVIEW=$RUNNER_TEMP/advice-review.json" >> "$GITHUB_ENV"
 
     - name: Advise on a target or symbol name that diverges from the workspace
       if: inputs.conformance == 'true'

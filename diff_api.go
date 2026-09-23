@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 )
@@ -15,6 +17,10 @@ import (
 type diffConfig struct {
 	baseline      *types.KnowledgeGraphOutput
 	baselineLabel string
+	patch         string
+	patchGiven    bool
+	minCohort     int
+	minShare      float64
 }
 
 // DiffAgainst is [Magus.Diff] compared against base, a `magus graph export --symbols` of the
@@ -26,7 +32,19 @@ type diffConfig struct {
 // as a changed signature. A base with no symbol nodes, one exported before signatures were
 // recorded, or a head with no symbol index is reported in Diff.Notes and leaves API nil.
 func (m *Magus) DiffAgainst(ctx context.Context, paths []string, base types.KnowledgeGraphOutput, label string) (types.Diff, error) {
-	return m.diff(ctx, paths, diffConfig{baseline: &base, baselineLabel: label})
+	return m.DiffWith(ctx, paths, types.DiffOptions{Baseline: &base, BaselineLabel: label})
+}
+
+// DiffWith is [Magus.Diff] with the options [types.DiffOptions] describes: the changeset's own
+// patch, a baseline to compare against, and the conformance checks' silence gates. A review of
+// anything but the working tree passes its patch, since without a baseline the patch is what
+// says which symbols the change adds; with neither, the working tree's patch is read.
+func (m *Magus) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+	return m.diff(ctx, paths, diffConfig{
+		baseline: opts.Baseline, baselineLabel: opts.BaselineLabel,
+		patch: opts.Patch, patchGiven: opts.Patch != "",
+		minCohort: opts.MinCohort, minShare: opts.MinShare,
+	})
 }
 
 // symbolDef is a symbol node that a file in the workspace defines.
@@ -74,21 +92,23 @@ type externalsFunc func(g *knowledge.Graph, symbolID, owner string) ([]string, i
 
 // attachAPIDelta classifies every symbol the changeset's files define on either side against
 // base, attaches the public ones to their files, and sets out.API. It returns every symbol's
-// DiffChange by ID, public or not, or nil when the baseline could not be compared.
-func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) map[string]string {
+// DiffChange by ID, public or not, and the base's nodes for the symbols the changed files no
+// longer define; both are nil when the baseline could not be compared.
+func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *knowledge.Graph, cfg diffConfig, externals externalsFunc) (map[string]string, []types.KnowledgeNode) {
 	baseOut := *cfg.baseline
 	if baseOut.SchemaVersion < 14 {
 		out.Notes = append(out.Notes, fmt.Sprintf(
 			"API delta skipped: the baseline %s is knowledge schema %d, which predates recorded signatures; export it again with this magus",
 			cfg.baselineLabel, baseOut.SchemaVersion))
-		return nil
+		return nil, nil
 	}
 	baseDefs := definedSymbols(baseOut.Nodes)
 	if len(baseDefs) == 0 {
 		out.Notes = append(out.Notes, "API delta skipped: the baseline "+cfg.baselineLabel+
 			" carries no symbols; export it with `magus graph export --symbols`")
-		return nil
+		return nil, nil
 	}
+	var removed []types.KnowledgeNode
 	base := knowledge.NewGraph()
 	base.Merge(baseOut.Nodes, baseOut.Links)
 	headDefs := definedSymbols(head.Nodes())
@@ -169,6 +189,7 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 			continue
 		}
 		record(f, base, def, types.DiffChangeRemoved, "", def.node.Attrs[knowledge.AttrSignature])
+		removed = append(removed, def.node)
 	}
 
 	api.Floor = types.DiffBumpNone
@@ -190,107 +211,193 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 			"API delta: %d symbol(s) in changed files had no readable definition lines on one side, so an edit to their bodies is not counted",
 			unmeasured))
 	}
-	return classified
+	return classified, removed
 }
 
-// attachNaming sets Naming on each symbol the change adds or re-signs, appending the symbol to
-// its file when the review did not list it: a new helper has no referents yet, and its name is
-// exactly what is worth a second look.
+// conformanceInput is what attachConformance reads beyond the head graph.
+type conformanceInput struct {
+	// changes and removed are attachAPIDelta's answer, nil without a baseline.
+	changes map[string]string
+	removed []types.KnowledgeNode
+	// patch is the changeset's unified diff, which says what is new when there is no baseline.
+	patch     string
+	generated map[string]bool
+	read      func(path string) (string, bool)
+	minCohort int
+	minShare  float64
+}
+
+// attachConformance runs the conformance checks over the symbols the change adds, renames or
+// re-signs, and sets Checks on each symbol with a finding, appending it to its file when the
+// review did not list it: a new helper has no referents yet, and it is exactly what is worth a
+// second look.
 //
-// changes is attachAPIDelta's classification. Without one, a symbol counts as added when the
-// committed copy of its file never mentions its name, and a re-signed symbol goes undetected.
-// A range review whose head is already committed therefore finds nothing new: silence, never a
-// finding about an established name.
-func attachNaming(byPath map[string]*types.DiffFile, head *knowledge.Graph, changes map[string]string,
-	committed func(path string) (string, bool), generated func(path string) bool,
-) {
+// With a baseline, attachAPIDelta's classification says what is new, and a removed symbol pairs
+// with an added one in the same file as a rename when its rendered signature, renamed, is the
+// new one's. Without one the patch says it: a symbol is new when its definition line is an
+// added line and no removed line in the patch names it (a moved or re-signed symbol is not new),
+// and it was renamed from the name a removed line of its file spells where it now reads its own.
+func attachConformance(byPath map[string]*types.DiffFile, head *knowledge.Graph, in conformanceInput) {
 	defs := definedSymbols(head.Nodes())
-	type blob struct {
-		text string
-		ok   bool
-	}
-	blobs := map[string]blob{}
 	var subjects []string
 	introduced := map[string]bool{}
+	renamed := map[string]string{}
+	var pf patchFacts
+	if in.changes == nil {
+		pf = readPatchFacts(in.patch)
+	}
 	for _, id := range slices.Sorted(maps.Keys(defs)) {
 		def := defs[id]
 		f, ok := byPath[def.path]
 		if !ok || f.Generated() {
 			continue
 		}
-		change := changes[id]
-		if changes == nil {
-			b, seen := blobs[def.path]
-			if !seen {
-				b.text, b.ok = committed(def.path)
-				blobs[def.path] = b
+		if in.changes != nil {
+			switch in.changes[id] {
+			case types.DiffChangeAdded:
+				introduced[id] = true
+				subjects = append(subjects, id)
+			case types.DiffChangeSignature:
+				subjects = append(subjects, id)
 			}
-			if !b.ok || !mentions(b.text, def.node.Label) {
-				change = types.DiffChangeAdded
-			}
+			continue
 		}
-		switch change {
-		case types.DiffChangeAdded:
-			introduced[id] = true
-			subjects = append(subjects, id)
-		case types.DiffChangeSignature:
-			subjects = append(subjects, id)
+		label := def.node.Label
+		text, added := pf.added[def.path][sourceLine(def.node.Source)]
+		if !added || knowledge.IndexIdentifier(pf.removedText, label) >= 0 {
+			continue
+		}
+		introduced[id] = true
+		subjects = append(subjects, id)
+		if old := knowledge.RenamedFrom(text, label, pf.removed[def.path]); old != "" {
+			renamed[id] = old
 		}
 	}
-	found := head.Naming(knowledge.NamingChange{
-		Subjects:   subjects,
-		Introduced: func(id string) bool { return introduced[id] },
-		Generated:  generated,
+	if in.changes != nil {
+		pairRenames(defs, in.changes, in.removed, renamed)
+	}
+	found := head.Conformance(knowledge.ConformanceChange{
+		Subjects: subjects, Introduced: introduced, Generated: in.generated, Renamed: renamed,
+		Read: in.read, MinCohort: in.minCohort, MinShare: in.minShare,
 	})
 	for _, id := range slices.Sorted(maps.Keys(found)) {
-		def := defs[id]
+		def, ok := defs[id]
 		f := byPath[def.path]
+		if !ok || f == nil {
+			continue
+		}
 		i := slices.IndexFunc(f.Symbols, func(s types.DiffSymbol) bool { return s.ID == id })
 		if i < 0 {
+			change := in.changes[id]
+			if in.changes == nil && introduced[id] {
+				change = types.DiffChangeAdded
+			}
 			f.Symbols = append(f.Symbols, types.DiffSymbol{
-				ID: id, Label: def.node.Label, Change: changes[id], Qualified: qualifiedName(id, def.node.Label),
+				ID: id, Label: def.node.Label, Change: change, Qualified: qualifiedName(id, def.node.Label),
 				Signature: def.node.Attrs[knowledge.AttrSignature],
 			})
 			i = len(f.Symbols) - 1
 		}
-		f.Symbols[i].Naming = found[id]
+		f.Symbols[i].Checks = found[id]
 	}
 }
 
-// declaredOutput returns a memoized test for whether a path is a declared target output, the
-// language-neutral mark of generated code.
-func (m *Magus) declaredOutput(ctx context.Context) func(path string) bool {
-	memo := map[string]bool{}
-	return func(path string) bool {
-		if v, ok := memo[path]; ok {
-			return v
-		}
-		entries, err := m.ClassifyFiles(ctx, []string{path})
-		v := err == nil && len(entries) == 1 && entries[0].Role == types.DiffRoleOutput
-		memo[path] = v
-		return v
-	}
-}
-
-// mentions reports whether text holds name as a whole identifier.
-func mentions(text, name string) bool {
-	if name == "" {
-		return false
-	}
-	identByte := func(b byte) bool {
-		return b == '_' || b == '$' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
-	}
-	for from := 0; ; {
-		i := strings.Index(text[from:], name)
+// pairRenames records, for each symbol a baseline classified as removed, the added symbol in the
+// same file that is it renamed: its ID and rendered signature with the old name swapped for the
+// new one. An ambiguous pairing is left out rather than guessed.
+func pairRenames(defs map[string]symbolDef, changes map[string]string, removed []types.KnowledgeNode, renamed map[string]string) {
+	for _, r := range removed {
+		i := strings.LastIndex(r.ID, r.Label)
 		if i < 0 {
-			return false
+			continue
 		}
-		start, end := from+i, from+i+len(name)
-		if (start == 0 || !identByte(text[start-1])) && (end == len(text) || !identByte(text[end])) {
-			return true
+		var match string
+		for id, def := range defs {
+			if changes[id] != types.DiffChangeAdded || id != r.ID[:i]+def.node.Label+r.ID[i+len(r.Label):] {
+				continue
+			}
+			sig, baseSig := def.node.Attrs[knowledge.AttrSignature], r.Attrs[knowledge.AttrSignature]
+			if strings.ReplaceAll(baseSig, r.Label, def.node.Label) != sig {
+				continue
+			}
+			if match != "" {
+				match = ""
+				break
+			}
+			match = id
 		}
-		from = start + 1
+		if match != "" {
+			renamed[match] = r.Label
+		}
 	}
+}
+
+// patchFacts is what a unified diff says about which lines are new.
+type patchFacts struct {
+	// added maps a file to its added lines, by new-side line number.
+	added map[string]map[int]string
+	// removed holds each file's removed lines; removedText is every removed line of the patch.
+	removed     map[string][]string
+	removedText string
+}
+
+func readPatchFacts(patch string) patchFacts {
+	pf := patchFacts{added: map[string]map[int]string{}, removed: map[string][]string{}}
+	var all strings.Builder
+	for _, f := range changeset.Parse(patch) {
+		for _, h := range f.Hunks {
+			for _, r := range h.Rows {
+				switch {
+				case r.Kind == changeset.KindAdd && r.NewLine != nil:
+					if pf.added[f.Path] == nil {
+						pf.added[f.Path] = map[int]string{}
+					}
+					pf.added[f.Path][*r.NewLine] = r.Text
+				case r.Kind == changeset.KindDel:
+					pf.removed[f.Path] = append(pf.removed[f.Path], r.Text)
+					all.WriteString(r.Text)
+					all.WriteByte('\n')
+				}
+			}
+		}
+	}
+	pf.removedText = all.String()
+	return pf
+}
+
+// sourceLine is the line of a "<path>:<line>" source, or 0.
+func sourceLine(source string) int {
+	i := strings.LastIndexByte(source, ':')
+	if i < 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(source[i+1:])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// generatedFiles classifies every file the head graph defines a symbol in, once, and returns
+// the ones that are declared target outputs.
+func (m *Magus) generatedFiles(ctx context.Context, head *knowledge.Graph) (map[string]bool, error) {
+	defs := definedSymbols(head.Nodes())
+	paths := make([]string, 0, len(defs))
+	for _, def := range defs {
+		paths = append(paths, def.path)
+	}
+	slices.Sort(paths)
+	entries, err := m.ClassifyFiles(ctx, slices.Compact(paths))
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, e := range entries {
+		if e.Role == types.DiffRoleOutput {
+			out[e.Path] = true
+		}
+	}
+	return out, nil
 }
 
 // qualifiedName joins the descriptor names after a SCIP symbol ID's package (or file) with

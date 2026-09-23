@@ -88,7 +88,7 @@ func TestCheckpointWiringAdvisesAGuardedHostThatRecordsNothing(t *testing.T) {
 
 	got := checkCheckpointWiring(root, "test-host")
 
-	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
 }
 
@@ -99,7 +99,7 @@ func TestCheckpointWiringPassesOnAHostThatRecordsOne(t *testing.T) {
 
 	got := checkCheckpointWiring(root, "test-host")
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "1 of 1")
 }
 
@@ -112,7 +112,7 @@ func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 
 	got := checkCheckpointWiring(root, "test-host")
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 }
 
 // Nothing wired at all is guard-wiring's finding. Repeating it here would be a second
@@ -120,7 +120,7 @@ func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 func TestCheckpointWiringStaysQuietWithNoHostAtAll(t *testing.T) {
 	got := checkCheckpointWiring(t.TempDir())
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 	assert.Contains(t, got.Message, "skipped")
 }
@@ -132,7 +132,7 @@ func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T
 
 	got := checkCheckpointWiring(root, "test-host")
 
-	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
 }
 
@@ -146,7 +146,7 @@ func TestCheckpointWiringFollowsNamedGuardScripts(t *testing.T) {
 
 	got := checkCheckpointWiring(root, "test-host")
 
-	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	assert.Contains(t, got.Message, "1 of 1")
 }
 
@@ -157,6 +157,6 @@ func TestCheckpointWiringIgnoresAConfigThatIsNotMagus(t *testing.T) {
 
 	got := checkCheckpointWiring(root, "test-host")
 
-	require.Equal(t, types.DoctorOK, got.Status)
+	require.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "skipped")
 }

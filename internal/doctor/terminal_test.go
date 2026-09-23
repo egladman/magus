@@ -19,7 +19,7 @@ import (
 func TestCheckTerminalUnderTest(t *testing.T) {
 	c := (&runner{}).checkTerminal()
 	assert.Equal(t, "terminal-capabilities", c.Name)
-	assert.Equal(t, types.DoctorOK, c.Status, "a pipe is not a fault")
+	assert.Equal(t, types.CheckOK, c.Status, "a pipe is not a fault")
 	assert.Contains(t, c.Message, "plain output")
 	require.NotEmpty(t, c.Details, "it still reports what it saw, so the reason is legible")
 	assert.Contains(t, c.Details[0], "TERM=")
@@ -32,7 +32,7 @@ func TestCheckTerminalUnderTest(t *testing.T) {
 func TestCheckTerminalNeverFails(t *testing.T) {
 	for _, term := range []string{"", "dumb", "xterm-256color", "screen-256color"} {
 		t.Setenv("TERM", term)
-		assert.NotEqual(t, types.DoctorFail, (&runner{}).checkTerminal().Status, "TERM=%q", term)
+		assert.NotEqual(t, types.CheckFail, (&runner{}).checkTerminal().Status, "TERM=%q", term)
 	}
 }
 
@@ -42,7 +42,7 @@ func TestCheckTerminalReportsNoColorWithoutBlaming(t *testing.T) {
 	// it is never a fault.
 	t.Setenv("NO_COLOR", "1")
 	c := (&runner{}).checkTerminal()
-	assert.NotEqual(t, types.DoctorFail, c.Status)
+	assert.NotEqual(t, types.CheckFail, c.Status)
 }
 
 // TestCheckTerminalReportsTheLogFormatFirst pins the ordering that matters.
@@ -56,7 +56,7 @@ func TestCheckTerminalReportsTheLogFormatFirst(t *testing.T) {
 	for _, format := range []string{"json", "text"} {
 		r := &runner{opts: options{cfg: config.Config{Log: config.Log{Format: format}}}}
 		c := r.checkTerminal()
-		assert.Equal(t, types.DoctorOK, c.Status, "a structured format is a choice, not a fault")
+		assert.Equal(t, types.CheckOK, c.Status, "a structured format is a choice, not a fault")
 		assert.Contains(t, c.Message, format)
 		assert.Contains(t, c.Message, "draws no interactive surface")
 		require.NotEmpty(t, c.Details)

@@ -125,6 +125,8 @@ flag buzz/test
 flag clean/cache
 flag diff/ack
 flag diff/baseline
+flag diff/conformance-min-cohort
+flag diff/conformance-min-share
 flag diff/generated
 flag diff/impact
 flag diff/no-tui

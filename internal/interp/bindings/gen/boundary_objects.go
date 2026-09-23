@@ -848,26 +848,22 @@ func ObjectFileReport(v types.FileReport) vm.Value {
 	return out
 }
 
-func ObjectDiffNaming(v types.DiffNaming) vm.Value {
+func ObjectCheck(v types.Check) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("check", vm.StrValue(v.Check))
-	out.MapSet("summary", vm.StrValue(v.Summary))
-	out.MapSet("score", vm.FloatValue(float64(v.Score)))
-	out.MapSet("headline", vm.BoolValue(v.Headline))
-	out.MapSet("pattern", vm.StrValue(v.Pattern))
-	out.MapSet("shape", vm.StrValue(v.Shape))
-	out.MapSet("members", vm.IntValue(int64(v.Members)))
-	out.MapSet("cohort", vm.IntValue(int64(v.Cohort)))
-	itemsExamples := make([]vm.Value, len(v.Examples))
-	for indexExamples := range v.Examples {
-		itemsExamples[indexExamples] = vm.StrValue(v.Examples[indexExamples])
+	out.MapSet("name", vm.StrValue(v.Name))
+	out.MapSet("status", vm.StrValue(string(v.Status)))
+	out.MapSet("message", vm.StrValue(v.Message))
+	itemsDetails := make([]vm.Value, len(v.Details))
+	for indexDetails := range v.Details {
+		itemsDetails[indexDetails] = vm.StrValue(v.Details[indexDetails])
 	}
-	out.MapSet("examples", vm.ListValue(itemsExamples))
-	itemsOutliers := make([]vm.Value, len(v.Outliers))
-	for indexOutliers := range v.Outliers {
-		itemsOutliers[indexOutliers] = vm.StrValue(v.Outliers[indexOutliers])
+	out.MapSet("details", vm.ListValue(itemsDetails))
+	out.MapSet("evidence", vm.StrValue(string(v.Evidence)))
+	itemsFix := make([]vm.Value, len(v.Fix))
+	for indexFix := range v.Fix {
+		itemsFix[indexFix] = vm.StrValue(v.Fix[indexFix])
 	}
-	out.MapSet("outliers", vm.ListValue(itemsOutliers))
+	out.MapSet("fix", vm.ListValue(itemsFix))
 	return out
 }
 
@@ -888,11 +884,11 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	out.MapSet("qualified", vm.StrValue(v.Qualified))
 	out.MapSet("signature", vm.StrValue(v.Signature))
 	out.MapSet("baseSignature", vm.StrValue(v.BaseSignature))
-	itemsNaming := make([]vm.Value, len(v.Naming))
-	for indexNaming := range v.Naming {
-		itemsNaming[indexNaming] = ObjectDiffNaming(v.Naming[indexNaming])
+	itemsChecks := make([]vm.Value, len(v.Checks))
+	for indexChecks := range v.Checks {
+		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
 	}
-	out.MapSet("naming", vm.ListValue(itemsNaming))
+	out.MapSet("checks", vm.ListValue(itemsChecks))
 	return out
 }
 
@@ -1024,25 +1020,6 @@ func ObjectDiff(v types.Diff) vm.Value {
 	return out
 }
 
-func ObjectDoctorCheck(v types.DoctorCheck) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("name", vm.StrValue(v.Name))
-	out.MapSet("status", vm.StrValue(string(v.Status)))
-	out.MapSet("message", vm.StrValue(v.Message))
-	itemsDetails := make([]vm.Value, len(v.Details))
-	for indexDetails := range v.Details {
-		itemsDetails[indexDetails] = vm.StrValue(v.Details[indexDetails])
-	}
-	out.MapSet("details", vm.ListValue(itemsDetails))
-	out.MapSet("evidence", vm.StrValue(string(v.Evidence)))
-	itemsFix := make([]vm.Value, len(v.Fix))
-	for indexFix := range v.Fix {
-		itemsFix[indexFix] = vm.StrValue(v.Fix[indexFix])
-	}
-	out.MapSet("fix", vm.ListValue(itemsFix))
-	return out
-}
-
 func ObjectDoctorSummary(v types.DoctorSummary) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("ok", vm.IntValue(int64(v.OK)))
@@ -1057,7 +1034,7 @@ func ObjectDoctorReport(v types.DoctorReport) vm.Value {
 	out.MapSet("workspace", vm.StrValue(v.Workspace))
 	itemsChecks := make([]vm.Value, len(v.Checks))
 	for indexChecks := range v.Checks {
-		itemsChecks[indexChecks] = ObjectDoctorCheck(v.Checks[indexChecks])
+		itemsChecks[indexChecks] = ObjectCheck(v.Checks[indexChecks])
 	}
 	out.MapSet("checks", vm.ListValue(itemsChecks))
 	out.MapSet("summary", ObjectDoctorSummary(v.Summary))

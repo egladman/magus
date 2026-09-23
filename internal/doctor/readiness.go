@@ -18,7 +18,7 @@ import (
 // daemon being up, the very coupling readiness exists to make legible. The runner
 // enforces; this only says what WOULD be enforced, so someone hitting MGS3004 can see
 // where the gate came from without reading a spell.
-func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorCheck {
+func (r *runner) checkReadinessProbes(projects []*types.Project) types.Check {
 	type gate struct {
 		spell, tool, cmd string
 		probe            spells.Command
@@ -49,9 +49,9 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 		}
 	}
 	if len(gates) == 0 {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    "tool-readiness",
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: "no spell gates an op on a tool being reachable",
 		}
 	}
@@ -68,7 +68,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 	// spells reach docker or podman permanently yellow, including one where --probe had
 	// just confirmed every tool was up, and a level that cannot be cleared is one people
 	// learn to skip past, taking the real ones with it. Only a failed probe lowers this.
-	status := types.DoctorOK
+	status := types.CheckOK
 	var down int
 	for _, g := range gates {
 		if !r.opts.probe {
@@ -80,7 +80,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 		// environment is ready, and the honest answer is no.
 		if err := exec.CommandContext(r.runCtx(), g.probe.Bin, g.probe.Args...).Run(); err != nil {
 			down++
-			status = types.DoctorFail
+			status = types.CheckFail
 			details = append(details, fmt.Sprintf("%s: %s NOT ready: `%s` failed", g.spell, g.tool, g.cmd))
 			continue
 		}
@@ -99,5 +99,5 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 		msg = fmt.Sprintf("%d gated tool(s), all ready", len(gates))
 		evidence = types.EvidenceMeasured
 	}
-	return types.DoctorCheck{Name: "tool-readiness", Status: status, Evidence: evidence, Message: msg, Details: details}
+	return types.Check{Name: "tool-readiness", Status: status, Evidence: evidence, Message: msg, Details: details}
 }

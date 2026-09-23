@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -47,7 +48,6 @@ type declShape struct {
 
 // symbolFacts is the language-neutral view of one symbol node that a reader starts from.
 type symbolFacts struct {
-	Label     string
 	Kind      string // the indexer's own classifier, often empty
 	Signature string
 	// Path is the symbol's descriptor chain after its package or file.
@@ -65,7 +65,8 @@ type shapeReader interface {
 // shapeReaders maps an index's language to its reader. A language missing here falls back to
 // descriptorShapes: families by kind and name only.
 var shapeReaders = map[string]shapeReader{
-	"go": goShapes{},
+	"go":         goShapes{},
+	"typescript": colonShapes{},
 }
 
 func readerFor(language string) shapeReader {
@@ -82,6 +83,36 @@ type descriptorShapes struct{}
 
 func (descriptorShapes) read(s symbolFacts) declShape {
 	return declShape{Kind: s.Neutral, Visible: true}
+}
+
+// colonShapes reads the parameter names of a declaration rendered `name(a: T, b?: U): R`, the
+// form scip-typescript uses, and leaves the rest to the descriptor grammar: its rendered types
+// are not compared, so families form on kind and name as with descriptorShapes.
+type colonShapes struct{}
+
+func (colonShapes) read(s symbolFacts) declShape {
+	shape := declShape{Kind: s.Neutral, Visible: true}
+	if shape.Kind != declFunction && shape.Kind != declMethod {
+		return shape
+	}
+	open := strings.IndexByte(s.Signature, '(')
+	if open < 0 {
+		return shape
+	}
+	end := matchingClose(s.Signature, open)
+	if end < 0 {
+		return shape
+	}
+	for list := s.Signature[open+1 : end]; list != ""; {
+		part, rest, _ := cutTopLevel(list, ',')
+		list = rest
+		name, typ, _ := strings.Cut(strings.TrimSpace(part), ":")
+		name = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(name), "..."), "?")
+		if name != "" {
+			shape.Params = append(shape.Params, namingParam{Name: name, Type: strings.TrimSpace(typ)})
+		}
+	}
+	return shape
 }
 
 // descriptor is one step of a SCIP symbol's descriptor chain.
@@ -313,24 +344,19 @@ func goParams(list string) []namingParam {
 		parts = append(parts, strings.TrimSpace(part))
 		list = rest
 	}
-	named := false
-	for _, p := range parts {
-		if _, _, ok := cutTopLevel(p, ' '); ok {
-			named = true
-			break
-		}
-	}
+	// Go names every parameter or none, so one named part settles the list.
+	named := slices.ContainsFunc(parts, func(p string) bool {
+		_, _, ok := goNamed(p)
+		return ok
+	})
 	out := make([]namingParam, len(parts))
 	for i, p := range parts {
 		if !named {
 			out[i] = namingParam{Type: p}
 			continue
 		}
-		name, typ, ok := cutTopLevel(p, ' ')
-		out[i] = namingParam{Name: name, Type: strings.TrimSpace(typ)}
-		if !ok {
-			out[i] = namingParam{Name: p}
-		}
+		name, typ, _ := goNamed(p)
+		out[i] = namingParam{Name: name, Type: typ}
 	}
 	for i := len(out) - 2; i >= 0; i-- {
 		if out[i].Type == "" {
@@ -358,6 +384,8 @@ func goTypeClass(typ string) string {
 		return "struct"
 	case strings.HasPrefix(typ, "interface{") || strings.HasPrefix(typ, "interface "):
 		return "interface"
+	case !strings.Contains(typ, "."):
+		return typ
 	}
 	return goQualifier.ReplaceAllString(typ, "$1")
 }
@@ -378,7 +406,7 @@ func goResultClass(results string) string {
 	for results != "" {
 		part, rest, _ := cutTopLevel(results, ',')
 		part = strings.TrimSpace(part)
-		if _, typ, ok := cutTopLevel(part, ' '); ok && !strings.HasPrefix(part, "func") && !strings.HasPrefix(part, "map") && !strings.HasPrefix(part, "chan") {
+		if _, typ, ok := goNamed(part); ok {
 			part = typ
 		}
 		switch c := goTypeClass(part); c {
@@ -393,6 +421,21 @@ func goResultClass(results string) string {
 		return "values"
 	}
 	return strings.Join(classes, ", ")
+}
+
+// goNamed splits a parameter or result declared with a name (`mapped bool`, `ch <-chan int`)
+// into its name and type. ok is false for a bare type, including one that holds a top-level
+// space itself (`chan<- Event`, `<-chan int`, `chan int`), and name is then the whole part.
+func goNamed(part string) (name, typ string, ok bool) {
+	before, after, found := cutTopLevel(part, ' ')
+	if !found || before == "" || strings.IndexFunc(before, func(r rune) bool { return !isIdentRune(r) || r == '$' }) >= 0 {
+		return part, "", false
+	}
+	switch before {
+	case "chan", "func", "map", "struct", "interface":
+		return part, "", false
+	}
+	return before, strings.TrimSpace(after), true
 }
 
 // cutTopLevel cuts s around the first sep outside brackets, braces and parentheses.

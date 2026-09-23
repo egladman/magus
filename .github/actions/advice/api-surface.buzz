@@ -108,25 +108,6 @@ fun body(count: int, lines: [str], api: obj) > str {
         + "`magus diff --baseline` shows the same answer locally.\n";
 }
 
-// reviewOpts says which changeset magus\diff should read, and what to compare it against.
-//
-// ON THE FORGE the checkout is CLEAN: a pull request's changes are commits, so the
-// working-tree default is empty and this advisor reported nothing at all, on every pull
-// request, for as long as it has existed. The range is what it has to read instead.
-//
-// LOCALLY the working tree is right and the range would be wrong: `magus diff --impact` is
-// run before committing, and the uncommitted edit IS the change its reader is weighing.
-//
-// baseline is the base's `graph export --symbols`, when the workflow built one. Without it
-// every symbol's `change` is empty and `api` is null, so the advisor reports who can see the
-// change and claims no bump.
-fun reviewOpts(baseline: str, base: str, head: str, local: bool) > {str: any} {
-    var opts = mut {<str: any>};
-    if (baseline != "") { opts["baseline"] = baseline; }
-    if (!local) { opts["rev"] = "origin/" + base + "..." + head; }
-    return opts;
-}
-
 fun main() > void !> any {
     final repo = advice\env("REPO");
     final pr = advice\env("PR_NUMBER");
@@ -147,8 +128,9 @@ fun main() > void !> any {
         return;
     }
 
-    final review = magus\diff(reviewOpts(
-        baseline: advice\env("BASELINE"), base: base, head: head, local: advice\collecting()));
+    // Without a baseline every symbol's `change` is empty and `api` is null, so this reports
+    // who can see the change and claims no bump.
+    final review = advice\review(base, head: head);
     // What it actually read, before what it concluded. "nothing to say" and "nothing to read"
     // are different failures, and this advisor spent two pull requests looking like the first
     // while being the second: the changeset came back empty and the line below said only that
@@ -231,16 +213,6 @@ test "body counts one file in the singular" {
     std\assert(one.indexOf("1 changed file touches") != null, message: "singular");
     final many = body(3, lines: ["- `a.go`\n"], api: null);
     std\assert(many.indexOf("3 changed files touch") != null, message: "plural");
-}
-
-test "on the forge the changeset is the RANGE, and locally it is the working tree" {
-    final ci = reviewOpts(baseline: "/tmp/base.json", base: "main", head: "abc123", local: false);
-    std\assert(ci["rev"] == "origin/main...abc123", message: "a clean checkout has to be told the range");
-    std\assert(ci["baseline"] == "/tmp/base.json", message: "and what to compare it against");
-
-    final here = reviewOpts(baseline: "", base: "main", head: "HEAD", local: true);
-    std\assert(here["rev"] == null, message: "the uncommitted edit is what a local reader is weighing");
-    std\assert(here["baseline"] == null, message: "no baseline, no bump claimed");
 }
 
 test "a removed export proves a major and says so without hedging" {

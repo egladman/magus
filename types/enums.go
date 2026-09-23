@@ -39,11 +39,11 @@ func (v PlatformStyle) Values() []string { return platformStyles.Strings() }
 func (v PlatformStyle) Valid() bool      { return platformStyles.Valid(v) }
 func (v PlatformStyle) String() string   { return enum.String(v) }
 
-var doctorCheckStatuses = enum.Set[DoctorCheckStatus]{"ok", "fail", "advice"}
+var checkStatuses = enum.Set[CheckStatus]{"ok", "fail", "advice"}
 
-func (v DoctorCheckStatus) Values() []string { return doctorCheckStatuses.Strings() }
-func (v DoctorCheckStatus) Valid() bool      { return doctorCheckStatuses.Valid(v) }
-func (v DoctorCheckStatus) String() string   { return enum.String(v) }
+func (v CheckStatus) Values() []string { return checkStatuses.Strings() }
+func (v CheckStatus) Valid() bool      { return checkStatuses.Valid(v) }
+func (v CheckStatus) String() string   { return enum.String(v) }
 
 var eventOutcomes = enum.Set[EventOutcome]{"waiting", "permission", "failed", "finished", "diagnostic", "update", "other"}
 

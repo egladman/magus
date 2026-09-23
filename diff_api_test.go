@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -151,23 +152,24 @@ func TestAttachAPIDeltaRefusesAnOlderSchema(t *testing.T) {
 	assert.Contains(t, out.Notes[0], "predates recorded signatures")
 }
 
-// namingHead assembles a head graph the way a workspace build does: nine context readers in
-// separate packages, eight named <X>FromContext, and whatever the test adds.
-func namingHead(extra ...types.KnowledgeSymbol) *knowledge.Graph {
+// conformanceHead assembles a head graph the way a workspace build does: nine context readers
+// in separate packages, eight named <X>FromContext, and the named functions the test adds to
+// internal/trail/trail.go, each defined on the line given.
+func conformanceHead(extra map[string]int) *knowledge.Graph {
 	var syms []types.KnowledgeSymbol
-	reader := func(pkg, name, file string) types.KnowledgeSymbol {
+	reader := func(pkg, name, file string, line int) types.KnowledgeSymbol {
 		ns := "gomod example.com/m `example.com/m/" + pkg + "`/"
 		return types.KnowledgeSymbol{
 			Key: ns + name + "().", Label: name, Language: "go", SymbolKind: "Function", Namespace: ns,
-			Signature: "func " + name + "(ctx context.Context) *T", Source: file + ":3", Defs: []string{file},
+			Signature: "func " + name + "(ctx context.Context) *T", Source: fmt.Sprintf("%s:%d", file, line), Defs: []string{file},
 		}
 	}
 	for _, name := range []string{"Cwd", "Lease", "Root", "Base", "Charms", "Progress", "Runtime", "Writer"} {
-		syms = append(syms, reader("internal/"+name, name+"FromContext", "internal/"+name+"/ctx.go"))
+		syms = append(syms, reader("internal/"+name, name+"FromContext", "internal/"+name+"/ctx.go", 3))
 	}
-	syms = append(syms, reader("internal/obs", "RecorderFrom", "internal/obs/ctx.go"))
-	for _, s := range extra {
-		syms = append(syms, reader("internal/trail", s.Label, "internal/trail/trail.go"))
+	syms = append(syms, reader("internal/obs", "RecorderFrom", "internal/obs/ctx.go", 3))
+	for name, line := range extra {
+		syms = append(syms, reader("internal/trail", name, "internal/trail/trail.go", line))
 	}
 	g := knowledge.NewGraph()
 	for _, sh := range knowledge.AssembleShards(knowledge.Inputs{
@@ -179,74 +181,99 @@ func namingHead(extra ...types.KnowledgeSymbol) *knowledge.Graph {
 	return g
 }
 
-func entryPointFromID() string {
-	return "symbol:gomod example.com/m `example.com/m/internal/trail`/EntryPointFrom()."
+func trailID(name string) string {
+	return "symbol:gomod example.com/m `example.com/m/internal/trail`/" + name + "()."
 }
 
-// Without a baseline, the committed copy of the file decides what is new. The symbol has no
-// referents yet, so the review never listed it; the finding is what puts it on the file.
-func TestAttachNamingFindsANewNameWithoutABaseline(t *testing.T) {
-	head := namingHead(types.KnowledgeSymbol{Label: "EntryPointFrom"}, types.KnowledgeSymbol{Label: "Trail"})
+// trailPatch adds EntryPointFrom on line 5 of an existing file whose Trail, on line 3, only had
+// its body edited.
+const trailPatch = `diff --git a/internal/trail/trail.go b/internal/trail/trail.go
+--- a/internal/trail/trail.go
++++ b/internal/trail/trail.go
+@@ -3,2 +3,4 @@
+ func Trail(ctx context.Context) *T {
+-	return nil
++	return &T{}
++}
++func EntryPointFrom(ctx context.Context) *T { return nil }
+`
+
+// Without a baseline, the patch decides what is new. The symbol has no referents yet, so the
+// review never listed it; the finding is what puts it on the file.
+func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
+	head := conformanceHead(map[string]int{"EntryPointFrom": 6, "Trail": 3})
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
-	committed := func(path string) (string, bool) {
-		return "package trail\n\nfunc Trail(ctx context.Context) *T { return nil }\n", path == "internal/trail/trail.go"
-	}
 
-	attachNaming(byPath, head, nil, committed, func(string) bool { return false })
+	attachConformance(byPath, head, conformanceInput{patch: trailPatch})
 
-	require.Len(t, out.Files[0].Symbols, 1, "Trail is committed already, so only EntryPointFrom is a subject")
+	require.Len(t, out.Files[0].Symbols, 1, "Trail's definition line is unchanged, so only EntryPointFrom is a subject")
 	got := out.Files[0].Symbols[0]
-	assert.Equal(t, entryPointFromID(), got.ID)
+	assert.Equal(t, trailID("EntryPointFrom"), got.ID)
 	assert.Equal(t, "EntryPointFrom", got.Qualified)
-	assert.Empty(t, got.Change, "no baseline, so no claim about what the change did")
-	require.Len(t, got.Naming, 1)
-	assert.Equal(t, "<X>FromContext", got.Naming[0].Pattern)
-	assert.True(t, got.Naming[0].Headline)
+	assert.Equal(t, types.DiffChangeAdded, got.Change, "the patch added its definition")
+	require.Len(t, got.Checks, 1)
+	assert.Equal(t, types.CheckNamingAffix, got.Checks[0].Name)
+	assert.Equal(t, types.CheckAdvice, got.Checks[0].Status)
 }
 
-func TestAttachNamingFollowsTheBaselineClassification(t *testing.T) {
-	head := namingHead(types.KnowledgeSymbol{Label: "EntryPointFrom"})
+// A symbol whose definition moved, or whose signature changed, has its old line removed in the
+// same patch: it is not new, and nothing is said about its name.
+func TestAttachConformanceSkipsAMovedSymbol(t *testing.T) {
+	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
+	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
+	moved := trailPatch + `diff --git a/internal/obs/old.go b/internal/obs/old.go
+--- a/internal/obs/old.go
++++ b/internal/obs/old.go
+@@ -1,1 +0,0 @@
+-func EntryPointFrom(ctx context.Context) *T { return nil }
+`
+
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{patch: moved})
+
+	assert.Empty(t, out.Files[0].Symbols)
+}
+
+func TestAttachConformanceFollowsTheBaselineClassification(t *testing.T) {
+	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: "."}}}
 	byPath := map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}
-	unread := func(string) (string, bool) {
-		t.Fatal("a baseline answers what is new; the committed file must not be read")
-		return "", false
-	}
 
-	attachNaming(byPath, head, map[string]string{entryPointFromID(): types.DiffChangeBody}, unread, nil)
+	attachConformance(byPath, head, conformanceInput{changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeBody}})
 	assert.Empty(t, out.Files[0].Symbols, "a body edit is not a naming decision")
 
-	attachNaming(byPath, head, map[string]string{entryPointFromID(): types.DiffChangeAdded}, unread, nil)
+	attachConformance(byPath, head, conformanceInput{changes: map[string]string{trailID("EntryPointFrom"): types.DiffChangeAdded}})
 	require.Len(t, out.Files[0].Symbols, 1)
 	assert.Equal(t, types.DiffChangeAdded, out.Files[0].Symbols[0].Change)
-	assert.NotEmpty(t, out.Files[0].Symbols[0].Naming)
+	assert.NotEmpty(t, out.Files[0].Symbols[0].Checks)
 }
 
-func TestAttachNamingSkipsGeneratedFiles(t *testing.T) {
-	head := namingHead(types.KnowledgeSymbol{Label: "EntryPointFrom"})
+func TestAttachConformanceSkipsGeneratedFiles(t *testing.T) {
+	head := conformanceHead(map[string]int{"EntryPointFrom": 6})
 	out := types.Diff{Files: []types.DiffFile{{Path: "internal/trail/trail.go", Project: ".", Role: types.DiffRoleOutput}}}
 
-	attachNaming(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, nil,
-		func(string) (string, bool) { return "", false }, nil)
+	attachConformance(map[string]*types.DiffFile{"internal/trail/trail.go": &out.Files[0]}, head, conformanceInput{patch: trailPatch})
 
 	assert.Empty(t, out.Files[0].Symbols, "a regenerated file's names are the generator's decision")
 }
 
-func TestMentions(t *testing.T) {
-	for _, tc := range []struct {
-		text, name string
-		want       bool
-	}{
-		{"func EntryPoint() {}", "EntryPoint", true},
-		{"x := EntryPointFrom(ctx)", "EntryPoint", false},
-		{"myEntryPoint := 1", "EntryPoint", false},
-		{"EntryPoint", "EntryPoint", true},
-		{"a EntryPointFrom b EntryPoint.", "EntryPoint", true},
-		{"anything", "", false},
-	} {
-		assert.Equal(t, tc.want, mentions(tc.text, tc.name), "%q in %q", tc.name, tc.text)
+func TestPairRenames(t *testing.T) {
+	head := conformanceHead(map[string]int{"EntryPointFromContext": 6, "Unrelated": 9})
+	base := types.KnowledgeNode{
+		ID: trailID("EntryPointFrom"), Kind: types.KindSymbol, Label: "EntryPointFrom",
+		Attrs: map[string]string{knowledge.AttrSignature: "func EntryPointFrom(ctx context.Context) *T"},
 	}
+	changes := map[string]string{trailID("EntryPointFromContext"): types.DiffChangeAdded, trailID("Unrelated"): types.DiffChangeBody}
+	renamed := map[string]string{}
+
+	pairRenames(definedSymbols(head.Nodes()), changes, []types.KnowledgeNode{base}, renamed)
+	assert.Equal(t, map[string]string{trailID("EntryPointFromContext"): "EntryPointFrom"}, renamed)
+
+	// Two added symbols fit equally well, so neither is claimed.
+	changes[trailID("Unrelated")] = types.DiffChangeAdded
+	clear(renamed)
+	pairRenames(definedSymbols(head.Nodes()), changes, []types.KnowledgeNode{base}, renamed)
+	assert.Empty(t, renamed)
 }
 
 func TestQualifiedName(t *testing.T) {

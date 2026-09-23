@@ -87,21 +87,20 @@ func TestPromptOmitsSectionsWithNothingInThem(t *testing.T) {
 	assert.NotContains(t, out, "could not measure", "a changeset with no caveats has no caveats section")
 }
 
-func TestPromptCarriesNamingHeadlinesOnly(t *testing.T) {
+func TestPromptCarriesConformanceChecks(t *testing.T) {
 	rev := types.Diff{Base: "main", Files: []types.DiffFile{{Path: "internal/trail/trail.go", Symbols: []types.DiffSymbol{{
 		Label: "EntryPointFrom",
-		Naming: []types.DiffNaming{
-			{Summary: "`EntryPointFrom`: 8 of 9 functions of its shape that say From or Context are named `<X>FromContext`", Headline: true},
-			{Summary: "a weaker guess", Score: 0.3},
-		},
+		Checks: []types.Check{{
+			Name: types.CheckNamingAffix, Status: types.CheckAdvice, Evidence: types.EvidenceInferred,
+			Message: "`EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
+		}},
 	}}}}}
 
 	out := renderPrompt(t, rev, nil)
 
-	assert.Contains(t, out, "## Names the workspace already spells differently")
-	assert.Contains(t, out, "- `EntryPointFrom`: 8 of 9 functions of its shape that say From or Context are named `<X>FromContext` (`internal/trail/trail.go`)")
-	assert.NotContains(t, out, "a weaker guess", "ranked evidence stays in `magus diff -o json`")
-	assert.NotContains(t, renderPrompt(t, types.Diff{Base: "main"}, nil), "spells differently")
+	assert.Contains(t, out, "## Conformance")
+	assert.Contains(t, out, "- `EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext` (`internal/trail/trail.go`)")
+	assert.NotContains(t, renderPrompt(t, types.Diff{Base: "main"}, nil), "## Conformance", "no finding, no section")
 }
 
 // TestPromptCarriesWhatCouldNotBeMeasured: magus's own caveats are the difference between

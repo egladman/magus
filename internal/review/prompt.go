@@ -103,9 +103,9 @@ func Prompt(in PromptInput) string {
 		Items(promptFiles(in.Changeset.Files), promptFileLimit,
 			"Ask magus for the rest with `magus diff -o json`.")
 
-	b.Section("Names the workspace already spells differently").
-		Note("Derived from how the rest of the workspace names the same shape; weigh, do not enforce.").
-		Items(promptNaming(in.Changeset.Files), 0, "")
+	b.Section("Conformance").
+		Note("Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.").
+		Items(promptConformance(in.Changeset.Files), 0, "")
 
 	b.Section("What magus could not measure").
 		Note("Do not read any of these as evidence that there is nothing there.").
@@ -163,16 +163,14 @@ func promptFiles(files []types.DiffFile) []string {
 	return out
 }
 
-// promptNaming is one line per headline naming finding. The change's headlines are already
-// capped, so no limit is needed here.
-func promptNaming(files []types.DiffFile) []string {
+// promptConformance is one line per conformance finding. The lens already caps them per change,
+// so no limit is needed here.
+func promptConformance(files []types.DiffFile) []string {
 	var out []string
 	for _, f := range files {
 		for _, s := range f.Symbols {
-			for _, n := range s.Naming {
-				if n.Headline {
-					out = append(out, n.Summary+" (`"+f.Path+"`)")
-				}
+			for _, c := range s.Checks {
+				out = append(out, c.Message+" (`"+f.Path+"`)")
 			}
 		}
 	}
