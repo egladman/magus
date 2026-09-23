@@ -12,44 +12,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// LogScope emits a scope header through the cache logger. No-op on Inspect workspaces.
-func (m *Magus) LogScope(ctx context.Context, label, source string) {
-	if m.cache == nil {
-		return
-	}
-	m.cache.LogScope(ctx, label, source)
-}
-
-// LogCharms emits the active-charm header through the cache logger. No-op on Inspect
-// workspaces.
-func (m *Magus) LogCharms(ctx context.Context, charms string) {
-	if m.cache == nil {
-		return
-	}
-	m.cache.LogCharms(ctx, charms)
-}
-
-// LogCache emits the cache-tier header through the cache logger. No-op on Inspect
-// workspaces, which have no cache to describe.
-func (m *Magus) LogCache(ctx context.Context) {
-	if m.cache == nil {
-		return
-	}
-	m.cache.LogCache(ctx)
-}
-
-// LogBase emits the affected-set base header through the cache logger. No-op on Inspect
-// workspaces.
-func (m *Magus) LogBase(ctx context.Context, base, vcs string) {
-	if m.cache == nil {
-		return
-	}
-	m.cache.LogBase(ctx, base, vcs)
-}
-
-// CacheDescription returns the cache-tier header's facts (tier, mode) without
-// logging them. See [cache.Cache.Description]. Empty strings on an Inspect
-// workspace, which has no cache to describe.
+// CacheDescription returns the cache header's facts, for [Sink.EmitCache]: which tiers
+// a run can reach ("local", or "<remote> + local") and whether it may write to them
+// ("read-only" or "read+write"). Empty on an Inspect workspace, which has no cache.
 func (m *Magus) CacheDescription() (tier, mode string) {
 	if m.cache == nil {
 		return "", ""

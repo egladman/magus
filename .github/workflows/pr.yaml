@@ -2,7 +2,7 @@ name: PR
 
 # Checks the pull request itself rather than the code in it: the title, and whether a
 # shipped change carries a changelog entry. Its own workflow rather than a ci.yaml job
-# because it must rerun when the title or labels change, and ci.yaml rerunning its whole
+# because it must rerun when the title changes, and ci.yaml rerunning its whole
 # shard matrix on a title edit would buy nothing.
 #
 # Both rules live in the root magusfile (pr-title, pr-changelog) and run by hand the same
@@ -11,9 +11,10 @@ name: PR
 on:
   pull_request:
     branches: [main]
-    # edited reruns on a title change; labeled and unlabeled on the no-changelog waiver.
-    # A fresh event rather than a rerun, because a rerun replays the old payload.
-    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+    # edited reruns both checks on a title change, since the title's type decides whether
+    # an entry is owed. A fresh event rather than a rerun, because a rerun replays the old
+    # payload.
+    types: [opened, edited, reopened, synchronize]
 
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
@@ -59,6 +60,6 @@ jobs:
         run: magus run pr-title:gha .
 
       # Runs even when the title failed, so one push reports both.
-      - name: Shipped changes carry a changelog entry
+      - name: Shipped feat, fix and perf changes carry a changelog entry
         if: ${{ !cancelled() }}
         run: magus run pr-changelog:gha .

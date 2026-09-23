@@ -22,7 +22,7 @@ not compose, and no integrator can be pointed at a single thing.
 
 | producer          | schema                                          | transport                                    | consumer today  |
 | ----------------- | ----------------------------------------------- | -------------------------------------------- | --------------- |
-| `internal/report` | `{"schema":4,"type":"run.target.result",...}` JSONL | stdout of `magus run -o jsonl`           | CI post-process |
+| `internal/report` | `{"schema":5,"type":"run.target.result",...}` JSONL | stdout of `magus run -o jsonl`           | CI post-process |
 | `internal/journal`| `{ts,inv,kind,stream,text,ref}` JSONL           | per-invocation file; loopback SSE with `--open` | browser viewer  |
 | `types.Event`     | `{schema_version,outcome,severity,source,where}`| `session notify`, attention store            | humans          |
 | `internal/trail`  | Kind + JSONL + blob refs                        | `/api/v1/activity` Connect                   | governance      |

@@ -556,6 +556,7 @@ func TestDenyReasonsStayShort(t *testing.T) {
 		"gh run watch",
 		"grep 'cause:' /tmp/task-capture.log",
 		`python3 -c "open('cmd/magus/main.go','w').write(x)"`,
+		`magus run test . ; echo "rc=$?"`,
 	}
 	for _, command := range commands {
 		v := Evaluate(testDependencies(), command)
@@ -1665,6 +1666,65 @@ func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 		`while true; do ./magus run lint .; sleep 60; done`,
 	} {
 		assert.NotEqual(t, denyRuleBusyWait, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
+func TestGuardDeniesExitStatusEcho(t *testing.T) {
+	for _, cmd := range []string{
+		`./magus run test . ; echo "rc=$?"`,
+		`./magus run test .; echo exit=$?`,
+		`./check.sh; echo $?`,
+		`./check.sh; echo "$?"`,
+		`./check.sh; echo ${?}`,
+		`./check.sh; echo -n "status: $?"`,
+		`./check.sh; printf '%s\n' "$?"`,
+		`./check.sh; printf 'rc=%d\n' $?`,
+		`./check.sh; /bin/echo $?`,
+		"./check.sh\necho \"exit: $?\"",
+		"./check.sh\necho $?\n",
+		// $? is the chain's status, and the echo still exits 0 over it.
+		`./check.sh && ./lint.sh; echo $?`,
+		`if ./check.sh; then true; fi; echo $?`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleExitStatusEcho, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "exits 0", "the masked failure is the fact a reader cannot see: %s", cmd)
+	}
+}
+
+// The rule refuses only a status printed and dropped. Every form here can feed $? into
+// later logic, or is not the last word on the line, so the guard cannot prove it is noise.
+func TestGuardAllowsExitStatusThatFeedsLogic(t *testing.T) {
+	for _, cmd := range []string{
+		`./check.sh; rc=$?`,
+		`./check.sh; rc=$?; echo "rc=$rc"`,
+		`./check.sh; if [ $? -ne 0 ]; then echo failed; fi`,
+		`./check.sh; [ $? -eq 0 ] || exit 1`,
+		`./check.sh; exit $?`,
+		`./check.sh; echo $?; ./lint.sh`,
+		"./check.sh\necho $?\n./lint.sh",
+		`./check.sh && echo $?`,
+		`./check.sh || echo "failed: $?"`,
+		`./check.sh; echo $? > rc.txt`,
+		`./check.sh; echo $? >> rc.log`,
+		`./check.sh; printf -v rc '%s' "$?"`,
+		`./check.sh; echo $? | tee rc.txt`,
+		`./check.sh & echo $?`,
+		`./check.sh; (echo $?)`,
+		`./check.sh; { echo $?; }`,
+		// Something besides the status is printed.
+		`./check.sh; echo "$? $PIPESTATUS"`,
+		`./check.sh; echo "${PIPESTATUS[@]}"`,
+		`./check.sh; echo "$(date) $?"`,
+		`./check.sh; echo $? *`,
+		// Single quotes print the two characters, not the status.
+		`./check.sh; echo '$?'`,
+		// No preceding command on the line.
+		`echo $?`,
+		`./check.sh; echo done`,
+	} {
+		assert.NotEqual(t, denyRuleExitStatusEcho, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 

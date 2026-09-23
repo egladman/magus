@@ -1109,18 +1109,22 @@ fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> an
     return serialize\jsonDecode(fs\readFile(path)).q("pull_request");
 }
 
+// The pull request title: the words after `--` when given, else the event's under gha.
+fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> any {
+    final title = args.join(" ");
+    if (title != "") { return title; }
+    final event = pull_request_event(ctx, target: target);
+    if (event == null) {
+        throw "{target}: no title: pass one after `--`, or add the gha charm in a pull_request workflow";
+    }
+    return event?.q("title").stringValue() ?? "";
+}
+
 // Fails a pull request title that is not a conventional commit subject. Squash merges make
 // the title the subject main records, so this is where the format is enforced; the rule is
 // tools/commits.buzz. Pass a title after `--` to check one by hand.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
-    var title = args.join(" ");
-    if (title == "") {
-        final event = pull_request_event(ctx, target: "pr-title");
-        if (event == null) {
-            throw "pr-title: no title: pass one after `--`, or add the gha charm in a pull_request workflow";
-        }
-        title = event?.q("title").stringValue() ?? "";
-    }
+    final title = pull_request_title(ctx, args: args, target: "pr-title");
     final problem = commits\problem(title);
     if (problem != "") {
         throw "pr-title: \"{title}\": {problem}";
@@ -1128,50 +1132,31 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("pr-title: \"{title}\" is a conventional commit subject");
 }
 
-// Fails a pull request that changes shipped code without adding a bullet to CHANGELOG.md's
-// [Unreleased] section. tools/changelog.buzz decides which paths ship. The waiver is the
-// pull request label changelog\optOutLabel(); a label passed after `--` counts too, for
-// checking a branch by hand.
+// Fails a feat, fix, perf or breaking pull request that changes shipped code without adding
+// a bullet to CHANGELOG.md's [Unreleased] section. tools/changelog.buzz holds the rule and
+// decides which paths ship. The title comes from the event under gha; to check a branch by
+// hand, pass the title after `--`.
 export fun pr_changelog(ctx: magus\Context, args: [str]) > void !> any {
-    var labels = mut [<str>];
-    foreach (a in args) { labels.append(a); }
-    final event = pull_request_event(ctx, target: "pr-changelog");
-    if (event != null) {
-        foreach (label in event?.q("labels").listValue() ?? [<serialize\Boxed>]) {
-            labels.append(label.q("name").stringValue());
-        }
-    }
-    if (labels.indexOf(changelog\optOutLabel()) != null) {
-        magus\log.info("pr-changelog: waived by the {changelog\optOutLabel()} label");
-        return;
-    }
+    final title = pull_request_title(ctx, args: args, target: "pr-changelog");
     if (vcs\name() != "git") {
         throw "pr-changelog: reads the base CHANGELOG.md with `git show`, and this checkout is {vcs\name()}";
     }
     final base = vcs\base();
-    var shipped = mut [<str>];
-    foreach (f in vcs\changedFiles(base)) {
-        if (changelog\needsEntry(f.value)) { shipped.append(f.value); }
-    }
-    if (shipped.len() == 0) {
-        magus\log.info("pr-changelog: nothing shipped changed against {base}; no entry needed");
-        return;
-    }
+    var changed = mut [<str>];
+    foreach (f in vcs\changedFiles(base)) { changed.append(f.value); }
     final before = vcs\cmd(["show", base + ":CHANGELOG.md"], {"quiet": true}).stdout;
     final added = changelog\addedEntries(releaser\unreleasedBody(before),
         releaser\unreleasedBody(fs\readFile("CHANGELOG.md")));
-    if (added.len() > 0) {
-        magus\log.info("pr-changelog: {added.len()} new [Unreleased] entry(s) cover {shipped.len()} shipped path(s)");
+    final problem = changelog\problem(title, changed: changed, added: added);
+    if (problem != "") {
+        throw "pr-changelog: against {base}: {problem}";
+    }
+    final owed = changelog\owed(title, changed: changed);
+    if (owed.len() == 0) {
+        magus\log.info("pr-changelog: \"{title}\" owes no entry against {base}");
         return;
     }
-    var listed = shipped.join("\n  ");
-    if (shipped.len() > 10) {
-        listed = shipped.sub(0, len: 10).join("\n  ") + "\n  ...and {shipped.len() - 10} more";
-    }
-    throw "pr-changelog: {shipped.len()} shipped path(s) changed against {base} and CHANGELOG.md's "
-        + "[Unreleased] section gained no entry. Add a bullet under the fitting heading, or have a "
-        + "maintainer label the pull request {changelog\optOutLabel()} when no user can notice it.\n  "
-        + listed;
+    magus\log.info("pr-changelog: {added.len()} new [Unreleased] entry(s) cover {owed.len()} shipped path(s)");
 }
 
 // Installs a shim in git's hooks directory for every tools/git-hooks/<hook>.buzz, so the
