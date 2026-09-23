@@ -59,6 +59,36 @@ func (rw *ReportWriter) RecordDiagnostic(unit string, code types.DiagnosticCode,
 	return report.Record(rw.w, report.DiagnosticEmitted{Unit: unit, Code: string(code), Message: message})
 }
 
+// RecordRunScope appends the run's project-selection header (the "projects: ..."
+// line a text run prints) as a typed event, for a caller rendering its own header
+// in place of the cache logger's prose (see [Magus.LogScope]).
+func (rw *ReportWriter) RecordRunScope(label, source string) error {
+	return report.Record(rw.w, report.RunScope{Label: label, Source: source})
+}
+
+// RecordRunCharms appends the active-charm header (see [Magus.LogCharms]) as a typed event.
+func (rw *ReportWriter) RecordRunCharms(charms string) error {
+	return report.Record(rw.w, report.RunCharms{Charms: charms})
+}
+
+// RecordRunCache appends the cache-tier header (see [Magus.LogCache] and
+// [Magus.CacheDescription]) as a typed event.
+func (rw *ReportWriter) RecordRunCache(tier, mode string) error {
+	return report.Record(rw.w, report.RunCache{Tier: tier, Mode: mode})
+}
+
+// RecordRunBase appends the affected-set base header (see [Magus.LogBase]) as a typed event.
+func (rw *ReportWriter) RecordRunBase(base, vcs string) error {
+	return report.Record(rw.w, report.RunBase{Base: base, VCS: vcs})
+}
+
+// RecordNotice appends a free-form advisory line (a hint, warning, or one-time
+// banner) that has no dedicated event type of its own. level is "info" or "warn";
+// code is the diagnostic code (e.g. an MGS####) when the notice carries one.
+func (rw *ReportWriter) RecordNotice(level string, code types.DiagnosticCode, message string) error {
+	return report.Record(rw.w, report.Notice{Level: level, Code: string(code), Message: message})
+}
+
 // WithReport attaches rw to receive one JSONL event per executed target.
 // Mutually exclusive with [WithReportWriter].
 func WithReport(rw *ReportWriter) RunOption {

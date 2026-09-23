@@ -105,6 +105,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
+  projects/charms/cache header, per-stage progress, the run summary and lock-wait
+  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
+  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
+  yet converted falls back to a plain JSON line instead of prose.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination
   and confidence labels are gone. A human reads the evidence and decides.

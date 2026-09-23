@@ -35,6 +35,15 @@ const (
 	TypeDeterminismMismatch   = "race.determinism_mismatch"
 	TypeMissingDependency     = "race.missing_dependency"
 	TypeDiagnosticEmitted     = "run.diagnostic"
+	TypeRunScope              = "run.scope"
+	TypeRunCharms             = "run.charms"
+	TypeRunCache              = "run.cache"
+	TypeRunBase               = "run.base"
+	TypeRunStep               = "run.step"
+	TypeRunSummary            = "run.summary"
+	TypeLockWait              = "lock.wait"
+	TypeLockReleased          = "lock.released"
+	TypeNotice                = "run.notice"
 )
 
 // TargetResult reports the outcome of one target run — the single per-target event
@@ -146,6 +155,84 @@ type DiagnosticEmitted struct {
 	Message string `json:"message,omitempty"` // human message
 }
 
+// RunScope reports the run's project selection -- the "projects: ..." header a text
+// run prints once at the start. Separate from RunCharms/RunCache/RunBase because the
+// three headers are independent slog calls (some callers, e.g. the interactive picker,
+// emit RunScope alone), so a single combined event would have to buffer for headers
+// that may never arrive.
+type RunScope struct {
+	Label  string `json:"label"`
+	Source string `json:"source,omitempty"`
+}
+
+// RunCharms reports the charms mixed into a run (e.g. magus.yaml default_charms),
+// the "charms: ..." header.
+type RunCharms struct {
+	Charms string `json:"charms"`
+}
+
+// RunCache reports which cache tiers a run can reach and whether it may write to
+// them, the "cache: ..." header.
+type RunCache struct {
+	Tier string `json:"tier"`
+	Mode string `json:"mode"`
+}
+
+// RunBase reports what an affected run's change set was compared against, the
+// "base: ..." header.
+type RunBase struct {
+	Base string `json:"base"`
+	VCS  string `json:"vcs,omitempty"`
+}
+
+// RunStep reports one sub-target progress line ("[pass] name (695ms)") as it
+// completes -- a magus.needs stage, or a dry-run target that never actually ran.
+// Status is "pass", "fail", "advisory", or "dry".
+type RunStep struct {
+	Label      string `json:"label"`
+	Target     string `json:"target,omitempty"`
+	Status     string `json:"status"`
+	DurationMs int64  `json:"duration_ms,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// RunSummary is the end-of-run footer: hit/miss/error counts (or, for a dry run,
+// the planned count) and elapsed wall time.
+type RunSummary struct {
+	Dry        bool  `json:"dry,omitempty"`
+	Planned    int   `json:"planned,omitempty"`
+	Hits       int   `json:"hits,omitempty"`
+	Misses     int   `json:"misses,omitempty"`
+	Errors     int   `json:"errors,omitempty"`
+	DurationMs int64 `json:"duration_ms"`
+}
+
+// LockWait reports a run blocked on another magus process holding a project's
+// lock -- emitted once when the wait starts and again on each heartbeat while it
+// continues, so a structured reader has the same liveness evidence a text run's
+// repeated line gives a human.
+type LockWait struct {
+	Project   string `json:"project"`
+	HolderPID int    `json:"holder_pid,omitempty"`
+	Command   string `json:"command,omitempty"`
+	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
+}
+
+// LockReleased reports that a previously-waited-on project lock freed and this
+// run now proceeds.
+type LockReleased struct {
+	Project string `json:"project"`
+}
+
+// Notice is a free-form advisory line -- a hint, warning, or one-time banner --
+// that has no dedicated event type of its own. Code is the diagnostic code (e.g.
+// an MGS####) when the notice carries one.
+type Notice struct {
+	Level   string `json:"level"` // "info" | "warn"
+	Code    string `json:"code,omitempty"`
+	Message string `json:"msg"`
+}
+
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
 	reflect.TypeOf(DiagnosticEmitted{}):     TypeDiagnosticEmitted,
 	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
@@ -158,6 +245,15 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(OutputOverlapDetected{}): TypeOutputOverlapDetected,
 	reflect.TypeOf(DeterminismMismatch{}):   TypeDeterminismMismatch,
 	reflect.TypeOf(MissingDependency{}):     TypeMissingDependency,
+	reflect.TypeOf(RunScope{}):              TypeRunScope,
+	reflect.TypeOf(RunCharms{}):             TypeRunCharms,
+	reflect.TypeOf(RunCache{}):              TypeRunCache,
+	reflect.TypeOf(RunBase{}):               TypeRunBase,
+	reflect.TypeOf(RunStep{}):               TypeRunStep,
+	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
+	reflect.TypeOf(LockWait{}):              TypeLockWait,
+	reflect.TypeOf(LockReleased{}):          TypeLockReleased,
+	reflect.TypeOf(Notice{}):                TypeNotice,
 }
 
 func typeOf(e any) string { return registry[reflect.TypeOf(e)] }

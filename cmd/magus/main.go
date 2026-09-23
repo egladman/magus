@@ -410,6 +410,17 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 // yaml and env, so without this pass `--log-level bogus` ran with a value the yaml
 // loader refuses.
 func finalizeConfig() error {
+	// -o jsonl has to decide the CACHE logger's format here, before dispatch: a
+	// command with needsWorkspace preloads the workspace (loadMagus, a sync.Once
+	// singleton) ahead of the verb's own handler, which builds the cache from
+	// globalCfg.Log.Format at that moment. Setting it inside runTarget/runAffected
+	// was too late -- the preload had already won the race and built a pretty
+	// logger no later mutation could replace. applyDisplay's own jsonl case (the
+	// process-wide default logger for general diagnostics) reads global.output
+	// directly for the same reason, so it needs no such ordering fix.
+	if global.output == string(FormatJSONL) {
+		globalCfg.Log.Format = "jsonl"
+	}
 	applyDisplay()
 	return config.Validate(globalCfg)
 }
