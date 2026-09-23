@@ -1182,14 +1182,23 @@ func TestWorkspaceLoadFailureLocatesEachJoinedFile(t *testing.T) {
 	err := fmt.Errorf("magus: repo: %w", errors.Join(
 		&interp.ExecError{Path: "/repo/a/magusfile.buzz", Err: errors.New("buzz: line 2:1: expected identifier")},
 		&interp.ExecError{Path: "/elsewhere/spell.buzz", Err: errors.New("buzz: line 5:4: unexpected }")},
+		// The shape a failed spell import takes: the file is on the wrapper, and each
+		// import's error is a branch of the join beneath it.
+		&interp.ImportError{Path: "/repo/b/magusfile.buzz", Err: errors.Join(
+			errors.New("load spell: buzz: line 3:7: expected expression"),
+		)},
 	))
 	assert.Equal(t, &types.WorkspaceFailure{
 		Message: err.Error(),
 		Diagnostics: []types.SourceDiagnostic{
 			{File: "a/magusfile.buzz", Line: 2, Column: 1, Message: "expected identifier"},
 			{File: "/elsewhere/spell.buzz", Line: 5, Column: 4, Message: "unexpected }"},
+			{File: "b/magusfile.buzz", Line: 3, Column: 7, Message: "expected expression"},
 		},
 	}, WorkspaceLoadFailure("/repo", err))
+	assert.Contains(t, err.Error(), "magusfile: exec /repo/a/magusfile.buzz: buzz:",
+		"an error built without a relative name falls back to the absolute path")
+	assert.Contains(t, err.Error(), "magusfile: /repo/b/magusfile.buzz: load spell")
 }
 
 func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {

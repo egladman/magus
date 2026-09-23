@@ -19,6 +19,16 @@ func TestValidate_InvalidConcurrency(t *testing.T) {
 	assert.Error(t, Validate(cfg), "Validate(Concurrency=-1): expected error")
 }
 
+// jsonl withholds every target's output for a report stream only -o jsonl opens, so a
+// magus.yaml asking for it would drop per-target results with nowhere to send them.
+func TestValidate_LogFormatRefusesJSONL(t *testing.T) {
+	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
+	cfg.Log.Format = "jsonl"
+	require.ErrorContains(t, Validate(cfg), "log.format")
+	cfg.Log.Format = "json"
+	assert.NoError(t, Validate(cfg))
+}
+
 func TestValidationError_Error(t *testing.T) {
 	cfg := Config{Concurrency: -5}
 	err := Validate(cfg)

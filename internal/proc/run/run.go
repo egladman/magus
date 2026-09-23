@@ -49,6 +49,16 @@ func OutputWriters(ctx context.Context) (stdout, stderr io.Writer) {
 	return os.Stdout, os.Stderr
 }
 
+// CapturedOutput returns the writers from WithOutputWriters, and false when ctx carries
+// none or either is nil, so a caller with its own fallback can tell the cases apart.
+func CapturedOutput(ctx context.Context) (stdout, stderr io.Writer, ok bool) {
+	w, ok := ctx.Value(contextKey{}).(writers)
+	if !ok || w.stdout == nil || w.stderr == nil {
+		return nil, nil, false
+	}
+	return w.stdout, w.stderr, true
+}
+
 // WithStepGate attaches a gate to ctx; Exec invokes it before each subprocess.
 func WithStepGate(ctx context.Context, gate StepGate) context.Context {
 	return context.WithValue(ctx, stepGateKey{}, gate)

@@ -106,8 +106,8 @@ func (t *runTargetTool) Invoke(ctx context.Context, req spells.InvokeRequest) (s
 		return spells.InvokeResponse{}, errors.New("mcp: no targets resolved for " + rawTarget)
 	}
 
-	var buf bytes.Buffer
-	rw, err := magus.NewReportWriter(&buf, nil)
+	var records, notices bytes.Buffer
+	sink, err := magus.NewSink(magus.FormatJSONL, &records, &notices)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
@@ -117,7 +117,7 @@ func (t *runTargetTool) Invoke(ctx context.Context, req spells.InvokeRequest) (s
 
 	charms := effectiveCharms(parsed.Charms, t.opts.Config.DefaultCharms)
 
-	runOpts := []magus.RunOption{magus.WithReport(rw)}
+	runOpts := []magus.RunOption{magus.WithSink(sink)}
 	if dryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
 	}
@@ -132,9 +132,9 @@ func (t *runTargetTool) Invoke(ctx context.Context, req spells.InvokeRequest) (s
 	runErr := t.opts.Magus.Run(ctx, targets, runOpts...)
 	dur := time.Since(start)
 
-	// Close the writer to flush the drain goroutine before parsing.
-	_ = rw.Close()
-	events := parseRunEvents(&buf)
+	// Close the sink to flush the drain goroutine before parsing.
+	_ = sink.Close()
+	events := parseRunEvents(&records, &notices)
 	out := runResult{
 		OK:         runErr == nil,
 		Charms:     charms,
@@ -149,26 +149,28 @@ func (t *runTargetTool) Invoke(ctx context.Context, req spells.InvokeRequest) (s
 
 var _ spells.Driver = (*runTargetTool)(nil)
 
-// parseRunEvents decodes the run report's JSONL buffer into a slice of raw JSON event objects.
-func parseRunEvents(buf *bytes.Buffer) []json.RawMessage {
-	// Use a 1 MB scanner buffer — report lines can be large on wide workspaces.
-	scanner := bufio.NewScanner(buf)
-	scanner.Buffer(make([]byte, 1<<20), 1<<20)
-
+// parseRunEvents decodes a JSONL sink's streams into one slice of raw JSON event
+// objects: its records, then its notices.
+func parseRunEvents(streams ...*bytes.Buffer) []json.RawMessage {
 	var events []json.RawMessage
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
+	for _, buf := range streams {
+		// Use a 1 MB scanner buffer — report lines can be large on wide workspaces.
+		scanner := bufio.NewScanner(buf)
+		scanner.Buffer(make([]byte, 1<<20), 1<<20)
+		for scanner.Scan() {
+			line := bytes.TrimSpace(scanner.Bytes())
+			if len(line) == 0 {
+				continue
+			}
+			var raw json.RawMessage
+			if err := json.Unmarshal(line, &raw); err == nil {
+				events = append(events, raw)
+			}
 		}
-		var raw json.RawMessage
-		if err := json.Unmarshal(line, &raw); err == nil {
-			events = append(events, raw)
-		}
+		// scanner.Err() is intentionally ignored here: a truncated or malformed
+		// line just means fewer events returned, which is already visible to the
+		// caller via the events slice length.
 	}
-	// scanner.Err() is intentionally ignored here: a truncated or malformed
-	// line just means fewer events returned, which is already visible to the
-	// caller via the events slice length.
 	if events == nil {
 		// ensure JSON encodes [] not null
 		events = []json.RawMessage{}

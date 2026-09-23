@@ -314,7 +314,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_LOG_FORMAT",
 		Flag:     fieldtype.FlagNames{Long: "log-format"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_LOG_FORMAT",
+		Usage:    "MAGUS_LOG_FORMAT: Format is pretty|plain|text|json.",
 	},
 	{
 		GoPath:   "Log.Level",

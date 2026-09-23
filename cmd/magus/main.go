@@ -410,6 +410,10 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 // yaml and env, so without this pass `--log-level bogus` ran with a value the yaml
 // loader refuses.
 func finalizeConfig() error {
+	applyDisplay()
+	if err := config.Validate(globalCfg); err != nil {
+		return err
+	}
 	// -o jsonl has to decide the CACHE logger's format here, before dispatch: a
 	// command with needsWorkspace preloads the workspace (loadMagus, a sync.Once
 	// singleton) ahead of the verb's own handler, which builds the cache from
@@ -418,11 +422,13 @@ func finalizeConfig() error {
 	// logger no later mutation could replace. applyDisplay's own jsonl case (the
 	// process-wide default logger for general diagnostics) reads global.output
 	// directly for the same reason, so it needs no such ordering fix.
+	//
+	// After Validate, which refuses "jsonl" from magus.yaml, env and --log-format:
+	// only -o jsonl opens the report stream the withheld results go to.
 	if global.output == string(FormatJSONL) {
 		globalCfg.Log.Format = "jsonl"
 	}
-	applyDisplay()
-	return config.Validate(globalCfg)
+	return nil
 }
 
 // bindGlobalsAfterSubcommand reads the generated config flags out of the args that
