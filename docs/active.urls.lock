@@ -144,6 +144,7 @@ daemon/
 debugging/
 decisions/
 decisions/0001-bounded-concurrency-with-recursive-invocation/
+decisions/0002-remote-spells-are-imported-by-registry-path/
 dependencies/
 development/
 development/cmd-magus-starter/
@@ -436,6 +437,9 @@ reference/codes/magusfile/MGS1039/
 reference/codes/magusfile/MGS1040/
 reference/codes/magusfile/MGS1041/
 reference/codes/magusfile/MGS1042/
+reference/codes/magusfile/MGS1043/
+reference/codes/magusfile/MGS1044/
+reference/codes/magusfile/MGS1045/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -490,6 +494,7 @@ reference/console/
 reference/diagnostics/
 reference/faq/
 reference/go-sdk/
+reference/guard-spawn/
 reference/logging/
 reference/manpage/
 reference/manpage/magus-affected/
@@ -641,6 +646,7 @@ tags/403/
 tags/activity/
 tags/admission/
 tags/adoption/
+tags/adr/
 tags/advise/
 tags/affected/
 tags/agent-install/
@@ -653,6 +659,7 @@ tags/annotations/
 tags/api/
 tags/argv/
 tags/artifacts/
+tags/attribution/
 tags/audit/
 tags/auth/
 tags/authoring/
@@ -690,6 +697,7 @@ tags/connect/
 tags/connector/
 tags/console/
 tags/container/
+tags/context/
 tags/conventions/
 tags/cosign/
 tags/coupling/
@@ -701,6 +709,7 @@ tags/cycle/
 tags/daemon/
 tags/deadlock/
 tags/debugging/
+tags/decision/
 tags/decisions/
 tags/declarations/
 tags/deny/
@@ -787,6 +796,7 @@ tags/ledger/
 tags/lint/
 tags/linux/
 tags/load/
+tags/lockfile/
 tags/locks/
 tags/logging/
 tags/logs/
@@ -797,6 +807,7 @@ tags/magus-hook/
 tags/magus-init/
 tags/magus-job/
 tags/magus-ledger/
+tags/magus-lock/
 tags/magus-memory/
 tags/magus-no-wait/
 tags/magus-query/
@@ -837,6 +848,7 @@ tags/output-ref/
 tags/output-refs/
 tags/output/
 tags/outputs/
+tags/override/
 tags/ownership/
 tags/passthrough/
 tags/path/
@@ -875,6 +887,7 @@ tags/release/
 tags/remote-cache/
 tags/remote/
 tags/repl/
+tags/replace/
 tags/replay/
 tags/reproduce/
 tags/retry/
@@ -911,6 +924,7 @@ tags/slots/
 tags/snapshot/
 tags/socket/
 tags/sources/
+tags/spawn/
 tags/spell/
 tags/spells/
 tags/stall/
@@ -935,6 +949,7 @@ tags/troubleshooting/
 tags/tty/
 tags/tui/
 tags/typescript/
+tags/update/
 tags/upgrade/
 tags/uv/
 tags/vcs/
