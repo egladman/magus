@@ -637,6 +637,26 @@ func freshenIndexes(touched []*types.Project, langs map[string]string, probe fun
 		strings.Join(problems, "; "))
 }
 
+// uncoveredNote opens every note naming a project the conformance checks could not see, so a
+// reader of notes (the prompt, the PR advisor) can gather them under the checks' own heading.
+const uncoveredNote = "conformance did not cover project "
+
+// uncoveredNotes names each project with a changed file, other than a declared output, that has
+// no symbol indexer: the conformance checks cannot see it, so their silence says nothing about it.
+func uncoveredNotes(files []types.DiffFile, capable []string) []string {
+	var out []string
+	for _, f := range files {
+		if f.Project == "" || f.Generated() || slices.Contains(capable, f.Project) {
+			continue
+		}
+		note := uncoveredNote + f.Project + ": it has no symbol indexer, so its changes were not compared"
+		if !slices.Contains(out, note) {
+			out = append(out, note)
+		}
+	}
+	return out
+}
+
 // diagnosticOf is err as a Diagnostic: its MGS code, message and docs link when err carries a
 // code, and the bare message otherwise.
 func diagnosticOf(err error) types.Diagnostic {
@@ -659,7 +679,15 @@ func projectList(ps []*types.Project) string {
 // symbolRunError wraps a failed scip run with the project (by its display name, so the
 // workspace root reads as its repo name, not ".") and, when known, an actionable hint
 // naming the language's indexer and where to install it.
+//
+// A run refused because another magus holds the lock or the machine budget never reached the
+// indexer, so it gets no install hint: the fix is to rerun once the holder the error names
+// finishes.
 func symbolRunError(project types.ProjectRef, language string, err error) error {
+	var busy interface{ ExitCode() int }
+	if errors.As(err, &busy) && busy.ExitCode() == lockContendedExit {
+		return fmt.Errorf("%s: %w; the indexer never ran, so rerun once that finishes", project.Display(), err)
+	}
 	if hint := symbols.InstallHint(language); hint != "" {
 		return fmt.Errorf("%s: %w; %s", project.Display(), err, hint)
 	}

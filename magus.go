@@ -1198,6 +1198,9 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// radius could not be walked would make the useful part unreachable, and the Note is
 		// what keeps the absence visible rather than silent.
 		out.Notes = append(out.Notes, "blast radius unavailable: "+ierr.Error())
+		out.ConformanceError = &types.Diagnostic{
+			Message: "the conformance checks could not run: the blast radius could not be computed: " + ierr.Error(),
+		}
 		out.SortForReading()
 		return out, nil //nolint:nilerr // reported as a Note, see above
 	}
@@ -1209,6 +1212,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		}
 	}
 	freshErr := m.freshenSymbolIndexes(ctx, touched)
+	out.Notes = append(out.Notes, uncoveredNotes(out.Files, m.symbolCapableIn(touched))...)
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a

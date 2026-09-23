@@ -110,7 +110,7 @@ func Prompt(in PromptInput) string {
 	} else {
 		b.Section("Conformance").
 			Note("Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.").
-			Items(promptConformance(in.Changeset.Files), 0, "")
+			Items(promptConformance(in.Changeset), 0, "")
 	}
 
 	b.Section("What magus could not measure").
@@ -169,15 +169,21 @@ func promptFiles(files []types.DiffFile) []string {
 	return out
 }
 
-// promptConformance is one line per conformance finding. The lens already caps them per change,
-// so no limit is needed here.
-func promptConformance(files []types.DiffFile) []string {
+// promptConformance is one line per conformance finding, then one per project the checks could
+// not see, so no silence here is read as a clean project that was never checked. The lens
+// already caps findings per change, so no limit is needed here.
+func promptConformance(rev types.Diff) []string {
 	var out []string
-	for _, f := range files {
+	for _, f := range rev.Files {
 		for _, s := range f.Symbols {
 			for _, c := range s.Checks {
 				out = append(out, c.Message+" (`"+f.Path+"`)")
 			}
+		}
+	}
+	for _, n := range rev.Notes {
+		if strings.HasPrefix(n, "conformance did not cover ") {
+			out = append(out, n)
 		}
 	}
 	return out

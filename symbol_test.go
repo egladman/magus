@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -405,6 +406,21 @@ func TestFreshenIndexesFailsWithACodeWhenTheIndexerCannotRun(t *testing.T) {
 	assert.Contains(t, err.Error(), symbols.InstallHint("go"), "the cause comes with its fix")
 }
 
+// Another magus holding the project's lock refuses the refresh at once; the review says so,
+// with the holder named, rather than reporting a missing indexer or reading the stale index.
+func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {
+	ps, langs := freshenProjects()
+	held := fmt.Errorf("run .:scip: %w", &lockContendedError{Project: ".", Owner: "pid 4242, `magus run test .`"})
+	w := &indexWorld{current: map[string]bool{"web": true}, buildErr: held}
+
+	err := freshenIndexes(ps, langs, w.probe, w.build, true)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.Contains(t, err.Error(), "locked by another magus process")
+	assert.Contains(t, err.Error(), "pid 4242")
+	assert.NotContains(t, err.Error(), symbols.InstallHint("go"), "the indexer never ran, so it is not missing")
+}
+
 // A read-only cache runs the indexer and records nothing, so the fresh index is one nothing can
 // vouch for: that is the error, never a stale index read as current.
 func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
@@ -415,6 +431,22 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "cache writes are off")
+}
+
+// A touched project with no indexer is named, so "found nothing" is only ever said about
+// projects that were checked. A regenerated file is not a change of its own.
+func TestUncoveredNotesNameTheProjectsTheChecksCannotSee(t *testing.T) {
+	files := []types.DiffFile{
+		{Path: "a.go", Project: "."},
+		{Path: "docs/x.md", Project: "docs"},
+		{Path: "docs/y.md", Project: "docs"},
+		{Path: "web/gen/z.ts", Project: "web", Role: types.DiffRoleOutput},
+		{Path: "README", Project: ""},
+	}
+
+	assert.Equal(t, []string{
+		"conformance did not cover project docs: it has no symbol indexer, so its changes were not compared",
+	}, uncoveredNotes(files, []string{"."}))
 }
 
 func TestDiagnosticOfKeepsTheCode(t *testing.T) {

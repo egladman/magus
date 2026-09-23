@@ -102,6 +102,12 @@ func TestPromptCarriesConformanceChecks(t *testing.T) {
 	assert.Contains(t, out, "- `EntryPointFrom`: 8 of 9 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext` (`internal/trail/trail.go`)")
 	assert.NotContains(t, renderPrompt(t, types.Diff{Base: "main"}, nil), "## Conformance", "no finding, no section")
 
+	uncovered := renderPrompt(t, types.Diff{Base: "main", Notes: []string{
+		"conformance did not cover project docs: it has no symbol indexer, so its changes were not compared",
+	}}, nil)
+	assert.Contains(t, uncovered, "## Conformance", "an unchecked project is named under the checks' heading")
+	assert.Contains(t, uncovered, "- conformance did not cover project docs")
+
 	unchecked := renderPrompt(t, types.Diff{Base: "main", ConformanceError: &types.Diagnostic{
 		Code: string(types.SymbolIndexNotCurrent), Message: "the symbol index could not be brought current",
 	}}, nil)
