@@ -335,4 +335,27 @@ func TestSeedInstall(t *testing.T) {
 		assert.Equal(t, real, from)
 		assert.FileExists(t, filepath.Join(proj, "node_modules", "x"))
 	})
+	t.Run("prefers the sibling installed from the same lock", func(t *testing.T) {
+		roots := fakeWorktreeSet(t, "same", "linked")
+		lock := func(root, body string) {
+			require.NoError(t, os.WriteFile(filepath.Join(root, "app", "pnpm-lock.yaml"), []byte(body), 0o644))
+		}
+		// The primary is found first, as a main checkout on an old branch is.
+		writeFile(t, filepath.Join(roots["primary"], "app", "node_modules", "from-primary"))
+		lock(roots["primary"], "lockfileVersion: '9.0'\nold: 1\n")
+		writeFile(t, filepath.Join(roots["same"], "app", "node_modules", "from-same"))
+		lock(roots["same"], "lockfileVersion: '9.0'\nnew: 2\n")
+		proj := filepath.Join(roots["linked"], "app")
+		require.NoError(t, os.MkdirAll(proj, 0o755))
+		lock(roots["linked"], "lockfileVersion: '9.0'\nnew: 2\n")
+		withLock := choice
+		withLock.Lock = filepath.Join(proj, "pnpm-lock.yaml")
+
+		from, found, err := SeedInstall(context.Background(), withLock, proj)
+		require.NoError(t, err)
+		require.True(t, found)
+		real, _ := filepath.EvalSymlinks(roots["same"])
+		assert.Equal(t, real, from)
+		assert.FileExists(t, filepath.Join(proj, "node_modules", "from-same"))
+	})
 }

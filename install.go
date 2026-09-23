@@ -28,6 +28,49 @@ func isSpellInstall(p *types.Project, target string) bool {
 	return false
 }
 
+// spellOp is one named op of one of a project's resolved spells.
+type spellOp struct {
+	spell *spells.Spell
+	name  string
+	op    spells.Op
+}
+
+// installOpsOf returns the spell installs target's step on p runs when running them is
+// ALL the step does, and nil otherwise: the synthesized install op itself, or a magusfile
+// target whose body provably only calls install ops (types.TargetGraphNode.DispatchOnly),
+// the way a conventional `install` target composes its spell's.
+func installOpsOf(p *types.Project, target string) []spellOp {
+	if isSpellInstall(p, target) {
+		var out []spellOp
+		for _, s := range p.ResolvedSpells {
+			if op, ok := s.Op(target); ok && op.Kind == spells.OpKindInstall {
+				out = append(out, spellOp{s, target, op})
+			}
+		}
+		return out
+	}
+	if !slices.Contains(p.DispatchOnlyTargets, target) {
+		return nil
+	}
+	var out []spellOp
+	for _, use := range p.TargetSpellOps[target] {
+		// Spell is the import handle, which names the spell only when unaliased; an
+		// aliased handle fails this lookup and the target keeps its ordinary step.
+		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
+		if i < 0 {
+			return nil
+		}
+		for _, name := range use.Ops {
+			op, ok := p.ResolvedSpells[i].Op(name)
+			if !ok || op.Kind != spells.OpKindInstall {
+				return nil
+			}
+			out = append(out, spellOp{p.ResolvedSpells[i], name, op})
+		}
+	}
+	return out
+}
+
 // installKeying is what every install step of one invocation shares with the steps the
 // scheduler builds, so an install keys the same whether scheduled or composed.
 type installKeying struct {
@@ -81,19 +124,12 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 func (m *Magus) prewarmInstallProbes(ctx context.Context, prober *toolProber, stages []stage) {
 	for _, st := range stages {
 		for _, p := range st.projects {
-			if !isSpellInstall(p, st.target) {
-				continue
-			}
-			for _, s := range p.ResolvedSpells {
-				op, ok := s.Op(st.target)
-				if !ok || op.Kind != spells.OpKindInstall {
-					continue
-				}
-				choice, found, err := spell.ResolveInstall(op.Install, p.Dir, m.ws.Root)
+			for _, so := range installOpsOf(p, st.target) {
+				choice, found, err := spell.ResolveInstall(so.op.Install, p.Dir, m.ws.Root)
 				if err != nil || !found {
 					continue
 				}
-				name, tools := s.Name(), choice.Install.Tools
+				name, tools := so.spell.Name(), choice.Install.Tools
 				go prober.probeVersions(ctx, []*types.Project{p}, func(sp, tool string) bool {
 					return sp == name && slices.Contains(tools, tool)
 				}, nil)

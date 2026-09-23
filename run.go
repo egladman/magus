@@ -591,7 +591,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// A service op is a long-running process: it must never be cached, or a re-run
 	// would replay a completed-target result instead of restarting the process. This
 	// is inherent (not an author opt-in), so OR it into the explicit SkipCache policy.
-	step.NoCache = pol.SkipCache || servesTarget(p.ResolvedSpells, target)
+	step.NoCache = alwaysRuns(p, target)
 	// Resolve the two spellings of the same claim into the one number the limiter
 	// understands. A target declaring memory_mb holds however many slots that memory
 	// is worth on THIS host, so an 8GB suite throttles peers on a 16GB runner and
@@ -603,15 +603,14 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// memory its own siblings held.
 	step.MemoryMB, step.MemoryDeclaredBy = m.chainMemoryMB(p, target)
 	step.Slots = slotsForPolicy(pol.Slots, step.MemoryMB, m.limiter().Capacity(), m.hostUsableBytes())
-	// The install target only dispatches each spell's install, and each keys itself
-	// (installStep). Keyed here on the project baseline, a hit would skip the stamp
+	// A step that only runs installs dispatches each spell's install, and each keys
+	// itself (installStep). Keyed here on the project baseline, a hit would skip the stamp
 	// check that notices a deleted tree.
 	//
 	// Nor does it wait on the installs of the projects p depends on: a package manager
 	// reads a dependency project's manifest, never its installed tree, so each install
 	// level the scheduler walked was pure latency.
-	if isSpellInstall(p, target) {
-		step.NoCache = true
+	if len(installOpsOf(p, target)) > 0 {
 		step.Sources, step.Outputs, step.RequiredOutputs = nil, nil, nil
 		step.DependsOn = nil
 	}
@@ -741,7 +740,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 		memo = reuse.memo
 		toolVersions = reuse.toolVersions
 	}
-	if toolVersions == nil {
+	if toolVersions == nil && keysTools(p, target) {
 		toolVersions = m.toolVersionsByProject(ctx, []*types.Project{p})
 	}
 	// Not part of sweepReuse: an observation probe runs only for a project whose
@@ -758,10 +757,18 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	return m.cache.StepKeyMemo(ctx, &step, memo)
 }
 
-// keysTools reports whether target's step on p keys on tool versions. A spell install's
-// step only dispatches, and each install keys on its own tools (installStep).
+// keysTools reports whether target's step on p keys on tool versions. A step that always
+// runs never replays, so a toolchain in its key would describe nothing, and the probe can
+// cost more than the step: `pnpm exec tsc --version` is ~400ms. A step that only runs
+// installs keys on nothing, and each install keys on its own tools (installStep).
 func keysTools(p *types.Project, target string) bool {
-	return !isSpellInstall(p, target)
+	return !alwaysRuns(p, target)
+}
+
+// alwaysRuns reports whether target's step on p is never replayed or snapshotted: an
+// author's skip_cache, a service, or a step that only runs installs.
+func alwaysRuns(p *types.Project, target string) bool {
+	return p.TargetPolicies[target].SkipCache || servesTarget(p.ResolvedSpells, target) || len(installOpsOf(p, target)) > 0
 }
 
 // applyRunKeying stamps the key-relevant fields the RUN SCHEDULER adds on top of
@@ -920,6 +927,23 @@ func (m *Magus) CurrentRevision(ctx context.Context) (name, revision string, dir
 	return res.Name, meta.ID, meta.IsDirty
 }
 
+// toolWindowOf is the version window p holds tool to: its own bound intersected with
+// what spell s requires. Zero means nothing constrains the tool.
+func toolWindowOf(p *types.Project, s *spells.Spell, tool string) spells.VersionBounds {
+	t, _ := s.Tool(tool)
+	return t.Supported.Intersect(p.ToolBounds[tool])
+}
+
+// hasToolWindow reports whether p's spell named spell constrains tool to a window.
+func hasToolWindow(p *types.Project, spell, tool string) bool {
+	for _, s := range p.ResolvedSpells {
+		if s.Name() == spell && !toolWindowOf(p, s, tool).IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
 // checkToolWindows fails the run when a probed tool falls outside the window its project
 // declares, intersected with what the declaring spell requires.
 //
@@ -941,8 +965,7 @@ func checkToolWindows(projects []*types.Project, versions map[string]string) err
 	for _, p := range projects {
 		for _, s := range p.ResolvedSpells {
 			for _, tool := range s.ToolNames() {
-				t, _ := s.Tool(tool) // ToolNames ranges the same map Tool reads
-				window := t.Supported.Intersect(p.ToolBounds[tool])
+				window := toolWindowOf(p, s, tool)
 				if window.IsZero() {
 					continue
 				}
@@ -1471,6 +1494,22 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			}
 		}
 	}
+	history := m.loadHistory(ctx)
+	// Resolved ONCE for the whole invocation, not per target; see CurrentRevision. Only
+	// output records read it, so it runs beside the locks, probes and step planning and
+	// is joined by stampRevision; `git status` alone is ~20ms.
+	var vcsName, revision string
+	var dirty bool
+	revisionDone := make(chan struct{})
+	// ctx is passed, not closed over: this function reassigns it below.
+	go func(ctx context.Context) {
+		defer close(revisionDone)
+		vcsName, revision, dirty = m.CurrentRevision(ctx)
+	}(ctx)
+	stampRevision := func(s *cache.Step) {
+		<-revisionDone
+		s.Revision, s.Dirty, s.VCSName = revision, dirty, vcsName
+	}
 	// Per-project workspace lock: this is a mutating invocation (it writes outputs
 	// and the cache), so take every reachable project's EXCLUSIVE advisory lock up
 	// front, in sorted order, and hold it for the whole invocation. It serializes
@@ -1517,23 +1556,29 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// KNOWN GAP: scope is uniqueProjects, so a project reached only through a target
 	// dependency joins later in the dispatcher and is not gated.
 	//
-	// Only projects with a stage that keys on tools are probed here. A spell install
-	// probes and gates its own tools when it runs; see installRunner.
-	var keyed []*types.Project
+	// A project whose every stage always runs keys on no tool, so only the tools its
+	// declared windows name are probed for it. A spell install also probes and gates its
+	// own tools when it runs; see installRunner.
+	var keyed, unkeyed []*types.Project
 	for _, p := range uniqueProjects {
 		if slices.ContainsFunc(stages, func(st stage) bool {
 			return keysTools(p, st.target) && slices.Contains(st.projects, p)
 		}) {
 			keyed = append(keyed, p)
+		} else {
+			unkeyed = append(unkeyed, p)
 		}
 	}
 	toolWindows := map[string]string{}
 	prober.probeVersions(ctx, keyed, nil, toolWindows)
-	if err := checkToolWindows(keyed, toolWindows); err != nil {
+	for _, p := range unkeyed {
+		prober.probeVersions(ctx, []*types.Project{p}, func(spell, tool string) bool {
+			return hasToolWindow(p, spell, tool)
+		}, toolWindows)
+	}
+	if err := checkToolWindows(uniqueProjects, toolWindows); err != nil {
 		return err
 	}
-	// Resolved ONCE for the whole invocation, not per target; see CurrentRevision.
-	vcsName, revision, dirty := m.CurrentRevision(ctx)
 
 	// Active charms participate in the cache key: a charm can change a target's
 	// behavior (pass/fail or output), so charm-variant runs must not collide.
@@ -1557,16 +1602,20 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	obs := m.probeObservations(ctx, uniqueProjects, drivenByProject)
-	newStep := func(p *types.Project, target string) cache.Step {
+	// keyedStep is newStep without the revision, for the planning below that must not
+	// wait on it.
+	keyedStep := func(p *types.Project, target string) cache.Step {
 		step := m.buildStep(p, target)
 		var toolVersions []string
 		if keysTools(p, target) {
 			toolVersions = prober.probeVersions(ctx, []*types.Project{p}, nil, nil)[p.Path]
 		}
 		applyRunKeying(&step, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
-		step.Revision = revision
-		step.Dirty = dirty
-		step.VCSName = vcsName
+		return step
+	}
+	newStep := func(p *types.Project, target string) cache.Step {
+		step := keyedStep(p, target)
+		stampRevision(&step)
 		return step
 	}
 
@@ -1582,7 +1631,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			trackVolatile = true
 		}
 		for _, p := range st.projects {
-			step := newStep(p, st.target)
+			step := keyedStep(p, st.target)
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
@@ -1708,9 +1757,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// that pair's own policy), so a run that selects one opted-in target alongside
 	// twenty others still retries exactly the one.
 	var volatilityRT *volatility.Runtime
-	if m.cfg.Volatility.Enabled {
+	if history != nil {
 		retry := trackVolatile && !opts.NoVolatilityRetry
-		volatilityRT = m.buildVolatilityRuntime(ctx, retry)
+		volatilityRT = m.buildVolatilityRuntime(ctx, retry, history)
 		if volatilityRT != nil {
 			ctx = volatility.WithRuntime(ctx, volatilityRT)
 		}
@@ -1779,6 +1828,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		svcSession.ReleaseAll(shutdownCtx)
 	}()
 	ctx = service.WithSession(ctx, svcSession)
+	for i := range steps {
+		stampRevision(&steps[i])
+	}
 	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
 		skipReplay: opts.NoCache, opts: cacheOpts,
@@ -2178,10 +2230,32 @@ func checkOutputOverlap(steps []cache.Step, w *report.Writer) {
 	}
 }
 
-// buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when history cannot be loaded.
-func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool) *volatility.Runtime {
+// loadHistory starts reading the run history in the background and returns the wait for
+// it, or nil when volatility is disabled. The file is shared by every workspace on the
+// host and runs to megabytes, so decoding it costs as much as the lock, probe and VCS
+// work it overlaps.
+func (m *Magus) loadHistory(ctx context.Context) func() (*forecast.History, error) {
+	if !m.cfg.Volatility.Enabled {
+		return nil
+	}
 	var h forecast.History
-	if err := h.Load(ctx, m.cfg.HistoryPath); err != nil {
+	var err error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		err = h.Load(ctx, m.cfg.HistoryPath)
+	}()
+	return func() (*forecast.History, error) {
+		<-done
+		return &h, err
+	}
+}
+
+// buildVolatilityRuntime returns a volatility.Runtime for the current run, or nil when
+// history cannot be loaded.
+func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool, history func() (*forecast.History, error)) *volatility.Runtime {
+	h, err := history()
+	if err != nil {
 		return nil
 	}
 	// Only when retrying. affected feeds shouldRetry and nothing else, so computing
@@ -2193,12 +2267,25 @@ func (m *Magus) buildVolatilityRuntime(ctx context.Context, retry bool) *volatil
 			affected = res.Affected
 		}
 	}
-	return volatility.NewRuntime(&h, m.cfg.HistoryPath, m.volatilityConfig(), affected, retry)
+	return volatility.NewRuntime(h, m.cfg.HistoryPath, m.volatilityConfig(), affected, retry)
 }
 
 // runTarget executes name on every spell in p and rejects writes into descendant projects.
 func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) error {
 	a := audit.Begin(ctx, p, types.HasCharm(ctx, types.CharmReadWrite))
+	// A magusfile target whose body is provably only these calls runs them directly:
+	// evaluating the file and its imports to make them costs more than a warm install
+	// (docs/magusfile.buzz: ~35ms idle, ~230ms beside three installs starting).
+	if slices.Contains(p.DispatchOnlyTargets, name) {
+		if ops := installOpsOf(p, name); len(ops) > 0 {
+			for _, so := range ops {
+				if err := invokeSpell(ctx, p, so.name, so.spell); err != nil {
+					return errors.Join(spellErr(p, name, types.SpellFailure{Spell: so.spell.Name(), Err: err}), a.Finish(ctx, name))
+				}
+			}
+			return a.Finish(ctx, name)
+		}
+	}
 	err := forEachSpell(ctx, p, name, func(ctx context.Context, s *spells.Spell) error {
 		// Load already evaluated this magusfile and knows it does not export name.
 		// Invoking it anyway re-evaluates the whole file, and its imports, to learn that.

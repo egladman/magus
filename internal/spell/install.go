@@ -1,6 +1,7 @@
 package spell
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -103,7 +104,7 @@ func SeedInstall(ctx context.Context, choice spells.InstallChoice, projectDir st
 	// not mean the tree is unseedable, only that this one is; the next sibling still
 	// might work, so failures accumulate rather than stopping the search.
 	var errs []error
-	for _, co := range others {
+	for _, co := range sameLockFirst(root, choice.Lock, others) {
 		src := filepath.Join(co, rel)
 		if fi, err := os.Lstat(src); err != nil || !fi.IsDir() {
 			continue
@@ -137,6 +138,36 @@ func SeedInstall(ctx context.Context, choice spells.InstallChoice, projectDir st
 		return co, true, nil
 	}
 	return "", false, errors.Join(errs...)
+}
+
+// sameLockFirst orders the checkouts whose copy of lock is byte-identical to this one
+// ahead of the rest, each group in its given order. A tree installed from the same lock
+// leaves the package manager nothing to reconcile, where the first checkout found may be
+// a branch whose lock is months behind. lock is absolute, under root.
+func sameLockFirst(root, lock string, others []string) []string {
+	rel, err := filepath.Rel(root, lock)
+	if err != nil {
+		return others
+	}
+	mine, err := os.ReadFile(lock)
+	if err != nil {
+		return others
+	}
+	same := make([]string, 0, len(others))
+	var rest []string
+	for _, co := range others {
+		theirs := filepath.Join(co, rel)
+		// Size first: most checkouts on another lock differ in length, and a stat is far
+		// cheaper than reading a lockfile hundreds of times.
+		if fi, err := os.Stat(theirs); err == nil && fi.Size() == int64(len(mine)) {
+			if b, err := os.ReadFile(theirs); err == nil && bytes.Equal(b, mine) {
+				same = append(same, co)
+				continue
+			}
+		}
+		rest = append(rest, co)
+	}
+	return append(same, rest...)
 }
 
 // removeAbandonedSeeds deletes clones a killed magus left beside dst. A seed whose lock

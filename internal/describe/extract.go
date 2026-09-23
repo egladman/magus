@@ -373,6 +373,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 		walk(fn.Body)
 		slices.Sort(node.Charms)
 		node.Spells = groupSpellOps(spellHits)
+		node.DispatchOnly = dispatchOnly(fn, spellHandles)
 		nodes = append(nodes, node)
 	}
 	return nodes, attributedIO, prog
@@ -818,6 +819,45 @@ func spellHandle(s *ast.ImportStmt) (string, bool) {
 		return s.Alias, true
 	}
 	return "", false
+}
+
+// dispatchOnly reports whether fn's body is one or more statements of exactly the form
+// handle["op"](ctx) or handle.op(ctx), where handle is an imported spell and ctx is
+// fn's first parameter. Anything else, a helper call included, means the body may do
+// work the static read cannot see.
+func dispatchOnly(fn *ast.FunDecl, spellHandles map[string]bool) bool {
+	if fn.Body == nil || len(fn.Body.Stmts) == 0 || len(fn.Params) == 0 {
+		return false
+	}
+	for _, stmt := range fn.Body.Stmts {
+		es, ok := stmt.(*ast.ExprStmt)
+		if !ok {
+			return false
+		}
+		call, ok := es.Expr.(*ast.CallExpr)
+		if !ok || len(call.Args) != 1 {
+			return false
+		}
+		if arg, ok := call.Args[0].(*ast.IdentExpr); !ok || arg.Name != fn.Params[0] {
+			return false
+		}
+		var handle ast.Node
+		switch c := call.Callee.(type) {
+		case *ast.IndexExpr:
+			if _, ok := c.Index.(*ast.StringLit); !ok {
+				return false
+			}
+			handle = c.Object
+		case *ast.MemberExpr:
+			handle = c.Object
+		default:
+			return false
+		}
+		if id, ok := handle.(*ast.IdentExpr); !ok || !spellHandles[id.Name] {
+			return false
+		}
+	}
+	return true
 }
 
 // projectImport returns the alias and project path of an `import "project/<path>"`
