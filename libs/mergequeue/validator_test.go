@@ -62,10 +62,10 @@ func TestSpeculativeStagesStackAndValidateInParallel(t *testing.T) {
 	gate := newGate()
 	got, err := validateWith(t, newStager(nil), gate, planOf(3, []Change{change("1", "a"), change("2", "a"), change("3", "a")}), nil)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]Decision{"1": DecisionLand, "2": DecisionLand, "3": DecisionLand}, got.decisions())
+	assert.Equal(t, map[string]Decision{"1": DecisionMerge, "2": DecisionMerge, "3": DecisionMerge}, got.decisions())
 	assert.EqualValues(t, 3, gate.peak.Load(), "all three stages gate at once")
 	one := got.get(t, "1")
-	assert.Equal(t, Verdict{BaseCommit: base, Change: change("1", "a"), Decision: DecisionLand,
+	assert.Equal(t, Verdict{BaseCommit: base, Change: change("1", "a"), Decision: DecisionMerge,
 		Onto: base, Stage: base + "+1", Message: "* 1", Depth: 1, DurationMS: one.DurationMS}, one)
 	two, three := got.get(t, "2"), got.get(t, "3")
 	assert.Equal(t, []string{base + "+1+2", "1", base + "+1"}, []string{two.Stage, two.After, two.Onto})
@@ -81,7 +81,7 @@ func TestAFailedStageRespeculatesOnlyWhatWasBehindIt(t *testing.T) {
 	gate.bad["2"] = true
 	got, err := validateWith(t, st, gate, planOf(2, []Change{change("1", "a"), change("2", "a"), change("3", "a"), change("4", "a")}), nil)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]Decision{"1": DecisionLand, "2": DecisionKick, "3": DecisionLand, "4": DecisionLand}, got.decisions())
+	assert.Equal(t, map[string]Decision{"1": DecisionMerge, "2": DecisionKick, "3": DecisionMerge, "4": DecisionMerge}, got.decisions())
 	assert.Contains(t, got.get(t, "2").Report, "tests failed in 2")
 	// #1 is never rebuilt; #3, first stacked on the red #2, is rebuilt on #1 alone.
 	assert.Equal(t, base+"+1+3", got.get(t, "3").Stage)
@@ -95,12 +95,12 @@ func TestAFailedStageRespeculatesOnlyWhatWasBehindIt(t *testing.T) {
 // A regeneration the change's own code broke is that change's verdict, not the run's
 // end: before, it aborted validation with no verdict at all, and the change sat at the
 // bottom of its partition forever.
-func TestARefusedStagingIsKickedBackAndTheRestLand(t *testing.T) {
+func TestARefusedStagingIsKickedBackAndTheRestMerge(t *testing.T) {
 	st, gate := newStager(nil), newGate()
 	st.refused["2"] = "`gen` exited 1 regenerating app/gen/out.txt"
 	got, err := validateWith(t, st, gate, planOf(3, []Change{change("1", "a"), change("2", "a"), change("3", "a")}), nil)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]Decision{"1": DecisionLand, "2": DecisionKick, "3": DecisionLand}, got.decisions())
+	assert.Equal(t, map[string]Decision{"1": DecisionMerge, "2": DecisionKick, "3": DecisionMerge}, got.decisions())
 	assert.Contains(t, got.get(t, "2").Report, "`gen` exited 1")
 	assert.Equal(t, base+"+1+3", got.get(t, "3").Stage, "#3 is built onto what staged")
 	assert.Equal(t, "1", got.get(t, "3").After)
@@ -135,7 +135,7 @@ func TestParallelCapsStagesAcrossPartitions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, got.all, 12)
 	for id, d := range got.decisions() {
-		assert.Equal(t, DecisionLand, d, id)
+		assert.Equal(t, DecisionMerge, d, id)
 	}
 	assert.LessOrEqual(t, gate.peak.Load(), int32(2))
 }
@@ -146,7 +146,7 @@ func TestAMachineFailureStopsItsPartitionAlone(t *testing.T) {
 	got, err := validateWith(t, newStager(nil), gate, planOf(1, []Change{change("1", "a")}, []Change{change("2", "b")}),
 		func(v *Validator) { v.Parallel = 2 })
 	require.ErrorContains(t, err, "gate #1: the runner ran out of memory")
-	assert.Equal(t, map[string]Decision{"2": DecisionLand}, got.decisions(), "no verdict on #1, and #2 is still decided")
+	assert.Equal(t, map[string]Decision{"2": DecisionMerge}, got.decisions(), "no verdict on #1, and #2 is still decided")
 }
 
 func TestDisjointPartitionsNeverWaitForEachOther(t *testing.T) {
@@ -157,7 +157,7 @@ func TestDisjointPartitionsNeverWaitForEachOther(t *testing.T) {
 	got, err := validateWith(t, newStager(nil), gate, planOf(1, []Change{change("1", "a")}, []Change{change("2", "b")}),
 		func(v *Validator) { v.Parallel = 2 })
 	require.NoError(t, err)
-	assert.Equal(t, map[string]Decision{"1": DecisionLand, "2": DecisionLand}, got.decisions())
+	assert.Equal(t, map[string]Decision{"1": DecisionMerge, "2": DecisionMerge}, got.decisions())
 	assert.Equal(t, base+"+2", got.get(t, "2").Stage, "each partition stages on the base alone")
 }
 
@@ -166,8 +166,8 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 	st.conflicts[[2]string{"1", "2"}] = []string{"app/a"}
 	got, err := validateWith(t, st, newGate(), planOf(3, []Change{change("1", "a"), change("2", "a"), change("3", "a")}), nil)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]Decision{"1": DecisionLand, "2": DecisionWait, "3": DecisionLand}, got.decisions())
-	assert.Equal(t, "conflicts with #1 ahead of it in app/a; retried once it lands", got.get(t, "2").Reason)
+	assert.Equal(t, map[string]Decision{"1": DecisionMerge, "2": DecisionWait, "3": DecisionMerge}, got.decisions())
+	assert.Equal(t, "conflicts with #1 ahead of it in app/a; retried once it merges", got.get(t, "2").Reason)
 	assert.Equal(t, base+"+1+3", got.get(t, "3").Stage)
 }
 
@@ -178,7 +178,7 @@ func TestOnlyStagesTheChainButGatesTheOneChange(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got.all, 1)
 	three := got.get(t, "3")
-	assert.Equal(t, DecisionLand, three.Decision)
+	assert.Equal(t, DecisionMerge, three.Decision)
 	assert.Equal(t, base+"+1+3", three.Stage, "the chain skips what its own run holds, as the pipeline does")
 	assert.Equal(t, "1", three.After)
 	assert.Equal(t, base+"+1", three.Onto)

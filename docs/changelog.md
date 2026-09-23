@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **The merge queue is a separate library, `libs/mergequeue`; `magus vcs queue` is gone.**
-  Its `mergequeue` CLI reads JSON, reports JSONL, and lands each green stage once the
+  Its `mergequeue` CLI reads JSON, reports JSONL, and merges each green stage once the
   changes beneath it have. Magus only supplies affected sets: `magus affected --plan`
   now prints `affected` and `unbounded_by`.
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**

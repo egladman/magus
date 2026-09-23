@@ -1,7 +1,7 @@
 // magusfile.buzz for mergequeue, a standalone Go module
 // (github.com/egladman/magus/libs/mergequeue) at libs/mergequeue: a speculative,
 // partitioned merge queue with its own CLI. Its own module, and nothing in the magus
-// module imports it, because a queue owns checkouts (staging commits, landing) and magus
+// module imports it, because a queue owns checkouts (staging commits, applying) and magus
 // never does; magus only supplies it facts through `magus affected ... --plan`.
 //
 //   magus run build libs/mergequeue   compile the library and cmd/mergequeue

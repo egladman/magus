@@ -1,4 +1,4 @@
-// Package verdicts carries verdicts from validation to landing through a directory,
+// Package verdicts carries verdicts from validation to apply through a directory,
 // which a CI system can ship between jobs as artifacts.
 //
 // The layout: PlanFile, the plan the verdicts were decided against, and one subdirectory
@@ -30,10 +30,10 @@ const (
 	DoneFile    = ".done"
 )
 
-// ExportFunc writes the commits a Lander needs for stage, from baseCommit up, into file.
+// ExportFunc writes the commits an Applier needs for stage, from baseCommit up, into file.
 type ExportFunc func(ctx context.Context, file, baseCommit, stage string) error
 
-// Dir is both ends of one verdict directory: validation records into it and a Lander
+// Dir is both ends of one verdict directory: validation records into it and an Applier
 // polls it. A Dir that polls must not be copied after its first Poll.
 type Dir struct {
 	Path string
@@ -167,7 +167,7 @@ func (d *Dir) Record(ctx context.Context, v mergequeue.Verdict) error {
 		return err
 	}
 	defer os.RemoveAll(tmp) // a no-op once renamed into place
-	if v.Decision == mergequeue.DecisionLand && v.Stage != "" && d.Export != nil {
+	if v.Decision == mergequeue.DecisionMerge && v.Stage != "" && d.Export != nil {
 		if err := d.Export(ctx, filepath.Join(tmp, BundleFile), v.BaseCommit, v.Stage); err != nil {
 			return fmt.Errorf("export stage %s: %w", v.Stage, err)
 		}

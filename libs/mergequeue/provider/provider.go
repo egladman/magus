@@ -10,8 +10,8 @@
 //	kick_back(change + {commit, report})                        > bool
 //
 // A change record carries the fields of [mergequeue.Change]; a returned record's other
-// keys are ignored. The two reads run in planning and landing; the three writes run
-// only in landing, so a script should read its write credential under its own name,
+// keys are ignored. The two reads run in planning and apply; the three writes run
+// only in apply, so a script should read its write credential under its own name,
 // letting a job that does not hold it fail rather than write.
 //
 // Scripts see Buzz's standard library (std, os, serialize, ...) and one host module,

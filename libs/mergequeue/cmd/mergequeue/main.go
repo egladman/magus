@@ -112,7 +112,7 @@ Commands:
             set; writes a mergequeue.plan/v1 document
   validate  stage and gate a plan's changes; writes the plan and a
             mergequeue.verdict/v1 per change the moment it is decided (read access only)
-  apply     land the green verdicts <source> holds as they arrive, each change as its
+  apply     merge the green verdicts <source> holds as they arrive, each change as its
             own commit (holds the write credential; runs no change's code)
 
 -C <path> runs the command as if started in <path>: the git checkout the queue works
@@ -480,7 +480,7 @@ func apply(ctx context.Context, e *env, args []string) error {
 		fs.StringVar(&statusContext, "status-context", mergequeue.DefaultStatusContext, "commit status the queue posts; branch protection requires it")
 		fs.BoolVar(&once, "once", false, "apply what <source> holds now and stop, rather than following it until it is complete")
 		fs.DurationVar(&interval, "interval", 10*time.Second, "how often apply reads <source> while following it")
-		fs.BoolVar(&dryRun, "dry-run", false, "report what would land; call nothing on the provider")
+		fs.BoolVar(&dryRun, "dry-run", false, "report what would merge; call nothing on the provider")
 		remote, attribute = remoteFlag(fs), attributeFlag(fs)
 	}, "source")
 	if err != nil {
@@ -504,7 +504,7 @@ func apply(ctx context.Context, e *env, args []string) error {
 		return err
 	}
 	defer p.Close()
-	repo, err := git.NewLandingRepo(e.gitConfig(*remote, *attribute))
+	repo, err := git.NewMergingRepo(e.gitConfig(*remote, *attribute))
 	if err != nil {
 		return err
 	}
@@ -513,7 +513,7 @@ func apply(ctx context.Context, e *env, args []string) error {
 	if src.dir != "" {
 		from = &verdicts.Dir{Path: e.path(src.dir), Follow: !once, Interval: interval}
 	} else {
-		// Bundles are imported while landing, so the unpacked run lives only as long.
+		// Bundles are imported while applying, so the unpacked run lives only as long.
 		tmp, err := os.MkdirTemp("", "mergequeue-apply-")
 		if err != nil {
 			return err
@@ -539,12 +539,12 @@ func apply(ctx context.Context, e *env, args []string) error {
 		events.Emit(mergequeue.Event{Kind: mergequeue.EventNotice, Reason: "run " + src.runID + " completed without a plan; nothing to apply"})
 		return nil
 	}
-	l := mergequeue.NewLander(p, repo, from)
-	l.StatusContext, l.Interval, l.DryRun, l.Events = statusContext, interval, dryRun, events
-	return l.Run(ctx, pl)
+	a := mergequeue.NewApplier(p, repo, from)
+	a.StatusContext, a.Interval, a.DryRun, a.Events = statusContext, interval, dryRun, events
+	return a.Run(ctx, pl)
 }
 
-// readToken picks the credential the GitHub provider reads with: the landing job's
+// readToken picks the credential the GitHub provider reads with: the apply job's
 // MERGEQUEUE_TOKEN where it holds one, else GITHUB_TOKEN.
 func readToken() string {
 	if t := os.Getenv("MERGEQUEUE_TOKEN"); t != "" {

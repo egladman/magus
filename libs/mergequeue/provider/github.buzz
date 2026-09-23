@@ -16,7 +16,7 @@
 // side runs pull-request code and holds only a read-only Actions token. The three writes
 // use MERGEQUEUE_TOKEN and nothing else, so a job that does not hold the write
 // credential cannot write by accident. It needs contents, pull requests and commit
-// statuses write; the landing job's own Actions token is enough, and since its merges
+// statuses write; the apply job's own Actions token is enough, and since its merges
 // start no workflow, that job dispatches the base branch's runs itself.
 //
 // The queue posts success on its status only after a merge, so its credential must be
@@ -94,7 +94,7 @@ fun slug(remote: str, host: str) > str {
     return parts[0] + "/" + parts[1];
 }
 
-// readRef prefers the write credential where the job holds it, so landing reads with the
+// readRef prefers the write credential where the job holds it, so apply reads with the
 // token it merges with.
 fun readRef() > str {
     if (getenv(WRITE_REF) != "") {
@@ -123,7 +123,7 @@ fun reading(op: str) > {str: str} !> any {
 
 fun writing(op: str) > {str: str} !> any {
     if (getenv(WRITE_REF) == "") {
-        throw "github: {op} writes, and needs {WRITE_REF}, the landing job's credential; it is not set";
+        throw "github: {op} writes, and needs {WRITE_REF}, the apply job's credential; it is not set";
     }
     return headers(WRITE_REF);
 }

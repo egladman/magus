@@ -35,7 +35,7 @@ const artifactPage = 100
 // ActionsRun follows one GitHub Actions workflow run and unpacks its artifacts into the
 // verdict directory Path as the run uploads them: [PlanArtifact] becomes Path/[PlanFile]
 // and each [VerdictArtifactPrefix]<id> becomes the entry for change <id>. It is a
-// [mergequeue.VerdictSource], so a Lander lands a green change while slower stages of
+// [mergequeue.VerdictSource], so an Applier merges a green change while slower stages of
 // the same run are still going.
 //
 // While following, it reads the run's status before listing its artifacts, and reports

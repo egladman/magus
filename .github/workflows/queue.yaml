@@ -22,7 +22,7 @@ on:
     types: [auto_merge_enabled, synchronize]
   pull_request_review:
     types: [submitted]
-  # Every landing moves the base the rest of the queue waits on. Landing merges with the
+  # Every merge moves the base the rest of the queue waits on. Apply merges with the
   # Actions token, which starts no workflow, so queue-apply.yaml dispatches this instead;
   # push covers a merge made any other way.
   push:
@@ -30,7 +30,7 @@ on:
   workflow_dispatch:
 
 # One validation at a time; a newer event waits rather than cancelling a run whose
-# verdicts landing is already following.
+# verdicts apply is already following.
 concurrency:
   group: magus-queue-validate
   cancel-in-progress: false
@@ -85,7 +85,7 @@ jobs:
         run: magus buzz tools/queue.buzz
 
       # Speculation depth: the first DEPTH changes of each partition get a stage job; the
-      # rest wait for the run the next landing starts.
+      # rest wait for the run the next merge starts.
       - id: plan
         name: Plan the queue
         env:

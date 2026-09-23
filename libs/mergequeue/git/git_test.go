@@ -63,8 +63,8 @@ func regenerate(_ context.Context, dir, _ string, _ mergequeue.Change, _ []strin
 }
 
 type fixture struct {
-	remote, dev, queue, land string
-	base                     string
+	remote, dev, queue, apply string
+	base                      string
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -79,9 +79,9 @@ func newFixture(t *testing.T) *fixture {
 	gitIn(t, f.dev, "commit", "--quiet", "-m", "initial")
 	gitIn(t, f.dev, "push", "--quiet", "origin", "HEAD:main")
 	f.base = gitIn(t, f.dev, "rev-parse", "HEAD")
-	f.queue, f.land = filepath.Join(root, "queue"), filepath.Join(root, "land")
+	f.queue, f.apply = filepath.Join(root, "queue"), filepath.Join(root, "apply")
 	gitIn(t, root, "clone", "--quiet", f.remote, f.queue)
-	gitIn(t, root, "clone", "--quiet", f.remote, f.land)
+	gitIn(t, root, "clone", "--quiet", f.remote, f.apply)
 	return f
 }
 
@@ -119,9 +119,9 @@ func (f *fixture) staging(t *testing.T) *StagingRepo {
 	return r
 }
 
-func (f *fixture) landing(t *testing.T) *LandingRepo {
+func (f *fixture) merging(t *testing.T) *MergingRepo {
 	t.Helper()
-	r, err := NewLandingRepo(Config{Root: f.land, Remote: "origin", Env: repoEnv})
+	r, err := NewMergingRepo(Config{Root: f.apply, Remote: "origin", Env: repoEnv})
 	require.NoError(t, err)
 	return r
 }
@@ -229,11 +229,11 @@ func (f *fixture) merge(t *testing.T, c mergequeue.Change) {
 	gitIn(t, f.dev, "push", "--quiet", "origin", c.Head+":refs/heads/main")
 }
 
-// Two disjoint partitions both regenerate INDEX. #1 lands; #2's stage regenerated INDEX
+// Two disjoint partitions both regenerate INDEX. #1 merges; #2's stage regenerated INDEX
 // on the old base, so taking the stage's copy would lose #1's line from it, and the
 // after-merge tree check would pass, since the prediction itself is what is wrong.
 // Before, Predict took the stage's side of every derived conflict.
-func TestPredictRefusesADerivedFileThatWhatLandedAlsoRegenerated(t *testing.T) {
+func TestPredictRefusesADerivedFileThatWhatMergedAlsoRegenerated(t *testing.T) {
 	f := newFixture(t)
 	one := f.change(t, "1", "ann", f.base, map[string]string{"lib/x.txt": "x-one\n"})
 	two := f.change(t, "2", "bob", f.base, map[string]string{"app/src.txt": "alpha-two\nbeta\ngamma\n"})
@@ -246,17 +246,17 @@ func TestPredictRefusesADerivedFileThatWhatLandedAlsoRegenerated(t *testing.T) {
 	require.NoError(t, stager.Export(ctx, bundle, f.base, st.Commit))
 
 	f.merge(t, one)
-	lander := f.landing(t)
-	require.NoError(t, lander.ImportBundle(ctx, bundle))
-	tip, err := lander.FetchTip(ctx, "main")
+	mr := f.merging(t)
+	require.NoError(t, mr.ImportBundle(ctx, bundle))
+	tip, err := mr.FetchTip(ctx, "main")
 	require.NoError(t, err)
-	_, err = lander.Predict(ctx, f.base, tip, f.base, st.Commit)
+	_, err = mr.Predict(ctx, f.base, tip, f.base, st.Commit)
 	var ce *mergequeue.ConflictError
 	require.ErrorAs(t, err, &ce, "INDEX with both lines was never validated")
 	assert.Equal(t, []string{"INDEX"}, ce.Conflict.Paths)
 }
 
-// Within a partition the stage was built onto exactly what landed, so its derived files
+// Within a partition the stage was built onto exactly what merged, so its derived files
 // are right even where they conflict with the base.
 func TestPredictTakesTheStagesDerivedFilesWhenItWasBuiltOntoTheTip(t *testing.T) {
 	f := newFixture(t)
@@ -274,20 +274,20 @@ func TestPredictTakesTheStagesDerivedFilesWhenItWasBuiltOntoTheTip(t *testing.T)
 	require.NoError(t, stager.Export(ctx, bundle, f.base, two.Commit))
 
 	gitIn(t, f.queue, "push", "--quiet", "origin", one.Commit+":refs/heads/main")
-	lander := f.landing(t)
-	require.NoError(t, lander.ImportBundle(ctx, bundle))
-	tip, err := lander.FetchTip(ctx, "main")
+	mr := f.merging(t)
+	require.NoError(t, mr.ImportBundle(ctx, bundle))
+	tip, err := mr.FetchTip(ctx, "main")
 	require.NoError(t, err)
-	tree, err := lander.Predict(ctx, f.base, tip, one.Commit, two.Commit)
+	tree, err := mr.Predict(ctx, f.base, tip, one.Commit, two.Commit)
 	require.NoError(t, err)
-	want, err := lander.TreeOf(ctx, two.Commit)
+	want, err := mr.TreeOf(ctx, two.Commit)
 	require.NoError(t, err)
 	assert.Equal(t, want, tree)
 }
 
-// A landing commit the queue pushed, or the base merged in by the author, adds nothing
-// a reviewer did not see, so a review of the commit beneath it covers it. Before, a
-// landing commit left behind by a refused merge was a head nobody had approved, and the
+// An update commit the queue pushed, or the base merged in by the author, adds nothing
+// a reviewer did not see, so a review of the commit beneath it covers it. Before, an
+// update commit left behind by a refused merge was a head nobody had approved, and the
 // change waited forever.
 func TestReviewTargetSeesThroughAMergeOfTheBase(t *testing.T) {
 	f := newFixture(t)
@@ -311,11 +311,11 @@ func TestReviewTargetSeesThroughAMergeOfTheBase(t *testing.T) {
 	evil := gitIn(t, f.dev, "rev-parse", "HEAD")
 	gitIn(t, f.dev, "push", "--quiet", "--force", "origin", "pr1", merged+":refs/heads/merged")
 
-	r := f.landing(t)
+	r := f.merging(t)
 	ctx := context.Background()
 	tip, err := r.FetchTip(ctx, "main")
 	require.NoError(t, err)
-	gitIn(t, f.land, "fetch", "--quiet", "origin", "pr1", "merged")
+	gitIn(t, f.apply, "fetch", "--quiet", "origin", "pr1", "merged")
 	got, err := r.ReviewTarget(ctx, tip, merged)
 	require.NoError(t, err)
 	assert.Equal(t, a.Head, got)
@@ -324,7 +324,7 @@ func TestReviewTargetSeesThroughAMergeOfTheBase(t *testing.T) {
 	assert.Equal(t, evil, got, "a merge that also edits a source is its own change")
 }
 
-func TestPushLandingNeverRecreatesADeletedBranch(t *testing.T) {
+func TestUpdateBranchNeverRecreatesADeletedBranch(t *testing.T) {
 	f := newFixture(t)
 	one := f.change(t, "1", "ann", f.base, map[string]string{"lib/x.txt": "x-one\n"})
 	two := f.change(t, "2", "bob", f.base, map[string]string{"app/src.txt": "alpha-two\nbeta\ngamma\n"})
@@ -341,13 +341,13 @@ func TestPushLandingNeverRecreatesADeletedBranch(t *testing.T) {
 	bundle := filepath.Join(t.TempDir(), "stage.bundle")
 	require.NoError(t, stager.Export(ctx, bundle, f.base, st.Commit))
 
-	lander := f.landing(t)
-	require.NoError(t, lander.FetchHead(ctx, two))
+	mr := f.merging(t)
+	require.NoError(t, mr.FetchHead(ctx, two))
 	gitIn(t, f.dev, "push", "--quiet", "origin", ":pr2")
-	_, err = lander.FetchTip(ctx, "main")
+	_, err = mr.FetchTip(ctx, "main")
 	require.NoError(t, err)
-	require.NoError(t, lander.ImportBundle(ctx, bundle))
-	_, err = lander.PushLanding(ctx, f.base, tip, two, tree)
+	require.NoError(t, mr.ImportBundle(ctx, bundle))
+	_, err = mr.UpdateBranch(ctx, f.base, tip, two, tree)
 	var wait *mergequeue.WaitError
 	require.ErrorAs(t, err, &wait)
 	assert.NotContains(t, gitIn(t, f.dev, "ls-remote", "--heads", "origin"), "pr2")
@@ -395,10 +395,10 @@ func (greenGate) Validate(context.Context, mergequeue.Stage, string, mergequeue.
 // End to end over real git, living here because only this package can drive both repos
 // against one fixture: planning admits two changes, validation stages them
 // speculatively and exports each green stage as it is decided; a separate checkout that
-// never builds anything imports the stages and lands both, each as its own squash commit
+// never builds anything imports the stages and merges both, each as its own squash commit
 // by its own author, the second through a pushed regeneration, and main ends on the
 // validated tree.
-func TestValidatedChangesLandOneCommitEachAndMainCarriesTheValidatedTree(t *testing.T) {
+func TestValidatedChangesMergeOneCommitEachAndMainCarriesTheValidatedTree(t *testing.T) {
 	f := newFixture(t)
 	a := f.change(t, "1", "ann", f.base, map[string]string{"app/src.txt": "alpha-a\nbeta\ngamma\n"})
 	b := f.change(t, "2", "bob", f.base, map[string]string{"app/src.txt": "alpha\nbeta\ngamma-b\n"})
@@ -423,8 +423,8 @@ func TestValidatedChangesLandOneCommitEachAndMainCarriesTheValidatedTree(t *test
 	require.NoError(t, f2.Close())
 	require.NoError(t, err)
 
-	lander := f.landing(t)
-	require.NoError(t, mergequeue.NewLander(host, lander, &verdicts.Dir{Path: dir.Path, Follow: true}).Run(ctx, plan))
+	mr := f.merging(t)
+	require.NoError(t, mergequeue.NewApplier(host, mr, &verdicts.Dir{Path: dir.Path, Follow: true}).Run(ctx, plan))
 	assert.Equal(t, []string{"1", "2"}, host.merged)
 
 	log := gitIn(t, merger, "log", "--format=%an|%s", f.base+"..origin/main")
@@ -435,20 +435,20 @@ func TestValidatedChangesLandOneCommitEachAndMainCarriesTheValidatedTree(t *test
 	// branch: authored by bob, with the bot only as committer.
 	pushed := gitIn(t, merger, "log", "-1", "--format=%an|%cn|%P", "origin/pr2")
 	assert.True(t, strings.HasPrefix(pushed, "bob|queue-bot|"+b.Head+" "), pushed)
-	assert.NoDirExists(t, filepath.Join(f.land, ".git", "worktrees"), "landing built nothing")
+	assert.NoDirExists(t, filepath.Join(f.apply, ".git", "worktrees"), "applying built nothing")
 }
 
-func TestPushLandingRefusesATreeThatDiffersOutsideDerivedFiles(t *testing.T) {
+func TestUpdateBranchRefusesATreeThatDiffersOutsideDerivedFiles(t *testing.T) {
 	f := newFixture(t)
 	a := f.change(t, "1", "ann", f.base, map[string]string{"lib/x.txt": "y\n"})
 	evil := f.change(t, "9", "eve", f.base, map[string]string{"lib/x.txt": "y\n", "lib/extra.txt": "surprise\n"})
-	r := f.landing(t)
+	r := f.merging(t)
 	ctx := context.Background()
 	require.NoError(t, r.FetchHead(ctx, a))
 	require.NoError(t, r.FetchHead(ctx, evil))
 	tree, err := r.TreeOf(ctx, evil.Head)
 	require.NoError(t, err)
-	_, err = r.PushLanding(ctx, f.base, f.base, a, tree)
+	_, err = r.UpdateBranch(ctx, f.base, f.base, a, tree)
 	var refused *mergequeue.RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, refused.Reason, "lib/extra.txt")

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// DefaultStatusContext is the commit status a [Lander] posts when none is configured.
+// DefaultStatusContext is the commit status an [Applier] posts when none is configured.
 const DefaultStatusContext = "merge-queue"
 
 // Change is one open change carrying merge intent.
@@ -73,7 +73,7 @@ type ListQuery struct {
 }
 
 // Provider is the forge side of the queue. A [Planner] calls only ListChanges (through
-// the caller) and ApprovalAt; the rest write, and only a [Lander] calls them.
+// the caller) and ApprovalAt; the rest write, and only an [Applier] calls them.
 type Provider interface {
 	// ListChanges returns the open changes carrying merge intent against q.Base, in queue
 	// order.
@@ -82,7 +82,7 @@ type Provider interface {
 	ApprovalAt(ctx context.Context, c Change, commit string) (Approval, error)
 	// PostStatus sets s on commit.
 	PostStatus(ctx context.Context, c Change, commit string, s CommitStatus) error
-	// MergeChange lands c as one commit at exactly commit, with the change's own merge
+	// MergeChange merges c as one commit at exactly commit, with the change's own merge
 	// method and its author as the author. message is the body for a squash when the
 	// author set none. It errors when the host refused, including when c's head is no
 	// longer commit.
@@ -164,7 +164,7 @@ type StagingRepo interface {
 	FetchTip(ctx context.Context, branch string) (string, error)
 	// FetchHead makes c.Head available locally.
 	FetchHead(ctx context.Context, c Change) error
-	// ReviewTarget is the commit a review of head covers; see [LandingRepo.ReviewTarget].
+	// ReviewTarget is the commit a review of head covers; see [MergingRepo.ReviewTarget].
 	ReviewTarget(ctx context.Context, tip, head string) (string, error)
 	// Changed lists the paths head changes since its merge base with onto.
 	Changed(ctx context.Context, onto, head string) ([]string, error)
@@ -182,27 +182,28 @@ type StagingRepo interface {
 	SquashMessage(ctx context.Context, baseCommit, head string) (string, error)
 }
 
-// LandingRepo is the landing side's version control. It runs git plumbing only, never a
-// build, so the job holding the write credential executes no change's code.
-type LandingRepo interface {
+// MergingRepo is the version control of the step that merges. It runs git plumbing only,
+// never a build, so the job holding the write credential executes no change's code.
+type MergingRepo interface {
 	FetchTip(ctx context.Context, branch string) (string, error)
 	FetchHead(ctx context.Context, c Change) error
-	// ReviewTarget is the commit a review of head covers: head itself, or, when head is a
-	// landing commit PushLanding pushed (or any merge of the base branch into an approved
+	// ReviewTarget is the commit a review of head covers: head itself, or, when head is an
+	// update commit UpdateBranch pushed (or any merge of the base branch into an approved
 	// commit), the commit beneath it. See the git package for the rule.
 	ReviewTarget(ctx context.Context, tip, head string) (string, error)
 	// ImportBundle loads the stage commits validation exported to file, creating no ref.
 	ImportBundle(ctx context.Context, file string) error
 	// Predict is the tree the base branch must carry once the change validated at stage
-	// lands on tip: stage's changes since baseCommit, merged onto tip. onto is the commit
-	// the stage was built onto. A file that both the stage and what landed since onto
+	// merges on tip: stage's changes since baseCommit, merged onto tip. onto is the commit
+	// the stage was built onto. A file that both the stage and what merged since onto
 	// changed is a combination nobody validated, reported as a *[ConflictError].
 	Predict(ctx context.Context, baseCommit, tip, onto, stage string) (tree string, err error)
-	// PushLanding returns the commit to merge so that landing c on tip yields tree:
-	// c.Head when a plain merge already does, else a landing commit it pushes to
-	// c.Branch. A difference from c's plain merge outside the files baseCommit marks
-	// derived is a *[RefusedError]; a branch that moved or was deleted is a *[WaitError].
-	PushLanding(ctx context.Context, baseCommit, tip string, c Change, tree string) (commit string, err error)
+	// UpdateBranch returns the commit to merge so that merging c on tip yields tree:
+	// c.Head when a plain merge already does, else an update commit it pushes to
+	// c.Branch, merging tip into c the way a forge's "Update branch" does. A difference
+	// from c's plain merge outside the files baseCommit marks derived is a
+	// *[RefusedError]; a branch that moved or was deleted is a *[WaitError].
+	UpdateBranch(ctx context.Context, baseCommit, tip string, c Change, tree string) (commit string, err error)
 	// TreeOf returns rev's tree.
 	TreeOf(ctx context.Context, rev string) (string, error)
 }
@@ -213,7 +214,7 @@ type VerdictSink interface {
 	Record(ctx context.Context, v Verdict) error
 }
 
-// VerdictSource supplies validation's verdicts to a [Lander] as they appear.
+// VerdictSource supplies validation's verdicts to an [Applier] as they appear.
 type VerdictSource interface {
 	// Poll returns the verdicts that appeared since the last call, and whether no more
 	// will arrive. A source must read its end-of-verdicts signal before the verdicts, so

@@ -153,15 +153,15 @@ func (f cliFixture) plan(t *testing.T) string {
 
 // The CLI end to end, the way a workflow drives it: a changes document with no affected
 // sets, an affected hook that answers them, validation writing a verdict per change, and
-// landing merging each green change through a Buzz provider.
-func TestTheCLIPlansValidatesAndLandsDisjointChanges(t *testing.T) {
+// apply merging each green change through a Buzz provider.
+func TestTheCLIPlansValidatesAndMergesDisjointChanges(t *testing.T) {
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
 
 	out, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir,
 		"--gate", `test "$(cat app/a.txt)" = "change 1" || test "$MERGEQUEUE_CHANGE" = 2`)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]mergequeue.Decision{"1": mergequeue.DecisionLand, "2": mergequeue.DecisionLand}, decided(t, out))
+	assert.Equal(t, map[string]mergequeue.Decision{"1": mergequeue.DecisionMerge, "2": mergequeue.DecisionMerge}, decided(t, out))
 	assert.FileExists(t, filepath.Join(dir, verdicts.DoneFile))
 	assert.FileExists(t, filepath.Join(dir, verdicts.PlanFile), "the directory carries its own plan")
 
@@ -237,7 +237,7 @@ func zipDir(t *testing.T, dir string) []byte {
 	return buf.Bytes()
 }
 
-// The landing workflow's shape: apply reads the plan and verdicts from the validation
+// The apply workflow's shape: apply reads the plan and verdicts from the validation
 // run's artifacts, as upload-artifact would have packed validate's output.
 func TestApplyFollowsAnActionsRun(t *testing.T) {
 	f := newCLIFixture(t, map[string]string{})
@@ -258,7 +258,7 @@ func TestApplyFollowsAnActionsRun(t *testing.T) {
 	assert.ElementsMatch(t, []string{"1", "2"}, merged(t, out))
 }
 
-func TestApplyFromARunThatPlannedNothingLandsNothing(t *testing.T) {
+func TestApplyFromARunThatPlannedNothingMergesNothing(t *testing.T) {
 	f := newCLIFixture(t, map[string]string{})
 	fakeRun(t, map[string]string{})
 	out, err := runCLI(t, "", "-C", f.queue, "apply", "--provider", f.provider(t), "--interval", "10ms", "github-actions:acme/widgets/runs/7")
@@ -291,7 +291,7 @@ func TestApplyReadsThePlanFromADirectoryAndRefusesOneWithout(t *testing.T) {
 }
 
 // Without --once apply follows a directory until validate marks it done; with --once it
-// lands what is there and leaves the rest queued.
+// merges what is there and leaves the rest queued.
 func TestApplyFollowsADirectoryUntilDoneUnlessOnce(t *testing.T) {
 	f := newCLIFixture(t, map[string]string{})
 	planFile, dir := f.plan(t), filepath.Join(f.root, "verdicts")
@@ -401,7 +401,7 @@ func TestAFailingRegenerationKicksItsChangeBackAndTheRunFinishes(t *testing.T) {
 	out, err := runCLI(t, "", "-C", f.queue, "validate", "--plan", planFile, "--verdicts", dir,
 		"--gate", "true", "--regenerate", `echo "cannot regenerate $MERGEQUEUE_CHANGE" >&2; exit 1`)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]mergequeue.Decision{"1": mergequeue.DecisionLand, "2": mergequeue.DecisionKick}, decided(t, out))
+	assert.Equal(t, map[string]mergequeue.Decision{"1": mergequeue.DecisionMerge, "2": mergequeue.DecisionKick}, decided(t, out))
 	assert.FileExists(t, filepath.Join(dir, verdicts.DoneFile))
 }
 
@@ -414,7 +414,6 @@ func TestUsageMistakesExitTwoAndErrorsNameTheirCommandOnce(t *testing.T) {
 		"list is ls":                       {"list", "--provider", "github", "--base", "main"},
 		"ls without --base":                {"ls", "--provider", "github"},
 		"ls with an operand":               {"ls", "--provider", "github", "--base", "main", "extra"},
-		"land is apply":                    {"land", "--provider", "github", "s"},
 		"apply without a source":           {"apply", "--provider", "github"},
 		"apply with two sources":           {"apply", "--provider", "github", "s", "t"},
 		"a flag after the source":          {"apply", "--provider", "github", "s", "--once"},
@@ -441,8 +440,8 @@ func TestUsageMistakesExitTwoAndErrorsNameTheirCommandOnce(t *testing.T) {
 		"ls stages nothing":                {"ls", "--attribute", "x", "--provider", "github", "--base", "main"},
 		"ls runs nothing in parallel":      {"ls", "--parallel", "2", "--provider", "github", "--base", "main"},
 		"apply runs nothing in parallel":   {"apply", "--parallel", "2", "--provider", "github", "s"},
-		"plan lands nothing":               {"plan", "--dry-run", "--out", "p"},
-		"validate lands nothing":           {"validate", "--once", "--plan", "p", "--gate", "true", "--verdicts", "v"},
+		"plan merges nothing":              {"plan", "--dry-run", "--out", "p"},
+		"validate merges nothing":          {"validate", "--once", "--plan", "p", "--gate", "true", "--verdicts", "v"},
 	} {
 		_, err = runCLI(t, "", args...)
 		require.ErrorIs(t, err, errUsage, name)

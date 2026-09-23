@@ -21,7 +21,7 @@ func TestPlanRoundTrips(t *testing.T) {
 }
 
 func TestVerdictRoundTripsWithItsSchemaStamped(t *testing.T) {
-	v := Verdict{BaseCommit: base, Change: change("1", "a"), Decision: DecisionLand, Onto: base, Stage: "s", Depth: 1}
+	v := Verdict{BaseCommit: base, Change: change("1", "a"), Decision: DecisionMerge, Onto: base, Stage: "s", Depth: 1}
 	var buf bytes.Buffer
 	require.NoError(t, WriteVerdict(&buf, v))
 	got, err := ReadVerdict(&buf)
@@ -42,7 +42,7 @@ func TestReadChangesRefusesAnotherSchemaAndAChangeWithoutAHead(t *testing.T) {
 	assert.False(t, got.Changes[1].Proven(), "null is unknown, not empty")
 }
 
-// An id names a directory the verdicts land in, so ".." once made the stages
+// An id names a directory the verdicts are written to, so ".." once made the stages
 // directory's parent the target of a RemoveAll.
 func TestReadChangesRefusesIDsThatEscapeTheirDirectory(t *testing.T) {
 	for _, id := range []string{"..", ".", "a/b", `a\b`, ".hidden", "-x", ""} {
@@ -52,18 +52,18 @@ func TestReadChangesRefusesIDsThatEscapeTheirDirectory(t *testing.T) {
 	}
 }
 
-func TestReadPlanRefusesADuplicateAndAPlanningLand(t *testing.T) {
+func TestReadPlanRefusesADuplicateAndAPlanningMerge(t *testing.T) {
 	dup := Plan{Base: "main", BaseCommit: base, Depth: 1, Partitions: [][]Change{{change("1")}, {change("1")}}}
 	var buf bytes.Buffer
 	require.NoError(t, WritePlan(&buf, dup))
 	_, err := ReadPlan(&buf)
 	require.ErrorContains(t, err, `change "1" appears twice`)
 
-	land := Plan{Base: "main", BaseCommit: base, Depth: 1, Verdicts: []Verdict{{Change: change("1"), Decision: DecisionLand}}}
+	merge := Plan{Base: "main", BaseCommit: base, Depth: 1, Verdicts: []Verdict{{Change: change("1"), Decision: DecisionMerge}}}
 	buf.Reset()
-	require.NoError(t, WritePlan(&buf, land))
+	require.NoError(t, WritePlan(&buf, merge))
 	_, err = ReadPlan(&buf)
-	require.ErrorContains(t, err, `planning decides "land"`)
+	require.ErrorContains(t, err, `planning decides "merge"`)
 }
 
 func TestCheckBranchFollowsGitsRules(t *testing.T) {

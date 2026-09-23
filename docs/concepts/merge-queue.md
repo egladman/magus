@@ -8,7 +8,7 @@ tags: [merge-queue, queue, pull-request, auto-merge, speculation, github, provid
 
 The merge queue is a separate Go module, `github.com/egladman/magus/libs/mergequeue`,
 with its own CLI, `mergequeue`. It does not import magus, and magus does not import it:
-a queue owns checkouts (staging commits, landing) and magus never does. Anyone can run it
+a queue owns checkouts (staging commits, applying) and magus never does. Anyone can run it
 without magus. Magus feeds it one fact, each change's affected set, through
 `magus affected <target> --plan --stdin`.
 
@@ -19,8 +19,8 @@ there the queue:
   of those stages at once, each running only what its own change adds;
 - keeps changes whose affected sets are disjoint in separate partitions, which never wait
   on each other;
-- lands each green change as its own commit, by its author, with the merge method the
-  author picked, as soon as every change beneath it in its partition has landed;
+- merges each green change as its own commit, by its author, with the merge method the
+  author picked, as soon as every change beneath it in its partition has merged;
 - checks after each merge that main carries exactly the tree it validated, and stops if
   it does not;
 - regenerates derived files a change touched or conflicted in, and pushes that
@@ -40,9 +40,9 @@ run and leaves the change queued.
 | base commit | the base's tip when the plan was made; every partition starts on it   |
 | stage       | a staging commit: one change merged onto the stage beneath it         |
 | onto        | the commit a stage was built onto: the base commit or the stage below |
-| tip         | the base's commit at landing                                          |
+| tip         | the base's commit at apply                                            |
 | head        | a change's own commit                                                 |
-| verdict     | what the queue decided for one change: `land`, `kick` or `wait`       |
+| verdict     | what the queue decided for one change: `merge`, `kick` or `wait`      |
 
 ## Commands
 
@@ -98,7 +98,7 @@ and stops, leaving the rest queued; `--interval` sets how often a follow reads t
 and is refused with `--once`.
 
 A run source downloads the run's `magus-queue-plan` artifact, then each
-`magus-queue-verdict-<id>` artifact as the run uploads it, and lands while slower stages
+`magus-queue-verdict-<id>` artifact as the run uploads it, and merges while slower stages
 are still going. It reads the run's status before each listing, so it stops following
 only after a listing made once the run had completed. It reads with `MERGEQUEUE_TOKEN`,
 else `GITHUB_TOKEN`.
@@ -199,7 +199,7 @@ different plan into a directory that already holds one is an error.
   "schema": "mergequeue.verdict/v1",
   "base_commit": "9f2e...",
   "change": {"id": "483", "head": "c0de...", "title": "feat: lexer"},
-  "decision": "land",
+  "decision": "merge",
   "after": "482",
   "onto": "5e1a...",
   "stage": "77aa...",
@@ -209,15 +209,15 @@ different plan into a directory that already holds one is an error.
 }
 ```
 
-`decision` is `land`, `kick` (with a `report` for the author) or `wait` (with a
+`decision` is `merge`, `kick` (with a `report` for the author) or `wait` (with a
 `reason`). `after` is the change validated beneath this one and `onto` its stage.
-`apply` polls the directory, and lands a change once its own verdict is green and
-`after` has landed. It trusts a verdict only as far as the plan vouches for it: a head,
-an `after` or an `onto` the plan does not match lands nothing.
+`apply` polls the directory, and merges a change once its own verdict is green and
+`after` has merged. It trusts a verdict only as far as the plan vouches for it: a head,
+an `after` or an `onto` the plan does not match merges nothing.
 
-## Landing as each stage goes green
+## Applying as each stage goes green
 
-Validation runs pull-request code with a read-only token; landing holds the write token
+Validation runs pull-request code with a read-only token; apply holds the write token
 and runs none. They are two workflows, and verdicts pass between them one stage at a
 time:
 
@@ -227,15 +227,15 @@ time:
 2. `queue-apply.yaml` starts when validation is requested (`workflow_run: requested`), from
    main's definition with a write-scoped Actions token, and downloads each verdict
    artifact as it appears, while validation is still running: `apply` with the run as its
-   source lands each change whose predecessors have landed, and stops once the
+   source merges each change whose predecessors have merged, and stops once the
    validation run completes.
 
-The landing token is the job's own, so no long-lived secret exists. A merge made with
-the Actions token starts no workflow, so once anything lands the job dispatches main's
+The apply token is the job's own, so no long-lived secret exists. A merge made with
+the Actions token starts no workflow, so once anything merges the job dispatches main's
 CI, CD and the queue's next run itself.
 
-Before each merge, landing predicts the tree main will carry. A file that both the stage
-and something landed since the stage was built changed, such as a root index two
+Before each merge, apply predicts the tree main will carry. A file that both the stage
+and something merged since the stage was built changed, such as a root index two
 disjoint partitions both regenerate, is a combination nobody validated: the change waits
 and is restaged on the next run.
 
@@ -244,18 +244,19 @@ change has merged. A required status that went green first would let anyone merg
 change onto whatever main had become, so branch protection must let the GitHub Actions
 app bypass that status; nothing else can satisfy it.
 
-Why not have validation post a `magus/queue` status per stage and trigger landing on
+Why not have validation post a `magus/queue` status per stage and trigger apply on
 the status event? Posting a status needs `statuses: write` in the job that runs
 pull-request code, and branch protection requires exactly that status, so a pull
 request could mark itself green. Statuses posted with the Actions token do not start
-workflows either. A `workflow_run: completed` trigger fires once per run, so landing
+workflows either. A `workflow_run: completed` trigger fires once per run, so apply
 would wait for the slowest stage. Artifacts are readable through the API as soon as they
 are uploaded, which is what lets the write side follow the read side stage by stage
 without either one holding the other's rights.
 
-When landing has to push a regeneration, it pushes a landing commit onto the change's
-branch with a lease on the validated head, so a branch that moved or was deleted is
-left alone. If the merge then fails, the landing commit is the branch's head; a review
+When apply has to push a regeneration, it pushes an update commit onto the change's
+branch, merging main into it the way a forge's "Update branch" does, with a lease on the
+validated head, so a branch that moved or was deleted is left alone. If the merge then
+fails, the update commit is the branch's head; a review
 of the commit beneath it still covers it, because it adds only main and regenerated
 files. The same holds for main merged into a change by its author.
 

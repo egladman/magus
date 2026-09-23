@@ -4,14 +4,14 @@
 //	QUEUE_STEP=build     magus buzz tools/queue.buzz   compile mergequeue; put it and mise's Go on PATH
 //	QUEUE_STEP=plan      magus buzz tools/queue.buzz   plan the queue; write the stage matrix (DEPTH)
 //	QUEUE_STEP=validate  magus buzz tools/queue.buzz   validate one change of the plan (CHANGE)
-//	QUEUE_STEP=apply     magus buzz tools/queue.buzz   land what validation run RUN uploads onto MAIN
+//	QUEUE_STEP=apply     magus buzz tools/queue.buzz   merge what validation run RUN uploads onto MAIN
 //
 // The step is an environment variable because `magus buzz` passes a script no
 // arguments; every input is one too. The decisions (which stages the matrix holds,
-// each command's argv, whether anything landed) are pure functions tested at the
+// each command's argv, whether anything merged) are pure functions tested at the
 // bottom; the process calls are not, since exercising them means running the queue.
 //
-// Landing never checks out or runs pull-request code: the apply step runs only
+// Applying never checks out or runs pull-request code: the apply step runs only
 // mergequeue, git and gh, from main's checkout.
 namespace queue;
 
@@ -23,7 +23,7 @@ import "std";
 
 import "assert";
 
-// main's workflows the apply step starts after a landing, since a merge made with the
+// main's workflows the apply step starts after a merge, since a merge made with the
 // job's Actions token starts none.
 final DISPATCH = ["ci.yaml", "cd.yaml", "queue.yaml"];
 
@@ -42,7 +42,7 @@ fun need(name: str) > str !> any {
 }
 
 // stageIDs lists the changes the plan gives a stage job: the first `depth` of each
-// partition. The rest wait for the run the next landing starts.
+// partition. The rest wait for the run the next merge starts.
 export fun stageIDs(plan: str) > [str] !> any {
     final doc = serialize\jsonDecode(plan);
     final depth = doc.q("depth").integerValue();
@@ -93,7 +93,7 @@ export fun tip(lsRemote: str) > str {
 }
 
 // dispatches names the workflows to start on main: all of them when its tip moved,
-// none when nothing landed.
+// none when nothing merged.
 export fun dispatches(before: str, after: str) > [str] {
     if (before == after) {
         return [<str>];
@@ -149,13 +149,13 @@ fun apply() > void !> any {
     proc\exec("git", args: ["config", "user.name", "magus-queue"], opts: {});
     proc\exec("git", args: ["config", "user.email", "magus-queue@users.noreply.github.com"], opts: {});
     final before = mainTip(branch);
-    final landed = proc\exec("mergequeue", args: args, opts: {"allow_failure": true});
-    // A failed apply still dispatches main's runs for whatever landed before it stopped.
+    final applied = proc\exec("mergequeue", args: args, opts: {"allow_failure": true});
+    // A failed apply still dispatches main's runs for whatever merged before it stopped.
     foreach (workflow in dispatches(before, after: mainTip(branch))) {
         proc\exec("gh", args: ["workflow", "run", workflow, "--repo", repo, "--ref", branch], opts: {});
     }
-    if (!landed.ok) {
-        os\exit(landed.code);
+    if (!applied.ok) {
+        os\exit(applied.code);
     }
 }
 
@@ -229,6 +229,6 @@ test "tip reads the commit off ls-remote" {
 }
 
 test "main's runs are dispatched only when its tip moved" {
-    assert\equal(dispatches("a", after: "a").len(), want: 0, message: "nothing landed");
-    assert\equal(dispatches("a", after: "b"), want: ["ci.yaml", "cd.yaml", "queue.yaml"], message: "something landed");
+    assert\equal(dispatches("a", after: "a").len(), want: 0, message: "nothing merged");
+    assert\equal(dispatches("a", after: "b"), want: ["ci.yaml", "cd.yaml", "queue.yaml"], message: "something merged");
 }

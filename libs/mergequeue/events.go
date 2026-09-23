@@ -14,9 +14,9 @@ const (
 	EventPartition EventKind = "partition" // planning grouped Changes into Partition
 	EventDecided   EventKind = "decided"   // planning or validation settled Change
 	EventGate      EventKind = "gate"      // a gate started on Change's stage Commit at Depth
-	EventMerged    EventKind = "merged"    // a Lander merged Change at Commit
-	EventKicked    EventKind = "kicked"    // a Lander kicked Change back
-	EventWaiting   EventKind = "waiting"   // a Lander left Change queued for a later run
+	EventMerged    EventKind = "merged"    // an Applier merged Change at Commit
+	EventKicked    EventKind = "kicked"    // an Applier kicked Change back
+	EventWaiting   EventKind = "waiting"   // an Applier left Change queued for a later run
 	EventNotice    EventKind = "notice"    // anything else worth a line, in Reason
 )
 

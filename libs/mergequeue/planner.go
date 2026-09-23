@@ -12,7 +12,7 @@ import (
 // nothing to the forge: it calls only [Provider.ApprovalAt].
 type Planner struct {
 	// Provider checks approval at each head. Nil admits every change unchecked, for a
-	// caller that vouched for its input; a Lander re-checks approval regardless.
+	// caller that vouched for its input; an Applier re-checks approval regardless.
 	Provider Provider
 	// Affected is asked about a change whose input carries no affected set. Nil leaves
 	// such a change unbounded.
@@ -173,7 +173,7 @@ func approval(ctx context.Context, prov Provider, repo reviewTargeter, tip strin
 	return appr, reviewed, nil
 }
 
-const forkReport = "The merge queue does not land changes from forks: it cannot push their " +
+const forkReport = "The merge queue does not merge changes from forks: it cannot push their " +
 	"regenerated files, and it runs only code whose author can push to this repository. " +
 	"Ask a maintainer to push the branch here.\n"
 

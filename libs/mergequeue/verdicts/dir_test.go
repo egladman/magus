@@ -33,7 +33,7 @@ func TestPollSeesOnlyFinishedVerdictsEachOnceAndTheDoneMarker(t *testing.T) {
 		exported = stage
 		return os.WriteFile(file, []byte("bundle"), 0o644)
 	}}
-	require.NoError(t, writer.Record(ctx, mergequeue.Verdict{Change: change("pr-1"), Decision: mergequeue.DecisionLand, Stage: "s1"}))
+	require.NoError(t, writer.Record(ctx, mergequeue.Verdict{Change: change("pr-1"), Decision: mergequeue.DecisionMerge, Stage: "s1"}))
 	require.NoError(t, os.Mkdir(filepath.Join(path, ".pr-3-123"), 0o755)) // a Record in progress
 	fresh, done, err = reader.Poll(ctx)
 	require.NoError(t, err)

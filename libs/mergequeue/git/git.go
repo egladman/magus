@@ -1,8 +1,8 @@
 // Package git is the merge queue's git side: [StagingRepo] for planning and validation,
-// [LandingRepo] for landing, each over one checkout's object store.
+// [MergingRepo] for applying, each over one checkout's object store.
 //
 // The two are separate types on purpose. Only a StagingRepo takes a regeneration hook,
-// which runs the changes' code; a LandingRepo cannot be handed one, so the job holding
+// which runs the changes' code; a MergingRepo cannot be handed one, so the job holding
 // the write credential runs plumbing only (merge-tree, commit-tree, push) and never
 // checks out or executes a change's code.
 //
@@ -223,13 +223,13 @@ func (r *repo) changedBetween(ctx context.Context, a, b string) ([]string, error
 	return splitNUL(out), nil
 }
 
-// reviewDepth bounds how many landing commits ReviewTarget looks through.
+// reviewDepth bounds how many update commits ReviewTarget looks through.
 const reviewDepth = 8
 
 // ReviewTarget is the commit a review of head covers. A head with two parents, the
 // second already on the base branch at tip, whose tree differs from the merge of its
 // parents only in files tip marks derived, adds nothing a reviewer did not see: it is a
-// landing commit the queue pushed, or the base branch merged into the change by its
+// update commit the queue pushed, or the base branch merged into the change by its
 // author. A review of its first parent covers it, and so on down.
 func (r *repo) ReviewTarget(ctx context.Context, tip, head string) (string, error) {
 	for range reviewDepth {

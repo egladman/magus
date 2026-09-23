@@ -40,7 +40,7 @@ func NewStagingRepo(cfg Config, scratch string, regenerate mergequeue.Regenerate
 
 // stagingIdent authors the staging commits with a fixed identity and date, so the same
 // changes stacked on the same base yield the same commit in every job that stages them.
-// They are never pushed; a landing commit is authored by the change's head author.
+// They are never pushed; an update commit is authored by the change's head author.
 var stagingIdent = []string{
 	"GIT_AUTHOR_NAME=merge queue", "GIT_AUTHOR_EMAIL=queue@mergequeue.invalid",
 	"GIT_COMMITTER_NAME=merge queue", "GIT_COMMITTER_EMAIL=queue@mergequeue.invalid",
@@ -251,7 +251,7 @@ func (s *StagingRepo) SquashMessage(ctx context.Context, baseCommit, head string
 const exportRefs = "refs/mergequeue/export/"
 
 // Export writes stage and every commit beneath it that baseCommit lacks to file as a git
-// bundle, so landing imports the validated commits instead of rebuilding anything. Its
+// bundle, so applying imports the validated commits instead of rebuilding anything. Its
 // signature is a verdicts.ExportFunc.
 func (s *StagingRepo) Export(ctx context.Context, file, baseCommit, stage string) error {
 	ref := fmt.Sprintf("%s%d", exportRefs, s.seq.Add(1))

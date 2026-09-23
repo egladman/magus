@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// branch is the base branch as a Lander sees it: the ids merged into it, in order. A
+// branch is the base branch as an Applier sees it: the ids merged into it, in order. A
 // tree is the sorted set of ids it carries, so trees compare the way content would.
-type branch struct{ landed []string }
+type branch struct{ merged []string }
 
 func treeOf(ids []string) string {
 	s := slices.Clone(ids)
@@ -24,51 +24,51 @@ func treeOf(ids []string) string {
 	return "tree:" + strings.Join(slices.Compact(s), ",")
 }
 
-type fakeLandingRepo struct {
+type fakeMergingRepo struct {
 	b        *branch
 	refused  map[string]bool
-	pushed   map[string]bool // changes whose landing needs a regeneration pushed
+	pushed   map[string]bool // changes whose merge needs a regeneration pushed
 	moved    map[string]bool // changes whose branch moved before the push
-	stale    map[string]bool // changes whose stage shares a file with what landed since
+	stale    map[string]bool // changes whose stage shares a file with what merged since
 	imported []string
 }
 
-func (l *fakeLandingRepo) FetchTip(context.Context, string) (string, error) {
-	return "main@" + strings.Join(l.b.landed, ","), nil
+func (l *fakeMergingRepo) FetchTip(context.Context, string) (string, error) {
+	return "main@" + strings.Join(l.b.merged, ","), nil
 }
-func (l *fakeLandingRepo) FetchHead(context.Context, Change) error { return nil }
-func (l *fakeLandingRepo) ReviewTarget(_ context.Context, _, h string) (string, error) {
+func (l *fakeMergingRepo) FetchHead(context.Context, Change) error { return nil }
+func (l *fakeMergingRepo) ReviewTarget(_ context.Context, _, h string) (string, error) {
 	return h, nil
 }
 
-func (l *fakeLandingRepo) ImportBundle(_ context.Context, file string) error {
+func (l *fakeMergingRepo) ImportBundle(_ context.Context, file string) error {
 	l.imported = append(l.imported, file)
 	return nil
 }
 
-// Predict merges the stage's ids onto what has landed.
-func (l *fakeLandingRepo) Predict(_ context.Context, _, _, _, stage string) (string, error) {
+// Predict merges the stage's ids onto what has merged.
+func (l *fakeMergingRepo) Predict(_ context.Context, _, _, _, stage string) (string, error) {
 	ids := strings.Split(stage, "+")[1:]
 	if l.stale[ids[len(ids)-1]] {
 		return "", &ConflictError{Conflict: Conflict{Paths: []string{"MAGUS.md"}}}
 	}
-	return treeOf(append(slices.Clone(l.b.landed), ids...)), nil
+	return treeOf(append(slices.Clone(l.b.merged), ids...)), nil
 }
 
-func (l *fakeLandingRepo) PushLanding(_ context.Context, _, _ string, c Change, _ string) (string, error) {
+func (l *fakeMergingRepo) UpdateBranch(_ context.Context, _, _ string, c Change, _ string) (string, error) {
 	switch {
 	case l.refused[c.ID]:
 		return "", &RefusedError{Reason: "cannot push to a fork"}
 	case l.moved[c.ID]:
 		return "", &WaitError{Reason: "its branch moved or was deleted since validation"}
 	case l.pushed[c.ID]:
-		return head("landing-" + c.ID), nil
+		return head("update-" + c.ID), nil
 	}
 	return c.Head, nil
 }
 
-func (l *fakeLandingRepo) TreeOf(context.Context, string) (string, error) {
-	return treeOf(l.b.landed), nil
+func (l *fakeMergingRepo) TreeOf(context.Context, string) (string, error) {
+	return treeOf(l.b.merged), nil
 }
 
 type writeProvider struct {
@@ -79,7 +79,7 @@ type writeProvider struct {
 	merges   []string      // id@commit: message
 	atMerge  []CommitState // the last state posted on each merged commit when it merged
 	kicked   map[string]string
-	extra    string // lands an unvalidated id alongside every merge
+	extra    string // merges an unvalidated id alongside every merge
 	refuse   map[string]bool
 }
 
@@ -115,9 +115,9 @@ func (p *writeProvider) MergeChange(_ context.Context, c Change, commit, message
 		return errors.New("405 not mergeable")
 	}
 	p.merges = append(p.merges, c.ID+"@"+idOf(commit)+": "+message)
-	p.b.landed = append(p.b.landed, c.ID)
+	p.b.merged = append(p.b.merged, c.ID)
 	if p.extra != "" {
-		p.b.landed = append(p.b.landed, p.extra)
+		p.b.merged = append(p.b.merged, p.extra)
 	}
 	return nil
 }
@@ -148,13 +148,13 @@ func (p *polls) Poll(context.Context) ([]Verdict, bool, error) {
 
 // green is the verdict on id validated onto onto, beneath which after was validated.
 func green(id, onto, after string) Verdict {
-	return Verdict{BaseCommit: base, Change: change(id, "a"), Decision: DecisionLand,
+	return Verdict{BaseCommit: base, Change: change(id, "a"), Decision: DecisionMerge,
 		Onto: onto, Stage: onto + "+" + id, After: after, Message: "* " + id}
 }
 
-type landed struct{ events []Event }
+type applied struct{ events []Event }
 
-func (l landed) outcomes() map[string]EventKind {
+func (l applied) outcomes() map[string]EventKind {
 	out := map[string]EventKind{}
 	for _, e := range l.events {
 		out[e.Change] = e.Kind
@@ -162,7 +162,7 @@ func (l landed) outcomes() map[string]EventKind {
 	return out
 }
 
-func (l landed) reason(id string) string {
+func (l applied) reason(id string) string {
 	for _, e := range slices.Backward(l.events) {
 		if e.Change == id {
 			return e.Reason
@@ -171,21 +171,21 @@ func (l landed) reason(id string) string {
 	return ""
 }
 
-func newLanding(src VerdictSource) (*Lander, *fakeLandingRepo, *writeProvider) {
+func newApplier(src VerdictSource) (*Applier, *fakeMergingRepo, *writeProvider) {
 	b := &branch{}
-	repo := &fakeLandingRepo{b: b, refused: map[string]bool{}, pushed: map[string]bool{}, moved: map[string]bool{}, stale: map[string]bool{}}
+	repo := &fakeMergingRepo{b: b, refused: map[string]bool{}, pushed: map[string]bool{}, moved: map[string]bool{}, stale: map[string]bool{}}
 	p := &writeProvider{b: b, refuse: map[string]bool{}}
-	l := NewLander(p, repo, src)
-	l.Interval = 1
-	return l, repo, p
+	a := NewApplier(p, repo, src)
+	a.Interval = 1
+	return a, repo, p
 }
 
-func landAll(t *testing.T, l *Lander, p Plan) (landed, error) {
+func applyAll(t *testing.T, a *Applier, p Plan) (applied, error) {
 	t.Helper()
 	var buf bytes.Buffer
-	l.Events = NewEvents(&buf)
-	err := l.Run(context.Background(), p)
-	var out landed
+	a.Events = NewEvents(&buf)
+	err := a.Run(context.Background(), p)
+	var out applied
 	sc := bufio.NewScanner(&buf)
 	for sc.Scan() {
 		var e Event
@@ -197,9 +197,9 @@ func landAll(t *testing.T, l *Lander, p Plan) (landed, error) {
 
 func once(vs ...Verdict) *polls { return &polls{batches: [][]Verdict{vs}} }
 
-func TestEveryChangeLandsAsItsOwnCommitInQueueOrder(t *testing.T) {
-	l, _, p := newLanding(once(green("2", base+"+1", "1"), green("1", base, ""), green("3", base+"+1+2", "2")))
-	got, err := landAll(t, l, planOf(3, []Change{change("1", "a"), change("2", "a"), change("3", "a")}))
+func TestEveryChangeMergesAsItsOwnCommitInQueueOrder(t *testing.T) {
+	a, _, p := newApplier(once(green("2", base+"+1", "1"), green("1", base, ""), green("3", base+"+1+2", "2")))
+	got, err := applyAll(t, a, planOf(3, []Change{change("1", "a"), change("2", "a"), change("3", "a")}))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1@1: * 1", "2@2: * 2", "3@3: * 3"}, p.merges)
 	assert.Equal(t, map[string]EventKind{"1": EventMerged, "2": EventMerged, "3": EventMerged}, got.outcomes())
@@ -210,9 +210,9 @@ func TestEveryChangeLandsAsItsOwnCommitInQueueOrder(t *testing.T) {
 // between would leave a change anyone could merge onto whatever the base had become.
 // Before, the status read success when MergeChange ran.
 func TestSuccessIsPostedOnlyOnceTheChangeMerged(t *testing.T) {
-	l, _, p := newLanding(once(green("1", base, ""), green("2", base+"+1", "1")))
+	a, _, p := newApplier(once(green("1", base, ""), green("2", base+"+1", "1")))
 	p.refuse["2"] = true
-	_, err := landAll(t, l, planOf(2, []Change{change("1", "a"), change("2", "a")}))
+	_, err := applyAll(t, a, planOf(2, []Change{change("1", "a"), change("2", "a")}))
 	require.NoError(t, err)
 	assert.Equal(t, []CommitState{StatePending, StatePending}, p.atMerge, "pending while the merge is asked for")
 	assert.Equal(t, []posted{
@@ -221,66 +221,66 @@ func TestSuccessIsPostedOnlyOnceTheChangeMerged(t *testing.T) {
 	}, p.statuses, "a refused merge never reads success")
 }
 
-// What landing only after the whole run misses: a green stage lands while stages above
+// What applying only after the whole run misses: a green stage merges while stages above
 // it and other partitions are still validating, and a verdict that arrives before the
-// one beneath it waits for it rather than landing out of order.
-func TestEachStageLandsTheMomentItAndEverythingBeneathItAreGreen(t *testing.T) {
+// one beneath it waits for it rather than merging out of order.
+func TestEachStageMergesTheMomentItAndEverythingBeneathItAreGreen(t *testing.T) {
 	two := green("2", base+"+1", "1")
 	two.Bundle = "verdicts/2/stage.bundle"
 	src := &polls{batches: [][]Verdict{{two}, {green("7", base, "")}, {green("1", base, "")}}}
-	l, repo, p := newLanding(src)
+	a, repo, p := newApplier(src)
 	var order []string
 	p.approval = func(c Change) Approval {
 		order = append(order, c.ID+"@poll"+string(rune('0'+src.n)))
 		return Approval{Approved: true, Head: c.Head}
 	}
-	_, err := landAll(t, l, planOf(3, []Change{change("1", "a"), change("2", "a")}, []Change{change("7", "b")}))
+	_, err := applyAll(t, a, planOf(3, []Change{change("1", "a"), change("2", "a")}, []Change{change("7", "b")}))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"7@poll2", "1@poll3", "2@poll3"}, order,
-		"#7 lands while #1 is still validating; #2, green first, waits for #1")
+		"#7 merges while #1 is still validating; #2, green first, waits for #1")
 	assert.Equal(t, []string{"verdicts/2/stage.bundle"}, repo.imported)
 }
 
-func TestAChangeValidatedOnOneThatDidNotLandWaits(t *testing.T) {
-	l, _, p := newLanding(once(green("1", base, ""), green("2", base+"+1", "1")))
+func TestAChangeValidatedOnOneThatDidNotMergeWaits(t *testing.T) {
+	a, _, p := newApplier(once(green("1", base, ""), green("2", base+"+1", "1")))
 	p.approval = func(c Change) Approval {
 		return Approval{Approved: c.ID != "1", Head: c.Head, Reason: "changes requested"}
 	}
-	got, err := landAll(t, l, planOf(2, []Change{change("1", "a"), change("2", "a")}))
+	got, err := applyAll(t, a, planOf(2, []Change{change("1", "a"), change("2", "a")}))
 	require.NoError(t, err)
 	assert.Empty(t, p.merges)
 	assert.Equal(t, map[string]EventKind{"1": EventWaiting, "2": EventWaiting}, got.outcomes())
-	assert.Equal(t, "validated on top of #1, which did not land", got.reason("2"))
+	assert.Equal(t, "validated on top of #1, which did not merge", got.reason("2"))
 }
 
 // The plan says which head was admitted and what lies beneath each change; a verdict
-// file saying otherwise was trusted before, and landed.
-func TestAVerdictThatDisagreesWithThePlanLandsNothing(t *testing.T) {
+// file saying otherwise was trusted before, and merged.
+func TestAVerdictThatDisagreesWithThePlanMergesNothing(t *testing.T) {
 	forged := green("1", base, "")
 	forged.Change.Head = head("other")
 	skipped := green("3", base+"+9", "9")
-	l, _, p := newLanding(once(forged, green("2", base, ""), skipped))
-	got, err := landAll(t, l, planOf(3, []Change{change("1", "a")}, []Change{change("2", "b")}, []Change{change("3", "c")}))
+	a, _, p := newApplier(once(forged, green("2", base, ""), skipped))
+	got, err := applyAll(t, a, planOf(3, []Change{change("1", "a")}, []Change{change("2", "b")}, []Change{change("3", "c")}))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"2@2: * 2"}, p.merges)
 	assert.Equal(t, "validated at "+short(head("other"))+", not the planned head "+short(head("1")), got.reason("1"))
 	assert.Equal(t, "validated on top of #9, which is not beneath it in its partition", got.reason("3"))
 
-	l, _, _ = newLanding(once(green("5", base, "")))
-	_, err = landAll(t, l, planOf(1, []Change{change("1", "a")}))
+	a, _, _ = newApplier(once(green("5", base, "")))
+	_, err = applyAll(t, a, planOf(1, []Change{change("1", "a")}))
 	require.EqualError(t, err, "a verdict names #5, which the plan did not admit")
 }
 
 func TestPlanVerdictsAndRedVerdictsReachTheProvider(t *testing.T) {
 	red := Verdict{BaseCommit: base, Change: change("3", "a"), Decision: DecisionKick, Report: "the gate failed"}
-	l, _, p := newLanding(once(red))
-	l.StatusContext = "magus/queue"
+	a, _, p := newApplier(once(red))
+	a.StatusContext = "magus/queue"
 	pl := planOf(1, []Change{change("3", "a")})
 	pl.Verdicts = []Verdict{
 		{Change: change("1"), Decision: DecisionKick, Report: "conflicts with main"},
 		{Change: change("2"), Decision: DecisionWait, Reason: "not approved"},
 	}
-	_, err := landAll(t, l, pl)
+	_, err := applyAll(t, a, pl)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"1": "conflicts with main", "3": "the gate failed"}, p.kicked)
 	assert.Equal(t, []posted{{"1", head("1"), StateFailure, "magus/queue"}, {"2", head("2"), StatePending, "magus/queue"},
@@ -288,8 +288,8 @@ func TestPlanVerdictsAndRedVerdictsReachTheProvider(t *testing.T) {
 }
 
 func TestWhatNoVerdictReachedWaitsForTheNextRun(t *testing.T) {
-	l, _, p := newLanding(once(green("1", base, "")))
-	got, err := landAll(t, l, planOf(1, []Change{change("1", "a"), change("2", "a")}))
+	a, _, p := newApplier(once(green("1", base, "")))
+	got, err := applyAll(t, a, planOf(1, []Change{change("1", "a"), change("2", "a")}))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1@1: * 1"}, p.merges)
 	assert.Equal(t, "not validated in this run", got.reason("2"))
@@ -298,37 +298,37 @@ func TestWhatNoVerdictReachedWaitsForTheNextRun(t *testing.T) {
 func TestAVerdictOnAnotherBaseWaits(t *testing.T) {
 	stale := green("1", base, "")
 	stale.BaseCommit = strings.Repeat("0", 40)
-	l, _, p := newLanding(once(stale))
-	got, err := landAll(t, l, planOf(1, []Change{change("1", "a")}))
+	a, _, p := newApplier(once(stale))
+	got, err := applyAll(t, a, planOf(1, []Change{change("1", "a")}))
 	require.NoError(t, err)
 	assert.Empty(t, p.merges)
 	assert.Contains(t, got.reason("1"), "not this plan's base")
 }
 
-func TestAStageSharingAFileWithWhatLandedIsRestaged(t *testing.T) {
-	l, repo, p := newLanding(once(green("1", base, "")))
+func TestAStageSharingAFileWithWhatMergedIsRestaged(t *testing.T) {
+	a, repo, p := newApplier(once(green("1", base, "")))
 	repo.stale["1"] = true
-	got, err := landAll(t, l, planOf(1, []Change{change("1", "a")}))
+	got, err := applyAll(t, a, planOf(1, []Change{change("1", "a")}))
 	require.NoError(t, err)
 	assert.Empty(t, p.merges)
-	assert.Equal(t, "MAGUS.md changed both here and in what landed since validation; restaged next run", got.reason("1"))
+	assert.Equal(t, "MAGUS.md changed both here and in what merged since validation; restaged next run", got.reason("1"))
 }
 
-func TestARegenerationThePushLandsIsMergedAtItsOwnCommit(t *testing.T) {
-	l, repo, p := newLanding(once(green("1", base, "")))
+func TestAnUpdateCommitIsMergedAtItsOwnCommit(t *testing.T) {
+	a, repo, p := newApplier(once(green("1", base, "")))
 	repo.pushed["1"] = true
-	_, err := landAll(t, l, planOf(1, []Change{change("1", "a")}))
+	_, err := applyAll(t, a, planOf(1, []Change{change("1", "a")}))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"1@landing-1: * 1"}, p.merges)
-	assert.Equal(t, []posted{{"1", head("landing-1"), StatePending, DefaultStatusContext},
-		{"1", head("landing-1"), StateSuccess, DefaultStatusContext}}, p.statuses)
+	assert.Equal(t, []string{"1@update-1: * 1"}, p.merges)
+	assert.Equal(t, []posted{{"1", head("update-1"), StatePending, DefaultStatusContext},
+		{"1", head("update-1"), StateSuccess, DefaultStatusContext}}, p.statuses)
 }
 
-func TestARefusedLandingIsKickedBackAndAMovedBranchWaits(t *testing.T) {
-	l, repo, p := newLanding(once(green("1", base, ""), green("2", base, "")))
+func TestARefusedUpdateIsKickedBackAndAMovedBranchWaits(t *testing.T) {
+	a, repo, p := newApplier(once(green("1", base, ""), green("2", base, "")))
 	repo.refused["1"] = true
 	repo.moved["2"] = true
-	got, err := landAll(t, l, planOf(1, []Change{change("1", "a")}, []Change{change("2", "b")}))
+	got, err := applyAll(t, a, planOf(1, []Change{change("1", "a")}, []Change{change("2", "b")}))
 	require.NoError(t, err)
 	assert.Equal(t, EventKicked, got.outcomes()["1"])
 	assert.Contains(t, p.kicked["1"], "cannot push to a fork")
@@ -337,10 +337,10 @@ func TestARefusedLandingIsKickedBackAndAMovedBranchWaits(t *testing.T) {
 }
 
 func TestAHeadPushedAfterValidationIsNotMerged(t *testing.T) {
-	l, _, p := newLanding(once(green("1", base, "")))
+	a, _, p := newApplier(once(green("1", base, "")))
 	moved := head("new")
 	p.approval = func(Change) Approval { return Approval{Approved: true, Head: moved} }
-	got, err := landAll(t, l, planOf(1, []Change{change("1", "a")}))
+	got, err := applyAll(t, a, planOf(1, []Change{change("1", "a")}))
 	require.NoError(t, err)
 	assert.Equal(t, EventWaiting, got.outcomes()["1"])
 	assert.Empty(t, p.merges)
@@ -348,36 +348,36 @@ func TestAHeadPushedAfterValidationIsNotMerged(t *testing.T) {
 		"pending on the new head; nothing on a commit that is no longer the head")
 }
 
-func TestAProviderThatReportsNoHeadStopsLanding(t *testing.T) {
-	l, _, p := newLanding(once(green("1", base, "")))
+func TestAProviderThatReportsNoHeadStopsApplying(t *testing.T) {
+	a, _, p := newApplier(once(green("1", base, "")))
 	p.approval = func(Change) Approval { return Approval{Approved: true} }
-	_, err := landAll(t, l, planOf(1, []Change{change("1", "a")}))
+	_, err := applyAll(t, a, planOf(1, []Change{change("1", "a")}))
 	require.EqualError(t, err, "approval of #1: the provider reported no head")
 	assert.Empty(t, p.merges)
 }
 
 func TestAHostRefusalWaitsAndHoldsWhatStacksOnIt(t *testing.T) {
-	l, _, p := newLanding(once(green("1", base, ""), green("2", base+"+1", "1")))
+	a, _, p := newApplier(once(green("1", base, ""), green("2", base+"+1", "1")))
 	p.refuse["1"] = true
-	got, err := landAll(t, l, planOf(2, []Change{change("1", "a"), change("2", "a")}))
+	got, err := applyAll(t, a, planOf(2, []Change{change("1", "a"), change("2", "a")}))
 	require.NoError(t, err)
 	assert.Equal(t, map[string]EventKind{"1": EventWaiting, "2": EventWaiting}, got.outcomes())
 }
 
-func TestABaseThatDoesNotCarryTheValidatedTreeStopsLanding(t *testing.T) {
-	l, _, p := newLanding(once(green("1", base, ""), green("2", base+"+1", "1")))
+func TestABaseThatDoesNotCarryTheValidatedTreeStopsApplying(t *testing.T) {
+	a, _, p := newApplier(once(green("1", base, ""), green("2", base+"+1", "1")))
 	p.extra = "intruder"
-	_, err := landAll(t, l, planOf(2, []Change{change("1", "a"), change("2", "a")}))
+	_, err := applyAll(t, a, planOf(2, []Change{change("1", "a"), change("2", "a")}))
 	require.ErrorContains(t, err, "not the validated")
-	assert.Equal(t, []string{"1@1: * 1"}, p.merges, "nothing lands on an unvalidated base")
+	assert.Equal(t, []string{"1@1: * 1"}, p.merges, "nothing merges on an unvalidated base")
 	assert.NotContains(t, p.statuses, posted{"1", head("1"), StateSuccess, DefaultStatusContext})
 }
 
-func TestLandingDryRunCallsNothing(t *testing.T) {
+func TestApplyDryRunCallsNothing(t *testing.T) {
 	red := Verdict{BaseCommit: base, Change: change("2", "a"), Decision: DecisionKick, Report: "r"}
-	l, _, p := newLanding(once(green("1", base, ""), red))
-	l.DryRun = true
-	got, err := landAll(t, l, planOf(2, []Change{change("1", "a"), change("2", "a")}))
+	a, _, p := newApplier(once(green("1", base, ""), red))
+	a.DryRun = true
+	got, err := applyAll(t, a, planOf(2, []Change{change("1", "a"), change("2", "a")}))
 	require.NoError(t, err)
 	assert.Equal(t, map[string]EventKind{"1": EventMerged, "2": EventKicked}, got.outcomes())
 	assert.Empty(t, p.statuses)

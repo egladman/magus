@@ -11,13 +11,13 @@
 #       gating on the platform test suites, at --depth 1 (each stage after the one
 #       below, cache warm) and --depth 3 (all three at once). Per-stage gate times come
 #       from the verdicts.
-#   Q3  land as each stage goes green: validation at --depth 3 and `mergequeue apply`
+#   Q3  apply as each stage goes green: validation at --depth 3 and `mergequeue apply`
 #       run side by side, and each merge's time since validation started is
-#       read from the landing events. A green stage should land before the stages
+#       read from the apply events. A green stage should merge before the stages
 #       above it finish.
 #
 # Needs ./setup.sh first; BENCH_SKIP_INSTALL=1 is enough, since no scenario runs next.
-# Results land in results/queue/ and are summarized to stdout.
+# Results are written to results/queue/ and summarized to stdout.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -126,23 +126,23 @@ for depth in 1 3; do
     done
 done
 
-echo "==> Q3 land as each stage goes green"
+echo "==> Q3 apply as each stage goes green"
 rm -rf "$REPO/.magus/cache" "$OUT/q3"
 platform_changes 3
-land_base="bench/queue-land"
-g branch -f "$land_base" "$BASE"
-jq --arg b "$land_base" '.base = $b' "$OUT/q2-plan-d3.json" > "$OUT/q3-plan.json"
+apply_base="bench/queue-apply"
+g branch -f "$apply_base" "$BASE"
+jq --arg b "$apply_base" '.base = $b' "$OUT/q2-plan-d3.json" > "$OUT/q3-plan.json"
 start=$(now)
 "$MQ" -C "$REPO" validate --remote . --plan "$OUT/q3-plan.json" --gate "$GATE" \
     --verdicts "$OUT/q3" > "$OUT/q3-validate.jsonl" 2> "$OUT/q3-validate.log" &
 validator=$!
-QUEUE_REPO="$REPO" QUEUE_BASE="$land_base" "$MQ" -C "$REPO" apply --remote . \
-    --provider "$DIR/queue-local.buzz" --interval 200ms "$OUT/q3" > "$OUT/q3-land.jsonl" 2> "$OUT/q3-land.log"
+QUEUE_REPO="$REPO" QUEUE_BASE="$apply_base" "$MQ" -C "$REPO" apply --remote . \
+    --provider "$DIR/queue-local.buzz" --interval 200ms "$OUT/q3" > "$OUT/q3-apply.jsonl" 2> "$OUT/q3-apply.log"
 wait "$validator"
 start_iso=$(jq -rn --argjson s "$start" '$s | todate')
 jq -r --argjson s "$start" 'select(.kind == "merged" or .kind == "decided")
     | "  \(.kind) #\(.change) at +\((.time | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) - ($s | floor))s"' \
-    "$OUT/q3-validate.jsonl" "$OUT/q3-land.jsonl" | sort -t+ -k2 -n
+    "$OUT/q3-validate.jsonl" "$OUT/q3-apply.jsonl" | sort -t+ -k2 -n
 echo "  (validation started $start_iso)"
-g branch -D "$land_base" >/dev/null
+g branch -D "$apply_base" >/dev/null
 clear_queue

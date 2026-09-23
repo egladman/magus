@@ -29,15 +29,15 @@ type Changes struct {
 type Decision string
 
 const (
-	// DecisionLand: validated green; land once every change beneath it has.
-	DecisionLand Decision = "land"
+	// DecisionMerge: validated green; merge once every change beneath it has.
+	DecisionMerge Decision = "merge"
 	// DecisionKick: a real conflict, a red gate, or a refusal; kick back with the report.
 	DecisionKick Decision = "kick"
 	// DecisionWait: not approved, or held behind a conflicting change; retried next run.
 	DecisionWait Decision = "wait"
 )
 
-// Plan is what validation stages and a [Lander] lands against.
+// Plan is what validation stages and an [Applier] merges against.
 type Plan struct {
 	Schema     string `json:"schema"`
 	Base       string `json:"base"`
@@ -73,7 +73,7 @@ type Verdict struct {
 	Reason     string   `json:"reason,omitempty"`
 	Report     string   `json:"report,omitempty"` // kick-back body
 	// After is the change validated beneath this one, empty at the bottom of its
-	// partition. A Lander holds a change whose After did not land.
+	// partition. An Applier holds a change whose After did not merge.
 	After string `json:"after,omitempty"`
 	// Onto is the commit the stage was built onto: BaseCommit at the bottom of a
 	// partition, else After's stage.
@@ -181,7 +181,7 @@ func ReadVerdict(r io.Reader) (Verdict, error) {
 		return Verdict{}, fmt.Errorf("%s: %w", SchemaVerdict, err)
 	}
 	switch v.Decision {
-	case DecisionLand, DecisionKick, DecisionWait:
+	case DecisionMerge, DecisionKick, DecisionWait:
 	default:
 		return Verdict{}, fmt.Errorf("%s: unknown decision %q", SchemaVerdict, v.Decision)
 	}

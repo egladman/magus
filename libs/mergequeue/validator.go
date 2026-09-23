@@ -30,7 +30,7 @@ type Validator struct {
 }
 
 // NewValidator stages with repo, gates with gate, and hands each verdict to sink the
-// moment it is decided, so a Lander can start on it while later stages still run.
+// moment it is decided, so an Applier can start on it while later stages still run.
 func NewValidator(repo StagingRepo, gate Gate, sink VerdictSink) *Validator {
 	return &Validator{repo: repo, gate: gate, sink: sink}
 }
@@ -184,7 +184,7 @@ func (r *validation) hold(ctx context.Context, f *flight, err error) error {
 	switch conf, ok := asConflict(err); {
 	case ok:
 		// Planning proved it merges onto the base alone, so it conflicts with a change
-		// ahead of it. The next run sees that change landed.
+		// ahead of it. The next run sees that change merged.
 		return r.decide(ctx, Verdict{Change: f.change, Decision: DecisionWait, Reason: conflictAhead(f.after, conf)})
 	case errors.As(err, &wait):
 		return r.decide(ctx, Verdict{Change: f.change, Decision: DecisionWait, Reason: wait.Reason})
@@ -298,7 +298,7 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 	if err != nil {
 		return false, fmt.Errorf("squash message of %s: %w", f.change.Label(), err)
 	}
-	v.Decision, v.Message = DecisionLand, msg
+	v.Decision, v.Message = DecisionMerge, msg
 	return true, r.decide(ctx, v)
 }
 
@@ -333,7 +333,7 @@ func conflictAhead(after string, conf Conflict) string {
 	if after != "" {
 		with = "#" + after + " ahead of it"
 	}
-	return "conflicts with " + with + " in " + joinPaths(conf.Paths) + "; retried once it lands"
+	return "conflicts with " + with + " in " + joinPaths(conf.Paths) + "; retried once it merges"
 }
 
 func failureReport(base, head, what, summary string) string {
