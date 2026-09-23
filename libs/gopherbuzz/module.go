@@ -40,6 +40,9 @@ type Module struct {
 type ModuleEnv struct {
 	Ctx context.Context
 	Out io.Writer
+	// OutFor, when set, picks print's writer on each call from the calling context, and
+	// Out is ignored. It lets a host route one program's output per caller.
+	OutFor func(context.Context) io.Writer
 }
 
 // Well-known module labels, classifying a module by origin. Labels are free-form

@@ -15,10 +15,10 @@ import (
 // coreModule builds the "std" module matching Buzz's std reference:
 // https://buzz-lang.dev/0.5.0/reference/std/std.html
 //
-// out receives std.print output; Register passes os.Stdout. Embeddings that
-// capture a program's output (e.g. a browser playground) supply their own
-// writer via RegisterWithOutput.
-func coreModule(out io.Writer) vm.Value {
+// out picks std.print's writer per call; Register's always answers os.Stdout.
+// Embeddings that capture a program's output (e.g. a browser playground) supply
+// their own writer via RegisterWithOutput or RegisterWithOutputFor.
+func coreModule(out func(context.Context) io.Writer) vm.Value {
 	m := mod()
 	m.MapSet("assert", fn("std.assert", stdAssert))
 	m.MapSet("print", fn("std.print", makeStdPrint(out)))
@@ -57,13 +57,14 @@ func stdAssert(_ context.Context, args []vm.Value) (vm.Value, error) {
 	return vm.Null, nil
 }
 
-func makeStdPrint(out io.Writer) func(context.Context, []vm.Value) (vm.Value, error) {
-	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
+func makeStdPrint(out func(context.Context) io.Writer) func(context.Context, []vm.Value) (vm.Value, error) {
+	return func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		w := out(ctx)
 		if len(args) < 1 {
-			fmt.Fprintln(out)
+			fmt.Fprintln(w)
 			return vm.Null, nil
 		}
-		fmt.Fprintln(out, args[0].String())
+		fmt.Fprintln(w, args[0].String())
 		return vm.Null, nil
 	}
 }

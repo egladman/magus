@@ -37,7 +37,11 @@ import (
 // buzz.Module (see gopherbuzz/module.go), shared with host embedders.
 var Modules = []buzz.Module{
 	{Name: "std", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
-		s.SetNativeModule("std", coreModule(env.Out)) // std.print targets env.Out
+		out := env.OutFor
+		if out == nil {
+			out = func(context.Context) io.Writer { return env.Out }
+		}
+		s.SetNativeModule("std", coreModule(out))
 		return nil
 	}},
 	{Name: "math", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("math", mathModule)},
@@ -110,6 +114,12 @@ func RegisterWithOutput(sess *buzz.Session, out io.Writer) {
 	// std modules never fail to bind; the (always-nil) error is dropped to keep
 	// this a void call. A host that provides fallible modules uses sess.Provide.
 	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), Out: out}, Modules...)
+}
+
+// RegisterWithOutputFor is Register with std.print's writer chosen per call by out,
+// from the context the program runs under.
+func RegisterWithOutputFor(sess *buzz.Session, out func(context.Context) io.Writer) {
+	_ = sess.Provide(buzz.ModuleEnv{Ctx: context.Background(), OutFor: out}, Modules...)
 }
 
 func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.Value {
