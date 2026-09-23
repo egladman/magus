@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -49,24 +50,36 @@ func guardDependencies() guard.Dependencies {
 		HeadCommit:       headCommitForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
 	}
-	if m := loadedWorkspace(context.Background()); m != nil {
+	m, loadErr := loadedWorkspace(context.Background())
+	if m != nil {
 		deps.SpawnRule = m.SpawnRule()
 		deps.ApprovedSpawnRule = m.ApprovedSpawnRule
 		deps.Policy = func() guard.PolicyState { return guardPolicyState(m) }
+		return deps
+	}
+	root, err := magus.FindRoot("")
+	if loadErr == nil || err != nil {
+		return deps
+	}
+	// The approved sources load when the working tree does not, and they are what an agent
+	// leaving a syntax error behind must not be able to turn off.
+	deps.LoadFailure = loadErr
+	deps.ApprovedSpawnRule = func(ctx context.Context) workspace.SpawnRule {
+		return magus.ApprovedSpawnRuleAt(ctx, root, magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 	}
 	return deps
 }
 
-// loadedWorkspace is the memoized workspace the hook's rules read, nil when it does not
-// load. Unloadable is nil for the reason loadWorkspaceShellRules gives: a magusfile typo
-// must not take down every hook, so the built-ins run alone.
-func loadedWorkspace(ctx context.Context) *magus.Magus {
+// loadedWorkspace is the memoized workspace the hook's rules read, nil with the reason
+// when it does not load. Unloadable is not fatal for the reason loadWorkspaceShellRules
+// gives: a magusfile typo must not take down every hook.
+func loadedWorkspace(ctx context.Context) (*magus.Magus, error) {
 	ws, err := inspectWorkspace(ctx, "")
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	m, _ := ws.(*magus.Magus)
-	return m
+	return m, nil
 }
 
 // guardPolicyState describes the loaded workspace's guard rules for the trail's lineage.
@@ -165,7 +178,7 @@ func symbolDefinedForGuard(ident string) (defined, definitive bool) {
 // Missing or unloadable is empty so a magusfile typo cannot take down every
 // shell hook (built-ins still apply).
 func loadWorkspaceShellRules(ctx context.Context) ([]guard.WorkspaceShellRule, guard.Dialect) {
-	m := loadedWorkspace(ctx)
+	m, _ := loadedWorkspace(ctx)
 	if m == nil {
 		return nil, ""
 	}

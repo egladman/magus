@@ -118,6 +118,18 @@ func (m *Magus) ApprovedSpawnRule(ctx context.Context) workspace.SpawnRule {
 	return m.spawnRuleFrom(ctx, approved)
 }
 
+// ApprovedSpawnRuleAt is ApprovedSpawnRule for the workspace at root when its working tree
+// does not load, so a syntax error left in a magusfile cannot switch off the approved rule.
+// It reads the config and discovers projects but evaluates no working-tree magusfile. Nil
+// when the config or the discovery fails, or for any reason ApprovedSpawnRule is nil.
+func ApprovedSpawnRuleAt(ctx context.Context, root string, opts ...Option) workspace.SpawnRule {
+	m, err := inspect(ctx, root, opts...)
+	if err != nil {
+		return nil
+	}
+	return m.ApprovedSpawnRule(ctx)
+}
+
 // spawnRuleFrom evaluates the root magusfile as approved holds it. A magusfiles/ file the
 // approved state lacks is left out rather than failing the load: it did not exist there.
 func (m *Magus) spawnRuleFrom(ctx context.Context, approved ApprovedPolicy) workspace.SpawnRule {

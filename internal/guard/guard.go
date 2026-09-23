@@ -65,6 +65,11 @@ type Dependencies struct {
 	// when those sources are the working tree's or register none. Resolved lazily because
 	// it can load the magusfile a second time, which only a spawn is worth.
 	ApprovedSpawnRule func(ctx context.Context) workspace.SpawnRule
+	// LoadFailure is why the working tree's workspace did not load, nil when it loaded or
+	// there is none. SpawnRule is then nil because nothing could be read, not because no
+	// rule is registered, so the approved side is asked regardless and the failure is
+	// reported beside the verdict.
+	LoadFailure error
 	// Policy describes the effective workspace rules for the lineage the trail keeps,
 	// nil when the caller cannot say. See RecordPolicy.
 	Policy func() PolicyState
@@ -991,34 +996,27 @@ type location struct {
 
 type locationKey struct{}
 
-type jobStoreRowsKey struct{}
-
-// jobStoreRows is the job store as one call read it, error included: an unreadable
-// store and a store with no rows are different facts, and only the first means a rule
-// could not be evaluated at all.
-type jobStoreRows struct {
-	rows []types.Job
-	err  error
-}
-
-// withJobStoreRows reads the job store once and pins it for the rules below.
+// withJobStoreRows reads the job store once and pins it for the rules below, error
+// included: an unreadable store and a store with no rows are different facts, and only the
+// first means a rule could not be evaluated at all.
 //
 // Four of them grade against it on one command arm, and each used to open and parse the
 // same file for itself. Nothing inside a hook call writes the store, so one snapshot is
-// what those four reads already agreed on.
+// what those four reads already agreed on. A workspace spawn rule reads the same pin
+// through magus\job.list.
 func withJobStoreRows(ctx context.Context, at location) context.Context {
 	if at.cacheDir == "" {
 		return ctx
 	}
 	rows, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
-	return context.WithValue(ctx, jobStoreRowsKey{}, jobStoreRows{rows: rows, err: err})
+	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
 }
 
 // leaseRows reports the pinned job store, reading it when nothing pinned one. A test that
 // calls a single rule gets its own read, which is what every rule used to do.
 func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
-	if pinned, ok := ctx.Value(jobStoreRowsKey{}).(jobStoreRows); ok {
-		return pinned.rows, pinned.err
+	if pinned, ok := job.SnapshotFromContext(ctx); ok {
+		return pinned.Rows, pinned.Err
 	}
 	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
 }
@@ -1076,11 +1074,21 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	trail.AppendAgentCommand(ctx, location.cacheDir, command)
 }
 
-// appendHookSpawn records a spawn into the same trail, so a person auditing the
-// activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
-// spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
-// there is no verdict to record, because a spawn is not a guard surface.
-func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, who hookAttribution, policyDigest, by string) {
+// spawnVerdictRecord is what the trail keeps about how a spawn or continuation was judged.
+type spawnVerdictRecord struct {
+	policyDigest string
+	decidedBy    string
+	// target is the agent a continuation addresses, resolved to its id when magus knows it.
+	target string
+	// ruleFailure is why a workspace spawn rule judged nothing, "" when every rule answered.
+	ruleFailure string
+}
+
+// appendHookSpawn records a spawn or a continuation into the same trail, so a person
+// auditing the activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent,
+// not merely that it spawned one. Like appendHookActivity it is best-effort and cannot fail
+// the tool call.
+func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, who hookAttribution, rec spawnVerdictRecord) {
 	if req.Value == "" {
 		return
 	}
@@ -1089,8 +1097,10 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		return
 	}
 	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
-		PolicyDigest:  policyDigest,
-		DecidedBy:     by,
+		PolicyDigest:  rec.policyDigest,
+		DecidedBy:     rec.decidedBy,
+		Target:        rec.target,
+		RuleFailure:   rec.ruleFailure,
 		Actor:         "agent",
 		Workspace:     location.workspace,
 		Host:          who.Host,

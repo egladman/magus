@@ -1,7 +1,6 @@
 package types
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"path"
@@ -1413,41 +1412,4 @@ func (u Job) Clone() Job {
 		c.LastRun = &run
 	}
 	return c
-}
-
-// JobSnapshot is the job store as one reader already read it, pinned onto a context so
-// code running inside that reader sees the same rows instead of opening the store again.
-type JobSnapshot struct {
-	Rows []Job
-	// Err is why the store could not be read, nil when it could.
-	Err error
-}
-
-type jobSnapshotKey struct{}
-
-// WithJobSnapshot pins snap onto ctx. A job-store member reached under it answers from
-// the pinned rows and refuses every write.
-func WithJobSnapshot(ctx context.Context, snap JobSnapshot) context.Context {
-	return context.WithValue(ctx, jobSnapshotKey{}, snap)
-}
-
-// JobSnapshotFromContext returns a copy of the pinned rows, and false when nothing is
-// pinned.
-func JobSnapshotFromContext(ctx context.Context) (JobSnapshot, bool) {
-	snap, ok := ctx.Value(jobSnapshotKey{}).(JobSnapshot)
-	if !ok {
-		return JobSnapshot{}, false
-	}
-	rows := make([]Job, len(snap.Rows))
-	for i, row := range snap.Rows {
-		rows[i] = row.Clone()
-	}
-	return JobSnapshot{Rows: rows, Err: snap.Err}, true
-}
-
-// HasJobSnapshot reports whether a snapshot is pinned, without cloning its rows: for a
-// caller that only needs the presence check, such as a write refusal.
-func HasJobSnapshot(ctx context.Context) bool {
-	_, ok := ctx.Value(jobSnapshotKey{}).(JobSnapshot)
-	return ok
 }

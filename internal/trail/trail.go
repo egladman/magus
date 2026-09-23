@@ -80,9 +80,9 @@ const (
 	// KindAgentSpawn records that an orchestrating agent handed work to a sub-agent, and WHAT
 	// CONTEXT it handed over. It is the lease sibling of KindAgentCommand: same producer (a
 	// pre-tool hook), same "observed, not executed" contract, but the thing observed is a context
-	// transfer rather than a command, so there is no verdict to record and the guard never judges
-	// one. The handed context lands in the request blob and only its REF rides the event, because
-	// a lease prompt is routinely kilobytes.
+	// transfer rather than a command. The handed context lands in the request blob and only its
+	// REF rides the event, because a lease prompt is routinely kilobytes. A continuation, a
+	// message to a sub-agent that already exists, records here too as ActionAgentContinue.
 	//
 	// Correlation to a lease is COOPERATIVE, not enforced. Nothing in the host event
 	// names a magus lease, and magus cannot infer one from prose, so the event's Lease is stamped
@@ -388,6 +388,10 @@ type AgentSpawn struct {
 	// see Event.
 	PolicyDigest string
 	DecidedBy    string
+	// Target is the agent a continuation addresses, "" for a spawn.
+	Target string
+	// RuleFailure is why a workspace spawn rule judged nothing, "" when every rule answered.
+	RuleFailure string
 }
 
 const agentSpawnSchemaVersion = 1
@@ -406,9 +410,17 @@ type agentSpawnRequest struct {
 	// "no model declared": the same fact a genuinely undeclared spawn reports. No schema
 	// bump, for the reason agentCommandResponse.PreauthorizedBy already documents.
 	DeclaredModel string `json:"declared_model,omitempty"`
+	// Target and RuleFailure are additive for the reason DeclaredModel is.
+	Target      string `json:"target,omitempty"`
+	RuleFailure string `json:"rule_failure,omitempty"`
 }
 
-// AppendAgentSpawn records one spawn and stores the context it was given as a blob.
+// ActionAgentContinue is the action of an agent_spawn event recording a message to a
+// subagent that already exists.
+const ActionAgentContinue = "agent.continue"
+
+// AppendAgentSpawn records one spawn or continuation and stores the context it was given
+// as a blob.
 //
 // Best-effort and error-free, like every other producer here: an audit write must never be able
 // to fail the lease it observes.
@@ -442,14 +454,20 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Lease:         lease,
 		Context:       spawn.Context,
 		DeclaredModel: spawn.DeclaredModel,
+		Target:        spawn.Target,
+		RuleFailure:   secret.RedactString(ctx, spawn.RuleFailure),
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
 
 	// The CHILD is the action, the way an MCP call's action is its tool name: it is the field a
 	// reader groups a page of leases by. A host that supplied no label leaves the generic
-	// verb, so the row still says what happened.
+	// verb, so the row still says what happened. A continuation starts no child, so it is
+	// always its own verb and a spawn count can leave it out.
 	action := spawn.Child
-	if action == "" {
+	switch {
+	case spawn.Target != "":
+		action = ActionAgentContinue
+	case action == "":
 		action = "agent.spawn"
 	}
 	actor := spawn.Actor

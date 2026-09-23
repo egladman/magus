@@ -260,7 +260,8 @@ func TestContinueReportsIdleTime(t *testing.T) {
 	assert.Nil(t, probe.asked[0].Target.IdleMs, "an agent magus never saw has no idle time")
 
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	seen := hint.MarkerPath(cacheDir, SessionKey("claude-code", "8f2c6a1e"), agentSeenKind("brisk-heron"))
+	Judge(ctx, deps, Request{Input: finishedSpawnEnvelope, Host: "claude-code"})
+	seen := hint.MarkerPath(cacheDir, SessionKey("claude-code", "8f2c6a1e"), agentSeenKind("a1b2c3"))
 	aged := time.Now().Add(-10 * time.Minute)
 	require.NoError(t, os.Chtimes(seen, aged, aged))
 
@@ -268,10 +269,97 @@ func TestContinueReportsIdleTime(t *testing.T) {
 	require.Len(t, probe.asked, 3)
 	idle := probe.asked[2].Target.IdleMs
 	require.NotNil(t, idle)
-	assert.GreaterOrEqual(t, *idle, (10 * time.Minute).Milliseconds())
+	assert.GreaterOrEqual(t, *idle, (10 * time.Minute).Milliseconds(), "the name reads the clock filed under the id")
 
+	byID := strings.Replace(claudeContinueEnvelope, `"to":"brisk-heron"`, `"to":"a1b2c3"`, 1)
+	Judge(ctx, deps, Request{Input: byID, Host: "claude-code"})
+	require.Len(t, probe.asked, 4)
+	assert.Less(t, *probe.asked[3].Target.IdleMs, time.Minute.Milliseconds(),
+		"a continue by name restarted the clock a continue by id reads")
+}
+
+// finishedSpawnEnvelope is claudeSpawnEnvelope's call after it ran, naming the child's id.
+const finishedSpawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PostToolUse","tool_name":"Agent",` +
+	`"tool_input":{"description":"orchestrator/brisk-heron/implement adr 0002","prompt":"Implement ADR 0002.","name":"brisk-heron"},` +
+	`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
+
+// spawnBlob is the part of an agent_spawn request blob these tests read.
+type spawnBlob struct {
+	Target      string `json:"target"`
+	RuleFailure string `json:"rule_failure"`
+}
+
+func readSpawnBlob(t *testing.T, cacheDir string, e trail.Event) spawnBlob {
+	t.Helper()
+	body, err := trail.ReadBlob(cacheDir, e.RequestRef)
+	require.NoError(t, err)
+	var got spawnBlob
+	require.NoError(t, json.Unmarshal(body, &got))
+	return got
+}
+
+// A syntax error left in the working tree cannot switch off the approved rule: the load
+// failure no longer reads as "no rule registered", the approved side still denies, and
+// the failure is reported and kept on the trail.
+func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
+	loadErr := errors.New("magusfile.buzz:3:1: expected expression")
+	cases := []struct {
+		name     string
+		approved types.SpawnVerdict
+		want     string
+		by       string
+	}{
+		{"an approved deny still denies", types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "Name a model."}, "deny", decidedByApproved},
+		{"an approved allow reports the failure", types.SpawnVerdict{Decision: types.SpawnAllow}, "advise", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cacheDir := spawnFixture(t)
+			approved := (&spawnRuleProbe{answer: tc.approved}).rule()
+			deps := Dependencies{
+				LoadFailure:       loadErr,
+				ApprovedSpawnRule: func(context.Context) workspace.SpawnRule { return approved },
+			}
+			v := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+			assert.Equal(t, tc.want, v.Decision)
+			if tc.want == "advise" {
+				assert.Contains(t, v.Context, "failed to load")
+				assert.Contains(t, v.Context, loadErr.Error())
+			}
+
+			spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+			require.Len(t, spawns, 1)
+			assert.Equal(t, tc.by, spawns[0].DecidedBy)
+			assert.Contains(t, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailure, loadErr.Error())
+		})
+	}
+}
+
+// A workspace advise joins a built-in one rather than being dropped behind it.
+func TestWorkspaceAdviseJoinsABuiltInAdvise(t *testing.T) {
+	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	ctx, _ := fleetFixture(t, row)
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
+
+	probe := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "Add a Done when section."}}
+	v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	assert.Equal(t, "advise", v.Decision)
+	assert.Equal(t, string(advisorySharedCheckout), v.Rule, "the built-in advice keeps its rule")
+	assert.Contains(t, v.Context, "Add a Done when section.")
+}
+
+// A continuation is recorded like a spawn, naming the agent it addressed by its id.
+func TestContinueIsRecordedOnTheTrail(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	deps := Dependencies{SpawnRule: (&spawnRuleProbe{}).rule()}
+	Judge(ctx, deps, Request{Input: finishedSpawnEnvelope, Host: "claude-code"})
 	Judge(ctx, deps, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Less(t, *probe.asked[3].Target.IdleMs, time.Minute.Milliseconds(), "the continue restarted the clock")
+
+	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	require.Len(t, spawns, 1)
+	assert.Equal(t, trail.ActionAgentContinue, spawns[0].Action)
+	assert.Equal(t, spawnBlob{Target: "a1b2c3"}, readSpawnBlob(t, cacheDir, spawns[0]))
 }
 
 // parent is what the CALLING agent was spawned as, recorded from the finished spawn call
@@ -496,9 +584,9 @@ func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
 func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
 	row := types.Job{ID: "guard-facts", Criteria: "the seam", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
-	var seen []types.JobSnapshot
+	var seen []job.Snapshot
 	rule := func(ctx context.Context, _ types.SpawnRequest, _ hint.Gate) (types.SpawnVerdict, error) {
-		snap, ok := types.JobSnapshotFromContext(ctx)
+		snap, ok := job.SnapshotFromContext(ctx)
 		require.True(t, ok, "the rule runs under the guard's rows")
 		seen = append(seen, snap)
 		return types.SpawnVerdict{}, nil

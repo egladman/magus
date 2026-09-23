@@ -86,7 +86,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	ctx = withJobStoreRows(ctx, at)
 
 	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
-	decided := ""
+	decided, failure := "", ""
 	if env.IsSpawn {
 		if verdict = spawnBuiltIns(ctx, req, who, at); verdict.Decision != "pass" {
 			decided = decidedByBuiltin
@@ -95,7 +95,9 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
 	if verdict.Decision != "deny" {
-		answer, by, failure := askSpawnRules(ctx, deps, spawnRequest(ctx, env, who, at, facts, req.Lease), facts, at.cacheDir)
+		var answer types.SpawnVerdict
+		var by string
+		answer, by, failure = askSpawnRules(ctx, deps, spawnRequest(ctx, env, who, at, facts, req.Lease), facts, at.cacheDir)
 		switch {
 		case answer.Decision == types.SpawnDeny:
 			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: workspaceSpawnRule}
@@ -103,6 +105,9 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		case answer.Decision == types.SpawnAdvise && verdict.Decision == "pass":
 			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: answer.Reason, Rule: workspaceSpawnRule}
 			decided = by
+		case answer.Decision == types.SpawnAdvise:
+			// The built-in advice keeps its rule; the workspace's is added, never dropped.
+			verdict.Context += "\n\n" + answer.Reason
 		}
 		if note := hint.NewGate(at.cacheDir, who.callerKey()).Once(advisorySpawnRuleFailed, failure); note != "" && verdict.Decision != "deny" {
 			if verdict.Decision == "advise" {
@@ -112,9 +117,12 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			}
 		}
 	}
-	if env.IsSpawn {
-		appendHookSpawn(ctx, deps, env, who, digest, decided)
-	}
+	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
+		policyDigest: digest,
+		decidedBy:    decided,
+		target:       resolveAgentID(facts, env.Target),
+		ruleFailure:  failure,
+	})
 	if verdict.Decision != "deny" {
 		markAgentSeen(facts, env)
 	}
@@ -144,22 +152,24 @@ func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at loc
 // magus\guard.shell's standing on a broken workspace rule: the built-ins still apply and
 // the agent is not bricked by a typo in the magusfile.
 //
-// The approved side is asked only when some spawn rule exists now or existed the last time
-// the lineage recorded one: that side can cost a VCS status and a second load, and a
-// workspace that never registered a rule should not pay for it on every spawn.
+// The approved side is asked only when some spawn rule exists now, existed the last time
+// the lineage recorded one, or cannot be known because the working tree failed to load:
+// that side can cost a VCS status and a second load, and a workspace that never registered
+// a rule should not pay for it on every spawn.
 func askSpawnRules(ctx context.Context, deps Dependencies, req types.SpawnRequest, facts hint.Gate, cacheDir string) (answer types.SpawnVerdict, by, failure string) {
 	type side struct {
 		by   string
 		rule workspace.SpawnRule
 	}
-	sides := []side{{decidedByWorktree, deps.SpawnRule}}
-	if deps.ApprovedSpawnRule != nil && (deps.SpawnRule != nil || policyHadSpawnRule(cacheDir)) {
-		sides = append(sides, side{decidedByApproved, deps.ApprovedSpawnRule(ctx)})
+	var failures []string
+	if deps.LoadFailure != nil {
+		failures = append(failures, "The working tree's magusfile failed to load, so only its approved magus\\guard.spawn rule and the built-in rules applied: "+deps.LoadFailure.Error())
 	}
-	// magus\job.list inside the rule answers from the rows this call is graded against,
-	// so the rule and the built-ins cannot read two different stores.
-	if pinned, ok := ctx.Value(jobStoreRowsKey{}).(jobStoreRows); ok {
-		ctx = types.WithJobSnapshot(ctx, types.JobSnapshot{Rows: pinned.rows, Err: pinned.err})
+	sides := []side{{decidedByWorktree, deps.SpawnRule}}
+	if deps.ApprovedSpawnRule != nil && (deps.LoadFailure != nil || deps.SpawnRule != nil || policyHadSpawnRule(cacheDir)) {
+		resolveCtx, cancel := context.WithTimeout(ctx, spawnRuleTimeout)
+		sides = append(sides, side{decidedByApproved, deps.ApprovedSpawnRule(resolveCtx)})
+		cancel()
 	}
 	for _, s := range sides {
 		if s.rule == nil {
@@ -169,7 +179,7 @@ func askSpawnRules(ctx context.Context, deps Dependencies, req types.SpawnReques
 		got, err := s.rule(callCtx, req, facts)
 		cancel()
 		if err != nil {
-			failure = cmp.Or(failure, "The workspace's magus\\guard.spawn rule failed, so it judged nothing and only the built-in rules applied: "+err.Error())
+			failures = append(failures, "The workspace's magus\\guard.spawn rule failed on the "+s.by+" side, so that side judged nothing: "+err.Error())
 			continue
 		}
 		merged := types.StricterSpawnVerdict(answer, got)
@@ -178,7 +188,7 @@ func askSpawnRules(ctx context.Context, deps Dependencies, req types.SpawnReques
 		}
 		answer = merged
 	}
-	return answer, by, failure
+	return answer, by, strings.Join(failures, "\n\n")
 }
 
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is
@@ -250,14 +260,11 @@ func agentIdle(facts hint.Gate, agentID string, now time.Time) *int64 {
 	return &idle
 }
 
-// markAgentSeen restarts the idle clock of the agent a call names: the spawned agent's
-// address, or the continued one.
+// markAgentSeen restarts the idle clock of the agent a continue addresses. A spawn's clock
+// starts when its call finishes, since only then does the child have an id to key it on.
 func markAgentSeen(facts hint.Gate, env hookRequest) {
-	switch {
-	case env.IsContinue:
-		facts.Touch(agentSeenKind(env.Target))
-	case env.Spawn.Name != "":
-		facts.Touch(agentSeenKind(env.Spawn.Name))
+	if env.IsContinue {
+		facts.Touch(agentSeenKind(resolveAgentID(facts, env.Target)))
 	}
 }
 
@@ -267,12 +274,26 @@ func agentAliasKind(name string) hint.MarkerKind {
 	return agentMarkerKind("agent-alias-", name)
 }
 
+// resolveAgentID is the id an address names: the id a recorded name maps to, else the
+// address itself, which is then either an id or a name whose spawn magus never saw finish.
+// Every per-agent record is keyed on the result, so a name and an id stay one agent.
+func resolveAgentID(facts hint.Gate, addressed string) string {
+	if addressed == "" || facts.CacheDir() == "" {
+		return addressed
+	}
+	id, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), agentAliasKind(addressed)))
+	if err != nil || len(id) == 0 {
+		return addressed
+	}
+	return string(id)
+}
+
 // spawnedAgent is what one subagent was spawned as, recorded under the id its host gave it.
 type spawnedAgent struct {
 	Description string `json:"description,omitempty"`
 	Name        string `json:"name,omitempty"`
-	// Model is the model the spawn named, "" when it named none.
-	Model string `json:"model,omitempty"`
+	// DeclaredModel is the model the spawn named, "" when it named none.
+	DeclaredModel string `json:"model,omitempty"`
 	// Job is the live job the spawn's title named, "" when it named none.
 	Job string `json:"job,omitempty"`
 	// ContextTokens is the agent's last observed context size, nil until its host
@@ -281,7 +302,7 @@ type spawnedAgent struct {
 }
 
 // recordSpawnedAgent files what a finished spawn call handed its child under the child's
-// id, and starts its idle clock under both of the names a later message may address it by.
+// id, maps its name to that id, and starts its idle clock.
 //
 // A title of the form `<parent>/<role> <job>` naming a live job attributes the child to
 // that job, and every later call carrying its id is graded under that job's lease. When
@@ -295,7 +316,6 @@ type spawnedAgent struct {
 func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, facts hint.Gate, env hookRequest) {
 	facts.Touch(agentSeenKind(env.SpawnedAgent))
 	if env.Spawn.Name != "" {
-		facts.Touch(agentSeenKind(env.Spawn.Name))
 		writeAgentMarker(facts, agentAliasKind(env.Spawn.Name), []byte(env.SpawnedAgent))
 	}
 	// Usage is kept rather than replaced: a spawn that runs in the foreground returns after
@@ -304,7 +324,7 @@ func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, fac
 	rec := spawnedAgent{
 		Description:   env.Spawn.Description,
 		Name:          env.Spawn.Name,
-		Model:         env.DeclaredModel,
+		DeclaredModel: env.DeclaredModel,
 		ContextTokens: prev.ContextTokens,
 	}
 	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
@@ -363,15 +383,10 @@ func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id
 // or by its name.
 func continueTarget(facts hint.Gate, addressed string, now time.Time) *types.SpawnTarget {
-	target := &types.SpawnTarget{Agent: addressed, IdleMs: agentIdle(facts, addressed, now)}
-	rec, ok := readSpawnedAgent(facts, addressed)
-	if !ok && addressed != "" && facts.CacheDir() != "" {
-		if id, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), agentAliasKind(addressed))); err == nil {
-			rec, ok = readSpawnedAgent(facts, string(id))
-		}
-	}
-	if ok {
-		target.Description, target.Model, target.ContextTokens = rec.Description, rec.Model, rec.ContextTokens
+	id := resolveAgentID(facts, addressed)
+	target := &types.SpawnTarget{Agent: addressed, IdleMs: agentIdle(facts, id, now)}
+	if rec, ok := readSpawnedAgent(facts, id); ok {
+		target.Description, target.Model, target.ContextTokens = rec.Description, rec.DeclaredModel, rec.ContextTokens
 	}
 	return target
 }
