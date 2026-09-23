@@ -217,6 +217,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
     proc\exec("pnpm", ["run", "stylelint"], ".", {});
+    // A swallowed catch is how a failure becomes an empty page; see scripts/lint-catch.mjs.
+    proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".", {});
 }
 
 // `format:rw` maintains declared source inputs.

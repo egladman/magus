@@ -53,6 +53,7 @@
 // shared DOM (the #console-conn status dot, dispatchCommand) rather than through shared module state.
 
 import { wireDrawerToggle } from "../ui/ref-drawer";
+import { renderTransientToast } from "./toast";
 
 export type NotifyKind = "ok" | "warn" | "error";
 
@@ -89,6 +90,9 @@ export interface NotifyInput {
   // NOT a failure but still needs a human - a device connecting to your share token, storage crossing a
   // threshold, an author-declared magus:alert: - can ring the bell while keeping a warn/ok color.
   important?: boolean;
+  // toast also pops a transient toast, but only when the store ADMITS the entry, so a retry loop that
+  // re-reports one failure under one key toasts once. See reportFailure.
+  toast?: boolean;
 }
 
 // One recorded notification. `important` marks the bell tier; `seen` gates the unseen-dot and is only
@@ -354,6 +358,19 @@ export function notify(input: NotifyInput): void {
   document.dispatchEvent(new CustomEvent<NotifyInput>(NOTIFY_EVENT, { detail: input }));
 }
 
+// reportFailure is the floor every console failure reaches: an error-tier entry AND a toast. It is a
+// deliberate exception to the admission doctrine above, which governs events; a failure the reader
+// cannot see is worse than an interruption, because it reads as an empty page or "not connected".
+// key is required so a poll or reconnect loop that hits the same failure every tick reports it once.
+export function reportFailure(
+  source: string,
+  message: string,
+  key: string,
+  link?: NotifyLink | string,
+): void {
+  notify({ source, message, key, link, kind: "error", toast: true });
+}
+
 // ---- the bell + history panel (shell-only) ---------------------------------
 
 export interface NotificationCenter {
@@ -394,8 +411,9 @@ export function mountNotificationCenter(): NotificationCenter {
   // Record every notification raised anywhere (surfaces + toasts) into the one store.
   document.addEventListener(NOTIFY_EVENT, (e) => {
     const detail = (e as CustomEvent<NotifyInput>).detail;
-    if (detail && typeof detail.message === "string" && typeof detail.source === "string")
-      store.notify(detail);
+    if (!detail || typeof detail.message !== "string" || typeof detail.source !== "string") return;
+    const n = store.notify(detail);
+    if (n && detail.toast) renderTransientToast(n.source, n.message, n.kind, n.link);
   });
 
   const actions = document.getElementById("console-actions");

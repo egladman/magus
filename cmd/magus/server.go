@@ -803,7 +803,7 @@ func printJobWatchHint(w *os.File) {
 		return
 	}
 	if u := consoleWatchURL(); u != "" {
-		fmt.Fprintf(w, "magus: watch it in the console dashboard: %s\n%s\n", u, authHint)
+		fmt.Fprintf(w, "magus: watch it in the console dashboard: %s\n%s\n", u, authHint(u))
 	}
 }
 

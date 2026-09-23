@@ -198,6 +198,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Console failures are always shown.** Every failed daemon call, stream or undecodable
+  frame raises a notification, and the console lint rejects a swallowed catch. A page with
+  no token shows one sign-in state with the command that opens it signed in, and a 401
+  returns there.
+- **The console dashboard connects on the daemon's own origin.** The token exchange sends
+  an expiry the daemon accepts, and a page from an older console build asks for a reload.
+- **Console links carry a runnable command.** `magus job fork`, `ls jobs` and the other
+  console hints print `open "<url>#token=$(magus config token print)"`, and
+  `magus_console_present` returns it as `open`. The job hint names a daemon running a
+  different build instead of claiming nothing serves the console.
 - **A fresh magus checkout can build its first binary.** The `raw-tool` rule advises
   `go build -o magus ./cmd/magus` alone into a checkout root with no `magus` yet, and denies
   it once one exists. `go -C <dir> <verb>` and `go <verb> -C <dir>` reach one verdict, and a
