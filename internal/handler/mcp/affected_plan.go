@@ -21,7 +21,7 @@ type affectedPlanResult struct {
 	Source      string              `json:"source"`
 	Matrix      []affectedPlanShard `json:"matrix"`
 	Affected    []string            `json:"affected"`
-	Unbounded   string              `json:"unbounded,omitempty"`
+	UnboundedBy string              `json:"unbounded_by,omitempty"`
 }
 
 type affectedPlanTool struct {
@@ -58,7 +58,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		Source:      plan.Source,
 		Matrix:      make([]affectedPlanShard, len(plan.Shards)),
 		Affected:    plan.Affected,
-		Unbounded:   plan.Unbounded,
+		UnboundedBy: plan.UnboundedBy,
 	}
 	var projects []string
 	for i, s := range plan.Shards {

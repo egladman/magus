@@ -453,12 +453,12 @@ type planOutput struct {
 	MaxParallel int         `json:"max_parallel"`
 	Source      string      `json:"source"`
 	Matrix      []planShard `json:"matrix"`
-	// Affected is the whole closure the matrix was cut from, sorted, and Unbounded says
+	// Affected is the whole closure the matrix was cut from, sorted, and UnboundedBy says
 	// why it is not a proof when it is not. Together they are the answer a merge queue's
 	// affected hook expects, so `affected <target> --plan --stdin` feeds one as it stands.
 	// Affected stays the closure even when an inherited verdict empties the matrix.
-	Affected  []string `json:"affected"`
-	Unbounded string   `json:"unbounded,omitempty"`
+	Affected    []string `json:"affected"`
+	UnboundedBy string   `json:"unbounded_by,omitempty"`
 	// Inherit is present only when the plan inherited a green run's verdict;
 	// see planInherit. The matrix beside it is then empty on purpose.
 	Inherit *planInherit `json:"inherit,omitempty"`
@@ -772,7 +772,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		Source:      plan.Source,
 		Matrix:      make([]planShard, len(plan.Shards)),
 		Affected:    plan.Affected,
-		Unbounded:   plan.Unbounded,
+		UnboundedBy: plan.UnboundedBy,
 	}
 	for i, s := range plan.Shards {
 		out.Matrix[i] = planShard{

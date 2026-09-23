@@ -3,12 +3,17 @@ package magus
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/config"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -38,10 +43,9 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 	}
 
 	var (
-		targets   []types.Target
-		source    string
-		changed   []string
-		unbounded string
+		targets     []types.Target
+		source      string
+		unboundedBy string
 	)
 	if opts.ChangedPaths != nil {
 		result, err := m.AffectedFromPaths(ctx, opts.ChangedPaths)
@@ -52,7 +56,9 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		for i, path := range result.Affected {
 			targets[i] = types.Target{Path: path, Name: target, Files: result.FilesBySeed[path]}
 		}
-		source, changed = "stdin paths", opts.ChangedPaths
+		source = "stdin paths"
+		result.Changed = opts.ChangedPaths
+		unboundedBy = m.unboundedBy(result)
 	} else {
 		var (
 			fellBack bool
@@ -63,10 +69,11 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		if err != nil {
 			return types.ShardPlan{}, err
 		}
-		if fellBack {
-			unbounded = source
-		} else if res != nil {
-			changed = res.Changed
+		switch {
+		case fellBack:
+			unboundedBy = "the VCS could not diff, so the plan holds every project (" + source + ")"
+		case res != nil:
+			unboundedBy = m.unboundedBy(res)
 		}
 	}
 	affected := make([]string, len(targets))
@@ -74,9 +81,6 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		affected[i] = t.Path
 	}
 	slices.Sort(affected)
-	if unbounded == "" {
-		unbounded = unboundedBy(changed, affected)
-	}
 
 	projects := make([]*types.Project, 0, len(targets))
 	for _, t := range targets {
@@ -146,26 +150,89 @@ func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (type
 		Sufficient:  f.SufficientShards(projects),
 		OverBudget:  overBudget,
 		Affected:    affected,
-		Unbounded:   unbounded,
+		UnboundedBy: unboundedBy,
 	}, nil
 }
 
-// unboundedBy says why the closure computed from changed is not a proof, or "" when it
-// is. The closure comes from the declarations as they stand, so a change set that edits
-// them (any Buzz source, since a magusfile can import it, or the workspace config and
-// lockfile) can add an edge the closure never saw.
-func unboundedBy(changed, affected []string) string {
-	for _, p := range changed {
-		switch filepath.Base(p) {
-		case "magus.yaml", "magus.yml", "magus.lock":
-			return p + " changes the declarations the affected set was computed from"
-		}
-		if strings.HasSuffix(p, ".buzz") {
-			return p + " changes the declarations the affected set was computed from"
+// unboundedBy says why the closure computed from res is not a proof, or "" when it is.
+func (m *Magus) unboundedBy(res *types.AffectedResult) string {
+	claimed := make(map[string]bool, len(res.Changed))
+	for _, files := range res.FilesBySeed {
+		for _, f := range files {
+			claimed[f] = true
 		}
 	}
-	if len(affected) == 0 && len(changed) > 0 {
-		return "no project claims " + changed[0]
+	if len(res.Changed) > 0 {
+		if name := m.opaqueProvider(); name != "" {
+			return "workspace provider " + name + " declares no inputs, so any file may decide the project graph"
+		}
+	}
+	return unboundedBy(res.Changed, claimed, m.edgeInputs())
+}
+
+// opaqueProvider names a wired workspace provider that declares no input globs, or "".
+func (m *Magus) opaqueProvider() string {
+	if m.wsReg == nil {
+		return ""
+	}
+	for _, name := range m.wsReg.Providers() {
+		if sp, ok := project.DefaultSpellRegistry().Lookup(name); !ok || len(sp.Sources()) == 0 {
+			return name
+		}
+	}
+	return ""
+}
+
+// edgeInputs matches the files that can move the graph's edges or every project's
+// verdict at once without seeding the projects they reach.
+func (m *Magus) edgeInputs() func(string) bool {
+	names := map[string]bool{config.Filename: true, config.DottedFilename: true, remotespell.LockFile: true}
+	for _, p := range m.ws.All() {
+		for _, sp := range p.ResolvedSpells {
+			for _, mf := range sp.Manifests() {
+				names[path.Base(mf.Value)] = true
+				for _, lock := range mf.LockCandidates {
+					names[lock] = true
+				}
+			}
+		}
+	}
+	var globs []string
+	if m.wsReg != nil {
+		for _, name := range m.wsReg.Providers() {
+			if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok {
+				globs = append(globs, sp.Sources()...)
+			}
+		}
+	}
+	return func(p string) bool {
+		if names[path.Base(p)] || strings.HasSuffix(p, ".buzz") || types.LooksLikeBuildInput(p) {
+			return true
+		}
+		for _, g := range globs {
+			if ok, _ := doublestar.Match(g, p); ok {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// unboundedBy is the rule [Magus.unboundedBy] applies. The closure is computed from the
+// declarations as they stand, so a change that edits them (a Buzz source, the workspace
+// config or lock, a dependency manifest a spell or a workspace provider reads, a
+// toolchain pin or rule set every project builds under) can add an edge the closure
+// never saw. A path no project claims reaches nothing the closure can name.
+func unboundedBy(changed []string, claimed map[string]bool, edgeInput func(string) bool) string {
+	for _, p := range changed {
+		if edgeInput(p) {
+			return p + " can change the dependency graph or every project's build, which the affected set cannot see"
+		}
+	}
+	for _, p := range changed {
+		if !claimed[p] {
+			return "no project claims " + p
+		}
 	}
 	return ""
 }

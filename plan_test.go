@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,25 +41,33 @@ func TestPlanFromChangedPaths(t *testing.T) {
 	assert.Positive(t, plan.MaxParallel)
 	assert.Contains(t, plan.Affected, "api")
 	assert.NotContains(t, plan.Affected, "web")
-	assert.Empty(t, plan.Unbounded, "a Go edit cannot move the declarations")
+	assert.Empty(t, plan.UnboundedBy, "a Go edit cannot move the declarations")
 
-	edit, err := m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/magusfile.buzz"}, MaxShards: -1})
-	require.NoError(t, err)
-	assert.Equal(t, "api/magusfile.buzz changes the declarations the affected set was computed from", edit.Unbounded)
+	for _, p := range []string{"api/magusfile.buzz", ".magus.yaml", "api/go.mod"} {
+		edit, err := m.Plan(context.Background(), "ci", PlanOptions{ChangedPaths: []string{"api/main.go", p}, MaxShards: -1})
+		require.NoError(t, err)
+		assert.Equal(t, p+" can change the dependency graph or every project's build, which the affected set cannot see", edit.UnboundedBy)
+	}
 }
 
-func TestUnboundedNamesWhatTheClosureCannotVouchFor(t *testing.T) {
+func TestUnboundedByNamesWhatTheClosureCannotVouchFor(t *testing.T) {
+	edgeInput := func(p string) bool {
+		return p == "magus.lock" || p == "app/go.mod" || strings.HasSuffix(p, ".buzz")
+	}
+	claimed := map[string]bool{"api/main.go": true, "app/go.mod": true, "spells/go/spell.buzz": true, "magus.lock": true}
 	for _, tc := range []struct {
-		changed, affected []string
-		want              string
+		changed []string
+		want    string
 	}{
-		{[]string{"api/main.go"}, []string{"api"}, ""},
-		{[]string{"api/main.go", "magus.lock"}, []string{"api"}, "magus.lock changes the declarations the affected set was computed from"},
-		{[]string{"spells/go/spell.buzz"}, []string{"."}, "spells/go/spell.buzz changes the declarations the affected set was computed from"},
-		{[]string{"stray.txt"}, nil, "no project claims stray.txt"},
-		{nil, nil, ""},
+		{[]string{"api/main.go"}, ""},
+		{[]string{"api/main.go", "magus.lock"}, "magus.lock can change the dependency graph or every project's build, which the affected set cannot see"},
+		{[]string{"spells/go/spell.buzz"}, "spells/go/spell.buzz can change the dependency graph or every project's build, which the affected set cannot see"},
+		{[]string{"app/go.mod"}, "app/go.mod can change the dependency graph or every project's build, which the affected set cannot see"},
+		{[]string{"stray.txt"}, "no project claims stray.txt"},
+		{[]string{"api/main.go", "stray.txt"}, "no project claims stray.txt"},
+		{nil, ""},
 	} {
-		assert.Equal(t, tc.want, unboundedBy(tc.changed, tc.affected), "%v", tc.changed)
+		assert.Equal(t, tc.want, unboundedBy(tc.changed, claimed, edgeInput), "%v", tc.changed)
 	}
 }
 
