@@ -2,6 +2,7 @@ package console
 
 import (
 	"bytes"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -10,7 +11,6 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
@@ -44,7 +44,8 @@ const consoleCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'uns
 // surface. A real file serves through the FileServer only when it is part of the app shell
 // (see shellExtensions); anything else in consoleDir, and any directory listing, is a 404.
 func StaticHandler(consoleDir string) http.Handler {
-	fileServer := http.StripPrefix("/console/", http.FileServer(http.Dir(consoleDir)))
+	root := shellDir{http.Dir(consoleDir)}
+	fileServer := http.StripPrefix("/console/", http.FileServer(root))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// cspHTMLWriter stamps the CSP onto HTML responses only, leaving asset (js/css/image)
 		// responses untouched; routing both the shell fallback and the FileServer through it means
@@ -53,13 +54,13 @@ func StaticHandler(consoleDir string) http.Handler {
 		// seg is the single path element under /console/ ("graph"), or "" for the root, or a
 		// multi-element sub-path ("graph/explorer.js"); only a bare known surface is a route.
 		seg := strings.Trim(strings.TrimPrefix(r.URL.Path, "/console/"), "/")
-		if IsSurfaceRoute(seg) {
+		if target, ok := CanonicalSurfacePath(seg); ok {
 			// Canonicalize to the trailing-slash form BEFORE serving, because the shell is
 			// served with <base href="../"> and that only lands on /console/ when the URL
 			// already ends in a slash. Without the redirect, /console/diff resolves every asset
 			// one level too high: console.css, theme.js, patternfly.css all 404 at the site
 			// root, and the surface renders unstyled and never boots. The trim above hides the
-			// difference from IsSurfaceRoute, so the check has to happen on the raw path.
+			// difference from the surface lookup, so the check has to happen on the raw path.
 			//
 			// KnownSurfaces documents the canonical grammar as /console/<surface>/ and Link
 			// mints it that way, so this only affects a URL a person typed, which is exactly
@@ -69,11 +70,6 @@ func StaticHandler(consoleDir string) http.Handler {
 			if !strings.HasSuffix(r.URL.Path, "/") {
 				// The destination comes from KnownSurfaces itself, not from the request; see
 				// CanonicalSurfacePath. It also normalizes an odd but legal /console//diff.
-				target, ok := CanonicalSurfacePath(seg)
-				if !ok {
-					fileServer.ServeHTTP(cw, r)
-					return
-				}
 				if q := r.URL.RawQuery; q != "" {
 					target += "?" + q
 				}
@@ -91,18 +87,38 @@ func StaticHandler(consoleDir string) http.Handler {
 			serveConsoleShell(cw, r, consoleDir)
 			return
 		}
+		// A shell path that does not exist is refused here too, so every miss under the mount
+		// answers the one structured 404 rather than FileServer's plain-text one.
 		if !isShellFile(consoleDir, r.URL.Path) {
-			httpx.FormatJSON.Write(w, r, rpcerr.Error{
+			rpcerr.FormatJSON.Write(w, r, rpcerr.Error{
 				Code:    connect.CodeNotFound,
 				Reason:  types.ConsoleFileWithheld,
-				Title:   "console file withheld",
-				Message: "the console mount serves only the app shell without a token; read data through the authenticated API",
+				Message: "the console mount serves only the app shell; read data through the authenticated API",
 			})
 			return
 		}
 		fileServer.ServeHTTP(cw, r)
 	})
 }
+
+// shellDir is the console directory as FileServer sees it: nothing it opens can be listed,
+// so FileServer can never render the listing that would name every file in a directory,
+// even one whose index.html vanished after isShellFile saw it.
+type shellDir struct{ dir http.Dir }
+
+func (d shellDir) Open(name string) (http.File, error) {
+	f, err := d.dir.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return unlistable{f}, nil
+}
+
+// unlistable refuses Readdir. Embedding http.File promotes only its methods, so the
+// underlying ReadDir is hidden as well and FileServer's listing has nothing that answers.
+type unlistable struct{ http.File }
+
+func (unlistable) Readdir(int) ([]fs.FileInfo, error) { return nil, fs.ErrPermission }
 
 // shellExtensions is every file type the app shell is built from. The handler is
 // unauthenticated, and the console dir also holds files that are not shell: the hosted demo's
@@ -114,9 +130,9 @@ var shellExtensions = map[string]bool{
 	".woff": true, ".woff2": true, ".ttf": true, ".otf": true,
 }
 
-// isShellFile reports whether urlPath (under /console/) names a file the unauthenticated
-// handler may serve. A directory request is allowed only when it holds an index.html, which
-// FileServer serves in place of the listing that would otherwise name every file there.
+// isShellFile reports whether urlPath (under /console/) names part of the app shell that
+// exists, with one Stat: no dotted segment, and either a directory holding an index.html,
+// which FileServer serves in place of a listing, or a regular file of a shellExtensions type.
 func isShellFile(consoleDir, urlPath string) bool {
 	name := path.Clean("/" + strings.TrimPrefix(urlPath, "/console/"))
 	for seg := range strings.SplitSeq(name, "/") {
@@ -124,11 +140,14 @@ func isShellFile(consoleDir, urlPath string) bool {
 			return false
 		}
 	}
-	if name == "/" || strings.HasSuffix(urlPath, "/") {
-		fi, err := os.Stat(filepath.Join(consoleDir, filepath.FromSlash(name), "index.html"))
-		return err == nil && fi.Mode().IsRegular()
+	switch {
+	case name == "/" || strings.HasSuffix(urlPath, "/"):
+		name = path.Join(name, "index.html")
+	case !shellExtensions[strings.ToLower(path.Ext(name))]:
+		return false
 	}
-	return shellExtensions[strings.ToLower(path.Ext(name))]
+	fi, err := os.Stat(filepath.Join(consoleDir, filepath.FromSlash(name)))
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // serveConsoleShell writes the console shell (index.html) for a clean /console/<surface>/ route,

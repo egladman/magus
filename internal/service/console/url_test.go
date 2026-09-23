@@ -148,7 +148,7 @@ func TestOpenCommandAs(t *testing.T) {
 		{"linux", "http://127.0.0.1:7391/console/plan/#job=a",
 			`xdg-open "http://127.0.0.1:7391/console/plan/#job=a&token=$(magus config token print)"`},
 		{"windows", "http://127.0.0.1:7391/console/",
-			`start "" "http://127.0.0.1:7391/console/#token=$(magus config token print)"`},
+			`Start-Process "http://127.0.0.1:7391/console/#token=$(magus config token print)"`},
 	} {
 		assert.Equal(t, tc.want, OpenCommandAs(tc.link, tc.goos, "magus"), tc.goos)
 	}

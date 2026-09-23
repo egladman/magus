@@ -38,7 +38,7 @@ func TestEvaluateHealth(t *testing.T) {
 	// substring of the reason.
 	assertHealth := func(name string, reply *proc.StatusReply, err error, kind probeKind, root string, wantOK bool, wantSub string) {
 		t.Run(name, func(t *testing.T) {
-			ok, reason := evaluateHealth(statusOutputFromReply(reply), err, kind, root)
+			ok, reason := evaluateHealth(reply.StatusOutput(), err, kind, root)
 			assert.Equal(t, wantOK, ok, "reason: %q", reason)
 			if wantSub != "" {
 				assert.Contains(t, reason, wantSub)
@@ -81,7 +81,7 @@ func TestHealthHTTPHandler(t *testing.T) {
 			reply := makeReply(1, workspaces...)
 			// Build a handler with a fake querier instead of dialing a real socket.
 			h := healthHTTPHandler(kind, func(context.Context) (*types.StatusOutput, error) {
-				return statusOutputFromReply(reply), nil
+				return reply.StatusOutput(), nil
 			})
 			url := "/"
 			if queryWS != "" {
@@ -137,7 +137,7 @@ func TestHealthEndpointBodiesRedactSensitiveDetail(t *testing.T) {
 		sentinelPID  = 424242
 		sentinelRoot = "/Users/secret/private-repo"
 	)
-	snapshot := statusOutputFromReply(makeReply(sentinelPID, sentinelRoot, "/srv/another/workspace"))
+	snapshot := makeReply(sentinelPID, sentinelRoot, "/srv/another/workspace").StatusOutput()
 	statusFn := func(context.Context) (*types.StatusOutput, error) { return snapshot, nil }
 
 	// leaks lists the sentinels no unguarded health body may echo.
@@ -268,7 +268,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 	statusOf := func(workspaces ...string) statusFunc {
 		reply := makeReply(1, workspaces...)
 		return func(context.Context) (*types.StatusOutput, error) {
-			return statusOutputFromReply(reply), nil
+			return reply.StatusOutput(), nil
 		}
 	}
 	do := func(h http.HandlerFunc) *httptest.ResponseRecorder {
@@ -351,7 +351,7 @@ func TestReadinessHTTPHandlerMatchesHealthHTTPHandlerGate(t *testing.T) {
 	for _, s := range scenarios {
 		t.Run(s.name, func(t *testing.T) {
 			statusFn := func(context.Context) (*types.StatusOutput, error) {
-				return statusOutputFromReply(makeReply(1, s.workspaces...)), nil
+				return makeReply(1, s.workspaces...).StatusOutput(), nil
 			}
 
 			oldRec := httptest.NewRecorder()

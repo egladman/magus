@@ -14,6 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func toProto(t *testing.T, r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
+	t.Helper()
+	s, err := statusSnapshotToProto(r, build)
+	require.NoError(t, err)
+	return s
+}
+
 // TestStatusProtoMapsPool maps a running-pool status report onto the wire message:
 // health, slots, and the in-flight calls a dashboard shows.
 func TestStatusProtoMapsPool(t *testing.T) {
@@ -24,7 +31,7 @@ func TestStatusProtoMapsPool(t *testing.T) {
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, Step: "go-build"}},
 		},
 	}
-	s := statusSnapshotToProto(r, types.BuildInfo{Version: "v1.2.3"})
+	s := toProto(t, r, types.BuildInfo{Version: "v1.2.3"})
 
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, s.GetHealth())
 	assert.Equal(t, "v1.2.3", s.GetBuild().GetVersion())
@@ -56,7 +63,7 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 			},
 		},
 	}
-	p := statusSnapshotToProto(r, types.BuildInfo{Version: "v1"}).GetPool()
+	p := toProto(t, r, types.BuildInfo{Version: "v1"}).GetPool()
 	require.NotNil(t, p)
 
 	// Per-running-target invocation id.
@@ -81,9 +88,9 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 
 // TestStatusProtoHealth derives DOWN when no pool is present and DEGRADED on a pool error.
 func TestStatusProtoHealth(t *testing.T) {
-	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusSnapshotToProto(types.StatusSnapshot{}, types.BuildInfo{Version: "v1"}).GetHealth())
+	assert.Equal(t, statusv1.Health_HEALTH_DOWN, toProto(t, types.StatusSnapshot{}, types.BuildInfo{Version: "v1"}).GetHealth())
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED,
-		statusSnapshotToProto(types.StatusSnapshot{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
+		toProto(t, types.StatusSnapshot{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
 }
 
 // A failed workspace is a resource in STATE_FAILED carrying the same google.rpc.Status a
@@ -92,7 +99,7 @@ func TestStatusProtoCarriesAFailedWorkspace(t *testing.T) {
 	failure := &types.WorkspaceFailure{Message: "boom", Diagnostics: []types.SourceDiagnostic{{
 		Code: "BZZ1005", File: "magusfile.buzz", Line: 3, Column: 3, Message: "cannot assign",
 	}}}
-	s := statusSnapshotToProto(types.StatusSnapshot{Pool: &types.StatusOutput{Workspaces: []types.StatusWorkspace{
+	s := toProto(t, types.StatusSnapshot{Pool: &types.StatusOutput{Workspaces: []types.StatusWorkspace{
 		{Root: "/ok"},
 		{Root: "/loading", State: types.WorkspaceLoading},
 		{Root: "/repo", State: types.WorkspaceFailed, Error: failure},
@@ -106,12 +113,37 @@ func TestStatusProtoCarriesAFailedWorkspace(t *testing.T) {
 	assert.Equal(t, statusv1.Workspace_STATE_LOADING, ws[1].GetState())
 	assert.Nil(t, ws[1].GetError())
 	assert.Equal(t, statusv1.Workspace_STATE_FAILED, ws[2].GetState())
-	assert.True(t, proto.Equal(rpcerr.WorkspaceFailed("/repo", failure).Status(), ws[2].GetError()))
+	want, err := rpcerr.WorkspaceFailed("/repo", failure).Status()
+	require.NoError(t, err)
+	assert.True(t, proto.Equal(want, ws[2].GetError()))
+}
+
+// Health agrees with readiness: every workspace that tried to load failing is down, and a
+// loaded one beside a failed one is degraded.
+func TestStatusProtoHealthMatchesReadiness(t *testing.T) {
+	failed := types.StatusWorkspace{Root: "/bad", State: types.WorkspaceFailed}
+	cases := []struct {
+		name string
+		ws   []types.StatusWorkspace
+		want statusv1.Health
+	}{
+		{"every workspace failed", []types.StatusWorkspace{failed}, statusv1.Health_HEALTH_DOWN},
+		{"one failed, one still loading", []types.StatusWorkspace{failed, {Root: "/l", State: types.WorkspaceLoading}}, statusv1.Health_HEALTH_DOWN},
+		{"one failed, one loaded", []types.StatusWorkspace{failed, {Root: "/ok", State: types.WorkspaceActive}}, statusv1.Health_HEALTH_DEGRADED},
+		{"one loaded", []types.StatusWorkspace{{Root: "/ok", State: types.WorkspaceActive}}, statusv1.Health_HEALTH_HEALTHY},
+		{"none yet", nil, statusv1.Health_HEALTH_HEALTHY},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := toProto(t, types.StatusSnapshot{Pool: &types.StatusOutput{Workspaces: tc.ws}}, types.BuildInfo{Version: "v1"})
+			assert.Equal(t, tc.want, s.GetHealth())
+		})
+	}
 }
 
 // TestEncodeStatusEventRoundTrip confirms a status snapshot decodes back: base64 -> proto.
 func TestEncodeStatusEventRoundTrip(t *testing.T) {
-	ev, err := EncodeStatusEvent(types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4}}, types.BuildInfo{Version: "v1"})
+	ev, err := EncodeStatusEvent(toProto(t, types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4}}, types.BuildInfo{Version: "v1"}))
 	require.NoError(t, err)
 	raw, err := base64.StdEncoding.DecodeString(ev)
 	require.NoError(t, err)
@@ -139,7 +171,7 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 			},
 		}},
 	}
-	s := statusSnapshotToProto(r, types.BuildInfo{Version: "v1"})
+	s := toProto(t, r, types.BuildInfo{Version: "v1"})
 
 	require.Len(t, s.GetRuns(), 1)
 	run := s.GetRuns()[0]
@@ -175,7 +207,7 @@ func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
 			},
 		},
 	}
-	p := statusSnapshotToProto(r, types.BuildInfo{Version: "v1"}).GetPool()
+	p := toProto(t, r, types.BuildInfo{Version: "v1"}).GetPool()
 	require.NotNil(t, p)
 	require.Len(t, p.GetWorkspaces(), 2)
 
@@ -198,7 +230,7 @@ func TestStatusProtoCarriesTheStaleLockThreshold(t *testing.T) {
 		AcquireTime: held, StaleAfterSeconds: 600,
 	}}}
 
-	locks := statusSnapshotToProto(r, types.BuildInfo{Version: "v1"}).GetLocks()
+	locks := toProto(t, r, types.BuildInfo{Version: "v1"}).GetLocks()
 
 	require.Len(t, locks, 1)
 	assert.Equal(t, int32(600), locks[0].GetStaleAfterSeconds())

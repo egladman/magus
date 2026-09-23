@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/egladman/magus/internal/rpcerr"
 )
 
 var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -27,7 +29,7 @@ func TestDnsRebindGuard(t *testing.T) {
 			req.Header.Set("Origin", origin)
 		}
 		rr := httptest.NewRecorder()
-		GuardRebind(FormatJSON, loopback, okHandler).ServeHTTP(rr, req)
+		GuardRebind(rpcerr.FormatJSON, loopback, okHandler).ServeHTTP(rr, req)
 		return rr.Code
 	}
 

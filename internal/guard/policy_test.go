@@ -71,6 +71,17 @@ func TestRecordPolicyClassifiesTheChange(t *testing.T) {
 	assert.Equal(t, []string{PolicyLoaded, PolicyTightened, PolicyLoosenPending, PolicyCommitted, PolicyRemoved}, policyActions(t, base))
 }
 
+// Shell rules have no approved twin, so dropping one applies at once even while another
+// edit is pending.
+func TestRecordPolicyShellRuleDropIsCommitted(t *testing.T) {
+	base := t.TempDir()
+	calls := 0
+	dirty := sourcesAt(&calls, PolicySource{Path: "/w/magusfile.buzz", Worktree: "b", Approved: "a"})
+	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d1", ShellRules: 2, SpawnRule: true, Sources: dirty}, false)
+	RecordPolicy(t.Context(), base, "/w", PolicyState{Digest: "d2", ShellRules: 1, SpawnRule: true, Sources: dirty}, false)
+	assert.Equal(t, []string{PolicyLoaded, PolicyCommitted}, policyActions(t, base))
+}
+
 // A guard_policy event names sources by blob id and carries both digests, never a body.
 func TestRecordPolicyEventCarriesRefsNotBodies(t *testing.T) {
 	base := t.TempDir()

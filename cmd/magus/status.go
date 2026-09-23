@@ -237,7 +237,7 @@ func applyStatusPools(ctx context.Context, snapshot *types.StatusSnapshot, addrs
 			failed = append(failed, fmt.Sprintf("query %s: %v", addr, err))
 			continue
 		}
-		out := statusOutputFromReply(reply)
+		out := reply.StatusOutput()
 		out.Socket = addr
 		if len(pools) == 0 {
 			snapshot.Services = reply.Services
@@ -287,42 +287,6 @@ func loadHeldLocks(ctx context.Context) []types.StatusLock {
 		return nil
 	}
 	return m.HeldLocks()
-}
-
-// statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput.
-// It deliberately leaves StatusOutput.Affected unset: `magus status` queries
-// the daemon over its proc socket only and never opens a workspace, so there
-// is no VCS context here to compute an affected set from. The console's
-// live Graph Explorer "affected" view (internal/service/console, which
-// has its own copy of this conversion) is correspondingly kept disabled
-// client-side rather than wired to a field that can never be populated from
-// this call site.
-func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
-	if r == nil {
-		return nil
-	}
-	out := &types.StatusOutput{
-		ParentPID:     r.ParentPID,
-		DaemonVersion: r.DaemonVersion,
-		Mode:          r.Mode,
-		Capacity:      r.Capacity,
-		Running:       r.Running,
-		// Floored: a daemon whose capacity was clamped under load can report more running
-		// than capacity, and "-2 available" is worse than "0".
-		Available: max(0, r.Capacity-r.Running),
-		Queued:    r.Queued,
-	}
-	for _, c := range r.Calls {
-		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{
-			Args: c.Args, Workspace: c.Workspace, StartedAt: c.StartedAt, Step: c.SubOp,
-		})
-	}
-	for _, w := range r.Workspaces {
-		out.Workspaces = append(out.Workspaces, types.StatusWorkspace{
-			Root: w.Root, State: w.State, Error: w.Error, LoadedAt: w.LoadedAt, LastAccess: w.LastAccess,
-		})
-	}
-	return out
 }
 
 func buildTelemetryStatus(t config.Telemetry) types.TelemetryStatus {

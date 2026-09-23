@@ -95,7 +95,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		h.dispose(w, r)
 	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		handler.RefuseMethod(w, r, http.MethodGet, http.MethodPost)
 	}
 }
 
