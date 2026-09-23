@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -91,7 +92,7 @@ func StaticHandler(consoleDir string) http.Handler {
 			return
 		}
 		if !isShellFile(consoleDir, r.URL.Path) {
-			httpx.JSONErrors.Refuse(w, r, httpx.Refusal{
+			httpx.FormatJSON.Write(w, r, rpcerr.Error{
 				Code:    connect.CodeNotFound,
 				Reason:  types.ConsoleFileWithheld,
 				Title:   "console file withheld",

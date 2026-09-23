@@ -101,7 +101,7 @@ func TestWorkspaceLoadingIsRetryable(t *testing.T) {
 func TestWriteJSONRendersAIP193(t *testing.T) {
 	t.Parallel()
 	rr := httptest.NewRecorder()
-	WriteJSON(rr, WorkspaceLoading("/repo").Status())
+	WriteJSON(rr, httptest.NewRequest(http.MethodGet, "/", nil), WorkspaceLoading("/repo"))
 
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
 	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))

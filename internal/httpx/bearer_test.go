@@ -27,7 +27,7 @@ func TestBearerGuard(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuard(JSONErrors, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+		BearerGuard(FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 
@@ -89,7 +89,7 @@ func TestBearerGuardWithQueryToken(t *testing.T) {
 		}
 		rr := httptest.NewRecorder()
 		load := func() (string, error) { return token, nil }
-		BearerGuardWithQueryToken(JSONErrors, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+		BearerGuardWithQueryToken(FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 		return rr
 	}
 	code := func(authHeader, rawQuery string) int { return serve(authHeader, rawQuery).Code }
@@ -111,7 +111,7 @@ func TestSingleTokenVerifierLoadErrorFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(JSONErrors, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
+	BearerGuard(FormatJSON, SingleTokenVerifier(load), okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
@@ -123,7 +123,7 @@ func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer anything")
 	rr := httptest.NewRecorder()
-	BearerGuard(JSONErrors, reject, okHandler).ServeHTTP(rr, req)
+	BearerGuard(FormatJSON, reject, okHandler).ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 

@@ -5,8 +5,10 @@
 package rpcerr
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -83,9 +85,14 @@ func (e Error) Status() *status.Status {
 func (e Error) Connect() *connect.Error {
 	err := connect.NewError(e.Code, errors.New(e.message()))
 	for _, m := range e.details() {
-		if d, derr := connect.NewErrorDetail(m); derr == nil {
-			err.AddDetail(d)
+		d, derr := connect.NewErrorDetail(m)
+		if derr != nil {
+			// No request in scope here to carry a trace-linked context; Background is the
+			// honest one, not a stand-in for one this call could have had.
+			slog.DebugContext(context.Background(), "rpcerr: dropping a detail that failed to marshal", slog.String("type", fmt.Sprintf("%T", m)), slog.String("error", derr.Error()))
+			continue
 		}
+		err.AddDetail(d)
 	}
 	return err
 }
@@ -112,8 +119,11 @@ type statusBody struct {
 	} `json:"error"`
 }
 
-// WriteJSON writes st in AIP-193's HTTP/1.1+JSON shape.
-func WriteJSON(w http.ResponseWriter, st *status.Status) {
+// WriteJSON writes e in AIP-193's HTTP/1.1+JSON shape. The body never depends on r, but the
+// parameter mirrors WriteConnect's signature (a caller can pick the format without reshaping
+// the call) and gives a dropped-detail log line the request's own context.
+func WriteJSON(w http.ResponseWriter, r *http.Request, e Error) {
+	st := e.Status()
 	code := connect.Code(st.GetCode())
 	httpCode := HTTPStatus(code)
 	var b statusBody
@@ -123,6 +133,7 @@ func WriteJSON(w http.ResponseWriter, st *status.Status) {
 	for _, a := range st.GetDetails() {
 		raw, err := protojson.Marshal(a)
 		if err != nil {
+			slog.DebugContext(r.Context(), "rpcerr: dropping a detail that failed to marshal", slog.String("type", a.GetTypeUrl()), slog.String("error", err.Error()))
 			continue
 		}
 		b.Error.Details = append(b.Error.Details, raw)
