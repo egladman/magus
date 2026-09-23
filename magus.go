@@ -759,11 +759,11 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// address when there is one: the stable path is only where an unconfigured daemon
 	// happens to land.
 	if admitter := m.machineAdmitter; admitter != nil {
-		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(admitter, noWaitLocks()))
+		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(admitter))
 	} else if addr := m.cfg.Daemon.Address; addr != "" && proc.SocketLive(ctx, addr) {
-		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.DaemonAdmitter{Addr: addr}, noWaitLocks()))
+		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.DaemonAdmitter{Addr: addr}))
 	} else if addr, ok := proc.LookupStableSocket(ctx); ok {
-		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.DaemonAdmitter{Addr: addr}, noWaitLocks()))
+		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.DaemonAdmitter{Addr: addr}))
 	}
 	c, err := cache.Open(ctx, cacheDir, cfgOpts...)
 	if err != nil {

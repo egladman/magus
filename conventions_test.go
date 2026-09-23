@@ -197,6 +197,57 @@ func TestDocsCarryNoBearerToken(t *testing.T) {
 		strings.Join(findings, "\n  "))
 }
 
+// yamlLocks are the .lock files whose encoder orders them, not their lines:
+// magus.lock sorts its spell keys on Marshal, and buf.lock is buf's own format.
+var yamlLocks = map[string]bool{"magus.lock": true, "buf.lock": true}
+
+// TestLockfilesAreSorted holds every line-per-entry .lock file to byte order within
+// each block that a comment or blank line delimits, so the file has one right order
+// whether a writer or a person produced it. Blocks keep a hand-written reason
+// attached to the entries it explains.
+func TestLockfilesAreSorted(t *testing.T) {
+	var findings []string
+
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // an unreadable subtree is skipped, not fatal
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", ".claude", "node_modules", "gen":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".lock" || yamlLocks[d.Name()] {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return nil //nolint:nilerr // same
+		}
+		prev := ""
+		for i, line := range strings.Split(string(body), "\n") {
+			entry := strings.TrimSpace(line)
+			if entry == "" || strings.HasPrefix(entry, "#") {
+				prev = ""
+				continue
+			}
+			if prev != "" && entry <= prev {
+				findings = append(findings, path+":"+itoa(i+1)+": "+entry+" follows "+prev)
+			}
+			prev = entry
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	assert.Emptyf(t, findings,
+		"lockfile entries out of byte order (or duplicated) within their block:\n  %s\n\n"+
+			"Move each entry to its sorted place; a comment line starts a new block.",
+		strings.Join(findings, "\n  "))
+}
+
 // Dogfooding checks: assertions that this repository actually uses what it publishes.
 //
 // This file deliberately has no dogfood.go beside it, and it is the one place in the tree

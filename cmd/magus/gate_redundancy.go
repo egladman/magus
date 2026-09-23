@@ -403,10 +403,10 @@ func planInheritance(ctx context.Context, m *magus.Magus) *internalci.InheritFin
 }
 
 // gatePoolProbe is swappable so a test can decide saturation without a
-// daemon; the machine gate's wait timings are vars for the same reason.
+// daemon.
 var gatePoolProbe = gatePoolSaturated
 
-// gatePoolSaturated asks the admission daemon whether a new run would queue,
+// gatePoolSaturated asks the admission daemon whether a new run would be refused,
 // and always says what it saw, so the finding can print the pool state behind
 // either answer. Every failure (no socket, no answer, a server that
 // arbitrates no budget) reads as idle: the daemon is an accelerant, never a
@@ -427,13 +427,6 @@ func gatePoolSaturated(ctx context.Context) (bool, string) {
 	}
 	m := reply.Machine
 	desc := strconv.Itoa(m.HeldSlots) + " of " + strconv.Itoa(m.BudgetSlots) + " slots held"
-	if n := len(m.Waiters); n > 0 {
-		runs := "runs"
-		if n == 1 {
-			runs = "run"
-		}
-		desc += ", " + strconv.Itoa(n) + " " + runs + " queued"
-	}
 	if !internalci.PoolSaturated(m) {
 		return false, "idle: " + desc
 	}

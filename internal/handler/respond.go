@@ -1,9 +1,15 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
+
+	"connectrpc.com/connect"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/types"
 )
 
 // AllowGet answers a CORS preflight (204) and rejects non-GET methods (405), returning false
@@ -18,10 +24,23 @@ func AllowGet(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		RefuseMethod(w, r, http.MethodGet)
 		return false
 	}
 	return true
+}
+
+// RefuseMethod answers a request whose method the route does not serve: 405 with the methods
+// it does serve in Allow, as the structured refusal every /api/ guard answers with.
+func RefuseMethod(w http.ResponseWriter, r *http.Request, allowed ...string) {
+	w.Header().Set("Allow", strings.Join(allowed, ", "))
+	rpcerr.FormatJSON.Write(w, r, rpcerr.Error{
+		// UNIMPLEMENTED is the google.rpc code HTTP transcoding pairs with 405.
+		Code:       connect.CodeUnimplemented,
+		Reason:     types.MethodNotAllowed,
+		Message:    fmt.Sprintf("%s %s is not served; use %s", r.Method, r.URL.Path, strings.Join(allowed, " or ")),
+		HTTPStatus: http.StatusMethodNotAllowed,
+	})
 }
 
 // MaxWireBodyBytes caps the request body a daemon HTTP handler will read into memory.

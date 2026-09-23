@@ -280,6 +280,9 @@ func ForSession(base, session string, limit int) SessionTrail {
 				}
 			}
 		case KindAgentSpawn:
+			if e.Action == ActionAgentContinue {
+				continue
+			}
 			sp := SessionSpawn{Child: e.Action, Lease: e.Lease, At: time.UnixMilli(e.Ts)}
 			if raw, err := ReadBlob(base, e.RequestRef); err == nil {
 				var req agentSpawnRequest

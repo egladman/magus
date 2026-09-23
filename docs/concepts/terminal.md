@@ -65,17 +65,11 @@ leave a useful scrolling area above it.
 ## Notifications
 
 A notification is for something you have to ACT on. That rule is strict, and it
-leaves magus itself raising almost none: a cache hit is passive, a summary is
-already on screen, and a failure is already pinned where it cannot scroll away.
-
-What qualifies is a run that has stopped and will not continue until you do
-something:
-
-![A magus run waiting on a workspace lock, with a yellow notification naming the process that holds it](../../assets/gen/terminal-lock-waiting.svg)
-
-That one is a _condition_, not an event - it is true until the lock clears - so
-it is pinned rather than given a countdown, and it is retracted when the lock is
-acquired rather than expiring on a timer.
+leaves magus itself raising none during a run: a cache hit is passive, a summary
+is already on screen, and a failure is already pinned where it cannot scroll away.
+A run that finds a project lock or the machine budget held by another magus
+invocation does not wait behind it, so there is no stalled run to announce; it
+exits 75 naming the holder.
 
 A magusfile can raise its own with
 [`term\notify`](../reference/buzz/term.md). Those expire on their own clock, and

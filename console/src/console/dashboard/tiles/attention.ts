@@ -452,34 +452,18 @@ export function attentionTile(): Tile {
       runLink.removeAttribute("title");
     }
 
-    // Queued explains ITSELF rather than linking. The two reasons anything waits are both in this
-    // frame: every pool slot busy, or a lock held by another process. Naming which one turns a
-    // number that reads as unexplained backlog into a fact with a cause.
+    // Queued explains ITSELF rather than linking: naming a saturated pool turns a number that reads
+    // as unexplained backlog into a fact with a cause.
     queueWrap.title = queuedReason(status, queued);
 
     renderFailList(status, liveHost, demo);
   }
 
-  // queuedReason says WHY work is waiting, from the same status frame. Capacity is checked first
-  // because a saturated pool is the ordinary reason and a held lock is the surprising one - but a
-  // lock is named even when the pool is also full, since it is the one an operator may need to act
-  // on. Capacity 0 means an unlimited pool, where saturation is not a possible explanation.
+  // queuedReason says WHY work is waiting, from the same status frame. Capacity 0 means an
+  // unlimited pool, where saturation is not a possible explanation.
   function queuedReason(status: StatusView, queued: number): string {
     if (queued === 0) return "Nothing is waiting to start.";
-    const held = status.locks.length;
     const saturated = status.pool.capacity > 0 && status.pool.running >= status.pool.capacity;
-    if (held > 0) {
-      const waiters = status.locks.reduce((n, l) => n + l.waiters.length, 0);
-      if (waiters > 0) {
-        return (
-          queued +
-          " waiting. " +
-          waiters +
-          (waiters === 1 ? " run is" : " runs are") +
-          " blocked behind a held workspace lock."
-        );
-      }
-    }
     if (saturated) {
       return (
         queued +

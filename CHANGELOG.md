@@ -48,7 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **MGS3013: a slot pool that cannot free a slot is refused within seconds.** The refusal
   names every holder and what it waits on.
 - **MGS3014: a newer gate supersedes an older one on the same tree.** The earlier `ci` run
-  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs still wait.
+  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs are refused
+  immediately instead, like any other contention.
 - **Tools declare `observe` probes; ops declare external effects.** An observation keys
   only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
   `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
@@ -127,6 +128,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`install` probes only its own tools and skips dependency order.** A project's install
   no longer waits for its dependencies' installs, and `run install` probes node and pnpm,
   not tsc.
+- **magus never waits on another magus invocation.** A workspace lock or machine budget
+  held by another invocation refuses immediately (exit 75), naming the holder.
+  `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
+  other, as do the nested runs of one root invocation. `--watch` retries on the next
+  change.
 - **Enum case sets are hand-written; no `_gen.go` file remains.** Each closed string
   type declares its cases once, and the `magus-utils enums` generator is gone. A test
   holds the Buzz boundary registry to each type's set.
@@ -135,16 +141,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
   `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
   workspace reloads when a `.buzz` file or `magus.yaml` changes.
-- **The daemon refuses a request as `google.rpc.Status` JSON in the route's protocol.**
-  A Connect service answers Connect's envelope; every other route, `/mcp` included, answers
+- **The daemon's guards refuse a request as `google.rpc.Status` JSON in the route's protocol.**
+  A Connect service answers Connect's envelope; every other route, `/mcp` included,
   AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
 - **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
-  projects/charms/cache header, per-stage progress, the run summary and lock-wait
-  notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,
-  `lock.released`, `run.notice`) on the same stream as `run.target.result`; anything not
+  projects/charms/cache header, per-stage progress and the run summary are now typed
+  events (`run.scope`, `run.step`, `run.summary`, `run.notice`) on the same stream as
+  `run.target.result`; anything not
   yet converted falls back to a plain JSON line instead of prose.
 - **`magus doctor`'s `recurring-guard-denials` check reports facts only.** Rule, surface,
   denial count, session count, and followed rate; the retired advice layer's destination
@@ -236,6 +242,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
   A run skips re-evaluating a magusfile that does not export the target, and an exact
   source no longer walks the tree. `magus ls` here: 1.45s to 0.11s.
+- **A broken working tree no longer switches off the approved spawn rule.** The committed
+  `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
+  it too slowly denies. A skipped rule says what applied. A workspace advise joins a
+  built-in one, and the idle clock follows the agent's id.
+- **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
+  wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
+  its message and Help link. Health reports down when every workspace failed, and the
+  Windows sign-in line is PowerShell's `Start-Process`.
+- **A run the machine's build budget refuses says so.** It exited 75 with nothing after
+  the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
+  cause naming the holder, and `-o jsonl` emits the `run.target.result` and
+  `run.diagnostic` records.
 - **The daemon API reference matches the protos again.** The committed descriptor set
   predated the last proto change, so the activity reference described an older API.
 - **The graph links a target to a workspace spell imported without an alias.**

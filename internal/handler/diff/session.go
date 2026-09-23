@@ -87,7 +87,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		http.Error(w, "review error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "review", err)
 		return
 	}
 	// Attaching here rather than on a separate route means a client that can read a review is
@@ -188,7 +188,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		http.Error(w, "context snapshot error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "context snapshot", err)
 		return
 	}
 	if changeset.PatchDigest(patch) != asOf {
@@ -217,7 +217,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "file is not present in the working tree", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "context", err)
 		return
 	}
 	rel, err := filepath.Rel(root, target)
@@ -227,7 +227,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := os.Stat(target)
 	if err != nil {
-		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "context", err)
 		return
 	}
 	if !info.Mode().IsRegular() {
@@ -244,7 +244,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "file is not present in the working tree", http.StatusNotFound)
 			return
 		}
-		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "context", err)
 		return
 	}
 	lines := strings.Split(strings.TrimSuffix(string(body), "\n"), "\n")
@@ -291,7 +291,7 @@ func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		http.Error(w, "diff error: "+err.Error(), http.StatusInternalServerError)
+		h.Fail(w, r, "diff", err)
 		return
 	}
 	handler.WriteJSON(w, diffResponse{
@@ -522,7 +522,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		handler.RefuseMethod(w, r, http.MethodGet, http.MethodPost)
 		return
 	}
 	handler.LimitRequestBody(w, r)
@@ -730,12 +730,7 @@ func remoteHost(remote string) string {
 }
 
 func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	at := h.lookup(r.Context())
@@ -852,12 +847,7 @@ type diffBranchesResponse struct {
 }
 
 func (h *BranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	out := diffBranchesResponse{Branches: []types.BranchChange{}}

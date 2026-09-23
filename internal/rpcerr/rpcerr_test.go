@@ -2,14 +2,19 @@ package rpcerr
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
@@ -22,7 +27,33 @@ func TestHTTPStatusMatchesConnect(t *testing.T) {
 	for c := connect.CodeCanceled; c <= connect.CodeUnauthenticated; c++ {
 		rr := httptest.NewRecorder()
 		_ = connect.NewErrorWriter().Write(rr, httptest.NewRequest(http.MethodPost, "/", nil), connect.NewError(c, errors.New("probe")))
-		assert.Equal(t, rr.Code, HTTPStatus(c), c.String())
+		assert.Equal(t, rr.Code, httpStatus(c), c.String())
+	}
+}
+
+// A Help link's description is the reason's own page heading, so the link reads the same as
+// the page it opens.
+func TestTitlesMatchTheCodePages(t *testing.T) {
+	t.Parallel()
+	for code, title := range titles {
+		pages, err := filepath.Glob(filepath.Join("..", "..", "docs", "reference", "codes", "*", string(code)+".md"))
+		require.NoError(t, err)
+		require.Len(t, pages, 1, "%s has one code page", code)
+		body, err := os.ReadFile(pages[0])
+		require.NoError(t, err)
+		assert.Contains(t, string(body), fmt.Sprintf("title: %q\n", string(code)+": "+title), pages[0])
+	}
+}
+
+// The MGS9xxx range is the daemon's, so a writer can be handed any reason in it; a reason
+// missing from titles would fall back to its bare code in the Help link.
+func TestEveryDaemonReasonHasATitle(t *testing.T) {
+	t.Parallel()
+	for _, code := range types.AllDiagnosticCodes() {
+		if !strings.HasPrefix(string(code), "MGS9") {
+			continue
+		}
+		assert.Contains(t, titles, code, "%s has no Help link title", code)
 	}
 }
 
@@ -31,10 +62,17 @@ func assertProto(t *testing.T, want, got proto.Message) {
 	assert.True(t, proto.Equal(want, got), "got %v, want %v", got, want)
 }
 
+func mustStatus(t *testing.T, e Error) *status.Status {
+	t.Helper()
+	st, err := e.Status()
+	require.NoError(t, err)
+	return st
+}
+
 func unpack(t *testing.T, e Error) []proto.Message {
 	t.Helper()
 	var out []proto.Message
-	for _, a := range e.Status().GetDetails() {
+	for _, a := range mustStatus(t, e).GetDetails() {
 		m, err := a.UnmarshalNew()
 		require.NoError(t, err)
 		out = append(out, m)
@@ -52,7 +90,7 @@ func TestWorkspaceFailedCarriesEveryDiagnostic(t *testing.T) {
 		}},
 	}
 	e := WorkspaceFailed("/repo", f)
-	st := e.Status()
+	st := mustStatus(t, e)
 
 	assert.Equal(t, int32(connect.CodeFailedPrecondition), st.GetCode())
 	assert.Equal(t, types.FormatDiagnostic(types.WorkspaceLoadFailed,
@@ -92,7 +130,9 @@ func TestWorkspaceFailedWithoutPosition(t *testing.T) {
 func TestWorkspaceLoadingIsRetryable(t *testing.T) {
 	t.Parallel()
 	e := WorkspaceLoading("/repo")
-	assert.Equal(t, connect.CodeUnavailable, e.Connect().Code())
+	cerr, err := e.connectError()
+	require.NoError(t, err)
+	assert.Equal(t, connect.CodeUnavailable, cerr.Code())
 	got := unpack(t, e)
 	assertProto(t, &errdetails.RetryInfo{RetryDelay: durationpb.New(loadingRetry)}, got[1])
 }
@@ -101,10 +141,12 @@ func TestWorkspaceLoadingIsRetryable(t *testing.T) {
 func TestWriteJSONRendersAIP193(t *testing.T) {
 	t.Parallel()
 	rr := httptest.NewRecorder()
-	WriteJSON(rr, httptest.NewRequest(http.MethodGet, "/", nil), WorkspaceLoading("/repo"))
+	FormatJSON.Write(rr, httptest.NewRequest(http.MethodGet, "/", nil), WorkspaceLoading("/repo"))
 
 	assert.Equal(t, http.StatusServiceUnavailable, rr.Code)
 	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	assert.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
+	assert.Equal(t, "nosniff", rr.Header().Get("X-Content-Type-Options"))
 	var body struct {
 		Error struct {
 			Code    int    `json:"code"`
@@ -123,4 +165,26 @@ func TestWriteJSONRendersAIP193(t *testing.T) {
 	assert.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", body.Error.Details[0].Type)
 	assert.Equal(t, "MGS3017", body.Error.Details[0].Reason)
 	assert.Equal(t, "2s", body.Error.Details[1].RetryDelay)
+}
+
+// A 405 has no google.rpc code, so the JSON body and status carry the override while the
+// canonical status name stays the code's.
+func TestWriteJSONHonorsTheHTTPStatusOverride(t *testing.T) {
+	t.Parallel()
+	rr := httptest.NewRecorder()
+	FormatJSON.Write(rr, httptest.NewRequest(http.MethodDelete, "/api/v1/insight", nil), Error{
+		Code: connect.CodeUnimplemented, Reason: types.MethodNotAllowed, Message: "use GET",
+		HTTPStatus: http.StatusMethodNotAllowed,
+	})
+
+	assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
+	var body struct {
+		Error struct {
+			Code   int    `json:"code"`
+			Status string `json:"status"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
+	assert.Equal(t, http.StatusMethodNotAllowed, body.Error.Code)
+	assert.Equal(t, "UNIMPLEMENTED", body.Error.Status)
 }

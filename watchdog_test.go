@@ -161,7 +161,7 @@ func TestStallWatchdogDoesNotReleaseAfterClose(t *testing.T) {
 // gateHold builds a hold over one locked project, the shape watchForSupersede polls.
 func gateHold(t *testing.T, project string, opts ...lockerOption) *projectHold {
 	t.Helper()
-	l := newProjectLocker(t.TempDir(), testWorkspaceRoot, false, opts...)
+	l := newProjectLocker(t.TempDir(), testWorkspaceRoot, opts...)
 	l.started = time.Now().Add(-time.Minute)
 	unlock, err := l.acquire(t.Context(), project)
 	require.NoError(t, err)
@@ -180,7 +180,7 @@ func deadPID(t *testing.T) int {
 // requestYieldFrom writes the request a later gate on the same tree would leave.
 func requestYieldFrom(t *testing.T, hold *projectHold, project string) {
 	t.Helper()
-	later := newProjectLocker("", testWorkspaceRoot, false, asGate())
+	later := newProjectLocker("", testWorkspaceRoot, asGate())
 	require.NoError(t, record.Write(hold.locker.yieldPath(project), later.selfRecord(t.Context(), time.Now())))
 }
 
@@ -208,10 +208,8 @@ func TestSupersedeWatchCancelsAndKeepsTheLocks(t *testing.T) {
 	require.ErrorAs(t, watch.verdict(nil), &stated)
 	assert.Equal(t, supersedeExit, stated.ExitCode())
 
-	other := newProjectLocker("", testWorkspaceRoot, true)
-	other.dir = hold.locker.dir
-	_, err := other.acquire(t.Context(), "app")
-	require.Error(t, err, "the lock is still held: the watch cancelled and released nothing")
+	assert.True(t, lockIsHeld(hold.locker.lockPath("app")),
+		"the lock is still held: the watch cancelled and released nothing")
 }
 
 // TestSupersedeWatchIgnoresANonGate is the containment: only a gate is superseded, so an
@@ -226,7 +224,7 @@ func TestSupersedeWatchIgnoresANonGate(t *testing.T) {
 	requestYieldFrom(t, hold, "app")
 	time.Sleep(100 * time.Millisecond)
 
-	assert.NoError(t, ctx.Err(), "a non-gate holder keeps waiting behind it, exactly as before")
+	assert.NoError(t, ctx.Err(), "a non-gate holder is never aborted by a marker")
 	assert.NoError(t, watch.verdict(nil))
 }
 
@@ -238,7 +236,7 @@ func TestSupersedeWatchIgnoresADeadRequester(t *testing.T) {
 	hold := gateHold(t, "app", asGate())
 	defer hold.release()
 
-	later := newProjectLocker("", testWorkspaceRoot, false, asGate())
+	later := newProjectLocker("", testWorkspaceRoot, asGate())
 	rec := later.selfRecord(t.Context(), time.Now())
 	rec.PID = deadPID(t)
 	require.NoError(t, record.Write(hold.locker.yieldPath("app"), rec))
