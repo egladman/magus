@@ -582,50 +582,58 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 		}
 	}
 
-	// Only a pattern can match during the walk, and an install's exact manifest and lock
-	// paths walked the whole workspace to add nothing.
-	if len(pats) > 0 {
-		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, werr error) error {
-			if werr != nil {
-				return werr
+	walk := func(path string, d fs.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != root && isIgnoreDir(name, spellDirs) {
+				return fs.SkipDir
 			}
-			if d.IsDir() {
-				name := d.Name()
-				if path != root && isIgnoreDir(name, spellDirs) {
-					return fs.SkipDir
-				}
-				if len(prunePrefixes) > 0 && path != root {
-					// Zero-alloc relative path: path is always root+sep+rel inside WalkDir.
-					rel := filepath.ToSlash(path[rootLen+1:])
-					for _, pre := range prunePrefixes {
-						if rel == pre || strings.HasPrefix(rel, pre+"/") {
-							return fs.SkipDir
-						}
+			if len(prunePrefixes) > 0 && path != root {
+				// Zero-alloc relative path: path is always root+sep+rel inside WalkDir.
+				rel := filepath.ToSlash(path[rootLen+1:])
+				for _, pre := range prunePrefixes {
+					if rel == pre || strings.HasPrefix(rel, pre+"/") {
+						return fs.SkipDir
 					}
-				}
-				return nil
-			}
-			if d.Type()&os.ModeSymlink != 0 {
-				return nil
-			}
-			// Zero-alloc relative path: path is always root+sep+rel inside WalkDir.
-			rel := filepath.ToSlash(path[rootLen+1:])
-			for _, ep := range exclPats {
-				if ep.Match(rel) {
-					return nil
-				}
-			}
-			for _, p := range pats {
-				if p.Match(rel) {
-					// WalkDir guarantees unique paths and we return after first match,
-					// so no dedup map is needed.
-					out = append(out, relAbs{rel: rel, abs: path})
-					return nil
 				}
 			}
 			return nil
-		})
-		if err != nil {
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		// Zero-alloc relative path: path is always root+sep+rel inside WalkDir.
+		rel := filepath.ToSlash(path[rootLen+1:])
+		for _, ep := range exclPats {
+			if ep.Match(rel) {
+				return nil
+			}
+		}
+		for _, p := range pats {
+			if p.Match(rel) {
+				// WalkDir guarantees unique paths and we return after first match,
+				// so no dedup map is needed.
+				out = append(out, relAbs{rel: rel, abs: path})
+				return nil
+			}
+		}
+		return nil
+	}
+	// Only a pattern can match during the walk, and each pattern can match only under
+	// its static prefix: console/**/*.ts has no reason to list the rest of the
+	// workspace, and doing so was most of a warm replay's CPU.
+	for _, base := range walkBases(patterns) {
+		start := root
+		if base != "" {
+			if !walkableBase(root, base, spellDirs, prunePrefixes) {
+				continue
+			}
+			start = filepath.Join(root, filepath.FromSlash(base))
+		}
+		if err := filepath.WalkDir(start, walk); err != nil {
 			return nil, fmt.Errorf("expandSources walk: %w", err)
 		}
 	}
@@ -649,6 +657,60 @@ func staticDirPrefix(glob string) string {
 		return p[:i]
 	}
 	return ""
+}
+
+// walkBases returns the directories, relative to the walk root, that together hold
+// every file patterns can match: each pattern's static prefix, minus any nested inside
+// another. A pattern with no prefix needs the whole root, returned as "". A prefix
+// that leaves the root (absolute, or through "..") is dropped, since no walked path
+// could ever match it.
+func walkBases(patterns []string) []string {
+	bases := make([]string, 0, len(patterns))
+	for _, g := range patterns {
+		base := filepath.Clean(filepath.FromSlash(staticDirPrefix(g)))
+		if base == "." {
+			return []string{""}
+		}
+		if filepath.IsLocal(base) {
+			bases = append(bases, filepath.ToSlash(base))
+		}
+	}
+	slices.Sort(bases)
+	bases = slices.Compact(bases)
+	// Sorted, a base's ancestors precede it, and the last base kept is the only one
+	// that can be its ancestor.
+	kept := bases[:0]
+	for _, b := range bases {
+		if n := len(kept); n > 0 && strings.HasPrefix(b, kept[n-1]+"/") {
+			continue
+		}
+		kept = append(kept, b)
+	}
+	return kept
+}
+
+// walkableBase reports whether the full walk from root would descend into base, so a
+// walk starting there sees exactly what the full walk would: every component a real
+// directory (the full walk follows no symlink), none an ignore dir, and base not under
+// an output prefix.
+func walkableBase(root, base string, spellDirs, prunePrefixes []string) bool {
+	for _, pre := range prunePrefixes {
+		if base == pre || strings.HasPrefix(base, pre+"/") {
+			return false
+		}
+	}
+	dir := root
+	for name := range strings.SplitSeq(base, "/") {
+		if isIgnoreDir(name, spellDirs) {
+			return false
+		}
+		dir = filepath.Join(dir, name)
+		fi, err := os.Lstat(dir)
+		if err != nil || !fi.IsDir() {
+			return false
+		}
+	}
+	return true
 }
 
 // isIgnoreDir reports whether name is a directory to skip during source expansion.

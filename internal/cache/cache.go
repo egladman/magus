@@ -706,11 +706,13 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// below handed that to every other machine. A failing stat was the lucky outcome; this
 	// is the one that was silent.
 	storable := c.mutable && !s.NoCache
-	if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
-		storable = false
-		c.log.WarnContext(ctx, fmt.Sprintf(
-			"magus/cache: not recording %s:%s under %s: %s changed while it ran, so the key no longer describes its inputs: %s",
-			s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5)))
+	if storable {
+		if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
+			storable = false
+			c.log.WarnContext(ctx, fmt.Sprintf(
+				"magus/cache: not recording %s:%s under %s: %s changed while it ran, so the key no longer describes its inputs: %s",
+				s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5)))
+		}
 	}
 
 	if storable {

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
 )
@@ -78,7 +80,14 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	if err != nil {
 		return err
 	}
-	return writeAtomic(filepath.Join(dir, keyInputsName), data)
+	path := filepath.Join(dir, keyInputsName)
+	// Every attempt of a key writes these same lines, so a repeat is a read, not a write.
+	if old, err := os.ReadFile(path); err == nil && bytes.Equal(old, data) {
+		return nil
+	}
+	// Not fsync'd, for the reason Persist's records are not: losing this sidecar only
+	// leaves --identity with nothing to explain.
+	return file.ReplaceFile(path, data, 0o644)
 }
 
 // RedactKeyInputs replaces every value the run's secret resolver has registered with its

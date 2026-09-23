@@ -716,7 +716,9 @@ func (h *History) Save(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(h, "", "  ")
+	// Compact, not indented: every run rewrites the whole file, which is shared by every
+	// workspace on the host and runs to megabytes; indenting 6.6MB took 15ms against 6ms.
+	b, err := json.Marshal(h)
 	if err != nil {
 		return fmt.Errorf("forecast: encode history: %w", err)
 	}

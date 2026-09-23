@@ -232,7 +232,12 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	// Temp + rename, matching AdoptImported: newestAttemptBlob picks the freshest
 	// blob by modtime, which (written in place with plain os.WriteFile) is
 	// exactly the file a concurrent reader could catch mid-write.
-	if err := writeAtomic(filepath.Join(dir, d.Attempt+outExt), output); err != nil {
+	//
+	// Not fsync'd: every executed step writes these, so two flushes a step were most of
+	// a warm run's step time. A record lost to a crash reads as a missing or orphaned
+	// attempt, which newestAttemptBlob already ranks below every intact one; no replay
+	// reads it.
+	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+outExt), output, 0o644); err != nil {
 		return OutputDescriptor{}, err
 	}
 	descriptor, err := json.Marshal(d)
@@ -243,7 +248,7 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 	// the capture tap, so this is their only write boundary. Redacting the marshaled bytes
 	// rather than each field keeps a field added later covered by construction.
 	descriptor = secret.Redact(ctx, descriptor)
-	if err := writeAtomic(filepath.Join(dir, d.Attempt+descExt), descriptor); err != nil {
+	if err := file.ReplaceFile(filepath.Join(dir, d.Attempt+descExt), descriptor, 0o644); err != nil {
 		return OutputDescriptor{}, err
 	}
 	s.pruneKey(dir, defaultOutputKeepLast)
