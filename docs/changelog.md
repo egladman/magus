@@ -117,6 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Enum case sets are hand-written; no `_gen.go` file remains.** Each closed string
+  type declares its cases once, and the `magus-utils enums` generator is gone. A test
+  holds the Buzz boundary registry to each type's set.
 - **A daemon whose workspace fails to load keeps serving and says why.** The console,
   `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
