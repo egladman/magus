@@ -261,10 +261,17 @@ func (s *ConnectorStore) ListScope(want ...ClientScope) []ConnectorToken {
 // create against the token file itself, not a lock, so a concurrent Create of
 // the same name cannot duplicate it; only the final append to the in-memory
 // snapshot runs under s.mu.
+//
+// The names [CLICredential] and [ShareCredential] are refused: every record names the
+// credential a request presented, and a token minted under one of them would read as the
+// cli token or a share link.
 func (s *ConnectorStore) Create(name string, expires time.Time, scope ClientScope) (secret string, c ConnectorToken, err error) {
 	name = strings.TrimSpace(name)
 	if err := dropin.ValidName(name); err != nil {
 		return "", ConnectorToken{}, fmt.Errorf("auth: connector %w", err)
+	}
+	if name == CLICredential || name == ShareCredential {
+		return "", ConnectorToken{}, fmt.Errorf("auth: %q names a credential magus mints itself; choose another name", name)
 	}
 
 	secret, err = mintToken()

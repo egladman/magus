@@ -132,9 +132,9 @@ func NewStore(loc Location) *Store {
 // computes anything: `ledger accept` grades a report and must say a worker cannot grade
 // its own row before it reads one. Resolved per call unless Location pinned one, so a
 // checkout that binds a lease is graded from its next write.
-func (s *Store) Actor() Actor {
+func (s *Store) Actor() (Actor, error) {
 	if s.actor != nil {
-		return *s.actor
+		return *s.actor, nil
 	}
 	return ActingActor(s.cacheDir)
 }
@@ -330,9 +330,12 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	actor := s.Actor()
+	actor, err := s.Actor()
+	if err != nil {
+		return types.Job{}, err
+	}
 	var stored types.Job
-	err := s.withFileLock(ctx, func() error {
+	err = s.withFileLock(ctx, func() error {
 		f, rawByID, err := s.read()
 		if err != nil {
 			return err
@@ -379,7 +382,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.RegisteredBy = prev.RegisteredBy
 			f.Jobs[i] = row
 		} else {
-			row.RegisteredBy = trail.StampOrigin(ctx, actor.Origin)
+			row.RegisteredBy = trail.StampOrigin(ctx, types.Origin{})
 			f.Jobs = append(f.Jobs, row)
 		}
 		if werr := s.write(f, rawByID); werr != nil {
@@ -428,14 +431,18 @@ func (s *Store) List() ([]types.Job, error) {
 // A bound worker is refused: see [authorizeClear]. ctx bounds the wait for the lock and
 // nothing else.
 func (s *Store) Clear(ctx context.Context) (int, error) {
-	if err := authorizeClear(s.Actor()); err != nil {
+	actor, err := s.Actor()
+	if err != nil {
+		return 0, err
+	}
+	if err := authorizeClear(actor); err != nil {
 		return 0, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var dropped int
-	err := s.withFileLock(ctx, func() error {
+	err = s.withFileLock(ctx, func() error {
 		f, rawByID, err := s.read()
 		if err != nil {
 			return err
@@ -818,14 +825,18 @@ func rowFields(row types.Job) (map[string]json.RawMessage, error) {
 // file rather than only from whatever the caller remembers.
 func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, error) {
 	id = strings.TrimSpace(id)
-	if err := authorizeDelete(s.Actor(), id); err != nil {
+	actor, err := s.Actor()
+	if err != nil {
+		return types.Job{}, err
+	}
+	if err := authorizeDelete(actor, id); err != nil {
 		return types.Job{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var dropped types.Job
-	err := s.withFileLock(ctx, func() error {
+	err = s.withFileLock(ctx, func() error {
 		f, rawByID, err := s.read()
 		if err != nil {
 			return err

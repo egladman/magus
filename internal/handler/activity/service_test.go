@@ -95,7 +95,7 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Equal(t, "Bash", events[0].GetAction())
 	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, events[0].GetKind())
 	user := trail.LocalOrigin(t.Context()).User
-	assert.Equal(t, types.Origin{User: user, Host: "codex"}.Label(), events[0].GetActor())
+	assert.Equal(t, types.Origin{User: user, Host: "codex", Agent: "a1"}.Label(), events[0].GetActor())
 	assert.Equal(t, user, events[0].GetUser(), "the OS account rides the wire on its own field")
 	assert.Equal(t, "hook", events[0].GetEntryPoint())
 	assert.Equal(t, "a1", events[0].GetAgent())
@@ -219,6 +219,15 @@ func TestMatchFilter_ActorsActions(t *testing.T) {
 	}))
 	// an unmatched value yields nothing, not everything.
 	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{"nobody"}}))
+
+	// An actor matches one origin field exactly, never the rendered label: the credential
+	// alone finds its event, and the label that event is served under finds nothing.
+	assert.Equal(t, []string{"connector.create"},
+		actions(list(t, dir, &activityv1.ActivityQuery{Actors: []string{"console-1"}})))
+	user := trail.LocalOrigin(t.Context()).User
+	label := types.Origin{User: user, Credential: "console-1"}.Label()
+	assert.Empty(t, list(t, dir, &activityv1.ActivityQuery{Actors: []string{label}}),
+		"a filter never matches the label's wording")
 }
 
 func TestMatchFilter_TimeWindow(t *testing.T) {

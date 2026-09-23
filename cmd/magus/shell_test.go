@@ -1005,7 +1005,7 @@ func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
 	require.NoError(t, shellStdin(ctx, strings.NewReader(filepath.Join(ws.Root(), "drift-fixture.txt")),
 		&out, []string{"--path", "--session", "session-1", "--agent-name", "claude-code"}))
 
-	assert.Equal(t, []string{"."}, touchedProjects(hint.NewGate(base, guard.SessionKey("claude-code", "session-1"))),
+	assert.Equal(t, []string{"."}, touchedProjects(hint.NewGate(base, guard.FactsKey("claude-code", "session-1"))),
 		"a workspace-root file belongs to the root project, whatever else this workspace declares")
 }
 
@@ -1392,7 +1392,7 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		got, err := run(owned, "--path", "--agent-name", "claude-code", "--session", "spawn-session", "--agent", "a1b2c3", "-o", "json")
 		require.NoError(t, err, "graded under the spawn's lease-a, whose ground this is")
 		assert.Contains(t, got, `"lease": "lease-a"`)
-		assert.Contains(t, got, `"lease_from": "agent"`)
+		assert.Contains(t, got, `"lease_from": "contested"`, "the claim named another lease")
 	})
 }
 

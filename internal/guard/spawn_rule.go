@@ -80,13 +80,14 @@ func spawnedAgentID(response any) string {
 // only add to what they said.
 func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution) Verdict {
 	at := hookLocation(ctx, deps)
-	facts := hint.NewGate(at.cacheDir, who.sessionKey())
+	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	// A spawn call that has already run judges nothing, and judging it again would spend
 	// the session's markers twice. What it carries is the id the host gave the child,
 	// which is what lets that child's own later calls name their parent and their job.
 	if env.AfterCall {
 		if env.SpawnedAgent != "" {
-			recordSpawnedAgent(ctx, deps, at, facts, env)
+			spawner, _, err := actingLeaseFor(who, at, facts, req.Lease)
+			recordSpawnedAgent(ctx, deps, at, facts, env, spawner, err)
 		}
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 	}
@@ -144,7 +145,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) Verdict {
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
-	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.sessionKey()), req.ObservesSkillLoads, at.workspace); reason != "" {
+	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.factsKey()), req.ObservesSkillLoads, at.workspace); reason != "" {
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
@@ -284,7 +285,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
-	if id, _ := actingLeaseFor(who, at, facts, explicitLease); id != "" {
+	if id, _, _ := actingLeaseFor(who, at, facts, explicitLease); id != "" {
 		req.Role = types.SpawnRoleWorker
 		req.Lease = &types.Job{ID: id}
 		if rows, err := leaseRows(ctx, at); err == nil {
@@ -366,8 +367,13 @@ type spawnedAgent struct {
 	Name        string `json:"name,omitempty"`
 	// Model is the model the spawn named, "" when it named none.
 	Model string `json:"model,omitempty"`
-	// Job is the live job the spawn's title named, "" when it named none.
+	// Job is the live job the spawn's title named, "" when it named none or when the
+	// spawner could not hand it out.
 	Job string `json:"job,omitempty"`
+	// UntrustedJob is a live job the title named that the spawner could not hand out: the
+	// spawner acted under a lease, and the job is neither that lease nor forked beneath
+	// it. Kept so a reader can see the claim; it attributes nothing.
+	UntrustedJob string `json:"untrusted_job,omitempty"`
 	// ContextTokens is the agent's last observed context size, nil until its host
 	// reports usage for it.
 	ContextTokens *int64 `json:"context_tokens,omitempty"`
@@ -383,9 +389,16 @@ type spawnedAgent struct {
 // missing exec. An isolated child's checkout is one magus cannot see from here, so its
 // base is left for the child to report.
 //
+// The title is the spawner's claim, and any process can pipe a spawn envelope into
+// `magus shell`, so it attributes only what the spawner could hand out: an unleased
+// spawner (the orchestrator or a person) any live job, a leased one only its own lease or
+// a job forked beneath it. A spawner whose lease does not resolve hands out nothing.
+// Anything else is recorded as UntrustedJob and attributes nothing, or a worker could name
+// another job in a title and be graded under it.
+//
 // Best effort like every marker: a record that cannot be written leaves the child's calls
 // with an empty parent and no job, the answer a host with no subagent identity gets.
-func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, facts hint.Gate, env hookRequest) {
+func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, facts hint.Gate, env hookRequest, spawner string, spawnerErr error) {
 	facts.Touch(agentSeenKind(env.SpawnedAgent))
 	if env.Spawn.Name != "" {
 		writeAgentMarker(facts, agentAliasKind(env.Spawn.Name), []byte(env.SpawnedAgent))
@@ -400,6 +413,12 @@ func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, fac
 		ContextTokens: prev.ContextTokens,
 	}
 	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
+		rows, err := leaseRows(ctx, at)
+		if spawnerErr != nil || err != nil || !mayHandOut(rows, spawner, row.ID) {
+			rec.UntrustedJob = row.ID
+			writeSpawnedAgent(facts, env.SpawnedAgent, rec)
+			return
+		}
 		rec.Job = row.ID
 		if row.Registered == 0 && !env.Spawn.Isolated {
 			if base := deps.checkoutBase(ctx, at.workspace); base != "" {
@@ -408,6 +427,26 @@ func recordSpawnedAgent(ctx context.Context, deps Dependencies, at location, fac
 		}
 	}
 	writeSpawnedAgent(facts, env.SpawnedAgent, rec)
+}
+
+// mayHandOut reports whether a spawner acting under lease spawner may attribute a child to
+// job: always when it acts under none, else when job is spawner's own row or one whose
+// parent chain reaches it.
+func mayHandOut(rows []types.Job, spawner, job string) bool {
+	if spawner == "" {
+		return true
+	}
+	parent := make(map[string]string, len(rows))
+	for _, row := range rows {
+		parent[row.ID] = row.Parent
+	}
+	for at, seen := job, map[string]bool{}; at != "" && !seen[at]; at = parent[at] {
+		if at == spawner {
+			return true
+		}
+		seen[at] = true
+	}
+	return false
 }
 
 // spawnTitleJob is the live job a spawn title names in the `<parent>/<role> <job>` form.
@@ -440,7 +479,7 @@ func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, b
 // hands them their parent's session id, so the marker cannot tell them apart and the
 // agent id can. The marker is keyed on the session, so several sessions sharing one
 // checkout each resolve their own; a host that reports none reads the checkout-wide one.
-func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit string) (string, types.LeaseSource) {
+func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit string) (string, types.LeaseSource, error) {
 	q := job.LeaseQuery{
 		Checkout: job.Checkout{CacheDir: at.cacheDir, Session: who.Session},
 		Flag:     explicit,
@@ -452,6 +491,14 @@ func actingLeaseFor(who hookAttribution, at location, facts hint.Gate, explicit 
 		}
 	}
 	return q.Resolve()
+}
+
+// denyUnresolvedLease is the verdict for a call whose lease could not be resolved: a
+// binding in this checkout exists and does not read. Denied, because every lease rule
+// would otherwise grade the call as nobody's while the checkout says it is somebody's.
+func denyUnresolvedLease(err error) string {
+	return "magus workspace: this checkout's lease binding does not read, so no call here can be graded. " +
+		leaseActorClause("clear or rebind it") + "\n" + err.Error()
 }
 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id

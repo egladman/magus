@@ -476,7 +476,9 @@ func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
-	assert.Equal(t, "fleet/captured", store.Actor().Lease)
+	actor, err := store.Actor()
+	require.NoError(t, err)
+	assert.Equal(t, "fleet/captured", actor.Lease)
 }
 
 // The captured lease is the process's claim, so a checkout bound by `magus job exec`
@@ -489,7 +491,9 @@ func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 
 	store, err := jobStoreFromContext(ctx, "job.put")
 	require.NoError(t, err)
-	assert.Equal(t, "fleet/bound", store.Actor().Lease)
+	actor, err := store.Actor()
+	require.NoError(t, err)
+	assert.Equal(t, "fleet/bound", actor.Lease)
 }
 
 // TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_job MCP

@@ -29,7 +29,7 @@ func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
 // the only producer the CLI has. It returns the session id so a row can be found by it.
 func recordSession(t *testing.T, root, verb string, args []string, inv string) string {
 	t.Helper()
-	handlers := withSessionJournal(context.Background(), nil, root, verb, args)
+	handlers := withInvocationJournal(context.Background(), nil, root, verb, args)
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: inv, Target: "build", Status: journal.StatusPass})
 	return inv
@@ -83,6 +83,25 @@ func TestSessionsRendersTheLeaseColumnAttributedAndNot(t *testing.T) {
 	assert.Equal(t, "-", sessionsLeaseCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
 }
 
+// A store written before the invocation rename is told as that, not as a killed process: a
+// reader who sees "killed mid-write" goes looking for a crash that never happened.
+func TestSessionsNamesLinesWrittenBeforeTheRename(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+	recordSession(t, root, "run", []string{"build"}, "invNew")
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	old := `{"v":1,"session":"0123456789abcdef","seq":1,"kind":"session_start","ts":1,"payload":{}}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "0123456789abcdef.jsonl"), []byte(old), 0o644))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, nil))
+	})
+	assert.Contains(t, out, "1 line(s) not shown: written before magus called a per-process id an invocation")
+	assert.NotContains(t, out, "killed mid-write")
+}
+
 // What the environment CLAIMED reaches the listing verbatim: the spawner label a person reads,
 // and the parent span a later session can be joined to.
 func TestSessionsRendersTheSpawnerAndParentFromTheEnvironment(t *testing.T) {
@@ -111,9 +130,9 @@ func TestSessionParentResolvesOnlyWhatTheStoreHolds(t *testing.T) {
 	t.Parallel()
 	bySpan := map[string]string{"00f067aa0ba902b7": "invParent"}
 
-	assert.Equal(t, "invParent", sessionParent(bySpan, "00f067aa0ba902b7"))
-	assert.Equal(t, "a1b2c3d4e5f60718", sessionParent(bySpan, "a1b2c3d4e5f60718"))
-	assert.Empty(t, sessionParent(bySpan, ""), "a session that claimed no parent has nothing to resolve")
+	assert.Equal(t, "invParent", invocationParent(bySpan, "00f067aa0ba902b7"))
+	assert.Equal(t, "a1b2c3d4e5f60718", invocationParent(bySpan, "a1b2c3d4e5f60718"))
+	assert.Empty(t, invocationParent(bySpan, ""), "a session that claimed no parent has nothing to resolve")
 }
 
 // The listing answers "what happened", but its reader is often looking for "what needs
@@ -194,23 +213,23 @@ func TestParseSinceRejectsAValueThatIsNeitherForm(t *testing.T) {
 // The filter turns on the LAST fact rather than the first, so a session that began
 // before the window and is still working stays listed. Hiding it is exactly the wrong
 // answer for the question --since asks.
-func TestSessionsSinceKeepsALongSessionStillWorking(t *testing.T) {
+func TestInvocationsSinceKeepsALongInvocationStillWorking(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	old := sessions.Summary{Session: "stale", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-47 * time.Hour).UnixMilli()}
-	long := sessions.Summary{Session: "long", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-time.Minute).UnixMilli()}
+	old := sessions.Summary{Invocation: "stale", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-47 * time.Hour).UnixMilli()}
+	long := sessions.Summary{Invocation: "long", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-time.Minute).UnixMilli()}
 
-	got := sessionsSince([]sessions.Summary{old, long}, now.Add(-2*time.Hour))
+	got := invocationsSince([]sessions.Summary{old, long}, now.Add(-2*time.Hour))
 	require.Len(t, got, 1)
-	assert.Equal(t, "long", got[0].Session)
+	assert.Equal(t, "long", got[0].Invocation)
 }
 
-func TestSessionsSinceWithNoCutoffKeepsEverything(t *testing.T) {
+func TestInvocationsSinceWithNoCutoffKeepsEverything(t *testing.T) {
 	t.Parallel()
 
-	all := []sessions.Summary{{Session: "a"}, {Session: "b"}}
-	assert.Equal(t, all, sessionsSince(all, time.Time{}))
+	all := []sessions.Summary{{Invocation: "a"}, {Invocation: "b"}}
+	assert.Equal(t, all, invocationsSince(all, time.Time{}))
 }
 
 // A store with sessions in it, all older than the window, must not read as a store

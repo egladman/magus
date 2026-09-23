@@ -19,7 +19,6 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/handler"
-	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
@@ -558,10 +557,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		sess = h.Sessions.AddComment(h.Root, types.DiffComment{
 			Path: req.Path, Hunk: req.Hunk, Line: req.Line, Body: req.Body,
 			Anchor: h.Sessions.Anchor(h.Root, req.Path, req.Line),
-			Origin: trail.StampOrigin(r.Context(), types.Origin{
-				EntryPoint: types.EntryPointRPC,
-				Credential: httpx.CredentialFromContext(r.Context()),
-			}),
+			Origin: trail.StampOrigin(r.Context(), types.Origin{}),
 		}, types.DiffAuthorUnattributed)
 		if h.Telemetry != nil {
 			h.Telemetry.RecordReviewRemark(r.Context(), string(types.DiffAuthorUnattributed))

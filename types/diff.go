@@ -381,9 +381,10 @@ const (
 // they were called unattributed.
 //
 // compat(until: no draft file under the diff session store still carries "author":"human"):
-// review drafts persist across a daemon restart, and dropping this would silently discard a
-// person's unsent remarks, because only unattributed drafts are restored. Observing that it
-// is safe to drop means finding none left: grep -l '"author":"human"' over the drafts.
+// review drafts persist across a daemon restart and loadDrafts restores every one, but
+// publishing, deleting and the console's draft list each take only unattributed drafts. A
+// draft restored as "human" would sit in the session unpublishable and unlisted. Observing
+// that it is safe to drop means finding none left: grep -l '"author":"human"' over the drafts.
 func (a *DiffAuthor) UnmarshalText(b []byte) error {
 	if string(b) == "human" {
 		*a = DiffAuthorUnattributed

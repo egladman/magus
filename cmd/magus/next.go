@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -73,9 +74,13 @@ func newNextGate(root string) nextGate {
 	return nextGate{gate: hint.NewGate(dir, ""), role: role, writePaths: writePaths}
 }
 
-// actingRole grades the acting lease against this checkout's job store.
+// actingRole grades the acting lease against this checkout's job store. A binding that
+// cannot be read serves the worker's narrower set, the answer an unreadable store gets.
 func actingRole(cacheDir, root string) (hint.Role, []string) {
-	id, _ := job.ActingLease(cacheDir)
+	id, _, err := job.ActingLease(cacheDir, trail.LeaseFromEnv())
+	if err != nil {
+		return hint.RoleWorker, nil
+	}
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}

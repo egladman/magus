@@ -56,7 +56,11 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 	if root == "" {
 		return fmt.Errorf("magus agent harness install: no workspace here: run it from inside one or pass --root <path>")
 	}
-	if lease := harnessActingLease(ctx, root); lease != "" {
+	lease, err := harnessActingLease(ctx, root)
+	if err != nil {
+		return fmt.Errorf("magus agent harness install: %w", err)
+	}
+	if lease != "" {
 		return fmt.Errorf("magus agent harness install: bound job %q cannot change a harness skill tree", lease)
 	}
 	ids, ctx, err := resolveHarnessIDs(ctx, rootOverride, *id)
@@ -132,29 +136,30 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 
 func agentHarnessApplyCmd(ctx context.Context, rootOverride string, args []string) error {
 	return runHarnessChange(ctx, rootOverride, args, "apply", func(ctx context.Context, root, id string) (agent.HarnessUpdate, error) {
-		return agent.ApplyHarness(ctx, agent.HarnessApplyOptions{
-			Root: root, ID: id, DryRun: globalCfg.DryRun, ActingLease: harnessActingLease(ctx, root),
-		})
+		lease, err := harnessActingLease(ctx, root)
+		if err != nil {
+			return agent.HarnessUpdate{}, err
+		}
+		return agent.ApplyHarness(ctx, agent.HarnessApplyOptions{Root: root, ID: id, DryRun: globalCfg.DryRun, ActingLease: lease})
 	})
 }
 
 // harnessActingLease is the lease a harness change is refused under: the checkout's
 // binding, else the claim this process was launched with.
-func harnessActingLease(ctx context.Context, root string) string {
-	lease, _ := checkoutLease(root, proc.LeaseFromContext(ctx))
-	return lease
+func harnessActingLease(ctx context.Context, root string) (string, error) {
+	lease, _, err := checkoutLease(root, proc.LeaseFromContext(ctx))
+	return lease, err
 }
 
-// checkoutLease resolves the lease a CLI call acts under in root's checkout, in
-// job.LeaseQuery's order: the checkout-wide binding, else claim. A CLI process knows no
-// host session or subagent, so those sources never answer here. A cache dir that does not
-// resolve leaves the claim to answer alone.
-func checkoutLease(root, claim string) (string, types.LeaseSource) {
-	q := job.LeaseQuery{Claim: claim}
-	if dir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg)); err == nil {
-		q.CacheDir = dir
+// checkoutLease resolves the lease a CLI call acts under in root's checkout through
+// job.ActingLease: the checkout-wide binding, else claim. A CLI process knows no host
+// session or subagent, so those sources never answer here.
+func checkoutLease(root, claim string) (string, types.LeaseSource, error) {
+	dir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return "", "", fmt.Errorf("resolve the checkout's lease: %w", err)
 	}
-	return q.Resolve()
+	return job.ActingLease(dir, claim)
 }
 
 // agentHarnessRemoveCmd is ApplyHarness's inverse on the CLI: it deletes only the
@@ -164,9 +169,11 @@ func checkoutLease(root, claim string) (string, types.LeaseSource) {
 // removal first.
 func agentHarnessRemoveCmd(ctx context.Context, rootOverride string, args []string) error {
 	return runHarnessChange(ctx, rootOverride, args, "remove", func(ctx context.Context, root, id string) (agent.HarnessUpdate, error) {
-		return agent.RemoveHarness(ctx, agent.HarnessRemoveOptions{
-			Root: root, ID: id, DryRun: globalCfg.DryRun, ActingLease: harnessActingLease(ctx, root),
-		})
+		lease, err := harnessActingLease(ctx, root)
+		if err != nil {
+			return agent.HarnessUpdate{}, err
+		}
+		return agent.RemoveHarness(ctx, agent.HarnessRemoveOptions{Root: root, ID: id, DryRun: globalCfg.DryRun, ActingLease: lease})
 	})
 }
 

@@ -180,8 +180,8 @@ func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
 	assert.Empty(t, events[0].Session, "a terminal window is not a host session")
 	assert.NotContains(t, events[0].Label(), "agent", "a terminal call is never labeled an agent")
 
-	assert.Equal(t, "test-host/tty:w1", hookAttribution{Host: "test-host", Window: "tty:w1"}.sessionKey())
-	assert.Equal(t, "test-host/s1", hookAttribution{Host: "test-host", Session: "s1", Window: "tty:w1"}.sessionKey(),
+	assert.Equal(t, "test-host/tty:w1", hookAttribution{Host: "test-host", Window: "tty:w1"}.factsKey())
+	assert.Equal(t, "test-host/s1", hookAttribution{Host: "test-host", Session: "s1", Window: "tty:w1"}.factsKey(),
 		"a host session wins over the window")
-	assert.Empty(t, hookAttribution{Host: "test-host"}.sessionKey(), "neither leaves the gate its anonymous window")
+	assert.Empty(t, hookAttribution{Host: "test-host"}.factsKey(), "neither leaves the gate its anonymous window")
 }

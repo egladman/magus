@@ -1315,7 +1315,10 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is
 	// the claim, so the checkout's marker still outranks it.
 	if claim := proc.LeaseFromContext(ctx); claim != "" {
-		lease, _ := job.LeaseQuery{Checkout: job.Checkout{CacheDir: loc.CacheDir}, Claim: claim}.Resolve()
+		lease, _, err := job.ActingLease(loc.CacheDir, claim)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", member, err)
+		}
 		loc.Actor = &job.Actor{Lease: lease}
 	}
 	return job.NewStore(loc), nil

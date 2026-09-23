@@ -29,7 +29,7 @@ func tmpLoc(t *testing.T, root string) Location {
 
 // boundStore is a Store acting as the worker leased to id, sharing loc's ledger file.
 func boundStore(loc Location, id string) *Store {
-	loc.Actor = &Actor{Lease: id, Origin: types.Origin{Session: "s-" + id, Host: "test-host"}}
+	loc.Actor = &Actor{Lease: id}
 	return NewStore(loc)
 }
 

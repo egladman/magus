@@ -101,10 +101,8 @@ type FeedEvent struct {
 	// Action is what happened, in the kind's own vocabulary: the path for a file event,
 	// the tool label for a tool call, the rendered command for a run.
 	Action string
-	// Actor is the recorded origin rendered as one label (types.Origin.Label).
-	Actor   string
-	Host    string
-	Session string
+	// Origin is the recorded origin of a tool call, whole; zero on the other kinds.
+	Origin types.Origin
 	// Decision is the guard's verdict on a tool call: pass, advise, ask or deny. Empty on
 	// an observation the guard did not judge, which is what --observe records, and on the
 	// other two kinds.
@@ -166,9 +164,7 @@ func ToolEvents(events []trail.Event) []FeedEvent {
 			Kind:     FeedTool,
 			Job:      e.Lease,
 			Action:   e.Action,
-			Actor:    e.Label(),
-			Host:     e.Host,
-			Session:  e.Session,
+			Origin:   e.Origin,
 			Decision: decisionOf(e),
 			Outcome:  e.Outcome,
 			Error:    e.Error,
@@ -243,7 +239,7 @@ func (f FeedFilter) Match(e FeedEvent) bool {
 	}) {
 		return false
 	}
-	if len(f.Sessions) > 0 && !slices.Contains(f.Sessions, e.Session) {
+	if len(f.Sessions) > 0 && !slices.Contains(f.Sessions, e.Origin.Session) {
 		return false
 	}
 	if len(f.Paths) > 0 {

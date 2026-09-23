@@ -235,7 +235,7 @@ export type ActivityQuery = Message<"magus.activity.v1alpha1.ActivityQuery"> & {
   kinds: Kind[];
 
   /**
-   * restrict to these actor labels
+   * restrict to events whose origin names one of these in a single field: user, host, agent, credential or entry_point, matched exactly (never the actor label)
    *
    * @generated from field: repeated string actors = 2;
    */

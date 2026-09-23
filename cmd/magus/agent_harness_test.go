@@ -70,16 +70,26 @@ func TestHarnessChangeRefusesABoundJobFromEitherSource(t *testing.T) {
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 
-	assert.Empty(t, harnessActingLease(context.Background(), root), "an unbound caller rewires its own hosts")
+	acting := func(ctx context.Context) string {
+		lease, err := harnessActingLease(ctx, root)
+		require.NoError(t, err)
+		return lease
+	}
+	assert.Empty(t, acting(context.Background()), "an unbound caller rewires its own hosts")
 
 	claimed := proc.WithLease(context.Background(), "fleet/claimed")
-	assert.Equal(t, "fleet/claimed", harnessActingLease(claimed, root), "the claim")
+	assert.Equal(t, "fleet/claimed", acting(claimed), "the claim")
 
 	require.NoError(t, job.BindLease(cacheDir, "fleet/bound"))
-	assert.Equal(t, "fleet/bound", harnessActingLease(context.Background(), root), "the binding, with no claim")
-	assert.Equal(t, "fleet/bound", harnessActingLease(claimed, root), "the binding over a different claim")
+	assert.Equal(t, "fleet/bound", acting(context.Background()), "the binding, with no claim")
+	assert.Equal(t, "fleet/bound", acting(claimed), "the binding over a different claim")
 
 	err = agentHarnessInstallCmd(context.Background(), root, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `bound job "fleet/bound"`)
+
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	err = agentHarnessInstallCmd(context.Background(), root, nil)
+	require.Error(t, err, "a binding that does not read refuses, never reads as unbound")
+	assert.Contains(t, err.Error(), "not a lease id")
 }

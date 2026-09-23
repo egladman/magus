@@ -274,17 +274,21 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	assert.Equal(t, workerRow().Criteria, rows[0].Criteria)
 }
 
-// The row records who declared it, which is the provenance a refusal names.
-func TestRowRecordsTheSessionThatDeclaredIt(t *testing.T) {
+// The row records who declared it: what the door the write came through put on its
+// context (entry point, verified credential, the MCP client as host), plus the OS account.
+// Before, registered_by came from an actor origin no door filled, so it held the account alone.
+func TestRowRecordsTheDoorThatDeclaredIt(t *testing.T) {
 	t.Parallel()
 
 	loc := tmpLoc(t, t.TempDir())
-	loc.Actor = &Actor{Origin: types.Origin{Session: "orchestrator-1", Host: "claude-code"}}
-	stored := seed(t, NewStore(loc), workerRow())
+	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), types.EntryPointMCP), "connector-1"), "claude-code")
+	row := workerRow()
+	stored, err := NewStore(loc).Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+	require.NoError(t, err)
 	want := trail.LocalOrigin(t.Context())
-	want.Session, want.Host = "orchestrator-1", "claude-code"
+	want.EntryPoint, want.Credential, want.Host = types.EntryPointMCP, "connector-1", "claude-code"
 	require.NotEmpty(t, want.UID, "the OS always answers with a uid")
-	assert.Equal(t, want, stored.RegisteredBy, "the host's facts, plus the OS account the store read itself")
+	assert.Equal(t, want, stored.RegisteredBy, "the door's facts, plus the OS account the store read itself")
 
 	after, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) {
 		u.State = types.StateFail
@@ -300,13 +304,13 @@ func TestBindLeaseIsOneWay(t *testing.T) {
 
 	cacheDir := t.TempDir()
 	require.NoError(t, BindLease(cacheDir, "adj/store"))
-	assert.Equal(t, "adj/store", LeaseFromMarker(cacheDir))
+	assert.Equal(t, "adj/store", markerOf(t, Checkout{CacheDir: cacheDir}))
 
 	err := BindLease(cacheDir, "adj/orchestrator")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "re-binding it to adj/orchestrator")
 	assert.NotContains(t, err.Error(), "unresolved risk", "a refused bind wrote nothing, so there is nothing to report")
-	assert.Equal(t, "adj/store", LeaseFromMarker(cacheDir), "the refused bind changed nothing")
+	assert.Equal(t, "adj/store", markerOf(t, Checkout{CacheDir: cacheDir}), "the refused bind changed nothing")
 
 	assert.NoError(t, BindLease(cacheDir, "adj/store"), "a worker running its bootstrap twice is not refused")
 }
@@ -330,7 +334,7 @@ func TestVacateLeaseClearsTheMarkerAndReopensBinding(t *testing.T) {
 	id, err = VacateLease(cacheDir)
 	require.NoError(t, err)
 	assert.Equal(t, "adj/store", id, "reports what it cleared")
-	assert.Empty(t, LeaseFromMarker(cacheDir))
+	assert.Empty(t, markerOf(t, Checkout{CacheDir: cacheDir}))
 
 	id, err = VacateLease(cacheDir)
 	require.NoError(t, err, "vacating an already-unbound checkout is still a no-op")
@@ -339,7 +343,7 @@ func TestVacateLeaseClearsTheMarkerAndReopensBinding(t *testing.T) {
 	// BindLease's one-way refusal is gone once vacated: the checkout can take a
 	// DIFFERENT lease, which it could not do while the marker still named the first one.
 	require.NoError(t, BindLease(cacheDir, "adj/other"))
-	assert.Equal(t, "adj/other", LeaseFromMarker(cacheDir))
+	assert.Equal(t, "adj/other", markerOf(t, Checkout{CacheDir: cacheDir}))
 }
 
 // An unattributed write is an OBSERVATION the guard makes about somebody else's row, so

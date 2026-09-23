@@ -61,6 +61,21 @@ func (s *ConnectorSuite) TestCreateListVerify() {
 	assert.False(t, accepted(st.VerifyScope(other, ScopeMCP)), "Verify accepted a non-stored token")
 }
 
+// Every record names the credential a request presented, so a connector or console token
+// minted as "cli" or "share" would read as the cli token or a share link.
+func (s *ConnectorSuite) TestCreateRefusesACredentialNameMagusReserves() {
+	t := s.T()
+	st := s.store()
+	for _, name := range []string{CLICredential, ShareCredential, " cli "} {
+		for _, scope := range []ClientScope{ScopeMCP, ScopeConsole} {
+			_, _, err := st.Create(name, time.Time{}, scope)
+			require.Error(t, err, "%q as %s", name, scope)
+			assert.Contains(t, err.Error(), "names a credential magus mints itself")
+		}
+	}
+	assert.Empty(t, st.List(), "a refused name writes nothing")
+}
+
 func (s *ConnectorSuite) TestCreateRejectsDuplicateName() {
 	t := s.T()
 	st := s.store()

@@ -485,7 +485,6 @@ func (g *sessionGuard) recordFirstUse(r *http.Request) {
 	go trail.Append(trailCtx, g.m.trailDir, trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindTokenLifecycle,
-		Origin:    types.Origin{EntryPoint: types.EntryPointRPC, Credential: auth.ShareCredential},
 		Action:    "share.open",
 		Outcome:   trail.OutcomeOK,
 		UserAgent: ua,

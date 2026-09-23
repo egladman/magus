@@ -176,9 +176,10 @@ func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 		WritePaths: []string{"pkg/a/**"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker)
 
 	assert.Equal(t, "fleet/w1", p.Lease)
+	assert.Equal(t, types.LeaseSourceMarker, p.LeaseFrom, "the narrowed policy carries where its lease came from")
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "b", "x.txt")))
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "x.txt")))
@@ -198,7 +199,7 @@ func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
 		WritePaths: []string{"pkg/**"}, DenyPaths: []string{"pkg/a/gen"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker)
 
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "gen", "x.txt")))
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "keep", "x.txt")))
@@ -215,7 +216,7 @@ func TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing(t *testing.T) {
 		WritePaths: []string{"pkg/nowhere/**"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker)
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -231,7 +232,7 @@ func TestNarrowToLeaseGrantsTheDirectoryOfALiteralPathToCreate(t *testing.T) {
 		WritePaths: []string{"pkg/a/new.go", "pkg/nowhere/**"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker)
 
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "new.go")))
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "sibling.go")),
@@ -252,7 +253,7 @@ func TestNarrowToLeaseNeverGrantsOutsideTheCheckout(t *testing.T) {
 	})
 	require.NoError(t, os.Symlink(outside, filepath.Join(root, "link")))
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker)
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(outside, "x.txt")), "a `..` path is not a grant on the sibling")
@@ -268,7 +269,7 @@ func TestNarrowToLeaseGrantsAReadOnlyRootNoWrites(t *testing.T) {
 		ID: "fleet/root", State: types.StateRunning, ReadOnly: true,
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/root")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/root", types.LeaseSourceMarker)
 
 	assert.Equal(t, "fleet/root", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -295,7 +296,7 @@ func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 			root, cacheDir := leaseWorkspace(t, tc.row)
 			base := FromConfig(t.Context(), root, config.Config{})
 
-			p := NarrowToLease(t.Context(), base, job.Location{CacheDir: cacheDir, Root: root}, tc.acted)
+			p := NarrowToLease(t.Context(), base, job.Location{CacheDir: cacheDir, Root: root}, tc.acted, types.LeaseSourceMarker)
 
 			assert.Same(t, base, p)
 			assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "b", "x.txt")))
@@ -310,7 +311,7 @@ func TestNarrowToLeaseGrantsAReadOnlyRowNoWrites(t *testing.T) {
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, ReadOnly: true,
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker)
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -326,7 +327,7 @@ func TestApplyAttachesANarrowedPolicy(t *testing.T) {
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
 		WritePaths: []string{"pkg/a/**"},
 	})
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1", types.LeaseSourceMarker)
 	MarkAppliedExternally(p.Fingerprint())
 
 	ctx, err := Apply(t.Context(), p, root)

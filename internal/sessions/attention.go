@@ -98,9 +98,10 @@ type AttentionDispose struct {
 	Note    string `json:"note,omitempty"`
 }
 
-// RequestID derives the identity of one blocked request from the session that raised
-// it and what o says. Exactly three of o's fields are read (Source, Where and
-// Message), and the result is stable: the same session and the same three values
+// RequestID derives the identity of one blocked request from sourceID, the id the raising
+// source goes by (an agent host's session id), and what o says. Exactly three of o's
+// fields are read (Source, Where and Message), and the result is stable: the same source
+// id and the same three values
 // always name the same request, on any machine and in any worktree.
 //
 // That determinism is the whole dedupe mechanism. An agent re-fires a block freely
@@ -120,8 +121,8 @@ type AttentionDispose struct {
 //
 // Fields are joined with NUL, which none of them can contain, so no pair of values
 // can concatenate into another pair's digest.
-func RequestID(session string, o AttentionOpen) string {
-	sum := sha256.Sum256([]byte(session + "\x00" + o.Source + "\x00" + o.Where + "\x00" + o.Message))
+func RequestID(sourceID string, o AttentionOpen) string {
+	sum := sha256.Sum256([]byte(sourceID + "\x00" + o.Source + "\x00" + o.Where + "\x00" + o.Message))
 	return "att-" + hex.EncodeToString(sum[:])[:12]
 }
 
@@ -344,8 +345,9 @@ func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
 // notification nobody happened to be looking at is still answerable afterwards, from any
 // worktree of the repository.
 //
-// agentSession is the AGENT's session id, not this magus invocation's: a re-fire is a
-// second magus process, and keying on that would mint a fresh id every time. It fills
+// sourceID is the raising source's id (an agent host's session id), not this magus
+// invocation's: a re-fire is a second magus process, and keying on that would mint a
+// fresh id every time. It fills
 // open.Request via [RequestID], so the caller must not set that field.
 //
 // Re-filing a block that is already open is a no-op reporting opened=false. An agent
@@ -356,8 +358,8 @@ func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
 // start describes the writing invocation; its Command is set here, and its id is minted
 // by [NewID]. The returned id is the request's, addressable whether or not this call
 // wrote anything.
-func OpenRequest(dir, agentSession string, open AttentionOpen, start InvocationStart) (id string, opened bool, err error) {
-	open.Request = RequestID(agentSession, open)
+func OpenRequest(dir, sourceID string, open AttentionOpen, start InvocationStart) (id string, opened bool, err error) {
+	open.Request = RequestID(sourceID, open)
 	fold, err := ReadAll(dir)
 	if err != nil {
 		return open.Request, false, err

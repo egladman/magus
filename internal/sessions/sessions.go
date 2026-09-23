@@ -69,7 +69,14 @@ import (
 // magus: readers IGNORE what they cannot interpret (an unknown kind, an unknown
 // payload field, a higher version) rather than failing, so an old binary reading a
 // newer store degrades to showing less instead of refusing to read.
-const SchemaVersion = 1
+//
+// 2 is the invocation rename: a record names its process under `invocation`. Schema 1
+// named it `session`, and this build counts those lines ([Fold.Legacy]) without reading
+// them.
+const SchemaVersion = 2
+
+// schemaVersionSession is the schema whose records named their process `session`.
+const schemaVersionSession = 1
 
 // Kinds of fact an invocation records. A reader must tolerate a kind it does not know:
 // the set grows, and an invocation written by a newer magus is still readable.
@@ -228,7 +235,7 @@ type Writer struct {
 //
 // An id that already has a file is RESUMED rather than restarted: see [Writer.resume].
 func Open(dir, invocation string, start InvocationStart) (*Writer, error) {
-	if !ValidID(invocation) {
+	if !ValidFileID(invocation) {
 		return nil, fmt.Errorf("sessions: invocation id %q must be alphanumeric with - and _ (it names the invocation's file); mint one with journal.NewInvocationID", invocation)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -255,7 +262,7 @@ func Open(dir, invocation string, start InvocationStart) (*Writer, error) {
 // A fresh invocation, which is the common case, costs one failed open: the file does
 // not exist until the first fact.
 func (w *Writer) resume() {
-	records, _, _ := readFile(w.path)
+	records, _, _, _ := readFile(w.path)
 	for _, rec := range records {
 		if rec.Seq > w.seq {
 			w.seq = rec.Seq
@@ -340,6 +347,11 @@ type Fold struct {
 	// expected, not corruption to report as an error. A line longer than the reader's
 	// budget counts here too, and costs only itself: the records after it still load.
 	Skipped int
+
+	// Legacy counts schema-1 lines written before a per-process id was called an
+	// invocation, keyed `session`. This build does not read them; they are counted apart
+	// from Skipped so they are not reported as damage, and [Prune] keeps their files.
+	Legacy int
 }
 
 // ReadAll folds every invocation file under dir.
@@ -363,13 +375,14 @@ func ReadAll(dir string) (Fold, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), fileExt) {
 			continue
 		}
-		records, skipped, vanished := readFile(filepath.Join(dir, e.Name()))
+		records, skipped, legacy, vanished := readFile(filepath.Join(dir, e.Name()))
 		if vanished {
 			continue
 		}
 		fold.Invocations++
 		fold.Records = append(fold.Records, records...)
 		fold.Skipped += skipped
+		fold.Legacy += legacy
 	}
 	sortRecords(fold.Records)
 	return fold, nil
@@ -406,13 +419,15 @@ const maxLineBytes = 1 << 20
 // housekeeping ran. Any OTHER open failure (a permission, a device error) is real
 // and counts as a skipped line, on the same reasoning as a corrupt tail: a partial
 // history beats a refused one.
-func readFile(path string) (records []Record, skipped int, vanished bool) {
+//
+// legacy counts schema-1 lines keyed `session`, which decode but name no invocation.
+func readFile(path string) (records []Record, skipped, legacy int, vanished bool) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, 0, true
+			return nil, 0, 0, true
 		}
-		return nil, 1, false
+		return nil, 1, 0, false
 	}
 	defer func() { _ = f.Close() }()
 
@@ -428,9 +443,14 @@ func readFile(path string) (records []Record, skipped int, vanished bool) {
 			skipped++
 		} else if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
 			var rec Record
-			if json.Unmarshal(trimmed, &rec) != nil || rec.Invocation == "" || rec.Kind == "" {
+			switch {
+			case json.Unmarshal(trimmed, &rec) != nil || rec.Kind == "":
 				skipped++
-			} else {
+			case rec.Invocation == "" && rec.V == schemaVersionSession:
+				legacy++
+			case rec.Invocation == "":
+				skipped++
+			default:
 				records = append(records, rec)
 			}
 		}
@@ -438,7 +458,7 @@ func readFile(path string) (records []Record, skipped int, vanished bool) {
 			if !errors.Is(err, io.EOF) {
 				skipped++
 			}
-			return records, skipped, false
+			return records, skipped, legacy, false
 		}
 	}
 }
@@ -471,22 +491,23 @@ func readLine(br *bufio.Reader, limit int) ([]byte, bool, error) {
 // Summary is one invocation as a reader meets it: who, when, and what it ran. Session is
 // the host's conversation it ran in, empty when no host delivered one.
 type Summary struct {
-	Invocation   string         `json:"invocation"`
-	Session      string         `json:"session,omitempty"`
-	User         string         `json:"user,omitempty"`
-	Host         string         `json:"host,omitempty"`
-	Lease        string         `json:"lease,omitempty"`
-	TraceID      string         `json:"trace_id,omitempty"`
-	SpanID       string         `json:"span_id,omitempty"`
-	ParentSpanID string         `json:"parent_span_id,omitempty"`
-	Spawner      string         `json:"spawner,omitempty"`
-	Workspace    string         `json:"workspace,omitempty"`
-	Command      string         `json:"command,omitempty"`
-	StartedMs    int64          `json:"started_ms"`
-	LastMs       int64          `json:"last_ms"`
-	Facts        int            `json:"facts"`
-	Events       int            `json:"events,omitempty"` // of Facts, the ones a `magus session load` put here
-	Targets      []TargetResult `json:"targets,omitempty"`
+	Invocation string `json:"invocation"`
+	// Origin is the start record's, whole: the host session it ran in, the OS account, the
+	// entry point and the rest, rather than a copy of some of its fields.
+	types.Origin `json:",inline"`
+	Lease        string            `json:"lease,omitempty"`
+	LeaseFrom    types.LeaseSource `json:"lease_from,omitempty"`
+	TraceID      string            `json:"trace_id,omitempty"`
+	SpanID       string            `json:"span_id,omitempty"`
+	ParentSpanID string            `json:"parent_span_id,omitempty"`
+	Spawner      string            `json:"spawner,omitempty"`
+	Workspace    string            `json:"workspace,omitempty"`
+	Command      string            `json:"command,omitempty"`
+	StartedMs    int64             `json:"started_ms"`
+	LastMs       int64             `json:"last_ms"`
+	Facts        int               `json:"facts"`
+	Events       int               `json:"events,omitempty"` // of Facts, the ones a `magus session load` put here
+	Targets      []TargetResult    `json:"targets,omitempty"`
 }
 
 // Summarize groups a fold into one entry per invocation, most recent activity first.
@@ -514,7 +535,7 @@ func Summarize(fold Fold) []Summary {
 		case KindInvocationStart:
 			var start InvocationStart
 			if json.Unmarshal(rec.Payload, &start) == nil {
-				s.Session, s.User, s.Host, s.Workspace, s.Command, s.Lease = start.Session, start.User, start.Host, start.Workspace, start.Command, start.Lease
+				s.Origin, s.Workspace, s.Command, s.Lease, s.LeaseFrom = start.Origin, start.Workspace, start.Command, start.Lease, start.LeaseFrom
 				s.TraceID, s.SpanID, s.ParentSpanID, s.Spawner = start.TraceID, start.SpanID, start.ParentSpanID, start.Spawner
 			}
 		case KindTargetResult:
@@ -821,8 +842,8 @@ func NewestEventMs(fold Fold) int64 {
 	return newest
 }
 
-// ValidID reports whether id can name a store file: an invocation id, or the host
+// ValidFileID reports whether id can name a store file: an invocation id, or the host
 // session id a load files under. It is exported so a loader can refuse a host id before
 // writing half a stream. The rule is the file name's, which is why it is strict: an id
 // that could contain a separator could escape the store directory.
-func ValidID(id string) bool { return idRE.MatchString(id) }
+func ValidFileID(id string) bool { return idRE.MatchString(id) }

@@ -55,7 +55,7 @@ func (s *Service) loadSessionActivity(peer, session, path string) (*viewerv1.Ses
 	if !loopbackPeer(peer) {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("viewer: session activity is served to local peers only"))
 	}
-	if !sessions.ValidID(session) || path == "" {
+	if !sessions.ValidFileID(session) || path == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("viewer: a session id and a path are required"))
 	}
 	if s.sessionRoot == "" {

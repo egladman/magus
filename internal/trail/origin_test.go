@@ -2,7 +2,9 @@ package trail
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/user"
 	"strconv"
 	"testing"
 
@@ -38,6 +40,37 @@ func TestAppendStampsTheOSAccountAndTheEntryPoint(t *testing.T) {
 		"the account is the OS's answer, never the producer's, and the entry point comes from ctx")
 	assert.Equal(t, types.Origin{User: local.User, UID: local.UID, EntryPoint: types.EntryPointDaemon}, byAction["b"],
 		"a producer that names its entry point keeps it")
+}
+
+// The credential a bearer guard verified rides the context and is stamped on every record
+// made under it, so no handler copies it by hand.
+func TestStampOriginReadsTheCredentialFromTheContext(t *testing.T) {
+	t.Parallel()
+	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), types.EntryPointRPC), "console-1")
+
+	got := StampOrigin(ctx, types.Origin{Host: "console"})
+	assert.Equal(t, types.EntryPointRPC, got.EntryPoint)
+	assert.Equal(t, "console-1", got.Credential)
+	assert.Equal(t, "console", got.Host)
+	assert.Equal(t, "share", StampOrigin(ctx, types.Origin{Credential: "share"}).Credential, "a named credential is kept")
+	assert.Empty(t, StampOrigin(t.Context(), types.Origin{}).Credential, "no guard, no credential")
+}
+
+// A failed passwd lookup records the uid alone. user.Current's pure-Go fallback reads
+// $USER, which any process sets, so it would put a forged name on every record.
+func TestAccountOfNeverReadsTheEnvironment(t *testing.T) {
+	t.Setenv("USER", "forged")
+	failing := func(string) (*user.User, error) { return nil, errors.New("no passwd entry") }
+	current := func() (*user.User, error) { return &user.User{Username: "forged", Uid: "0"}, nil }
+
+	name, uid := accountOf(4242, failing, current)
+	assert.Empty(t, name)
+	assert.Equal(t, "4242", uid)
+
+	found := func(id string) (*user.User, error) { return &user.User{Username: "eli", Uid: id}, nil }
+	name, uid = accountOf(501, found, current)
+	assert.Equal(t, "eli", name)
+	assert.Equal(t, "501", uid)
 }
 
 func TestEntryPointFromContextIsEmptyUntilRecorded(t *testing.T) {

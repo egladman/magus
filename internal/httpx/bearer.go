@@ -1,7 +1,6 @@
 package httpx
 
 import (
-	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
@@ -10,31 +9,16 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
 // verifier decides whether a presented bearer token is accepted and, when it is, names
 // the credential it matched. It is the one knob that varies across loopback endpoints:
-// the daemon passes auth.MCPCredential (cli token or a non-expired named connector
+// the daemon passes auth.VerifyMCPBearer (cli token or a non-expired named connector
 // token), while the ephemeral live and blob servers pass SingleTokenVerifier over their
 // per-run token.
 type verifier func(presented string) (credential string, ok bool)
-
-type credentialKey struct{}
-
-// ContextWithCredential returns ctx recording name as the credential the request
-// presented. [BearerGuard] sets it; a test or a server-side caller may too.
-func ContextWithCredential(ctx context.Context, name string) context.Context {
-	return context.WithValue(ctx, credentialKey{}, name)
-}
-
-// CredentialFromContext returns the name of the credential a bearer-guarded request
-// presented, or "" when the request passed no guard or the guard's credential has no
-// name.
-func CredentialFromContext(ctx context.Context) string {
-	name, _ := ctx.Value(credentialKey{}).(string)
-	return name
-}
 
 // BearerGuard rejects any request whose token fails verify. The token is read
 // ONLY from the `Authorization: Bearer <token>` header. This is the default and
@@ -49,8 +33,10 @@ func CredentialFromContext(ctx context.Context) string {
 // without restarting the server; it must fail closed (return false) on any error.
 // A refusal is a 401 in format: MGS9011 when no token was presented, MGS9001 when
 // one was, which never says whether it was wrong, expired, or revoked. An accepted
-// request reaches next with the credential's name on its context
-// ([CredentialFromContext]).
+// request reaches next with the credential's name and the rpc entry point on its
+// context (trail.CredentialFromContext, trail.EntryPointFromContext), which every record
+// made under it is stamped from. A mount that is not the RPC surface restamps its own
+// entry point inside.
 func BearerGuard(format rpcerr.Format, verify verifier, next http.Handler) http.Handler {
 	return guard(format, verify, headerToken, next)
 }
@@ -79,7 +65,8 @@ func guard(format rpcerr.Format, verify verifier, extract func(*http.Request) (s
 			format.Write(w, r, bearerRejected)
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(ContextWithCredential(r.Context(), credential)))
+		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), types.EntryPointRPC)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -106,8 +93,8 @@ var (
 // an attacker-controlled input is itself length-dependent, but that timing
 // channel is independent of the secret.) A load error from expected fails closed.
 // The ephemeral live and blob servers use this with their per-run token, which has
-// no name; the daemon uses a richer, per-surface verifier (auth.MCPCredential or
-// auth.ConsoleCredential) instead.
+// no name; the daemon uses a richer, per-surface verifier (auth.VerifyMCPBearer or
+// auth.VerifyConsoleBearer) instead.
 func SingleTokenVerifier(expected func() (string, error)) verifier {
 	return func(presented string) (string, bool) {
 		want, err := expected()

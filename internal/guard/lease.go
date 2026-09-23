@@ -511,7 +511,7 @@ func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, comm
 		return ""
 	}
 	for _, c := range cmds {
-		if path.Base(c.Name) != "magus" || hasFlag(c.Args, 'h', "help") {
+		if path.Base(c.Name) != "magus" || magusFlag(c.Args, "h") || magusFlag(c.Args, "help") {
 			continue
 		}
 		words := magusSubcommandWords(c.Args)
@@ -583,27 +583,6 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 		return "declare a job"
 	}
 	return ""
-}
-
-// magusSubcommandWords is the bare words of a magus argv, stopping at `--` because
-// everything past it belongs to an underlying tool. Flags are skipped wherever they sit,
-// since magus accepts them before and after the subcommand.
-//
-// A flag's VALUE is a bare word too (`--root /tmp/x ledger accept`), which this reads as a
-// subcommand token and so does not match. That is the safe direction: the rule fails to
-// fire rather than firing on a path that happened to end in a verb.
-func magusSubcommandWords(args []string) []string {
-	var words []string
-	for _, a := range args {
-		if a == "--" {
-			break
-		}
-		if a == "" || a[0] == '-' {
-			continue
-		}
-		words = append(words, a)
-	}
-	return words
 }
 
 // jobToolRebind judges one call to the job tool against the job the caller holds, naming

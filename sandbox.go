@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxapply "github.com/egladman/magus/internal/sandbox/apply"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,8 +31,11 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	}
 	loc := job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
 	p := sandboxapply.FromConfig(ctx, m.ws.Root, m.cfg)
-	lease, _ := job.ActingLease(loc.CacheDir)
-	p = sandboxapply.NarrowToLease(ctx, p, loc, lease)
+	lease, from, err := job.ActingLease(loc.CacheDir, trail.LeaseFromEnv())
+	if err != nil {
+		return ctx, fmt.Errorf("sandbox: %w", err)
+	}
+	p = sandboxapply.NarrowToLease(ctx, p, loc, lease, from)
 	return sandboxapply.Apply(ctx, p, m.ws.Root)
 }
 

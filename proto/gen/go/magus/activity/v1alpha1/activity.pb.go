@@ -471,7 +471,7 @@ func (x *ActivityEvent) GetLeaseFrom() string {
 type ActivityQuery struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Kinds   []Kind                 `protobuf:"varint,1,rep,packed,name=kinds,proto3,enum=magus.activity.v1alpha1.Kind" json:"kinds,omitempty"` // restrict to these action kinds
-	Actors  []string               `protobuf:"bytes,2,rep,name=actors,proto3" json:"actors,omitempty"`                                         // restrict to these actor labels
+	Actors  []string               `protobuf:"bytes,2,rep,name=actors,proto3" json:"actors,omitempty"`                                         // restrict to events whose origin names one of these in a single field: user, host, agent, credential or entry_point, matched exactly (never the actor label)
 	Actions []string               `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`                                       // restrict to these actions (e.g. tool names)
 	Time    *v1alpha1.TimeRange    `protobuf:"bytes,4,opt,name=time,proto3" json:"time,omitempty"`                                             // action-time window
 	// The three narrowings a person watching a worker asks for. They are here rather than on

@@ -79,12 +79,15 @@ func (r *runner) checkBoundLease() types.DoctorCheck {
 func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string) types.DoctorCheck {
 	const name = "bound-lease"
 
-	id, from := job.ActingLease(cacheDir)
+	claimed := trail.LeaseFromEnv()
+	id, from, err := job.ActingLease(cacheDir, claimed)
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: err.Error()}
+	}
 	if id == "" {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no lease bound; the guard advises only"}
 	}
 	if from == types.LeaseSourceContested {
-		claimed := trail.LeaseFromEnv()
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,

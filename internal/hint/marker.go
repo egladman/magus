@@ -66,12 +66,13 @@ type Gate struct {
 	session  string
 }
 
-// NewGate keys the gate on the cache dir the caller already resolved and an opaque
-// session key: the host's session id, or a key naming the caller within it, as the
-// guard's callerKey does. An empty cacheDir means magus could not locate a workspace,
-// and the gate then suppresses nothing.
-func NewGate(cacheDir, session string) Gate {
-	return Gate{cacheDir: cacheDir, session: strings.TrimSpace(session)}
+// NewGate keys the gate on the cache dir the caller already resolved and an opaque key
+// naming who the notices are held for: a host session, a terminal window, or a caller
+// within either, as the guard's callerKey does. An empty key is the anonymous window. An
+// empty cacheDir means magus could not locate a workspace, and the gate then suppresses
+// nothing.
+func NewGate(cacheDir, key string) Gate {
+	return Gate{cacheDir: cacheDir, session: strings.TrimSpace(key)}
 }
 
 // WindowFromTerminal names the terminal window a caller runs in, the key a gate holds

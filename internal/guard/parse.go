@@ -591,8 +591,13 @@ func processPollFires(cmds []hint.Invocation) bool {
 // tested. Every predicate here takes the parsed commands, so a quoted string, a comment
 // and a heredoc are words rather than commands.
 
-// hasFlag reports whether args carry a long flag, or a short flag packed into a cluster
-// (`-rn` carries `r`). Only the letter matters, not where it sits.
+// hasFlag reports whether args carry a long flag, or a short flag bare or packed into a
+// cluster (`-rn` carries `r`). The cluster is the run of letters after the dash, so
+// `-i.bak` carries `i` and its suffix is the flag's value. A word holding `=` carries no
+// short flag: `-o=template=hi` is one flag and its value, never `-h`.
+//
+// POSIX getopt reading, for the tools the guard parses. A magus argv is read by Go's flag
+// package, which does not cluster; ask magusFlag for those.
 func hasFlag(args []string, short rune, long string) bool {
 	for _, a := range args {
 		if a == "--" {
@@ -601,12 +606,21 @@ func hasFlag(args []string, short rune, long string) bool {
 		if long != "" && (a == "--"+long || strings.HasPrefix(a, "--"+long+"=")) {
 			return true
 		}
-		if len(a) > 1 && a[0] == '-' && !strings.HasPrefix(a, "--") && strings.ContainsRune(a[1:], short) {
+		if short == 0 || len(a) < 2 || a[0] != '-' || a[1] == '-' || strings.Contains(a, "=") {
+			continue
+		}
+		cluster := a[1:]
+		if end := strings.IndexFunc(cluster, func(r rune) bool { return !isASCIILetter(r) }); end >= 0 {
+			cluster = cluster[:end]
+		}
+		if strings.ContainsRune(cluster, short) {
 			return true
 		}
 	}
 	return false
 }
+
+func isASCIILetter(r rune) bool { return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') }
 
 // operands are the arguments that are not flags nor a flag's own value, so a rule can ask
 // what a command was pointed AT rather than how it was spelled.

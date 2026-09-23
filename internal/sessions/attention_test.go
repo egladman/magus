@@ -409,7 +409,7 @@ func TestNewIDIsAValidIDAndCarriesAProcessSuffix(t *testing.T) {
 	t.Parallel()
 
 	id := NewID()
-	assert.True(t, ValidID(id), "the id names the invocation's file, so it must not escape the store")
+	assert.True(t, ValidFileID(id), "the id names the invocation's file, so it must not escape the store")
 
 	_, suffix, found := strings.Cut(id, "-")
 	require.True(t, found, "the id carries a per-process suffix")

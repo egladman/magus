@@ -19,6 +19,7 @@ func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
 	}{
 		{Origin{User: "eli", EntryPoint: EntryPointCLI}, "eli"},
 		{Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1"}, "eli via claude-code"},
+		{Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1", Agent: "a1b2"}, "eli via claude-code via agent a1b2"},
 		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: "console-1"}, "eli via credential console-1"},
 		{Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Credential: "cli"}, "eli via claude-code via credential cli"},
 		{Origin{User: "eli", EntryPoint: EntryPointDaemon}, "daemon"},
@@ -28,8 +29,19 @@ func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
 	for _, c := range cases {
 		assert.Equal(t, c.want, c.origin.Label(), "%+v", c.origin)
 	}
-	assert.False(t, Origin{User: "eli"}.Attributed(), "no host session is unattributed, whoever the user is")
-	assert.True(t, Origin{Session: "s1"}.Attributed())
+}
+
+// A filter names one channel's value, and matches only that value exactly: the rendered
+// label is prose, and matching it would tie what a filter selects to its wording.
+func TestOriginNamesMatchesEachFieldExactly(t *testing.T) {
+	t.Parallel()
+	o := Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Agent: "a1b2", Credential: "cli"}
+	for _, name := range []string{"eli", "claude-code", "a1b2", "cli", "mcp"} {
+		assert.True(t, o.Names(name), name)
+	}
+	for _, name := range []string{"", "el", "eli via claude-code", "claude", "s1"} {
+		assert.False(t, o.Names(name), name)
+	}
 }
 
 // A review draft written before the review route's author was renamed still restores as a

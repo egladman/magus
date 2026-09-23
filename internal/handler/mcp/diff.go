@@ -9,7 +9,6 @@ import (
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
@@ -250,12 +249,14 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		if verr := t.validateAnchor(ctx, path, hunk); verr != nil {
 			return spells.InvokeResponse{}, verr
 		}
+		// The MCP client's name is recorded once, as the origin's Host the call's ctx carries;
+		// agent_name stays the separate label the caller chose.
 		out := t.sessions.AddComment(t.root, types.DiffComment{
 			Path:      path,
 			Hunk:      hunk,
 			Body:      body,
 			AgentName: strings.TrimSpace(paramString(req.Params, "agent_name", "")),
-			Origin:    trail.StampOrigin(ctx, types.Origin{Credential: httpx.CredentialFromContext(ctx)}),
+			Origin:    trail.StampOrigin(ctx, types.Origin{}),
 		}, types.DiffAuthorAgent)
 		// The author here is transport-stamped, never read off the payload, which is what makes
 		// it safe as an attribute: it says which DOOR the remark came through, and the agent's

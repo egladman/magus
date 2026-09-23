@@ -1571,7 +1571,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if o, ok := origin.FromContext(ctx); ok {
 		slog.InfoContext(
 			ctx, "[AGENT] build triggered",
-			slog.String("agent", o.Agent),
+			slog.String("agent", o.Name),
 			slog.String("scope", scopeLabel),
 		)
 	}

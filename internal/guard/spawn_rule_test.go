@@ -128,7 +128,7 @@ func TestSpawnRuleSeesEveryHostsEnvelope(t *testing.T) {
 			assert.Equal(t, "pass", v.Decision)
 			require.Len(t, probe.asked, 1, "the rule is asked once per event")
 			assert.Equal(t, tc.want, probe.asked[0])
-			assert.Equal(t, SessionKey(tc.host, tc.want.Session), probe.gates[0].Session(),
+			assert.Equal(t, FactsKey(tc.host, tc.want.Session), probe.gates[0].Session(),
 				"once and count are keyed on the calling session")
 		})
 	}
@@ -292,7 +292,7 @@ func TestContinueReportsIdleTime(t *testing.T) {
 
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	Judge(ctx, deps, Request{Input: finishedSpawnEnvelope, Host: "claude-code"})
-	seen := hint.MarkerPath(cacheDir, SessionKey("claude-code", "8f2c6a1e"), agentSeenKind("a1b2c3"))
+	seen := hint.MarkerPath(cacheDir, FactsKey("claude-code", "8f2c6a1e"), agentSeenKind("a1b2c3"))
 	aged := time.Now().Add(-10 * time.Minute)
 	require.NoError(t, os.Chtimes(seen, aged, aged))
 
@@ -599,7 +599,7 @@ func TestContinueTargetCarriesTheTargetsSpawnFacts(t *testing.T) {
 // with no usage records nothing rather than a zero.
 func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
-	facts := hint.NewGate(cacheDir, SessionKey("claude-code", "8f2c6a1e"))
+	facts := hint.NewGate(cacheDir, FactsKey("claude-code", "8f2c6a1e"))
 
 	Judge(ctx, Dependencies{}, Request{Input: subagentStop(t, "a1b2c3", writeTranscript(t, transcriptUser)), Host: "claude-code"})
 	_, ok := readSpawnedAgent(facts, "a1b2c3")
@@ -717,6 +717,43 @@ func TestAgentFlagAttributesAnExtractedCommandToTheSubagentsJob(t *testing.T) {
 	assert.Empty(t, parent.Lease, "the same command with no agent id is the parent's")
 }
 
+// A spawn title is the spawner's claim, and any process can pipe a spawn envelope into
+// `magus shell`. A leased worker that names another live job must not be graded under it
+// through a child id it made up; it may hand out only its own lease or a job forked beneath
+// it. An unleased spawner, the orchestrator or a person, may name any live job.
+func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	running := func(id, parent string) types.Job {
+		return types.Job{ID: id, Parent: parent, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
+	}
+	ctx, _ := fleetFixture(t, running("worker-job", ""), running("victim-job", ""), running("sub-job", "worker-job"), running("grandchild-job", "sub-job"))
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "worker-session"}.Bind("worker-job"))
+	facts := hint.NewGate(cacheDir, hookAttribution{Host: "claude-code", Session: "worker-session"}.factsKey())
+
+	spawn := func(title, child string) {
+		t.Helper()
+		env := strings.Replace(finishedSpawn(t, title, "", "", "", child), `"session_id":"8f2c6a1e"`, `"session_id":"worker-session"`, 1)
+		Judge(ctx, Dependencies{}, Request{Input: env, Host: "claude-code"})
+	}
+	graded := func(child string) Verdict {
+		return Judge(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "worker-session", Agent: child})
+	}
+
+	spawn("worker/forger victim-job", "forged")
+	rec, ok := readSpawnedAgent(facts, "forged")
+	require.True(t, ok)
+	assert.Empty(t, rec.Job, "a leased spawner cannot hand out a job outside its own tree")
+	assert.Equal(t, "victim-job", rec.UntrustedJob, "the claim is kept for a reader")
+	assert.Equal(t, "worker-job", graded("forged").Lease, "the forged child is graded under the spawner's own binding")
+
+	spawn("worker/integrator grandchild-job", "helper")
+	assert.Equal(t, "grandchild-job", graded("helper").Lease, "a job forked beneath the spawner's lease is its to hand out")
+
+	spawn("worker/integrator worker-job", "twin")
+	assert.Equal(t, "worker-job", graded("twin").Lease, "its own lease is its to hand out")
+}
+
 // BAGGAGE reaches a hook from the host's environment, so it is the one lease answer a
 // worker, or the orchestrator that spawned it, can rewrite from a shell. A spawn record
 // and a checkout's binding are records, and each outranks it; the claim answers only
@@ -749,11 +786,11 @@ func TestARecordOutranksTheBaggageClaim(t *testing.T) {
 		},
 		"the subagent's job over the claim": {
 			Request{Input: "ls", Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"},
-			answer{"agent-job", types.LeaseSourceAgent},
+			answer{"agent-job", types.LeaseSourceContested},
 		},
 		"an explicit flag over every record": {
 			Request{Input: "ls", Host: "claude-code", Session: "bound-session", Lease: "agent-job"},
-			answer{"agent-job", types.LeaseSourceFlag},
+			answer{"agent-job", types.LeaseSourceContested},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

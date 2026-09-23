@@ -44,19 +44,16 @@ type Origin struct {
 	Credential string `json:"credential,omitempty" yaml:"credential,omitempty"`
 }
 
-// Attributed reports whether a host delivered a session for this record. False is
-// "unattributed", which is a fact about the channel and says nothing about who acted.
-func (o Origin) Attributed() bool { return o.Session != "" }
-
 // Label renders the origin as one phrase for a row head: "eli", "eli via <host>",
-// "eli via credential console-1", "daemon". It is "unattributed" when no channel named
-// anything. A reader that needs one field reads that field, never this.
+// "eli via <host> via agent a1b2", "eli via credential console-1", "daemon". It is
+// "unattributed" when no channel named anything. A reader that needs one field, a filter
+// included, reads that field, never this.
 func (o Origin) Label() string {
 	if o.EntryPoint == EntryPointDaemon {
 		return string(EntryPointDaemon)
 	}
 	label := o.User
-	for _, via := range []string{o.Host, credentialPhrase(o.Credential)} {
+	for _, via := range []string{o.Host, phrase("agent", o.Agent), phrase("credential", o.Credential)} {
 		switch {
 		case via == "":
 		case label == "":
@@ -71,9 +68,25 @@ func (o Origin) Label() string {
 	return label
 }
 
-func credentialPhrase(name string) string {
+func phrase(what, name string) string {
 	if name == "" {
 		return ""
 	}
-	return "credential " + name
+	return what + " " + name
+}
+
+// Names reports whether any channel of the origin (User, Host, Agent, Credential, or the
+// EntryPoint) is exactly name. It is what an activity filter matches on: each field
+// separately, so "eli" never matches a host that happens to contain it and a change to
+// [Origin.Label]'s wording cannot change what a filter selects.
+func (o Origin) Names(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, field := range []string{o.User, o.Host, o.Agent, o.Credential, string(o.EntryPoint)} {
+		if field == name {
+			return true
+		}
+	}
+	return false
 }

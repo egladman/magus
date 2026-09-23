@@ -169,8 +169,8 @@ func TestAttentionHandler_DisposeStampsTheConsoleAsTheSurface(t *testing.T) {
 			continue
 		}
 		found = true
-		if s.Host != consoleSessionHost {
-			t.Errorf("want the disposing session stamped %q, got %q", consoleSessionHost, s.Host)
+		if s.Host != consoleHost {
+			t.Errorf("want the disposing invocation stamped %q, got %q", consoleHost, s.Host)
 		}
 		// Version is stamped on the record but Summarize does not surface it, so the
 		// fold can only prove the workspace half of the CLI parity here.

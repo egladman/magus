@@ -101,7 +101,7 @@ func (s *Service) WatchActivityEvents(ctx context.Context, req *connect.Request[
 		case <-tick.C:
 			fresh := cursor.Next(jobstore.Ascending(readMerged(s.loaded(), maxWindow)))
 			for _, e := range fresh {
-				if !matchFilter(e, e.Label(), filter) {
+				if !matchFilter(e, filter) {
 					continue
 				}
 				if err := stream.Send(wireEvent(e)); err != nil {
@@ -128,7 +128,7 @@ func (s *Service) WatchActivityEvents(ctx context.Context, req *connect.Request[
 func (s *Service) history(past []trail.Event, filter *activityv1.ActivityQuery) []*activityv1.ActivityEvent {
 	out := make([]*activityv1.ActivityEvent, 0, len(past))
 	for _, e := range past {
-		if matchFilter(e, e.Label(), filter) {
+		if matchFilter(e, filter) {
 			out = append(out, wireEvent(e))
 		}
 	}
@@ -176,15 +176,21 @@ func (s *Service) pollInterval() time.Duration {
 // filter narrow the whole merged stream.
 func wireFeedEvent(e jobstore.FeedEvent) *activityv1.ActivityEvent {
 	out := &activityv1.ActivityEvent{
-		Time:    timestamppb.New(time.UnixMilli(e.Ts)),
-		Actor:   e.Actor,
-		Action:  e.Action,
-		Host:    e.Host,
-		Session: e.Session,
-		Unit:    e.Job,
-		Outcome: encodeOutcome(e.Outcome),
-		Error:   e.Error,
-		Preview: e.Note,
+		Time:       timestamppb.New(time.UnixMilli(e.Ts)),
+		Action:     e.Action,
+		User:       e.Origin.User,
+		EntryPoint: string(e.Origin.EntryPoint),
+		Host:       e.Origin.Host,
+		Session:    e.Origin.Session,
+		Agent:      e.Origin.Agent,
+		Credential: e.Origin.Credential,
+		Unit:       e.Job,
+		Outcome:    encodeOutcome(e.Outcome),
+		Error:      e.Error,
+		Preview:    e.Note,
+	}
+	if e.Origin != (types.Origin{}) {
+		out.Actor = e.Origin.Label()
 	}
 	switch e.Kind {
 	case jobstore.FeedFile:
@@ -219,7 +225,7 @@ func matchWire(e *activityv1.ActivityEvent, q *activityv1.ActivityQuery) bool {
 			}
 		}
 	}
-	return matchFilter(probe, e.GetActor(), q)
+	return matchFilter(probe, q)
 }
 
 // fromWire is the narrow slice of a wire event matchFilter reads, so one filter serves both
@@ -227,8 +233,11 @@ func matchWire(e *activityv1.ActivityEvent, q *activityv1.ActivityQuery) bool {
 // carried: this exists to answer a predicate, not to round-trip an event.
 func fromWire(e *activityv1.ActivityEvent) trail.Event {
 	return trail.Event{
-		Ts:     e.GetTime().AsTime().UnixMilli(),
-		Origin: types.Origin{Session: e.GetSession()},
+		Ts: e.GetTime().AsTime().UnixMilli(),
+		Origin: types.Origin{
+			User: e.GetUser(), EntryPoint: types.EntryPoint(e.GetEntryPoint()), Host: e.GetHost(),
+			Session: e.GetSession(), Agent: e.GetAgent(), Credential: e.GetCredential(),
+		},
 		Action: e.GetAction(),
 		Lease:  e.GetUnit(),
 		Kind:   decodeKind(e.GetKind()),

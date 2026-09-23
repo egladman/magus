@@ -270,7 +270,10 @@ func recordAttentionOpen(root string, ev types.Event) error {
 	// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so the
 	// queue can say WHOSE work is blocked without the row's identity moving when a fleet
 	// re-partitions.
-	lease, leaseFrom := checkoutLease(root, trail.LeaseFromEnv())
+	lease, leaseFrom, err := checkoutLease(root, trail.LeaseFromEnv())
+	if err != nil {
+		return err
+	}
 	open := sessions.AttentionOpen{
 		Outcome:   string(ev.Outcome),
 		Severity:  string(ev.Severity),

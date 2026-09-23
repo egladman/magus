@@ -9,7 +9,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 )
 
-// DefaultRetention is how long a invocation file outlives its newest fact. [Open]
+// DefaultRetention is how long an invocation file outlives its newest fact. [Open]
 // prunes with it; a caller that wants a different window calls [Prune] directly.
 //
 // There is no config key and no environment variable behind this on purpose: the
@@ -21,7 +21,7 @@ const DefaultRetention = 30 * 24 * time.Hour
 // Prune deletes whole invocation files whose newest fact is older than retain.
 //
 // Deleting is all it does. Nothing here rolls a file over, renames one, or truncates
-// one: a invocation file is append-only or absent, and a truncation would produce a
+// one: an invocation file is append-only or absent, and a truncation would produce a
 // third state (a file whose beginning is missing) that no reader in this package is
 // written to expect. A retain of zero or less disables pruning entirely.
 //
@@ -100,7 +100,7 @@ func prune(dir string, retain time.Duration, keep string) {
 	requestFiles := make(map[string]map[string]bool)
 	candidates := make(map[string]bool)
 	for _, name := range names {
-		records, _, vanished := readFile(filepath.Join(dir, name))
+		records, _, _, vanished := readFile(filepath.Join(dir, name))
 		if vanished {
 			continue
 		}
@@ -117,9 +117,12 @@ func prune(dir string, retain time.Duration, keep string) {
 				requestFiles[id][name] = true
 			}
 		}
-		// last stays zero for a file with no decodable record, which reads as older
-		// than any cutoff and deletes it. That is the right answer: it is the file of
-		// an invocation that recorded nothing anybody can still use.
+		// A file with no current record is never deleted: this build cannot tell its age,
+		// and it may be history an older build wrote in a shape this one does not read.
+		// Deleting what a reader cannot see is losing it without anyone having looked.
+		if len(records) == 0 {
+			continue
+		}
 		if _, ok := stale[name]; ok && last < cutoffMs {
 			candidates[name] = true
 		}

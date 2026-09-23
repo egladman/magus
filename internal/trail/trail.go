@@ -219,9 +219,8 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 // the path is what a reader follows to see the rest. A host that exposes no transcript sends
 // none, exactly as with the other identity fields.
 //
-// Lease is the lease a producer already knew this observation belongs to, and is
-// usually empty: a hook observes a command, not a lease, so nothing in the host event names
-// one and [AppendAgentCommand] falls back to the environment channel.
+// Lease is the lease the producer resolved for this observation through job.LeaseQuery,
+// with LeaseFrom naming its source; empty when nothing answered.
 type AgentCommand struct {
 	Workspace string
 	// EntryPoint is where the observation entered magus; empty records a hook.
@@ -319,20 +318,16 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
-	// A supplied lease is what the producer could correlate at the observation itself and wins;
-	// the BAGGAGE channel is this process's own claim about itself and fills the gap. A supplied one that
-	// fails types.ValidJobID falls through to the environment rather than being stamped, on the same
-	// reasoning as everywhere else: no join beats a wrong one.
+	// The lease is the one the producer resolved through job.LeaseQuery, recorded as given:
+	// reading BAGGAGE here as well would be a second resolution order. One that fails
+	// types.ValidJobID is dropped with its source, since no join beats a wrong one.
 	//
 	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
 	// line and a guard's reason, not a lease prompt, and a "lease:" line inside either is
 	// quoted prose rather than an orchestrator's assertion.
 	lease, leaseFrom := command.Lease, command.LeaseFrom
 	if !types.ValidJobID(lease) {
-		lease, leaseFrom = LeaseFromEnv(), ""
-		if lease != "" {
-			leaseFrom = types.LeaseSourceEnv
-		}
+		lease, leaseFrom = "", ""
 	}
 
 	action := command.Tool
@@ -346,7 +341,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	Append(ctx, base, Event{
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentCommand,
-		Origin:        hookOrigin(command.EntryPoint, command.Host, command.Session, command.Agent),
+		Origin:        hookOrigin(types.Origin{EntryPoint: command.EntryPoint, Host: command.Host, Session: command.Session, Agent: command.Agent}),
 		Workspace:     command.Workspace,
 		Action:        action,
 		Lease:         lease,
@@ -381,8 +376,10 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // would read as one more of those instead of a spawn's own claim.
 type AgentSpawn struct {
 	Workspace string
-	Host      string
-	Session   string
+	// EntryPoint is where the observation entered magus; empty records a hook.
+	EntryPoint types.EntryPoint
+	Host       string
+	Session    string
 	// Agent is the host's id for the subagent that spawned, empty for the main
 	// conversation.
 	Agent         string
@@ -498,7 +495,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	Append(ctx, base, Event{
 		Ts:           time.Now().UnixMilli(),
 		Kind:         KindAgentSpawn,
-		Origin:       hookOrigin(types.EntryPointHook, spawn.Host, spawn.Session, spawn.Agent),
+		Origin:       hookOrigin(types.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
 		Workspace:    spawn.Workspace,
 		Action:       action,
 		Lease:        lease,

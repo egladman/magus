@@ -185,7 +185,7 @@ service ActivityService {
 // a field OR; the time window bounds it.
 message ActivityQuery {
   repeated Kind kinds = 1;              // restrict to these action kinds
-  repeated string actors = 2;          // restrict to these actor labels
+  repeated string actors = 2;          // restrict to events whose origin names one of these in a single field: user, host, agent, credential or entry_point, matched exactly (never the actor label)
   repeated string actions = 3;         // restrict to these actions (e.g. tool names)
   magus.query.v1alpha1.TimeRange time = 4;   // action-time window
   // The three narrowings a person watching a worker asks for. They are here rather than on

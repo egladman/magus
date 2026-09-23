@@ -284,16 +284,15 @@ func recordCredentialGrant(ctx context.Context, g types.SecretGrant, action stri
 	if base == "" {
 		return
 	}
-	// An MCP client that triggered this run names its host; any other run is recorded
-	// with the entry point and OS account alone.
-	var host, userAgent string
+	// Append stamps the origin from ctx: an MCP client that triggered this run is its Host;
+	// any other run is recorded with the entry point and OS account alone.
+	var userAgent string
 	if o, ok := origin.FromContext(ctx); ok {
-		host, userAgent = o.Agent, o.UserAgent
+		userAgent = o.UserAgent
 	}
 	trail.Append(ctx, base, trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindCredentialGrant,
-		Origin:    types.Origin{Host: host},
 		UserAgent: userAgent,
 		Action:    action,
 		Outcome:   trail.OutcomeOK,

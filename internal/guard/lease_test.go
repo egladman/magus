@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -277,23 +278,30 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 }
 
 // TestActingLeaseFromMarker pins the channel a worker in its own worktree reaches the
-// hook through: a marker in the checkout's cache dir, honored only when it holds a lease
-// id, and read by the same job.ActingLease the sandbox resolves through.
+// hook through: a marker in the checkout's cache dir, read by the same job.ActingLease the
+// sandbox resolves through. A marker that holds anything but a lease id is an error, and
+// the guard refuses the call: grading it as nobody's while the checkout says it is
+// somebody's is how every lease rule falls silent at once.
 func TestActingLeaseFromMarker(t *testing.T) {
+	t.Setenv("BAGGAGE", "")
 	ctx, _ := fleetFixture(t, narrowLease())
 	base := hookLocation(ctx, Dependencies{}).cacheDir
-	acting := func() string {
-		lease, _ := job.ActingLease(base)
-		return lease
-	}
 
-	assert.Empty(t, acting(), "no marker, no lease")
+	lease, _, err := job.ActingLease(base, "")
+	require.NoError(t, err)
+	assert.Empty(t, lease, "no marker, no lease")
 
 	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
-	assert.Equal(t, "harness/lease-scoped-deny", acting())
+	lease, _, err = job.ActingLease(base, "")
+	require.NoError(t, err)
+	assert.Equal(t, "harness/lease-scoped-deny", lease)
 
 	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
-	assert.Empty(t, acting(), "a malformed marker binds nothing rather than something")
+	_, _, err = job.ActingLease(base, "")
+	require.Error(t, err, "a malformed marker is an error, never an unbound checkout")
+	v := Judge(ctx, Dependencies{}, Request{Input: "ls"})
+	assert.Equal(t, "deny", v.Decision)
+	assert.Contains(t, v.Reason, "does not read")
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
@@ -355,6 +363,55 @@ func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
 	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, "harness/absent", "git commit -m done"))
 }
 
+// TestDenyLeaseScopedHarnessSeesPastGlobalFlags pins the two bypasses the harness rule had:
+// a global flag's value read as the subcommand (`--root .`), and a single-dash word holding
+// an h read as -h (`-o=template=hi`, `-root=/home/x`, `-cache-dir`), which exempted the call
+// as a help request.
+func TestDenyLeaseScopedHarnessSeesPastGlobalFlags(t *testing.T) {
+	for _, command := range []string{
+		"magus agent harness apply",
+		"magus --root . agent harness apply",
+		"magus -C /repo agent harness install",
+		"magus -o=template=hi agent harness apply",
+		"magus -root=/home/x agent harness remove",
+		"magus -cache-dir /tmp/c agent harness apply",
+		"magus -j 4 --tee /tmp/out -s agent harness apply --id x",
+	} {
+		assert.NotEmpty(t, denyLeaseScopedHarness(t.Context(), Dependencies{}, "wave/a", command), "%q", command)
+	}
+	for _, command := range []string{
+		"magus agent harness apply --help",
+		"magus agent harness apply -h",
+		"magus -help agent harness apply",
+		"magus agent harness verify",
+		"magus --root agent harness",
+	} {
+		assert.Empty(t, denyLeaseScopedHarness(t.Context(), Dependencies{}, "wave/a", command), "%q", command)
+	}
+}
+
+// TestHasFlagReadsOnlyARealShortFlag pins the POSIX reading every rule shares: a short flag
+// is bare or in a cluster of letters, a cluster's non-letter tail is a value, and a word
+// holding `=` is one flag with its value.
+func TestHasFlagReadsOnlyARealShortFlag(t *testing.T) {
+	for args, want := range map[string]bool{
+		"-h":             true,
+		"-rh":            true,
+		"-i.bak":         false, // asked for h; the i form is below
+		"-o=template=hi": false,
+		"-root=/home/x":  false,
+		"--help":         true,
+		"--help=true":    true,
+		"-- -h":          false,
+		"file -xh":       true,
+	} {
+		assert.Equal(t, want, hasFlag(strings.Fields(args), 'h', "help"), "%q", args)
+	}
+	assert.True(t, hasFlag([]string{"-i.bak"}, 'i', "in-place"), "a cluster's suffix is its value")
+	assert.True(t, hasFlag([]string{"-pi.bak", "-e", "s/a/b/"}, 'i', "in-place"))
+	assert.False(t, hasFlag([]string{"-e=i"}, 'i', ""), "a word with = carries no short flag")
+}
+
 // TestDenyLeaseScopedRebind pins the rebind rule: under a bound lease, the commands that
 // rewrite who the caller is, or what its row says, are refused with the actor named.
 func TestDenyLeaseScopedRebind(t *testing.T) {
@@ -365,6 +422,7 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 		"magus job exec harness/other":                                   "take the lease on another job here",
 		"./magus job exec harness/other":                                 "take the lease on another job here",
 		"magus -s job exec harness/other":                                "take the lease on another job here",
+		"magus --root /tmp/x job exec harness/other":                     "take the lease on another job here",
 		"magus job wait harness/other":                                   "verify a job",
 		"magus job fork":                                                 "declare a job",
 		"magus_job op=clear":                                             "drop every job",
@@ -396,10 +454,6 @@ func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 		"listing rows over MCP":     "magus_job op=list",
 		"an unrelated magus verb":   "magus run go-build .",
 		"a lease id in an argument": "magus query \"job exec\"",
-		// A flag's value is a bare word, so this reads as a subcommand token and matches
-		// nothing. The rule fails to fire rather than firing on a path that happened to
-		// end in a verb, which is the safe direction; see magusSubcommandWords.
-		"a value-taking global flag": "magus --root /tmp/x job exec harness/other",
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command), name)
 	}

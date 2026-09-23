@@ -729,11 +729,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		cfgPath string
 	)
 	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
-	fs.StringVar(&root, "root", "", "Path to start the workspace search from, -C after make (must precede subcommand; default: cwd)")
-	fs.StringVar(&root, "C", "", "Short for --root")
-	fs.StringVar(&cfgPath, "config", "", "Config file path (must precede subcommand; default: search magus.yaml in CWD / XDG)")
-	fs.StringVar(&cfgPath, "c", "", "Short for --config")
-	gen.BindFlags(fs, &globalCfg)
+	bindGlobalFlags(fs, &root, &cfgPath)
 	bindDisplayFlags(fs)
 	fs.Usage = usage
 	// Parse until first non-flag arg (the subcommand). ErrHelp means an explicit -h or

@@ -6,11 +6,11 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
-// Actor is the party a job-store write is made by: the lease it is bound to, and what the
-// host delivered about the session writing.
+// Actor is the party a job-store write is made by: the lease it is bound to.
 //
 // BOUND OR UNBOUND is the whole of the vocabulary. An unbound actor may write anything; a
 // bound one is a worker acting under one row, and the rules below are what it may do to
@@ -18,21 +18,22 @@ import (
 // an agent that never bound its checkout are both unbound. Binding is the checkout's lease
 // marker or the BAGGAGE channel, the same two the guard reads, so a worker cannot be one
 // party to the guard and another to the store.
+//
+// Who the writer is beyond its lease is not the actor's: a row's registered_by is stamped
+// from the write's context (trail.StampOrigin), where each door put its entry point,
+// credential and host.
 type Actor struct {
 	// Lease is the row this session acts under, empty when it acts under none.
 	Lease string
-	// Origin is what the host delivered about the writer (its label, session and
-	// agent), recorded on the rows it creates. No rule keys on it; the store adds the
-	// OS account and the entry point when it records one.
-	Origin types.Origin
 }
 
 // ActingActor is the party this process acts as for the checkout whose cache dir is
-// cacheDir: the bound lease from [ActingLease]. A process with no lease is the unbound
-// actor.
-func ActingActor(cacheDir string) Actor {
-	lease, _ := ActingLease(cacheDir)
-	return Actor{Lease: lease}
+// cacheDir: the lease [ActingLease] resolves from the checkout's binding and this
+// process's BAGGAGE claim. A process with no lease is the unbound actor; a binding that
+// cannot be read is an error, never the unbound actor.
+func ActingActor(cacheDir string) (Actor, error) {
+	lease, _, err := ActingLease(cacheDir, trail.LeaseFromEnv())
+	return Actor{Lease: lease}, err
 }
 
 // Bound reports whether this actor is a worker acting under a lease.

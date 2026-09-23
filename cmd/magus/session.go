@@ -53,7 +53,7 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		sessionUsage()
 		return nil
 	case "ls":
-		return sessionList(ctx, root, rest)
+		return invocationList(ctx, root, rest)
 	case "load":
 		return sessionLoad(root, rest)
 	case "show":
@@ -108,9 +108,9 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
 }
 
-// sessionList shows what recent magus invocations did, folded across every worktree of
+// invocationList shows what recent magus invocations did, folded across every worktree of
 // this repository.
-func sessionList(ctx context.Context, root string, args []string) error {
+func invocationList(ctx context.Context, root string, args []string) error {
 	var limit int
 	var since string
 	var brief bool
@@ -149,7 +149,7 @@ func sessionList(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	summaries := sessions.Summarize(fold)
-	summaries = sessionsSince(summaries, cutoff)
+	summaries = invocationsSince(summaries, cutoff)
 	if limit > 0 && len(summaries) > limit {
 		summaries = summaries[:limit]
 	}
@@ -160,7 +160,7 @@ func sessionList(ctx context.Context, root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputText:
-		return renderSessionsText(ctx, root, summaries, fold, dir, !cutoff.IsZero())
+		return renderInvocationsText(ctx, root, summaries, fold, dir, !cutoff.IsZero())
 	case outputName:
 		names := make([]string, 0, len(summaries))
 		for _, s := range summaries {
@@ -172,6 +172,7 @@ func sessionList(ctx context.Context, root string, args []string) error {
 		"invocations": summaries,
 		"checkpoints": sessions.LatestCheckpoints(fold),
 		"skipped":     fold.Skipped,
+		"legacy":      fold.Legacy,
 		"store":       dir,
 	}
 	if clock := promptCacheForCheckout(root, time.Now()); len(clock.Providers) > 0 {
@@ -189,7 +190,7 @@ func sessionList(ctx context.Context, root string, args []string) error {
 //
 // INVOCATION is magus's own id for the process; SESSION is the host's conversation it
 // ran in, a dash when no host delivered one.
-func renderSessionsText(ctx context.Context, root string, summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
+func renderInvocationsText(ctx context.Context, root string, summaries []sessions.Summary, fold sessions.Fold, dir string, filtered bool) error {
 	renderCheckpoints(ctx, root, os.Stdout, sessions.LatestCheckpoints(fold))
 	if len(summaries) == 0 {
 		if filtered {
@@ -221,7 +222,7 @@ func renderSessionsText(ctx context.Context, root string, summaries []sessions.S
 			orDash(s.Host),
 			orDash(s.Lease),
 			orDash(s.Spawner),
-			orDash(sessionParent(bySpan, s.ParentSpanID)),
+			orDash(invocationParent(bySpan, s.ParentSpanID)),
 			s.Facts,
 			// A dash rather than a zero: no loaded events is the ordinary state, and a
 			// column of zeros reads as a producer that broke.
@@ -245,7 +246,10 @@ func renderSessionsText(ctx context.Context, root string, summaries []sessions.S
 		// Surfaced rather than swallowed: a skipped line is a fact that happened and
 		// cannot be shown, which is exactly the thing a silent reader would misreport
 		// as "nothing happened".
-		fmt.Fprintf(os.Stdout, "\n%d unreadable line(s) skipped (a session killed mid-write leaves a partial line; the rest of its records still read)\n", fold.Skipped)
+		fmt.Fprintf(os.Stdout, "\n%d unreadable line(s) skipped (an invocation killed mid-write leaves a partial line; the rest of its records still read)\n", fold.Skipped)
+	}
+	if fold.Legacy > 0 {
+		fmt.Fprintf(os.Stdout, "\n%d line(s) not shown: written before magus called a per-process id an invocation, in a shape this build does not read; their files are kept\n", fold.Legacy)
 	}
 	return nil
 }
@@ -346,14 +350,14 @@ func checkpointWhere(c sessions.Checkpoint) string {
 	return b.String()
 }
 
-// sessionParent names the invocation a span id belongs to, falling back to the raw id when
+// invocationParent names the invocation a span id belongs to, falling back to the raw id when
 // this store holds no record of it. The id is the honest answer rather than a blank: the parent may
 // have run in a repository this store does not cover, or before the retention window, and
 // "unknown to magus" is a different fact from "spawned by nobody".
 //
 // Resolved for the TEXT view only. -o json carries the ids, because a consumer joining
 // invocations wants the identity rather than this reader's guess at a name for it.
-func sessionParent(bySpan map[string]string, parentSpanID string) string {
+func invocationParent(bySpan map[string]string, parentSpanID string) string {
 	if invocation, ok := bySpan[parentSpanID]; ok {
 		return invocation
 	}
@@ -424,12 +428,12 @@ func parseSince(raw string) (time.Time, error) {
 	return time.Time{}, usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
 }
 
-// sessionsSince drops the invocations whose last fact predates cutoff.
+// invocationsSince drops the invocations whose last fact predates cutoff.
 //
 // It filters on LastMs rather than StartedMs so a long-lived invocation that is still
 // working stays listed. The alternative hides exactly the one a person asking "what is
 // happening lately" most wants: one that began before the window and has not stopped.
-func sessionsSince(summaries []sessions.Summary, cutoff time.Time) []sessions.Summary {
+func invocationsSince(summaries []sessions.Summary, cutoff time.Time) []sessions.Summary {
 	if cutoff.IsZero() {
 		return summaries
 	}
@@ -680,7 +684,7 @@ func validateLoadEvent(ev loadEvent) string {
 	case !sessions.ValidEventKind(ev.Kind):
 		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(sessions.EventKinds, ", "))
 	}
-	if !sessions.ValidID(ev.Session) {
+	if !sessions.ValidFileID(ev.Session) {
 		return fmt.Sprintf("session id %q must be alphanumeric with - and _ (it names the session file)", ev.Session)
 	}
 	return ""

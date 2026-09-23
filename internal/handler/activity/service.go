@@ -118,7 +118,7 @@ func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[act
 	filter := req.Msg.GetFilter()
 	matched := make([]trail.Event, 0, limit)
 	for _, e := range readMerged(s.loaded(), maxWindow) {
-		if matchFilter(e, e.Label(), filter) {
+		if matchFilter(e, filter) {
 			matched = append(matched, e)
 		}
 	}
@@ -251,16 +251,17 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 }
 
 // matchFilter applies the ActivityQuery's set filters (kinds/actors/actions) and the time
-// window, all ANDed; an empty or absent field does not constrain. actor is the label the
-// event is served under, which is what an actors filter names.
-func matchFilter(e trail.Event, actor string, q *activityv1.ActivityQuery) bool {
+// window, all ANDed; an empty or absent field does not constrain. An actors entry matches
+// an event whose origin names it in any one field (types.Origin.Names), never the rendered
+// label.
+func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 	if q == nil {
 		return true
 	}
 	if kinds := q.GetKinds(); len(kinds) > 0 && !slices.Contains(kinds, encodeKind(e.Kind)) {
 		return false
 	}
-	if actors := q.GetActors(); len(actors) > 0 && !slices.Contains(actors, actor) {
+	if actors := q.GetActors(); len(actors) > 0 && !slices.ContainsFunc(actors, e.Names) {
 		return false
 	}
 	if actions := q.GetActions(); len(actions) > 0 && !slices.Contains(actions, e.Action) {

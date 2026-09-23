@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/egladman/magus/internal/handler"
-	"github.com/egladman/magus/internal/httpx"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sessions"
@@ -15,7 +14,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// consoleSessionHost stamps the disposing invocation as having come through the console.
+// consoleHost stamps the disposing invocation as having come through the console.
 //
 // sessions.InvocationStart.Host names the surface that drove an invocation, and the CLI
 // leaves it empty because nothing on its run path knows the answer. This route DOES know
@@ -23,7 +22,7 @@ import (
 // credential the bearer guard verified. Neither says a person acted: any process of the
 // account can read a console token, so the record names the door and the credential, and
 // the OS user says whose account it was.
-const consoleSessionHost = "console"
+const consoleHost = "console"
 
 // Handler serves /api/v1/attention: the blocks agents have raised in this repository
 // and waiting on a person, plus the one write that closes one.
@@ -41,7 +40,7 @@ const consoleSessionHost = "console"
 // clear the queue without reading it.
 //
 // Authorship rides the ROUTE and the verified credential, never the payload, the same rule
-// DiffSessionHandler states: a write that lands here is stamped [consoleSessionHost] and the
+// DiffSessionHandler states: a write that lands here is stamped [consoleHost] and the
 // credential's name without trusting anything the caller sent.
 type Handler struct {
 	handler.Base
@@ -129,11 +128,7 @@ func (h *Handler) dispose(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req, err := sessions.DisposeRequest(dir, body.ID, body.Reason, sessions.InvocationStart{
-		Origin: trail.StampOrigin(r.Context(), types.Origin{
-			EntryPoint: types.EntryPointRPC,
-			Host:       consoleSessionHost,
-			Credential: httpx.CredentialFromContext(r.Context()),
-		}),
+		Origin:    trail.StampOrigin(r.Context(), types.Origin{Host: consoleHost}),
 		Workspace: h.root,
 		Version:   h.version,
 	})

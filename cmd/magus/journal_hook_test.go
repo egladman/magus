@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
@@ -54,14 +56,14 @@ func firstPayload(t *testing.T, fold sessions.Fold, kind string) string {
 	return ""
 }
 
-func TestWithSessionJournalRecordsAffectedResults(t *testing.T) {
+func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// Every TargetResult below carries the lease off the environment, so a developer or
 	// CI job that exported one would fail this test over its own baggage.
 	t.Setenv(trail.EnvBaggage, "")
 	root := t.TempDir()
 
-	handlers := withSessionJournal(context.Background(), nil, root, "affected", []string{"ci", "--base", "main"})
+	handlers := withInvocationJournal(context.Background(), nil, root, "affected", []string{"ci", "--base", "main"})
 	require.Len(t, handlers, 1)
 
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
@@ -94,17 +96,17 @@ func TestWithSessionJournalRecordsAffectedResults(t *testing.T) {
 // `magus session` is a view of the repository, so a fact must not carry a trace of which
 // command produced it. Comparing the raw payload bytes is what pins that: a field added
 // to one path and not the other would diverge here before anyone noticed in the view.
-func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
+func TestWithInvocationJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	runRoot, affectedRoot := t.TempDir(), t.TempDir()
 
 	result := journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusCached, DurationMs: 7, Ref: "out9"}
 
-	runHandlers := withSessionJournal(context.Background(), nil, runRoot, "run", []string{"ci", "api"})
+	runHandlers := withInvocationJournal(context.Background(), nil, runRoot, "run", []string{"ci", "api"})
 	require.Len(t, runHandlers, 1)
 	emitJournalEvent(t, runHandlers[0], result)
 
-	affectedHandlers := withSessionJournal(context.Background(), nil, affectedRoot, "affected", []string{"ci"})
+	affectedHandlers := withInvocationJournal(context.Background(), nil, affectedRoot, "affected", []string{"ci"})
 	require.Len(t, affectedHandlers, 1)
 	emitJournalEvent(t, affectedHandlers[0], result)
 
@@ -135,7 +137,7 @@ func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 // The lease is stamped in the shared wiring, not per command, for the same reason the fact shape
 // is: `magus session` is a view of the repository, and a lease that only `run` recorded would
 // read as a fleet that stopped working the moment it ran `affected`.
-func TestWithSessionJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
+func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
 
@@ -145,7 +147,7 @@ func TestWithSessionJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	} {
 		t.Run(verb, func(t *testing.T) {
 			root := t.TempDir()
-			handlers := withSessionJournal(context.Background(), nil, root, verb, args)
+			handlers := withInvocationJournal(context.Background(), nil, root, verb, args)
 			require.Len(t, handlers, 1)
 			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
 
@@ -164,17 +166,46 @@ func TestWithSessionJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 	}
 }
 
+// The journal's lease goes through the one resolver, so a checkout bound by `magus job exec`
+// outranks the claim here as it does for the guard: before, a worker bound to one job that
+// exported another's id recorded every run against the other job.
+func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/claimed")
+	root := t.TempDir()
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, job.LeaseMarkerName), []byte("fleet/bound\n"), 0o644))
+
+	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"ci"})
+	require.Len(t, handlers, 1)
+	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Status: journal.StatusPass})
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, types.LeaseSourceContested, summaries[0].LeaseFrom, "the summary carries the start's source")
+	assert.NotEmpty(t, summaries[0].UID, "the summary carries the start's origin whole, uid included")
+	require.Len(t, summaries[0].Targets, 1)
+	assert.Equal(t, "fleet/bound", summaries[0].Targets[0].Lease)
+	assert.Equal(t, types.LeaseSourceContested, summaries[0].Targets[0].LeaseFrom)
+}
+
 // The lease a forwarded run carries beats the environment, because on an adopted run this
 // code executes in the DAEMON and the environment it would otherwise read belongs to whoever
 // started the daemon. Without the preference every daemon-adopted run in a fleet is attributed
 // to one stranger, or to nobody: the defect this wiring exists to close.
-func TestWithSessionJournalPrefersTheForwardedLease(t *testing.T) {
+func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/daemon-env")
 	root := t.TempDir()
 
 	ctx := proc.WithLease(context.Background(), "fleet/client")
-	handlers := withSessionJournal(ctx, nil, root, "run", []string{"ci", "api"})
+	handlers := withInvocationJournal(ctx, nil, root, "run", []string{"ci", "api"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
 
@@ -193,7 +224,7 @@ func TestWithSessionJournalPrefersTheForwardedLease(t *testing.T) {
 // The other half of the precedence: a plain CLI run carries no forwarded lease, and the
 // environment channel must still be read. A context-only implementation would leave every
 // unadopted run unattributed, which is the same bug with the cases swapped.
-func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t *testing.T) {
+func TestWithInvocationJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/local")
 	root := t.TempDir()
@@ -201,7 +232,7 @@ func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t *te
 	// An invalid forwarded id stores nothing, so this is also the "the wire lied" case: the
 	// context carries none and the local environment is what remains.
 	ctx := proc.WithLease(context.Background(), "not a lease id")
-	handlers := withSessionJournal(ctx, nil, root, "run", []string{"build"})
+	handlers := withInvocationJournal(ctx, nil, root, "run", []string{"build"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 
@@ -219,12 +250,12 @@ func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedLease(t *te
 // redaction exemption honest. The drop happens in the wiring, because that is where the
 // environment is read; the note explaining it is asserted in internal/trail, where the one-time
 // gate can be reset. Here the observable fact is that nothing was attributed.
-func TestWithSessionJournalDropsAnInvalidLease(t *testing.T) {
+func TestWithInvocationJournalDropsAnInvalidLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=not a lease id")
 	root := t.TempDir()
 
-	handlers := withSessionJournal(context.Background(), nil, root, "run", []string{"build"})
+	handlers := withInvocationJournal(context.Background(), nil, root, "run", []string{"build"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 
@@ -242,7 +273,7 @@ func TestWithSessionJournalDropsAnInvalidLease(t *testing.T) {
 
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler
 // that reported an error here would be a build failure caused by bookkeeping.
-func TestWithSessionJournalSurvivesAnUnwritableStore(t *testing.T) {
+func TestWithInvocationJournalSurvivesAnUnwritableStore(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
@@ -253,7 +284,7 @@ func TestWithSessionJournalSurvivesAnUnwritableStore(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o755))
 	require.NoError(t, os.WriteFile(dir, []byte("blocked\n"), 0o644))
 
-	handlers := withSessionJournal(context.Background(), nil, root, "affected", []string{"ci"})
+	handlers := withInvocationJournal(context.Background(), nil, root, "affected", []string{"ci"})
 	require.Len(t, handlers, 1, "the store is only opened on the first fact, so wiring still succeeds")
 
 	rec := captureJournalRecord(t, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass})
@@ -269,13 +300,13 @@ func TestWithSessionJournalSurvivesAnUnwritableStore(t *testing.T) {
 
 // With no resolvable state directory there is nowhere to journal, and a machine in that
 // state must still be able to run builds.
-func TestWithSessionJournalLeavesHandlersAloneWithoutAStateDir(t *testing.T) {
+func TestWithInvocationJournalLeavesHandlersAloneWithoutAStateDir(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")
 	t.Setenv("LocalAppData", "")
 
 	existing := []slog.Handler{&journalRecordSink{}}
-	got := withSessionJournal(context.Background(), existing, t.TempDir(), "affected", []string{"ci"})
+	got := withInvocationJournal(context.Background(), existing, t.TempDir(), "affected", []string{"ci"})
 	assert.Equal(t, existing, got)
 }

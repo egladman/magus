@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -279,8 +280,33 @@ func TestReadAllTreatsAFileThatVanishedMidFoldAsAbsent(t *testing.T) {
 func TestReadFileReportsAMissingFileAsVanishedNotSkipped(t *testing.T) {
 	t.Parallel()
 
-	records, skipped, vanished := readFile(filepath.Join(t.TempDir(), "never-existed"+fileExt))
+	records, skipped, legacy, vanished := readFile(filepath.Join(t.TempDir(), "never-existed"+fileExt))
 	assert.Empty(t, records)
 	assert.Zero(t, skipped)
+	assert.Zero(t, legacy)
 	assert.True(t, vanished)
+}
+
+// A store written before the invocation rename holds schema-1 lines keyed `session`. The
+// clean break stands, so this build reads none of them, but it must neither delete their
+// files nor report them as damage: a reader has to be told they exist and why they are not
+// shown.
+func TestASchemaOneFileIsCountedAndNeverPruned(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	old := time.Now().Add(-90 * 24 * time.Hour)
+	path := filepath.Join(dir, "0123456789abcdef"+fileExt)
+	line := fmt.Sprintf(`{"v":1,"session":"0123456789abcdef","seq":1,"kind":"session_start","ts":%d,"payload":{}}`+"\n", old.UnixMilli())
+	require.NoError(t, os.WriteFile(path, []byte(line+line), 0o644))
+	require.NoError(t, os.Chtimes(path, old, old))
+
+	Prune(dir, DefaultRetention)
+	assert.FileExists(t, path, "a file this build cannot read is never pruned")
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	assert.Empty(t, fold.Records)
+	assert.Equal(t, 2, fold.Legacy)
+	assert.Zero(t, fold.Skipped, "a line written before the rename is not damage")
 }

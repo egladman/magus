@@ -330,32 +330,24 @@ func TestLeaseFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
 	assert.NotContains(t, logged, "not a lease id", "the value failed the charset that makes a lease safe to log unredacted")
 }
 
-// A hook observes a command, not a lease, so the environment is the only channel that can
-// attribute one, and it is what lights up the console drawer's lease column for runs.
-func TestAppendAgentCommand_LeaseFallsBackToTheEnvironment(t *testing.T) {
-	t.Setenv(EnvBaggage, BaggageLease+"=fleet/f3")
-	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: "pass"})
-
-	events, err := ReadRecent(dir, 1)
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "fleet/f3", events[0].Lease)
-}
-
-func TestAppendAgentCommand_SuppliedLeaseBeatsTheEnvironment(t *testing.T) {
+// The producer resolved the lease through job.LeaseQuery, so the trail records what it was
+// handed and never consults BAGGAGE itself: a second reading here would be a second order.
+func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	t.Setenv(EnvBaggage, BaggageLease+"=fleet/from-env")
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Lease: "fleet/supplied"})
-	// A supplied lease that could not be stamped is not an error and not a stamp: the process's
-	// own claim is still better than a value that failed the charset.
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id"})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Lease: "fleet/supplied", LeaseFrom: types.LeaseSourceMarker})
+	// A supplied lease that fails the charset is not stamped, and nothing stands in for it.
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Lease: "not a lease id", LeaseFrom: types.LeaseSourceFlag})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: "pass"})
 
-	events, err := ReadRecent(dir, 2)
+	events, err := ReadRecent(dir, 3)
 	require.NoError(t, err)
-	require.Len(t, events, 2)
-	assert.Equal(t, "fleet/from-env", events[0].Lease, "newest first: the malformed supplied lease fell through")
-	assert.Equal(t, "fleet/supplied", events[1].Lease)
+	require.Len(t, events, 3)
+	assert.Empty(t, events[0].Lease, "newest first: an unresolved call is uncorrelated, never the environment's")
+	assert.Empty(t, events[1].Lease)
+	assert.Empty(t, events[1].LeaseFrom, "a dropped lease drops its source")
+	assert.Equal(t, "fleet/supplied", events[2].Lease)
+	assert.Equal(t, types.LeaseSourceMarker, events[2].LeaseFrom)
 }
 
 func TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated(t *testing.T) {

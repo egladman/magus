@@ -25,7 +25,6 @@ import (
 	_ "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/trail"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
@@ -148,11 +147,12 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	}
 }
 
-// verifiedAs stands in for the bearer guard, which puts the verified credential's name on
-// the request context before any service sees it.
+// verifiedAs stands in for the bearer guard, which puts the verified credential's name and
+// the rpc entry point on the request context before any service sees it.
 func verifiedAs(credential string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r.WithContext(httpx.ContextWithCredential(r.Context(), credential)))
+		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), types.EntryPointRPC)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

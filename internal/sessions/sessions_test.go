@@ -277,11 +277,11 @@ func TestReadAllCountsEveryUnusableLine(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
 	body := strings.Join([]string{
-		`{"v":1,"invocation":"sess1","seq":1,"kind":"target_result","ts":1}`,
+		`{"v":2,"invocation":"sess1","seq":1,"kind":"target_result","ts":1}`,
 		`not json at all`,
 		``, // a blank line is not damage; it is skipped without counting
-		`{"v":1,"seq":2,"kind":"target_result","ts":2}`, // no session: unattributable
-		`{"v":1,"invocation":"sess1","seq":3,"ts":3}`,   // no kind: uninterpretable
+		`{"v":2,"seq":2,"kind":"target_result","ts":2}`, // no invocation: unattributable
+		`{"v":2,"invocation":"sess1","seq":3,"ts":3}`,   // no kind: uninterpretable
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
@@ -572,8 +572,8 @@ func TestValidEventKind(t *testing.T) {
 	assert.False(t, ValidEventKind(""))
 }
 
-func TestValidIDRefusesAPathSeparator(t *testing.T) {
-	assert.True(t, ValidID("8f1c-2d4e_9"))
-	assert.False(t, ValidID("../escape"))
-	assert.False(t, ValidID(""))
+func TestValidFileIDRefusesAPathSeparator(t *testing.T) {
+	assert.True(t, ValidFileID("8f1c-2d4e_9"))
+	assert.False(t, ValidFileID("../escape"))
+	assert.False(t, ValidFileID(""))
 }
