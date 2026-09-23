@@ -712,6 +712,12 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	switch r.Message {
 	case "lock.waiting":
+		// compat(until: no watched trail can still contain a "lock.waiting"/"lock.acquired"
+		// record): no current magus emits either message -- a contended lock or machine
+		// budget now refuses immediately (exit 75) instead of queuing. This stays reachable
+		// for `magus job watch` against a trail an OLDER magus recorded, or a mixed-version
+		// daemon adoption, either of which can still contain one.
+		//
 		// State, not a failure: the run is correctly queued behind a peer. It is
 		// pinned rather than logged-and-forgotten because the wait is unbounded.
 		h.status.blocked = recordStr(r, "project")

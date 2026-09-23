@@ -331,10 +331,10 @@ const (
 	// machine holds. It joins MGS3007 in the environment family for the same reason: the
 	// workspace is correct and the code is fine, the machine cannot seat the work.
 	//
-	// Ordinarily a queue rather than an error: the daemon that owns the budget tells a
-	// waiter when its turn comes. It surfaces as this code in the two cases a wait
-	// cannot fix: MAGUS_NO_WAIT asked to fail fast, or the declaration does not fit in
-	// the whole budget, so an idle machine would refuse it too. Both exit 75.
+	// magus never queues behind a peer, so a full budget refuses immediately (exit 75,
+	// EX_TEMPFAIL: the same command succeeds once the holder finishes). A declaration
+	// that does not fit in the whole budget refuses too, but permanently (exit 78,
+	// EX_CONFIG), since an idle machine would refuse it just the same.
 	MachineBudgetExhausted DiagnosticCode = "MGS3009"
 	// RedundantGateDeferred is a ci gate magus did not start because an
 	// identical-or-equivalent gate already passed for this branch on this

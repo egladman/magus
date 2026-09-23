@@ -22,21 +22,9 @@ import (
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
 	procrun "github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/types"
 )
-
-// noWaitLocks reports whether MAGUS_NO_WAIT asks a contended workspace lock to
-// fail fast instead of blocking.
-func noWaitLocks() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("MAGUS_NO_WAIT"))) {
-	case "1", "true", "yes":
-		return true
-	default:
-		return false
-	}
-}
 
 // A projectHold is one invocation's grip on its project locks, plus what a supersede
 // watch needs in order to see a later gate asking for them.
@@ -91,8 +79,10 @@ func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 //
 // gate marks this invocation the workspace's gate, which is what admits it to
 // supersession in both directions: it may take a lock from an earlier gate on this same
-// tree, and a later one may take its locks (MGS3014). Everything else queues as before.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer) (*projectHold, error) {
+// tree, and a later one may take its locks (MGS3014). Every other contention with a
+// DIFFERENT magus process is refused immediately (exit 75): magus never waits on
+// another magus process.
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
@@ -105,11 +95,11 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
 	}
-	lopts := []lockerOption{withReportWriter(rw)}
+	var lopts []lockerOption
 	if gate {
 		lopts = append(lopts, asGate())
 	}
-	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, noWaitLocks(), lopts...)
+	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, lopts...)
 	unlock, err := l.acquireAll(ctx, paths)
 	if err != nil {
 		return nil, err
@@ -210,9 +200,7 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 //
 // It is safe for concurrent use; each acquire opens its own OS lock handle.
 type projectLocker struct {
-	dir    string
-	noWait bool
-	notify func(projectPath string) // waiting-message hook; nil prints to stderr
+	dir string
 	// root is the resolved workspace root, recorded in every sidecar. It is what makes
 	// "the same tree" a comparison of paths rather than of project names: a sibling
 	// worktree serves a project called "." too, and its gate judges different files.
@@ -226,15 +214,9 @@ type projectLocker struct {
 	// out is where the lock's decision lines go: os.Stderr in every real run, a buffer
 	// under test so it can read the exact bytes a user sees. The lines are written
 	// straight to the stream, never through the console, which is why -s/--silent
-	// cannot suppress any of them: a run that stalls or yields without explanation is
-	// the failure they exist to prevent.
+	// cannot suppress any of them: a decision made without explanation is the failure
+	// they exist to prevent.
 	out io.Writer
-	// rw is set for a structured (-o jsonl) invocation; when non-nil the wait/
-	// resume lines go there as typed events instead of the prose lines above, which
-	// would otherwise be free text on a stream a caller is parsing as JSONL. ctx
-	// cannot carry this the way [report.WithWriter] does elsewhere: the lock is
-	// acquired before Run wraps ctx with it, so it is threaded in directly instead.
-	rw *report.Writer
 }
 
 // lockRetryDelay is how often a blocked acquire re-polls the OS lock while waiting.
@@ -254,39 +236,26 @@ var supersedeYieldBound = 30 * time.Second
 // lockerOption configures a projectLocker.
 type lockerOption func(*projectLocker)
 
-// withLockNotify overrides where the one-shot "waiting for another magus process"
-// message goes. Defaults to stderr. Used by tests to observe contention.
-func withLockNotify(fn func(projectPath string)) lockerOption {
-	return func(l *projectLocker) { l.notify = fn }
-}
-
 // asGate marks this invocation the workspace's gate. See projectLocker.gate.
 func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
-
-// withReportWriter routes the wait/resume lines to w as typed events instead of the
-// prose lines emitWaiting/emitResumed otherwise print, for a structured (-o jsonl)
-// invocation. nil is a no-op, so callers can pass opts.Report unconditionally.
-func withReportWriter(w *report.Writer) lockerOption {
-	return func(l *projectLocker) { l.rw = w }
-}
 
 // writingTo redirects the lock's decision lines, for a test that reads them.
 func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
 
 // newProjectLocker returns a projectLocker whose lock files live under
-// <cacheDir>/locks/<workspace>, mirroring the workspace project tree. When noWait is
-// true a contended acquire fails fast with a *lockContendedError instead of blocking.
+// <cacheDir>/locks/<workspace>, mirroring the workspace project tree. A contended
+// acquire against a DIFFERENT magus process fails fast with a *lockContendedError
+// rather than blocking: magus never waits on another magus process.
 //
 // The workspace segment is what keeps the lock namespace per-WORKSPACE rather than
 // per-cache-dir. An absolute cache.dir (or MAGUS_CACHE_DIR) is returned unchanged by
 // resolveCacheDir for every root, which is the point (one shared cache), but without
 // this it also collapses every workspace's locks together, so an unrelated tree's
-// project "." blocked on this one's. That is a false conflict between projects that
-// share nothing, and it presents as a hang rather than an error.
-func newProjectLocker(cacheDir, workspaceRoot string, noWait bool, opts ...lockerOption) *projectLocker {
+// project "." contended with this one's. That is a false conflict between projects that
+// share nothing, and it presents as a spurious refusal rather than an error.
+func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *projectLocker {
 	l := &projectLocker{
 		dir:     filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot)),
-		noWait:  noWait,
 		root:    resolvedRoot(workspaceRoot),
 		started: time.Now(),
 		out:     os.Stderr,
@@ -332,14 +301,14 @@ func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) er
 			" so one invocation runs both.", p, l.describeOwner(projectPath))
 }
 
-// lockContendedError is returned by a no-wait acquire when another magus process holds
-// the project's lock. It is the fail-fast signal for MAGUS_NO_WAIT.
+// lockContendedError is returned when a DIFFERENT magus process holds the project's
+// lock. It is the fail-fast signal: magus never waits on another magus process.
 type lockContendedError struct {
 	Project string
 	Owner   string // describeOwner's rendering of the holder, "" when the sidecar says nothing
 }
 
-// lockContendedExit is the process status a contended no-wait acquire carries.
+// lockContendedExit is the process status a contended acquire carries.
 //
 // 75 is EX_TEMPFAIL from BSD sysexits: the work was never attempted and the same command
 // succeeds once the holder finishes. 1 leaves a caller unable to tell a busy machine from
@@ -355,13 +324,13 @@ func (e *lockContendedError) Error() string {
 	if p == "" {
 		p = "."
 	}
-	// Named for the same reason the waiting path names it: a fail-fast that cannot say
-	// who won leaves the caller nothing to act on.
-	return fmt.Sprintf("magus: project %s is locked by another magus process%s; not waiting (MAGUS_NO_WAIT set)", p, heldBy(e.Owner))
+	// Named because a fail-fast that cannot say who won leaves the caller nothing to
+	// act on.
+	return fmt.Sprintf("magus: project %s is locked by another magus process%s; not waiting", p, heldBy(e.Owner))
 }
 
 // heldBy renders a describeOwner string as a parenthetical, or "" when there is nothing
-// trustworthy to say. Shared so the fail-fast and the wait render a holder the same way.
+// trustworthy to say.
 func heldBy(owner string) string {
 	if owner == "" {
 		return ""
@@ -369,15 +338,15 @@ func heldBy(owner string) string {
 	return " (held by " + owner + ")"
 }
 
-// acquire takes the project's EXCLUSIVE lock, blocking until it is free. If
-// another magus process holds it, one waiting message is emitted and then the
-// call blocks. With noWait the call returns a *lockContendedError immediately.
-// The returned release func unlocks; call it (defer) once the invocation's
-// mutating work on the project is done.
+// acquire takes the project's EXCLUSIVE lock. If a DIFFERENT magus process holds it,
+// the call returns a *lockContendedError immediately: magus never waits on another
+// magus process. The returned release func unlocks; call it (defer) once the
+// invocation's mutating work on the project is done.
 //
-// One contention does not wait: a gate holding the lock for an EARLIER gate on this same
-// tree is asked to stop instead (MGS3014), and this call takes the lock when it does. See
-// supersedes for the qualifier and takeBySuperseding for the bound.
+// One contention is not fail-fast: a gate holding the lock for an EARLIER gate on this
+// same tree is asked to stop instead (MGS3014), bounded by supersedeYieldBound, and this
+// call takes the lock when it does. See supersedes for the qualifier. A holder that does
+// not yield within the bound is refused exactly like any other contention.
 func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func(), error) {
 	path := l.lockPath(projectPath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -392,18 +361,14 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 	if !got {
 		// Before anything else: a lock held by one of this invocation's OWN ancestors can
 		// never be released, because the ancestor is blocked waiting on this process to
-		// exit. Waiting is not slow here, it is permanent, so refuse instead, ahead of
-		// the noWait branch, since this diagnosis is the more specific one.
+		// exit. Waiting is not slow here, it is permanent, so refuse instead with the more
+		// specific diagnosis.
 		if err := l.reentrantErr(ctx, projectPath); err != nil {
 			return nil, err
 		}
-		if l.noWait {
-			return nil, &lockContendedError{Project: projectPath, Owner: l.describeOwner(projectPath)}
-		}
 		// A later gate does not queue behind an earlier one on the same tree: the earlier
 		// verdict is about a tree that has since changed, so ask it to stop and take the
-		// lock when it does. After the noWait branch, because MAGUS_NO_WAIT asked not to
-		// wait at all and superseding still waits, briefly, for the holder to unwind.
+		// lock when it does.
 		if holder, ok := l.supersedes(projectPath); ok {
 			got, err = l.takeBySuperseding(ctx, projectPath, fl, holder)
 			if err != nil {
@@ -412,34 +377,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		}
 	}
 	if !got {
-		l.emitWaiting(ctx, projectPath)
-		stopWaiter := l.recordWaiter(ctx, projectPath)
-		stopHeartbeat := l.startWaitHeartbeat(ctx, projectPath)
-		waitStart := time.Now()
-		got, err = fl.TryLockContext(ctx, lockRetryDelay)
-		waited := time.Since(waitStart)
-		stopHeartbeat()
-		stopWaiter()
-		if err != nil {
-			// HOW LONG, not just which. This is the path a lock wait actually
-			// ends on (TryLockContext returns the context's own error), and
-			// "workspace lock: lock api: context deadline exceeded" leaves the
-			// reader unable to tell a wait that timed out after five seconds
-			// from one cancelled immediately. The duration is the difference
-			// between "the holder is slow" and "my deadline was too tight",
-			// which are opposite fixes. %w keeps the sentinel intact.
-			return nil, fmt.Errorf("workspace lock: gave up waiting for %s after %s: %w",
-				projectPath, waited.Round(time.Millisecond), err)
-		}
-		if !got {
-			// TryLockContext only returns (false, nil) when ctx is done.
-			if ctx.Err() != nil {
-				return nil, fmt.Errorf("workspace lock: gave up waiting for %s after %s: %w",
-					projectPath, waited.Round(time.Millisecond), ctx.Err())
-			}
-			return nil, fmt.Errorf("workspace lock: could not lock %s", projectPath)
-		}
-		l.emitResumed(ctx, projectPath)
+		return nil, &lockContendedError{Project: projectPath, Owner: l.describeOwner(projectPath)}
 	}
 	l.recordOwner(ctx, projectPath)
 	return func() { l.removeOwner(projectPath); _ = fl.Unlock() }, nil
@@ -500,138 +438,6 @@ func (l *projectLocker) lockPath(projectPath string) string {
 		return filepath.Join(l.dir, lockFileName)
 	}
 	return filepath.Join(l.dir, filepath.FromSlash(p), lockFileName)
-}
-
-// emitWaiting tells the user, up front, that the run is not hung: another magus
-// process holds the project's lock, this run will start automatically once it frees,
-// and MAGUS_NO_WAIT is the fail-fast escape hatch. It goes to stderr unconditionally
-// (even under -s/--silent): a run that stalls without explanation is the exact UX we
-// are avoiding. The notify hook diverts it for tests and the console.
-func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
-	if l.notify != nil {
-		l.notify(projectPath)
-		return
-	}
-	p := projectPath
-	if p == "" {
-		p = "."
-	}
-	rec := l.readOwner(projectPath)
-	// A structured invocation gets the same fact as a typed event instead of the
-	// prose below: -o jsonl parses this stream, and a caller cannot tell where a
-	// "magus:" line ends and JSON begins.
-	if l.rw != nil {
-		_ = report.Record(l.rw, report.LockWait{
-			Project: p, HolderPID: rec.PID, Command: rec.Command,
-		})
-		return
-	}
-	fmt.Fprintf(l.out, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
-	// What is SAFE while you wait, which is the question a blocked caller actually has and
-	// the one the line above leaves open.
-	//
-	// Measured on one session: ten gate runs in two hours, thirty-eight minutes of wall
-	// clock, and most of the waiting was a caller who had stopped working entirely because
-	// it could not tell which edits would spoil the run. Nothing said. The cost of that
-	// silence is a person or an agent idling for the length of a full gate, repeatedly,
-	// and it is worse than the cost this message was written to explain.
-	//
-	// The rule is narrow enough to state: a run reads the locked project's files, so
-	// editing THOSE makes its verdict describe a tree that no longer exists. Everything
-	// else in the workspace is untouched by it.
-	fmt.Fprintf(l.out, "magus: while it runs, editing files OUTSIDE %s is safe; editing files INSIDE it makes this run's verdict describe a tree that no longer exists.\n", p)
-	// Also as a record, so the sticky terminal region can PIN the wait. The stderr
-	// line above announces the event and then scrolls away; a run that is blocked
-	// needs the state to stay on screen, because the alternative a reader sees is
-	// silence.
-	// Structured, not the rendered line above: that string is this package's own
-	// stderr output, and handing it to another package to display verbatim would put
-	// presentation for a surface magus cannot see inside magus. The region composes
-	// its own from these fields.
-	slog.InfoContext(ctx, "lock.waiting",
-		slog.String("project", p),
-		slog.Int("holder_pid", rec.PID),
-		slog.String("holder_command", rec.Command))
-}
-
-// lockWaitHeartbeat is how often a blocked acquire reprints that it is still waiting.
-// Long enough not to spam a short contention, short enough that a watcher never sits in
-// silence wondering.
-// A var, not a const, so a test can shorten it: the heartbeat only exists to be
-// observed, so it has to be reachable in a test that finishes in milliseconds.
-var lockWaitHeartbeat = 15 * time.Second
-
-// startWaitHeartbeat reprints the wait periodically until the returned stop func is
-// called.
-//
-// One message followed by unbounded silence is indistinguishable from a hang: a human
-// kills the "stuck" command, and an agent behind a pipe concludes magus wedged and
-// reports that it hangs. Both happened repeatedly against healthy runs queued behind
-// `magus run serve`.
-//
-// A periodic line is the liveness evidence a one-shot notice cannot give, and the elapsed
-// counter distinguishes "the holder is working" from "the holder is itself stuck".
-// Suppressed when a notify hook is installed so tests count exactly one signal.
-func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath string) func() {
-	if l.notify != nil {
-		return func() {}
-	}
-	p := projectPath
-	if p == "" {
-		p = "."
-	}
-	done := make(chan struct{})
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		t := time.NewTicker(lockWaitHeartbeat)
-		defer t.Stop()
-		start := time.Now()
-		for {
-			select {
-			case <-done:
-				return
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				elapsed := time.Since(start)
-				if l.rw != nil {
-					rec := l.readOwner(projectPath)
-					_ = report.Record(l.rw, report.LockWait{
-						Project: p, HolderPID: rec.PID, Command: rec.Command,
-						ElapsedMs: elapsed.Milliseconds(),
-					})
-					continue
-				}
-				fmt.Fprintf(l.out,
-					"magus: still waiting for the lock on project %s (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.%s\n",
-					p, elapsed.Round(time.Second), orphanHint(elapsed, l.describeOwner(projectPath)))
-			}
-		}
-	}()
-	// Wait for the goroutine to exit so a caller that returns immediately after cannot
-	// interleave a heartbeat line after the resumed/failed message.
-	return func() { close(done); <-stopped }
-}
-
-// emitResumed closes the loop the waiting message opened: the other process finished
-// and this run now holds the lock and proceeds. Only reached after a wait, so it never
-// prints on the common uncontended path. Suppressed when a notify hook is installed so
-// the hook stays the single waiting signal tests count.
-func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
-	if l.notify != nil {
-		return
-	}
-	p := projectPath
-	if p == "" {
-		p = "."
-	}
-	if l.rw != nil {
-		_ = report.Record(l.rw, report.LockReleased{Project: p})
-		return
-	}
-	fmt.Fprintf(l.out, "magus: lock on project %s released; starting.\n", p)
-	slog.InfoContext(ctx, "lock.acquired", slog.String("project", p))
 }
 
 // lockOwner is the best-effort record of which process holds a project lock,
@@ -750,34 +556,14 @@ func (o processRecord) describe() string {
 	return desc
 }
 
-// LockStaleAfter is how long a lock is held, or a wait runs, before "busy" stops
-// being the likely explanation and "abandoned" starts.
+// LockStaleAfter is how long a lock is held before "busy" stops being the likely
+// explanation and "abandoned" starts.
 //
 // Exported because it is a JUDGMENT the whole product has to agree on. It was
 // previously decided twice (two minutes here and ten in the console tile), which put
 // a CLI warning that a holder "may be abandoned" beside a dashboard row still styled
 // as perfectly healthy. One threshold, one place; the console reads it off the wire.
 const LockStaleAfter = 10 * time.Minute
-
-// orphanHint returns the escalated advice for a wait that has gone on too long, or
-// "" while the wait is still plausibly normal.
-//
-// The 15s heartbeat says "this run is NOT hung", which is correct at 15 seconds and
-// actively misleading at six days. Past the threshold the likeliest explanation is
-// no longer a busy peer but a holder nobody knows is running, and the message says
-// so along with where to look.
-func orphanHint(elapsed time.Duration, owner string) string {
-	if elapsed < LockStaleAfter {
-		return ""
-	}
-	where := "the holder"
-	if owner != "" {
-		where = owner
-	}
-	return fmt.Sprintf(" This has waited %s, which is long enough that %s may be abandoned"+
-		" rather than busy; check it with `magus doctor`, and note a process whose worktree"+
-		" was deleted keeps running and keeps its lock.", elapsed.Round(time.Second), where)
-}
 
 // waiterPath is this process's waiter marker for a project. One file per blocked pid,
 // so several waiters coexist without coordinating.
@@ -891,10 +677,11 @@ func (l *projectLocker) clearStaleYield(projectPath string) {
 	_ = record.Remove(l.yieldPath(projectPath))
 }
 
-// takeBySuperseding asks the holder to stop, waits a bounded time for the lock, and
-// reports whether it got it. A false return means the caller falls back to the ordinary
-// wait, which is exactly today's behavior; the error is non-nil only when the CALLER's
-// context ended, since the bound expiring is a fallback rather than a failure.
+// takeBySuperseding asks the holder to stop, waits a BOUNDED time for the lock, and
+// reports whether it got it. A false return means the caller refuses the acquire as
+// ordinary contention (exit 75), the same as a holder that never qualified for
+// supersession; the error is non-nil only when the CALLER's context ended, since the
+// bound expiring is a fallback rather than a failure.
 func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath string, fl *flock.Flock, holder processRecord) (bool, error) {
 	retract := l.askHolderToYield(ctx, projectPath)
 	waitCtx, cancel := context.WithTimeout(ctx, supersedeYieldBound)
@@ -909,7 +696,7 @@ func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath strin
 		if p == "" {
 			p = "."
 		}
-		fmt.Fprintf(l.out, "magus: the earlier gate on project %s did not stop within %s; waiting for it instead.\n", p, supersedeYieldBound)
+		fmt.Fprintf(l.out, "magus: the earlier gate on project %s did not stop within %s; refusing instead of waiting for it.\n", p, supersedeYieldBound)
 		return false, nil
 	}
 	l.emitSuperseded(ctx, projectPath, holder)

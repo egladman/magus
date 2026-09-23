@@ -152,7 +152,7 @@ history to find the commit that introduced a regression.
 : Misuse: no target named, or --step without an interactive terminal.
 
 **75**
-: Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. Either MAGUS_NO_WAIT found a selected project's workspace lock held by another magus process (the error names the holding pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides).
+: Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus process (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides).
 
 ## Examples
 

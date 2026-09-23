@@ -4,9 +4,10 @@
 // The decision has two inputs, each computed by the caller: whether an
 // identical-or-equivalent gate already passed for this branch (Redundant), and
 // whether the caller asked to skip the check (Forced). A redundant gate is
-// REFUSED with exit 75, the same fast-refusal shape MAGUS_NO_WAIT uses. A gate
-// that is not redundant always runs, silently. The machine pool is probed for
-// the refusal message and decides nothing; see DecideGate.
+// REFUSED with exit 75, the same fast-refusal shape a contended workspace lock
+// or machine budget uses: magus never proceeds by queuing, only by refusing or
+// running. A gate that is not redundant always runs, silently. The machine pool
+// is probed for the refusal message and decides nothing; see DecideGate.
 //
 // "Equivalent" means every path changed since the green gate's commit falls in
 // one of exactly three low-risk classes: generated output (declared output

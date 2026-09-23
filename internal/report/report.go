@@ -207,10 +207,13 @@ type RunSummary struct {
 	DurationMs int64 `json:"duration_ms"`
 }
 
-// LockWait reports a run blocked on another magus process holding a project's
-// lock -- emitted once when the wait starts and again on each heartbeat while it
-// continues, so a structured reader has the same liveness evidence a text run's
-// repeated line gives a human.
+// LockWait reported a run blocked on another magus process holding a project's lock.
+//
+// compat(until: no reader still needs to decode a JSONL stream produced before magus
+// stopped waiting on another magus process): magus never queues behind a peer any more
+// (a held lock or machine budget refuses immediately, exit 75), so no current build of
+// magus emits this event. The type stays so a stream captured by an older magus, or one
+// still mid-flight in a mixed-version fleet, keeps decoding.
 type LockWait struct {
 	Project   string `json:"project"`
 	HolderPID int    `json:"holder_pid,omitempty"`
@@ -218,8 +221,8 @@ type LockWait struct {
 	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
 }
 
-// LockReleased reports that a previously-waited-on project lock freed and this
-// run now proceeds.
+// LockReleased reported that a previously-waited-on project lock freed and the run
+// proceeded. See LockWait: no current magus emits this either.
 type LockReleased struct {
 	Project string `json:"project"`
 }

@@ -28,7 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **MGS3013: a slot pool that cannot free a slot is refused within seconds.** The refusal
   names every holder and what it waits on.
 - **MGS3014: a newer gate supersedes an older one on the same tree.** The earlier `ci` run
-  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs still wait.
+  cancels and exits 75 (`EX_TEMPFAIL`). Sibling worktrees and non-`ci` runs are refused
+  immediately instead, like any other contention.
 - **Tools declare `observe` probes; ops declare external effects.** An observation keys
   only the targets that drive the tool (`obs:`). Ops mark `reads-external` or
   `mutates-external`, and MGS1033 fails a cacheable target composing one with neither an
@@ -101,6 +102,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **magus never waits on another magus process.** A held workspace lock or machine
+  budget now refuses immediately (exit 75), naming the holder, instead of queuing with a
+  heartbeat. `MAGUS_NO_WAIT` is removed: that is the only behavior now. A nested run under
+  its own parent's claim is still excused, and `--watch` retries on the next change.
 - **`-o jsonl` runs emit only structured lines, on stdout and stderr.** The
   projects/charms/cache header, per-stage progress, the run summary and lock-wait
   notices are now typed events (`run.scope`, `run.step`, `run.summary`, `lock.wait`,

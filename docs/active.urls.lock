@@ -434,6 +434,7 @@ reference/codes/magusfile/MGS1041/
 reference/codes/magusfile/MGS1042/
 reference/codes/magusfile/MGS1043/
 reference/codes/magusfile/MGS1044/
+reference/codes/magusfile/MGS1045/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -486,6 +487,7 @@ reference/console/
 reference/diagnostics/
 reference/faq/
 reference/go-sdk/
+reference/guard-spawn/
 reference/logging/
 reference/manpage/
 reference/manpage/magus-affected/
@@ -908,6 +910,7 @@ tags/slots/
 tags/snapshot/
 tags/socket/
 tags/sources/
+tags/spawn/
 tags/spell/
 tags/spells/
 tags/stall/

@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -117,4 +118,38 @@ func TestStream_EmptyBatchSkipped(t *testing.T) {
 	}()
 	require.NoError(t, m.Stream(context.Background(), pr, "build", func(error) { errCalled = true }), "Stream (empty input)")
 	assert.False(t, errCalled, "Stream (empty input): errFn called unexpectedly")
+}
+
+// TestStream_BatchErrorDoesNotStopTheLoop pins the --watch contract: magus never waits
+// on another magus process, so a batch that hits a contended lock or a full machine
+// budget now fails a whole target run (exit 75) instead of blocking. That failure must
+// be reported through errFn and skipped, not treated as fatal to the stream: a later
+// batch (the next change) still gets a turn, and Stream itself still returns nil.
+//
+// A zero Magus has no workspace, so every batch's AffectedFromPaths errors the same way
+// a real contention would surface to errFn; the loop's behavior on that error is what
+// this test pins, not the specific cause.
+func TestStream_BatchErrorDoesNotStopTheLoop(t *testing.T) {
+	t.Parallel()
+	m := &Magus{}
+	var mu sync.Mutex
+	var errs int
+	pr, pw := io.Pipe()
+	go func() {
+		io.WriteString(pw, "a\n\n")
+		// Long enough that the first batch is picked up, fails, and the worker goes
+		// idle again before the second one (the "next change") arrives.
+		time.Sleep(100 * time.Millisecond)
+		io.WriteString(pw, "b\n\n")
+		pw.Close()
+	}()
+	err := m.Stream(context.Background(), pr, "build", func(error) {
+		mu.Lock()
+		errs++
+		mu.Unlock()
+	})
+	require.NoError(t, err, "a batch failure must never become Stream's own return value")
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 2, errs, "both the failing batch and the next change must be attempted")
 }

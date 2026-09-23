@@ -360,104 +360,16 @@ func (f *fakeAdmitter) Drop(_ context.Context, waiter string) {
 	f.budget.Drop(waiter)
 }
 
-func (f *fakeAdmitter) dropCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return len(f.dropped)
-}
-
-func testGate(t *testing.T, b *MachineBudget, noWait bool) (*machineGate, *fakeAdmitter, *[]string) {
+func testGate(t *testing.T, b *MachineBudget) (*machineGate, *fakeAdmitter) {
 	t.Helper()
 	adm := &fakeAdmitter{budget: b}
-	var said []string
-	g := &machineGate{
-		admit: adm, noWait: noWait, log: newLogger("", 0),
-		notify: func(msg string) { said = append(said, msg) },
-	}
-	return g, adm, &said
-}
-
-func TestMachineGateQueuesAndNamesTheHolder(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
-	g, adm, said := testGate(t, b, false)
-
-	first, err := g.acquire(t.Context(), types.MachineClaim{
-		Project: ".", Target: "test", MemoryMB: 9000, Slots: 1, PID: 100, Dir: "/tree/a",
-	})
-	require.NoError(t, err)
-
-	// The second invocation queues, then is admitted the moment the first releases.
-	done := make(chan error, 1)
-	go func() {
-		release, err := g.acquire(t.Context(), types.MachineClaim{
-			Project: "docs", Target: "ci", MemoryMB: 9000, Slots: 1, PID: 200,
-		})
-		if release != nil {
-			release()
-		}
-		done <- err
-	}()
-
-	require.Eventually(t, func() bool {
-		adm.mu.Lock()
-		defer adm.mu.Unlock()
-		return adm.requests > 1
-	}, 5*time.Second, 10*time.Millisecond, "the queued run keeps asking")
-	first()
-
-	require.NoError(t, <-done, "the queued run starts once room frees")
-	require.NotEmpty(t, *said)
-	assert.Contains(t, (*said)[0], "queued for this machine's build budget")
-	assert.Contains(t, (*said)[0], "pid 100 (root) test (8.8 GiB), in /tree/a",
-		"a wait a reader cannot attribute is a wait they can only interrupt")
-	assert.Contains(t, (*said)[len(*said)-1], "machine budget freed")
-}
-
-// TestMachineGateHeartbeatsWhileQueued covers the line whose absence makes a queued run
-// indistinguishable from a hung one. The cadence is a var so this costs milliseconds
-// rather than the real fifteen seconds.
-func TestMachineGateHeartbeatsWhileQueued(t *testing.T) {
-	defer swapMachineWaitTimings(20*time.Millisecond, 30*time.Millisecond)()
-	b, _, _ := testBudget(t, 10_000, 8)
-	g, _, said := testGate(t, b, false)
-
-	held, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithCancel(t.Context())
-	beats := make(chan struct{}, 1)
-	g.notify = func(msg string) {
-		*said = append(*said, msg)
-		if strings.Contains(msg, "still queued") {
-			select {
-			case beats <- struct{}{}:
-			default:
-			}
-		}
-	}
-	go func() {
-		_, _ = g.acquire(ctx, types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
-	}()
-
-	select {
-	case <-beats:
-	case <-time.After(5 * time.Second):
-		t.Fatal("a queued run went silent; without the heartbeat it reads as hung")
-	}
-	cancel()
-	held()
-}
-
-// swapMachineWaitTimings shortens the wait cadence for a test and returns the restore.
-func swapMachineWaitTimings(poll, beat time.Duration) func() {
-	oldPoll, oldBeat := machinePollEvery, machineWaitHeartbeat
-	machinePollEvery, machineWaitHeartbeat = poll, beat
-	return func() { machinePollEvery, machineWaitHeartbeat = oldPoll, oldBeat }
+	g := &machineGate{admit: adm, log: newLogger("", 0)}
+	return g, adm
 }
 
 func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
 	b, _, _ := testBudget(t, 10_000, 8)
-	g, adm, _ := testGate(t, b, true)
+	g, adm := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err)
@@ -465,14 +377,14 @@ func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
 	_, err = g.acquire(t.Context(), types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted), "the code is what maps to exit 75")
-	assert.Contains(t, err.Error(), "MAGUS_NO_WAIT is set")
+	assert.Contains(t, err.Error(), "this machine's build budget is full")
 	assert.Contains(t, err.Error(), "pid 100 (root) test")
-	assert.NotEmpty(t, adm.dropped, "a run that will not wait must not stay in the queue")
+	assert.NotEmpty(t, adm.dropped, "a run that is refused must not stay in the queue")
 }
 
 func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 	b, _, _ := testBudget(t, 4000, 8)
-	g, _, _ := testGate(t, b, false)
+	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{
 		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 64_000, PID: 100,
@@ -489,7 +401,7 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 // and a refusal that does not say so reads as arithmetic magus got wrong.
 func TestMachineRefusalNamesTheFractionAndTheDeclarationCheck(t *testing.T) {
 	b, _, _ := testBudget(t, 4000, 8)
-	g, _, _ := testGate(t, b, false)
+	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{
 		Project: ".", Target: "ci", DeclaredBy: "test", MemoryMB: 26_000, Slots: 1, PID: 100,
@@ -507,7 +419,7 @@ func TestMachineRefusalNamesTheFractionAndTheDeclarationCheck(t *testing.T) {
 // same path, and neither the memory fraction nor a memory check has anything to say about it.
 func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
 	b, _, _ := testBudget(t, 32_000, 8)
-	g, _, _ := testGate(t, b, false)
+	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 1000, Slots: 32, PID: 100,
@@ -520,42 +432,13 @@ func TestMachineRefusalForTooManySlotsStaysAboutSlots(t *testing.T) {
 
 func TestMachineGateAdmitsWhenTheArbiterIsGone(t *testing.T) {
 	b, _, _ := testBudget(t, 10_000, 8)
-	g, adm, said := testGate(t, b, false)
+	g, adm := testGate(t, b)
 	adm.fail = errors.New("dial: connection refused")
 
 	release, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err, "losing the arbiter must not fail a build that was going to run")
 	require.NotNil(t, release)
 	release()
-	assert.Empty(t, *said, "the notice is a log line, not a wait")
-}
-
-func TestMachineGateFinishesWhenTheDaemonDiesMidWait(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
-	g, adm, _ := testGate(t, b, false)
-
-	held, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
-	require.NoError(t, err)
-	defer held()
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := g.acquire(t.Context(), types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
-		done <- err
-	}()
-	require.Eventually(t, func() bool {
-		adm.mu.Lock()
-		defer adm.mu.Unlock()
-		return adm.requests > 1
-	}, 5*time.Second, 10*time.Millisecond)
-
-	before := adm.dropCount()
-	adm.mu.Lock()
-	adm.fail = errors.New("dial: connection refused")
-	adm.mu.Unlock()
-	assert.NoError(t, <-done, "a run that loses its daemon finishes rather than aborting")
-	assert.Greater(t, adm.dropCount(), before,
-		"and it leaves the queue on the way out; the head's whole claim is reserved until it does")
 }
 
 func TestMachineGateIsInertWithoutAnAdmitter(t *testing.T) {
@@ -567,34 +450,22 @@ func TestMachineGateIsInertWithoutAnAdmitter(t *testing.T) {
 
 // TestMachineWaiterIDsAreUniqueAcrossCaches is B2. The daemon holds one Cache per
 // workspace and every one reports the daemon's pid, so a per-Cache counter handed two
-// workspaces the same id and their queue entries overwrote each other.
+// workspaces the same "<pid>.N" id and their Requests could overwrite each other in the
+// registry, even though each is dropped again within the same call.
 func TestMachineWaiterIDsAreUniqueAcrossCaches(t *testing.T) {
-	b, _, _ := testBudget(t, 10_000, 8)
-	adm := &fakeAdmitter{budget: b}
-	newGate := func() *machineGate {
-		return &machineGate{admit: adm, log: newLogger("", 0), notify: func(string) {}}
+	claim := types.MachineClaim{PID: 100}
+	ids := make(map[string]bool)
+	for range 10 {
+		id := machineWaiterID(claim)
+		require.False(t, ids[id], "id %q reused; two workspaces with the same pid would collide", id)
+		ids[id] = true
 	}
-	held, err := newGate().acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
-	require.NoError(t, err)
-	defer held()
-
-	// Two workspaces in ONE process: same pid, different Cache, both queue.
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	for _, project := range []string{"docs", "console"} {
-		go func() {
-			_, _ = newGate().acquire(ctx, types.MachineClaim{
-				Project: project, Target: "ci", MemoryMB: 9000, PID: 100,
-			})
-		}()
-	}
-	require.Eventually(t, func() bool { return len(b.Snapshot().Waiters) == 2 }, 5*time.Second, 10*time.Millisecond,
-		"both workspaces must hold their own place in the queue")
 }
 
 // TestMachineGateRefusesRatherThanQueueWhenBlindToItsAncestry is C7. A nested magus
-// that cannot name its ancestors cannot be excused from its parent's claim, so queueing
-// is queueing behind a step that is blocked waiting for this very process.
+// that cannot name its ancestors cannot be excused from its parent's claim, so admitting
+// it would admit a claim indistinguishable from a stranger's against a budget its own
+// parent already filled.
 func TestMachineGateRefusesRatherThanQueueWhenBlindToItsAncestry(t *testing.T) {
 	// Nested, and the ancestry did not survive: a magusfile that cleared the
 	// environment. Both variables are set explicitly because the fallback reads the
@@ -602,26 +473,26 @@ func TestMachineGateRefusesRatherThanQueueWhenBlindToItsAncestry(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	t.Setenv("MAGUS_INVOCATION_ANCESTORS", "")
 	b, _, _ := testBudget(t, 10_000, 8)
-	g, adm, _ := testGate(t, b, false)
+	g, adm := testGate(t, b)
 
 	held, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err)
 	defer held()
 
-	// Bounded, so a regression that queues fails in a second instead of hanging the
-	// package until the go test timeout, which is how this test first went wrong.
+	// Bounded, so a regression that admits this claim (instead of refusing it) fails in a
+	// second rather than hanging the package until the go test timeout.
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	// No Ancestors on the claim, none on the context, none in the environment.
 	_, err = g.acquire(ctx, types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
-	require.Error(t, err, "queueing here would hang forever while the heartbeat says otherwise")
-	require.NotErrorIs(t, err, context.DeadlineExceeded, "it must REFUSE, not queue until the caller gives up")
+	require.Error(t, err, "this claim cannot be excused from its own parent's, and magus never queues behind it")
+	require.NotErrorIs(t, err, context.DeadlineExceeded, "it must REFUSE immediately, not wait out the ctx")
 	assert.True(t, errors.Is(err, types.MachineBudgetExhausted))
 	assert.Contains(t, err.Error(), "MAGUS_INVOCATION_ANCESTORS")
 	assert.NotEmpty(t, adm.dropped)
 }
 
-func TestMachineGateQueuesNormallyWhenNotNested(t *testing.T) {
+func TestMachineGateNotBlindWhenNotNested(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	assert.False(t, blindToOwnAncestry(t.Context()), "a top-level run has no ancestry to lose")
 }
@@ -681,7 +552,7 @@ func TestLibraryCallerIsExcusedFromItsParentsClaim(t *testing.T) {
 	stamped := types.AppendInvocationAncestor(
 		types.WithInvocationAncestors(context.Background(), []string{"3217:inv-parent"}),
 		os.Getpid(), "inv-self")
-	g, _, _ := testGate(t, b, false)
+	g, _ := testGate(t, b)
 	release, err := g.acquire(stamped, types.MachineClaim{
 		Project: "svc-a", Target: "alpha", MemoryMB: 500, Slots: 1, PID: 4000,
 		Ancestors: ancestorInvocations(stamped),
@@ -715,7 +586,7 @@ func TestDescribeMachineHoldersBoundsTheList(t *testing.T) {
 // the exact split proc.ExitCode exists to close.
 func TestMachineRefusalStatesItsExitCode(t *testing.T) {
 	b, _, _ := testBudget(t, 10_000, 8)
-	g, _, _ := testGate(t, b, true)
+	g, _ := testGate(t, b)
 
 	_, err := g.acquire(t.Context(), types.MachineClaim{Project: ".", Target: "test", MemoryMB: 9000, PID: 100})
 	require.NoError(t, err)

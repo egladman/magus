@@ -10,7 +10,6 @@ tags:
     scheduler,
     daemon,
     needs,
-    MAGUS_NO_WAIT,
     machine budget,
     admission,
     memory_mb,
@@ -60,13 +59,13 @@ separate process. Only a lock does.
 
 So before a non-dry run begins mutating, magus takes a **per-project advisory lock**
 for every project the run will touch, holds it for the whole invocation, and releases
-it at the end. A second `magus` that wants the same project waits for the first to
-finish, then proceeds automatically.
+it at the end. **magus never waits on another magus process**: a second `magus` that
+wants the same project is refused immediately rather than queued behind the first.
 
 Key properties:
 
 - **Per project, not per workspace.** Runs on _different_ projects proceed in
-  parallel; only runs on the _same_ project serialize. The lock is not directory- or
+  parallel; only runs on the _same_ project contend. The lock is not directory- or
   target-scoped - a project's outputs and cache are the unit being protected, and
   that is exactly a project.
 - **Advisory.** It serializes _magus_ processes and nothing else. A raw `git clean`,
@@ -76,54 +75,28 @@ Key properties:
   holding process exits or crashes - never a stale PID file that would wedge a project
   after a `Ctrl-C`.
 - **Taken by every real run**, not just `generate`/`clean`. Even `magus test` writes
-  the project's cache and run log, so two concurrent runs on one project are
-  serialized regardless of whether either touches the source tree.
+  the project's cache and run log, so two concurrent runs on one project contend
+  regardless of whether either touches the source tree.
 
-### When a run is waiting
+### When a run is contended
 
-If another magus holds the lock, your run does not fail and does not hang silently -
-it prints one line up front and starts the moment the other finishes:
-
-```text
-magus: project web is being changed by another magus process; waiting for it to
-finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail
-fast instead.
-magus: lock on project web released; starting.
-```
-
-On a terminal the wait is also pinned as a notification, so it stays visible
-instead of scrolling away behind the run it is queued behind:
-
-![A magus run queued on the workspace lock, with a yellow notification naming the process that holds it and the two ways out](../../assets/gen/terminal-lock-waiting.svg)
-
-It is a condition rather than an event - true until the lock clears - so it is
-pinned rather than given a countdown, and it is retracted once the lock is
-acquired. See [Terminal](terminal.md).
-
-Set `MAGUS_NO_WAIT=1` to make a contended run **fail fast** instead of blocking -
-useful in CI or a script that would rather error than queue behind another process.
-It names the holder the same way the wait message does, and exits **75**
-(`EX_TEMPFAIL`) rather than 1:
+If another magus holds the lock, your run fails fast rather than blocking or hanging
+silently. It names the holder and exits **75** (`EX_TEMPFAIL`) rather than 1:
 
 ```text
 magus: project web is locked by another magus process (pid 4821 (magus run ci .),
-running 12s, in /Users/me/src/acme); not waiting (MAGUS_NO_WAIT set)
+running 12s, in /Users/me/src/acme); not waiting
 ```
 
 75 is the transient-failure convention, so a caller can branch on "the machine is
 busy, retry later" without treating a genuinely broken build the same way. Nothing
 ran, and the same invocation succeeds once the holder finishes.
 
-The wait happens at the very start of the invocation, before the concurrency pool is
-even set up, so a blocked run does not yet appear in `magus status` (there is nothing
-running to report - it is queued behind the lock). The stderr line above is how you
-know why.
+### When the contender is a newer gate
 
-### When the waiter is a newer gate
-
-One contention does not wait. A **gate** is the whole `ci` target, run through
+One contention is not fail-fast. A **gate** is the whole `ci` target, run through
 `magus affected ci` or `magus run ci`. A gate that contends for a lock held by an
-**earlier gate on the same workspace root** does not queue behind it: it asks the earlier
+**earlier gate on the same workspace root** does not refuse: it asks the earlier
 run to stop, which it does
 with [MGS3014](../reference/codes/sandbox/MGS3014.md), and takes the lock, usually within
 a second:
@@ -137,10 +110,10 @@ since changed.
 The older run's verdict is about files that have already changed, so the machine spends
 its time on the newer one instead. The ordering comes from the tree and never from the
 caller: one resolved root, both invocations the whole `ci` target, later start wins.
-There is no priority to set. A sibling worktree is a different tree and still waits, a
-`run build` behind a `run test` still waits, and a lock held by one of the run's own
+There is no priority to set. A sibling worktree is a different tree and still refuses, a
+`run build` behind a `run test` still refuses, and a lock held by one of the run's own
 ancestors is still refused as [MGS3007](../reference/codes/sandbox/MGS3007.md). A holder
-that does not answer within thirty seconds is waited on exactly as above.
+that does not answer within thirty seconds is refused exactly like any other contention.
 
 ## Across the whole machine: the budget
 
@@ -164,11 +137,11 @@ Key properties:
   ([`memory_mb`](targets.md)), so the same command on the same machine reaches the
   same verdict whatever else is running. Observed pressure warns separately and
   never blocks.
-- **It queues.** A step that does not fit waits, and starts the moment room frees.
-  The wait names who holds the budget - pid, project, target, and directory - and
-  repeats on a heartbeat, so it never reads as a hang. `MAGUS_NO_WAIT=1` fails fast
-  instead, exiting **75** ([MGS3009](../reference/codes/sandbox/MGS3009.md)) - the same
-  transient-failure code a contended lock uses above, and for the same reason.
+- **It never queues.** A step that does not fit is refused immediately, exiting
+  **75** ([MGS3009](../reference/codes/sandbox/MGS3009.md)) - the same transient-failure
+  code a contended lock uses above, and for the same reason: magus never waits on
+  another magus process. The refusal names who holds the budget - pid, project,
+  target, and directory - so a caller can go see why and retry once it frees.
 - **It fails open.** A daemon that will not start, or that dies mid-run, leaves the
   run unarbitrated and finishing, having said once that it is. Claims are retired by
   process liveness, so nothing has to release cleanly.
@@ -178,8 +151,8 @@ Key properties:
   nothing held a claim and no client asked it for anything; one you started with
   `magus server start` stays up until you stop it.
 
-`magus status` shows the whole budget: what is held, what is queued, and by whom,
-across every worktree on the machine.
+`magus status` shows the whole budget: what is held, and by whom, across every
+worktree on the machine.
 
 ## Relationship to the daemon
 
@@ -203,4 +176,4 @@ three compose - ordering inside a run, exclusion per project, capacity per machi
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
 - [Daemon](../guides/integrations/daemon.md): the persistent process that owns the machine budget.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.
-- [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, when it queues and when it refuses.
+- [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, and the two ways it refuses.

@@ -1399,7 +1399,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// against a SEPARATE concurrent magus process; the intra-process scheduler fans
 	// out beneath it untouched. Acquired here (after the dry-run early return) so a
 	// dry run, which mutates nothing, takes no lock.
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.Report)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate)
 	if err != nil {
 		return err
 	}

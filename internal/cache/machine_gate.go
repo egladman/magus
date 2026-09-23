@@ -24,24 +24,13 @@ type MachineAdmitter interface {
 	Drop(ctx context.Context, waiter string)
 }
 
-// Vars, not consts, for the reason lock.go states about its own wait timings: a test
-// that has to spend the real cadence either sleeps for it or does not cover it, and a
-// wait whose reporting is untested is a wait that goes silent without anyone noticing.
-var (
-	// machinePollEvery is how often a queued step re-asks. The budget never blocks, so
-	// the wait is the client's, which is the process that can print it and the one whose
-	// death should retire the waiter.
-	machinePollEvery = 200 * time.Millisecond
-
-	// machineWaitHeartbeat matches the project lock's cadence: a queued run must keep
-	// saying it is queued, or it reads as hung.
-	machineWaitHeartbeat = 15 * time.Second
-
-	// machineReleaseTimeout bounds handing a claim back. The release runs in the defer
-	// that still holds this step's local limiter slot, so it must never outlast a sick
-	// daemon.
-	machineReleaseTimeout = 5 * time.Second
-)
+// machineReleaseTimeout bounds handing a claim back. The release runs in the defer
+// that still holds this step's local limiter slot, so it must never outlast a sick
+// daemon.
+//
+// A var, not a const, for the same reason as elsewhere in this package: a timing a test
+// cannot shorten is a timing that either costs real wall-clock or goes uncovered.
+var machineReleaseTimeout = 5 * time.Second
 
 // machineWaiterSeq numbers waiters within this PROCESS, not within a Cache.
 //
@@ -67,28 +56,23 @@ const ExitCodeMachineBusy = 75
 // are configuration answers rather than timing ones.
 const ExitCodeMachineDeclaration = 78
 
-// machineGate is the client half of admission: it polls the budget, reports the wait,
-// and hands back the release.
+// machineGate is the client half of admission: it asks the budget once and either
+// proceeds or refuses; it never queues behind another magus process.
 type machineGate struct {
-	admit  MachineAdmitter
-	noWait bool
-	log    *slog.Logger
-	lost   sync.Once
-	// queued is set once any step in this run waited on the budget.
-	queued atomic.Bool
-	// notify replaces the stderr writes when set, so a test observes the wait without
-	// a terminal.
-	notify func(string)
+	admit MachineAdmitter
+	log   *slog.Logger
+	lost  sync.Once
 }
 
 // acquire claims the machine budget for one step and returns the function that frees
 // it, or an MGS3009 error naming who holds it.
 //
 // A step declaring nothing still takes a slot: concurrency is the half every step
-// spends. Bounded by ctx; a wait ends when the caller gives up.
+// spends. magus never waits on another magus process, so a step that does not fit right
+// now is refused immediately (exit 75) rather than queued.
 //
-// Fails OPEN. A daemon that dies mid-wait, or a transport that breaks, admits the step
-// and says so once: losing the arbiter must not stop a build that was going to run.
+// Fails OPEN. A daemon that dies, or a transport that breaks, admits the step and says
+// so once: losing the arbiter must not stop a build that was going to run.
 func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func(), error) {
 	if g == nil || g.admit == nil {
 		return func() {}, nil
@@ -103,24 +87,17 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 		return g.releaser(v.ID), nil
 	case !v.Fits:
 		return nil, machineDoesNotFitError(c, v)
-	case g.noWait:
-		g.admit.Drop(ctx, waiter)
-		return nil, machineBusyError(c, v)
 	case blindToOwnAncestry(ctx):
 		// A nested magus that cannot name its ancestors cannot be excused from its own
 		// parent's claim, so queueing here is queueing behind a step that is blocked in
-		// exec waiting for THIS process: a deadlock the heartbeat would report as "not
-		// hung" forever. Refusing turns it into an answer a caller can act on.
+		// exec waiting for THIS process: a permanent deadlock. Refusing turns it into an
+		// answer a caller can act on.
 		g.admit.Drop(ctx, waiter)
 		return nil, machineBlindError(c, v)
+	default:
+		g.admit.Drop(ctx, waiter)
+		return nil, machineBusyError(c, v)
 	}
-	return g.wait(ctx, waiter, c, v)
-}
-
-// MachineQueued reports whether any step of this Cache has waited on the machine budget.
-// False when no budget is wired.
-func (c *Cache) MachineQueued() bool {
-	return c.machine != nil && c.machine.queued.Load()
 }
 
 // blindToOwnAncestry reports a run that is inside a magus process tree and cannot say
@@ -133,54 +110,6 @@ func (c *Cache) MachineQueued() bool {
 // its own parent's claim.
 func blindToOwnAncestry(ctx context.Context) bool {
 	return runPkg.CurrentLevel() > 0 && len(ancestorInvocations(ctx)) == 0
-}
-
-// wait polls until the budget admits the step. The notice names the holders up front
-// and repeats on a heartbeat, because a queued run with nothing on screen is
-// indistinguishable from a hung one.
-func (g *machineGate) wait(ctx context.Context, waiter string, c types.MachineClaim, first types.MachineVerdict) (func(), error) {
-	g.queued.Store(true)
-	g.say(machineWaitingMessage(c, first))
-	started := time.Now()
-	poll := time.NewTicker(machinePollEvery)
-	defer poll.Stop()
-	beat := time.NewTicker(machineWaitHeartbeat)
-	defer beat.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			g.admit.Drop(context.WithoutCancel(ctx), waiter)
-			return nil, ctx.Err()
-		case <-beat.C:
-			// The message says this run is not hung; the heartbeat says the same thing to
-			// the stall watchdog, which would otherwise abort a run that is queued behind
-			// a busy machine exactly as if it had wedged.
-			ProgressFromContext(ctx).Beat()
-			g.say(fmt.Sprintf("magus: still queued for the machine budget (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.\n",
-				time.Since(started).Round(time.Second)))
-		case <-poll.C:
-			v, err := g.admit.Request(ctx, waiter, c)
-			if err != nil {
-				// Leaving the queue on the way out matters most HERE: this waiter may be
-				// the head, and the head's whole claim is reserved against every peer
-				// until it is retired. A best-effort drop on a broken transport usually
-				// fails, but when the daemon is merely slow rather than gone it saves
-				// every other run on the machine a stale reservation.
-				g.admit.Drop(context.WithoutCancel(ctx), waiter)
-				return g.admitOpen(ctx, err), nil
-			}
-			switch {
-			case v.Granted:
-				g.say(fmt.Sprintf("magus: machine budget freed after %s; starting %s %s.\n",
-					time.Since(started).Round(time.Second), displayProject(c.Project), c.Target))
-				return g.releaser(v.ID), nil
-			case !v.Fits:
-				// A peer grew its claim while this one queued, and the budget can no
-				// longer seat this step at all. No position in the queue fixes that.
-				return nil, machineDoesNotFitError(c, v)
-			}
-		}
-	}
 }
 
 // releaser hands the claim back on a fresh, BOUNDED context. Fresh because the step's
@@ -264,35 +193,17 @@ func workingDir() string {
 	return dir
 }
 
-func (g *machineGate) say(msg string) {
-	if g.notify != nil {
-		g.notify(msg)
-		return
-	}
-	fmt.Fprint(os.Stderr, msg)
-}
-
-// machineWaitingMessage is the one-shot notice a queued run prints. It names the
-// holders because a wait a reader cannot attribute is a wait they can only interrupt.
-func machineWaitingMessage(c types.MachineClaim, v types.MachineVerdict) string {
-	ahead := ""
-	if v.Ahead > 0 {
-		ahead = fmt.Sprintf(", %d ahead of it", v.Ahead)
-	}
-	return fmt.Sprintf("magus: %s %s is queued for this machine's build budget%s; %s. This run starts automatically once room frees; set MAGUS_NO_WAIT=1 to fail fast instead.\n",
-		displayProject(c.Project), c.Target, ahead, describeMachineHolders(v.Holders))
-}
-
 // The exit status is per refusal (types.ExitError, and see proc.ExitCode for the daemon
 // side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
 // that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
 // would loop on them.
 
-// machineBusyError is the fail-fast answer: the machine is full right now, the same
-// command will succeed later, and the caller asked not to queue.
+// machineBusyError is the fail-fast answer: the machine is full right now, and the same
+// command will succeed later. magus never queues behind another magus process, so this
+// is the only answer a full budget ever gets.
 func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
 	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
-		"not starting %s %s: this machine's build budget is full and MAGUS_NO_WAIT is set; %s, and %s. %s",
+		"not starting %s %s: this machine's build budget is full; %s, and %s. %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
 }
@@ -379,8 +290,8 @@ func describeMachineRemaining(v types.MachineVerdict) string {
 	return strings.Join(parts, " and ")
 }
 
-// describeMachineHolders names who is holding the budget, so a wait or a refusal is a
-// fact the reader can act on rather than a number.
+// describeMachineHolders names who is holding the budget, so a refusal is a fact the
+// reader can act on rather than a number.
 func describeMachineHolders(holders []types.MachineClaimant) string {
 	if len(holders) == 0 {
 		return "nothing else holds a claim"
