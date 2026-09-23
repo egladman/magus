@@ -10,8 +10,8 @@ import (
 )
 
 // ErrNoWorkspace is returned by Insight when the service was built without a *magus.Magus
-// (the graph/scan seams are unset too). The daemon always supplies one, so this only fires
-// on a misconfigured or test service; handlers map it to a 503 rather than a 500.
+// (the graph/scan seams are unset too). A loaded daemon always supplies one, and an
+// unloaded one refuses /api/ before any handler runs, so this fires only on a test service.
 var ErrNoWorkspace = errors.New("console: no workspace available")
 
 // insightCommits caps how many recent commits the insight scan reads, matching the

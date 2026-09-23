@@ -1,6 +1,7 @@
 package console
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -119,6 +120,7 @@ func TestStaticHandlerServesOnlyTheShell(t *testing.T) {
 		".env":                          "SECRET=1",
 		"nested/.hidden/leak.js":        "js",
 		"listing/only-a-data-file.json": "{}",
+		"help/index.html":               "<html></html>",
 	} {
 		p := filepath.Join(dir, filepath.FromSlash(name))
 		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
@@ -130,6 +132,8 @@ func TestStaticHandlerServesOnlyTheShell(t *testing.T) {
 		"/console/", "/console/console.css", "/console/sw.js", "/console/manifest.webmanifest",
 		"/console/assets/icon.svg", "/console/assets/icon-192.png",
 		"/console/graph/explorer.js", "/console/graph/scaffold.html", "/console/graph/",
+		// Not a surface route: a directory holding an index.html serves that page.
+		"/console/help/",
 	} {
 		assert.Equal(t, http.StatusOK, get(t, h, p).Code, "shell file %s", p)
 	}
@@ -145,9 +149,25 @@ func TestStaticHandlerServesOnlyTheShell(t *testing.T) {
 		"/console/assets/",
 		"/console/listing/",
 		"/console/assets",
+		"/console/missing.js",
 	} {
 		w := get(t, h, p)
 		assert.Equal(t, http.StatusNotFound, w.Code, "%s must be refused", p)
 		assert.NotContains(t, w.Body.String(), "note", p)
+		assert.Contains(t, w.Body.String(), `"reason":"MGS9010"`, "%s answers the one structured refusal", p)
 	}
+}
+
+// The filesystem layer itself refuses a directory with no index.html, so no FileServer path
+// can list one.
+func TestShellDirRefusesADirectoryWithoutAnIndex(t *testing.T) {
+	dir := consoleDir(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "listing"), 0o755))
+	root := shellDir{http.Dir(dir)}
+
+	_, err := root.Open("/listing")
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	f, err := root.Open("/")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
 }

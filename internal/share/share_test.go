@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -463,7 +463,7 @@ func waitClosed(t *testing.T, url string) {
 // a test can present arbitrary remote hosts (impossible over a single loopback IP)
 // and thereby exercise the device-binding reject path end to end.
 func serveGuarded(g *sessionGuard, remoteAddr string) (int, string) {
-	h := g.admit(httpx.FormatJSON, okHandler)
+	h := g.admit(rpcerr.FormatJSON, okHandler)
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/status", nil)
 	r.RemoteAddr = remoteAddr
 	w := httptest.NewRecorder()

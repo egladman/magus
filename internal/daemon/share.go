@@ -1,16 +1,19 @@
 package daemon
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
+	"github.com/egladman/magus/types"
 )
 
 // shareResponse is the JSON the share endpoint returns to the console: the link
@@ -30,11 +33,6 @@ type shareRequest struct {
 	TTLSeconds int `json:"ttl_seconds"`
 }
 
-// shareError is the JSON error body the console toasts on a failed share.
-type shareError struct {
-	Error string `json:"error"`
-}
-
 // newShareHandler returns the POST /api/v1/share handler. It is mounted on the
 // loopback listener behind RequireLoopbackPeer + the cli/connector bearer guard,
 // so only the local, already-authenticated console can trigger a share. Each POST
@@ -45,13 +43,15 @@ type shareError struct {
 func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded map[string]share.Route, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", http.MethodPost)
-			writeShareError(r.Context(), w, http.StatusMethodNotAllowed, "share requires POST", log)
+			handler.RefuseMethod(w, r, http.MethodPost)
 			return
 		}
 		if consoleDir == "" {
-			writeShareError(r.Context(), w, http.StatusServiceUnavailable,
-				"the built console was not found, so there is nothing to share; build it with `magus run build console` and try again", log)
+			refuseShare(w, r, rpcerr.Error{
+				Code:    connect.CodeFailedPrecondition,
+				Reason:  types.ConsoleNotBuilt,
+				Message: "the built console was not found, so there is nothing to share; build it with `magus run build console` and try again",
+			}, log)
 			return
 		}
 		// The body is optional: an absent or malformed body means "use the default
@@ -65,7 +65,11 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			// A missing LAN interface (the common case) is a client-actionable
 			// condition, not a server fault: report it as 503 with the guidance
 			// share.SelectLANIPv4 already put in the message.
-			writeShareError(r.Context(), w, http.StatusServiceUnavailable, err.Error(), log)
+			refuseShare(w, r, rpcerr.Error{
+				Code:    connect.CodeUnavailable,
+				Reason:  types.ShareUnavailable,
+				Message: err.Error(),
+			}, log)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -80,13 +84,11 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 	})
 }
 
-// writeShareError writes a JSON {error} body with the given status and logs it.
-func writeShareError(ctx context.Context, w http.ResponseWriter, status int, msg string, log *slog.Logger) {
-	log.WarnContext(ctx, "[SHARE] share request failed", slog.Int("status", status), slog.String("error", msg))
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(shareError{Error: msg})
+// refuseShare logs a failed share and answers it in the AIP-193 shape the endpoint's guards
+// already answer in, so the console reads one error shape from this route.
+func refuseShare(w http.ResponseWriter, r *http.Request, e rpcerr.Error, log *slog.Logger) {
+	log.WarnContext(r.Context(), "[SHARE] share request failed", slog.String("reason", string(e.Reason)), slog.String("error", e.Message))
+	rpcerr.FormatJSON.Write(w, r, e)
 }
 
 // resolveConsoleDir locates the built console the LAN share serves. It honors an

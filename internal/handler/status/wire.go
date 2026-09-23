@@ -3,6 +3,7 @@
 package status
 
 import (
+	"context"
 	"encoding/base64"
 	"slices"
 
@@ -17,7 +18,7 @@ import (
 // onto the magus.status.v1alpha1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
 // intentionally not on this dashboard contract: it is `magus status`/config.
-func statusSnapshotToProto(r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
+func statusSnapshotToProto(ctx context.Context, r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
 	s := &statusv1.Status{
 		Health: deriveHealth(r),
 		Build: &statusv1.BuildInfo{
@@ -28,7 +29,7 @@ func statusSnapshotToProto(r types.StatusSnapshot, build types.BuildInfo) *statu
 		},
 	}
 	if r.Pool != nil {
-		s.Pool = poolToProto(r.Pool)
+		s.Pool = poolToProto(ctx, r.Pool)
 		// Pool-wide cache activity is the sum of the warm workspaces' counters, with the
 		// configured cap from the static report: the headline hit/miss tiles plus the
 		// client-side trend.
@@ -134,21 +135,26 @@ func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
 // EncodeStatusEvent marshals a status snapshot to base64(protobuf) for a StreamStatus
 // SSE `data:` line, the live-dashboard delivery. The JS client base64-decodes then
 // Status.fromBinary.
-func EncodeStatusEvent(r types.StatusSnapshot, build types.BuildInfo) (string, error) {
-	raw, err := proto.Marshal(statusSnapshotToProto(r, build))
+func EncodeStatusEvent(ctx context.Context, r types.StatusSnapshot, build types.BuildInfo) (string, error) {
+	raw, err := proto.Marshal(statusSnapshotToProto(ctx, r, build))
 	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(raw), nil
 }
 
+// deriveHealth agrees with the readiness probe's workspaces component: a pool where every
+// workspace that tried to load failed is down, not degraded, since nothing it holds serves.
 func deriveHealth(r types.StatusSnapshot) statusv1.Health {
-	switch {
-	case r.Pool == nil:
+	if r.Pool == nil {
 		return statusv1.Health_HEALTH_DOWN
-	case r.PoolError != "":
-		return statusv1.Health_HEALTH_DEGRADED
-	case slices.ContainsFunc(r.Pool.Workspaces, func(w types.StatusWorkspace) bool { return w.State == types.WorkspaceFailed }):
+	}
+	failed := slices.ContainsFunc(r.Pool.Workspaces, func(w types.StatusWorkspace) bool { return w.State == types.WorkspaceFailed })
+	loaded := slices.ContainsFunc(r.Pool.Workspaces, types.StatusWorkspace.Loaded)
+	switch {
+	case failed && !loaded:
+		return statusv1.Health_HEALTH_DOWN
+	case r.PoolError != "", failed:
 		return statusv1.Health_HEALTH_DEGRADED
 	default:
 		return statusv1.Health_HEALTH_HEALTHY
@@ -173,7 +179,7 @@ func workspaceStateToProto(s types.WorkspaceState) statusv1.Workspace_State {
 	}
 }
 
-func poolToProto(p *types.StatusOutput) *statusv1.Pool {
+func poolToProto(ctx context.Context, p *types.StatusOutput) *statusv1.Pool {
 	out := &statusv1.Pool{
 		ParentPid:     int32(p.ParentPID),
 		DaemonVersion: p.DaemonVersion,
@@ -196,7 +202,7 @@ func poolToProto(p *types.StatusOutput) *statusv1.Pool {
 			State:          workspaceStateToProto(w.State),
 		}
 		if w.State == types.WorkspaceFailed {
-			ws.Error = rpcerr.WorkspaceFailed(w.Root, w.Error).Status()
+			ws.Error = rpcerr.WorkspaceFailed(w.Root, w.Error).Status(ctx)
 		}
 		if w.CacheHit != 0 || w.CacheMiss != 0 || w.CacheError != 0 || w.CacheBytes != 0 {
 			ws.Cache = &statusv1.Cache{

@@ -2,7 +2,6 @@ package plan
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler"
-	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -122,10 +120,6 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	graph, err := h.src.TargetGraph(r.Context())
 	if err != nil {
-		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
-			return
-		}
 		http.Error(w, "plan error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

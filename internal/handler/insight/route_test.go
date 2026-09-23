@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,15 +47,6 @@ func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 	}
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("want no-store, got %q", got)
-	}
-}
-
-func TestInsightHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewHandler(fakeInsightSource{insightErr: console.ErrNoWorkspace}, nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("want 503, got %d", w.Code)
 	}
 }
 

@@ -115,9 +115,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
   `StatusService` reports `Workspace.state` and a `google.rpc.Status` error. A failed
   workspace reloads when a `.buzz` file or `magus.yaml` changes.
-- **The daemon refuses a request as `google.rpc.Status` JSON in the route's protocol.**
-  A Connect service answers Connect's envelope; every other route, `/mcp` included, answers
-  AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
+- **The daemon's guards refuse a request as `google.rpc.Status` JSON in the route's protocol.**
+  On a Connect service the refusal is Connect's envelope; on every other route, `/mcp`
+  included, AIP-193's `{"error":{"code","message","status","details"}}`. Both carry the MGS code as a
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
@@ -212,6 +212,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A magusfile syntax error no longer switches off the approved spawn rule.** The guard
+  still runs the committed `magus\guard.spawn` rule, reports the load failure, and records
+  rule failures and continuations on the trail. A workspace advise joins a built-in one,
+  the idle clock follows the agent's id, and the bootstrap build is exempt only in cwd.
+- **Share and wrong-method failures answer in the refusal shape.** `/api/v1/share` and a
+  wrong method on any `/api/` route send AIP-193 JSON (MGS9012-MGS9014); the console shows
+  its message and Help link. Health reports down when every workspace failed, and the
+  Windows sign-in line is PowerShell's `Start-Process`.
 - **Console failures are always shown.** Every failed daemon call, stream or undecodable
   frame raises a notification, and the console lint rejects a swallowed catch. A page with
   no token shows one sign-in state with the command that opens it signed in, and a 401

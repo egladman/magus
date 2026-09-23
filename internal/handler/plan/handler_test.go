@@ -11,7 +11,6 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -342,15 +341,6 @@ func TestPlanHandler_EmptyPlanIsNeverNull(t *testing.T) {
 	}
 	if out.Target != planDefaultTarget {
 		t.Errorf("want the default anchor, got %q", out.Target)
-	}
-}
-
-func TestPlanHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewHandler(fakePlanSource{graphErr: console.ErrNoWorkspace}, fakePlanOutputs{}, "", nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/plan", nil))
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("want 503, got %d", w.Code)
 	}
 }
 

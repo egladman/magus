@@ -61,12 +61,7 @@ func NewEventsHandler(src statusSource, build types.BuildInfo, metrics func(ctx 
 }
 
 func (h *EventsHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !handler.AllowGet(w, r) {
 		return
 	}
 
@@ -96,7 +91,7 @@ func (h *EventsHandler) serve(w http.ResponseWriter, r *http.Request) {
 	// a version to stamp; metrics on the snapshot fn. A bare handler stays heartbeat/graph-only.
 	var lastStatus string
 	pushStatus := func() {
-		enc, err := EncodeStatusEvent(h.src.StatusSnapshot(r.Context()), h.build)
+		enc, err := EncodeStatusEvent(r.Context(), h.src.StatusSnapshot(r.Context()), h.build)
 		if err != nil || enc == lastStatus {
 			return
 		}

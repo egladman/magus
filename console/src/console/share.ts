@@ -21,7 +21,15 @@
 // mounts the panel, and the daemon would reject the share trigger anyway (it is
 // loopback + bearer guarded).
 
-import { resolveDaemonHost, authHeaders, getLiveToken } from "../lib/daemon";
+import {
+  resolveDaemonHost,
+  authHeaders,
+  getLiveToken,
+  parseRefusal,
+  reportHttpStatus,
+  type Refusal,
+} from "../lib/daemon";
+import { reportFailure } from "../lib/notifications";
 import { showToast } from "../lib/refresh-toast";
 import { encodeToCanvas } from "../lib/qr";
 
@@ -287,14 +295,23 @@ export function mountSharePanel(): SharePanel {
     }
     if (!res.ok) {
       trigger.disabled = false;
-      let msg = "Share failed (HTTP " + res.status + ").";
-      try {
-        const errBody = await res.json();
-        if (errBody && typeof errBody.error === "string") msg = errBody.error;
-      } catch {
-        // reported: a non-JSON error body keeps the generic message the toast below shows
+      if (res.status === 401) {
+        reportHttpStatus(host, "the share", res.status);
+        return;
       }
-      showToast("Share", msg, "error");
+      let refusal: Refusal | null = null;
+      try {
+        refusal = parseRefusal(await res.json());
+      } catch {
+        // reported: a non-JSON error body keeps the generic message reported below
+      }
+      // Keyed per attempt: a retried share that fails again is a new failure, not a repeat poll.
+      reportFailure(
+        "Share",
+        refusal?.message ?? "Share failed (HTTP " + res.status + ").",
+        "share:" + Date.now(),
+        refusal?.help,
+      );
       return;
     }
 

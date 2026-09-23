@@ -105,13 +105,12 @@ func (o Options) httpAddr() netip.AddrPort {
 // Duplicated here to avoid importing cmd/magus; keep in sync.
 const defaultExploreURL = "https://eli.gladman.cc/magus/console/graph/"
 
-// SiteOrigin returns the scheme://host origin of the hosted Graph Explorer.
-// Used by internal/daemon to set the bridge's CORS allowed origin.
-func (o Options) SiteOrigin() (string, error) {
+// SiteOrigin returns the scheme://host origin of the hosted Graph Explorer, "" when the
+// default URL names none. Used by internal/daemon to set the bridge's CORS allowed origin.
+func (o Options) SiteOrigin() string {
 	u, err := url.Parse(defaultExploreURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		//nolint:nilerr // a malformed or schemeless default URL means no origin to allow, not a hard error
-		return "", nil
+		return ""
 	}
-	return u.Scheme + "://" + u.Host, nil
+	return u.Scheme + "://" + u.Host
 }

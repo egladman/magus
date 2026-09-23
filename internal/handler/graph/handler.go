@@ -48,12 +48,7 @@ func NewGraphHandler(src graphSource, log *slog.Logger) *GraphHandler {
 }
 
 func (h *GraphHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !handler.AllowGet(w, r) {
 		return
 	}
 

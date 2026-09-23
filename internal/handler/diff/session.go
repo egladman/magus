@@ -23,7 +23,6 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/review"
-	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -83,10 +82,6 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := h.src.Diff(r.Context(), paths)
 	if err != nil {
-		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
-			return
-		}
 		http.Error(w, "review error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -184,10 +179,6 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	patch, err := h.src.WorkingDiff(r.Context(), nil)
 	if err != nil {
-		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
-			return
-		}
 		http.Error(w, "context snapshot error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -208,7 +199,7 @@ func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	root, err := filepath.EvalSymlinks(h.root)
 	if err != nil {
-		http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	target, err := filepath.EvalSymlinks(filepath.Join(root, path))
@@ -287,10 +278,6 @@ func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	patch, err := h.src.WorkingDiff(r.Context(), scopePaths(r))
 	if err != nil {
-		if errors.Is(err, console.ErrNoWorkspace) {
-			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
-			return
-		}
 		http.Error(w, "diff error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -522,7 +509,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		handler.RefuseMethod(w, r, http.MethodGet, http.MethodPost)
 		return
 	}
 	handler.LimitRequestBody(w, r)
@@ -730,12 +717,7 @@ func remoteHost(remote string) string {
 }
 
 func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	at := h.lookup(r.Context())
@@ -852,12 +834,7 @@ type diffBranchesResponse struct {
 }
 
 func (h *BranchesHandler) serve(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if !handler.AllowGet(w, r) {
 		return
 	}
 	out := diffBranchesResponse{Branches: []types.BranchChange{}}

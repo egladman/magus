@@ -14,7 +14,6 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -95,15 +94,6 @@ func TestDiffHandler_EmptyPathParamDoesNotWidenScope(t *testing.T) {
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch?path=&path=+&path=real.go", nil))
 	if len(src.gotPaths) != 1 || src.gotPaths[0] != "real.go" {
 		t.Errorf("want only [real.go], got %q", src.gotPaths)
-	}
-}
-
-func TestDiffHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewPatchHandler(&fakePatchSource{err: console.ErrNoWorkspace}, nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("want 503, got %d", w.Code)
 	}
 }
 
