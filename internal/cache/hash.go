@@ -582,48 +582,52 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 		}
 	}
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, werr error) error {
-		if werr != nil {
-			return werr
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if path != root && isIgnoreDir(name, spellDirs) {
-				return fs.SkipDir
+	// Only a pattern can match during the walk, and an install's exact manifest and lock
+	// paths walked the whole workspace to add nothing.
+	if len(pats) > 0 {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, werr error) error {
+			if werr != nil {
+				return werr
 			}
-			if len(prunePrefixes) > 0 && path != root {
-				// Zero-alloc relative path: path is always root+sep+rel inside WalkDir.
-				rel := filepath.ToSlash(path[rootLen+1:])
-				for _, pre := range prunePrefixes {
-					if rel == pre || strings.HasPrefix(rel, pre+"/") {
-						return fs.SkipDir
+			if d.IsDir() {
+				name := d.Name()
+				if path != root && isIgnoreDir(name, spellDirs) {
+					return fs.SkipDir
+				}
+				if len(prunePrefixes) > 0 && path != root {
+					// Zero-alloc relative path: path is always root+sep+rel inside WalkDir.
+					rel := filepath.ToSlash(path[rootLen+1:])
+					for _, pre := range prunePrefixes {
+						if rel == pre || strings.HasPrefix(rel, pre+"/") {
+							return fs.SkipDir
+						}
 					}
+				}
+				return nil
+			}
+			if d.Type()&os.ModeSymlink != 0 {
+				return nil
+			}
+			// Zero-alloc relative path: path is always root+sep+rel inside WalkDir.
+			rel := filepath.ToSlash(path[rootLen+1:])
+			for _, ep := range exclPats {
+				if ep.Match(rel) {
+					return nil
+				}
+			}
+			for _, p := range pats {
+				if p.Match(rel) {
+					// WalkDir guarantees unique paths and we return after first match,
+					// so no dedup map is needed.
+					out = append(out, relAbs{rel: rel, abs: path})
+					return nil
 				}
 			}
 			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("expandSources walk: %w", err)
 		}
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-		// Zero-alloc relative path: path is always root+sep+rel inside WalkDir.
-		rel := filepath.ToSlash(path[rootLen+1:])
-		for _, ep := range exclPats {
-			if ep.Match(rel) {
-				return nil
-			}
-		}
-		for _, p := range pats {
-			if p.Match(rel) {
-				// WalkDir guarantees unique paths and we return after first match,
-				// so no dedup map is needed.
-				out = append(out, relAbs{rel: rel, abs: path})
-				return nil
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("expandSources walk: %w", err)
 	}
 	slices.SortFunc(out, func(a, b relAbs) int { return cmp.Compare(a.rel, b.rel) })
 	// The walk returns each path once, but an exact declaration and a pattern can both

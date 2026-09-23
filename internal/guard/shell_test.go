@@ -936,8 +936,6 @@ func TestGuardAdversarial(t *testing.T) {
 		{"wrapped absolute build", "mise exec -- env -u GOROOT go build -o /tmp/magus ./cmd/magus"},
 		{"bare build", "go build ./..."},
 		{"go mod tidy", "go mod tidy"},
-		// The go spell's install op runs it, keyed, so `magus run install` is the route.
-		{"go mod download", "go mod download"},
 		{"gofmt -w", "gofmt -w ."},
 		{"go generate", "go generate ./..."},
 		{"wrapped write", "mise exec -- go generate ./..."},
@@ -980,6 +978,7 @@ func TestGuardAdversarial(t *testing.T) {
 		{"version probe", "golangci-lint --version"},
 		{"go version", "go version"},
 		{"go help", "go help test"},
+		{"go mod download reads", "go mod download"},
 		{"go list reads", "go list ./..."},
 		{"go mod vendor has no spell operation", "go mod vendor"},
 		{"prettier through an unsupported package runner", "npx prettier --write ."},
@@ -1298,6 +1297,28 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	// command in a JS repo.
 	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
 		assert.NotContains(t, Evaluate(testDependencies(), cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
+	}
+}
+
+// TestGuardAdvisesInstallOnRawInstalls: a raw install is correct work, only uncached, so
+// it earns advice toward the install op and never a deny. Naming packages is a
+// dependency edit, which the install op cannot run, so that spelling is left alone.
+func TestGuardAdvisesInstallOnRawInstalls(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"pnpm install",
+		"pnpm install -r --frozen-lockfile --prefer-offline",
+		"npm ci",
+		"uv sync",
+		"cargo fetch",
+		"go mod download",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "%q must advise, never deny", cmd)
+		assert.Equal(t, installGuardContext, v.Context, cmd)
+	}
+	for _, cmd := range []string{"pnpm install lodash", "go mod download golang.org/x/mod", "npm install", "mise install"} {
+		assert.Equal(t, ShellVerdict{}, Evaluate(testDependencies(), cmd), cmd)
 	}
 }
 

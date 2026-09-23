@@ -2,9 +2,12 @@ package buzz
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"unsafe"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
@@ -104,7 +107,7 @@ func (p *parser) markImportUsed(name string) {
 // labeled. This is the default because it matches upstream — leniency is the
 // deviation, not strictness, so it must be opted into explicitly (ParseEmbedded).
 func Parse(src string) (*ast.Program, error) {
-	toks, err := token.Tokenize(src)
+	toks, err := tokenize(src)
 	if err != nil {
 		return nil, err
 	}
@@ -118,11 +121,63 @@ func Parse(src string) (*ast.Program, error) {
 // eval, magusfile loading, and interactive snippets, where top-level statements
 // are the whole point. It is the named, deliberate deviation from upstream Buzz.
 func ParseEmbedded(src string) (*ast.Program, error) {
-	toks, err := token.Tokenize(src)
+	toks, err := tokenize(src)
 	if err != nil {
 		return nil, err
 	}
 	return newParser(toks).parseProgram()
+}
+
+// tokenCache memoizes token.Tokenize by source text, process-wide. A host that loads
+// many sessions lexes the same module once per importing session, three times per
+// import (namespace, declarations, compile): one magus workspace load lexed 36MB of
+// source to read about 2MB. Tokens are safe to share because the parser only reads them.
+var tokenCache = struct {
+	sync.Mutex
+	m     map[string][]token.Token
+	bytes int
+}{m: map[string][]token.Token{}}
+
+// maxTokenCacheBytes bounds the memory tokenCache retains; at the bound it starts over,
+// which keeps a long-lived host from holding every revision of every file it has read.
+const maxTokenCacheBytes = 64 << 20
+
+// minCachedSource keeps interpolation fragments and one-line snippets, which are cheap
+// to lex and numerous, out of the cache.
+const minCachedSource = 256
+
+func tokenize(src string) ([]token.Token, error) {
+	if len(src) < minCachedSource {
+		return token.Tokenize(src)
+	}
+	tokenCache.Lock()
+	toks, ok := tokenCache.m[src]
+	tokenCache.Unlock()
+	if ok {
+		return toks, nil
+	}
+	toks, err := token.Tokenize(src)
+	if err != nil {
+		return nil, err
+	}
+	// Copied to its length: the lexer over-allocates for comment-heavy source, and a
+	// full-capacity slice keeps any reader's append from writing into a shared array.
+	toks = slices.Clone(toks)
+	// The key holds the whole source string alive, not just the token slice, so it
+	// counts toward the bound too; omitting it undercounted every entry by len(src).
+	size := len(toks)*int(unsafe.Sizeof(token.Token{})) + len(src)
+	tokenCache.Lock()
+	defer tokenCache.Unlock()
+	if cached, ok := tokenCache.m[src]; ok {
+		return cached, nil
+	}
+	if tokenCache.bytes+size > maxTokenCacheBytes {
+		clear(tokenCache.m)
+		tokenCache.bytes = 0
+	}
+	tokenCache.m[src] = toks
+	tokenCache.bytes += size
+	return toks, nil
 }
 
 // parseModed parses src strict (Parse) or embedded (ParseEmbedded).
@@ -150,7 +205,7 @@ type unusedImportDiag struct {
 // treats parsing as the expensive, non-hot-path step (checkShared's own doc comment:
 // resolving imports executes code and reads files from disk).
 func parseModedTracked(src string, strict bool) (*ast.Program, []unusedImportDiag, error) {
-	toks, err := token.Tokenize(src)
+	toks, err := tokenize(src)
 	if err != nil {
 		return nil, nil, err
 	}

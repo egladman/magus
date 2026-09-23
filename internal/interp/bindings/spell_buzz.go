@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
@@ -36,6 +37,12 @@ func compileBuzzSpell(ctx context.Context, path string) (spells.Descriptor, stri
 		return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, err)
 	}
 	src := string(data)
+	// A spell exports mgs_getName, and only the file's own source can export a name, so
+	// without the text it is a plain module. Executing one to find that out doubled the
+	// cost of every bare-path library import, since the file search runs it again.
+	if !strings.Contains(src, spell.NameFunc) {
+		return spells.Descriptor{}, "", spell.ErrNotASpell
+	}
 	spec, err := extractDescriptorWithModules(ctx, src, filepath.Dir(path))
 	if err != nil {
 		return spells.Descriptor{}, "", fmt.Errorf("load spell %q: %w", path, hint.ExplainImplicitMagus(err))

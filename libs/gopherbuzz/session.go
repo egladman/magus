@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
@@ -1372,7 +1374,57 @@ func (s *Session) rememberModuleType(boundName string, d ast.Node) {
 // import's exports under this full path; gopherbuzz mirrors that in
 // bindNamespacePath, in addition to its own basename/splat conveniences.
 func (s *Session) declaredNamespace(src string) []string {
-	prog, err := parseModed(src, !s.embedded)
+	// Only a file that opens with the keyword can declare one, and that answer needs
+	// no parse. Every import asks this of the file it imports.
+	if toks, err := tokenize(src); err == nil && len(toks) > 0 && toks[0].Kind != token.Namespace {
+		return nil
+	}
+	key := namespaceKey{src: src, strict: !s.embedded}
+	namespaceCache.Lock()
+	ns, ok := namespaceCache.m[key]
+	namespaceCache.Unlock()
+	if !ok {
+		ns = leadingNamespace(src, key.strict)
+		namespaceCache.Lock()
+		// Another goroutine may have computed and inserted the same key while this one
+		// held no lock; tokenCache checks again before inserting for the same reason.
+		if cached, ok := namespaceCache.m[key]; ok {
+			namespaceCache.Unlock()
+			return slices.Clone(cached)
+		}
+		size := len(key.src)
+		if namespaceCache.bytes+size > maxNamespaceCacheBytes {
+			clear(namespaceCache.m)
+			namespaceCache.bytes = 0
+		}
+		namespaceCache.m[key] = ns
+		namespaceCache.bytes += size
+		namespaceCache.Unlock()
+	}
+	return slices.Clone(ns)
+}
+
+type namespaceKey struct {
+	src    string
+	strict bool
+}
+
+// namespaceCache memoizes leadingNamespace process-wide; see tokenCache for why a host
+// asks the same question of the same source many times, and for the eviction policy
+// this mirrors: bounded by retained source bytes, not entry count, since a key holds
+// its whole source string alive.
+var namespaceCache = struct {
+	sync.Mutex
+	m     map[namespaceKey][]string
+	bytes int
+}{m: map[namespaceKey][]string{}}
+
+// maxNamespaceCacheBytes matches maxTokenCacheBytes: the two caches key on the same
+// source strings, so a workload that bounds one bounds the other the same way.
+const maxNamespaceCacheBytes = 64 << 20
+
+func leadingNamespace(src string, strict bool) []string {
+	prog, err := parseModed(src, strict)
 	if err != nil {
 		return nil
 	}

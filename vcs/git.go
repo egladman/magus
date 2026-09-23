@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/types"
@@ -544,17 +545,29 @@ func (v gitVCS) culprit(ctx context.Context, dir string) (string, error) {
 }
 
 func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
-	shortHash, err := vcsOutput(ctx, dir, "git", "rev-parse", "--short", "HEAD")
-	if err != nil {
-		return types.VCSMeta{}, err
+	// Concurrent: every run reads this before its first step, and five serial spawns
+	// were about 90ms of a cached replay.
+	queries := [][]string{
+		{"rev-parse", "--short", "HEAD"},
+		{"rev-parse", "HEAD"},
+		{"rev-parse", "--abbrev-ref", "HEAD"},
+		{"log", "-1", "--format=%ci"},
+		{"status", "--porcelain"},
 	}
-	hash, _ := vcsOutput(ctx, dir, "git", "rev-parse", "HEAD")
-	branch, _ := vcsOutput(ctx, dir, "git", "rev-parse", "--abbrev-ref", "HEAD")
-	commitDate, _ := vcsOutput(ctx, dir, "git", "log", "-1", "--format=%ci")
+	outs := make([]string, len(queries))
+	errs := make([]error, len(queries))
+	var wg sync.WaitGroup
+	for i, q := range queries {
+		wg.Go(func() { outs[i], errs[i] = vcsOutput(ctx, dir, "git", q...) })
+	}
+	wg.Wait()
+	if errs[0] != nil {
+		return types.VCSMeta{}, errs[0]
+	}
+	shortHash, hash, branch, commitDate, dirtyOut := outs[0], outs[1], outs[2], outs[3], outs[4]
 	// Don't swallow the dirty-probe error: a failed status must not be reported as
 	// a clean tree (that would stamp a dirty build as clean).
-	dirtyOut, err := vcsOutput(ctx, dir, "git", "status", "--porcelain")
-	if err != nil {
+	if err := errs[4]; err != nil {
 		return types.VCSMeta{}, fmt.Errorf("git status: %w", err)
 	}
 	return types.VCSMeta{

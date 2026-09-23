@@ -113,6 +113,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Raw package-manager installs are advised, not denied.** `pnpm install`, `npm ci`,
+  `uv sync`, `cargo fetch` and `go mod download` point at `magus run install`; naming a
+  package leaves the command alone.
+- **`install` probes only its own tools and skips dependency order.** A project's install
+  no longer waits for its dependencies' installs, and `run install` probes node and pnpm,
+  not tsc.
 - **`magus doctor` checks a freshly built knowledge graph.** `graph-bounds` built nothing
   and passed when `gen/knowledge-graph.json` was absent; it now builds the graph in process
   and fails when the build does. The graph JSON is no longer committed.
@@ -191,6 +197,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Workspace load is 10x faster.** A bare library import is no longer executed as a
+  candidate spell, Buzz tokens are shared across sessions, and `magus ls` loads once.
+  A run skips re-evaluating a magusfile that does not export the target, and an exact
+  source no longer walks the tree. `magus ls` here: 1.45s to 0.11s.
 - **A fresh magus checkout can build its first binary.** The `raw-tool` rule advises
   `go build -o magus ./cmd/magus` alone into a checkout root with no `magus` yet, and denies
   it once one exists. `go -C <dir> <verb>` and `go <verb> -C <dir>` reach one verdict, and a
