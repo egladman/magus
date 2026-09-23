@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -360,6 +361,37 @@ func TestTierPromotionEvicts(t *testing.T) {
 	require.True(t, r.Hit)
 	_, err = consumer.readManifest("test/pkg", rb.Hash)
 	assert.Error(t, err, "the promotion did not evict down to the cap")
+	// The promoted entry's CreatedAt is the producer's, older than the big entry's, so
+	// ordering by creation would have evicted it first: the entry this run just used.
+	_, err = consumer.readManifest("test/pkg", r.Hash)
+	assert.NoError(t, err, "the freshly promoted entry was evicted")
+}
+
+// Eviction orders by last use: an old entry that just hit outlives a newer one that
+// has not been used since it was written.
+func TestTierEvictionOrdersByLastUse(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	old, _ := buildIn(t, t.Context(), root, c)
+
+	newer := makeStep(root)
+	newer.Target = "newer"
+	rn, err := c.Run(t.Context(), newer, func(context.Context) error { return nil })
+	require.NoError(t, err)
+	// Backdate both writes, newer still after old, so the hit below is the latest use
+	// whatever the filesystem's timestamp resolution.
+	base := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(c.manifestPath("test/pkg", old.Hash), base, base))
+	require.NoError(t, os.Chtimes(c.manifestPath("test/pkg", rn.Hash), base.Add(time.Minute), base.Add(time.Minute)))
+
+	hit, _ := buildIn(t, t.Context(), root, c)
+	require.True(t, hit.Hit)
+
+	total, _ := c.scanManifests()
+	c.evictOldest(t.Context(), total-1)
+	_, err = c.readManifest("test/pkg", old.Hash)
+	assert.NoError(t, err, "the entry that just hit was evicted before one unused since it was written")
+	_, err = c.readManifest("test/pkg", rn.Hash)
+	assert.Error(t, err, "the least recently used entry survived")
 }
 
 // A put the store answers with ErrRemoteExists is neither an upload nor a failure.

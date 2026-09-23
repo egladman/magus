@@ -13,14 +13,17 @@ import (
 
 type manifestEntry struct {
 	manifestPath string
-	createdAt    time.Time
+	createdAt    time.Time // when the producing run wrote it; age-based prune reads this
+	lastUsed     time.Time // the manifest file's mtime; see markUsed
 	blobs        []string
 	hash         string // the cache key, so an eviction can reclaim outputs/<hash> too
 }
 
-// evictLRU removes oldest manifests (by CreatedAt) until disk usage is at or
-// below limit bytes. evictMu prevents concurrent goroutines from double-counting
-// freed bytes and over-evicting.
+// evictOldest removes the least recently used entries until disk usage is at or below
+// limit bytes. Last use, not creation: a promoted remote-tier entry carries its
+// producer's CreatedAt, and ordering by that evicted the entry this run just promoted.
+// evictMu prevents concurrent goroutines from double-counting freed bytes and
+// over-evicting.
 func (c *Cache) evictOldest(ctx context.Context, limit int64) {
 	if limit <= 0 {
 		return
@@ -32,7 +35,7 @@ func (c *Cache) evictOldest(ctx context.Context, limit int64) {
 		return
 	}
 	slices.SortFunc(entries, func(a, b manifestEntry) int {
-		return a.createdAt.Compare(b.createdAt)
+		return a.lastUsed.Compare(b.lastUsed)
 	})
 
 	// Blob refcount: credit a blob's bytes only when the last manifest referencing it is evicted.
@@ -81,6 +84,15 @@ func (c *Cache) evictOldest(ctx context.Context, limit int64) {
 		}
 	}
 	_ = c.gcBlobs(ctx)
+}
+
+// markUsed records a hit on the entry for (projectPath, hash) by touching its manifest's
+// mtime, which evictOldest orders by. The file's own timestamp needs no index to keep
+// consistent and no lock: concurrent runs touching one entry all move it forward. A
+// failed touch only leaves the entry older than it is.
+func (c *Cache) markUsed(projectPath, hash string) {
+	now := time.Now()
+	_ = os.Chtimes(c.manifestPath(projectPath, hash), now, now)
 }
 
 // diskSizeTTL bounds how often DiskBytes re-walks the cache tree, so a status stream
@@ -169,6 +181,7 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 		entries = append(entries, manifestEntry{
 			manifestPath: p,
 			createdAt:    m.CreatedAt,
+			lastUsed:     info.ModTime(),
 			blobs:        blobs,
 			hash:         strings.TrimSuffix(filepath.Base(p), ".json"),
 		})

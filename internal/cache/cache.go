@@ -577,6 +577,11 @@ func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, 
 	if e.remote != "" {
 		remoteStatsFrom(ctx).hit(e.bytes)
 	}
+	// A hit in the local store is a use, whether it was already there or just promoted,
+	// so it is the last thing eviction reaches.
+	if e.root == c.dir && c.local.writes() {
+		c.markUsed(s.ProjectPath, hash)
+	}
 	if e.promoted {
 		c.evictOldest(ctx, c.sizeCap())
 	}

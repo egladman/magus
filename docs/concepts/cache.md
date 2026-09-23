@@ -899,7 +899,8 @@ two-tier semantics:
    the rest of the run stops asking. It fails a step only when remote writes were
    declared required (`cache.remote.write.enabled: true`).
 6. **No invalidation.** Keys are content-addressed, so an entry is never stale; each
-   tier evicts on its own, L1 by `cache.size_mb`, L2 by the backend's retention
+   tier evicts on its own, L1 by `cache.size_mb`, least recently used first (every
+   hit, a promotion included, marks its entry used), L2 by the backend's retention
    (`magus config cache prune --remote`).
 
 Each tier's write gate is decided once, when the cache opens:
