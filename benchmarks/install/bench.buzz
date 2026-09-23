@@ -22,16 +22,18 @@
 // The fresh case DELETES this checkout's four node_modules and the lockfile case edits
 // console/pnpm-lock.yaml; both are restored before the script exits, success or failure.
 //
-// Every MAGUS_* variable is cleared from this process's environment before either
-// contender runs, so the magus binary this script execs is a top-level invocation, not
-// one nested inside the `magus buzz` that is running this file.
+// The magus measured is the binary running this file, reached through magus\run. Every
+// MAGUS_* variable is cleared from this process's environment before either contender
+// runs, so that child is a top-level invocation, not one nested inside the `magus buzz`
+// that is running this file: with no daemon variable to forward, it shares no
+// concurrency budget or socket with its parent.
 //
 // Reports medians (seconds) and the host's load average as one JSON object on stdout.
 //
 // Env overrides:
 //   BENCH_RUNS=7   measured runs per case
 //
-// Required: pnpm, and a magus built from this checkout (./magus).
+// Required: pnpm, and a magus built from this checkout, run as ./magus.
 
 import "std";
 import "fs";
@@ -40,10 +42,10 @@ import "os";
 import "env";
 import "encoding/json";
 import "strings";
+import "magus";
 
 final PROJECTS = ["console", "docs", "docs/guides/integrations/agents", "libs/textsearch"];
 final LOCK = "console/pnpm-lock.yaml";
-final MAGUS_BIN = "./magus";
 
 // ---------------------------------------------------------------------------
 // Pure: fixture layout, parsing, statistics. Covered by the test blocks below.
@@ -86,10 +88,10 @@ fun joinPath(parts: [str]) > str {
     return parts.join(separator: "/");
 }
 
-// magusInstallArgs is the argv `magus run install <projects>` takes, shared by the
+// magusInstallArgs is the argv after `magus run` for installing projects, shared by the
 // timed calls and the final restore-the-checkout call in cleanup.
 fun magusInstallArgs(projects: [str]) > [str] {
-    final args = mut ["run", "-s", "install"];
+    final args = mut ["-s", "install"];
     foreach (p in projects) {
         args.append(p);
     }
@@ -163,10 +165,10 @@ test "joinPath separates parts with a single slash" {
     std\assert(joinPath(["a"]) == "a", message: "one part");
 }
 
-test "magus install args name run, install, and every project" {
+test "magus install args name install, quietly, and every project" {
     final args = magusInstallArgs(["a", "b"]);
-    std\assert(args[0] == "run" and args[2] == "install", message: "run install");
-    std\assert(args[3] == "a" and args[4] == "b", message: "both projects");
+    std\assert(args[0] == "-s" and args[1] == "install", message: "quiet install");
+    std\assert(args[2] == "a" and args[3] == "b", message: "both projects");
 }
 
 test "load average parses the macOS form" {
@@ -244,23 +246,18 @@ fun toggleLock(path: str) > void !> any {
     }
 }
 
-// runOnce times one exec of bin, in milliseconds. Neither contender's own output is
-// wanted on this script's stdout, so both run quiet; a non-zero exit raises, which the
-// caller lets propagate rather than reporting a fast time for a run that failed.
-fun runOnce(bin: str, args: [str]) > double !> any {
-    final t0 = os\time();
-    proc\exec(bin, args: args, opts: {"quiet": true});
-    return os\time() - t0;
-}
-
-// timeRuns runs prepare() then times one exec, `runs` times, returning each duration
-// in milliseconds.
-fun timeRuns(bin: str, args: [str], runs: int, prepare: fun () > void !> any) > [double] !> any {
+// timeRuns runs prepare() then times one contender() call, `runs` times, returning each
+// duration in milliseconds. Neither contender's own output is wanted on this script's
+// stdout, so both run quiet; a non-zero exit raises, which the caller lets propagate
+// rather than reporting a fast time for a run that failed.
+fun timeRuns(runs: int, prepare: fun () > void !> any, contender: fun () > void !> any) > [double] !> any {
     final samples = mut [];
     var i = 0;
     while (i < runs) {
         prepare();
-        samples.append(runOnce(bin, args));
+        final t0 = os\time();
+        contender();
+        samples.append(os\time() - t0);
         i = i + 1;
     }
     return samples;
@@ -287,19 +284,22 @@ fun run(root: str, scratch: str, runs: int) > {str: any} !> any {
     final magusArgs = magusInstallArgs(PROJECTS);
     final scratchLock = joinPath([scratch, "console", "pnpm-lock.yaml"]);
 
+    final pnpm = fun () > void !> any { proc\exec("pnpm", args: pnpmArgs, opts: {"quiet": true}); };
+    final magusInstall = fun () > void !> any { magus\run(magusArgs, opts: {"quiet": true}); };
+
     // Warm the pnpm store, the scratch trees, and magus's own install entries, so the
     // measured runs are not paying for a cold store on top of what each case tests.
-    proc\exec("pnpm", args: pnpmArgs, opts: {"quiet": true});
-    proc\exec(MAGUS_BIN, args: magusArgs, opts: {"quiet": true});
+    pnpm();
+    magusInstall();
 
-    final pnpmFresh = timeRuns("pnpm", args: pnpmArgs, runs: runs, prepare: fun () > void !> any { cleanTrees(scratch, projects: PROJECTS); });
-    final magusFresh = timeRuns(MAGUS_BIN, args: magusArgs, runs: runs, prepare: fun () > void !> any { cleanTrees(root, projects: PROJECTS); });
+    final pnpmFresh = timeRuns(runs, prepare: fun () > void !> any { cleanTrees(scratch, projects: PROJECTS); }, contender: pnpm);
+    final magusFresh = timeRuns(runs, prepare: fun () > void !> any { cleanTrees(root, projects: PROJECTS); }, contender: magusInstall);
 
-    final pnpmNoop = timeRuns("pnpm", args: pnpmArgs, runs: runs, prepare: noPrepare);
-    final magusNoop = timeRuns(MAGUS_BIN, args: magusArgs, runs: runs, prepare: noPrepare);
+    final pnpmNoop = timeRuns(runs, prepare: noPrepare, contender: pnpm);
+    final magusNoop = timeRuns(runs, prepare: noPrepare, contender: magusInstall);
 
-    final pnpmLockfile = timeRuns("pnpm", args: pnpmArgs, runs: runs, prepare: fun () > void !> any { toggleLock(scratchLock); });
-    final magusLockfile = timeRuns(MAGUS_BIN, args: magusArgs, runs: runs, prepare: fun () > void !> any { toggleLock(LOCK); });
+    final pnpmLockfile = timeRuns(runs, prepare: fun () > void !> any { toggleLock(scratchLock); }, contender: pnpm);
+    final magusLockfile = timeRuns(runs, prepare: fun () > void !> any { toggleLock(LOCK); }, contender: magusInstall);
 
     return {
         "runs": runs,
@@ -320,7 +320,7 @@ fun cleanup(root: str, scratch: str, lockOriginal: str) > void !> any {
     fs\writeFile(LOCK, content: lockOriginal);
     fs\removeAll(scratch);
     cleanTrees(root, projects: PROJECTS);
-    proc\exec(MAGUS_BIN, args: magusInstallArgs(PROJECTS), opts: {"quiet": true, "allow_failure": true});
+    magus\run(magusInstallArgs(PROJECTS), opts: {"quiet": true});
 }
 
 fun main() > void !> any {
@@ -346,4 +346,3 @@ fun main() > void !> any {
     }
     std\print(json\stringify(report, indent: "  "));
 }
-main() catch null;
