@@ -17,7 +17,7 @@
 //   fresh     no node_modules anywhere, as in a new worktree. magus may seed from a
 //             sibling checkout; the scratch workspace has none to seed from.
 //   noop      nothing changed since the last install
-//   lockfile  console/pnpm-lock.yaml changed (a comment toggled before every run)
+//   lockfile  console/pnpm-lock.yaml changed (a never-seen comment before every run)
 //
 // The fresh case DELETES this checkout's four node_modules and the lockfile case edits
 // console/pnpm-lock.yaml; both are restored before the script exits, success or failure.
@@ -227,23 +227,20 @@ fun cleanTrees(base: str, projects: [str]) > void !> any {
     fs\removeAll(joinPath([base, "node_modules"]));
 }
 
-// toggleLock flips a trailing YAML-comment marker line on path: added if absent,
-// removed if present. Either way the file's bytes differ from what the last install
-// saw, without changing what the lock pins, which is what makes every call here force
-// a real lockfile-changed detection rather than only every other one.
-fun toggleLock(path: str) > void !> any {
+// stampLock replaces path's trailing "# bench-stamp" comment with one no run has seen,
+// without changing what the lock pins. A marker that only toggled would give a cache
+// two states to replay after warmup, measuring a replay instead of a lockfile change.
+fun stampLock(path: str) > void !> any {
     final lines = fs\readLines(path);
-    if (lines.len() > 0 and lines[lines.len() - 1] == "# bench-toggle") {
-        final kept = mut [];
-        var i = 0;
-        while (i < lines.len() - 1) {
-            kept.append(lines[i]);
-            i = i + 1;
+    final kept = mut [];
+    foreach (line in lines) {
+        if (!line.startsWith("# bench-stamp ")) {
+            kept.append(line);
         }
-        fs\writeLines(path, lines: kept);
-    } else {
-        fs\appendFile(path, content: "# bench-toggle\n");
     }
+    final stamp = os\time();
+    kept.append("# bench-stamp {stamp}");
+    fs\writeLines(path, lines: kept);
 }
 
 // timeRuns runs prepare() then times one contender() call, `runs` times, returning each
@@ -298,8 +295,8 @@ fun run(root: str, scratch: str, runs: int) > {str: any} !> any {
     final pnpmNoop = timeRuns(runs, prepare: noPrepare, contender: pnpm);
     final magusNoop = timeRuns(runs, prepare: noPrepare, contender: magusInstall);
 
-    final pnpmLockfile = timeRuns(runs, prepare: fun () > void !> any { toggleLock(scratchLock); }, contender: pnpm);
-    final magusLockfile = timeRuns(runs, prepare: fun () > void !> any { toggleLock(LOCK); }, contender: magusInstall);
+    final pnpmLockfile = timeRuns(runs, prepare: fun () > void !> any { stampLock(scratchLock); }, contender: pnpm);
+    final magusLockfile = timeRuns(runs, prepare: fun () > void !> any { stampLock(LOCK); }, contender: magusInstall);
 
     return {
         "runs": runs,
