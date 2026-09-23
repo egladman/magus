@@ -97,7 +97,7 @@ func (r *wsRegistry) load(e *wsEntry) {
 		defer r.bump()
 		if err != nil {
 			e.loadErr = err
-			e.failure = magus.LoadFailure(e.root, err)
+			e.failure = magus.WorkspaceLoadFailure(e.root, err)
 			r.watchFailed(e)
 			return
 		}
@@ -225,8 +225,9 @@ func (*wsRegistry) preloadAndApplySandbox(ctx context.Context, roots []string) e
 
 // acquire loads the workspace for root and takes an in-flight lease so evictIdle/close
 // won't Close it underneath the caller. Caller must release(e) when done. Rejects
-// undeclared roots in declared mode.
-func (r *wsRegistry) acquire(_ context.Context, root string) (*wsEntry, error) {
+// undeclared roots in declared mode. Takes no context: load's own r.open seam has no ctx
+// parameter to bound, so a caller cancelling mid-load could not shorten this call anyway.
+func (r *wsRegistry) acquire(root string) (*wsEntry, error) {
 	r.mu.Lock()
 	if r.declared != nil {
 		if _, ok := r.declared[root]; !ok {
@@ -365,7 +366,7 @@ func (r *wsRegistry) failBridge(root string, err error) {
 	e := newEntry(root, r.now())
 	e.once.Do(func() {})
 	e.loadErr = err
-	e.failure = magus.LoadFailure(root, err)
+	e.failure = magus.WorkspaceLoadFailure(root, err)
 	e.inflight = 1
 	r.entries[root] = e
 	r.watchFailed(e)
@@ -427,7 +428,7 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 			return
 		default:
 		}
-		e, err := r.acquire(ctx, root)
+		e, err := r.acquire(root)
 		if err != nil {
 			slog.WarnContext(ctx, "daemon: warm workspace failed (readiness probe may be delayed)",
 				"root", root, "err", err)
@@ -442,7 +443,7 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 // on ctx) goes to dispatchJob, which admits the wider maintenance command set. Both reuse the
 // warm workspace via withMagus.
 func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, args []string) error {
-	e, err := r.acquire(ctx, root)
+	e, err := r.acquire(root)
 	if err != nil {
 		return err
 	}

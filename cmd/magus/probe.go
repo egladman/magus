@@ -107,6 +107,9 @@ func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root 
 			if ws.State == types.WorkspaceFailed {
 				return false, fmt.Sprintf("workspace %s failed to load [%s]", root, types.WorkspaceLoadFailed)
 			}
+			if ws.State == types.WorkspaceLoading {
+				return false, fmt.Sprintf("workspace %s is loading", root)
+			}
 			if ws.Loaded() {
 				return true, fmt.Sprintf("workspace %s is loaded", root)
 			}
@@ -123,6 +126,16 @@ func loadedCount(ws []types.StatusWorkspace) int {
 	n := 0
 	for _, w := range ws {
 		if w.Loaded() {
+			n++
+		}
+	}
+	return n
+}
+
+func failedCount(ws []types.StatusWorkspace) int {
+	n := 0
+	for _, w := range ws {
+		if w.State == types.WorkspaceFailed {
 			n++
 		}
 	}
@@ -446,12 +459,7 @@ func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent 
 		c.Status, c.Detail = types.ReadinessDown, "daemon is in per-process mode"
 	default:
 		loaded := loadedCount(snapshot.Workspaces)
-		failed := 0
-		for _, w := range snapshot.Workspaces {
-			if w.State == types.WorkspaceFailed {
-				failed++
-			}
-		}
+		failed := failedCount(snapshot.Workspaces)
 		switch {
 		case loaded == 0 && failed == 0:
 			c.Status, c.Detail = types.ReadinessDown, "no workspaces loaded"

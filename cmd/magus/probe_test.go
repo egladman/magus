@@ -65,7 +65,7 @@ func TestEvaluateHealth(t *testing.T) {
 		{Root: "/repo", State: types.WorkspaceFailed}, {Root: "/loading", State: types.WorkspaceLoading},
 	}}
 	assertHealth("readiness/failed-root-names-the-code", failed, nil, probeReadiness, "/repo", false, "MGS3016")
-	assertHealth("readiness/loading-root-not-ready", failed, nil, probeReadiness, "/loading", false, "not loaded")
+	assertHealth("readiness/loading-root-not-ready", failed, nil, probeReadiness, "/loading", false, "is loading")
 	assertHealth("readiness/only-unloaded-workspaces", failed, nil, probeReadiness, "", false, "no workspaces loaded")
 	assertHealth("readiness/proc-mode-rejected",
 		&proc.StatusReply{ParentPID: 1, Mode: "proc"}, nil, probeReadiness, "", false, "per-process mode")
@@ -407,7 +407,7 @@ func TestAcquireRejectsNonDeclared(t *testing.T) {
 
 	reg.setDeclared([]string{allowed})
 
-	_, err := reg.acquire(ctx, forbidden)
+	_, err := reg.acquire(forbidden)
 	require.Error(t, err, "acquire of non-declared root should error")
 	var de *types.DiagnosticError
 	require.ErrorAs(t, err, &de)
@@ -433,7 +433,7 @@ func TestAcquireAdmitsDeclaredEvenWithoutMagusYaml(t *testing.T) {
 
 	// acquire may fail at magus.Open (no real workspace), but it must NOT
 	// fail with the MGS2010 declared-list gate.
-	_, err := reg.acquire(ctx, allowed)
+	_, err := reg.acquire(allowed)
 	if err != nil {
 		var de *types.DiagnosticError
 		if errors.As(err, &de) {

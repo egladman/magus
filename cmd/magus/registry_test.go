@@ -65,8 +65,8 @@ func TestAcquireKeepsAFailedWorkspaceWithoutReopening(t *testing.T) {
 	opens := scriptedOpens(r, make(chan struct{}))
 	root := t.TempDir()
 
-	_, err1 := r.acquire(context.Background(), root)
-	_, err2 := r.acquire(context.Background(), root)
+	_, err1 := r.acquire(root)
+	_, err2 := r.acquire(root)
 
 	require.Error(t, err1)
 	assert.Same(t, err1, err2, "the recorded load error, not a second attempt")
@@ -91,7 +91,7 @@ func TestAcquireReportsWhereAMagusfileFailed(t *testing.T) {
 	r := newTestRegistry()
 	defer close(r.stopCh)
 
-	_, err = r.acquire(context.Background(), root)
+	_, err = r.acquire(root)
 	require.Error(t, err)
 
 	got := r.status()
@@ -208,7 +208,7 @@ func TestAdoptBridgeReusedByAcquire(t *testing.T) {
 	bridge := &magus.Magus{}
 	r.adoptBridge(root, bridge)
 
-	e, err := r.acquire(context.Background(), root)
+	e, err := r.acquire(root)
 	require.NoError(t, err)
 	defer r.release(e)
 	assert.Same(t, bridge, e.m, "acquire must hand back the already-adopted bridge Magus")
@@ -264,12 +264,11 @@ func preloadedRegistry(b *testing.B, root string) *wsRegistry {
 func BenchmarkRegistryAcquireHot(b *testing.B) {
 	root := b.TempDir()
 	r := preloadedRegistry(b, root)
-	ctx := context.Background()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = r.acquire(ctx, root)
+		_, _ = r.acquire(root)
 	}
 }
 
@@ -279,13 +278,12 @@ func BenchmarkRegistryAcquireHot(b *testing.B) {
 func BenchmarkRegistryAcquireParallel(b *testing.B) {
 	root := b.TempDir()
 	r := preloadedRegistry(b, root)
-	ctx := context.Background()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _ = r.acquire(ctx, root)
+			_, _ = r.acquire(root)
 		}
 	})
 }
