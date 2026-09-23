@@ -220,6 +220,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A run the machine's build budget refuses says so.** It exited 75 with nothing after
+  the header; it now prints `[fail] <project> <target> (not started)` with the MGS3009
+  cause naming the holder, and `-o jsonl` emits the `run.target.result` and
+  `run.diagnostic` records.
 - **The daemon API reference matches the protos again.** The committed descriptor set
   predated the last proto change, so the activity reference described an older API.
 - **The graph links a target to a workspace spell imported without an alias.**
