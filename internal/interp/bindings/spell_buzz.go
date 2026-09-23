@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -146,7 +147,7 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	if source := interp.SourceFromContext(ctx); source != nil && source.Dir != dir {
 		roots = append(roots, source.Dir)
 	}
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(spellSearchPaths(roots...)...))
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()), buzz.WithSearchPaths(spellSearchPaths(roots...)...))
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	registerMagusModules(ctx, sess)
@@ -208,7 +209,7 @@ func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Contex
 // module body must be idempotent (no one-time side effects) — the mgs_ functions
 // and op bodies do the work.
 func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeRequest) (any, error) {
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	registerMagusModules(ctx, sess)

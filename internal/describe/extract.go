@@ -25,7 +25,7 @@ import (
 	"slices"
 	"strings"
 
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -54,7 +54,7 @@ func Extract(source string) []types.TargetGraphNode {
 // every io member access in the program against the attributed set to find the ones the
 // static read can't see. Extract discards the latter two. prog is nil on a parse failure.
 func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *ast.Program) {
-	prog, err := buzz.ParseEmbedded(source)
+	prog, err := parsecache.Shared().ParseEmbedded(source)
 	if err != nil || prog == nil {
 		return nil, nil, nil
 	}
@@ -458,7 +458,7 @@ type FileWrite struct {
 // `if (ctx.hasCharm("rw"))` counts, and a write reached through a helper is not followed.
 // It under-reports rather than over-reports, the same trade UnreachedIO makes.
 func WritesOutsideRWCharm(source string) []FileWrite {
-	prog, err := buzz.ParseEmbedded(source)
+	prog, err := parsecache.Shared().ParseEmbedded(source)
 	if err != nil || prog == nil {
 		return nil
 	}
