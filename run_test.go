@@ -767,6 +767,27 @@ func driftingFixture(t *testing.T) (*Magus, *types.Project, func() error) {
 	return m, p, func() error { return os.WriteFile(path, []byte("after"), 0o644) }
 }
 
+// TestDeclaresOutputFollowsTheChain pins the libs/* shape: generate declares nothing and
+// composes an index-generate that writes MAGUS.md. Asking only about generate's own refs
+// left it ungated, so CI regenerated a stale index without rw and passed.
+func TestDeclaresOutputFollowsTheChain(t *testing.T) {
+	t.Parallel()
+	p := &types.Project{
+		Path: "libs/a",
+		TargetChains: map[string][]types.ChainStep{
+			"generate": {{Target: "preflight"}, {Target: "index-generate", CallIndex: 1}},
+			"ci":       {{Target: "lint"}},
+		},
+		TargetOutputs: map[string][]types.OutputRef{"index-generate": {{Glob: "MAGUS.md"}}},
+	}
+
+	assert.True(t, declaresOutput(p, "generate"), "a composed writer makes its composer write")
+	assert.True(t, declaresOutput(p, "index-generate"))
+	assert.False(t, declaresOutput(p, "ci"), "a chain that reaches no writer declares nothing")
+	assert.True(t, declaresOutput(&types.Project{Outputs: []string{"gen/**"}}, "ci"),
+		"project-wide outputs cover every target")
+}
+
 func TestGateDriftSkipsWhenVCSDisabled(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
 	m, p := gateDriftFixture(t)
