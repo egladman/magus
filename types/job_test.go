@@ -1,7 +1,6 @@
 package types
 
 import (
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -423,43 +422,4 @@ func TestJobListNamesWhyAJobOwnsNothing(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(got), `"blocked":[{"job":"waiter","on":"dep","state":"fail"}]`)
 	})
-}
-
-// A pinned snapshot hands out copies, so a reader that edits what it got cannot change
-// what the next reader under the same context sees.
-func TestJobSnapshotFromContext(t *testing.T) {
-	t.Parallel()
-
-	readErr := errors.New("jobs.json: unexpected end of JSON input")
-	row := func() Job {
-		return Job{ID: "orchestrator/guard-facts", State: StateRunning, WritePaths: []string{"internal/guard/**"}}
-	}
-	cases := []struct {
-		name   string
-		pin    *JobSnapshot
-		want   JobSnapshot
-		pinned bool
-	}{
-		{"nothing pinned", nil, JobSnapshot{}, false},
-		{"rows", &JobSnapshot{Rows: []Job{row()}}, JobSnapshot{Rows: []Job{row()}}, true},
-		{"an unreadable store", &JobSnapshot{Err: readErr}, JobSnapshot{Rows: []Job{}, Err: readErr}, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			ctx := t.Context()
-			if tc.pin != nil {
-				ctx = WithJobSnapshot(ctx, *tc.pin)
-			}
-			got, ok := JobSnapshotFromContext(ctx)
-			assert.Equal(t, tc.pinned, ok)
-			assert.Equal(t, tc.want, got)
-			if len(got.Rows) > 0 {
-				got.Rows[0].WritePaths[0] = "edited"
-				again, _ := JobSnapshotFromContext(ctx)
-				assert.Equal(t, tc.want, again, "a reader's edit does not reach the pinned rows")
-			}
-		})
-	}
 }

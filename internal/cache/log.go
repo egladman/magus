@@ -99,16 +99,9 @@ type PrettyHandler struct {
 	// handler's band within it. The handler no longer sets scroll margins
 	// itself: it used to, and so did the CLI's own handler, and two components
 	// driving one global DECSTBM setting is what tty.Zone exists to end.
-	zone  *tty.Zone
-	lease *tty.Lease
-	// notifier is nil for the handler on standard error, which reaches the
-	// process band through tty.StderrNotifier instead. Caching that one here
-	// was a bug: applyDisplay runs several times per invocation and each run
-	// tears the process band down, so a handler holding a pointer from before
-	// the teardown kept a CLOSED notifier forever and every magus-raised
-	// notification silently vanished.
-	notifier *tty.Notifier
-	status   statusLine // live counters painted into the band's first row
+	zone   *tty.Zone
+	lease  *tty.Lease
+	status statusLine // live counters painted into the band's first row
 	// failures is the pinned failure ring, one entry per row beneath the status
 	// line. A fixed array written at failureAt and rendered in place, so the
 	// newest entry replaces the oldest and the rest do not shuffle.
@@ -178,11 +171,6 @@ type statusLine struct {
 	// start is when the first event arrived, which is close enough to the
 	// run's start for a progress readout and needs no plumbing.
 	start time.Time
-	// blocked names the project this run is waiting on a lock for, and who holds
-	// it. It is the one clause that describes a run doing NOTHING, which is exactly
-	// why it belongs in a region that does not scroll: the log line announcing the
-	// wait scrolls away, and what is left on screen is silence.
-	blocked, blockedBy string
 }
 
 // render composes the status row. Clauses that carry no information are
@@ -195,13 +183,6 @@ func (s statusLine) render(now time.Time) (left, elapsed string) {
 		elapsed = FormatDuration(now.Sub(s.start))
 	}
 	var b strings.Builder
-	// The blocked state is NOT rendered here, though this type holds it: the
-	// pinned notification is the better home, since it carries the remedy and
-	// this line's job is a steady readout of pool and counts. Rendering both
-	// announced one lock wait twice.
-	//
-	// The fields stay because blockedMessage composes the notification from
-	// them; see [PrettyHandler.blockedMessage].
 	if g := PoolGauge(s.running, s.capacity); g != "" {
 		b.WriteString(g)
 	} else {
@@ -524,7 +505,7 @@ func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	stderrPrettyMu.Lock()
 	defer stderrPrettyMu.Unlock()
 	if stderrPretty == nil {
-		stderrPretty = newPrettyHandlerZone(w, level, tty.SystemProbe, tty.ZoneOf(w), tty.NotifierOf(w))
+		stderrPretty = newPrettyHandlerZone(w, level, tty.SystemProbe, tty.ZoneOf(w))
 		return stderrPretty
 	}
 	// The level comes from the most recent caller. In the CLI both callers read
@@ -561,13 +542,12 @@ func (h *PrettyHandler) setLevel(level slog.Level) {
 // newPrettyHandler is the probe-injecting form. Tests use it to render
 // terminal output into a buffer without opening a pty.
 func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler {
-	z := tty.NewZone(w, p)
-	return newPrettyHandlerZone(w, level, p, z, tty.NewNotifier(z, 3))
+	return newPrettyHandlerZone(w, level, p, tty.NewZone(w, p))
 }
 
 // newPrettyHandlerZone is the form that takes an explicit zone, so a test can
 // give two handlers the same one and watch them share the terminal.
-func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zone, n *tty.Notifier) *PrettyHandler {
+func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zone) *PrettyHandler {
 	return &PrettyHandler{
 		w:     w,
 		probe: p,
@@ -578,7 +558,6 @@ func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zon
 		// never reserves a row for one. stickyRegionRows is the ceiling now,
 		// not the opening claim.
 		lease:    z.Acquire(1),
-		notifier: n,
 		selected: -1,
 		now:      time.Now,
 	}
@@ -695,38 +674,6 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	remote := remoteSuffix(recordDur(r, "remote_ns"), dur)
 
 	switch r.Message {
-	case "lock.waiting":
-		// State, not a failure: the run is correctly queued behind a peer. It is
-		// pinned rather than logged-and-forgotten because the wait is unbounded.
-		h.status.blocked = recordStr(r, "project")
-		// Composed here, from fields: the emitting package sends who the holder IS,
-		// this package decides how a terminal shows it.
-		if pid := recordStr(r, "holder_pid"); pid != "" && pid != "0" {
-			h.status.blockedBy = "pid " + pid
-			if cmd := recordStr(r, "holder_command"); cmd != "" {
-				h.status.blockedBy += " (" + cmd + ")"
-			}
-		} else {
-			h.status.blockedBy = ""
-		}
-		h.paintStatus()
-		// The ONE run event that earns a notification. It is not information
-		// about the run; it is the run having stopped, for an unbounded time,
-		// on something only the user can shorten: go see what that process is,
-		// or wait for it. Everything else magus knows during a run is either
-		// passive (a cache hit, a pool sample, a summary) or already pinned
-		// where it will not scroll away (a failure), and a toast for any of
-		// those is noise that teaches the reader to ignore the band.
-		//
-		// Pinned rather than expiring, because it reports a CONDITION: the wait
-		// does not end when a timer says so.
-		h.fail(h.notify().Pin(lockNotifyKey, h.blockedMessage(), tty.SGRYellow))
-		return h.err
-	case "lock.acquired":
-		h.status.blocked, h.status.blockedBy = "", ""
-		h.paintStatus()
-		h.fail(h.notify().Clear(lockNotifyKey))
-		return h.err
 	case "cache.hit":
 		// Cached: passed without running. Dimmed green so a cache hit reads as
 		// low-signal next to work that actually ran. Cache state lives in the parens,
@@ -1408,43 +1355,6 @@ func remoteSuffix(remote, total time.Duration) string {
 		return ""
 	}
 	return ", " + FormatDuration(remote) + " remote"
-}
-
-// notify resolves the band this handler raises notifications into.
-//
-// Resolved per call rather than held, because the process band is torn down and
-// rebuilt between runs (applyDisplay -> restoreTerminal -> CloseStderr) and a
-// cached pointer survives that teardown pointing at a closed notifier. A
-// handler that is not on standard error keeps its own, which nothing else
-// closes.
-func (h *PrettyHandler) notify() *tty.Notifier {
-	if h.notifier != nil {
-		return h.notifier
-	}
-	return tty.StderrNotifier()
-}
-
-// lockNotifyKey names the pinned notification raised while a run is queued
-// behind another process's workspace lock.
-const lockNotifyKey = "lock.waiting"
-
-// blockedMessage renders the pinned lock notification. It names the ACTION
-// available rather than only the state: "waiting" alone leaves a reader
-// watching a stalled run with nothing to do about it, and the whole reason
-// this one event is worth a notification is that there is something to do.
-func (h *PrettyHandler) blockedMessage() string {
-	// The PROJECT is named here, and that is not decoration. It used to be
-	// stated on the status row; moving the status into the box's title dropped
-	// the clause, and with it the only thing on screen saying WHICH project was
-	// blocked: a reader saw a pid and had to guess what it was holding.
-	what := "the workspace lock"
-	if h.status.blocked != "" {
-		what = "the lock on " + h.status.blocked
-	}
-	if h.status.blockedBy == "" {
-		return "waiting on " + what + " - another magus run holds it"
-	}
-	return fmt.Sprintf("waiting on %s held by %s - wait, or stop it", what, h.status.blockedBy)
 }
 
 // Failure is one failed target, as the pinned band holds it.

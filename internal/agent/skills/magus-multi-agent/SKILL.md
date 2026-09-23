@@ -574,7 +574,7 @@ Use Magus to watch processes and shared workspace resources:
 magus status --watch=15s
 ```
 
-This shows Magus process state, lock holders and waiters, and shared-service
+This shows Magus process state, lock holders, and shared-service
 state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.

@@ -33,7 +33,7 @@ type AllowedSet struct {
 //
 // Health routes (/livez, /readyz, /healthz) are mounted outside this middleware
 // and are deliberately left unguarded.
-func GuardRebind(format ErrorFormat, allowed AllowedSet, next http.Handler) http.Handler {
+func GuardRebind(format rpcerr.Format, allowed AllowedSet, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isAllowedHost(r.Host, allowed) {
 			format.Write(w, r, hostNotAllowed)
@@ -53,7 +53,6 @@ func GuardRebind(format ErrorFormat, allowed AllowedSet, next http.Handler) http
 var hostNotAllowed = rpcerr.Error{
 	Code:    connect.CodePermissionDenied,
 	Reason:  types.HostNotAllowed,
-	Title:   "host not allowed",
 	Message: "the daemon serves only loopback hosts and the configured console origin; this request named another host in its Host or Origin header",
 }
 

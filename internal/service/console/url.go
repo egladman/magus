@@ -203,8 +203,8 @@ func OpenCommandAs(link, goos, bin string) string {
 	case "darwin":
 		opener = "open"
 	case "windows":
-		// start takes its first quoted argument as a window title.
-		opener = `start ""`
+		// cmd.exe never expands $(...), so the line is PowerShell's, where it does.
+		opener = "Start-Process"
 	}
 	return opener + ` "` + link + sep + "token=$(" + hint.ConfigTokenPrint.StringAs(bin) + `)"`
 }

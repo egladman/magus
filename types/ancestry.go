@@ -36,6 +36,18 @@ func InvocationAncestorsFromContext(ctx context.Context) []string {
 	return slices.Clone(refs)
 }
 
+// InvocationRoot returns the outermost invocation ctx runs underneath, which is this
+// invocation itself when nothing started it; "" when ctx carries no ancestry. Invocations
+// sharing a root belong to one run: an ancestor and its descendants, or the siblings of
+// one fan-out.
+func InvocationRoot(ctx context.Context) string {
+	refs, _ := ctx.Value(invocationAncestorsKey{}).([]string)
+	if len(refs) == 0 {
+		return ""
+	}
+	return refs[0]
+}
+
 // AppendInvocationAncestor returns ctx with this invocation appended to the ancestry
 // already on it. Called once per invocation, as soon as its id is known.
 func AppendInvocationAncestor(ctx context.Context, pid int, id string) context.Context {

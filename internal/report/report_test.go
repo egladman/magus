@@ -94,8 +94,6 @@ func TestRoundTripAllTypes(t *testing.T) {
 		RunBase{Base: "git diff vs origin/main"},
 		RunStep{Label: "magus", Target: "types-generate", Status: "pass", DurationMs: 695},
 		RunSummary{Hits: 1, Misses: 2, Errors: 0, DurationMs: 1600},
-		LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci"},
-		LockReleased{Project: "."},
 		Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "projects seeded by changed files nothing declares"},
 	}
 	for _, e := range events {
@@ -113,7 +111,7 @@ func TestRoundTripAllTypes(t *testing.T) {
 		TypeVolatility, TypeShardTotal,
 		TypeRunScope, TypeRunCharms, TypeRunCache, TypeRunBase,
 		TypeRunStep, TypeRunSummary,
-		TypeLockWait, TypeLockReleased, TypeNotice,
+		TypeNotice,
 	}
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
@@ -520,10 +518,8 @@ func TestStructuredRunEventTypes(t *testing.T) {
 		{"RunSummary dry", RunSummary{Dry: true, Planned: 4, DurationMs: 12}, TypeRunSummary},
 		{"RunRemote", RunRemote{Hits: 2, Misses: 1, Published: 1, Failures: 1, DownBytes: 2048, UpBytes: 512}, TypeRunRemote},
 		{"RunDry", RunDry{}, TypeRunDry},
-		{"LockWait", LockWait{Project: ".", HolderPID: 4242, Command: "magus run ci", ElapsedMs: 15000}, TypeLockWait},
-		{"LockReleased", LockReleased{Project: "libs/gopherbuzz"}, TypeLockReleased},
 		{"LockSuperseded", LockSuperseded{Project: ".", HolderPID: 4242, Command: "magus run ci"}, TypeLockSuperseded},
-		{"LockSupersedeUnanswered", LockSupersedeUnanswered{Project: ".", HolderPID: 4242, Command: "magus run ci", BoundMs: 30000}, TypeLockSupersedeUnanswered},
+		{"LockSupersedeRefused", LockSupersedeRefused{Project: ".", HolderPID: 4242, Command: "magus run ci", BoundMs: 30000}, TypeLockSupersedeRefused},
 		{"DeterminismUnchecked", DeterminismUnchecked{Project: "api", Target: "build", Error: "open dist: permission denied"}, TypeDeterminismUnchecked},
 		{"Notice", Notice{Level: slog.LevelWarn, Code: "MGS1028", Message: "projects seeded by changed files nothing declares"}, TypeNotice},
 	}

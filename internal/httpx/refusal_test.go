@@ -1,3 +1,5 @@
+// cross-cutting: the refusal every guard in this package writes, across bearer.go and rebind.go
+
 package httpx
 
 import (
@@ -14,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
 
@@ -53,12 +56,12 @@ func (s wireStatus) reason() string {
 	return ""
 }
 
-func TestRefuseWritesAIPStatusJSON(t *testing.T) {
+func TestBearerRefusalIsAIPStatusJSON(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Authorization", "Bearer nope")
 	rr := httptest.NewRecorder()
-	BearerGuard(FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
+	BearerGuard(rpcerr.FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
 	t.Logf("%s", rr.Body.Bytes())
 
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
@@ -79,12 +82,12 @@ func TestRefuseWritesAIPStatusJSON(t *testing.T) {
 	assert.Equal(t, types.CodeURL(types.BearerRejected), help.Links[0].URL)
 }
 
-func TestRefuseOmitsTheBearerChallengeOn403(t *testing.T) {
+func TestRebindRefusalOmitsTheBearerChallenge(t *testing.T) {
 	t.Parallel()
 	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
 	req.Host = "evil.example"
 	rr := httptest.NewRecorder()
-	GuardRebind(FormatJSON, AllowedHosts(netip.MustParseAddrPort("127.0.0.1:7391")), okHandler).ServeHTTP(rr, req)
+	GuardRebind(rpcerr.FormatJSON, AllowedHosts(netip.MustParseAddrPort("127.0.0.1:7391")), okHandler).ServeHTTP(rr, req)
 
 	assert.Equal(t, http.StatusForbidden, rr.Code)
 	assert.Empty(t, rr.Header().Get("WWW-Authenticate"))
@@ -95,9 +98,9 @@ func TestRefuseOmitsTheBearerChallengeOn403(t *testing.T) {
 
 // The Connect cases decode through connect-go's own client, so they prove what a Connect
 // client parses rather than a shape this test assumes.
-func TestRefuseSpeaksConnectOnConnectMounts(t *testing.T) {
+func TestBearerRefusalSpeaksConnectOnConnectMounts(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(BearerGuard(FormatConnect, rejectAll, okHandler))
+	srv := httptest.NewServer(BearerGuard(rpcerr.FormatConnect, rejectAll, okHandler))
 	t.Cleanup(srv.Close)
 	url := srv.URL + "/magus.probe.v1alpha1.ProbeService/Call"
 
@@ -154,7 +157,7 @@ func TestJSONMountIgnoresConnectLookingRequests(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
-	BearerGuard(FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
+	BearerGuard(rpcerr.FormatJSON, rejectAll, okHandler).ServeHTTP(rr, req)
 
 	assert.Equal(t, "UNAUTHENTICATED", decodeStatus(t, rr.Body.Bytes()).Error.Status)
 }

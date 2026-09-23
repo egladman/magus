@@ -31,7 +31,7 @@ type verifier func(presented string) bool
 // without restarting the server; it must fail closed (return false) on any error.
 // A refusal is a 401 in format: MGS9011 when no token was presented, MGS9001 when
 // one was, which never says whether it was wrong, expired, or revoked.
-func BearerGuard(format ErrorFormat, verify verifier, next http.Handler) http.Handler {
+func BearerGuard(format rpcerr.Format, verify verifier, next http.Handler) http.Handler {
 	return guard(format, verify, headerToken, next)
 }
 
@@ -41,13 +41,13 @@ func BearerGuard(format ErrorFormat, verify verifier, next http.Handler) http.Ha
 // set an Authorization header, so the query carrier is the sole option. It is a
 // deliberate, scoped exception to the header-only rule (RFC 6750 section 2.3);
 // keep it off the MCP endpoint, which every supported client reaches with a header.
-func BearerGuardWithQueryToken(format ErrorFormat, verify verifier, next http.Handler) http.Handler {
+func BearerGuardWithQueryToken(format rpcerr.Format, verify verifier, next http.Handler) http.Handler {
 	return guard(format, verify, presentedToken, next)
 }
 
 // guard is the shared 401-or-pass core; extract names the token carriers a given
 // mount accepts (header-only, or header-plus-query).
-func guard(format ErrorFormat, verify verifier, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
+func guard(format rpcerr.Format, verify verifier, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		presented, ok := extract(r)
 		if !ok {
@@ -69,13 +69,11 @@ var (
 	bearerMissing = rpcerr.Error{
 		Code:    connect.CodeUnauthenticated,
 		Reason:  types.BearerMissing,
-		Title:   "no bearer token presented",
 		Message: "the request carried no bearer token; send one as `Authorization: Bearer <token>`. Mint or inspect a connector token with: magus config mcp connector",
 	}
 	bearerRejected = rpcerr.Error{
 		Code:    connect.CodeUnauthenticated,
 		Reason:  types.BearerRejected,
-		Title:   "bearer token rejected",
 		Message: "the daemon rejected the bearer token: it is wrong, expired, or revoked. Mint or inspect a connector token with: magus config mcp connector",
 	}
 )

@@ -51,21 +51,25 @@ func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 	}
 }
 
+// The error names the daemon's workspace path, so it stays in the log.
+func TestInsightHandler_ErrorReturns500(t *testing.T) {
+	h := NewHandler(fakeInsightSource{insightErr: errors.New("git -C /Users/dev/repo log: scan boom")}, nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("want 500, got %d", w.Code)
+	}
+	if body := w.Body.String(); body != "insight failed\n" {
+		t.Errorf("want only what failed, got %q", body)
+	}
+}
+
 func TestInsightHandler_NoWorkspaceReturns503(t *testing.T) {
 	h := NewHandler(fakeInsightSource{insightErr: console.ErrNoWorkspace}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("want 503, got %d", w.Code)
-	}
-}
-
-func TestInsightHandler_ErrorReturns500(t *testing.T) {
-	h := NewHandler(fakeInsightSource{insightErr: errors.New("scan boom")}, nil)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
-	if w.Code != http.StatusInternalServerError {
-		t.Errorf("want 500, got %d", w.Code)
 	}
 }
 

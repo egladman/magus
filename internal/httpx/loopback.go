@@ -42,10 +42,9 @@ func RequireLoopbackPeer(next http.Handler) http.Handler {
 		if !isLoopbackAddr(r.RemoteAddr) {
 			// Every mux-level caller here is a plain JSON route; a Connect server checks
 			// loopback via its own interceptor instead of this middleware.
-			FormatJSON.Write(w, r, rpcerr.Error{
+			rpcerr.FormatJSON.Write(w, r, rpcerr.Error{
 				Code:    connect.CodePermissionDenied,
 				Reason:  types.LoopbackPeerRequired,
-				Title:   "local access only",
 				Message: "this route only answers a caller on this machine's loopback interface",
 			})
 			return

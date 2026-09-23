@@ -319,3 +319,7 @@ reference/codes/sandbox/MGS3015/
 # The pinning tag is down to one page, reference/remote-spells.md; a one-page tag gets no
 # index, as with the tags above.
 tags/pinning/
+
+# MAGUS_NO_WAIT was removed when a held lock or budget began refusing at once; its tag
+# index went with the pages that documented it.
+tags/magus-no-wait/

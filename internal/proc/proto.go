@@ -52,17 +52,13 @@ const (
 // shape, so a request without it is answered as unrecognized rather than acted on.
 const budgetMagic = "magus-budget-v1"
 
-// budgetAcquireRequest asks the machine budget to seat one step. It is a POLL, not a
-// blocking wait: the budget answers immediately with a grant, a refusal, or a queue
-// position, and the client owns the waiting. The client is the process that can print
-// the wait and whose death should retire the waiter, and a poll needs no per-connection
-// queue state to survive a daemon restart.
+// budgetAcquireRequest asks the machine budget to seat one step. The budget answers
+// immediately, with a grant or a refusal, and keeps nothing for a refused claim; a
+// client that may wait (see types.MachineVerdict.OwnRun) asks again.
 type budgetAcquireRequest struct {
-	Magic    string `json:"magic"`
-	Protocol string `json:"protocol"`
-	// Waiter identifies this step across its polls, so the budget can hold its place.
-	Waiter string             `json:"waiter"`
-	Claim  types.MachineClaim `json:"claim"`
+	Magic    string             `json:"magic"`
+	Protocol string             `json:"protocol"`
+	Claim    types.MachineClaim `json:"claim"`
 }
 
 // budgetAcquireReply carries the verdict. Err is non-empty only when this server holds
@@ -72,14 +68,11 @@ type budgetAcquireReply struct {
 	Err     string               `json:"err,omitempty"`
 }
 
-// budgetReleaseRequest returns a granted claim (ID) or retires a waiter that gave up
-// (Waiter). One frame for both because they are the same event from the budget's side:
-// this step is no longer asking for room.
+// budgetReleaseRequest returns a granted claim.
 type budgetReleaseRequest struct {
 	Magic    string `json:"magic"`
 	Protocol string `json:"protocol"`
 	ID       string `json:"id,omitempty"`
-	Waiter   string `json:"waiter,omitempty"`
 }
 
 // budgetReleaseReply is the response to a release. It carries no fields: the client
@@ -196,6 +189,41 @@ type StatusReply struct {
 	// magus on the machine holds and who is queued for it. Nil for a per-process proc
 	// server, which arbitrates nothing beyond itself.
 	Machine *types.MachineSnapshot `json:"machine,omitempty"`
+}
+
+// StatusOutput is r as the status report's pool section, nil for a nil reply. It is the
+// one conversion `magus status` and the console both read, so the two cannot disagree.
+//
+// Affected is left unset: it needs a workspace-scoped VCS diff, and neither reader opens a
+// workspace to answer a status query.
+func (r *StatusReply) StatusOutput() *types.StatusOutput {
+	if r == nil {
+		return nil
+	}
+	out := &types.StatusOutput{
+		ParentPID:     r.ParentPID,
+		DaemonVersion: r.DaemonVersion,
+		Mode:          r.Mode,
+		Capacity:      r.Capacity,
+		Running:       r.Running,
+		// Floored: a daemon whose capacity was clamped under load can report more running
+		// than capacity, and "-2 available" is worse than "0".
+		Available: max(0, r.Capacity-r.Running),
+		Queued:    r.Queued,
+	}
+	for _, c := range r.Calls {
+		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{
+			Args: c.Args, Workspace: c.Workspace, StartedAt: c.StartedAt, Step: c.SubOp, Inv: c.Inv,
+		})
+	}
+	for _, w := range r.Workspaces {
+		out.Workspaces = append(out.Workspaces, types.StatusWorkspace{
+			Root: w.Root, State: w.State, Error: w.Error, LoadedAt: w.LoadedAt, LastAccess: w.LastAccess,
+			CacheHit: w.CacheHit, CacheMiss: w.CacheMiss, CacheError: w.CacheError,
+			CacheBytes: w.CacheBytes, CacheSavedMs: w.CacheSavedMs, SecretProvider: w.SecretProvider,
+		})
+	}
+	return out
 }
 
 // Call describes a single adopted call currently executing.

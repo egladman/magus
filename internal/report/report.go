@@ -23,38 +23,36 @@ import (
 // v4 prefixed that event and the diagnostic one with "run.": both collided by name
 // with types.StreamEvent, which stamps its own schema number on a line of nearly the
 // same shape.
-// v5 dropped run.base's vcs field, and a -o jsonl run's stderr moved from slog's
-// {time,level,msg} lines to run.notice records.
+// v5 dropped run.base's vcs field and the lock.wait and lock.released events, and a
+// -o jsonl run's stderr moved from slog's {time,level,msg} lines to run.notice records.
 const Schema = 5
 
 // Type values stamped on every event line; stable across versions.
 const (
-	TypeTargetResult            = "run.target.result"
-	TypeGraphBuild              = "graph.build"
-	TypeGraphQuery              = "graph.query"
-	TypeGraphError              = "graph.error"
-	TypeVolatility              = "volatile"
-	TypeShardTotal              = "shard.total"
-	TypeRaceDetected            = "race.detected"
-	TypeOutputOverlapDetected   = "race.output_overlap"
-	TypeDeterminismMismatch     = "race.determinism_mismatch"
-	TypeDeterminismUnchecked    = "race.determinism_unchecked"
-	TypeMissingDependency       = "race.missing_dependency"
-	TypeDiagnosticEmitted       = "run.diagnostic"
-	TypeRunScope                = "run.scope"
-	TypeRunCharms               = "run.charms"
-	TypeRunCache                = "run.cache"
-	TypeRunBase                 = "run.base"
-	TypeRunStep                 = "run.step"
-	TypeRunSummary              = "run.summary"
-	TypeRunRemote               = "run.remote"
-	TypeRunDry                  = "run.dry"
-	TypeRunDetach               = "run.detach"
-	TypeLockWait                = "lock.wait"
-	TypeLockReleased            = "lock.released"
-	TypeLockSuperseded          = "lock.superseded"
-	TypeLockSupersedeUnanswered = "lock.supersede_unanswered"
-	TypeNotice                  = "run.notice"
+	TypeTargetResult          = "run.target.result"
+	TypeGraphBuild            = "graph.build"
+	TypeGraphQuery            = "graph.query"
+	TypeGraphError            = "graph.error"
+	TypeVolatility            = "volatile"
+	TypeShardTotal            = "shard.total"
+	TypeRaceDetected          = "race.detected"
+	TypeOutputOverlapDetected = "race.output_overlap"
+	TypeDeterminismMismatch   = "race.determinism_mismatch"
+	TypeDeterminismUnchecked  = "race.determinism_unchecked"
+	TypeMissingDependency     = "race.missing_dependency"
+	TypeDiagnosticEmitted     = "run.diagnostic"
+	TypeRunScope              = "run.scope"
+	TypeRunCharms             = "run.charms"
+	TypeRunCache              = "run.cache"
+	TypeRunBase               = "run.base"
+	TypeRunStep               = "run.step"
+	TypeRunSummary            = "run.summary"
+	TypeRunRemote             = "run.remote"
+	TypeRunDry                = "run.dry"
+	TypeRunDetach             = "run.detach"
+	TypeLockSuperseded        = "lock.superseded"
+	TypeLockSupersedeRefused  = "lock.supersede_refused"
+	TypeNotice                = "run.notice"
 )
 
 // TargetResult reports the outcome of one target run — the single per-target event
@@ -248,23 +246,6 @@ type RunSummary struct {
 	DurationMs int64 `json:"duration_ms"`
 }
 
-// LockWait reports a run blocked on another magus process holding a project's
-// lock -- emitted once when the wait starts and again on each heartbeat while it
-// continues, so a structured reader has the same liveness evidence a text run's
-// repeated line gives a human.
-type LockWait struct {
-	Project   string `json:"project"`
-	HolderPID int    `json:"holder_pid,omitempty"`
-	Command   string `json:"command,omitempty"`
-	ElapsedMs int64  `json:"elapsed_ms,omitempty"`
-}
-
-// LockReleased reports that a previously-waited-on project lock freed and this
-// run now proceeds.
-type LockReleased struct {
-	Project string `json:"project"`
-}
-
 // LockSuperseded reports that this gate stopped an earlier gate on the same tree and
 // took its project lock (MGS3014).
 type LockSuperseded struct {
@@ -273,9 +254,10 @@ type LockSuperseded struct {
 	Command   string `json:"command,omitempty"`
 }
 
-// LockSupersedeUnanswered reports that this gate asked an earlier gate on the same tree
-// to stop and it did not within BoundMs, so nothing was superseded.
-type LockSupersedeUnanswered struct {
+// LockSupersedeRefused reports that this gate asked an earlier gate on the same tree to
+// stop, it did not within BoundMs, and so this run is refused (exit 75) rather than
+// waiting for it. Nothing was superseded.
+type LockSupersedeRefused struct {
 	Project   string `json:"project"`
 	HolderPID int    `json:"holder_pid,omitempty"`
 	Command   string `json:"command,omitempty"`
@@ -337,32 +319,30 @@ func LevelName(l slog.Level) string {
 }
 
 var registry = map[reflect.Type]string{ // populated at init; read-only in the hot path
-	reflect.TypeOf(DiagnosticEmitted{}):       TypeDiagnosticEmitted,
-	reflect.TypeOf(TargetResult{}):            TypeTargetResult,
-	reflect.TypeOf(GraphBuild{}):              TypeGraphBuild,
-	reflect.TypeOf(GraphQuery{}):              TypeGraphQuery,
-	reflect.TypeOf(GraphError{}):              TypeGraphError,
-	reflect.TypeOf(VolatilityCall{}):          TypeVolatility,
-	reflect.TypeOf(ShardTotal{}):              TypeShardTotal,
-	reflect.TypeOf(RaceDetected{}):            TypeRaceDetected,
-	reflect.TypeOf(OutputOverlapDetected{}):   TypeOutputOverlapDetected,
-	reflect.TypeOf(DeterminismMismatch{}):     TypeDeterminismMismatch,
-	reflect.TypeOf(DeterminismUnchecked{}):    TypeDeterminismUnchecked,
-	reflect.TypeOf(MissingDependency{}):       TypeMissingDependency,
-	reflect.TypeOf(RunScope{}):                TypeRunScope,
-	reflect.TypeOf(RunCharms{}):               TypeRunCharms,
-	reflect.TypeOf(RunCache{}):                TypeRunCache,
-	reflect.TypeOf(RunBase{}):                 TypeRunBase,
-	reflect.TypeOf(RunStep{}):                 TypeRunStep,
-	reflect.TypeOf(RunSummary{}):              TypeRunSummary,
-	reflect.TypeOf(RunDry{}):                  TypeRunDry,
-	reflect.TypeOf(RunDetach{}):               TypeRunDetach,
-	reflect.TypeOf(LockWait{}):                TypeLockWait,
-	reflect.TypeOf(LockReleased{}):            TypeLockReleased,
-	reflect.TypeOf(LockSuperseded{}):          TypeLockSuperseded,
-	reflect.TypeOf(LockSupersedeUnanswered{}): TypeLockSupersedeUnanswered,
-	reflect.TypeOf(RunRemote{}):               TypeRunRemote,
-	reflect.TypeOf(Notice{}):                  TypeNotice,
+	reflect.TypeOf(DiagnosticEmitted{}):     TypeDiagnosticEmitted,
+	reflect.TypeOf(TargetResult{}):          TypeTargetResult,
+	reflect.TypeOf(GraphBuild{}):            TypeGraphBuild,
+	reflect.TypeOf(GraphQuery{}):            TypeGraphQuery,
+	reflect.TypeOf(GraphError{}):            TypeGraphError,
+	reflect.TypeOf(VolatilityCall{}):        TypeVolatility,
+	reflect.TypeOf(ShardTotal{}):            TypeShardTotal,
+	reflect.TypeOf(RaceDetected{}):          TypeRaceDetected,
+	reflect.TypeOf(OutputOverlapDetected{}): TypeOutputOverlapDetected,
+	reflect.TypeOf(DeterminismMismatch{}):   TypeDeterminismMismatch,
+	reflect.TypeOf(DeterminismUnchecked{}):  TypeDeterminismUnchecked,
+	reflect.TypeOf(MissingDependency{}):     TypeMissingDependency,
+	reflect.TypeOf(RunScope{}):              TypeRunScope,
+	reflect.TypeOf(RunCharms{}):             TypeRunCharms,
+	reflect.TypeOf(RunCache{}):              TypeRunCache,
+	reflect.TypeOf(RunBase{}):               TypeRunBase,
+	reflect.TypeOf(RunStep{}):               TypeRunStep,
+	reflect.TypeOf(RunSummary{}):            TypeRunSummary,
+	reflect.TypeOf(RunDry{}):                TypeRunDry,
+	reflect.TypeOf(RunDetach{}):             TypeRunDetach,
+	reflect.TypeOf(LockSuperseded{}):        TypeLockSuperseded,
+	reflect.TypeOf(LockSupersedeRefused{}):  TypeLockSupersedeRefused,
+	reflect.TypeOf(RunRemote{}):             TypeRunRemote,
+	reflect.TypeOf(Notice{}):                TypeNotice,
 }
 
 // TypeOf returns the record type e is written as, or "" for an unregistered event.

@@ -4,12 +4,17 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
+	// The interpreter a real magusfile load needs, which cmd/magus links in production.
+	_ "github.com/egladman/magus/internal/interp/bindings"
+	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
@@ -161,8 +166,9 @@ func TestSpawnRuleDenyAndAdviseReachTheVerdict(t *testing.T) {
 	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "advise", Context: "Add a Done when section.", Rule: workspaceSpawnRule}, v)
 }
 
-// A broken rule judges nothing and says so once per session, following guard.shell's
-// fail-open stance on a workspace rule it cannot use.
+// A broken rule judges nothing, following guard.shell's fail-open stance on a workspace
+// rule it cannot use. Its failure is told in full once per session, and every spawn it
+// skips still says which rules applied.
 func TestSpawnRuleFailureFailsOpen(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	probe := &spawnRuleProbe{err: errors.New("magus\\guard.spawn: the rule raised: boom")}
@@ -172,9 +178,12 @@ func TestSpawnRuleFailureFailsOpen(t *testing.T) {
 	assert.Equal(t, "advise", first.Decision)
 	assert.Equal(t, string(advisorySpawnRuleFailed), first.Rule)
 	assert.Contains(t, first.Context, "boom")
+	assert.Contains(t, first.Context, "Only the built-in rules applied to this spawn.")
 
-	assert.Equal(t, "pass", Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"}).Decision,
-		"the failure is told once per session, then the spawn proceeds quietly")
+	repeat := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	assert.Equal(t, "advise", repeat.Decision)
+	assert.NotContains(t, repeat.Context, "boom", "the repeat is one line")
+	assert.Contains(t, repeat.Context, "Only the built-in rules applied to this spawn.")
 }
 
 // The approved rule and the working-tree rule both run and the stricter answer stands,
@@ -196,16 +205,13 @@ func TestSpawnRulesKeepTheStricterSide(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, cacheDir := spawnFixture(t)
-			// The lineage saw a spawn rule before, which is what tells the guard a rule gone
-			// from the working tree may still have an approved twin.
-			RecordPolicy(ctx, cacheDir, "", PolicyState{Digest: "seen", SpawnRule: true}, false)
 			deps := Dependencies{}
 			if tc.live != nil {
 				deps.SpawnRule = (&spawnRuleProbe{answer: *tc.live}).rule()
 			}
 			if tc.approved != nil {
 				approved := (&spawnRuleProbe{answer: *tc.approved}).rule()
-				deps.ApprovedSpawnRule = func(context.Context) workspace.SpawnRule { return approved }
+				deps.ApprovedSpawnRule = func(context.Context) (workspace.SpawnRule, error) { return approved, nil }
 			}
 			v := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 			assert.Equal(t, tc.want, v.Decision)
@@ -217,14 +223,39 @@ func TestSpawnRulesKeepTheStricterSide(t *testing.T) {
 	}
 }
 
-// A workspace that never registered a spawn rule does not pay for the approved side,
-// which can cost a VCS status and a second load of the magusfile, on every spawn.
-func TestApprovedSideIsSkippedWithoutAnySpawnRule(t *testing.T) {
-	ctx, _ := spawnFixture(t)
-	resolved := 0
-	deps := Dependencies{ApprovedSpawnRule: func(context.Context) workspace.SpawnRule { resolved++; return nil }}
-	assert.Equal(t, "pass", Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"}).Decision)
-	assert.Zero(t, resolved)
+// An approved rule that fails to resolve judges nothing and says so, following the stance
+// on any broken workspace rule; only running out of time denies.
+func TestApprovedResolveFailureIsReported(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	deps := Dependencies{ApprovedSpawnRule: func(context.Context) (workspace.SpawnRule, error) {
+		return nil, errors.New("approved magusfile: magusfile.buzz:3:1: expected expression")
+	}}
+	v := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	assert.Equal(t, "advise", v.Decision)
+	assert.Contains(t, v.Context, "The approved magus\\guard.spawn rule judged nothing: the rule could not be resolved")
+	assert.Contains(t, v.Context, "Only the built-in rules applied to this spawn.")
+
+	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	require.Len(t, spawns, 1)
+	assert.Equal(t, []trail.SpawnRuleFailure{{
+		Side:  decidedByApproved,
+		Error: "the rule could not be resolved: approved magusfile: magusfile.buzz:3:1: expected expression",
+	}}, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
+}
+
+// A built-in advice and a workspace advice both reach the reader, and the trail names both.
+func TestDecidedByNamesBothAdvisingSides(t *testing.T) {
+	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	ctx, _ := fleetFixture(t, row)
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
+
+	probe := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "Add a Done when section."}}
+	Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+
+	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	require.Len(t, spawns, 1)
+	assert.Equal(t, decidedByBuiltin+decidedByJoin+decidedByWorktree, spawns[0].DecidedBy)
 }
 
 // Role is computed from the job store, never declared by the caller.
@@ -260,7 +291,8 @@ func TestContinueReportsIdleTime(t *testing.T) {
 	assert.Nil(t, probe.asked[0].Target.IdleMs, "an agent magus never saw has no idle time")
 
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	seen := hint.MarkerPath(cacheDir, SessionKey("claude-code", "8f2c6a1e"), agentSeenKind("brisk-heron"))
+	Judge(ctx, deps, Request{Input: finishedSpawnEnvelope, Host: "claude-code"})
+	seen := hint.MarkerPath(cacheDir, SessionKey("claude-code", "8f2c6a1e"), agentSeenKind("a1b2c3"))
 	aged := time.Now().Add(-10 * time.Minute)
 	require.NoError(t, os.Chtimes(seen, aged, aged))
 
@@ -268,10 +300,99 @@ func TestContinueReportsIdleTime(t *testing.T) {
 	require.Len(t, probe.asked, 3)
 	idle := probe.asked[2].Target.IdleMs
 	require.NotNil(t, idle)
-	assert.GreaterOrEqual(t, *idle, (10 * time.Minute).Milliseconds())
+	assert.GreaterOrEqual(t, *idle, (10 * time.Minute).Milliseconds(), "the name reads the clock filed under the id")
 
+	byID := strings.Replace(claudeContinueEnvelope, `"to":"brisk-heron"`, `"to":"a1b2c3"`, 1)
+	Judge(ctx, deps, Request{Input: byID, Host: "claude-code"})
+	require.Len(t, probe.asked, 4)
+	assert.Less(t, *probe.asked[3].Target.IdleMs, time.Minute.Milliseconds(),
+		"a continue by name restarted the clock a continue by id reads")
+}
+
+// finishedSpawnEnvelope is claudeSpawnEnvelope's call after it ran, naming the child's id.
+const finishedSpawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PostToolUse","tool_name":"Agent",` +
+	`"tool_input":{"description":"orchestrator/brisk-heron/implement adr 0002","prompt":"Implement ADR 0002.","name":"brisk-heron"},` +
+	`"tool_response":{"status":"async_launched","agentId":"a1b2c3"}}`
+
+// spawnBlob is the part of an agent_spawn request blob these tests read.
+type spawnBlob struct {
+	Target       string                   `json:"target"`
+	RuleFailures []trail.SpawnRuleFailure `json:"rule_failures"`
+}
+
+func readSpawnBlob(t *testing.T, cacheDir string, e trail.Event) spawnBlob {
+	t.Helper()
+	body, err := trail.ReadBlob(cacheDir, e.RequestRef)
+	require.NoError(t, err)
+	var got spawnBlob
+	require.NoError(t, json.Unmarshal(body, &got))
+	return got
+}
+
+// A syntax error left in the working tree cannot switch off the approved rule: the load
+// failure no longer reads as "no rule registered", the approved side still denies, and
+// the failure is reported and kept on the trail.
+func TestBrokenWorkingTreeStillRunsTheApprovedRule(t *testing.T) {
+	loadErr := errors.New("magusfile.buzz:3:1: expected expression")
+	cases := []struct {
+		name     string
+		approved types.SpawnVerdict
+		want     string
+		by       string
+	}{
+		{"an approved deny still denies", types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "Name a model."}, "deny", decidedByApproved},
+		{"an approved allow reports the failure", types.SpawnVerdict{Decision: types.SpawnAllow}, "advise", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cacheDir := spawnFixture(t)
+			approved := (&spawnRuleProbe{answer: tc.approved}).rule()
+			deps := Dependencies{
+				LoadFailure:       loadErr,
+				ApprovedSpawnRule: func(context.Context) (workspace.SpawnRule, error) { return approved, nil },
+			}
+			v := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+			assert.Equal(t, tc.want, v.Decision)
+			if tc.want == "advise" {
+				assert.Contains(t, v.Context, "failed to load")
+				assert.Contains(t, v.Context, loadErr.Error())
+				assert.Contains(t, v.Context, "Only the built-in rules and the approved magus\\guard.spawn rule applied to this spawn.")
+			}
+
+			spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+			require.Len(t, spawns, 1)
+			assert.Equal(t, tc.by, spawns[0].DecidedBy)
+			assert.Equal(t, []trail.SpawnRuleFailure{{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadErr.Error()}},
+				readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
+		})
+	}
+}
+
+// A workspace advise joins a built-in one rather than being dropped behind it.
+func TestWorkspaceAdviseJoinsABuiltInAdvise(t *testing.T) {
+	row := types.Job{ID: "wave/worker", Criteria: "the guard", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
+	ctx, _ := fleetFixture(t, row)
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	require.NoError(t, job.Checkout{CacheDir: cacheDir, Session: "8f2c6a1e"}.Bind(row.ID))
+
+	probe := &spawnRuleProbe{answer: types.SpawnVerdict{Decision: types.SpawnAdvise, Reason: "Add a Done when section."}}
+	v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	assert.Equal(t, "advise", v.Decision)
+	assert.Equal(t, string(advisorySharedCheckout), v.Rule, "the built-in advice keeps its rule")
+	assert.Contains(t, v.Context, "Add a Done when section.")
+}
+
+// A continuation is recorded like a spawn, naming the agent it addressed by its id.
+func TestContinueIsRecordedOnTheTrail(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	deps := Dependencies{SpawnRule: (&spawnRuleProbe{}).rule()}
+	Judge(ctx, deps, Request{Input: finishedSpawnEnvelope, Host: "claude-code"})
 	Judge(ctx, deps, Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Less(t, *probe.asked[3].Target.IdleMs, time.Minute.Milliseconds(), "the continue restarted the clock")
+
+	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	require.Len(t, spawns, 1)
+	assert.Equal(t, trail.ActionAgentContinue, spawns[0].Action)
+	assert.Equal(t, spawnBlob{Target: "a1b2c3"}, readSpawnBlob(t, cacheDir, spawns[0]))
 }
 
 // parent is what the CALLING agent was spawned as, recorded from the finished spawn call
@@ -496,9 +617,9 @@ func TestSubagentStopRecordsOnlyReportedUsage(t *testing.T) {
 func TestSpawnRuleSeesTheGuardsJobRows(t *testing.T) {
 	row := types.Job{ID: "guard-facts", Criteria: "the seam", WritePaths: []string{"internal/guard/**"}, State: types.StateRunning, Registered: 1}
 	ctx, _ := fleetFixture(t, row)
-	var seen []types.JobSnapshot
+	var seen []job.Snapshot
 	rule := func(ctx context.Context, _ types.SpawnRequest, _ hint.Gate) (types.SpawnVerdict, error) {
-		snap, ok := types.JobSnapshotFromContext(ctx)
+		snap, ok := job.SnapshotFromContext(ctx)
 		require.True(t, ok, "the rule runs under the guard's rows")
 		seen = append(seen, snap)
 		return types.SpawnVerdict{}, nil
@@ -579,4 +700,86 @@ func TestAttributionDoesNotReachTheParent(t *testing.T) {
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
 	v := Judge(ctx, Dependencies{}, Request{Input: `{"session_id":"8f2c6a1e","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"}}`, Host: "claude-code"})
 	assert.Empty(t, v.Lease)
+}
+
+// denyEverySpawn is a magusfile whose spawn rule denies every spawn.
+const denyEverySpawn = `import "magus";
+
+magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+    return magus\guard.deny("Name a model.");
+});
+`
+
+// committedSpawnRule is a git repository whose committed magusfile is denyEverySpawn and
+// whose working tree then holds worktree in its place.
+func committedSpawnRule(t *testing.T, worktree string) string {
+	t.Helper()
+	root := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", root, "-c", "user.email=test@example.com", "-c", "user.name=test"}, args...)...).CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	runGit("init", "-q")
+	magusfile := filepath.Join(root, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(magusfile, []byte(denyEverySpawn), 0o644))
+	runGit("add", "-A")
+	runGit("commit", "-q", "-m", "init")
+	require.NoError(t, os.WriteFile(magusfile, []byte(worktree), 0o644))
+	return root
+}
+
+func inspectMagus(t *testing.T, root string) *magus.Magus {
+	t.Helper()
+	ws, err := magus.Inspect(t.Context(), root)
+	require.NoError(t, err, "the working tree still loads")
+	m, ok := ws.(*magus.Magus)
+	require.True(t, ok)
+	return m
+}
+
+// A fresh checkout has no lineage recording that a spawn rule ever existed, so deleting the
+// rule from its working tree must not be what decides whether the approved rule is asked.
+func TestApprovedRuleAppliesAfterTheWorkingTreeDeletesIt(t *testing.T) {
+	m := inspectMagus(t, committedSpawnRule(t, "import \"magus\";\n"))
+	require.Nil(t, m.SpawnRule(), "the working tree registers no rule")
+
+	ctx, _ := spawnFixture(t)
+	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: m.ApprovedSpawnRule},
+		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, "Name a model.", v.Reason)
+}
+
+// Resolving the approved rule is the one part of a spawn an agent can slow down, so running
+// out of time denies rather than letting the working tree's looser rule stand alone.
+func TestSlowApprovedRuleDenies(t *testing.T) {
+	m := inspectMagus(t, committedSpawnRule(t, `import "magus";
+
+magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+    return magus\guard.allow();
+});
+`))
+	require.NotNil(t, m.SpawnRule())
+
+	prev := approvedResolveTimeout
+	approvedResolveTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { approvedResolveTimeout = prev })
+	slow := func(ctx context.Context) (workspace.SpawnRule, error) {
+		<-ctx.Done()
+		return m.ApprovedSpawnRule(ctx)
+	}
+
+	ctx, cacheDir := spawnFixture(t)
+	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: slow},
+		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
+	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, approvedRuleTimedOut, v.Reason)
+
+	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	require.Len(t, spawns, 1)
+	assert.Equal(t, decidedByApproved, spawns[0].DecidedBy)
+	assert.Equal(t, []trail.SpawnRuleFailure{{Side: decidedByApproved, Error: "resolving the rule took longer than 50ms"}},
+		readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 }
