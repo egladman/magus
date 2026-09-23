@@ -152,7 +152,6 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 // failed target result and as an MGS3009 diagnostic, both naming the holder.
 func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	t.Setenv("MAGUS_NO_WAIT", "1")
 	const spellName = "zzz-machine-refusal-spell"
 	spell := spells.NewSpell(spellName,
 		spells.WithTargets("build"),
@@ -167,7 +166,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	// A pid that is alive for the whole test, so the budget does not reap the claim.
 	holderPID := os.Getppid()
 	budget := cache.NewMachineBudget(10_000, 4)
-	held := budget.Request("holder.1", types.MachineClaim{
+	held := budget.Request(types.MachineClaim{
 		Project: ".", Target: "ci", Slots: 4, PID: holderPID, Dir: "/elsewhere/checkout",
 	})
 	require.True(t, held.Granted, "the fixture's holder must own the budget")

@@ -1395,11 +1395,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	// Per-project workspace lock: this is a mutating invocation (it writes outputs
 	// and the cache), so take every reachable project's EXCLUSIVE advisory lock up
-	// front, in sorted order, and hold it for the whole invocation. It serializes
-	// against a SEPARATE concurrent magus process; the intra-process scheduler fans
-	// out beneath it untouched. Acquired here (after the dry-run early return) so a
+	// front, in sorted order, and hold it for the whole invocation. It excludes every
+	// other invocation; this invocation's own scheduler fans out beneath it untouched. Acquired here (after the dry-run early return) so a
 	// dry run, which mutates nothing, takes no lock.
-	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate, opts.Report)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate)
 	if err != nil {
 		return err
 	}

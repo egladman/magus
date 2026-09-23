@@ -49,7 +49,6 @@ type Cache struct {
 	// in Open from the two fields below, which is where the caller's logger exists.
 	machine         *machineGate
 	machineAdmitter MachineAdmitter
-	machineNoWait   bool
 	mutable         bool // true = read+write (default); false = read-only
 	sizeMB          int
 	maxImportBytes  int64 // per-entry cap for Import; 0 uses defaultMaxImportBytes
@@ -306,7 +305,7 @@ func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 		o(c)
 	}
 	if c.machineAdmitter != nil {
-		c.machine = &machineGate{admit: c.machineAdmitter, noWait: c.machineNoWait, log: c.log}
+		c.machine = &machineGate{admit: c.machineAdmitter, log: c.log}
 	}
 	if err := c.initSigning(); err != nil {
 		return nil, err

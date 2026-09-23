@@ -265,7 +265,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
 		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
 		{2, "Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation."},
-		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. Either MAGUS_NO_WAIT found a selected project's workspace lock held by another magus process (the error names the holding pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
+		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
 }
 
@@ -412,7 +412,7 @@ history to find the commit that introduced a regression.`,
 		{0, "Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs-only commit."},
 		{1, "At least one target failed, already reported with the path to its captured log."},
 		{2, "Misuse: no target named, or --step without an interactive terminal."},
-		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. Either MAGUS_NO_WAIT found a selected project's workspace lock held by another magus process (the error names the holding pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
+		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
 }
 

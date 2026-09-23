@@ -45,10 +45,10 @@ daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
 When no daemon is running the line reads `daemon: off`, with no error and no hang. Drop `--compact` for the full grid view when you have a wider pane to spare.
 
 The full view also lists workspace locks held by ordinary `magus run` processes,
-which may exist without a daemon. When a target is waiting on one, keep this
-watch open instead of writing a `sleep`/`ps` loop: it reports the lock holder's
-PID, command, directory, age, and waiters. A long run alone is not grounds to
-kill it; only act on a verified stale holder.
+which may exist without a daemon. When a run is refused by one, keep this watch
+open instead of writing a `sleep`/`ps` loop: it reports the lock holder's PID,
+command, directory, and age. A long run alone is not grounds to kill it; only act
+on a verified stale holder.
 
 The same view lists registered shared services with their lifecycle state and
 current dependent count, so an idle retained service is not mistaken for active

@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 38911
-skill_short_bytes: 29223
+skill_full_bytes: 38899
+skill_short_bytes: 29211
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `86` |
 | `knowledge-schema-version` | `14` |
-| `skill-content` | `8945d36963d6` |
+| `skill-content` | `c7f867d055e8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -510,7 +510,7 @@ Use Magus to watch processes and shared workspace resources:
 magus status --watch=15s
 ```
 
-This shows Magus process state, lock holders and waiters, and shared-service
+This shows Magus process state, lock holders, and shared-service
 state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
@@ -1169,7 +1169,7 @@ Use Magus to watch processes and shared workspace resources:
 magus status --watch=15s
 ```
 
-This shows Magus process state, lock holders and waiters, and shared-service
+This shows Magus process state, lock holders, and shared-service
 state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.

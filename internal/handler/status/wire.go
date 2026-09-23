@@ -58,16 +58,9 @@ func statusSnapshotToProto(r types.StatusSnapshot, build types.BuildInfo) *statu
 
 // lockToProto maps one held workspace lock onto the wire message. It deliberately
 // does not influence deriveHealth above: a held lock is what a working run looks
-// like, and reporting it as unhealthy would make a queued peer look like an outage.
+// like, and reporting it as unhealthy would make a busy peer look like an outage.
 func lockToProto(l types.StatusLock) *statusv1.Lock {
-	waiters := make([]*statusv1.LockWaiter, 0, len(l.Waiters))
-	for _, w := range l.Waiters {
-		waiters = append(waiters, &statusv1.LockWaiter{
-			Pid: int32(w.PID), Command: w.Command, Dir: w.Dir, WaitTime: tsFromTime(w.WaitTime),
-		})
-	}
 	return &statusv1.Lock{
-		Waiters: waiters,
 		Project: l.Project,
 		Pid:     int32(l.PID),
 		Command: l.Command,
