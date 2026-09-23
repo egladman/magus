@@ -1,11 +1,14 @@
 package doctor
 
 import (
+	"fmt"
 	"os/exec"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // checkMergeDriverLoads reports a registered merge driver that cannot load this workspace.
@@ -88,6 +91,37 @@ func driverExecutable(registered string) string {
 	}
 	exe, _, _ := strings.Cut(registered, " ")
 	return exe
+}
+
+// checkOwedRegeneration reports regenerations the merge driver recorded that no run has
+// settled yet. Each names generated files still holding one side of a merge, so a
+// commit made now carries stale output. The record outlives a failed job or a clone
+// with no daemon to run it, and this is where that becomes visible.
+func (r *runner) checkOwedRegeneration() types.DoctorCheck {
+	const name = "owed-regeneration"
+	ctx := r.runCtx()
+	owed, err := vcs.OwedRegenerations(ctx, r.ws.Root())
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: err.Error()}
+	}
+	if len(owed) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no merge left a regeneration owed"}
+	}
+	path, _ := vcs.OwedRegenerationPath(ctx, r.ws.Root())
+	details := make([]string, 0, len(owed)+2)
+	for _, o := range owed {
+		details = append(details, fmt.Sprintf("%s (%d kept file(s): %s)",
+			hint.Run.With(o.Target+":rw", o.Project), len(o.Paths), strings.Join(o.Paths, ", ")))
+	}
+	details = append(details,
+		"settle them with `"+hint.JobRun.With(job.NameRegenerateOwed)+"`, or `magus server "+job.NameRegenerateOwed+"` without a daemon",
+		"record: "+path)
+	return types.DoctorCheck{
+		Name:    name,
+		Status:  types.DoctorFail,
+		Message: fmt.Sprintf("%d regeneration(s) a merge kept one side for have not run, so those generated files are stale", len(owed)),
+		Details: details,
+	}
 }
 
 // firstLine keeps a probe's complaint to the line that names the cause; a failing magus

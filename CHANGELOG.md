@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A merge's kept generated files regenerate after it finishes.** The merge driver records
+  the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
+  a `regenerate-owed` job that runs each once, deepest project first, and stages the
+  result; it prints the amend command and never amends. `magus doctor` reports an unsettled
+  record (`owed-regeneration`).
 - **BZZ1008: a redundant import alias is refused in magusfiles and embedded Buzz.**
   `import "path" as alias;` errors when `alias` repeats the default binding, for
   `spells/`, `project/`, `magus/spell/<name>` and `buzz:` imports; a file import's
@@ -116,6 +121,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each
   other, as do the nested runs of one root invocation. `--watch` retries on the next
   change.
+- **Enum case sets are hand-written; no `_gen.go` file remains.** Each closed string
+  type declares its cases once, and the `magus-utils enums` generator is gone. A test
+  holds the Buzz boundary registry to each type's set.
 - **A daemon whose workspace fails to load keeps serving and says why.** The console,
   `/mcp` and status stay up; workspace calls answer MGS3016 (`FAILED_PRECONDITION`, one
   `PreconditionFailure` violation per diagnostic), or MGS3017 while reloading.
