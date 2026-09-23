@@ -277,6 +277,41 @@ func TestGitRepoPathsOfLinkedWorktree(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(linked, managedLockName))
 }
 
+// TestGitVCSChecksoutsFindsTheRootBehindABareRepoRedirect covers a bare-repo-backed
+// primary: root/.git is a FILE redirecting to root/.bare rather than a directory named
+// ".git", so matching the common dir's basename against ".git" never recognized it, and
+// it carries no worktrees/ admin entry of its own either since `worktree add` was never
+// run against it. From a sibling worktree, Checkouts must still find it.
+func TestGitVCSChecksoutsFindsTheRootBehindABareRepoRedirect(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	bare := filepath.Join(root, ".bare")
+	cmd := exec.Command("git", "init", "-q", "--bare", bare)
+	cmd.Env = gitEnv()
+	require.NoError(t, cmd.Run())
+	// core.bare stays true from init; flip it so git accepts root, reached through the
+	// plain .git redirect below, as this repo's work tree instead of refusing every
+	// command with "this operation must be run in a work tree".
+	gitRun(t, bare, "config", "core.bare", "false")
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: ./.bare\n"), 0o644))
+
+	run := func(args ...string) { gitRun(t, root, args...) }
+	run("config", "maintenance.auto", "false")
+	run("commit", "-q", "--allow-empty", "-m", "init")
+	run("branch", "-q", "-M", "main")
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	run("worktree", "add", "-q", "-b", "feature", linked)
+
+	_, others, err := Checkouts(linked)
+	require.NoError(t, err)
+	realRoot, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	assert.Equal(t, []string{realRoot}, others)
+}
+
 // TestCommitPushed covers the three answers CommitPushed can give: not pushed (ahead of
 // upstream), pushed (upstream contains it), and unknown (no upstream configured at all).
 func TestCommitPushed(t *testing.T) {
