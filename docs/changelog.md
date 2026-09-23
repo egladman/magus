@@ -128,11 +128,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `google.rpc.ErrorInfo` reason and a `google.rpc.Help` link. A missing bearer token is now
   MGS9011, split from a rejected one (MGS9001). Host, loopback, share-device and
   console-file refusals gain MGS9007-9010.
-- **`-o jsonl` runs emit only records, on stdout and stderr.** Headers, stage progress,
-  summaries, remote-cache counts, lock decisions and notices are typed events (`run.scope`,
-  `run.step`, `run.summary`, `run.remote`, `lock.wait`, `lock.superseded`, `run.notice`)
-  beside `run.target.result`; any other log record is a `run.notice`. Target output stays
-  behind the result's ref, even on failure.
+- **`-o jsonl` runs emit only records, on stdout and stderr.** Headers, progress,
+  summaries, race diagnostics and lock decisions are typed events beside
+  `run.target.result`; any other log line, or output printed outside a target, is a
+  `run.notice`. `magus x`, `affected --stdin` and `--detach` do the same. Target output
+  stays behind its ref. No record is dropped; the schema is now 5.
 - **A target's `std\print` is captured with its output.** It is withheld, streamed and
   stored under the target's ref like a subprocess's output, instead of bypassing both.
 - **Breaking: `log.format: jsonl` is refused** from `magus.yaml`, `MAGUS_LOG_FORMAT` and
@@ -221,9 +221,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the concurrency dials. The run-isolation gate goes with it. See docs/decisions/0001.
 - **The `magus_tail_log` MCP tool.** `magus_output` returns the same bytes by ref; the SDK
   keeps `Magus.TailLog`.
-- **Breaking for SDK callers: `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache`,
-  `LogBase` and `ReportWriter.RecordRun*`.** Build one `Sink` with `Magus.Sink`, emit headers
-  through it and pass it with `WithSink`. `WithReport` keeps taking a caller-owned writer.
+- **Breaking for SDK callers: `WithReport`, `WithReportWriter`, `Magus.LogScope`,
+  `LogCharms`, `LogCache`, `LogBase`, `Magus.CacheDescription`, `ReportWriter.RecordRun*`
+  and `ReportWriter.RecordDiagnostic`.** Build one `Sink` with `Magus.TextSink` or
+  `Magus.JSONLSink`, emit headers through it and pass it with `WithSink`.
+  `ReportWriter.RecordNotice` takes an `slog.Level`.
 
 ### Fixed
 
@@ -232,7 +234,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts
   merge.
 - **"Cannot check byte-stability" is recorded.** It fails the gate, and a `-o jsonl` run
-  now carries it as `race.determinism_mismatch` with its error.
+  now carries it as `race.determinism_unchecked` with its error.
+- **The daemon API reference matches the protos again.** The committed descriptor set
+  predated the last proto change, so the activity reference described an older API.
+- **The graph links a target to a workspace spell imported without an alias.**
+  `import "spells/acme";`, the form BZZ1008 requires, produced no target-to-op edges, so
+  `magus path` and `magus explain` missed every op it runs.
 - **Console failures are always shown.** Every failed daemon call, stream or undecodable
   frame raises a notification, and the console lint rejects a swallowed catch. A page with
   no token shows one sign-in state with the command that opens it signed in, and a 401
