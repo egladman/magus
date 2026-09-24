@@ -64,6 +64,16 @@ type Observed struct {
 	// is a real answer and not a missing one.
 	Symbols      map[string]SymbolFact
 	SymbolsKnown bool
+	// Regions are the declarations the lines of Changed land in, read over the same
+	// revision and only for those paths. RegionsKnown says the VCS answered, so an empty
+	// Regions means "no line of the diff" rather than "nobody looked"; a backend that
+	// declines the capability leaves it false. RegionsReason says why, for a reader who
+	// would otherwise take the silence for an empty footprint.
+	//
+	// No gate reads them: the footprint is reported, never graded.
+	Regions       []types.RegionChange
+	RegionsKnown  bool
+	RegionsReason string
 }
 
 // SymbolFact is what the graph knows about one symbol a gate named.
@@ -184,7 +194,10 @@ func (o Observed) covering(declared string, paths []string) bool {
 // att and gateAttempts are what an output store recorded, and seen is what the caller
 // observed of the tree; nothing here resolves either, so no IO runs under the store's lock.
 func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateAttempts []types.JobGateAttempt, declared []types.Job, seen Observed) Status {
-	v := Status{Job: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command}
+	v := Status{
+		Job: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command,
+		Footprint: seen.Regions, FootprintKnown: seen.RegionsKnown, FootprintReason: seen.RegionsReason,
+	}
 
 	if rep.Job != "" && rep.Job != row.ID {
 		v.Violations = append(v.Violations, fmt.Sprintf("the result is filed under job %q and this one is %q", rep.Job, row.ID))
