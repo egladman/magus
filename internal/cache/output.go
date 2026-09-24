@@ -95,8 +95,7 @@ type OutputDescriptor struct {
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
 	MagusVersion string `json:"magus_version,omitempty"`
 	// PersistedNs orders attempts that share a TimestampMs: unix nanoseconds at Persist,
-	// strictly increasing within one process (see nextPersistNs). Zero on a descriptor
-	// written before the field existed.
+	// strictly increasing within one process (see nextPersistNs).
 	PersistedNs int64 `json:"persisted_ns,omitempty"`
 
 	// The cache key pins a TREE STATE (via its source content hashes)
@@ -506,12 +505,7 @@ func newerDescriptor(a, b OutputDescriptor) bool {
 	if a.TimestampMs != b.TimestampMs {
 		return a.TimestampMs > b.TimestampMs
 	}
-	// compat(until: no store holds a descriptor without persisted_ns): an older
-	// descriptor carries zero, so a pair that includes one falls through to the attempt
-	// id and may rank a same-millisecond pair wrongly, as before the field existed.
-	// Observable: every outputs/*/*.json in the reachable stores carries persisted_ns;
-	// they age out under keep-last-K, so no migration is needed.
-	if a.PersistedNs != 0 && b.PersistedNs != 0 && a.PersistedNs != b.PersistedNs {
+	if a.PersistedNs != b.PersistedNs {
 		return a.PersistedNs > b.PersistedNs
 	}
 	if a.Attempt != b.Attempt {

@@ -854,9 +854,7 @@ func (c *Cache) emitUnchangedFailureHint(hash string) string {
 		return ""
 	}
 	d, err := c.outputs.newestDescriptor(hash)
-	// compat: see the v1-descriptor note in Attempts.
-	failed := cmp.Or(d.Attempt, d.Ref)
-	if err != nil || !d.Failed || failed == "" {
+	if err != nil || !d.Failed || d.Attempt == "" {
 		return ""
 	}
 	if _, dup := c.failureHinted.LoadOrStore(hash, struct{}{}); dup {
@@ -867,7 +865,7 @@ func (c *Cache) emitUnchangedFailureHint(hash string) string {
 		msg = msg[:maxHintErrChars] + "..."
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
-		failed, msg, hint.QueryOutput.With(failed)))
+		d.Attempt, msg, hint.QueryOutput.With(d.Attempt)))
 	return HintUnchangedFailure
 }
 

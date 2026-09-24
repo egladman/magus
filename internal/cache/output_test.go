@@ -313,21 +313,6 @@ func TestOutputStoreSameMillisecondLaterAttemptWins(t *testing.T) {
 	}
 }
 
-// TestNewerDescriptorWithoutPersistedNs pins the fallback for descriptors written
-// before PersistedNs: a later TimestampMs still wins, and a same-millisecond pair
-// with one or both fields missing is still ordered deterministically.
-func TestNewerDescriptorWithoutPersistedNs(t *testing.T) {
-	old := OutputDescriptor{TimestampMs: 5, Attempt: "out00000001"}
-	later := OutputDescriptor{TimestampMs: 6, Attempt: "out00000000"}
-	assert.True(t, newerDescriptor(later, old))
-	assert.False(t, newerDescriptor(old, later))
-
-	legacy := OutputDescriptor{TimestampMs: 5, Attempt: "out00000002"}
-	stamped := OutputDescriptor{TimestampMs: 5, Attempt: "out00000001", PersistedNs: 5_000_001}
-	assert.NotEqual(t, newerDescriptor(legacy, stamped), newerDescriptor(stamped, legacy),
-		"a mixed pair still has exactly one newer side")
-}
-
 // TestPortableRefDeterministicAcrossCaches is the point of portable refs: two machines
 // (modeled as two fresh cache dirs) running the same step over the same workspace
 // content print the SAME ref, so an inspect line pasted from CI resolves anywhere and
