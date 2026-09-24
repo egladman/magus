@@ -85,6 +85,21 @@ func gitRun(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
 }
 
+// gitFixtureConfig is repo config every fixture repository gets, set by gitInitRepo and
+// gitCloneShallow. Repo config is the only lever that reaches the git subprocesses
+// production code spawns with its own environment, where gitEnv does not apply.
+//
+// maintenance.auto and gc.auto: nearly every mutating git command spawns `git maintenance
+// run --auto --quiet --detach`, which outlives its parent by design and races t.TempDir
+// cleanup into "unlinkat .git: directory not empty" under load.
+//
+// user.name and user.email: `git merge` wants an identity even with --no-commit, and a CI
+// runner has no global one. StartMerge rightly uses the user's own. user.useConfigOnly
+// stops git guessing one from the hostname, which succeeds on a laptop and fails on a
+// runner, so a fixture missing the identity fails here as it would in CI.
+var gitFixtureConfig = []string{"maintenance.auto=false", "gc.auto=0",
+	"user.name=magus test", "user.email=test@example.com", "user.useConfigOnly=true"}
+
 // gitInitRepo makes a throwaway repo at dir with files committed. Skips if git is absent.
 func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
@@ -93,13 +108,10 @@ func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 	}
 	run := func(args ...string) { gitRun(t, dir, args...) }
 	run("init", "-q")
-	// Nearly every mutating git command spawns `git maintenance run --auto --quiet
-	// --detach`, which outlives its parent by design and races t.TempDir cleanup into
-	// "unlinkat .git: directory not empty" under load. Repo config is the only lever that
-	// also reaches the git subprocesses production code spawns with its own environment.
-	// gitCloneShallow sets the same pair, because a clone does not inherit these.
-	run("config", "maintenance.auto", "false")
-	run("config", "gc.auto", "0")
+	for _, kv := range gitFixtureConfig {
+		k, v, _ := strings.Cut(kv, "=")
+		run("config", k, v)
+	}
 	for name, content := range files {
 		p := filepath.Join(dir, filepath.FromSlash(name))
 		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
@@ -502,10 +514,12 @@ func gitDivergedOrigin(t *testing.T, trunk int) (string, int) {
 func gitCloneShallow(t *testing.T, origin string, depth int) string {
 	t.Helper()
 	clone := filepath.Join(t.TempDir(), "checkout")
-	// The detached-maintenance kill switch from gitInitRepo, set at birth: the deepen
-	// fetches the tests trigger would otherwise each leave one behind in the checkout.
-	args := []string{"clone", "--quiet", "--single-branch", "--branch", "feat",
-		"--config", "maintenance.auto=false", "--config", "gc.auto=0"}
+	// Set at birth, since a clone inherits no config: the deepen fetches the tests trigger
+	// would otherwise each leave a detached maintenance run behind in the checkout.
+	args := []string{"clone", "--quiet", "--single-branch", "--branch", "feat"}
+	for _, kv := range gitFixtureConfig {
+		args = append(args, "--config", kv)
+	}
 	if depth > 0 {
 		args = append(args, fmt.Sprintf("--depth=%d", depth))
 	}
@@ -1918,6 +1932,7 @@ func TestStartMergeRefusesWhenAMergeIsAlreadyUnderway(t *testing.T) {
 // B13: an exported GIT_DIR, which git exports into every hook, must not send magus's own
 // git calls into another repository, the fetch recovery included.
 func TestGitCallsIgnoreAHostileGitDir(t *testing.T) {
+	isolateGitConfig(t)
 	origin, _ := gitDivergedOrigin(t, 40)
 	clone := gitCloneShallow(t, origin, 1)
 	elsewhere := t.TempDir()
