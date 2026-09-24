@@ -212,9 +212,7 @@ func renderExamples() (map[string]string, error) {
 func capture(bin, dir string, argv []string) (string, error) {
 	cmd := exec.Command(bin, argv...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"MAGUS_DAEMON_ENABLED=false",
-		"XDG_STATE_HOME="+filepath.Join(dir, "state"))
+	cmd.Env = captureEnv(os.Environ(), dir)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -228,6 +226,24 @@ func capture(bin, dir string, argv []string) (string, error) {
 		text += "\n"
 	}
 	return text, nil
+}
+
+// captureEnv is environ without any MAGUS_ variable, with the cache and state dirs inside
+// the fixture dir. An inherited MAGUS_CACHE_DIR, such as the merge queue's per-candidate
+// cache, carries run history `explain` prints (last_output_ref), so a page captured there
+// differed from one captured anywhere else.
+func captureEnv(environ []string, dir string) []string {
+	env := make([]string, 0, len(environ)+4)
+	for _, kv := range environ {
+		if !strings.HasPrefix(kv, "MAGUS_") && !strings.HasPrefix(kv, "XDG_CACHE_HOME=") && !strings.HasPrefix(kv, "XDG_STATE_HOME=") {
+			env = append(env, kv)
+		}
+	}
+	return append(env,
+		"MAGUS_DAEMON_ENABLED=false",
+		"MAGUS_CACHE_DIR="+filepath.Join(dir, "cache", "magus"),
+		"XDG_CACHE_HOME="+filepath.Join(dir, "cache"),
+		"XDG_STATE_HOME="+filepath.Join(dir, "state"))
 }
 
 // inject replaces the content between each example's markers with its snippet. A
