@@ -163,9 +163,9 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A binary links the spell sources of the tree it was built from, so a verdict it reaches about a DIFFERENT checkout describes a tree that exists nowhere, and anything it regenerates lands there unmarked. " +
 			"Run magus from the workspace it belongs to and name the project as an argument; a different workspace is `--root <path>`."},
 	{Name: string(denyRuleStageAll), Decision: "deny",
-		Catches: "`git add -A`, which sweeps regenerated output into a commit about something else",
+		Catches: "a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output",
 		Why: "A magus target writes its declared outputs as it runs, so the tree here is routinely dirty with files you did not edit. " +
-			"`-A` sweeps those and any build residue into a commit about something else, with no signal that it happened. " +
+			"`-A` sweeps those and any build residue into a commit about something else, with no signal that it happened, and `-u` reaches the same outputs: it stages every TRACKED change across the whole tree, which is the same sweep minus files that are merely untracked, and a target's declared outputs are ordinarily tracked already. " +
 			"Measured: one such call put 69 files, a whole regenerated docs site plus five untouched source files, into a commit about four collection methods. " +
 			"`magus vcs add` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and reports anything undeclared instead of staging it."},
 	{Name: string(denyRuleSymbolSearch), Decision: "deny",
