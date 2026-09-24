@@ -17,7 +17,7 @@
 // It shares the ranking with the console's Diff surface and `magus diff` by construction:
 // all three read magus\diff, so nobody maintains a second opinion about which files matter.
 //
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
+// Reads the `baseline` input.
 import "advice";
 import "magus";
 import "std";
@@ -128,16 +128,17 @@ fun reviewOpts(baseline: str, base: str, head: str, local: bool) > {str: any} {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
         std\print("api-surface: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "api-surface: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "api-surface: the pull request's number, base and head sha must be set together";
     }
 
     if (advice\silenced(repo, pr: pr, name: section)) {
@@ -148,7 +149,7 @@ fun main() > void !> any {
     }
 
     final review = magus\diff(reviewOpts(
-        baseline: advice\env("BASELINE"), base: base, head: head, local: advice\collecting()));
+        baseline: advice\input("baseline"), base: base, head: head, local: advice\collecting()));
     // What it actually read, before what it concluded. "nothing to say" and "nothing to read"
     // are different failures, and this advisor spent two pull requests looking like the first
     // while being the second: the changeset came back empty and the line below said only that

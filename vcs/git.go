@@ -886,6 +886,29 @@ func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 	return strings.TrimPrefix(out, "origin/"), nil
 }
 
+// CheckoutState implements types.CheckoutStateReporter with two reads of refs and none of
+// the working tree: `symbolic-ref` names the branch HEAD points at and exits 1 when HEAD
+// names a commit, and `for-each-ref` lists refs/remotes.
+func (gitVCS) CheckoutState(ctx context.Context, dir string) (types.CheckoutState, error) {
+	var state types.CheckoutState
+	branch, err := gitOutput(ctx, dir, gitOpts{}, "symbolic-ref", "-q", "--short", "HEAD")
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		state.Branch = branch
+	case !errors.As(err, &exit) || exit.ExitCode() != 1:
+		return types.CheckoutState{}, fmt.Errorf("git symbolic-ref: %w", err)
+	}
+	refs, err := gitOutput(ctx, dir, gitOpts{}, "for-each-ref", "--format=%(refname)", "refs/remotes")
+	if err != nil {
+		return types.CheckoutState{}, fmt.Errorf("git for-each-ref: %w", err)
+	}
+	for _, ref := range strings.Fields(refs) {
+		state.RemoteBranches = append(state.RemoteBranches, strings.TrimPrefix(ref, "refs/remotes/"))
+	}
+	return state, nil
+}
+
 // CommitPushed implements types.PushStatusReporter: it asks whether id is an ancestor of
 // the current branch's upstream ("@{upstream}"), the same tracking ref `git status` and a
 // plain `git push` compare against. ok=false when no upstream is configured (a branch

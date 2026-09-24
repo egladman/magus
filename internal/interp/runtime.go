@@ -2,7 +2,7 @@ package interp
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec // G505: git names objects with it; see GitBlobID
+	"crypto/sha1" //nolint:gosec // G505: a content fingerprint; see ContentID
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -220,12 +220,11 @@ func sourceReaderFrom(ctx context.Context) func(path string) ([]byte, error) {
 	return read
 }
 
-// SourceFile is one file a magusfile load read, named by the git blob id of the bytes it
-// read. The id is computed from the bytes rather than asked of a VCS, so recording it
-// costs no process and names the same object git would.
+// SourceFile is one file a magusfile load read, named by the ContentID of the bytes it
+// read, which costs no process to record.
 type SourceFile struct {
-	Path   string
-	BlobID string
+	Path      string
+	ContentID string
 }
 
 // SourceLog collects every file a load reads: its magusfile sources and every Buzz file
@@ -241,7 +240,7 @@ func (l *SourceLog) Files() []SourceFile {
 	defer l.mu.Unlock()
 	out := make([]SourceFile, 0, len(l.files))
 	for path, id := range l.files {
-		out = append(out, SourceFile{Path: path, BlobID: id})
+		out = append(out, SourceFile{Path: path, ContentID: id})
 	}
 	slices.SortFunc(out, func(a, b SourceFile) int { return strings.Compare(a.Path, b.Path) })
 	return out
@@ -253,7 +252,7 @@ func (l *SourceLog) record(path string, data []byte) {
 	if l.files == nil {
 		l.files = map[string]string{}
 	}
-	l.files[path] = GitBlobID(data)
+	l.files[path] = ContentID(data)
 }
 
 type sourceLogCtxKey struct{}
@@ -263,9 +262,11 @@ func WithSourceLog(ctx context.Context, log *SourceLog) context.Context {
 	return context.WithValue(ctx, sourceLogCtxKey{}, log)
 }
 
-// GitBlobID is the object id git assigns data as a blob in a SHA-1 repository.
-func GitBlobID(data []byte) string {
-	h := sha1.New() //nolint:gosec // G401: git's object naming, not a security primitive
+// ContentID is a stable fingerprint of data, computed in-process without asking any VCS.
+// It uses git's SHA-1 blob formula, so the value is the one ids already recorded carry,
+// and equals the blob id a git checkout would give the same bytes.
+func ContentID(data []byte) string {
+	h := sha1.New() //nolint:gosec // G401: a content fingerprint, not a security primitive
 	fmt.Fprintf(h, "blob %d\x00", len(data))
 	_, _ = h.Write(data)
 	return hex.EncodeToString(h.Sum(nil))

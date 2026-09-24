@@ -148,6 +148,7 @@ type VCSDriver interface {
 	RemoteReporter
 	RemoteConfigReporter
 	DefaultRefReporter
+	CheckoutStateReporter
 	PushStatusReporter
 	RevTimeReporter
 	TrackedFileReporter
@@ -377,6 +378,7 @@ const (
 	CapRemoteReporter        VCSCapability = "RemoteReporter"
 	CapRemoteConfigReporter  VCSCapability = "RemoteConfigReporter"
 	CapDefaultRefReporter    VCSCapability = "DefaultRefReporter"
+	CapCheckoutStateReporter VCSCapability = "CheckoutStateReporter"
 	CapPushStatusReporter    VCSCapability = "PushStatusReporter"
 	CapRevTimeReporter       VCSCapability = "RevTimeReporter"
 	CapTrackedFileReporter   VCSCapability = "TrackedFileReporter"
@@ -518,6 +520,25 @@ type DefaultRefReporter interface {
 	// branch, hg's "default", jj's trunk()) for the repo containing dir, or ""
 	// with ErrVCSUnsupported when it cannot be determined.
 	DefaultRef(ctx context.Context, dir string) (string, error)
+}
+
+// CheckoutState is which branch a checkout is on and which branches its repository
+// records its remotes as having.
+type CheckoutState struct {
+	// Branch is the branch the checkout is on, "" when it is on none (git's detached HEAD).
+	Branch string
+	// RemoteBranches are the remotes' branches as of the last fetch, each named
+	// `<remote>/<branch>`. A branch a remote has that was never fetched is absent.
+	RemoteBranches []string
+}
+
+// CheckoutStateReporter is the capability (sibling of DefaultRefReporter) to report a
+// CheckoutState without reading the working tree. It answers a rule about a push, which
+// needs these two facts and none of what Metadata spends a status on. Callers treat
+// ErrVCSUnsupported as unknown.
+type CheckoutStateReporter interface {
+	// CheckoutState returns the state of the checkout containing dir.
+	CheckoutState(ctx context.Context, dir string) (CheckoutState, error)
 }
 
 // PushStatusReporter is the capability to report whether a commit has already left the

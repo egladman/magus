@@ -87,7 +87,7 @@ const (
 	Kind_KIND_RUN Kind = 12
 	// The effective workspace guard rules changed. action is loaded, tightened, loosen_pending,
 	// committed or removed; the request blob names each source file by its working-tree and
-	// approved git blob ids, never its body. Written only on a change, so these rows read as the
+	// approved content ids, never its body. Written only on a change, so these rows read as the
 	// lineage of the workspace's policy, and a verdict event's policy digest points at one.
 	Kind_KIND_GUARD_POLICY Kind = 13
 )

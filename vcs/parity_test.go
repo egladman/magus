@@ -1077,6 +1077,20 @@ func TestParityRangeDiffScopesToPaths(t *testing.T) {
 	})
 }
 
+// A fresh repository with no remote reports its checkout without error and no remote
+// branches, whichever backend answers.
+func TestParityCheckoutStateWithoutARemote(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		skipUnsupported(t, b, types.CapCheckoutStateReporter)
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n"})
+
+		got, err := b.drv.CheckoutState(t.Context(), dir)
+		require.NoErrorf(t, err, "%s CheckoutState", b.name)
+		assert.Emptyf(t, got.RemoteBranches, "%s has no remote to report", b.name)
+	})
+}
+
 // capabilityMatrix is deliberate: adding a backend to a row is an implementation, removing
 // one is a regression, and neither happens by accident. Every backend DECLARES every
 // capability, so this matrix, not the compiler, is where support is written down.
@@ -1089,6 +1103,7 @@ var capabilityMatrix = map[types.VCSCapability]map[string]bool{
 	types.CapRemoteReporter:        {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapRemoteConfigReporter:  {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapDefaultRefReporter:    {"git": true, "hg": true, "sl": true, "jj": true},
+	types.CapCheckoutStateReporter: {"git": true},
 	types.CapPushStatusReporter:    {"git": true, "hg": true, "sl": true},
 	types.CapRevTimeReporter:       {"git": true, "hg": true, "sl": true, "jj": true},
 	types.CapTrackedFileReporter:   {"git": true, "hg": true, "sl": true, "jj": true},
@@ -1139,6 +1154,7 @@ func capabilityProbes(t *testing.T) []capabilityProbe {
 		{types.CapRemoteReporter, "RemoteURL", func(d types.VCSDriver, dir string) error { return errOf(d.RemoteURL(ctx, dir, "-x")) }},
 		{types.CapRemoteConfigReporter, "ConfiguredRemote", func(d types.VCSDriver, dir string) error { return errOf(d.ConfiguredRemote(dir)) }},
 		{types.CapDefaultRefReporter, "DefaultRef", func(d types.VCSDriver, dir string) error { return errOf(d.DefaultRef(ctx, dir)) }},
+		{types.CapCheckoutStateReporter, "CheckoutState", func(d types.VCSDriver, dir string) error { return errOf(d.CheckoutState(ctx, dir)) }},
 		{types.CapPushStatusReporter, "CommitPushed", func(d types.VCSDriver, dir string) error {
 			_, _, err := d.CommitPushed(ctx, dir, "-x")
 			return err
