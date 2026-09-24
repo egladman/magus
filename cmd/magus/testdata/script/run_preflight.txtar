@@ -25,6 +25,11 @@ stderr '\[MGS3020\] preflight generate failed in b; reproduce with `magus run ge
 ! exists log/b.lint
 ! exists log/b.ci
 
+# Whether a's generate finished, and was recorded, before b's failure stopped the pass
+# depends on timing, so the green run starts from no cache and no log.
+rm .magus
+rm log/a.generate
+
 # Green: generate runs once, in the preflight pass. lint's ctx.needs(generate) finds it
 # done rather than running it again.
 rm b/broken
