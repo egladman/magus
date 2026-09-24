@@ -53,6 +53,16 @@ inputs:
     required: false
     default: ''
 
+  restore-history:
+    description: >
+      'true' restores the newest run history this workflow saved to the Actions cache, for
+      `--base last-passed` and the shard forecaster. Off by default because the restore
+      takes the newest entry by prefix, and any run sharing the cache scope can save one,
+      including a run executing pull-request code on main (a merge queue's validation).
+      Never turn it on in a job holding a secret, a write token or id-token.
+    required: false
+    default: 'false'
+
   queue-app-client-id:
     description: >
       Client id of the merge queue's own GitHub App (vars.MAGUS_QUEUE_APP_CLIENT_ID).
@@ -345,11 +355,15 @@ runs:
     # A miss is free and expected (a fork, a first run, a cache aged out after 7 days).
     # What a miss costs is the shard forecaster's duration data, so the plan falls back
     # to a flat estimate rather than failing.
+    #
+    # The path is set either way: a shard writes its history there for the magus action
+    # to upload, restored or not.
     - name: Set the run history path
       shell: bash
       run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
 
     - name: Restore the run history
+      if: inputs.restore-history == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/magus-history.json
