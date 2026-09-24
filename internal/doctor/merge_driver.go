@@ -98,7 +98,7 @@ func driverExecutable(registered string) string {
 // checkOwedRegeneration reports regenerations the merge driver recorded that no run has
 // settled yet. Each names generated files still holding one side of a merge, so a
 // commit made now carries stale output. The record outlives a failed job or a clone
-// with no daemon to run it, and this is where that becomes visible.
+// with no server to run it, and this is where that becomes visible.
 func (r *runner) checkOwedRegeneration() types.Check {
 	const name = "owed-regeneration"
 	ctx := r.runCtx()
@@ -116,7 +116,7 @@ func (r *runner) checkOwedRegeneration() types.Check {
 			hint.Run.With(o.Target+":rw", o.Project), len(o.Paths), strings.Join(o.Paths, ", ")))
 	}
 	details = append(details,
-		"settle them with `"+hint.JobRun.With(job.NameRegenerateOwed)+"`, or `magus server "+job.NameRegenerateOwed+"` without a daemon",
+		"settle them with `"+hint.JobRun.With(job.NameRegenerateOwed)+"`, or `magus server "+job.NameRegenerateOwed+"` when no server is running",
 		"record: "+path)
 	return types.Check{
 		Name:    name,

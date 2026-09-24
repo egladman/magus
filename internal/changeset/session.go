@@ -5,20 +5,20 @@
 // not the session, collided with the handler package serving /api/v1/diff and the terminal
 // viewer, and had four callers aliasing it `session` to say what the name did not.
 //
-// One object rather than three, because the daemon already multiplexes those transports over
+// One object rather than three, because the server already multiplexes those transports over
 // one workspace and three privately-rebuilt reviews would be three diverging opinions of the
 // same changeset. Sharing it is what makes pairing work at all: an agent that can see where
 // the human is looking can be useful about it, instead of narrating into the void.
 //
 // State is split by lifetime, deliberately:
 //
-//   - COORDINATION (cursor, suggestions) lives in memory for the daemon's life. It is about a
+//   - COORDINATION (cursor, suggestions) lives in memory for the server's life. It is about a
 //     conversation happening right now; outliving the conversation would resurrect stale
 //     suggestions into a review nobody is having.
 //   - DRAFTS (comments a person wrote, not yet published) are persisted. They used to sit with
 //     coordination, and that was wrong about what they are: a self-review remark is not chatter
 //     about a live conversation, it is a sentence addressed to a teammate that has not been
-//     sent yet. Losing eight of them to a daemon restart is losing the work, not forgetting a
+//     sent yet. Losing eight of them to a server restart is losing the work, not forgetting a
 //     detail. An AGENT's comment stays ephemeral: it belongs to the pairing session, and
 //     reviving it into a review nobody is having is the failure the rule above names.
 //   - PROGRESS (which hunks the human has read) is persisted, because it is the one piece
@@ -57,7 +57,7 @@ type Store struct {
 	// seenPath is where the seen-thread watermark is persisted, empty to disable.
 	//
 	// It has to outlive the process for the same reason the digest set does: a watermark that
-	// resets on a daemon restart marks the whole conversation new again the next morning, which
+	// resets on a server restart marks the whole conversation new again the next morning, which
 	// is the badge-always-on failure the mark exists to avoid.
 	seenPath string
 	// hunks maps a root to the file each of its hunk digests belongs to, and to how many
@@ -83,7 +83,7 @@ type Store struct {
 }
 
 // NewStore returns a session store persisting viewed state under stateDir. An empty stateDir
-// keeps everything in memory, which is what a test wants and what a workspace-less daemon
+// keeps everything in memory, which is what a test wants and what a workspace-less server
 // gets.
 func NewStore(stateDir string) *Store {
 	s := &Store{
@@ -284,7 +284,7 @@ func (s *Store) MarkThreadsSeen(root string, ids []string) *types.DiffReview {
 		persist = slices.Clone(sess.SeenThreads)
 	})
 	// Persisted like the digest set beside it: a watermark that lived only in memory would reset
-	// on every daemon restart and mark the whole conversation new again the next morning.
+	// on every server restart and mark the whole conversation new again the next morning.
 	s.saveSeen(persist)
 	return sess
 }

@@ -37,7 +37,7 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req spells.InvokeRequest) 
 		return spells.InvokeResponse{}, err
 	}
 	// Route graph events to this request's sink via context, not the shared
-	// workspace observer: the daemon serves concurrent requests on one *Magus,
+	// workspace observer: the server serves concurrent requests on one *Magus,
 	// and a process-global observer would interleave their graph events.
 	ctx = types.ContextWithGraphObserver(ctx, sink.GraphObserver())
 

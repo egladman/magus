@@ -20,7 +20,7 @@
 #     consumer cannot import internal/, so a mock there serves nobody outside this repo;
 #     the extension boundary (types.VCSDriver and its capability probes, spells.Driver,
 #     types.Observer) and the read surfaces (types.WorkspaceRepository and friends,
-#     magus.Daemon) are what an external test suite has to stand in for. Publishing those
+#     magus.Server) are what an external test suite has to stand in for. Publishing those
 #     mocks is part of the package surface, not test scaffolding, so they are generated
 #     whether or not one of OUR tests happens to use them today.
 #
@@ -34,7 +34,7 @@ packages:
   # Public: the composition root a consumer embeds.
   github.com/egladman/magus:
     interfaces:
-      Daemon:
+      Server:
   # Public: the domain surface. VCSDriver plus the capability probes a driver may
   # optionally satisfy - a consumer's code has to handle a driver that implements
   # some and not others, which is exactly what these mocks let it test.

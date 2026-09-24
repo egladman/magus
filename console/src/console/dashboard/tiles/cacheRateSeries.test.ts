@@ -42,7 +42,7 @@ test("an interval where nothing happened has no rate to report", () => {
 // negative difference that a Math.max(0, ...) clamp turned into a zero delta - drawn as a
 // minute with no cache activity, which is a plausible reading of a real event that did not
 // happen.
-test("a daemon restart breaks the series instead of plotting a confident zero", () => {
+test("a server restart breaks the series instead of plotting a confident zero", () => {
   const pts = cacheRateSeries([
     sample({ at: 1_000, cacheHits: 900, cacheMisses: 100, generation: 100 }),
     sample({ at: 2_000, cacheHits: 3, cacheMisses: 1, generation: 200 }),

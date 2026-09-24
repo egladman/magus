@@ -1,5 +1,5 @@
 // agent.ts - the session panel behind a story row: what the agent ran, the turns leading up to
-// its write, and a plain statement of every transcript part the daemon could not show.
+// its write, and a plain statement of every transcript part the server could not show.
 
 import { createClient, ConnectError } from "@connectrpc/connect";
 import {
@@ -8,14 +8,14 @@ import {
   type SessionActivity,
   type SessionTurn,
 } from "@wire/viewer/v1alpha1/viewer_pb";
-import { createDaemonTransport, getLiveToken } from "../../lib/daemon";
+import { createServerTransport, getLiveToken } from "../../lib/server";
 import { h } from "../view";
 import type { DiffTouch } from "./session";
 
 export type ActivityResult =
   | { readonly activity: SessionActivity }
   | { readonly failed: string }
-  // The showcase has no daemon, so the panel renders the touch alone and says why.
+  // The showcase has no server, so the panel renders the touch alone and says why.
   | { readonly offline: string };
 
 export async function fetchSessionActivity(
@@ -25,7 +25,7 @@ export async function fetchSessionActivity(
   signal: AbortSignal,
 ): Promise<ActivityResult> {
   try {
-    const client = createClient(ViewerService, createDaemonTransport(host, getLiveToken()));
+    const client = createClient(ViewerService, createServerTransport(host, getLiveToken()));
     return { activity: await client.getSessionActivity({ session, path }, { signal }) };
   } catch (e) {
     return { failed: e instanceof ConnectError ? e.rawMessage : String(e) };
@@ -81,7 +81,7 @@ function unavailable(result: ActivityResult, role: TurnRole): string | null {
     const why = result.activity.unrecorded.find((u) => u.role === role)?.reason;
     return `${capitalize(ROLE_NAMES[role])} unavailable for this session: ${why || "its record holds none"}.`;
   }
-  const why = "offline" in result ? result.offline : `the daemon did not answer (${result.failed})`;
+  const why = "offline" in result ? result.offline : `the server did not answer (${result.failed})`;
   return `${capitalize(ROLE_NAMES[role])} unavailable for this session: ${why}.`;
 }
 
@@ -90,7 +90,7 @@ function capitalize(s: string): string {
 }
 
 // renderAgentSession fills body with the session behind one touch. result is null while the
-// daemon's answer is in flight.
+// server's answer is in flight.
 export function renderAgentSession(
   body: HTMLElement,
   touch: DiffTouch,

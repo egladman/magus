@@ -40,7 +40,7 @@ test("morning window surfaces a morning line, not an evening one", () => {
 
 test("the night window wraps past midnight", () => {
   const seen = new Set([...poolAt(at(23)), ...poolAt(at(2))]);
-  assert.ok([...seen].some((t) => t.includes("midnight") || t.includes("daemon never sleeps")));
+  assert.ok([...seen].some((t) => t.includes("midnight") || t.includes("server never sleeps")));
 });
 
 test("the original tagline is still in the pool", () => {

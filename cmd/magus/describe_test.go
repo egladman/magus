@@ -18,7 +18,7 @@ import (
 )
 
 // TestDescribeWorkspacesOutput_MultiDeclared verifies that `describe workspaces`
-// enumerates every declared daemon workspace, not just the active one.
+// enumerates every declared server workspace, not just the active one.
 func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
 	base := t.TempDir()
 	mkWorkspace := func(name string) string {
@@ -33,7 +33,7 @@ func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
 	globalCfg = config.Config{}
-	globalCfg.Daemon.Workspaces = []string{wsA, wsB}
+	globalCfg.Server.Workspaces = []string{wsA, wsB}
 
 	out, err := describeWorkspacesOutput(context.Background(), "")
 	require.NoError(t, err)

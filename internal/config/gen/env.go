@@ -18,7 +18,7 @@ import (
 //
 // Regenerate with: cd magus && go generate ./cmd/magus/...
 func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
-	var errs []error
+	errs := []error{config.RetiredEnv(getenv)}
 	if v := getenv("MAGUS_CACHE_DIR"); v != "" {
 		cfg.Cache.Dir = v
 	}
@@ -163,24 +163,24 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Telemetry.SampleRatio = f
 		}
 	}
-	if v := getenv("MAGUS_DAEMON_ENABLED"); v != "" {
+	if v := getenv("MAGUS_SERVER_ENABLED"); v != "" {
 		if b, err := parseBoolEnv(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_DAEMON_ENABLED: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_SERVER_ENABLED: %w", err))
 		} else {
-			cfg.Daemon.Enabled = b
+			cfg.Server.Enabled = b
 		}
 	}
-	if v := getenv("MAGUS_DAEMON_ADDRESS"); v != "" {
-		cfg.Daemon.Address = v
+	if v := getenv("MAGUS_SERVER_ADDRESS"); v != "" {
+		cfg.Server.Address = v
 	}
-	if v := getenv("MAGUS_DAEMON_IDLE_TTL"); v != "" {
+	if v := getenv("MAGUS_SERVER_IDLE_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_DAEMON_IDLE_TTL: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_SERVER_IDLE_TTL: %w", err))
 		} else {
-			cfg.Daemon.IdleTTL = d
+			cfg.Server.IdleTTL = d
 		}
 	}
-	if v := getenv("MAGUS_DAEMON_WORKSPACES"); v != "" {
+	if v := getenv("MAGUS_SERVER_WORKSPACES"); v != "" {
 		parts := strings.Split(v, ",")
 		out := parts[:0]
 		for _, p := range parts {
@@ -188,41 +188,41 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 				out = append(out, p)
 			}
 		}
-		cfg.Daemon.Workspaces = out
+		cfg.Server.Workspaces = out
 	}
-	if v := getenv("MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES"); v != "" {
+	if v := getenv("MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES"); v != "" {
 		if d, err := time.ParseDuration(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES: %w", err))
 		} else {
-			cfg.Daemon.Maintenance.RotateActivities = d
+			cfg.Server.Maintenance.RotateActivities = d
 		}
 	}
-	if v := getenv("MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS"); v != "" {
+	if v := getenv("MAGUS_SERVER_MAINTENANCE_ROTATE_LOGS"); v != "" {
 		if d, err := time.ParseDuration(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_SERVER_MAINTENANCE_ROTATE_LOGS: %w", err))
 		} else {
-			cfg.Daemon.Maintenance.RotateLogs = d
+			cfg.Server.Maintenance.RotateLogs = d
 		}
 	}
-	if v := getenv("MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED"); v != "" {
+	if v := getenv("MAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED"); v != "" {
 		if d, err := time.ParseDuration(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED: %w", err))
 		} else {
-			cfg.Daemon.Maintenance.PrunePreserved = d
+			cfg.Server.Maintenance.PrunePreserved = d
 		}
 	}
-	if v := getenv("MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH"); v != "" {
+	if v := getenv("MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH"); v != "" {
 		if d, err := time.ParseDuration(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH: %w", err))
 		} else {
-			cfg.Daemon.Maintenance.SyncGraph = d
+			cfg.Server.Maintenance.SyncGraph = d
 		}
 	}
-	if v := getenv("MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW"); v != "" {
+	if v := getenv("MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW"); v != "" {
 		if d, err := time.ParseDuration(v); err != nil {
-			errs = append(errs, fmt.Errorf("MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW: %w", err))
+			errs = append(errs, fmt.Errorf("MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW: %w", err))
 		} else {
-			cfg.Daemon.Maintenance.CheckReview = d
+			cfg.Server.Maintenance.CheckReview = d
 		}
 	}
 	if v := getenv("MAGUS_VCS_ENABLED"); v != "" {
@@ -468,6 +468,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 	if v := getenv("MAGUS_CONCURRENCY_PROFILE"); v != "" {
 		if err := cfg.ConcurrencyProfile.UnmarshalText([]byte(v)); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CONCURRENCY_PROFILE: %w", err))
+		}
+	}
+	if v := getenv("MAGUS_BROKER"); v != "" {
+		if err := cfg.Broker.UnmarshalText([]byte(v)); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_BROKER: %w", err))
 		}
 	}
 	if v := getenv("MAGUS_MAX_FAILURES"); v != "" {

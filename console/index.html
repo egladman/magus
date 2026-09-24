@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#31302e" media="(prefers-color-scheme: dark)">
   <meta name="generator" content="magus">
   <title>magus console</title>
-  <meta name="description" content="The magus native console: a tabbed, tiling app that hosts the log viewer, graph explorer, dashboard, and activity as live lenses on the daemon over loopback.">
+  <meta name="description" content="The magus native console: a tabbed, tiling app that hosts the log viewer, graph explorer, dashboard, and activity as live lenses on the server over loopback.">
   <link rel="manifest" href="./manifest.webmanifest">
   <!-- The SVG favicon inverts with the browser theme (Chrome, Edge, Firefox). Safari ignores
        SVG favicons entirely and takes the PNG below, which is why that one still ships and
@@ -114,7 +114,7 @@
     </button>
     <!-- The settings gear opens the Settings surface as a tab (single-instance: console.js focuses it
          if already open). It is a plain trigger, not a popover anchor - the old #settings-panel dropdown
-         (refresh rate / daemon host / theme cycle) was retired when those controls moved onto the
+         (refresh rate / server host / theme cycle) was retired when those controls moved onto the
          Settings surface. console.js's startConsole() wires the click to open("settings"). -->
     <button id="settings-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-label="Settings" title="Settings">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
@@ -209,8 +209,8 @@
     </details>
     <details data-ref-section>
       <summary>Where your data goes</summary>
-      <p>Nowhere. The console is a static page: it talks only to a daemon on <code>127.0.0.1</code>, in your browser, and there is no server to send anything to. The address is checked against loopback before any request - a hostname is refused outright.</p>
-      <p>Without a daemon it reads only what rides in the link you opened: a run's output or a graph travels in the URL's fragment, which a browser never sends to a server. Nothing is uploaded, and nothing is stored beyond this browser.</p>
+      <p>Nowhere. The console is a static page: it talks only to a server on <code>127.0.0.1</code>, in your browser, and there is no server to send anything to. The address is checked against loopback before any request - a hostname is refused outright.</p>
+      <p>Without a server it reads only what rides in the link you opened: a run's output or a graph travels in the URL's fragment, which a browser never sends to a server. Nothing is uploaded, and nothing is stored beyond this browser.</p>
     </details>
     <details data-ref-section>
       <summary>Tabs and panes</summary>

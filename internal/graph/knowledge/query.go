@@ -888,7 +888,7 @@ func (g *Graph) projectOf(n types.KnowledgeNode, id string) (string, bool) {
 // lazily and invalidated with the adjacency indices.
 //
 // Guarded by projMu for the same reason ensureAdj is guarded by adjMu: this runs
-// on the query path against a *Graph the daemon's warm graph can hand to several
+// on the query path against a *Graph the server's warm graph can hand to several
 // concurrent requests, so a bare nil check would let two first-queries race
 // writing g.projPaths, a concurrent map/slice write that crashes the process.
 func (g *Graph) projectPaths() []string {

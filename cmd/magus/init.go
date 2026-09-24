@@ -232,12 +232,12 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 		interactive.Emit(os.Stderr, "tip: commit magus.yaml to share config with your team")
 	}
 
-	// Daemon rc snippet — clearly optional, copy/paste only.
+	// Server rc snippet — clearly optional, copy/paste only.
 	interactive.Emit(os.Stderr, "")
-	interactive.Emit(os.Stderr, "optional: start the daemon automatically on login")
+	interactive.Emit(os.Stderr, "optional: start the server automatically on login")
 	interactive.Emit(os.Stderr, "add to ~/.bashrc, ~/.zshrc, or ~/.profile:")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  # start magus daemon on login (magus works fine without it)")
+	fmt.Fprintln(os.Stderr, "  # start magus server on login (magus works fine without it)")
 	fmt.Fprintln(os.Stderr, "  if command -v magus >/dev/null 2>&1 && \\")
 	fmt.Fprintln(os.Stderr, "     ! "+hint.Status.With("--probe=liveness")+" >/dev/null 2>&1; then")
 	fmt.Fprintln(os.Stderr, "    "+hint.ServerStart.String()+" &")
@@ -249,7 +249,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 	// is per-user and per-machine (it writes the client's config, not the repo),
 	// so it does not belong in repo bootstrap; init just says where to look.
 	interactive.Emit(os.Stderr, "")
-	interactive.Emit(os.Stderr, "let an agent use this workspace over the daemon (graph-aware skills + MCP tools):")
+	interactive.Emit(os.Stderr, "let an agent use this workspace over the server (graph-aware skills + MCP tools):")
 	interactive.Emit(os.Stderr, "  "+hint.AgentInstall.With("<skills-dir>")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
 	interactive.Emit(os.Stderr, "  "+hint.ConfigMCPConnectorCreate.With("--name", "<client>")+"  # mint a token, then configure the client")
 }

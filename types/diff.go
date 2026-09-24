@@ -278,7 +278,7 @@ type DiffTouch struct {
 	// Ran are the PROGRAMS the session ran before the write, most recent first and capped:
 	// "go", "grep", "perl", never their arguments. Carrying the raw command line makes
 	// the record a verbatim copy of everything an agent typed, and one was observed
-	// holding a live daemon bearer token; this payload is served to every MCP client, so
+	// holding a live server bearer token; this payload is served to every MCP client, so
 	// an agent asked to summarize it reproduces whatever is in there. Anyone who needs the
 	// argument list opens the host's own transcript.
 	Ran []string `json:"ran,omitempty" yaml:"ran,omitempty"`
@@ -431,7 +431,7 @@ type DiffReviewed struct {
 
 // DiffAuthor says which door a comment or a suggestion came through.
 //
-// It is STAMPED BY THE DAEMON from the route the write arrived on, and never read from the
+// It is STAMPED BY THE SERVER from the route the write arrived on, and never read from the
 // payload, so a writer cannot choose it. It does not say who wrote the remark: the review
 // route admits any holder of console=write, which an agent in the same OS account
 // can read. The comment's [Origin] is what records whose account and which credential
@@ -450,7 +450,7 @@ const (
 // they were called unattributed.
 //
 // compat(until: no draft file under the diff session store still carries "author":"human"):
-// review drafts persist across a daemon restart and loadDrafts restores every one, but
+// review drafts persist across a server restart and loadDrafts restores every one, but
 // publishing, deleting and the console's draft list each take only unattributed drafts. A
 // draft restored as "human" would sit in the session unpublishable and unlisted. Observing
 // that it is safe to drop means finding none left: grep -l '"author":"human"' over the drafts.
@@ -556,7 +556,7 @@ type DiffComment struct {
 	Path   string     `json:"path" yaml:"path"`
 	Hunk   int        `json:"hunk" yaml:"hunk"`
 	Author DiffAuthor `json:"author" yaml:"author"`
-	// Origin is where the write came from, stamped by the daemon: the OS account, the entry
+	// Origin is where the write came from, stamped by the server: the OS account, the entry
 	// point, and the credential or MCP client that carried it.
 	Origin Origin `json:"origin,omitzero" yaml:"origin,omitzero"`
 	// AgentName is the opaque host label an MCP client passed, empty on the review route.
@@ -813,7 +813,7 @@ type DiffSuggestion struct {
 // tab, an MCP agent, and the CLI all read and write. It is not [DiffReviewed], which is one
 // fact inside its changeset: how far a reader got on an earlier pass.
 //
-// One object rather than three implementations: the daemon already multiplexes those three
+// One object rather than three implementations: the server already multiplexes those three
 // transports over one workspace, so a review they each rebuilt privately would be three
 // diverging opinions of the same changeset. Sharing it is what makes pairing real: the agent
 // can see where the human is and be useful about it rather than narrating blindly.
@@ -888,9 +888,9 @@ func (r Diff) GeneratedCount() int {
 // It is a separate step from building the review, and the caller supplies the lens data,
 // because the two have very different costs and very different freshness needs. The
 // annotations are cheap and must be current; the history lenses are a bounded git-log scan
-// that the daemon already caches for everyone. Computing them inside Review would either make
+// that the server already caches for everyone. Computing them inside Review would either make
 // every review pay for a scan or bake a cache into a function that has no business owning one.
-// So the daemon passes its cached scan and the CLI passes a fresh one, and this is the single
+// So the server passes its cached scan and the CLI passes a fresh one, and this is the single
 // definition of how the numbers land on a file either way.
 //
 // A file with no hotspot entry gets Churn only when its project's trend actually MOVED, so

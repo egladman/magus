@@ -196,12 +196,12 @@ func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
 }
 
 // The lease a forwarded run carries beats the environment, because on an adopted run this
-// code executes in the DAEMON and the environment it would otherwise read belongs to whoever
-// started the daemon. Without the preference every daemon-adopted run in a fleet is attributed
+// code executes in the SERVER and the environment it would otherwise read belongs to whoever
+// started the server. Without the preference every server-adopted run in a fleet is attributed
 // to one stranger, or to nobody: the defect this wiring exists to close.
 func TestWithInvocationJournalPrefersTheForwardedLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/daemon-env")
+	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/server-env")
 	root := t.TempDir()
 
 	ctx := proc.WithLease(context.Background(), "fleet/client")

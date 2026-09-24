@@ -331,8 +331,8 @@ func runCLIQuietly(t *testing.T, argv ...string) {
 	defer func() { os.Stdout, os.Stderr, os.Args = oldOut, oldErr, oldArgs }()
 
 	// Restore the environment afterwards. Driving the real CLI in this process is the
-	// whole point of the check and also its hazard: a probe left MAGUS_DAEMON_SOCKET
-	// behind, and the next test in the package then refused to start a daemon because
+	// whole point of the check and also its hazard: a probe left MAGUS_PROC_SOCKET
+	// behind, and the next test in the package then refused to start a server because
 	// it believed it was running under a parent magus. Snapshot everything rather than
 	// the one variable that bit, since the next leak will be a different name.
 	env := os.Environ()

@@ -81,7 +81,7 @@ func TestUnknownSegmentIsNotASurfaceRoute(t *testing.T) {
 	assert.NotEqual(t, http.StatusFound, w.Code, "only a known surface canonicalizes")
 }
 
-// KnownSurfaces is the contract the daemon, the link minters, and the console's boot router
+// KnownSurfaces is the contract the server, the link minters, and the console's boot router
 // all read. A surface added to the console without being added here is deep-linkable in
 // exactly one direction, which is the kind of gap nobody notices until someone shares a URL.
 func TestKnownSurfacesCoversTheDiffSurface(t *testing.T) {

@@ -545,7 +545,7 @@ func TestEndpointResolveFailureDoesNotEchoProviderError(t *testing.T) {
 }
 
 // TestEndpointReclaimsRedactionOnShutdown bounds the growth that would otherwise run
-// for a daemon's whole life: a fresh token plus a base URL plus seven encoded forms of
+// for a server's whole life: a fresh token plus a base URL plus seven encoded forms of
 // each, per rebind, per run, all scanned linearly by Redact on the output hot path.
 //
 // A resolved CREDENTIAL is never reclaimed: it stays valid wherever it was sent. An

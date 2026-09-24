@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
@@ -45,7 +46,7 @@ func newTestRegistry() *wsRegistry {
 // scriptedOpens makes r.open fail until ok is closed, counting every attempt.
 func scriptedOpens(r *wsRegistry, ok <-chan struct{}) *atomic.Int32 {
 	var n atomic.Int32
-	r.open = func(root string, _ *cache.Limiter, _ *cache.MachineBudget, _ observability.Provider) (*magus.Magus, error) {
+	r.open = func(root string, _ *cache.Limiter, _ *broker.Client, _ observability.Provider) (*magus.Magus, error) {
 		n.Add(1)
 		select {
 		case <-ok:
@@ -181,12 +182,12 @@ func TestAdoptBridgeReportsWorkspace(t *testing.T) {
 	r.adoptBridge(root, &magus.Magus{})
 
 	got := r.status()
-	require.Len(t, got, 1, "the bridge workspace must show in the lister the daemon exposes")
+	require.Len(t, got, 1, "the bridge workspace must show in the lister the server exposes")
 	assert.Equal(t, root, got[0].Root)
 }
 
 // TestAdoptBridgeIsPinned verifies the bridge entry is leased so the idle janitor never
-// evicts the daemon's own long-lived MCP workspace, which would make /readyz flap back to
+// evicts the server's own long-lived MCP workspace, which would make /readyz flap back to
 // "no workspaces loaded" after the TTL.
 func TestAdoptBridgeIsPinned(t *testing.T) {
 	r := newTestRegistry()
@@ -231,7 +232,7 @@ func TestAdoptBridgeDoesNotClobberExisting(t *testing.T) {
 	assert.Same(t, existing, r.entries[root].m, "an existing entry must not be replaced")
 }
 
-// Benchmarks lock the current behaviour of the daemon-side workspace
+// Benchmarks lock the current behaviour of the server-side workspace
 // registry's acquire path. The agent's roadmap explicitly called this
 // out as "verify with a benchmark; if no contention, no code change".
 // These benchmarks are the verification — if they ever show measurable
@@ -259,7 +260,7 @@ func preloadedRegistry(b *testing.B, root string) *wsRegistry {
 
 // BenchmarkRegistryAcquireHot measures the cost of acquire() when the
 // workspace is already loaded — the steady-state path inside the multi-
-// workspace daemon. Today this is a mutex-guarded map lookup; sub-µs
+// workspace server. Today this is a mutex-guarded map lookup; sub-µs
 // expected.
 func BenchmarkRegistryAcquireHot(b *testing.B) {
 	root := b.TempDir()
@@ -288,7 +289,7 @@ func BenchmarkRegistryAcquireParallel(b *testing.B) {
 	})
 }
 
-// TestEvictAllDropsIdleKeepsBusy pins `magus server reload`. The daemon keeps a workspace
+// TestEvictAllDropsIdleKeepsBusy pins `magus server reload`. The server keeps a workspace
 // warm across invocations and each one captured its config when it loaded, so editing
 // magus.yaml had no effect until something evicted the entry: a TTL away, and invisible.
 // Reload drops them so the next command reopens and re-reads.
@@ -311,7 +312,7 @@ func TestEvictAllDropsIdleKeepsBusy(t *testing.T) {
 	assert.Contains(t, r.entries, busy, "a running workspace keeps the config it started with")
 }
 
-// TestEvictAllOnEmptyRegistry proves reload is a clean no-op when the daemon holds nothing,
+// TestEvictAllOnEmptyRegistry proves reload is a clean no-op when the server holds nothing,
 // which is what `magus server reload` reports rather than treating as a failure.
 func TestEvictAllOnEmptyRegistry(t *testing.T) {
 	dropped, busy := newTestRegistry().evictAll()
@@ -326,11 +327,11 @@ func TestEvictAllOnEmptyRegistry(t *testing.T) {
 // naming the log the run produced.
 func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 	dir := t.TempDir()
-	daemonJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
-	t.Cleanup(func() { daemonJobStore = nil })
+	serverJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
+	t.Cleanup(func() { serverJobStore = nil })
 
-	_, err := daemonJobStore.Update(t.Context(), "sync-graph", func(row *types.Job) {
-		row.Holder = types.HolderDaemon
+	_, err := serverJobStore.Update(t.Context(), "sync-graph", func(row *types.Job) {
+		row.Holder = types.HolderServer
 		row.State = types.StateRunning
 		row.LastRun = &types.JobRun{Invocation: "inv-1"}
 	})
@@ -338,12 +339,12 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 
 	completeJobRow(t.Context(), []string{"graph", "build"}, 250*time.Millisecond, nil)
 
-	rows, err := daemonJobStore.List()
+	rows, err := serverJobStore.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	got := rows[0]
 	assert.Equal(t, "sync-graph", got.ID)
-	assert.Equal(t, types.HolderDaemon, got.Holder)
+	assert.Equal(t, types.HolderServer, got.Holder)
 	assert.Equal(t, types.StatePass, got.State)
 	require.NotNil(t, got.LastRun)
 	assert.Equal(t, "inv-1", got.LastRun.Invocation)
@@ -353,7 +354,7 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 
 	completeJobRow(t.Context(), []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
 
-	rows, err = daemonJobStore.List()
+	rows, err = serverJobStore.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, types.StateFail, rows[0].State)
@@ -363,16 +364,16 @@ func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
 }
 
 // TestCompleteJobRowIgnoresAnAdoptedRun keeps the callback narrow: it fires for every
-// background job the daemon finishes, and an adopted run is somebody's `magus run`, which
+// background job the server finishes, and an adopted run is somebody's `magus run`, which
 // has no row of its own to complete.
 func TestCompleteJobRowIgnoresAnAdoptedRun(t *testing.T) {
 	dir := t.TempDir()
-	daemonJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
-	t.Cleanup(func() { daemonJobStore = nil })
+	serverJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
+	t.Cleanup(func() { serverJobStore = nil })
 
 	completeJobRow(t.Context(), []string{"run", "test", "."}, time.Second, nil)
 
-	rows, err := daemonJobStore.List()
+	rows, err := serverJobStore.List()
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }

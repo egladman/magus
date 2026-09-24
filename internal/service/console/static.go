@@ -16,7 +16,7 @@ import (
 )
 
 // consoleCSP is the Content-Security-Policy served with every console HTML document, on BOTH
-// listeners that serve the app (the daemon's loopback /console/ mount and the on-demand LAN
+// listeners that serve the app (the server's loopback /console/ mount and the on-demand LAN
 // "share to phone" listener). It is deliberately strict: the console ORIGIN holds the operator
 // token (in the URL fragment, then in memory) and reaches TokenService (list, mint, revoke), and it
 // renders attacker-influenced output (build/test logs, graph labels, activity text), so a single
@@ -34,7 +34,7 @@ const consoleCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'uns
 
 // StaticHandler serves the built console at /console/ for a consoleDir, with an SPA fallback for
 // the clean surface paths and a strict CSP on every HTML document. It is the ONE implementation
-// shared by the daemon's loopback mount and the LAN share listener, so a phone reload of
+// shared by the server's loopback mount and the LAN share listener, so a phone reload of
 // /console/<surface>/ gets the same shell fallback the desktop does (rather than a 404) and both
 // origins carry the same CSP.
 //
@@ -73,7 +73,7 @@ func StaticHandler(consoleDir string) http.Handler {
 				if q := r.URL.RawQuery; q != "" {
 					target += "?" + q
 				}
-				// The fragment carries the daemon host and token and is never sent to a server,
+				// The fragment carries the server host and token and is never sent to a server,
 				// so there is nothing to preserve here; the browser reattaches it itself.
 				//
 				//nolint:gosec // G710: the destination is an element of KnownSurfaces, returned by
@@ -153,7 +153,7 @@ func isShellFile(consoleDir, urlPath string) bool {
 // serveConsoleShell writes the console shell (index.html) for a clean /console/<surface>/ route,
 // with a <base href="../"> injected as the first <head> child. The injection is REQUIRED: the
 // shell loads its assets by RELATIVE path (./console.js, ./patternfly.css) so a single built
-// index.html works at both the hosted origin and this daemon; served one level deep at
+// index.html works at both the hosted origin and this server; served one level deep at
 // /console/<surface>/, those refs must resolve against the parent /console/, which the base
 // makes so. (The shell's own lazy imports resolve against import.meta.url, i.e. console.js's
 // URL, so they are unaffected.) The hosted static host (which has no such fallback) gets the

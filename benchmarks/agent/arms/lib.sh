@@ -62,7 +62,7 @@ arm_write_env() {
         printf 'PATH="%s:$PATH"; export PATH\n' "$(dirname "$bin")"
         printf 'BENCH_MAGUS_BIN="%s"; export BENCH_MAGUS_BIN\n' "$bin"
         printf 'RUNNER_MCP_CONFIG="%s/.benchmark/mcp.json"; export RUNNER_MCP_CONFIG\n' "$wt"
-        printf 'MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES=0; export MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES\n'
+        printf 'MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES=0; export MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES\n'
         cat
     } > "$wt/.benchmark/env.sh"
 }
@@ -78,7 +78,7 @@ arm_load_env() {
     [ -x "$BENCH_MAGUS_BIN" ] || arm_die "BENCH_MAGUS_BIN=$BENCH_MAGUS_BIN is not executable"
     resolved=$(command -v magus 2>/dev/null)
     [ "$resolved" = "$BENCH_MAGUS_BIN" ] || arm_die "PATH resolves magus to ${resolved:-nothing}, not $BENCH_MAGUS_BIN"
-    [ "${MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES:-}" = "0" ] || arm_die "activity-trail rotation is not pinned off (MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES=${MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES:-unset})"
+    [ "${MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES:-}" = "0" ] || arm_die "activity-trail rotation is not pinned off (MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES=${MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES:-unset})"
 }
 
 # arm_check_no_mcp proves no MCP server reaches the session: the config the run

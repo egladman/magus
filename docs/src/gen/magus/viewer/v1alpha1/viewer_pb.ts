@@ -849,7 +849,7 @@ export type SessionActivity = Message<"magus.viewer.v1alpha1.SessionActivity"> &
   host: string;
 
   /**
-   * A pointer to the host's own log. The daemon does not open it.
+   * A pointer to the host's own log. The server does not open it.
    *
    * @generated from field: string transcript = 3;
    */

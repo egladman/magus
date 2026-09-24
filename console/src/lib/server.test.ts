@@ -1,0 +1,196 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  validateLoopbackHost,
+  normalizeServerHost,
+  serverAttach,
+  adoptServerOrigin,
+  consumeLinkCode,
+  getLiveToken,
+  isReadOnly,
+  mayLoadBundledDemo,
+  parseRefusal,
+  signInCommand,
+} from "./server";
+
+// The loopback lock and the #port/LAN-share grammar. validateLoopbackHost is the pure
+// loopback check for a configured/entered host; normalizeServerHost adds bare-port expansion;
+// serverAttach resolves an explicit attach (#port -> loopback, or the page's own origin when
+// a LAN-share link adopted it). #live is gone entirely.
+
+// withLocation stubs a page origin (host, hostname, hash) for the duration of fn, then restores it.
+function withLocation<T>(loc: { host: string; hostname: string; hash?: string }, fn: () => T): T {
+  const g = globalThis as unknown as { location?: unknown };
+  const prev = g.location;
+  g.location = { hash: "", ...loc };
+  try {
+    return fn();
+  } finally {
+    if (prev === undefined) delete g.location;
+    else g.location = prev;
+  }
+}
+
+test("validateLoopbackHost accepts literal loopback with a port", () => {
+  assert.equal(validateLoopbackHost("127.0.0.1:7391"), "127.0.0.1:7391");
+  assert.equal(validateLoopbackHost("[::1]:7391"), "[::1]:7391");
+});
+
+test("validateLoopbackHost rejects non-loopback hosts, including the page origin", () => {
+  // Even when the page itself is on the LAN, a raw host string is only accepted when it is
+  // literal loopback - the LAN-share origin is resolved through location.host, not here.
+  withLocation({ host: "192.168.1.20:54321", hostname: "192.168.1.20" }, () => {
+    assert.equal(validateLoopbackHost("192.168.1.20:54321"), null);
+    assert.equal(validateLoopbackHost("192.168.1.99:54321"), null);
+    assert.equal(validateLoopbackHost("evil.example.com:80"), null);
+    assert.equal(validateLoopbackHost("localhost:7391"), null);
+  });
+});
+
+test("validateLoopbackHost refuses userinfo smuggling", () => {
+  // "127.0.0.1:7391@evil.com" parses to host evil.com, which is not loopback.
+  assert.equal(validateLoopbackHost("127.0.0.1:7391@evil.com"), null);
+});
+
+test("normalizeServerHost expands a bare port to the literal loopback IP", () => {
+  assert.equal(normalizeServerHost("8787"), "127.0.0.1:8787");
+  assert.equal(normalizeServerHost(" 7391 "), "127.0.0.1:7391");
+});
+
+test("normalizeServerHost keeps a loopback host:port and rejects everything else", () => {
+  assert.equal(normalizeServerHost("127.0.0.1:7391"), "127.0.0.1:7391");
+  assert.equal(normalizeServerHost("[::1]:7391"), "[::1]:7391");
+  assert.equal(normalizeServerHost("0"), null); // port out of range
+  assert.equal(normalizeServerHost("70000"), null); // port out of range
+  assert.equal(normalizeServerHost("example.com:80"), null);
+  assert.equal(normalizeServerHost(""), null);
+});
+
+test("serverAttach expands #port to the literal loopback IP, rejecting a bad port", () => {
+  assert.equal(serverAttach({ port: "8787" }), "127.0.0.1:8787");
+  assert.equal(serverAttach({ port: "70000" }), null);
+  assert.equal(serverAttach({ port: "abc" }), null);
+  assert.equal(serverAttach({}), null); // no attach directive, no origin adoption
+});
+
+// The bundled demo graph is this repo's real graph, notes included: an attached surface whose
+// live connection failed must not fall back to it.
+test("mayLoadBundledDemo is refused under a server attach", () => {
+  assert.equal(mayLoadBundledDemo({ demo: "" }), true);
+  assert.equal(mayLoadBundledDemo({ q: "notes" }), true);
+  assert.equal(mayLoadBundledDemo({ port: "7391", demo: "" }), false);
+  assert.equal(mayLoadBundledDemo({ port: "7391", q: "notes" }), false);
+});
+
+// withBrowserGlobals stubs the minimal DOM surface adoptServerOrigin/consumeLiveToken touch
+// (storage + history), plus the fuller location they read, for the duration of fn.
+function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
+  const g = globalThis as unknown as Record<string, unknown>;
+  const saved: Record<string, unknown> = {
+    location: g.location,
+    sessionStorage: g.sessionStorage,
+    localStorage: g.localStorage,
+    history: g.history,
+  };
+  const store = (): Storage => {
+    const m = new Map<string, string>();
+    return {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+      clear: () => m.clear(),
+      key: () => null,
+      length: 0,
+    } as unknown as Storage;
+  };
+  g.location = { pathname: "/console/dashboard/", search: "", hash: "", ...loc };
+  g.sessionStorage = store();
+  g.localStorage = store();
+  g.history = { replaceState: () => {} };
+  try {
+    fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete g[k];
+      else g[k] = v;
+    }
+  }
+}
+
+// A link's one-time code leaves the fragment at once and is held in memory only: it is never
+// written to storage, and every other directive survives the rewrite.
+test("consumeLinkCode takes the code out of the fragment and stores nothing", () => {
+  withBrowserGlobals({ hash: "#job=a&code=mgx_abc" }, () => {
+    const g = globalThis as unknown as { history: { replaceState: (...a: unknown[]) => void } };
+    let rewritten = "";
+    g.history.replaceState = (_s: unknown, _t: unknown, url: unknown) => {
+      rewritten = String(url);
+    };
+    assert.equal(consumeLinkCode(), "mgx_abc");
+    assert.equal(rewritten, "/console/dashboard/#job=a");
+    assert.equal(getLiveToken(), null, "a code is not a token and is not stored");
+  });
+  withBrowserGlobals({ hash: "#job=a" }, () => {
+    assert.equal(consumeLinkCode(), null);
+  });
+});
+
+// Kept LAST: adoptServerOrigin only ever sets the module read-only/own-origin flags to
+// true, so once read-only is entered it stays entered for the rest of this module's tests.
+test("a LAN-share origin resolves the server to the page's own LAN origin (not loopback)", () => {
+  withBrowserGlobals(
+    { host: "192.168.1.42:8787", hostname: "192.168.1.42", hash: "#token=abc123" },
+    () => {
+      assert.equal(adoptServerOrigin(), true); // non-loopback origin + token -> read-only view
+      assert.equal(isReadOnly(), true);
+      // The device must keep talking to the EXACT LAN IP:port it loaded from - never 127.0.0.1.
+      assert.equal(serverAttach({}), "192.168.1.42:8787");
+      // A server-origin page is attached, so the bundled demo is off even with #demo set.
+      assert.equal(mayLoadBundledDemo({ demo: "" }), false);
+    },
+  );
+});
+
+// The share endpoint and every guard answer /api/ with AIP-193's JSON shape; the person sees its
+// message and a link to the code's page, never "HTTP 401".
+test("parseRefusal reads an AIP-193 body's message and Help link", () => {
+  const body = {
+    error: {
+      code: 503,
+      message: "MGS9013: the built console was not found",
+      status: "UNAVAILABLE",
+      details: [
+        { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "MGS9013" },
+        {
+          "@type": "type.googleapis.com/google.rpc.Help",
+          links: [{ description: "console not built", url: "https://example.test/MGS9013/" }],
+        },
+      ],
+    },
+  };
+  assert.deepEqual(parseRefusal(body), {
+    message: "MGS9013: the built console was not found",
+    help: { label: "console not built", href: "https://example.test/MGS9013/" },
+  });
+});
+
+// The code substitution only expands in a shell that knows $(...): PowerShell on Windows, never
+// cmd.exe's start. What reaches the opener is a one-time code, never a token.
+test("signInCommand uses each platform's opener", () => {
+  const url = "http://127.0.0.1:7391/console/";
+  const tail =
+    ' "http://127.0.0.1:7391/console/#code=$(magus config console token create --code --expires 12h)"';
+  assert.equal(signInCommand(url, "MacIntel"), "open" + tail);
+  assert.equal(signInCommand(url, "Win32"), "Start-Process" + tail);
+  assert.equal(signInCommand(url, "Linux x86_64"), "xdg-open" + tail);
+});
+
+test("parseRefusal keeps a body without a Help link and rejects any other shape", () => {
+  assert.deepEqual(parseRefusal({ error: { message: "no help here", details: [] } }), {
+    message: "no help here",
+  });
+  assert.equal(parseRefusal({ error: "the old string shape" }), null);
+  assert.equal(parseRefusal({ error: { message: "" } }), null);
+  assert.equal(parseRefusal("plain text"), null);
+  assert.equal(parseRefusal(null), null);
+});

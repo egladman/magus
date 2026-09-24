@@ -7,7 +7,7 @@
 // Package magus.metrics.v1alpha1 is the versioned wire contract for the DERIVED dashboard
 // metrics: magus's OTel instrument families rolled up into the numbers a developer reads
 // to judge health - operation counts, cache hit-rates, and latency percentiles - plus a
-// rolling time-series the daemon backfills so the utilization grid shows history from
+// rolling time-series the server backfills so the utilization grid shows history from
 // before the page opened. A sibling of magus.status.v1alpha1 (which carries the live pool/health
 // snapshot); the dashboard streams both. Served by MetricsService over ConnectRPC (one
 // endpoint speaks Connect, gRPC, and gRPC-Web): StreamMetrics sends one Backfill (the Sample
@@ -1061,7 +1061,7 @@ func (x *Sandbox) GetEnvDropped() int64 {
 	return 0
 }
 
-// Backfill is the ring-buffer history the daemon sends once, right after a dashboard
+// Backfill is the ring-buffer history the server sends once, right after a dashboard
 // connects, so the utilization grid and cache-rate trend start populated instead of empty.
 type Backfill struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1107,7 +1107,7 @@ func (x *Backfill) GetSamples() []*Sample {
 	return nil
 }
 
-// Sample is one point in the rolling utilization/activity history. The daemon appends one
+// Sample is one point in the rolling utilization/activity history. The server appends one
 // per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid
 // square per sample by utilization.
 //
@@ -1134,7 +1134,7 @@ type Sample struct {
 	CacheMisses *int64                 `protobuf:"varint,6,opt,name=cache_misses,json=cacheMisses,proto3,oneof" json:"cache_misses,omitempty"` // cumulative
 	TargetRuns  *int64                 `protobuf:"varint,7,opt,name=target_runs,json=targetRuns,proto3,oneof" json:"target_runs,omitempty"`    // cumulative target executions
 	// observe_start_time identifies the GENERATION the cumulative counters above belong to:
-	// the instant the daemon began observing. The counters restart at zero when the daemon
+	// the instant the server began observing. The counters restart at zero when the server
 	// does, so two samples from different generations cannot be differenced - their
 	// difference is not a rate, it is the new process's total minus the old one's.
 	//

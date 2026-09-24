@@ -404,10 +404,10 @@ func (w tmpWorkspace) CacheDiskBytes() int64 { return 0 }
 // store is the case they used to answer differently, one serving "jobs":[] because it
 // normalized by hand and the other serving null.
 //
-// The service lists the daemon's own catalog whatever the store holds, so its side of the
+// The service lists the server's own catalog whatever the store holds, so its side of the
 // parity is that the store contributed no row and derived no overlap.
 func TestJobDoorsAgreeOnAnEmptyStore(t *testing.T) {
-	t.Setenv("MAGUS_DAEMON_SOCKET", "") // no daemon to query, so nothing lists as running
+	t.Setenv("MAGUS_PROC_SOCKET", "") // no server to query, so nothing lists as running
 
 	store := tmpJobStore(t, t.TempDir())
 	tool := &jobTool{store: store}

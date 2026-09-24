@@ -1,7 +1,7 @@
 // order.ts - what to show, in what order, and what to fold away.
 //
 // This is the part that makes a magus review different from a text diff, and it is pure so it
-// can be tested without a DOM or a daemon.
+// can be tested without a DOM or a server.
 //
 // Two ideas, both of which depend on facts only the workspace has:
 //
@@ -43,7 +43,7 @@ import type {
 
 export interface OrderedFile {
   readonly file: DiffFile;
-  // annotation is absent when the review has not landed yet (first paint) or when the daemon
+  // annotation is absent when the review has not landed yet (first paint) or when the server
   // could not classify the path. Callers must render without it rather than waiting for it.
   readonly annotation?: DiffAnnotation;
 }
@@ -96,7 +96,7 @@ export function order(files: readonly DiffFile[], session: DiffReview | null): O
 // change from the one person who would otherwise have caught it.
 //
 // The predicate is spelled the same way in the terminal viewer (diff.File.Settled), against the
-// same read_state the daemon computes once. The STATE is shared; only the folding is per surface.
+// same read_state the server computes once. The STATE is shared; only the folding is per surface.
 export function settled(annotation: DiffAnnotation | undefined): boolean {
   // role, not a field on the patch file: DiffFile is the PATCH, and whether a path is generated is
   // something only the annotation knows - the same a.role === "output" the grouping above uses.

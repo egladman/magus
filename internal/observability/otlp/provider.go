@@ -36,7 +36,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	if !cfg.Enabled && !cfg.LocalCollect {
 		return disabledProvider{}, nil
 	}
-	// External export requires an endpoint; local-only collection (the daemon's dashboard
+	// External export requires an endpoint; local-only collection (the server's dashboard
 	// feed) does not.
 	if cfg.Enabled && cfg.Endpoint == "" {
 		return nil, errors.New("observability: telemetry.enabled is true but telemetry.endpoint is empty")

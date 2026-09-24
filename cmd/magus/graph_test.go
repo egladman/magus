@@ -68,7 +68,7 @@ func TestStripRuntimeAttrs(t *testing.T) {
 }
 
 // TestStripRuntimeAttrsLeavesGraphIntact is why stripRuntimeAttrs copies instead of
-// deleting in place: Output shares Attrs maps with the live graph, which in the daemon is
+// deleting in place: Output shares Attrs maps with the live graph, which in the server is
 // warm and long-lived, so an in-place delete would blind every later explain.
 func TestStripRuntimeAttrsLeavesGraphIntact(t *testing.T) {
 	g := runtimeGraph()

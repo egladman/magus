@@ -1,0 +1,51 @@
+# A pipe between different projects streams: the writer settles on project a, which
+# the reader in project b does not need, so the reader starts at once and handles each
+# record as it arrives rather than after the writer exits.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe'
+
+exec bash -c 'set -o pipefail; magus run emit a | magus run consume b'
+cmp log/order want-order
+! stderr 'locked by another magus process'
+
+# A read-only producer never holds a reader back, even in the reader's own project.
+exec bash -c 'set -o pipefail; magus ls -o json | magus run consume b'
+! stderr 'waiting for pid'
+
+-- want-order --
+consume.got record-1
+emit.end
+-- log/.keep --
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "pipe-root"});
+-- a/magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({"targets": {"emit": {"skip_cache": "streams stdout per invocation"}}});
+
+export fun emit(ctx: magus\Context, args: [str]) > void !> any {
+    io\stdout.write("record-1\n");
+    proc\exec("sleep", ["2"]);
+    proc\exec("sh", ["-c", "echo emit.end >> ../log/order"]);
+    io\stdout.write("record-2\n");
+}
+-- b/magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({"targets": {"consume": {"skip_cache": "reads stdin per invocation"}}});
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    final first = io\stdin.readLine();
+    if (first != null) {
+        proc\exec("sh", ["-c", "echo consume.got {first} >> ../log/order"]);
+    }
+    io\stdin.readAll();
+}

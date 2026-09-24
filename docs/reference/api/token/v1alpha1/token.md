@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, tokenservice]
 
 TokenService lists, mints and revokes stored tokens, and lists and revokes the active share link. No response ever carries a secret except CreateTokenResponse, once.
 
-Package `magus.token.v1alpha1`, defined in `proto/magus/token/v1alpha1/token.proto`. Source: [token.proto:25](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L25). Part of the [daemon API](../../index.md).
+Package `magus.token.v1alpha1`, defined in `proto/magus/token/v1alpha1/token.proto`. Source: [token.proto:25](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L25). Part of the [server API](../../index.md).
 
 ## Methods
 
@@ -45,7 +45,7 @@ Source: [token.proto:87](https://github.com/egladman/magus/blob/main/proto/magus
 
 | Field         | Type            | # | Description                                                                                                    |
 | ------------- | --------------- | - | -------------------------------------------------------------------------------------------------------------- |
-| `name`        | string          | 1 | A human label, unique among stored tokens, that does not look like an id. Empty asks the daemon to derive one. |
+| `name`        | string          | 1 | A human label, unique among stored tokens, that does not look like an id. Empty asks the server to derive one. |
 | `expire_time` | Timestamp       | 3 | _optional_ Required: when the token dies, in the future and at most 366 days out.                              |
 | `grant`       | [Grant](#grant) | 4 | The grant to mint. Console levels only; within the caller's own grant.                                         |
 
@@ -68,7 +68,7 @@ Used by: [CreateToken (response)](token.md#createtoken).
 
 ### Grant
 
-Grant is what a token may do: one level per surface, as the daemon enforces it.
+Grant is what a token may do: one level per surface, as the server enforces it.
 
 Source: [token.proto:49](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L49).
 

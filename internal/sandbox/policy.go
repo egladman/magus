@@ -174,7 +174,7 @@ func (p *Policy) Fingerprint() string {
 	return hex.EncodeToString(h.Sum(nil)[:8]) // first 8 bytes → 16 hex chars
 }
 
-// UnionPolicies returns the set-union of all input policies (for multi-workspace daemons).
+// UnionPolicies returns the set-union of all input policies (for multi-workspace servers).
 // FS rules with the same path are merged by OR-ing Read/Write/Exec. nil inputs are ignored.
 // Per-workspace binding-layer checks remain strict; only the kernel landlock layer sees the union.
 func UnionPolicies(ps ...*Policy) *Policy {

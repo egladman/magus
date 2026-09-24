@@ -357,7 +357,7 @@ runs:
         restore-keys: |
           ${{ github.workflow }}-magus-history-v1-
 
-    # No job here runs a daemon, so MCP/console have nothing to listen on.
+    # No job here runs a server, so MCP/console have nothing to listen on.
     # Exported via GITHUB_ENV so every later `magus` call in the job picks
     # it up, not just this step. Otherwise magus doctor's console check
     # always fails (checks_mcp.go's probeBridgeReachability).
