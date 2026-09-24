@@ -499,8 +499,7 @@ func isCdInvocation(c hint.Invocation) bool {
 }
 
 // isMagusInvocation reports a command that runs magus. The base name is compared exactly,
-// not by suffix, so `./magus` and an absolute path both count (this repository's own
-// CLAUDE.md has agents invoke the local build that way) while `notmagus` does not.
+// not by suffix, so `./magus` and an absolute path both count while `notmagus` does not.
 func isMagusInvocation(c hint.Invocation) bool {
 	return filepath.Base(c.Name) == "magus"
 }

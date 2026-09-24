@@ -27,11 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   advisor, off by default, reads it to name the label that queues an approved pull
   request.
 - **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
-  It reads the status the base requires and who it is pinned to, auto-merge, and the
-  required checks that run on `pull_request`; `--app <slug>` prints the steps for the
-  queue's own GitHub App, which `setup-magus` turns into a token with no workflow edit.
-  `-o json` prints the setup; magus runs none of it. `apply` refuses a status pinned to
-  another integration than its token's (MGS3019).
+  `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
+  turns into a token. magus runs none of it. `apply` refuses a status pinned to another
+  integration than its token's (MGS3019).
 - **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
   partitions by them.
 - **The merge queue merges stacked changes.** A change carrying another queued or merged
@@ -382,12 +380,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
-- **Three guard rules now match what their catalog entries claim.** `cd` denied a `cd`
-  ahead of any command at all; it now fires only ahead of a magus one. `cache-dir-write`
-  matched `.magus` as a bare substring, denying `rsync --exclude .magus` and an
-  interpreter's own quoted DATA; it now grades only write targets. `stage-all`'s
-  description named only `-A`; the matcher already covered `-u`, `.` and the long forms,
-  so the description was widened to match instead.
+- **Three guard rules match their catalog entries.** `cd` fires only ahead of a magus
+  command. `cache-dir-write` grades only write targets, so `rsync --exclude .magus` and
+  an interpreter's quoted data pass. `stage-all`'s description now names `-u`, `.` and
+  the long forms its matcher already covered.
 - **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
   Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
   queue provider both read, in place of `GH_TOKEN`.
