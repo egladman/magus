@@ -129,18 +129,13 @@ func TestWriteTargetGraphMarkdownHeadingAndOrder(t *testing.T) {
 	assert.Less(t, i, j, "primary target should precede the worker")
 }
 
-// TestWriteTargetGraphMarkdownRouting pins the "query first" section: it renders
-// only when routing is supplied, leads with the retrieval verbs, and emits a
-// per-kind row (with the query to run) and a per-project row.
+// TestWriteTargetGraphMarkdownRouting pins the "query first" section: it leads with
+// the retrieval verbs, and with routing supplied emits a per-kind row (with the query
+// to run) and a per-project row.
 func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
 		Path: ".", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}},
 	}}}
-
-	// Without routing, the section is absent.
-	var plain bytes.Buffer
-	require.NoError(t, WriteTargetGraphMarkdown(&plain, out, nil, "", nil))
-	assert.NotContains(t, plain.String(), "## Query first")
 
 	routing := &types.KnowledgeRouting{
 		SchemaVersion: 1, NodeCount: 42, EdgeCount: 99,
@@ -164,6 +159,24 @@ func TestWriteTargetGraphMarkdownRouting(t *testing.T) {
 	// live answer, and the block above points at it.
 	assert.NotContains(t, got, "42 nodes", "routing section must not carry churning totals")
 	assert.NotContains(t, got, "99 edges", "routing section must not carry churning totals")
+}
+
+// A scoped index (nil routing) carries no figure a change in another project can move:
+// no kind or project table and no schema version, only the verbs and its own scope.
+func TestWriteTargetGraphMarkdownScopedIndexOmitsWorkspaceFigures(t *testing.T) {
+	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
+		Path: "libs/foo", RelPath: "libs/foo", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}},
+	}}}
+	var b bytes.Buffer
+	require.NoError(t, WriteTargetGraphMarkdown(&b, out, nil, "", nil))
+	got := b.String()
+
+	assert.Contains(t, got, "## Query first")
+	assert.Contains(t, got, "magus explain <node>")
+	assert.Contains(t, got, "Scope a query to this index: `magus query project=libs/foo`. `magus graph stats` sizes up the whole workspace.")
+	for _, bad := range []string{"| Kind", "| Project", "schema v", "Anchors"} {
+		assert.NotContains(t, got, bad, "a scoped index must not carry workspace-wide %q", bad)
+	}
 }
 
 // TestFirstDocLine pins the target-list cell helper: it keeps only the first
