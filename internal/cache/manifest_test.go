@@ -68,7 +68,7 @@ func TestManifestOutOfTreeOutputPathIsRefused(t *testing.T) {
 	_, err = c.readManifest(step.ProjectPath, r1.Hash)
 	require.Error(t, err, "an out-of-tree output path must not read back as a valid entry")
 
-	c2, err := Open(t.Context(), cdir, WithMutable(true))
+	c2, err := Open(t.Context(), cdir, WithLocalWrite(true))
 	require.NoError(t, err, "cache.Open c2")
 	calls := 0
 	r2, err := c2.Run(context.Background(), step, func(context.Context) error {
@@ -130,7 +130,7 @@ func TestManifestPlatformMismatchIsMiss(t *testing.T) {
 	step := makeStep(root)
 	step.Target = "build"
 
-	c1, err := Open(t.Context(), cdir, WithMutable(true), withPlatform("linux/amd64"))
+	c1, err := Open(t.Context(), cdir, WithLocalWrite(true), withPlatform("linux/amd64"))
 	require.NoError(t, err, "cache.Open c1")
 	calls := 0
 	r1, err := c1.Run(context.Background(), step, func(context.Context) error { calls++; return nil })
@@ -138,7 +138,7 @@ func TestManifestPlatformMismatchIsMiss(t *testing.T) {
 	require.False(t, r1.Hit, "first run must be a miss")
 	require.Equal(t, 1, calls)
 
-	c2, err := Open(t.Context(), cdir, WithMutable(true), withPlatform("darwin/arm64"))
+	c2, err := Open(t.Context(), cdir, WithLocalWrite(true), withPlatform("darwin/arm64"))
 	require.NoError(t, err, "cache.Open c2")
 	r2, err := c2.Run(context.Background(), step, func(context.Context) error { calls++; return nil })
 	require.NoError(t, err, "Run c2")
@@ -156,7 +156,7 @@ func TestManifestPlatformMatchStillReplays(t *testing.T) {
 	step := makeStep(root)
 	step.Target = "build"
 
-	c1, err := Open(t.Context(), cdir, WithMutable(true), withPlatform("linux/amd64"))
+	c1, err := Open(t.Context(), cdir, WithLocalWrite(true), withPlatform("linux/amd64"))
 	require.NoError(t, err, "cache.Open c1")
 	calls := 0
 	r1, err := c1.Run(context.Background(), step, func(context.Context) error { calls++; return nil })
@@ -164,7 +164,7 @@ func TestManifestPlatformMatchStillReplays(t *testing.T) {
 	require.False(t, r1.Hit)
 	require.Equal(t, 1, calls)
 
-	c2, err := Open(t.Context(), cdir, WithMutable(true), withPlatform("linux/amd64"))
+	c2, err := Open(t.Context(), cdir, WithLocalWrite(true), withPlatform("linux/amd64"))
 	require.NoError(t, err, "cache.Open c2")
 	r2, err := c2.Run(context.Background(), step, func(context.Context) error { calls++; return nil })
 	require.NoError(t, err, "Run c2")
@@ -185,7 +185,7 @@ func TestManifestEmptyPlatformMatchesAnyPlatform(t *testing.T) {
 	step := makeStep(root)
 	step.Target = "build"
 
-	c1, err := Open(t.Context(), cdir, WithMutable(true), withPlatform("linux/amd64"))
+	c1, err := Open(t.Context(), cdir, WithLocalWrite(true), withPlatform("linux/amd64"))
 	require.NoError(t, err, "cache.Open c1")
 	r1, err := c1.Run(context.Background(), step, func(context.Context) error { return nil })
 	require.NoError(t, err, "Run c1")
@@ -202,7 +202,7 @@ func TestManifestEmptyPlatformMatchesAnyPlatform(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, writeAtomic(mp, data))
 
-	c2, err := Open(t.Context(), cdir, WithMutable(true), withPlatform("darwin/arm64"))
+	c2, err := Open(t.Context(), cdir, WithLocalWrite(true), withPlatform("darwin/arm64"))
 	require.NoError(t, err, "cache.Open c2")
 	calls := 0
 	r2, err := c2.Run(context.Background(), step, func(context.Context) error { calls++; return nil })

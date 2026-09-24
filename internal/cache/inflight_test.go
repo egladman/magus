@@ -118,3 +118,39 @@ func TestInflightNilIsUsable(t *testing.T) {
 	assert.NotPanics(t, func() { f.start("a", "b")() })
 	assert.Empty(t, f.takeAbandoned())
 }
+
+// One project and target can run twice at once (another charm set, other args). Each
+// run clears its own record, so the first to finish does not erase the second.
+func TestInflightSameTargetTwiceKeepsBothRecords(t *testing.T) {
+	i := newInflight(t.TempDir())
+	doneA := i.start("docs", "generate")
+	doneB := i.start("docs", "generate")
+	doneA()
+	require.Len(t, i.Running(), 1, "finishing one run erased the other's record")
+	doneB()
+	assert.Empty(t, i.Running())
+}
+
+// A killed run's inflight temp file and remote-tier staging directory are collected once
+// stale; a fresh one may belong to a live writer and stays.
+func TestInflightCollectsStaleLitter(t *testing.T) {
+	dir := t.TempDir()
+	old := time.Now().Add(-2 * staleAfter)
+	tmp := filepath.Join(dir, inflightPrefix+"1.tmp")
+	require.NoError(t, os.WriteFile(tmp, nil, 0o644))
+	staging := filepath.Join(dir, stagingPrefix+"old")
+	require.NoError(t, os.MkdirAll(filepath.Join(staging, "cas"), 0o755))
+	for _, p := range []string{tmp, staging} {
+		require.NoError(t, os.Chtimes(p, old, old))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, inflightPrefix+"2.tmp"), nil, 0o644))
+
+	newInflight(dir).takeAbandoned()
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Equal(t, []string{inflightPrefix + "2.tmp"}, names)
+}

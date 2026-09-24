@@ -3492,3 +3492,76 @@ func (ix symbolIndex) addBuzzName(lit string) {
 		}
 	}
 }
+
+// installCall matches a package-manager install run from a magusfile, directly or through
+// the install() helper each JS project defines.
+var installCall = regexp.MustCompile(`\binstall\(\)|"(pnpm|npm|yarn)",\s*\["(install|ci)"`)
+
+// exportedTarget matches the head of a target definition, capturing its name.
+var exportedTarget = regexp.MustCompile(`(?m)^export fun (\w+)\(`)
+
+// A target that installs packages must never replay. Its effect is node_modules, which no
+// cache entry records, so a hit on a fresh checkout (a restored CI store, a remote-tier
+// entry) restores nothing and the next target runs without its packages. That is how the
+// console shard of #268 failed: preflight hit, build ran, esbuild could not resolve
+// @connectrpc/connect.
+func TestPackageInstallTargetsNeverReplay(t *testing.T) {
+	var files []string
+	require.NoError(t, filepath.WalkDir(".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", ".magus", ".claude", ".agents", ".opencode", "node_modules", "gen", "testdata":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() == "magusfile.buzz" {
+			files = append(files, p)
+		}
+		return nil
+	}))
+	require.NotEmpty(t, files)
+
+	checked := 0
+	for _, path := range files {
+		body, err := os.ReadFile(path)
+		require.NoError(t, err)
+		src := string(body)
+		for _, m := range exportedTarget.FindAllStringSubmatchIndex(src, -1) {
+			name := src[m[2]:m[3]]
+			if !installCall.MatchString(funBody(src, m[1])) {
+				continue
+			}
+			checked++
+			assert.Regexp(t, `"`+regexp.QuoteMeta(name)+`":\s*\{\s*"skip_cache"`, src,
+				"%s: target %q installs packages but may replay. Its effect is node_modules, which no\n"+
+					"cache entry records, so a hit on a fresh checkout restores nothing; declare\n"+
+					"\"%s\": {\"skip_cache\": \"<why>\"} in the project's targets.", path, name, name)
+		}
+	}
+	assert.Positive(t, checked, "no install target found; the pattern no longer matches how projects install")
+}
+
+// funBody returns the brace-balanced body starting at the first "{" at or after from.
+func funBody(src string, from int) string {
+	open := strings.IndexByte(src[from:], '{')
+	if open < 0 {
+		return ""
+	}
+	depth := 0
+	for i := from + open; i < len(src); i++ {
+		switch src[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return src[from+open : i+1]
+			}
+		}
+	}
+	return src[from+open:]
+}

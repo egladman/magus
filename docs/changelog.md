@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The cache is two tiers under standard two-tier semantics.** Reads go local, then
+  remote; a remote hit is verified and promoted into the local tier; a build is stored in
+  both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
+  unset, it is written when a signing key is held; `true` makes remote writes required.
+- **A run that may write the remote tier backfills it.** A local hit whose key the remote
+  tier lacks is uploaded in the background, after a `has_artifact` lookup; the cache
+  contract gains that optional function.
+- **A failing remote tier degrades the run to the local tier.** The first failure is
+  reported and counted as failed, never missed, and the run stops asking.
 - **`magus queue` is a merge queue; `magus vcs queue` is gone.** Its `ls`, `plan`,
   `validate` and `apply` read JSON and report JSONL. Validation runs changes' code with
   read access only; apply rebuilds each candidate and merges it with the change's own
@@ -154,6 +163,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking (Go API): the cache's tiers share one shape.** `cache.WithMutable` is
+  `WithLocalWrite`, `WithRemoteStats` is `ContextWithRemoteStats`, `Cache.Remote()` is
+  `RemoteNamespace(ns)`, and `RemoteBackend` takes `(namespace, key)`, answers
+  `ErrRemoteMiss` and `ErrRemoteExists` instead of `(nil, nil)`, and gains `HasArtifact`.
+  `cache.Open` reads no environment.
+- **The `run.remote` record says `stored`, not `published`,** which names output bundles
+  only.
+- **`magus query output --publish` is refused when remote writes are off.**
 - **Breaking (SDK): every `types.VCSDriver` implements every capability.** A backend
   without one returns `*types.VCSUnsupportedError` naming itself and a `VCSCapability`,
   matching `ErrVCSUnsupported` and `errors.ErrUnsupported`. `RemoteURL` takes a remote
@@ -266,6 +283,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The GitHub Actions remote tier stores what it uploads.** The spell read the signed
+  URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
+  the empty URL for an existing entry: every upload reported success, nothing was stored,
+  and every lookup missed. It reads either name.
+- **A failing remote store reads as failed, not missed.** Both shipped cache spells throw
+  on a failed request; `false` means not stored (get) or already stored (put).
+- **A remote-tier miss is visible.** Each prints `<project> not in the remote cache
+  (out...)` with the producing run's ref, the end-of-run line counts misses, and `-v`
+  adds a digest per key-input class.
+- **A remote hit is one `cache.hit` record, counted once its replay succeeds.** A local
+  replay that fails tries the remote tier before rebuilding.
+- **Knowledge shards on the remote tier are signed and verified,** and a run that may not
+  write the remote tier stores none.
+- **An unrecognized boolean in a `MAGUS_*` variable is an error** instead of silently
+  keeping the previous value.
+- **Imported cache files are 0644, and a running target's crash record survives the same
+  target running twice at once.** Stale inflight temp files and staging directories are
+  collected.
 - **Concurrent fetches into one repository no longer fail.** Two `git fetch` runs read
   each other's refs mid-update and failed with "bad object"; magus now fetches into a
   repository one at a time.
