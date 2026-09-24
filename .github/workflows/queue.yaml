@@ -89,11 +89,13 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
+      # No restore and no save: main's cache scope is writable by a validate job's
+      # escaped hook, and the plan decides what apply merges.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
-          cache_save: false
+          cache: false
 
       - uses: ./.github/actions/setup-magus
         with:
@@ -138,12 +140,14 @@ jobs:
           filter: blob:none
           persist-credentials: false
 
-      # cache_save: false because validation runs queued pull requests' code.
+      # No save: validation runs queued pull requests' code. No restore either: an entry
+      # an earlier run's hook planted would decide this verdict. cache_save: false alone
+      # stops only the action's own save, not a hook holding the runtime token.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
-          cache_save: false
+          cache: false
 
       # The gate runs the same `ci` a shard does, compress-cgo-test included.
       - uses: ./.github/actions/codec-deps
