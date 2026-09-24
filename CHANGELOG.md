@@ -336,6 +336,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+- **Three guard rules now match what their catalog entries claim.** `cd` denied a `cd`
+  ahead of any command at all; it now fires only ahead of a magus one. `cache-dir-write`
+  matched `.magus` as a bare substring, denying `rsync --exclude .magus` and an
+  interpreter's own quoted DATA; it now grades only write targets. `stage-all`'s
+  description named only `-A`; the matcher already covered `-u`, `.` and the long forms,
+  so the description was widened to match instead.
 
 ### Security
 

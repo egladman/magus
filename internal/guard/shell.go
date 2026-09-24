@@ -473,19 +473,36 @@ func magusCdTargets(command string, d Dialect) []string {
 	return out
 }
 
-// shellUsesCd reports whether the line runs the cd builtin AHEAD of other work. Parsed
-// commands are preferred so `bash -c 'cd ...'` and a subshell `(cd ... && ...)` are seen
-// the same way; the regex is only the unparseable-line fallback.
+// shellUsesCd reports whether the line runs the cd builtin ahead of a magus command, the
+// shape the catalog names: magus is CWD-relative, so a cd there is how the right command
+// lands on the wrong project. Parsed commands are preferred so `bash -c 'cd ...'` and a
+// subshell `(cd ... && ...)` are seen the same way; the regex is only the
+// unparseable-line fallback.
 //
-// A cd alone on its line passes: it relocates no later command, and on a host whose shell
-// persists across calls it is how a session moves into its own checkout.
+// A cd with no magus command AFTER it passes, alone on its line or ahead of ordinary
+// work (`cd dir && go test`, `cd dir; ls`): it relocates nothing this rule is about, and
+// on a host whose shell persists across calls a bare cd is how a session moves into its
+// own checkout.
 func shellUsesCd(cmds []hint.Invocation, parsed bool, command string) bool {
 	if parsed {
-		return len(cmds) > 1 && slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-			return c.Name == "cd" || filepath.Base(c.Name) == "cd"
-		})
+		cdAt := slices.IndexFunc(cmds, isCdInvocation)
+		if cdAt < 0 {
+			return false
+		}
+		return slices.ContainsFunc(cmds[cdAt+1:], isMagusInvocation)
 	}
-	return cdCmdRe.MatchString(command)
+	return cdCmdRe.MatchString(command) && magusMentionRe.MatchString(command)
+}
+
+func isCdInvocation(c hint.Invocation) bool {
+	return c.Name == "cd" || filepath.Base(c.Name) == "cd"
+}
+
+// isMagusInvocation reports a command that runs magus. The base name is compared exactly,
+// not by suffix, so `./magus` and an absolute path both count (this repository's own
+// CLAUDE.md has agents invoke the local build that way) while `notmagus` does not.
+func isMagusInvocation(c hint.Invocation) bool {
+	return filepath.Base(c.Name) == "magus"
 }
 
 // rawWord returns a word's SOURCE text, quotes stripped.
@@ -845,6 +862,11 @@ var (
 	// Unparseable-line fallback for shellUsesCd. Anchored at a command position
 	// so a `cd` inside a commit message or a quoted string does not trip it.
 	cdCmdRe = regexp.MustCompile(cmdPos + `cd\b`)
+	// The other half of that fallback: shellUsesCd also requires a magus command
+	// somewhere on the line, and without a parse tree "somewhere" is all an unparseable
+	// line can promise. A path segment ending in "magus" counts, the way isMagusInvocation
+	// counts `./magus`.
+	magusMentionRe = regexp.MustCompile(cmdPos + `(?:\S*/)?magus\b`)
 
 	// notesWriteRe matches an invocation that would AUTHOR a note. It is the
 	// unparsable-line fallback for notesWriteFires below, the way gitGuardFallback is for

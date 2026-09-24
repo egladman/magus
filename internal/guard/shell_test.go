@@ -175,7 +175,11 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git add -A", rule: denyRule{Name: denyRuleStageAll}},
 		{command: "git add --all", rule: denyRule{Name: denyRuleStageAll}},
 		{command: "git add .", rule: denyRule{Name: denyRuleStageAll}},
+		// -u stages every TRACKED change across the whole tree, the same sweep as -A
+		// minus untracked files, and a target's declared outputs are ordinarily
+		// tracked already: measured, every real firing of this rule was -u, not -A.
 		{command: "git add -u", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git add --update", rule: denyRule{Name: denyRuleStageAll}},
 		// The deny holds wherever the stage-everything call sits on the line. It used to
 		// be graded in the ADVISORY pass, so any earlier git command that advised answered
 		// first and the deny was never reached.
@@ -230,8 +234,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
 		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
 		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
-		// Still caught in every real command position.
-		{command: "cd /repo && go test ./...", rule: denyRule{Name: denyRuleCd}},
+		// The cd rule is about magus landing on the wrong project, not about cd itself:
+		// a cd ahead of ordinary, non-magus work falls through to whatever rule that
+		// work earns on its own (here, the raw-tool deny for `go test`).
+		{command: "cd /repo && go test ./...", rule: rawTool(`go test ./...`)},
 		{command: "make lint; pytest tests/"},
 		{command: "go build ./... | tee log", rule: rawTool(`go build ./...`)},
 		// A READ-ONLY rendering is covered too. It used to be exempt on the reading that
@@ -359,17 +365,23 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// Only run and affected carry the flag, so nothing else is advised toward it.
 		{command: "timeout 60 magus graph build"},
 		{command: "magus run test ."},
-		// A cd WITHIN the workspace is denied: name the project instead. A cd into
-		// a temp or scratchpad copy is the throwaway rule above (more specific).
+		// A cd WITHIN the workspace, ahead of a magus command, is denied: name the
+		// project instead. A cd into a temp or scratchpad copy is the throwaway rule
+		// above (more specific); "./magus" counts the same as "magus" on PATH.
 		{command: "cd libs/gopherbuzz && magus run test .", rule: denyRule{Name: denyRuleCd}},
 		// A cd alone on its line relocates nothing after it, and is how a session whose
 		// shell persists moves into its own checkout.
 		{command: "cd libs/diagnostics"},
 		{command: "cd /Users/someone/checkouts/guard-terms"},
 		{command: "cd /Users/someone/checkouts/guard-terms && ./magus run lint .", rule: denyRule{Name: denyRuleCd}},
-		{command: "cd libs/diagnostics; ls", rule: denyRule{Name: denyRuleCd}},
-		{command: "bash -c 'cd /tmp && ls'", rule: denyRule{Name: denyRuleCd}},
-		{command: "(cd libs/diagnostics && ls)", rule: denyRule{Name: denyRuleCd}},
+		// A cd ahead of ordinary, non-magus work is not this rule's business: nothing
+		// after it lands on the wrong project, since nothing after it is magus.
+		{command: "cd libs/diagnostics; ls"},
+		{command: "bash -c 'cd /tmp && ls'"},
+		{command: "(cd libs/diagnostics && ls)"},
+		// A name merely ENDING in "magus" is not magus: the base name must match exactly,
+		// or a wrapper script called notmagus would earn another program's deny.
+		{command: "cd libs/foo && notmagus run test"},
 		// --root is the sanctioned way to mean a different workspace, and a temp
 		// path merely MENTIONED is not a relocation.
 		{command: "magus run test . --root /tmp/other-workspace"},
@@ -1229,8 +1241,11 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
 		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
 	}
-	// A leading cd is refused on its own; the checkpoint advise is never reached.
-	assert.Equal(t, denyRuleCd, Evaluate(testDependencies(), "cd libs/foo && git rev-parse HEAD").Rule.Name)
+	// A leading cd is not this rule's business, since nothing after it is magus: the
+	// checkpoint advise still fires.
+	v := Evaluate(testDependencies(), "cd libs/foo && git rev-parse HEAD")
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, "magus vcs checkpoint")
 
 	for _, cmd := range []string{
 		"git rev-parse --show-toplevel",
@@ -1283,8 +1298,11 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
 		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
-	// A leading cd is refused on its own; the update advise is never reached.
-	assert.Equal(t, denyRuleCd, Evaluate(testDependencies(), "cd libs/foo && pnpm add lodash").Rule.Name)
+	// A leading cd is not this rule's business, since nothing after it is magus: the
+	// update advise still fires.
+	v := Evaluate(testDependencies(), "cd libs/foo && pnpm add lodash")
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, ":update")
 
 	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
 	// spell op and a dependency refresh, and the deny answers first, so without this
