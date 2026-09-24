@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// staticFilter is a test-only gitFilter substitute.
+// staticFilter is a test-only trackedFilter substitute.
 type staticFilter struct{ allowed map[string]bool }
 
 func (f *staticFilter) Allow(path string) bool { return f.allowed[path] }

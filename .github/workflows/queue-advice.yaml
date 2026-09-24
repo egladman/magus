@@ -1,0 +1,66 @@
+name: Queue advice
+
+# The merge-queue advisor: names the label that queues an approved pull request, and
+# retracts it once the pull request is queued, merged or closed. Its own workflow because
+# what it reads changes on labels, reviews and auto-merge, events ci.yaml does not run on
+# and pr.yaml must not: a skipped required check on a label event would read as passing.
+#
+# It runs main's advisor with main's magus and executes no pull-request code.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled, closed, auto_merge_enabled, auto_merge_disabled]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+concurrency:
+  group: queue-advice-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+
+jobs:
+  advice:
+    name: queue advice
+    # A fork is never queued, so there is nothing to name or retract.
+    if: vars.MAGUS_PR_COMMENTS != 'false' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+          cache_save: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - uses: ./.github/actions/advice
+        with:
+          merge-queue: 'true'
+          merge-conflicts: 'false'
+          hand-edited-generated: 'false'
+          target-outputs: 'false'
+          doctor: 'false'
+          version-floor: 'false'
+          blast-radius: 'false'
+          unclaimed: 'false'
+          skip-cache: 'false'
+          conformance: 'false'
+          missing-target: 'false'
+          api-surface: 'false'
+          first-contribution: 'false'

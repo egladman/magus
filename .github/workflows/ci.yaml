@@ -12,12 +12,17 @@ name: CI
 # ci also runs on main pushes, and that is not a publish step: the push run is what
 # populates the shared cache and the run-duration history a pull request may only read.
 # See MAGUS_CACHE_WRITE_ENABLED below.
+#
+# workflow_dispatch is the merge queue's main run: its merges use the Actions token, whose
+# pushes start no workflow, so queue-apply.yaml dispatches this on main instead. Every
+# check below that means "a main run" is therefore `!= 'pull_request'`, not `== 'push'`.
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 # On a PR the newest push supersedes the ones before it, so cancelling is right: the only
 # verdict anyone acts on is the one for the head commit.
@@ -203,7 +208,7 @@ jobs:
       - id: plan
         name: Compute shard matrix
         env:
-          MAGUS_VCS_BASE_REF: ${{ github.event_name == 'push' && 'last-passed' || '' }}
+          MAGUS_VCS_BASE_REF: ${{ github.event_name != 'pull_request' && 'last-passed' || '' }}
           # Read by the github spell's last_green_run alone. Unset, it answers null
           # and the plan fans out as it always has.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,7 +234,7 @@ jobs:
   # A push by the Actions token starts no workflow run, so a fix cannot trigger itself.
   regenerate:
     name: magus regenerate
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -334,7 +339,7 @@ jobs:
       # needs its own branch checked out by name. main's copy of them, taken before any branch
       # is checked out over the workspace.
       - name: Settle labelled pull requests this push put in conflict
-        if: github.event_name == 'push' && steps.work.outputs.requested == 'true'
+        if: github.event_name != 'pull_request' && steps.work.outputs.requested == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -365,7 +370,7 @@ jobs:
     permissions:
       contents: read
     env:
-      MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
+      MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
     strategy:
       fail-fast: false
       max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
@@ -694,7 +699,7 @@ jobs:
       # runs whose timings the forecaster most needs are the ones that went red. This
       # used to be one composite step whose own merge steps carried always(); splitting
       # the summary out moved that guard up here.
-      - if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: ./.github/actions/magus
         with:
           merge-history: 'true'
