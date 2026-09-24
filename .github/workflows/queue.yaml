@@ -14,6 +14,11 @@ name: Queue
 # credential and executes no pull-request code. It cannot post statuses either, which is
 # why verdicts travel as artifacts: a job running pull-request code with statuses: write
 # could set the very status branch protection requires.
+#
+# Only a run on main started by a push or a dispatch plans and validates. A pull request
+# event runs the pull request's own copy of this file, which could upload any plan and any
+# verdict, so apply follows no such run: there the intent job alone runs, and
+# queue-apply.yaml answers it by dispatching this workflow on main.
 
 on:
   # No branches filter: a stacked pull request targets the branch below it, not main.
@@ -31,9 +36,12 @@ on:
   workflow_dispatch:
 
 # One validation at a time; a newer event waits rather than cancelling a run whose
-# verdicts apply is already following.
+# verdicts apply is already following. A pull request event validates nothing, so it
+# waits on no validation.
 concurrency:
-  group: queue-validate
+  group: >-
+    ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'queue-validate' ||
+    format('queue-intent-{0}', github.run_id) }}
   cancel-in-progress: false
 
 permissions:
@@ -46,15 +54,27 @@ env:
   GOEXPERIMENT: jsonv2
 
 jobs:
+  # Runs where a pull request event carries merge intent. queue-apply.yaml reads whether
+  # it ran and dispatches a run on main; it is a hint, never a verdict. The provider lists
+  # forks too and the plan refuses them by name; skipping them here only saves a run
+  # nobody's change can use.
+  intent:
+    name: queue intent
+    if: >-
+      github.event_name != 'push' && github.event_name != 'workflow_dispatch' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
+       startsWith(github.event.label.name, 'queue: '))
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - name: Merge intent; queue-apply.yaml starts the run on main that validates it
+        run: 'true'
+
   plan:
     name: queue plan
-    # The provider lists forks too and the plan refuses them by name; skipping the event
-    # here only saves a run nobody's change can use.
-    if: >-
-      github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-       ((github.event.pull_request.auto_merge != null && github.event.pull_request.base.ref == 'main') ||
-        startsWith(github.event.label.name, 'queue: ')))
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:

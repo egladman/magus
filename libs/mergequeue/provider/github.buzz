@@ -1412,15 +1412,43 @@ fun artifactsFrom(body: str, base: str, repo: str) > [any] !> any {
     return artifacts;
 }
 
+// BRANCH_EVENTS are the events whose run executes the workflow file as the branch it
+// ran on holds it. Every pull_request* event runs a file the pull request can change,
+// and a fork's run reaches this repository's workflow_run followers all the same.
+final BRANCH_EVENTS = ["push", "workflow_dispatch"];
+
+// originFrom reads a run's JSON into the run record list_artifacts returns. repo is the
+// repository the source named; a run of any other is an error, not a record.
+fun originFrom(body: str, repo: str) > {str: any} !> any {
+    final run = serialize\jsonDecode(body);
+    final own = run.q("repository").q("full_name").stringValue();
+    if (own != repo) {
+        throw "github: run {run.q("id").integerValue()} belongs to '{own}', not '{repo}'";
+    }
+    final event = run.q("event").stringValue();
+    return {
+        "repo": own,
+        "head_repo": run.q("head_repository").q("full_name").stringValue(),
+        "head_branch": run.q("head_branch").stringValue(),
+        "event": event,
+        "branch_event": BRANCH_EVENTS.indexOf(event) != null,
+        "definition": run.q("path").stringValue(),
+    };
+}
+
 // list_artifacts reads the run's status BEFORE listing its artifacts, so a listing that
-// says complete holds every artifact the run uploaded. The headers carry the read
-// credential for the downloads; the queue drops them on a redirect to the storage host.
+// says complete holds every artifact the run uploaded. The same read says what started
+// the run and what it ran, which the queue checks before it downloads anything. The
+// headers carry the read credential for the downloads; the queue drops them on a
+// redirect to the storage host.
 export fun list_artifacts(io: {str: any}) > any !> any {
     final hdrs = reading("list_artifacts");
     final run = runOf("{io["source"] ?? ""}");
     final base = apiBase();
     final prefix = base + "/repos/" + (run["repo"] ?? "") + "/actions/runs/" + (run["id"] ?? "");
-    final status = serialize\jsonDecode(expect(get(prefix, hdrs: hdrs), status: 200, what: "run {run["id"] ?? ""}")).q("status").stringValue();
+    final view = expect(get(prefix, hdrs: hdrs), status: 200, what: "run {run["id"] ?? ""}");
+    final origin = originFrom(view, repo: run["repo"] ?? "");
+    final status = serialize\jsonDecode(view).q("status").stringValue();
     final artifacts = mut [<any>];
     var page = 1;
     while (true) {
@@ -1434,7 +1462,7 @@ export fun list_artifacts(io: {str: any}) > any !> any {
         }
         page = page + 1;
     }
-    return {"complete": status == "completed", "headers": hdrs, "artifacts": artifacts};
+    return {"run": origin, "complete": status == "completed", "headers": hdrs, "artifacts": artifacts};
 }
 
 test "list keeps auto-merge pull requests against the base and drops drafts and plain ones" {
@@ -1752,6 +1780,41 @@ test "a run names its repository and id, and its artifacts download from the API
     assert\equal(run["id"], want: "7", message: "run id");
     final got = artifactsFrom(`{"artifacts": [{"id": 100, "name": "mergequeue-plan"}]}`, base: "https://api.github.com", repo: "acme/widgets");
     assert\equal(serialize\Boxed.init(got[0]).q("url").stringValue(), want: "https://api.github.com/repos/acme/widgets/actions/artifacts/100/zip", message: "zip url");
+}
+
+fun runJSON(event: str, branch: str, headRepo: str) > str {
+    return serialize\jsonEncode({"id": 7, "status": "in_progress", "event": event, "head_branch": branch, "path": ".github/workflows/queue.yaml",
+        "repository": {"full_name": "acme/widgets"}, "head_repository": {"full_name": headRepo}});
+}
+
+test "a run says what started it and what it ran" {
+    final push = serialize\Boxed.init(originFrom(runJSON("push", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets"));
+    assert\equal(push.q("repo").stringValue(), want: "acme/widgets", message: "repository");
+    assert\equal(push.q("head_repo").stringValue(), want: "acme/widgets", message: "head repository");
+    assert\equal(push.q("head_branch").stringValue(), want: "main", message: "branch");
+    assert\equal(push.q("event").stringValue(), want: "push", message: "event");
+    assert\equal(push.q("branch_event").booleanValue(), want: true, message: "a push runs the branch's own workflow file");
+    assert\equal(push.q("definition").stringValue(), want: ".github/workflows/queue.yaml", message: "workflow file");
+    final dispatched = serialize\Boxed.init(originFrom(runJSON("workflow_dispatch", branch: "main", headRepo: "acme/widgets"), repo: "acme/widgets"));
+    assert\equal(dispatched.q("branch_event").booleanValue(), want: true, message: "so does a dispatch");
+}
+
+test "a run a pull request started never runs the branch's own workflow file" {
+    foreach (event in ["pull_request", "pull_request_review", "pull_request_target", "workflow_run", "schedule"]) {
+        final got = serialize\Boxed.init(originFrom(runJSON(event, branch: "main", headRepo: "mallory/widgets"), repo: "acme/widgets"));
+        assert\equal(got.q("branch_event").booleanValue(), want: false, message: event);
+        assert\equal(got.q("head_repo").stringValue(), want: "mallory/widgets", message: "a fork's head repository is reported as it is");
+    }
+}
+
+test "a run of another repository than the source names is an error" {
+    var refused = false;
+    try {
+        originFrom(runJSON("push", branch: "main", headRepo: "acme/widgets"), repo: "acme/other");
+    } catch (e) {
+        refused = true;
+    }
+    assert\equal(refused, want: true, message: "the listing names the run's own repository");
 }
 
 test "the GraphQL endpoint follows the REST one" {

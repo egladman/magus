@@ -397,6 +397,8 @@ const (
 	FlagQueryURL = "url"
 	// queue apply: --app
 	FlagQueueApplyApp = "app"
+	// queue apply: --base
+	FlagQueueApplyBase = "base"
 	// queue apply: --committer
 	FlagQueueApplyCommitter = "committer"
 	// queue apply: --facts
@@ -417,6 +419,8 @@ const (
 	FlagQueueApplyTarget = "target"
 	// queue apply: --vcs
 	FlagQueueApplyVCS = "vcs"
+	// queue apply: --workflow
+	FlagQueueApplyWorkflow = "workflow"
 	// queue describe: --app
 	FlagQueueDescribeApp = "app"
 	// queue describe: --base
@@ -1363,6 +1367,8 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 // QueueApplyFlags are the flags declared for `magus queue apply`.
 type QueueApplyFlags struct {
 	Provider      string        // --provider
+	Base          string        // --base
+	Workflow      string        // --workflow
 	StatusContext string        // --status-context
 	Once          bool          // --once
 	Interval      time.Duration // --interval
@@ -1379,6 +1385,8 @@ type QueueApplyFlags struct {
 func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	var f QueueApplyFlags
 	fs.StringVar(&f.Provider, FlagQueueApplyProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueApplyBase, "", "`branch` the queue merges into; a plan naming another is refused (MGS3025), and a run: source must have run on it")
+	fs.StringVar(&f.Workflow, FlagQueueApplyWorkflow, "", "`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3024)")
 	fs.StringVar(&f.StatusContext, FlagQueueApplyStatusContext, "merge-queue", "Commit status the queue posts; branch protection requires it")
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")

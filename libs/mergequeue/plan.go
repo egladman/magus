@@ -217,7 +217,7 @@ func (r *planning) fetch(ctx context.Context, c types.Change) (*types.Verdict, m
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("commits of %s: %w", c.Label(), err)
 	}
-	top, err := r.ownTop(ctx, c.Head)
+	top, err := ownTop(ctx, r.vcs, r.clone.Root, r.tip, c.Head)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("commits of %s: %w", c.Label(), err)
 	}
@@ -232,23 +232,23 @@ func (r *planning) unqueuedTop(ctx context.Context, u types.UnqueuedChange) (str
 	if err := r.vcs.FetchCommit(ctx, r.clone.Root, r.clone.Remote, u.Head); err != nil {
 		return "", fmt.Errorf("fetch the head of the unqueued #%s: %w", u.ID, err)
 	}
-	top, err := r.ownTop(ctx, u.Head)
+	top, err := ownTop(ctx, r.vcs, r.clone.Root, r.tip, u.Head)
 	if err != nil {
 		return "", fmt.Errorf("commits of the unqueued #%s: %w", u.ID, err)
 	}
 	return top, nil
 }
 
-// ownTop is head with the merges of the base into it peeled off: GitHub's "Update
-// branch", or an update commit the queue pushed. A change stacked on this one before
-// such a merge carries the top, not the head, and is still stacked on it.
-func (r *planning) ownTop(ctx context.Context, head string) (string, error) {
+// ownTop is head with the merges of the base at tip into it peeled off: GitHub's
+// "Update branch", or an update commit the queue pushed. A change stacked on this one
+// before such a merge carries the top, not the head, and is still stacked on it.
+func ownTop(ctx context.Context, v types.ReadVCS, root, tip, head string) (string, error) {
 	for range reviewDepth {
-		cm, err := r.vcs.FindCommit(ctx, r.clone.Root, head)
+		cm, err := v.FindCommit(ctx, root, head)
 		if err != nil || len(cm.Parents) != 2 {
 			return head, err
 		}
-		onBase, err := r.vcs.IsAncestor(ctx, r.clone.Root, cm.Parents[1], r.tip)
+		onBase, err := v.IsAncestor(ctx, root, cm.Parents[1], tip)
 		if err != nil || !onBase {
 			return head, err
 		}

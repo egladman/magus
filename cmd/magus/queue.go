@@ -503,11 +503,11 @@ type queuePlanSource interface {
 }
 
 func queueApply(ctx context.Context, e *queueEnv, args []string) error {
-	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> [flags] <source>", args, gen.BindQueueApply, "source")
+	f, operands, fs, err := queueParse(e, "apply", "magus queue apply --provider <provider> --base <branch> [flags] <source>", args, gen.BindQueueApply, "source")
 	if err != nil {
 		return err
 	}
-	if err := queueRequired("apply", [2]string{"provider", f.Provider}); err != nil {
+	if err := queueRequired("apply", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
 		return err
 	}
 	switch {
@@ -519,6 +519,12 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	src, err := parseQueueSource(operands[0])
 	if err != nil {
 		return usagef("magus queue apply: %v", err)
+	}
+	switch {
+	case src.run != "" && f.Workflow == "":
+		return usagef("magus queue apply: a run: source needs --workflow, the definition the run must have run")
+	case src.dir != "" && f.Workflow != "":
+		return usagef("magus queue apply: --workflow has no effect on a directory source")
 	}
 	who, err := parseCommitter(f.Committer)
 	if err != nil {
@@ -533,6 +539,10 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 		return fmt.Errorf("provider %q does not export list_artifacts, which reading run:%s needs", f.Provider, src.run)
 	}
 	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
+	if err != nil {
+		return err
+	}
+	remoteURL, err := drv.RemoteURL(ctx, cl.Root, cl.Remote)
 	if err != nil {
 		return err
 	}
@@ -552,7 +562,8 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 			return err
 		}
 		defer cleanup()
-		from = &mergequeue.ArtifactFollower{Lister: p, Source: src.run, Path: tmp, Follow: !f.Once, Interval: f.Interval, Client: queueDownloads, Events: events}
+		from = &mergequeue.ArtifactFollower{Lister: p, Source: src.run, Path: tmp, Branch: f.Base, Definition: f.Workflow,
+			Follow: !f.Once, Interval: f.Interval, Client: queueDownloads, Events: events}
 	}
 	pl, planned, err := from.Plan(ctx)
 	if err != nil {
@@ -578,6 +589,7 @@ func queueApply(ctx context.Context, e *queueEnv, args []string) error {
 	if err != nil {
 		return err
 	}
+	a.Base, a.RemoteURL = f.Base, remoteURL
 	a.StatusContext, a.App, a.Interval, a.DryRun, a.Committer, a.Events = f.StatusContext, f.App, f.Interval, globalCfg.DryRun, who, events
 	if f.Regenerate != "" {
 		a.Regenerate = mergequeue.CommandRegenerate(f.Regenerate, pl, mergequeue.NewHookLog(e.stderr))

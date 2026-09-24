@@ -421,6 +421,7 @@ guess.
 | advice                            | `pull-requests: write`                                       |
 | advice with `fix-generated-drift` | `contents: write`                                            |
 | queue validation                  | `contents: read`, `pull-requests: read`                      |
+| queue dispatch                    | `contents: read`, `actions: write`                           |
 | queue apply                       | `contents`, `pull-requests`, `statuses` and `actions: write` |
 
 On a pull request from a fork the default token is read-only whatever you declare, so the

@@ -11,7 +11,7 @@
 //	retarget(change + {base})                      > bool
 //	merge_change(change + {commit, message, through: [{id, commit}]}) > {merged, by_provider?, reason?}
 //	kick_back(change + {commit, code, report, paths, with, candidate_commit}) > bool
-//	list_artifacts({source})                       > {complete, artifacts: [{name, url}], headers?}
+//	list_artifacts({source})                       > {run, complete, artifacts: [{name, url}], headers?}
 //
 // Every op but list_artifacts is required; list_artifacts is required of a provider
 // apply follows a validation run through. A change record carries the fields of
@@ -20,7 +20,9 @@
 // status_context, carries [types.Setup] as status_context, credential {id, name?},
 // required_checks [{context, integration?, events?}], settings [{name, value, want}],
 // app? {slug, id, client_id?, registration_url?, install_url?, environment?, variable?,
-// secret?} and steps [{title, command? or url?}]. Every key the contract lists
+// secret?} and steps [{title, command? or url?}]. list_artifacts' run carries
+// [types.RunOrigin] as repo, head_repo, head_branch, event, branch_event and
+// definition. Every key the contract lists
 // without a "?" is required: a missing one is an error, never a zero value, since a
 // missing "fork" or "queued" read as false would admit what the provider meant to
 // refuse. Other keys a record carries are ignored. The reads run in planning and apply;
@@ -468,7 +470,13 @@ func (p *Script) ListArtifacts(ctx context.Context, source string) (types.Artifa
 	}
 	var out types.ArtifactListing
 	var rows []record
-	if err := r.decode(required("complete", &out.Complete), required("artifacts", &rows), optional("headers", &out.Headers)); err != nil {
+	var run *record
+	if err := r.decode(required("run", &run), required("complete", &out.Complete), required("artifacts", &rows), optional("headers", &out.Headers)); err != nil {
+		return types.ArtifactListing{}, err
+	}
+	o := &out.Run
+	if err := run.decode(required("repo", &o.Repo), required("head_repo", &o.HeadRepo), required("head_branch", &o.HeadBranch),
+		required("event", &o.Event), required("branch_event", &o.BranchEvent), required("definition", &o.Definition)); err != nil {
 		return types.ArtifactListing{}, err
 	}
 	for _, row := range rows {
