@@ -46,7 +46,7 @@ func TestIsGateCommand(t *testing.T) {
 		{[]string{"run", "ci:rw", "."}, true},
 		{[]string{"-v", "affected", "ci"}, true},
 		{[]string{"affected", "--timeout", "5m", "ci"}, true},
-		{[]string{"run", "ci-shard", "."}, false},
+		{[]string{"run", "ci-lint", "."}, false},
 		{[]string{"run", "test", "."}, false},
 		// The false positive a regex over the raw command line could not avoid: a
 		// trailing test filter that happens to be the word ci.

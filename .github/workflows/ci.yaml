@@ -190,14 +190,17 @@ jobs:
           # Read by the github spell's last_green_run alone. Unset, it answers null
           # and the plan fans out as it always has.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Two commands through a file, never a pipe: the preflight holds project `.`'s
-        # lock while it runs, so a piped ci-shard starting in `.` beside it found the
-        # lock held and failed fast. `-e` stops at a failed plan, so ci-shard never
-        # runs on a partial file.
+        # Provider glue, and nothing else: the plan is computed once into a file, then
+        # rendered from it twice, its outputs into $GITHUB_OUTPUT and its summary into
+        # $GITHUB_STEP_SUMMARY. magus prints and this step redirects, so magus never learns
+        # either file's name. `run --plan --dry-run` loads and runs nothing; it checks the
+        # saved plan and renders it. `-e` stops at a failed plan, so nothing is published
+        # from a partial file.
         shell: bash
         run: |
           magus affected ci --plan --preflight generate --no-default-charms --concurrency-profile aggressive > "$RUNNER_TEMP/plan.json"
-          magus run ci-shard:gha --no-default-charms < "$RUNNER_TEMP/plan.json"
+          magus run --plan "$RUNNER_TEMP/plan.json" --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' >> "$GITHUB_OUTPUT"
+          magus run --plan "$RUNNER_TEMP/plan.json" --dry-run -o 'template={{.summary}}' >> "$GITHUB_STEP_SUMMARY"
 
       # Determinism, in this job rather than its own: the saving is a runner and a from-source
       # magus build, not a generate pass.

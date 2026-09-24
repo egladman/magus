@@ -169,7 +169,7 @@ ends, so they are the opposite of the antipattern above:{{end}}
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set
-magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
+magus affected ci --plan | magus run --plan -     # plan -> run its shards
 ```
 
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is

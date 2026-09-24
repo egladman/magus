@@ -161,7 +161,11 @@ jobs:
         with: { fetch-depth: 0, filter: blob:none }
       - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
       - id: plan
-        run: magus affected ci --plan | magus run ci-shard:gha
+        shell: bash
+        run: |
+          magus affected ci --plan > "$RUNNER_TEMP/plan.json"
+          magus run --plan "$RUNNER_TEMP/plan.json" --dry-run -o 'template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}' >> "$GITHUB_OUTPUT"
+          magus run --plan "$RUNNER_TEMP/plan.json" --dry-run -o 'template={{.summary}}' >> "$GITHUB_STEP_SUMMARY"
 
   ci:
     needs: plan
@@ -175,27 +179,36 @@ jobs:
       - uses: egladman/magus/.github/actions/setup-magus@v0.4.0
       - uses: egladman/magus/.github/actions/magus@v0.4.0
         with:
-          command: affected ci --shard ${{ matrix.shard }}
+          command: run ci:gha ${{ matrix.projects }}
           shard: ${{ matrix.shard }}
-          n-shards: ${{ matrix.total }}
+          n-shards: ${{ needs.plan.outputs.count }}
 ```
 
-`magus affected ci --plan` emits the plan; `magus run ci-shard:gha` writes it out. The
-`gha` charm is what writes `$GITHUB_OUTPUT` - without it the plan is printed and nothing
-else, which is what you want when running the same command locally.
+`magus affected ci --plan` computes the plan once, into a file. `magus run --plan <file>
+--dry-run` loads and runs nothing: it checks the saved plan and renders it through `-o`,
+so the step renders it twice without computing it twice. magus prints; the redirects into
+`$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY` are the workflow's, and magus never learns
+either file's name.
 
-The plan's `outputs` array is the full set of job outputs, each a `name` and a `value`,
-and `ci-shard` writes the array rather than naming its members. Copy that loop rather
-than listing the outputs you use today: a magus release that adds one reaches your
-workflow without a magusfile edit, and no output can go missing because a translator
-forgot to mention it. `summary` is the job summary as markdown, rendered by the plan for
-the same reason.
+The plan's `outputs` array is the full set of job outputs, each a `name` and a `value`, and
+the template writes the array rather than naming its members. Keep that loop rather than
+listing the outputs you use today: a magus release that adds one reaches your workflow
+without an edit, and no output can go missing because a translator forgot to mention it.
+`summary` is the job summary as markdown, rendered by the plan for the same reason. Each
+output value is one line, so none can forge another.
 
-`count` guards the matrix: when nothing is affected there is no job to run, and a matrix
-of zero shards is an error rather than a skip.
+`count` guards the matrix: when nothing is affected, or the plan inherited a green run's
+verdict, there is no job to run, and a matrix of zero shards is an error rather than a skip.
 
-Passing `shard` and `n-shards` to the action sets `MAGUS_SHARD` and `MAGUS_N_SHARDS`, so
-shard-aware output lands in the run's timing events without extra shell in the workflow.
+Each shard job runs its share as positionals: the matrix entry's `projects` is exactly the
+list `magus run` takes. Passing `shard` and `n-shards` to the action sets `MAGUS_SHARD` and
+`MAGUS_N_SHARDS`, which label the run's timing events with the shard; they select nothing.
+
+The saved plan also runs outside the matrix. `magus run --plan plan.json --shard 2` runs
+exactly shard 2 of it, which reproduces one CI job locally from the plan that job ran, and
+`magus affected ci --plan | magus run --plan -` runs every shard in one process. A shard id
+the plan lacks, a target other than the plan's, or a malformed plan is refused before
+anything runs ([MGS3026](../../reference/codes/sandbox/MGS3026.md)).
 
 ## Remote caching
 

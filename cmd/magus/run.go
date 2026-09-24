@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
@@ -57,9 +59,22 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// flags + any project args for cmdParse below. The prescan binds run's own flags too,
 	// throwing the values away: it needs to know which of them consume the next token.
 	var skips skipFlag
-	rawTarget, rest, ok := splitTargetFromArgs(args, func(fs *flag.FlagSet) {
-		bindRunFlags(fs, nil)
-	})
+	prescanRun := func(fs *flag.FlagSet) { bindRunFlags(fs, nil) }
+	// Read once and before anything else: `--plan -` consumes stdin, and a plan run may
+	// name no target, leaving the plan to supply it.
+	var saved *planOutput
+	if ref, ok := runPlanRef(args, prescanRun); ok {
+		p, err := loadSavedPlan(ref)
+		if err != nil {
+			return err
+		}
+		saved = &p
+	}
+	rawTarget, rest, ok := splitTargetFromArgs(args, prescanRun)
+	if !ok && saved != nil {
+		args = append([]string{saved.Target}, args...)
+		rawTarget, rest, ok = splitTargetFromArgs(args, prescanRun)
+	}
 	if !ok {
 		return targetUsage()
 	}
@@ -122,6 +137,36 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	if rf.Wait && !rf.Detach {
 		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
+	}
+	if saved != nil {
+		switch {
+		case rf.Detach:
+			return usagef("magus run: --plan runs here; it does not apply to --detach")
+		case rf.Graph:
+			return usagef("magus run: --plan runs the plan's shards; it does not apply to --graph")
+		case len(projectArgs) > 0 || parsedTarget.Path != "":
+			return usagef("magus run: --plan names the projects; drop the project arguments")
+		case len(skips.refs) > 0:
+			return usagef("magus run: --plan names the projects; --skip does not apply")
+		}
+		shards, err := selectPlanShards(*saved, targetName, rf.Shard, rf.NShards)
+		if err != nil {
+			return err
+		}
+		// The shard pair keeps labeling timing events, and now both halves come from
+		// the plan; a run of every shard is not partial.
+		rf.NShards = 0
+		if rf.Shard != "" {
+			rf.NShards = saved.Count
+		}
+		if globalCfg.DryRun {
+			return emitSavedPlanDryRun(*saved, rawTarget, shards)
+		}
+		projectArgs = planProjects(shards)
+		if len(projectArgs) == 0 {
+			slog.InfoContext(ctx, "magus run --plan: the plan has no shards, so nothing runs", slog.String("target", targetName))
+			return nil
+		}
 	}
 	preflight, err := parsePreflight(rf.Preflight)
 	if err != nil {
@@ -234,7 +279,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
 	cwd := clientCwd(ctx)
-	targets, source, err := resolveTargets(ctx, m, parsedTarget, runSelection{projects: projectArgs, skips: skips.refs, cwd: cwd})
+	sel := runSelection{projects: projectArgs, skips: skips.refs, cwd: cwd}
+	if saved != nil {
+		// A plan's paths are workspace-relative, and no cwd anchors at the root; anchored
+		// at the caller's cwd, "." in a subdirectory would name the wrong project.
+		sel.cwd = ""
+	}
+	targets, source, err := resolveTargets(ctx, m, parsedTarget, sel)
 	if err != nil {
 		return err
 	}
@@ -485,6 +536,148 @@ func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *gen.RunFlags {
 	}
 	fs.Var(skips, gen.FlagRunSkip, "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error")
 	return rf
+}
+
+// runPlanRef finds --plan's value in run's raw args, before the target is split off:
+// a plan run may name no target, so the plan has to be read to find it.
+func runPlanRef(args []string, bind func(*flag.FlagSet)) (string, bool) {
+	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
+	gen.BindFlags(fs, &globalCfg)
+	bindDisplayFlags(fs)
+	bind(fs)
+	flags, _ := partitionFlags(fs, args)
+	ref, found := "", false
+	for i := 0; i < len(flags); i++ {
+		if v, ok := strings.CutPrefix(strings.TrimLeft(flags[i], "-"), gen.FlagRunPlan+"="); ok {
+			ref, found = v, true
+		} else if isFlagNamed(flags[i], gen.FlagRunPlan) && i+1 < len(flags) {
+			ref, found = flags[i+1], true
+			i++
+		}
+	}
+	return ref, found
+}
+
+// planRefusal is an MGS3026 refusal. It exits 2, the misuse status: nothing was attempted.
+type planRefusal struct{ error }
+
+func (planRefusal) ExitCode() int { return exitUsage }
+
+func (e planRefusal) Unwrap() error { return e.error }
+
+func refusePlan(format string, args ...any) error {
+	return planRefusal{types.DiagnosticErrorf(types.SavedPlanRefused, format, args...)}
+}
+
+// loadSavedPlan reads a `magus affected --plan` JSON document from ref, a file path or
+// "-" for stdin, and checks that it is one.
+func loadSavedPlan(ref string) (planOutput, error) {
+	if ref == "" {
+		return planOutput{}, usagef("magus run: --plan needs a file, or - for stdin")
+	}
+	name := ref
+	var data []byte
+	var err error
+	if ref == "-" {
+		name = "stdin"
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(ref)
+	}
+	if err != nil {
+		return planOutput{}, fmt.Errorf("magus run --plan: %w", err)
+	}
+	return decodeSavedPlan(data, name)
+}
+
+// decodeSavedPlan decodes a plan document and refuses one whose shards could not be
+// run as written. Keys it does not know are ignored, so a plan from a newer magus
+// still runs.
+func decodeSavedPlan(data []byte, name string) (planOutput, error) {
+	var p planOutput
+	if err := json.Unmarshal(data, &p); err != nil {
+		return planOutput{}, refusePlan("--plan %s is not a shard plan: %v", name, err)
+	}
+	if p.Target == "" {
+		return planOutput{}, refusePlan("--plan %s names no target; print it again with `%s`",
+			name, hint.Affected.With("<target>", "--plan"))
+	}
+	if p.Count != len(p.Matrix) {
+		return planOutput{}, refusePlan("--plan %s states %d shard(s) but lists %d", name, p.Count, len(p.Matrix))
+	}
+	seen := make(map[string]bool, len(p.Matrix))
+	for _, s := range p.Matrix {
+		switch {
+		case s.Shard == "":
+			return planOutput{}, refusePlan("--plan %s has a shard with no id", name)
+		case seen[s.Shard]:
+			return planOutput{}, refusePlan("--plan %s lists shard %s twice", name, s.Shard)
+		case len(strings.Fields(s.Projects)) == 0:
+			return planOutput{}, refusePlan("--plan %s: shard %s has no projects", name, s.Shard)
+		}
+		seen[s.Shard] = true
+	}
+	return p, nil
+}
+
+// selectPlanShards returns the shards a `run --plan` invocation runs: the one named by
+// shard, or every shard when shard is empty. target is the invoked target and nShards
+// the caller's --n-shards (0 when unset); each must agree with the plan.
+func selectPlanShards(p planOutput, target, shard string, nShards int) ([]planShard, error) {
+	if target != p.Target {
+		return nil, refusePlan("--plan is a plan for %s, not %s; drop the target, or give %s with charms (%s:<charm>)",
+			p.Target, target, p.Target, p.Target)
+	}
+	if nShards > 0 && nShards != p.Count {
+		return nil, refusePlan("--n-shards %d, but the plan has %d shard(s); drop --n-shards, the plan supplies it", nShards, p.Count)
+	}
+	if shard == "" {
+		return p.Matrix, nil
+	}
+	ids := make([]string, len(p.Matrix))
+	for i, s := range p.Matrix {
+		if s.Shard == shard {
+			return []planShard{s}, nil
+		}
+		ids[i] = s.Shard
+	}
+	if len(ids) == 0 {
+		return nil, refusePlan("--shard %s: the plan has no shards, so there is nothing to select", shard)
+	}
+	return nil, refusePlan("--shard %s: the plan has no such shard (it has %s)", shard, strings.Join(ids, ", "))
+}
+
+// planProjects is the projects shards run, in plan order.
+func planProjects(shards []planShard) []string {
+	projects := make([]string, 0, len(shards))
+	for _, s := range shards {
+		projects = append(projects, strings.Fields(s.Projects)...)
+	}
+	return projects
+}
+
+// emitSavedPlanDryRun answers `run --plan --dry-run`, which loads and runs nothing.
+// Structured -o renders the plan document as read, which is how a saved plan renders
+// again without being computed again; text names each shard's command.
+func emitSavedPlanDryRun(p planOutput, target string, shards []planShard) error {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputText:
+		if len(shards) == 0 {
+			fmt.Fprintln(os.Stderr, "[dry] the plan has no shards; nothing would run")
+		}
+		for _, s := range shards {
+			fmt.Fprintf(os.Stderr, "[dry] shard %s: magus run %s %s\n", s.Shard, target, s.Projects)
+		}
+		return nil
+	case outputName:
+		return emitNames(planProjects(shards))
+	default:
+		return emitFormatted(opts, p)
+	}
 }
 
 // parsePreflight splits a --preflight value into canonical target names. A preflight

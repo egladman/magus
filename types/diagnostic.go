@@ -420,7 +420,12 @@ const (
 	// PreflightOutsideClosure is a --preflight target the invoked target never reaches
 	// through ctx.needs in any selected project. Running it first would add work rather
 	// than reorder it, so the invocation is refused before anything runs.
-	PreflightOutsideClosure   DiagnosticCode = "MGS3021"
+	PreflightOutsideClosure DiagnosticCode = "MGS3021"
+	// SavedPlanRefused is a `magus run --plan` that cannot be run as asked: the document is
+	// not a shard plan, or the invocation names a shard, target or shard count the plan
+	// does not have. Refused before anything loads, because running part of a plan, or a
+	// plan for another target, gates less than the caller asked for and still exits 0.
+	SavedPlanRefused          DiagnosticCode = "MGS3026"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -583,7 +588,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure,
+	PreflightFailed, PreflightOutsideClosure, SavedPlanRefused,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

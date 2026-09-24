@@ -453,6 +453,9 @@ func hasModeFlag(args []string, name string) bool {
 
 // planOutput is the provider-neutral JSON shape from `magus affected --plan`.
 type planOutput struct {
+	// Target is what every shard runs, so `magus run --plan` needs nothing beside the
+	// document to know what to run.
+	Target      string      `json:"target"`
 	Count       int         `json:"count"`
 	MaxParallel int         `json:"max_parallel"`
 	Source      string      `json:"source"`
@@ -633,7 +636,7 @@ type shardAgents struct {
 // affectedPlan emits a provider-neutral JSON shard plan for the affected set of a
 // target (the --plan mode of `magus affected`). It does NOT execute the pipeline;
 // CI wrappers (e.g. GitHub Actions) translate the matrix into their own parallel-job
-// format with jq. The plan keys off the given target — exactly the set
+// format, and `magus run --plan` runs its shards. The plan keys off the given target — exactly the set
 // `magus affected <target>` would run — which is required (no default). Adaptive
 // sharding is applied when runtime history is available.
 func affectedPlan(ctx context.Context, root string, args []string) error {
@@ -782,16 +785,17 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// runner death, neither of which the shard table shows.
 	if n := plan.Sufficient; n > 0 && n < len(plan.Shards) {
 		slog.WarnContext(ctx, fmt.Sprintf(
-			"magus: %d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--ci-max-shards=%d`)",
+			"magus: %d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--max-shards=%d`)",
 			len(plan.Shards), n, n))
 	}
 	if len(plan.OverBudget) > 0 {
 		slog.WarnContext(ctx, fmt.Sprintf(
-			"magus: shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--ci-max-shards` splits them, unless one project exceeds the budget alone)",
+			"magus: shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
 			strings.Join(plan.OverBudget, ", ")))
 	}
 
 	out := planOutput{
+		Target:      target,
 		Count:       len(plan.Shards),
 		MaxParallel: plan.MaxParallel,
 		Source:      plan.Source,

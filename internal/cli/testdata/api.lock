@@ -180,6 +180,7 @@ flag run/no-default-charms
 flag run/no-redundancy-check
 flag run/no-volatility-retry
 flag run/open
+flag run/plan
 flag run/preflight
 flag run/race
 flag run/shard

@@ -234,8 +234,19 @@ those targets as done, so nothing runs twice and no cache key changes.
 The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
-the rw charm (e.g. 'magus run format:rw') to mutate files.`,
-	Usage: "magus run <target> [flags] [project...]",
+the rw charm (e.g. 'magus run format:rw') to mutate files.
+
+--plan runs a saved shard plan instead of a selection: the document that
+magus affected <target> --plan printed, read from a file, or from stdin when
+the value is -. The plan names the target and each shard's projects, so the
+target positional is optional (give it to add charms, as in ci:gha) and project
+positionals are refused. --shard <id> runs that one shard; without it every
+shard runs here. A malformed plan, a shard id the plan does not have, a target
+other than the plan's, or an --n-shards other than its count is refused before
+anything runs (MGS3026). Under the global --dry-run nothing loads or runs: the
+plan is checked and printed, and -o json, yaml or template renders the document
+as read, so a saved plan renders more than once without being computed again.`,
+	Usage: "magus run <target> [flags] [project...] | magus run [<target>] --plan <file|-> [--shard <id>]",
 	Flags: []Flag{
 		{Name: "graph", Kind: FlagBool, Doc: "Render the dependency graph for the selected scope instead of executing"},
 		{Name: "upstream", Kind: FlagBool, Doc: "With --graph: show dependents instead of dependencies"},
@@ -249,12 +260,13 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
 		{Name: "race", Kind: FlagString, Doc: "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock."},
 		{Name: "timeout", Kind: FlagDuration, Doc: "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)"},
+		{Name: "plan", Kind: FlagString, Doc: "Run the shards of a saved `magus affected <target> --plan` document, from a file or - for stdin; the plan names the target and the projects"},
 		// A STRING, not an int: the shard id is passed through as a label (it reaches
 		// RecordShardTotal as text and defaults from MAGUS_SHARD), and the man page
 		// documented it as an int for as long as the two lists were written apart.
 		// The drift test compared names only, so a type could disagree indefinitely.
-		{Name: "shard", Kind: FlagString, Doc: "This run's shard index within a CI matrix; paired with --n-shards"},
-		{Name: "n-shards", Kind: FlagInt, Doc: "Total shard count for this CI matrix run; paired with --shard"},
+		{Name: "shard", Kind: FlagString, Doc: "With --plan: run only the shard with this id. Without --plan: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing"},
+		{Name: "n-shards", Kind: FlagInt, Doc: "Without --plan: the shard count the --shard label belongs to. With --plan it is implied by the plan, and a different value is refused"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
 		{Name: "preflight", Kind: FlagString, Doc: "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)"},
@@ -273,11 +285,14 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{"Graph in Mermaid format", "magus run build --graph -o mermaid"},
 		{"Graph dependents of api/gateway", "magus run build api/gateway --graph --upstream"},
 		{"Stream JSONL target events to a file", "magus run build -o jsonl --tee build.jsonl"},
+		{"Run every shard of the affected ci plan here", "magus affected ci --plan | magus run --plan -"},
+		{"Run one shard of a saved plan", "magus run ci:gha --plan plan.json --shard 2"},
+		{"Render a saved plan's summary without computing it again", "magus run --plan plan.json --dry-run -o 'template={{.summary}}'"},
 	},
 	ExitStatus: []ExitCode{
 		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
 		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
-		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, or a --preflight target the invoked target never reaches (MGS3021)."},
+		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a --preflight target the invoked target never reaches (MGS3021), or a --plan that cannot be run as asked (MGS3026)."},
 		{3, "A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them."},
 		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},

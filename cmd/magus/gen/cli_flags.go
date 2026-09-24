@@ -501,6 +501,8 @@ const (
 	FlagRunNoVolatilityRetry = "no-volatility-retry"
 	// run: --open
 	FlagRunOpen = "open"
+	// run: --plan
+	FlagRunPlan = "plan"
 	// run: --preflight
 	FlagRunPreflight = "preflight"
 	// run: --race
@@ -729,6 +731,7 @@ type RunFlags struct {
 	Step              bool          // --step
 	Race              string        // --race
 	Timeout           time.Duration // --timeout
+	Plan              string        // --plan
 	Shard             string        // --shard
 	NShards           int           // --n-shards
 	NoVolatilityRetry bool          // --no-volatility-retry
@@ -750,8 +753,9 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.BoolVar(&f.Step, FlagRunStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
 	fs.StringVar(&f.Race, FlagRunRace, "", "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.")
 	fs.DurationVar(&f.Timeout, FlagRunTimeout, 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
-	fs.StringVar(&f.Shard, FlagRunShard, "", "This run's shard index within a CI matrix; paired with --n-shards")
-	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Total shard count for this CI matrix run; paired with --shard")
+	fs.StringVar(&f.Plan, FlagRunPlan, "", "Run the shards of a saved `magus affected <target> --plan` document, from a file or - for stdin; the plan names the target and the projects")
+	fs.StringVar(&f.Shard, FlagRunShard, "", "With --plan: run only the shard with this id. Without --plan: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
+	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Without --plan: the shard count the --shard label belongs to. With --plan it is implied by the plan, and a different value is refused")
 	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
 	fs.BoolVar(&f.NoRedundancyCheck, FlagRunNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
 	fs.StringVar(&f.Preflight, FlagRunPreflight, "", "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)")

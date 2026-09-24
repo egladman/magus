@@ -338,13 +338,13 @@ lint</code></pre>
     <div class="term term-plain">
       <div class="term-bar">
         <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="term-name" data-nolink>magus run ci-shard .</span>
+        <span class="term-name" data-nolink>magus run lint apps/web</span>
       </div>
-      <pre class="term-body"><code>[fail] magus ci-shard:rw (ran, 2.8s)
-  cause: serialize.jsonDecode: invalid character 'o' in literal null
+      <pre class="term-body"><code>[fail] apps/web lint (ran, 2.8s)
+  cause: eslint: exit status 1
   output: outb513e99c9eea
   inspect: magus query output outb513e99c9eea
-  reproduce: magus run ci-shard:rw .</code></pre>
+  reproduce: magus run lint apps/web</code></pre>
     </div>
     <p class="landing-humans-body">That reference resolves days later, to the exact captured bytes, or to a record with <code>-o json</code>, or into a browser log viewer with <code>--open</code>. <code>--attempts</code> lists every stored execution behind it, because a flaky target has a history rather than a result. And <code>--publish</code> uploads one run's output to the remote cache as a signed bundle so a colleague can resolve the same reference you are looking at; failing runs are never shared automatically, because a stack trace from your machine is yours until you decide otherwise.</p>
     <p class="landing-humans-body">None of this is an audit log and none of it is a security feature; nothing here is trying to catch anyone. It answers the two questions you actually ask after the fact, both otherwise guesswork: what did that command really run, and why did this rebuild when I did not change anything.</p>
@@ -436,6 +436,7 @@ lint</code></pre>
             <span class="term-name" data-nolink>magus affected ci --plan --max-shards 3</span>
           </div>
           <pre class="term-body"><code class="language-json">\{
+  "target": "ci",
   "count": 3,
   "max_parallel": 3,
   "source": "git diff vs origin/main",
@@ -449,31 +450,23 @@ lint</code></pre>
       </section>
 
       <section class="landing-tabpanel">
-        <p class="landing-tab-note">Actions wants <code>key=value</code> lines written to <code>$GITHUB_OUTPUT</code>, with the matrix as a JSON string it will parse back out with <code>fromJSON</code>. That is the glue, and here is all of it. <code>gha</code> is not a declared thing you register anywhere: a charm is a name you attach to a run, and the target decides what it means.</p>
+        <p class="landing-tab-note">Actions wants <code>key=value</code> lines appended to <code>$GITHUB_OUTPUT</code>, with the matrix as a JSON string it will parse back out with <code>fromJSON</code>. That is the glue, and here is all of it: the plan is computed once, magus renders it through a template, and the step redirects what magus printed. magus never learns the file's name.</p>
         <div class="term term-plain">
           <div class="term-bar">
             <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="term-name" data-nolink>magusfile.buzz</span>
+            <span class="term-name" data-nolink>.github/workflows/ci.yaml</span>
           </div>
-          <pre class="term-body"><code class="language-buzz">export fun ci_shard(ctx: magus&#92;Context, args: [str]) &gt; void \{
-    if (proc&#92;stdinIsTerminal()) \{ throw "ci-shard: pipe a plan in"; \}
-    final plan = serialize&#92;jsonDecode(io.stdin.readAll());
-
-    // The plan names its own outputs, so this never lists them.
-    var block = "";
-    foreach (o in plan.q("outputs").listValue()) \{
-        block = block + o.q("name").stringValue() + "=" + o.q("value").stringValue() + "&#92;n";
-    \}
-
-    // Without the charm this only previews. The charm is the whole difference.
-    if (!ctx.has_charm("gha")) \{ magus&#92;info(block); return; \}
-    fs&#92;writeFile(os&#92;env("GITHUB_OUTPUT"), block);
-\}</code></pre>
+          <pre class="term-body"><code class="language-yaml">- id: plan
+  shell: bash
+  run: |
+    magus affected ci --plan &gt; "$RUNNER_TEMP/plan.json"
+    magus run --plan "$RUNNER_TEMP/plan.json" --dry-run -o 'template=\{\{range .outputs\}\}\{\{.name\}\}=\{\{.value\}\}\{\{"&#92;n"\}\}\{\{end\}\}' &gt;&gt; "$GITHUB_OUTPUT"
+    magus run --plan "$RUNNER_TEMP/plan.json" --dry-run -o 'template=\{\{.summary\}\}' &gt;&gt; "$GITHUB_STEP_SUMMARY"</code></pre>
         </div>
         <div class="term term-plain">
           <div class="term-bar">
             <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="term-name" data-nolink>magus affected ci --plan | magus run ci-shard:gha</span>
+            <span class="term-name" data-nolink>$GITHUB_OUTPUT</span>
           </div>
           <pre class="term-body"><code class="language-ini">matrix=\{"include":[\{"shard":"0","projects":". apps/api libs/schema"\},\{"shard":"1","projects":"apps/web libs/ui"\},\{"shard":"2","projects":"services/worker libs/testing"\}]\}
 count=3
@@ -496,7 +489,7 @@ matrix:      $\{\{ fromJSON(needs.plan.outputs.matrix) \}\}</code></pre>
         <div class="term term-plain">
           <div class="term-bar">
             <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="term-name" data-nolink>ci-shard-gitlab.buzz</span>
+            <span class="term-name" data-nolink>gitlab-matrix.buzz</span>
           </div>
           <pre class="term-body"><code class="language-buzz">final plan = serialize&#92;jsonDecode(io.stdin.readAll());
 var yaml = "shard:\n  parallel:\n    matrix:\n";
@@ -509,7 +502,7 @@ std&#92;print(yaml);</code></pre>
         <div class="term term-plain">
           <div class="term-bar">
             <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="term-name" data-nolink>magus affected ci --plan | magus buzz ci-shard-gitlab.buzz</span>
+            <span class="term-name" data-nolink>magus affected ci --plan | magus buzz gitlab-matrix.buzz</span>
           </div>
           <pre class="term-body"><code class="language-yaml">shard:
   parallel:

@@ -1,0 +1,140 @@
+# run --plan runs the shards of a saved `affected --plan` document: the plan names the
+# target and the projects, --shard picks one shard, and anything that would make the run
+# cover something other than the plan is refused (MGS3026) before a target starts.
+#
+# Asserted on the EFFECT: every build appends a line to log/<project>.build, so a
+# file's line count is how many times that project's body ran.
+
+# affected writes the target into the plan, so run needs nothing beside the document.
+exec magus affected build --plan
+stdout '"target": "build"'
+cp stdout affected.json
+stdin affected.json
+exec magus run --plan - --dry-run -o name
+stdout '^a$'
+stdout '^b$'
+stdout '^c$'
+
+# One shard runs that shard's projects and nothing else.
+exec magus run --plan plan.json --shard 1
+cmp log/c.build once
+! exists log/a.build
+! exists log/b.build
+
+# The target positional is optional, and adds charms when given.
+exec magus run build:rw --plan plan.json --shard 0 --dry-run
+stderr '\[dry\] shard 0: magus run build:rw a b'
+
+# Without --shard every shard runs here; c replays from the run above.
+exec magus run --plan plan.json
+cmp log/a.build once
+cmp log/b.build once
+cmp log/c.build once
+
+# stdin, named explicitly with -.
+stdin plan.json
+exec magus run --plan - --shard 0 --dry-run
+stderr '\[dry\] shard 0: magus run build a b'
+
+# --dry-run renders the saved plan through -o without loading or running anything.
+exec magus run --plan plan.json --dry-run -o 'template={{.target}} {{.count}} {{range .outputs}}{{.name}}={{.value}};{{end}}'
+stdout '^build 2 count=2;inherit=false;$'
+
+# Misconfiguration is refused before anything runs, and exits 2.
+! exec magus run --plan plan.json --shard 7
+stderr 'MGS3026'
+stderr '--shard 7: the plan has no such shard \(it has 0, 1\)'
+! exec magus run test --plan plan.json
+stderr 'MGS3026'
+stderr 'a plan for build, not test'
+! exec magus run --plan plan.json --n-shards 3
+stderr 'MGS3026'
+stderr '--n-shards 3, but the plan has 2 shard'
+exec magus run --plan plan.json --n-shards 2 --shard 0 --dry-run
+! exec magus run --plan bad.json
+stderr 'MGS3026'
+stderr '--plan bad.json is not a shard plan'
+! exec magus run --plan old.json
+stderr 'MGS3026'
+stderr 'names no target'
+! exec magus run --plan miscount.json
+stderr 'states 3 shard\(s\) but lists 2'
+! exec magus run --plan dup.json
+stderr 'lists shard 0 twice'
+! exec magus run --plan plan.json a
+stderr 'a plan for build, not a'
+! exec magus run build --plan plan.json a
+stderr '--plan names the projects'
+! exec magus run --plan plan.json --skip a
+stderr '--skip does not apply'
+! exec magus run --plan missing.json
+stderr 'magus run --plan: open missing.json'
+
+# An inherited plan carries no shards: a whole-plan run has nothing to do, and a shard
+# of it does not exist.
+exec magus run --plan empty.json
+stderr 'the plan has no shards'
+! exec magus run --plan empty.json --shard 0
+stderr 'the plan has no shards, so there is nothing to select'
+
+-- once --
+ran
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- log/.keep --
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "plan-root"});
+-- a/magusfile.buzz --
+import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    var seen = "";
+    if (fs\exists("../log/a.build")) { seen = fs\readFile("../log/a.build"); }
+    fs\writeFile("../log/a.build", seen + "ran\n");
+}
+-- b/magusfile.buzz --
+import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    var seen = "";
+    if (fs\exists("../log/b.build")) { seen = fs\readFile("../log/b.build"); }
+    fs\writeFile("../log/b.build", seen + "ran\n");
+}
+-- c/magusfile.buzz --
+import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    var seen = "";
+    if (fs\exists("../log/c.build")) { seen = fs\readFile("../log/c.build"); }
+    fs\writeFile("../log/c.build", seen + "ran\n");
+}
+-- plan.json --
+{
+  "target": "build",
+  "count": 2,
+  "max_parallel": 2,
+  "source": "fixture",
+  "matrix": [
+    {"shard": "0", "projects": "a b", "label": "a b"},
+    {"shard": "1", "projects": "c", "label": "c"}
+  ],
+  "affected": ["a", "b", "c"],
+  "outputs": [
+    {"name": "count", "value": "2"},
+    {"name": "inherit", "value": "false"}
+  ],
+  "summary": "## plan\n"
+}
+-- empty.json --
+{"target": "build", "count": 0, "max_parallel": 0, "matrix": [], "inherit": {"run": "42", "commit": "abc", "summary": "inherited"}, "summary": "inherited"}
+-- old.json --
+{"count": 1, "matrix": [{"shard": "0", "projects": "a"}]}
+-- miscount.json --
+{"target": "build", "count": 3, "matrix": [{"shard": "0", "projects": "a"}, {"shard": "1", "projects": "b"}]}
+-- dup.json --
+{"target": "build", "count": 2, "matrix": [{"shard": "0", "projects": "a"}, {"shard": "0", "projects": "b"}]}
+-- bad.json --
+this is not json

@@ -500,17 +500,17 @@ type Charm struct {
 
 ## Glossary
 
-| Term             | Definition                                                                                                                                                                                                                                                                        |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Charm**        | A named, shared execution modifier carried in context. `Target.Charms` / `[]string`.                                                                                                                                                                                              |
-| **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Stripped from `ci`.                                                                                                                                                |
-| **`gha`**        | A built-in charm: opt into GitHub Actions output. Swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest), or have a target emit GHA-shaped output (the `ci-shard` job matrix → `$GITHUB_OUTPUT`). Set via `:gha`. A no-op where unsupported; not stripped from `ci`. |
-| **JSON Patch**   | The RFC 6902 document a charm declares: an ordered list of element-level ops (`add`/`remove`/`replace`/`move`/`copy`/`test`) over the target's argv.                                                                                                                              |
-| **PatchOp**      | One operation: `{op, path, value?, from?}`.                                                                                                                                                                                                                                       |
-| **Anchor**       | A value (or predicate) a `charm.*` constructor resolves to a numeric JSON Pointer at author time.                                                                                                                                                                                 |
-| **Stacking**     | Multiple charms apply together: patches concatenate in sorted-name order and apply as one sequential patch.                                                                                                                                                                       |
-| **The boundary** | Charms edit argv elements only (never `cmd`, never the whole argv). Enforced by `ValidatePatch`.                                                                                                                                                                                  |
-| **`HasCharm`**   | The set-membership query a spell uses to react to a charm; unknown charms are ignored.                                                                                                                                                                                            |
+| Term             | Definition                                                                                                                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Charm**        | A named, shared execution modifier carried in context. `Target.Charms` / `[]string`.                                                                                                      |
+| **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Stripped from `ci`.                                                        |
+| **`gha`**        | A built-in charm: opt into GitHub Actions output. Swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest). Set via `:gha`. A no-op where unsupported; not stripped from `ci`. |
+| **JSON Patch**   | The RFC 6902 document a charm declares: an ordered list of element-level ops (`add`/`remove`/`replace`/`move`/`copy`/`test`) over the target's argv.                                      |
+| **PatchOp**      | One operation: `{op, path, value?, from?}`.                                                                                                                                               |
+| **Anchor**       | A value (or predicate) a `charm.*` constructor resolves to a numeric JSON Pointer at author time.                                                                                         |
+| **Stacking**     | Multiple charms apply together: patches concatenate in sorted-name order and apply as one sequential patch.                                                                               |
+| **The boundary** | Charms edit argv elements only (never `cmd`, never the whole argv). Enforced by `ValidatePatch`.                                                                                          |
+| **`HasCharm`**   | The set-membership query a spell uses to react to a charm; unknown charms are ignored.                                                                                                    |
 
 ## See also
 

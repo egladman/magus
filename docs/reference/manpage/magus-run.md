@@ -11,7 +11,7 @@ Run a target for selected projects
 
 ## Synopsis
 
-**magus** run \<target\> [flags] [project...]
+**magus** run \<target\> [flags] [project...] | magus run [\<target\>] --plan \<file|-\> [--shard \<id\>]
 
 ## Description
 
@@ -40,6 +40,17 @@ its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
 the rw charm (e.g. 'magus run format:rw') to mutate files.
 
+--plan runs a saved shard plan instead of a selection: the document that
+magus affected \<target\> --plan printed, read from a file, or from stdin when
+the value is -. The plan names the target and each shard's projects, so the
+target positional is optional (give it to add charms, as in ci:gha) and project
+positionals are refused. --shard \<id\> runs that one shard; without it every
+shard runs here. A malformed plan, a shard id the plan does not have, a target
+other than the plan's, or an --n-shards other than its count is refused before
+anything runs (MGS3026). Under the global --dry-run nothing loads or runs: the
+plan is checked and printed, and -o json, yaml or template renders the document
+as read, so a saved plan renders more than once without being computed again.
+
 ## Options
 
 **--depth** *int*
@@ -52,7 +63,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : Render the dependency graph for the selected scope instead of executing
 
 **--n-shards** *int*
-: Total shard count for this CI matrix run; paired with --shard
+: Without --plan: the shard count the --shard label belongs to. With --plan it is implied by the plan, and a different value is refused
 
 **--no-cache**
 : Force a fresh run even on a cache hit; still refreshes the entry
@@ -69,6 +80,9 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 **--open**
 : Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 
+**--plan** *magus affected \<target\> --plan*
+: Run the shards of a saved \`magus affected \<target\> --plan\` document, from a file or - for stdin; the plan names the target and the projects
+
 **--preflight** *string*
 : Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)
 
@@ -76,7 +90,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when \>=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.
 
 **--shard** *string*
-: This run's shard index within a CI matrix; paired with --n-shards
+: With --plan: run only the shard with this id. Without --plan: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing
 
 **--skip** *string*
 : Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/\*); a value matching nothing is an error
@@ -128,7 +142,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name.
 
 **2**
-: Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, or a --preflight target the invoked target never reaches (MGS3021).
+: Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a --preflight target the invoked target never reaches (MGS3021), or a --plan that cannot be run as asked (MGS3026).
 
 **3**
 : A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them.
@@ -208,6 +222,24 @@ magus run build api/gateway --graph --upstream
 
 ```sh
 magus run build -o jsonl --tee build.jsonl
+```
+
+*Run every shard of the affected ci plan here*
+
+```sh
+magus affected ci --plan | magus run --plan -
+```
+
+*Run one shard of a saved plan*
+
+```sh
+magus run ci:gha --plan plan.json --shard 2
+```
+
+*Render a saved plan's summary without computing it again*
+
+```sh
+magus run --plan plan.json --dry-run -o 'template={{.summary}}'
 ```
 
 ## See Also
