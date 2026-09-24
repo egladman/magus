@@ -1,6 +1,6 @@
 ---
 title: Agents
-description: How magus equips AI agents - the installable skills, the MAGUS.md routing index, the MCP daemon, and the guard hook any agent host can wire, with a setup page per host.
+description: How magus equips AI agents - the installable skills, the MAGUS.md routing index, the MCP server, and the guard hook any agent host can wire, with a setup page per host.
 tags:
   [
     agents,
@@ -352,7 +352,7 @@ addressed by [output references](../../concepts/cache/output-refs.md).
 ### The CLI works without it
 
 The CLI still reads the workspace, runs targets, uses the cache, and answers
-graph queries with no daemon running. What it lacks is MCP tool discovery, the
+graph queries with no server running. What it lacks is MCP tool discovery, the
 warm graph and background indexes, structured output retrieval, and MCP-only
 capabilities such as the memory store.
 
@@ -361,7 +361,7 @@ error, run `magus status --probe=mcp`; if it is unavailable, use the CLI
 fallback. Restoring or changing host MCP wiring is a user-owned integration
 action, not ordinary agent work.
 
-### Why a daemon, not a wrapper
+### Why a server, not a wrapper
 
 If an agent can already run `magus query` in a shell, what does an MCP server
 add? If the server only ran the CLI and handed back its stdout, the answer would
@@ -372,7 +372,7 @@ An agent working through a shell falls back on the habits it learned everywhere
 else: grep and cat over the files. Those return text matches. They do not return
 the project DAG, the declared outputs, the affected set, or the blast radius of
 a symbol, because none of that is written in the files - it lives in the graph
-the daemon keeps warm. So the agent reasons one layer below the structure it is
+the server keeps warm. So the agent reasons one layer below the structure it is
 trying to understand, and fills the gap by guessing: this file looks generated,
 these two packages probably change together. Those guesses are frequently wrong,
 and the agent has no way to check them.
@@ -390,7 +390,7 @@ tools arrive in the model's context with their descriptions and parameters, so
 the agent knows they exist without reading `--help` first. Shape: results come
 back structured and sized for a model, rather than a human-formatted table
 wrapped in color codes and pagination it has to scrape and pay for by the token.
-Ground truth: the daemon reports what the workspace declares, which the agent
+Ground truth: the server reports what the workspace declares, which the agent
 can rely on, rather than what a text pattern happened to match, which it cannot.
 
 None of this comes from the protocol. A server that only shelled out would be a

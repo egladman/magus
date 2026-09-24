@@ -289,8 +289,8 @@ func (w *slotWatch) refusalLocked() error {
 	}
 	slices.Sort(queued)
 	// Carries its exit status the way a machine refusal does and for the same reason: a
-	// step the daemon runs for an adopted client crosses a socket that erases the Go
-	// type, and the daemon reads the code off the error.
+	// step the server runs for an adopted client crosses a socket that erases the Go
+	// type, and the server reads the code off the error.
 	return types.ExitError{Code: ExitCodeSlotDeadlock, Err: types.DiagnosticErrorf(types.BuildSlotsDeadlocked,
 		"refusing to keep waiting for a build slot: all %d of this run's slots are held by steps that are"+
 			" themselves waiting, so no slot can free and nothing queued can start. Holding: %s. Queued: %s."+

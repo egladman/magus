@@ -1,6 +1,6 @@
 // sections.ts - the shared DOM renderers for a status-accented, foldable section of text.
 // The log viewer and the activity view both paint the same markup and console-render-* classes
-// (styled in logs.css), so a run's output and the daemon's audit trail read as one design.
+// (styled in logs.css), so a run's output and the server's audit trail read as one design.
 //
 // The log viewer keeps its own scanning loop (render.ts) - it interleaves the #q= filter,
 // global line numbering, and the timeline/raw modes - but builds each line and header line

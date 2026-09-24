@@ -118,9 +118,9 @@ func (s *Service) ListEvents(_ context.Context, req *connect.Request[viewerv1.Li
 // StreamEvents replays one run's stored events, then tails the journal for what the run appends
 // next, until the run finishes or the caller goes away.
 //
-// It reads the journal rather than subscribing to a broadcaster because the daemon does not run
+// It reads the journal rather than subscribing to a broadcaster because the server does not run
 // the build: every `magus` invocation is its own process appending to <cacheDir>/runs/<inv>.jsonl,
-// and that directory is the only place the daemon can observe a run from. journal.Broadcaster (the
+// and that directory is the only place the server can observe a run from. journal.Broadcaster (the
 // SSE route in live.go) is the in-process path for the run that owns it, and is unreachable here.
 //
 // The filter runs BEFORE each send, as ListEvents applies it before paging, so a narrow filter

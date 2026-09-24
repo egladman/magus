@@ -19,7 +19,7 @@ import {
   MemoryRefKind,
   type Memory,
 } from "@wire/memory/v1alpha1/memory_pb";
-import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
+import { createServerTransport, getLiveToken, isCapabilityDenied } from "../../lib/server";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 
@@ -126,10 +126,10 @@ type EditState = { kind: "none" } | { kind: "new" } | { kind: "edit"; name: stri
 // fieldSeq gives each labeled control a unique id so its <label for> can point at it.
 let fieldSeq = 0;
 
-// buildMemorySection builds the section body and drives it live against the daemon at host. A
+// buildMemorySection builds the section body and drives it live against the server at host. A
 // null host short-circuits to a "connect first" empty state. Returns the body and a destroy()
 // the surface calls on teardown so a late RPC never renders into a detached node. opts.onDenied
-// fires when the daemon declines the service (a phone-share session): the caller hides the
+// fires when the server declines the service (a phone-share session): the caller hides the
 // whole section, so the SERVER decides whether the memory view is offered.
 export function buildMemorySection(
   host: string | null,
@@ -141,8 +141,8 @@ export function buildMemorySection(
   if (!host) {
     body.append(
       buildEmpty(
-        "Not connected to a daemon",
-        "Connect the console to a running daemon to view and edit agent memory. Open the console from a magus link, or set the daemon host on the General tab.",
+        "Not connected to a server",
+        "Connect the console to a running server to view and edit agent memory. Open the console from a magus link, or set the server host on the General tab.",
       ),
     );
     return {
@@ -155,7 +155,7 @@ export function buildMemorySection(
 
   const client: Client<typeof MemoryService> = createClient(
     MemoryService,
-    createDaemonTransport(host, getLiveToken()),
+    createServerTransport(host, getLiveToken()),
   );
 
   // One controller for the section's whole lifetime: every RPC rides its signal, and destroy()
@@ -203,7 +203,7 @@ export function buildMemorySection(
       body.replaceChildren(
         buildEmpty(
           "Could not load memory",
-          "The daemon at " +
+          "The server at " +
             host +
             " did not answer the memory service (" +
             msg +

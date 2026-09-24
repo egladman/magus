@@ -22,7 +22,7 @@ func TestLoadWorkspaceConfigFallsBackWhenTheFileIsAbsent(t *testing.T) {
 
 // The failure this exists to prevent: a magus.yaml that asked for sandboxing but does not
 // parse used to collapse into Defaults(), which disables it, so the workspace joined the
-// daemon's union unsandboxed and nothing said so.
+// server's union unsandboxed and nothing said so.
 func TestLoadWorkspaceConfigRefusesAMalformedFile(t *testing.T) {
 	t.Parallel()
 
@@ -43,10 +43,10 @@ func TestApplyUnionSandboxReportsAMalformedWorkspaceConfig(t *testing.T) {
 	assert.Error(t, ApplyUnionSandbox(context.Background(), []string{root}))
 }
 
-// TestApplyUnionSandboxIsInertWithoutAnOptIn: the daemon applies a kernel policy
+// TestApplyUnionSandboxIsInertWithoutAnOptIn: the server applies a kernel policy
 // only when some workspace asked for one. No roots, or roots that never enable
 // sandboxing, must leave the process unconfined: applying a policy nobody
-// requested would break every other workspace the daemon serves.
+// requested would break every other workspace the server serves.
 func TestApplyUnionSandboxIsInertWithoutAnOptIn(t *testing.T) {
 	ctx := context.Background()
 

@@ -10,7 +10,7 @@ type sessionKey struct{}
 type supervisionKey struct{}
 
 // WithSession stores the run's service [Session] on ctx so service ops reached as
-// dependencies can be supervised through it (routed to the daemon or run in-process).
+// dependencies can be supervised through it (routed to the broker or run in-process).
 // Set once per run.
 func WithSession(ctx context.Context, s *Session) context.Context {
 	return context.WithValue(ctx, sessionKey{}, s)

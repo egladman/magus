@@ -1822,7 +1822,7 @@ type SessionActivity struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Session string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	Host    string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
-	// A pointer to the host's own log. The daemon does not open it.
+	// A pointer to the host's own log. The server does not open it.
 	Transcript string `protobuf:"bytes,3,opt,name=transcript,proto3" json:"transcript,omitempty"`
 	// Whether the loaded record holds a write of the requested path. False with no turns means
 	// the session was seen only by the guard hook, or its transcript was never loaded.

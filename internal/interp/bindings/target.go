@@ -270,7 +270,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 //
 // The journal already records the same act, and the two are not redundant. The journal
 // answers "what did this build do" and is read per invocation; the trail answers "who
-// did what against this daemon" and is what the console's activity view shows. When an
+// did what against this server" and is what the console's activity view shows. When an
 // AGENT triggers a run that makes a credential spendable, this is the event that
 // connects the tool call to its consequence; without it the activity log shows the
 // call and not what it unlocked.

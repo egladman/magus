@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -20,16 +21,24 @@ import (
 // admission through the broker. Under off it wires nothing and leaves m.broker nil, so
 // services run in-process too. It never dials: the client connects on the first claim,
 // so a command that runs no step never touches the broker.
+//
+// A client the caller passed is used or refused, never dropped: a nil one, or one beside
+// a resolved policy of off, is an error naming where the off came from.
 func (m *Magus) wireBroker() ([]cache.Option, error) {
-	policy := m.brokerPolicy
+	policy, source := m.brokerPolicy, "WithBrokerPolicy"
 	if policy == "" {
-		policy = m.cfg.Broker
+		policy, source = m.cfg.Broker, "the workspace's broker setting"
 	}
 	if !policy.Valid() {
 		return nil, fmt.Errorf("magus: unknown broker policy %q (want one of %v)", policy, policy.Values())
 	}
+	if m.brokerGiven && m.broker == nil {
+		return nil, errors.New("magus: WithBroker was given a nil client")
+	}
 	if policy.Resolved() == types.BrokerOff {
-		m.broker = nil
+		if m.brokerGiven {
+			return nil, fmt.Errorf("magus: WithBroker passed a client, but %s is off, so it would never be used; drop one or the other", source)
+		}
 		return nil, nil
 	}
 	if m.broker == nil {

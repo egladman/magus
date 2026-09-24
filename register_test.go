@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -475,4 +476,54 @@ func TestWithoutWorkspaceProvidersLeavesMagusfileProjectsAlone(t *testing.T) {
 		paths = append(paths, p.Path)
 	}
 	assert.ElementsMatch(t, []string{".", "api"}, paths)
+}
+
+// TestOpenRefusesABrokerItWouldNotUse pins that no pair of broker options is silently
+// contradictory: a client beside a resolved policy of off, from the option or from the
+// workspace's own setting, fails Open naming where the off came from, and so does a nil
+// client. A client beside a policy that uses it opens. Nothing here dials: the client
+// connects on the first claim, and none is taken.
+func TestOpenRefusesABrokerItWouldNotUse(t *testing.T) {
+	client := broker.NewClient("unix:///nonexistent/broker.sock")
+	cases := map[string]struct {
+		yaml    string
+		opts    []Option
+		wantErr string
+	}{
+		"off by option": {
+			opts:    []Option{WithBroker(client), WithBrokerPolicy(types.BrokerOff)},
+			wantErr: "magus: WithBroker passed a client, but WithBrokerPolicy is off, so it would never be used; drop one or the other",
+		},
+		"off by the workspace setting": {
+			yaml:    "broker: off\n",
+			opts:    []Option{WithBroker(client)},
+			wantErr: "magus: WithBroker passed a client, but the workspace's broker setting is off, so it would never be used; drop one or the other",
+		},
+		"a nil client": {
+			opts:    []Option{WithBroker(nil), WithBrokerPolicy(types.BrokerBestEffort)},
+			wantErr: "magus: WithBroker was given a nil client",
+		},
+		"a client under best-effort": {
+			opts: []Option{WithBroker(client), WithBrokerPolicy(types.BrokerBestEffort)},
+		},
+		"the option overrides the setting": {
+			yaml: "broker: off\n",
+			opts: []Option{WithBroker(client), WithBrokerPolicy(types.BrokerRequired)},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			files := map[string]string{"magusfile.buzz": ""}
+			if tc.yaml != "" {
+				files["magus.yaml"] = tc.yaml
+			}
+			m, err := Open(t.Context(), writeWorkspace(t, files), tc.opts...)
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.NoError(t, m.Close())
+		})
+	}
 }

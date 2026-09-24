@@ -72,7 +72,7 @@ func skipMergeDriverRefresh(ctx context.Context) bool {
 
 type magusCtxKey struct{}
 
-// withMagus injects a per-workspace Magus for daemon-adopted handlers.
+// withMagus injects a per-workspace Magus for server-adopted handlers.
 func withMagus(ctx context.Context, m *magus.Magus) context.Context {
 	return context.WithValue(ctx, magusCtxKey{}, m)
 }
@@ -111,11 +111,11 @@ var (
 )
 
 // loadMagus opens (once) the process's singleton workspace handle. extra Options apply only
-// to the first, memoizing call: the daemon serve path passes magus.WithMetricsCollection()
+// to the first, memoizing call: the server serve path passes magus.WithMetricsCollection()
 // so the bridge Magus feeds the /dashboard, while one-shot CLI callers pass none and stay a
 // true no-op.
 func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) (*magus.Magus, error) {
-	if m, ok := magusFromContext(ctx); ok { // daemon-adopted handlers bypass the singleton
+	if m, ok := magusFromContext(ctx); ok { // server-adopted handlers bypass the singleton
 		return m, nil
 	}
 	t := traceFromContext(ctx)
@@ -168,7 +168,7 @@ var (
 // the environment is the caller's choice and is left alone.
 //
 // Refcounted and shared across callers because loadMagus and inspectWorkspace can both
-// first-load concurrently (the daemon bootstraps both in parallel goroutines): a plain
+// first-load concurrently (the server bootstraps both in parallel goroutines): a plain
 // save/restore pair races there, since either could observe the other's already-raised
 // GOGC as "the prior value" and restore to it instead of the true original, or one
 // restoring early could drop GOGC out from under the other's still-running load. Only
@@ -254,9 +254,9 @@ func (errSilent) Error() string { return "silent exit" }
 func (errSilent) AlreadyReported() bool { return true }
 
 // ExitCode states the process status this failure carries, for the ADOPTED path.
-// exitCodeOf reads the field directly; the daemon holds the error as a plain `error`
+// exitCodeOf reads the field directly; the server holds the error as a plain `error`
 // and cannot, so without the method every forwarded failure collapsed to 1 and the
-// documented 1-vs-2 split existed only when no daemon was running.
+// documented 1-vs-2 split existed only when no server was running.
 func (e errSilent) ExitCode() int { return e.exitCode }
 
 // exitUsage is the exit code for a command-line misuse: a missing or unknown
@@ -279,7 +279,7 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 // contended no-wait project lock (lockContendedExit) and a step the machine's build
 // budget could not seat (cache.ExitCodeMachineBusy, MGS3009). Neither is named here:
 // each error states its own code and exitCodeOf reads it through proc.ExitCode, which
-// is what lets the daemon report the same status for a run it executed on a client's
+// is what lets the server report the same status for a run it executed on a client's
 // behalf. A caller that cannot tell either from 1 reads a busy machine as a broken
 // build: CI retries nothing, and an agent debugs a target that never ran.
 const exitUsage = 2
@@ -291,7 +291,7 @@ type errUsage struct{ msg string }
 
 func (e errUsage) Error() string { return e.msg }
 
-// ExitCode carries exitUsage across the daemon boundary; see errSilent.ExitCode.
+// ExitCode carries exitUsage across the server boundary; see errSilent.ExitCode.
 func (errUsage) ExitCode() int { return exitUsage }
 
 // usagef builds an errUsage with a formatted message.
@@ -363,7 +363,7 @@ func splitOnThen(args []string) (before, after []string, found bool) {
 // hintCanonicalSpelling nudges toward the canonical name when the user typed
 // another one. The fact comes off the parsed Target (Declared/DeclaredCharms), so
 // this is presentation only: types.ParseTarget stays a pure function and the
-// daemon and MCP paths get the same information without inheriting stderr output.
+// server and MCP paths get the same information without inheriting stderr output.
 //
 // Silent on canonical input, and deduped by interactive.Emit, so it teaches once
 // rather than nagging.

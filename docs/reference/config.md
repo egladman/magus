@@ -37,20 +37,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | ----------------- | ----------------------- | ------------ | ----------------- |
 | `console.enabled` | `MAGUS_CONSOLE_ENABLED` | _(env only)_ | bool _(env only)_ |
 
-## daemon
-
-| Config key                             | Environment variable                         | Flag                                     | Type                               |
-| -------------------------------------- | -------------------------------------------- | ---------------------------------------- | ---------------------------------- |
-| `daemon.address`                       | `MAGUS_DAEMON_ADDRESS`                       | `--daemon-address`                       | string                             |
-| `daemon.enabled`                       | `MAGUS_DAEMON_ENABLED`                       | `--daemon-enabled`                       | bool                               |
-| `daemon.idle_ttl`                      | `MAGUS_DAEMON_IDLE_TTL`                      | `--daemon-idle-ttl`                      | duration                           |
-| `daemon.maintenance.check_review`      | `MAGUS_DAEMON_MAINTENANCE_CHECK_REVIEW`      | `--daemon-maintenance-check-review`      | duration                           |
-| `daemon.maintenance.prune_preserved`   | `MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED`   | `--daemon-maintenance-prune-preserved`   | duration                           |
-| `daemon.maintenance.rotate_activities` | `MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES` | `--daemon-maintenance-rotate-activities` | duration                           |
-| `daemon.maintenance.rotate_logs`       | `MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS`       | `--daemon-maintenance-rotate-logs`       | duration                           |
-| `daemon.maintenance.sync_graph`        | `MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH`        | `--daemon-maintenance-sync-graph`        | duration                           |
-| `daemon.workspaces`                    | `MAGUS_DAEMON_WORKSPACES`                    | _(env only)_                             | list _(comma-separated, env only)_ |
-
 ## diff
 
 | Config key | Environment variable | Flag         | Type              |
@@ -144,6 +130,20 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | ---------------------------- | ---------------------------------- | ------------------------------ | -------- |
 | `secret.interactive_timeout` | `MAGUS_SECRET_INTERACTIVE_TIMEOUT` | `--secret-interactive-timeout` | duration |
 | `secret.unattended_timeout`  | `MAGUS_SECRET_UNATTENDED_TIMEOUT`  | `--secret-unattended-timeout`  | duration |
+
+## server
+
+| Config key                             | Environment variable                         | Flag                                     | Type                               |
+| -------------------------------------- | -------------------------------------------- | ---------------------------------------- | ---------------------------------- |
+| `server.address`                       | `MAGUS_SERVER_ADDRESS`                       | `--server-address`                       | string                             |
+| `server.enabled`                       | `MAGUS_SERVER_ENABLED`                       | `--server-enabled`                       | bool                               |
+| `server.idle_ttl`                      | `MAGUS_SERVER_IDLE_TTL`                      | `--server-idle-ttl`                      | duration                           |
+| `server.maintenance.check_review`      | `MAGUS_SERVER_MAINTENANCE_CHECK_REVIEW`      | `--server-maintenance-check-review`      | duration                           |
+| `server.maintenance.prune_preserved`   | `MAGUS_SERVER_MAINTENANCE_PRUNE_PRESERVED`   | `--server-maintenance-prune-preserved`   | duration                           |
+| `server.maintenance.rotate_activities` | `MAGUS_SERVER_MAINTENANCE_ROTATE_ACTIVITIES` | `--server-maintenance-rotate-activities` | duration                           |
+| `server.maintenance.rotate_logs`       | `MAGUS_SERVER_MAINTENANCE_ROTATE_LOGS`       | `--server-maintenance-rotate-logs`       | duration                           |
+| `server.maintenance.sync_graph`        | `MAGUS_SERVER_MAINTENANCE_SYNC_GRAPH`        | `--server-maintenance-sync-graph`        | duration                           |
+| `server.workspaces`                    | `MAGUS_SERVER_WORKSPACES`                    | _(env only)_                             | list _(comma-separated, env only)_ |
 
 ## telemetry
 

@@ -44,7 +44,7 @@ output \<ref\>       One target run's captured output, by the output ref
                      credential reads - which references the run reached for and
                      through which provider, never the value - which is how an audit
                      answers "what did this run touch". Run logs are trimmed to a cap
-                     by the daemon's RotateLogs job, so this answers for recent runs
+                     by the server's RotateLogs job, so this answers for recent runs
                      rather than forever.
 
 The graph is cache-backed under \<cache\>/knowledge and only shards whose sources

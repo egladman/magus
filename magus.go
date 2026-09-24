@@ -89,11 +89,11 @@ func collapseOnSuccess(l config.Log) bool {
 	return true
 }
 
-// Magus is the high-level orchestrator. Read paths and the daemon's warm caches
+// Magus is the high-level orchestrator. Read paths and the server's warm caches
 // (warmGraph, symbolStatus) are safe for concurrent use: that is what backs
-// daemon mode, where one Magus is shared across goroutines; concurrent callers
+// `magus server`, where one Magus is shared across goroutines; concurrent callers
 // should use types.ContextWithGraphObserver rather than a shared default observer.
-// SetGraphObserver and SetDaemon are NOT concurrency-safe: each mutates shared
+// SetGraphObserver and SetServer are NOT concurrency-safe: each mutates shared
 // state with no lock and is meant to be called once, before the workspace is
 // shared (SetGraphObserver mutates the underlying *types.Workspace, which
 // documents itself as safe only for a sole owner). Inspect-constructed
@@ -123,7 +123,7 @@ type Magus struct {
 	// publishedShards is the read-only knowledge-shard source UsePublishedShards installs,
 	// which is after Open or Inspect has returned: the destination comes from config a
 	// command reads, not from a workspace fact. Atomic because every later graph build
-	// reads it, and the daemon builds on its own goroutines.
+	// reads it, and the server builds on its own goroutines.
 	publishedShards atomic.Pointer[knowledge.RemoteShards]
 
 	symbolStatus symbolStatusCache
@@ -157,37 +157,38 @@ type Magus struct {
 
 	tel            observability.Provider
 	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
-	metricsCollect bool                   // daemon: build an always-on local metrics collector for the dashboard
+	metricsCollect bool                   // server: build an always-on local metrics collector for the dashboard
 	// broker is this workspace's broker client, nil when the policy is off. ownsBroker is
 	// set when Open made it, and Close then hangs it up.
 	broker        *broker.Client
+	brokerGiven   bool // the caller passed WithBroker, so wireBroker must use it or refuse
 	ownsBroker    bool
 	brokerPolicy  types.BrokerPolicy // WithBrokerPolicy's override; empty keeps the config's
 	skipProviders bool               // open without running wired workspace providers (see WithoutWorkspaceProviders)
 
-	daemon Daemon
+	server Server
 }
 
-// Daemon is the long-running server this workspace hosts (the MCP HTTP endpoint plus the
-// console API routes, and whatever else the daemon grows to serve). It is injected by
-// the CLI in daemon mode ONLY (so ordinary command paths never construct one) and held
-// as an interface so the root magus package need not import the daemon/handler packages
-// (which depend on magus), breaking that cycle. The concrete *daemon.Daemon satisfies it.
-type Daemon interface {
+// Server is the HTTP surface `magus server` hosts over this workspace: the MCP endpoint,
+// the console and its API routes. The CLI injects it under `magus server` ONLY, so
+// ordinary command paths never construct one, and it is an interface so the root magus
+// package need not import the handler packages that depend on it. The concrete
+// *serverhttp.Server satisfies it.
+type Server interface {
 	Serve(ctx context.Context) error
 }
 
-// SetDaemon installs the daemon that ServeDaemon delegates to. Called once, in daemon
-// mode; other command paths leave it nil so no server is ever constructed.
-func (m *Magus) SetDaemon(d Daemon) { m.daemon = d }
+// SetServer installs the Server that Serve delegates to. Called once, under `magus
+// server`; other command paths leave it nil so no listener is ever constructed.
+func (m *Magus) SetServer(s Server) { m.server = s }
 
-// ServeDaemon runs the injected daemon, blocking until ctx is cancelled or the server
-// fails. It errors if no daemon was installed via SetDaemon.
-func (m *Magus) ServeDaemon(ctx context.Context) error {
-	if m.daemon == nil {
-		return errors.New("magus: no daemon configured")
+// Serve runs the injected Server, blocking until ctx is cancelled or the listener
+// fails. It errors if no Server was installed via SetServer.
+func (m *Magus) Serve(ctx context.Context) error {
+	if m.server == nil {
+		return errors.New("magus: no server configured")
 	}
-	return m.daemon.Serve(ctx)
+	return m.server.Serve(ctx)
 }
 
 // workspaceMarker is the ONE file that declares a workspace root.
@@ -295,7 +296,7 @@ func (m *Magus) explainStale(err error) error {
 	return ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion)
 }
 
-// WorkspaceLoadFailure describes err, a failed Open of root, as the daemon reports a FAILED
+// WorkspaceLoadFailure describes err, a failed Open of root, as the server reports a FAILED
 // workspace: the error as rendered, plus the source position of each failing file that has
 // one. A position outside root keeps its absolute path.
 func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
@@ -507,7 +508,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if o.Limiter != nil {
 		m.limOnce.Do(func() { m.lim = o.Limiter })
 	}
-	m.broker, m.brokerPolicy = o.Broker, o.BrokerPolicy
+	m.broker, m.brokerGiven, m.brokerPolicy = o.Broker, o.BrokerGiven, o.BrokerPolicy
 	m.metricsCollect = o.MetricsCollect
 	m.injectedTel = o.Provider
 	m.skipProviders = o.SkipWorkspaceProviders
@@ -536,10 +537,17 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 		path = filepath.Join(root, "magus.yaml")
 	}
 	cfg, err := config.LoadFile(path, false)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return config.Config{}, nil
+	if errors.Is(err, fs.ErrNotExist) {
+		// A workspace with no magus.yaml configures nothing, but the environment still
+		// does: MAGUS_BROKER=off must hold for it as for any other. Not validated: the
+		// zero Config under it is not one Validate accepts, and it never was.
+		var zero config.Config
+		if err := configgen.ApplyEnv(&zero, os.Getenv); err != nil {
+			return config.Config{}, fmt.Errorf("invalid configuration from the environment: %w", err)
 		}
+		return zero, nil
+	}
+	if err != nil {
 		return config.Config{}, err
 	}
 	// LoadFile validated the yaml; the environment overwrites those fields after it.
@@ -760,7 +768,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	cfgOpts = append(cfgOpts, cache.WithCollapse(collapseOnSuccess(m.cfg.Log)))
 	// Build the telemetry provider before the cache so a wired remote backend can
 	// be instrumented as it is attached. When the caller injected a shared provider
-	// (WithProvider), adopt it verbatim and skip construction: the daemon shares ONE
+	// (WithProvider), adopt it verbatim and skip construction: the server shares ONE
 	// provider across its bridge Magus and every per-workspace registry Magus, so a
 	// build routed to any workspace feeds the same instruments the dashboard reads,
 	// and workspace eviction never discards the accumulated counters. Otherwise build
@@ -770,7 +778,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		tel = m.injectedTel
 	} else {
 		telCfg := observability.ConfigFromTelemetry(m.cfg.Telemetry, "", m.ws.Root)
-		telCfg.LocalCollect = m.metricsCollect // daemon: record metrics even when export is off
+		telCfg.LocalCollect = m.metricsCollect // server: record metrics even when export is off
 		built, err := otlp.New(ctx, telCfg)
 		if err != nil {
 			slog.WarnContext(ctx, "magus: telemetry init failed; falling back to no-op", "err", err)
@@ -781,7 +789,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	m.tel = tel
 	// Close is what shuts a provider Open built, and neither error path below reaches it:
 	// they return before the caller has a *Magus to close. An injected provider is the
-	// daemon's, so it is left alone here for the reason Close leaves it alone.
+	// server's, so it is left alone here for the reason Close leaves it alone.
 	shutdownTel := func() {
 		if m.injectedTel == nil {
 			_ = tel.Shutdown(ctx)
@@ -1620,9 +1628,9 @@ func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 // Close releases workspace resources (VM pools, telemetry); cache and limiter are
 // caller-owned. A provider built by Open is shut down here so its spans/metrics
 // flush rather than being lost on exit. An injected provider (WithProvider) is
-// left running: it is shared across every workspace the daemon holds (and the
+// left running: it is shared across every workspace the server holds (and the
 // bridge Magus), so one workspace's eviction must not stop telemetry for the
-// rest; the daemon itself owns and shuts down that provider.
+// rest; the server itself owns and shuts down that provider.
 func (m *Magus) Close() error {
 	var errs []error
 	if m.tel != nil && m.injectedTel == nil {
@@ -1969,13 +1977,13 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 // ContextWithSecrets installs this workspace's secret resolver on ctx, so a caller
 // outside the run path can redact against the credentials this workspace has resolved.
 //
-// It hands out a CONTEXT, not the resolver. The daemon needs redaction on its serving
+// It hands out a CONTEXT, not the resolver. The server needs redaction on its serving
 // paths (internal/trail writes MCP request and response payloads verbatim, and those are
 // the largest credential-shaped thing magus persists), but nothing outside this package
 // needs to read or mutate the resolver to get it.
 //
 // The resolver is per workspace Open, so this is only meaningful for a caller already
-// bound to one workspace. A daemon-wide action has no workspace and therefore nothing to
+// bound to one workspace. A server-wide action has no workspace and therefore nothing to
 // redact against, which is the honest answer rather than a gap.
 func (m *Magus) ContextWithSecrets(ctx context.Context) context.Context {
 	if m == nil || m.resolver == nil {

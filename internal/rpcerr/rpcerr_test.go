@@ -45,9 +45,9 @@ func TestTitlesMatchTheCodePages(t *testing.T) {
 	}
 }
 
-// The MGS9xxx range is the daemon's, so a writer can be handed any reason in it; a reason
+// The MGS9xxx range is the server's, so a writer can be handed any reason in it; a reason
 // missing from titles would fall back to its bare code in the Help link.
-func TestEveryDaemonReasonHasATitle(t *testing.T) {
+func TestEveryServerReasonHasATitle(t *testing.T) {
 	t.Parallel()
 	for _, code := range types.AllDiagnosticCodes() {
 		if !strings.HasPrefix(string(code), "MGS9") {

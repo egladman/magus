@@ -12,12 +12,12 @@ const NOW = 1_760_000_000_000;
 
 test("the demo carries both holders, which is the claim the view makes", () => {
   const holders = new Set(demoJobs(NOW).map((j) => j.holder));
-  assert.ok(holders.has(JobHolder.DAEMON), "the daemon's own maintenance is part of the picture");
+  assert.ok(holders.has(JobHolder.SERVER), "the server's own maintenance is part of the picture");
   assert.ok(holders.has(JobHolder.SESSION), "and so is the work a session was handed");
 });
 
-test("the daemon's jobs carry what only they have: what it does, and how much there is", () => {
-  for (const job of demoJobs(NOW).filter((j) => j.holder === JobHolder.DAEMON)) {
+test("the server's jobs carry what only they have: what it does, and how much there is", () => {
+  for (const job of demoJobs(NOW).filter((j) => j.holder === JobHolder.SERVER)) {
     assert.ok(job.description, `${job.id} says nothing about what it does`);
     assert.ok(job.target, `${job.id} maintains nothing measurable`);
   }

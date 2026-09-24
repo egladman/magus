@@ -64,7 +64,10 @@ function statusWith(targets: { label: string; state: string; ref?: string }[]): 
     services: [],
     locks: [],
     magusVersion: "",
-    daemonVersion: "",
+    ownerVersion: "",
+    broker: null,
+    server: null,
+    brokerPolicy: "best-effort",
   };
 }
 

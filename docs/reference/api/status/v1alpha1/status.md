@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, statusservice]
 
 StatusService serves the snapshot, and streams it for a live dashboard.
 
-Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Source: [status.proto:244](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L244). Part of the [daemon API](../../index.md).
+Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Source: [status.proto:244](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L244). Part of the [server API](../../index.md).
 
 ## Methods
 
@@ -52,7 +52,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 ### BuildInfo
 
-BuildInfo identifies the running magus binary: the version tag, the commit it was built from, the build date, and the full human fingerprint (what `magus --version` prints). Reported so a dashboard shows exactly which daemon it is talking to. All fields are "unknown" for an unstamped dev build.
+BuildInfo identifies the running magus binary: the version tag, the commit it was built from, the build date, and the full human fingerprint (what `magus --version` prints). Reported so a dashboard shows exactly which server it is talking to. All fields are "unknown" for an unstamped dev build.
 
 Source: [status.proto:113](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L113).
 
@@ -78,7 +78,7 @@ Source: [status.proto:227](https://github.com/egladman/magus/blob/main/proto/mag
 | `errors`      | int64 | 3 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `size_bytes`  | int64 | 4 | real on-disk size of the cache dir (0 = unknown/not computed)                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `size_cap_mb` | int32 | 5 | configured cap (MAGUS\_CACHE\_SIZE\_MB; 0 = unlimited)                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `saved_ms`    | int64 | 6 | saved\_ms is the summed recorded duration of the runs those hits replayed - the work the cache avoided, measured rather than modeled: each figure is how long that exact target took on this machine when it last ran, carried on the cache entry.  It UNDERSTATES and never overstates. A hit on an entry written before the duration was recorded counts toward hits and adds nothing here, so a reader must not present this as the cache's lifetime saving - it is what this daemon has saved since it started. |
+| `saved_ms`    | int64 | 6 | saved\_ms is the summed recorded duration of the runs those hits replayed - the work the cache avoided, measured rather than modeled: each figure is how long that exact target took on this machine when it last ran, carried on the cache entry.  It UNDERSTATES and never overstates. A hit on an entry written before the duration was recorded counts toward hits and adds nothing here, so a reader must not present this as the cache's lifetime saving - it is what this server has saved since it started. |
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 
@@ -119,7 +119,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 ### Config
 
-Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse (the one-shot), never the live Status frame.
+Config is the server's resolved, read-only configuration a dashboard shows so an operator can see what the server is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse (the one-shot), never the live Status frame.
 
 Source: [status.proto:266](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L266).
 
@@ -146,8 +146,8 @@ Source: [status.proto:253](https://github.com/egladman/magus/blob/main/proto/mag
 | Field                | Type              | # | Description                                                                                                                                                                                                                                                                                                                                                                                                              |
 | -------------------- | ----------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `status`             | [Status](#status) | 1 |                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `observe_start_time` | Timestamp         | 2 | observe\_start\_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields the deprecated JSON /api/v1/status route used to carry. when this daemon began observing (its start) |
-| `config`             | [Config](#config) | 3 | the daemon's resolved, read-only configuration                                                                                                                                                                                                                                                                                                                                                                           |
+| `observe_start_time` | Timestamp         | 2 | observe\_start\_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they are static per server session (Status stays "what is happening right now"), so a dashboard reads them once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields the deprecated JSON /api/v1/status route used to carry. when this server began observing (its start) |
+| `config`             | [Config](#config) | 3 | the server's resolved, read-only configuration                                                                                                                                                                                                                                                                                                                                                                           |
 
 Used by: [GetStatus (response)](status.md#getstatus).
 
@@ -194,7 +194,7 @@ Source: [status.proto:173](https://github.com/egladman/magus/blob/main/proto/mag
 | Field             | Type                                     | #  | Description                                         |
 | ----------------- | ---------------------------------------- | -- | --------------------------------------------------- |
 | `parent_pid`      | int32                                    | 1  |                                                     |
-| `daemon_version`  | string                                   | 2  | the pool owner's build                              |
+| `owner_version`   | string                                   | 11 | the build of the process that owns the pool         |
 | `capacity`        | int32                                    | 4  | total concurrency slots (0 = unlimited)             |
 | `running`         | int32                                    | 5  | slots currently running                             |
 | `queued`          | int32                                    | 6  | targets queued for a slot                           |
@@ -203,13 +203,13 @@ Source: [status.proto:173](https://github.com/egladman/magus/blob/main/proto/mag
 | `affected`        | repeated string                          | 9  |                                                     |
 | `cache`           | [Cache](#cache)                          | 10 | aggregate cache activity across the warm workspaces |
 
-_Reserved: 3; `mode`._
+_Reserved: 2, 3; `daemon_version`, `mode`._
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 
 ### Run
 
-Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected` dispatch, keyed by its invocation id. It carries the per-target execution state a dashboard renders as a live run row, so the SAME status stream that shows the pool also shows what each run's targets are doing.
+Run is one in-flight invocation the server has adopted - a `magus run`/`affected` dispatch, keyed by its invocation id. It carries the per-target execution state a dashboard renders as a live run row, so the SAME status stream that shows the pool also shows what each run's targets are doing.
 
 Source: [status.proto:124](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L124).
 
@@ -258,7 +258,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 ### Service
 
-Service is one long-running shared service the daemon is hosting right now, kept warm across invocations. It carries the derived identity (id/label/command/ports), the live state a dashboard renders, and how many targets currently depend on it.
+Service is one long-running shared service the server is hosting right now, kept warm across invocations. It carries the derived identity (id/label/command/ports), the live state a dashboard renders, and how many targets currently depend on it.
 
 Source: [status.proto:162](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L162).
 
@@ -334,7 +334,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 ### Workspace
 
-Workspace is one workspace the daemon holds: loading, loaded, or failed to load.
+Workspace is one workspace the server holds: loading, loaded, or failed to load.
 
 Source: [status.proto:197](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L197).
 
@@ -386,7 +386,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 ### Workspace.State
 
-State is where the daemon's copy of this workspace sits. Output only; values may be added.
+State is where the server's copy of this workspace sits. Output only; values may be added.
 
 Source: [status.proto:199](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L199).
 

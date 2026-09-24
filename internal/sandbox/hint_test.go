@@ -323,11 +323,11 @@ func TestMagusRuntimeEnvPassesThrough(t *testing.T) {
 	p := BuildPolicy("/ws", nil, nil, nil, nil)
 	// MAGUS_RUN_ID is a plain identifier; it passes through to all children.
 	assert.True(t, p.AllowEnv("MAGUS_RUN_ID"), "MAGUS_RUN_ID must pass through")
-	// MAGUS_DAEMON_SOCKET and MAGUS_DAEMON_ADDRESS are intentionally withheld
-	// from the general allowlist: the daemon socket is unauthenticated. They
+	// MAGUS_PROC_SOCKET and MAGUS_SERVER_ADDRESS are intentionally withheld
+	// from the general allowlist: the pool socket is unauthenticated. They
 	// are injected per-spawn only by MagusCmd (recursive magus invocations).
-	assert.False(t, p.AllowEnv("MAGUS_DAEMON_SOCKET"), "MAGUS_DAEMON_SOCKET must NOT be in the general allowlist (unauthenticated socket)")
-	assert.False(t, p.AllowEnv("MAGUS_DAEMON_ADDRESS"), "MAGUS_DAEMON_ADDRESS must NOT be in the general allowlist (unauthenticated socket)")
+	assert.False(t, p.AllowEnv("MAGUS_PROC_SOCKET"), "MAGUS_PROC_SOCKET must NOT be in the general allowlist (unauthenticated socket)")
+	assert.False(t, p.AllowEnv("MAGUS_SERVER_ADDRESS"), "MAGUS_SERVER_ADDRESS must NOT be in the general allowlist (unauthenticated socket)")
 }
 
 func TestValidateGlobs(t *testing.T) {
@@ -427,7 +427,7 @@ func TestPathTraversalRejected(t *testing.T) {
 
 // TestProcSelfDenied verifies that /proc/self paths are denied by the
 // sandbox policy. A spell reading /proc/self/environ would obtain the
-// daemon's full environment including any secrets in it.
+// server's full environment including any secrets in it.
 func TestProcSelfDenied(t *testing.T) {
 	ws := t.TempDir()
 	p := BuildPolicy(ws, nil, nil, nil, nil)

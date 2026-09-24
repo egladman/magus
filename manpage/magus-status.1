@@ -28,7 +28,7 @@ Single\-line, densely\-packed snapshot for sidebar/multiplexer use (text output 
 Exec\-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores \-\-watch/\-\-compact)
 .TP
 \fB\-\-socket\fR \fIstring\fR
-Adopt server address as unix:// URL or bare path; default: auto\-detect from MAGUS_DAEMON_SOCKET or scan sock dir
+Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. \-\-probe asks the server at server.address unless this names one
 .TP
 \fB\-\-symbols\fR
 Include the expensive symbol\-index freshness scan
@@ -61,7 +61,7 @@ magus status --compact --watch=15s
 \fIInspect a specific running parent\fR
 .PP
 .EX
-magus status --socket=unix:///run/user/1000/magus/daemon.sock
+magus status --socket=unix:///run/user/1000/magus/server.sock
 .EE
 .PP
 .SH SEE ALSO

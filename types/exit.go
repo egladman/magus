@@ -11,11 +11,11 @@ import (
 // verdict), and propagated up like any other target error.
 //
 // It deliberately does NOT call os.Exit: a target can run inside a long-lived
-// daemon serving multiple workspaces (see internal/proc), where os.Exit would
+// server serving multiple workspaces (see internal/proc), where os.Exit would
 // kill unrelated in-flight work. Instead the CLI maps this error to its process
-// exit status, and the daemon to the per-run reply code. The wrapping form exists
-// for the same daemon: a step it runs for an adopted client crosses a socket that
-// erases the Go type, and the daemon reads the code off the error rather than
+// exit status, and the server to the per-run reply code. The wrapping form exists
+// for the same server: a step it runs for an adopted client crosses a socket that
+// erases the Go type, and the server reads the code off the error rather than
 // naming a CLI package it must not import. It wraps rather than replaces, so
 // errors.Is against the diagnostic code keeps matching.
 type ExitError struct {
@@ -25,7 +25,7 @@ type ExitError struct {
 }
 
 // Error reports the wrapped error, or the bare exit code. For a bare exit the message
-// is incidental: the CLI/daemon recover ExitError via errors.As and use Code.
+// is incidental: the CLI/server recover ExitError via errors.As and use Code.
 func (e ExitError) Error() string {
 	if e.Err != nil {
 		return e.Err.Error()
@@ -35,7 +35,7 @@ func (e ExitError) Error() string {
 
 func (e ExitError) Unwrap() error { return e.Err }
 
-// ExitCode is the seam the CLI and the daemon ask an error for its process status.
+// ExitCode is the seam the CLI and the server ask an error for its process status.
 func (e ExitError) ExitCode() int { return e.Code }
 
 // NormalizeExitCode maps a requested code onto the range a process exit status can

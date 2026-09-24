@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, insightservice]
 
 InsightService serves the assembled lenses to the console dashboard. One read-only unary RPC: the four git lenses come from a server-cached scan (~10s TTL) and volatility from a fresh file read, so the client polls rather than subscribes.
 
-Package `magus.insight.v1alpha1`, defined in `proto/magus/insight/v1alpha1/insight.proto`. Source: [insight.proto:26](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L26). Part of the [daemon API](../../index.md).
+Package `magus.insight.v1alpha1`, defined in `proto/magus/insight/v1alpha1/insight.proto`. Source: [insight.proto:26](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1alpha1/insight.proto#L26). Part of the [server API](../../index.md).
 
 ## Methods
 

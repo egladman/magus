@@ -38,18 +38,18 @@ func TestDoctorToolAgainstFixture(t *testing.T) {
 	assert.NotEmpty(t, rep.Checks, "doctor produced no checks")
 }
 
-func TestStatusToolNoDaemon(t *testing.T) {
+func TestStatusToolNoServer(t *testing.T) {
 	// Point discovery at a socket that cannot exist, so QueryStatus fails
-	// deterministically rather than connecting to a real daemon on the dev box.
-	t.Setenv("MAGUS_DAEMON_SOCKET", filepath.Join(t.TempDir(), "nonexistent.sock"))
+	// deterministically rather than connecting to a real server on the dev box.
+	t.Setenv("MAGUS_PROC_SOCKET", filepath.Join(t.TempDir(), "nonexistent.sock"))
 
 	tool := &statusTool{opts: Options{Magus: fixtureMagus(t)}}
 	assert.Equal(t, "magus_status", tool.Name())
 
-	// status never returns an error; an unreachable daemon becomes a PoolError.
+	// status never returns an error; an unreachable server becomes a PoolError.
 	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{})
 	require.NoError(t, err)
 	got := resp.Data.(statusResult)
-	assert.Nil(t, got.Pool, "no daemon should mean no pool reply")
-	assert.NotEmpty(t, got.PoolError, "unreachable daemon should surface a pool_error")
+	assert.Nil(t, got.Pool, "no server should mean no pool reply")
+	assert.NotEmpty(t, got.PoolError, "unreachable server should surface a pool_error")
 }

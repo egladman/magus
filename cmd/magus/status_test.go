@@ -40,11 +40,20 @@ func TestPrintStatusCompact(t *testing.T) {
 	server := &types.StatusServer{PID: 1}
 	assertCompact("nothing running",
 		types.StatusSnapshot{PoolError: "no running magus proc server found"},
-		"broker off · server off\n")
+		"no broker · no server\n")
+
+	// Off is the setting, not an absence: a run under it never starts one.
+	assertCompact("the broker policy is off",
+		types.StatusSnapshot{BrokerPolicy: types.BrokerOff},
+		"broker off · no server\n")
+
+	assertCompact("a broker that measured the host shows its seated slots",
+		types.StatusSnapshot{Broker: &types.StatusBroker{Capacity: types.MachineSnapshot{BudgetSlots: 8, HeldSlots: 3}}},
+		"broker 3/8 slots · no server\n")
 
 	assertCompact("server idle",
 		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{Capacity: 8, Running: 0}},
-		"broker off · server up · pool · 0/8 idle\n")
+		"no broker · server up · pool 0/8 idle\n")
 
 	assertCompact("a per-process pool without a server",
 		types.StatusSnapshot{Pool: &types.StatusOutput{
@@ -53,7 +62,7 @@ func TestPrintStatusCompact(t *testing.T) {
 				{Args: []string{"test", "web"}, Workspace: "/w", StartedAt: at(400 * time.Millisecond)},
 			},
 		}},
-		"broker off · server off · pool · 1/8 running · web:test(0.4s)\n")
+		"no broker · no server · pool 1/8 running · web:test(0.4s)\n")
 
 	assertCompact("running with targets, sorted oldest first",
 		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
@@ -65,7 +74,7 @@ func TestPrintStatusCompact(t *testing.T) {
 			},
 			Workspaces: []types.StatusWorkspace{{Root: "/w", LastAccess: now}},
 		}},
-		"broker off · server up · pool · 3/8 running · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 ws\n")
+		"no broker · server up · pool 3/8 running · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 workspace\n")
 
 	assertCompact("queued and overflow running",
 		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
@@ -82,7 +91,7 @@ func TestPrintStatusCompact(t *testing.T) {
 				{Root: "/w2", LastAccess: now},
 			},
 		}},
-		"broker off · server up · pool · 8/8 running · +2 queued · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 ws\n")
+		"no broker · server up · pool 8/8 running +2 queued · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 workspaces\n")
 
 	assertCompact("multi-workspace running prefixes ws",
 		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
@@ -92,7 +101,7 @@ func TestPrintStatusCompact(t *testing.T) {
 				{Args: []string{"test", "ui"}, Workspace: "/srv/beta", StartedAt: at(500 * time.Millisecond)},
 			},
 		}},
-		"broker off · server up · pool · 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
+		"no broker · server up · pool 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
 
 	assertCompact("the broker's services report activity and dependents",
 		types.StatusSnapshot{
@@ -103,14 +112,14 @@ func TestPrintStatusCompact(t *testing.T) {
 				{State: "idle", Dependents: 0},
 			}},
 		},
-		"broker up · server up · pool · 0/4 idle · services 1/2 active, 2 dependents\n")
+		"broker up · server up · pool 0/4 idle · services 1/2 active, 2 dependents\n")
 
 	assertCompact("unparsable args fall back to ?:?",
 		types.StatusSnapshot{Server: server, Pool: &types.StatusOutput{
 			Capacity: 4, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
 		}},
-		"broker off · server up · pool · 1/4 running · ?:?(0.1s)\n")
+		"no broker · server up · pool 1/4 running · ?:?(0.1s)\n")
 }
 
 func TestClampStatusWatch(t *testing.T) {
@@ -167,12 +176,12 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 // the usage text IS what was asked for, and conflating the two is the easy mistake:
 // both reach this branch with no subcommand left to run.
 func TestStartupNoSubcommandExitsUsage(t *testing.T) {
-	// Isolate socket discovery from the host: clearing MAGUS_DAEMON_SOCKET is not
-	// enough, because startup still scans proc.SockDir() for the stable daemon
+	// Isolate socket discovery from the host: clearing MAGUS_PROC_SOCKET is not
+	// enough, because startup still scans proc.SockDir() for the stable server
 	// socket. Point that dir (XDG_RUNTIME_DIR/magus) at an empty temp dir so a real
-	// `magus server start` daemon running on the developer's machine is not found
+	// `magus server start` server running on the developer's machine is not found
 	// and forwarded to; otherwise its exit code, not this path's, is returned.
-	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+	t.Setenv("MAGUS_PROC_SOCKET", "")
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 
 	res, code := startup(context.Background(), nil)
@@ -187,7 +196,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 	// the caller asked for.
 	for _, flagName := range []string{"-h", "--help"} {
 		t.Run(flagName, func(t *testing.T) {
-			t.Setenv("MAGUS_DAEMON_SOCKET", "")
+			t.Setenv("MAGUS_PROC_SOCKET", "")
 			t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 			res, code := startup(context.Background(), []string{flagName})
 			if res.cleanup != nil {
@@ -370,7 +379,7 @@ func TestProbeMCPReadiness(t *testing.T) {
 		assert.Equal(t, http.StatusServiceUnavailable, probeMCPReadiness(context.Background(), readyzServer(t, http.StatusServiceUnavailable)))
 	})
 	t.Run("answered-other-status-reads-as-ok", func(t *testing.T) {
-		// An older daemon without /readyz still proves a listener is up: any answered
+		// An older server without /readyz still proves a listener is up: any answered
 		// status collapses to OK so the endpoint reads as reachable.
 		assert.Equal(t, http.StatusOK, probeMCPReadiness(context.Background(), readyzServer(t, http.StatusTeapot)))
 	})
@@ -453,7 +462,7 @@ func TestPrintMCPEndpointStatus(t *testing.T) {
 		assert.Contains(t, out, "serving")
 	})
 	t.Run("unreachable-shows-note", func(t *testing.T) {
-		out := render(&types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", State: "unreachable", Note: "start the daemon: magus server start"})
+		out := render(&types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", State: "unreachable", Note: "start the server: magus server start"})
 		assert.Contains(t, out, "unreachable")
 		assert.Contains(t, out, "magus server start")
 	})
@@ -527,12 +536,12 @@ func TestEvaluateMCPHealth(t *testing.T) {
 		assert.Contains(t, reason, "serving")
 	})
 	t.Run("not-ready-passes", func(t *testing.T) {
-		// The endpoint is up; a liveness/ensure check should not restart the daemon.
+		// The endpoint is up; a liveness/ensure check should not restart the server.
 		ok, _ := evaluateMCPHealth(&types.MCPEndpointStatus{Reachable: true, State: "not-ready", URL: "http://127.0.0.1:7391/mcp"})
 		assert.True(t, ok)
 	})
 	t.Run("unreachable-fails-with-note", func(t *testing.T) {
-		ok, reason := evaluateMCPHealth(&types.MCPEndpointStatus{State: "unreachable", Note: "start the daemon: magus server start"})
+		ok, reason := evaluateMCPHealth(&types.MCPEndpointStatus{State: "unreachable", Note: "start the server: magus server start"})
 		assert.False(t, ok)
 		assert.Contains(t, reason, "magus server start")
 	})
@@ -553,7 +562,7 @@ func TestEvaluateMCPHealth(t *testing.T) {
 }
 
 // recordingStatus is a statusFunc that counts calls and returns a fixed snapshot/err, so
-// tests can assert how many times (if at all) the daemon socket was dialed.
+// tests can assert how many times (if at all) the server socket was dialed.
 func recordingStatus(calls *int, out *types.StatusOutput, err error) statusFunc {
 	return func(context.Context) (*types.StatusOutput, error) {
 		*calls++
@@ -563,24 +572,24 @@ func recordingStatus(calls *int, out *types.StatusOutput, err error) statusFunc 
 
 func TestEvaluateProbes(t *testing.T) {
 	ctx := context.Background()
-	aliveDaemon := &types.StatusOutput{ParentPID: 42, Workspaces: []types.StatusWorkspace{{Root: "/ws"}}}
+	aliveServer := &types.StatusOutput{ParentPID: 42, Workspaces: []types.StatusWorkspace{{Root: "/ws"}}}
 
 	t.Run("liveness-alone-passes-and-dials-once", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveDaemon, nil), config.MCP{}, []probeKind{probeLiveness}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []probeKind{probeLiveness}, "")
 		require.Len(t, res, 1)
 		assert.True(t, res[0].ok)
 		assert.Equal(t, 1, calls)
 	})
 	t.Run("two-socket-probes-dial-once", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveDaemon, nil), config.MCP{}, []probeKind{probeLiveness, probeReadiness}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), config.MCP{}, []probeKind{probeLiveness, probeReadiness}, "")
 		require.Len(t, res, 2)
 		assert.True(t, res[0].ok)
 		assert.True(t, res[1].ok)
-		assert.Equal(t, 1, calls, "the daemon snapshot is fetched once and reused")
+		assert.Equal(t, 1, calls, "the server snapshot is fetched once and reused")
 	})
-	t.Run("mcp-only-never-dials-the-daemon", func(t *testing.T) {
+	t.Run("mcp-only-never-dials-the-server", func(t *testing.T) {
 		calls := 0
 		res := evaluateProbes(ctx, recordingStatus(&calls, nil, errors.New("must not be called")), mcpServing(t, http.StatusOK), []probeKind{probeMCP}, "")
 		require.Len(t, res, 1)
@@ -589,9 +598,9 @@ func TestEvaluateProbes(t *testing.T) {
 	})
 	t.Run("combined-liveness-and-mcp-both-evaluated", func(t *testing.T) {
 		calls := 0
-		res := evaluateProbes(ctx, recordingStatus(&calls, aliveDaemon, nil), mcpUnreachable(), []probeKind{probeLiveness, probeMCP}, "")
+		res := evaluateProbes(ctx, recordingStatus(&calls, aliveServer, nil), mcpUnreachable(), []probeKind{probeLiveness, probeMCP}, "")
 		require.Len(t, res, 2)
-		assert.True(t, res[0].ok, "daemon is alive")
+		assert.True(t, res[0].ok, "server is alive")
 		assert.False(t, res[1].ok, "mcp endpoint is down")
 		assert.Equal(t, probeMCP, res[1].kind)
 	})
@@ -620,9 +629,9 @@ func TestRenderProbeResults(t *testing.T) {
 	}
 
 	t.Run("single-pass-no-label", func(t *testing.T) {
-		out, errb, ok := render([]probeResult{{kind: probeLiveness, ok: true, reason: "daemon pid 42 is alive"}})
+		out, errb, ok := render([]probeResult{{kind: probeLiveness, ok: true, reason: "server pid 42 is alive"}})
 		assert.True(t, ok)
-		assert.Equal(t, "ok: daemon pid 42 is alive\n", out)
+		assert.Equal(t, "ok: server pid 42 is alive\n", out)
 		assert.Empty(t, errb)
 	})
 	t.Run("single-fail-exit-signal", func(t *testing.T) {
@@ -809,21 +818,21 @@ func TestResolveStatusSocketsNarrowing(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("--socket narrows to one", func(t *testing.T) {
-		t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///run/magus-env.sock")
+		t.Setenv("MAGUS_PROC_SOCKET", "unix:///run/magus-env.sock")
 		addrs, err := resolveStatusSockets(ctx, "unix:///run/magus-flag.sock")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"unix:///run/magus-flag.sock"}, addrs, "the flag wins over the env")
 	})
 
 	t.Run("env pins one", func(t *testing.T) {
-		t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///run/magus-env.sock")
+		t.Setenv("MAGUS_PROC_SOCKET", "unix:///run/magus-env.sock")
 		addrs, err := resolveStatusSockets(ctx, "")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"unix:///run/magus-env.sock"}, addrs)
 	})
 
 	t.Run("unpinned discovers, and says so when there is nothing", func(t *testing.T) {
-		t.Setenv("MAGUS_DAEMON_SOCKET", "")
+		t.Setenv("MAGUS_PROC_SOCKET", "")
 		t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 		_, err := resolveStatusSockets(ctx, "")
 		require.Error(t, err)
@@ -1156,7 +1165,7 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 	t.Run("nothing running", func(t *testing.T) {
 		var buf bytes.Buffer
 		printStatusCompact(&buf, types.StatusSnapshot{}, now)
-		assert.Equal(t, "broker off · server off\n", buf.String())
+		assert.Equal(t, "no broker · no server\n", buf.String())
 	})
 
 	t.Run("a full snapshot", func(t *testing.T) {
@@ -1166,10 +1175,8 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 
 		require.Equal(t, 1, strings.Count(out, "\n"))
 		assert.NotContains(t, out, "\x1b")
-		assert.True(t, strings.HasPrefix(out, "broker up · server up · pool"), out)
-		assert.Contains(t, out, "2/4 running")
-		assert.Contains(t, out, "+3 queued")
-		assert.Contains(t, out, "1 ws")
+		assert.True(t, strings.HasPrefix(out, "broker 2/8 slots · server up · pool 2/4 running +3 queued"), out)
+		assert.Contains(t, out, "1 workspace")
 		assert.Contains(t, out, "services 1/2 active, 2 dependents")
 		// Two workspaces are in flight, so each entry is qualified by its own.
 		assert.Contains(t, out, "alpha/web:build")
@@ -1281,7 +1288,7 @@ func TestWriteStatusStructuredFormats(t *testing.T) {
 	t.Run("compact wins over the text frame", func(t *testing.T) {
 		var buf bytes.Buffer
 		require.NoError(t, writeStatus(&buf, r, OutputOptions{Format: outputText}, 0, true))
-		assert.Equal(t, "broker off · server off\n", buf.String())
+		assert.Equal(t, "no broker · no server\n", buf.String())
 	})
 }
 

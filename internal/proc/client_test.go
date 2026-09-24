@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/testenv"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +38,7 @@ func TestForwardRoundTrip(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
 	code, err := Forward(context.Background(), []string{"run", "build", "api"}, "test", "")
 	require.NoError(t, err)
@@ -50,7 +51,7 @@ func TestForwardRoundTrip(t *testing.T) {
 
 // TestForwardCarriesTheLease exercises the whole seam rather than the request struct: the
 // client reads the BAGGAGE lease, the server validates it, and the adopted handler sees it. A run
-// launched under a lease used to lose it the moment the daemon adopted the run, because proc
+// launched under a lease used to lose it the moment the server adopted the run, because proc
 // forwarded argv, cwd and root and no environment at all.
 func TestForwardCarriesTheLease(t *testing.T) {
 	got := make(chan string, 1)
@@ -64,7 +65,7 @@ func TestForwardCarriesTheLease(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
 
 	code, err := Forward(context.Background(), []string{"run", "build"}, "test", "")
@@ -83,7 +84,7 @@ func TestForwardHandlerError(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
 	code, err := Forward(context.Background(), []string{"run", "build", "broken"}, "", "")
 	require.NoError(t, err, "Forward transport error")
@@ -91,7 +92,7 @@ func TestForwardHandlerError(t *testing.T) {
 }
 
 func TestForwardInvalidSocket(t *testing.T) {
-	t.Setenv("MAGUS_DAEMON_SOCKET", "/nonexistent/path/magus.sock")
+	t.Setenv("MAGUS_PROC_SOCKET", "/nonexistent/path/magus.sock")
 
 	_, err := Forward(context.Background(), []string{"run", "build", "foo"}, "", "")
 	assert.Error(t, err, "expected error dialing nonexistent socket")
@@ -116,7 +117,7 @@ func TestForwardCycleDetection(t *testing.T) {
 	defer close(block)
 	require.NoError(t, srv.Start())
 
-	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
 	args := []string{"run", "build", "same-project"}
 
@@ -152,7 +153,7 @@ func TestQueryStatus(t *testing.T) {
 	defer close(block)
 	require.NoError(t, srv.Start())
 
-	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
 	// Launch a call and wait for it to be in-flight.
 	go func() {
@@ -232,7 +233,7 @@ func TestRunChildSyncNilLimiter(t *testing.T) {
 }
 
 func TestNewAlreadyAdopted(t *testing.T) {
-	t.Setenv("MAGUS_DAEMON_SOCKET", "/some/path")
+	t.Setenv("MAGUS_PROC_SOCKET", "/some/path")
 
 	_, err := New(Options{
 		Handler: func(_ context.Context, args []string) error { return nil },
@@ -251,7 +252,7 @@ func TestRunRequestArgsCapEnforced(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
 	// Build a slice with 257 elements — one over the limit of 256.
 	oversized := make([]string, 257)
@@ -284,8 +285,8 @@ func TestDialRespectsContextCancellation(t *testing.T) {
 }
 
 // newWedgedServer starts a raw unix-socket listener that accepts one connection,
-// drains the request frame, and then never replies, simulating the wedged-daemon
-// symptom documented elsewhere in this repo as "daemon-adopted runs ignore
+// drains the request frame, and then never replies, simulating the wedged-server
+// symptom documented elsewhere in this repo as "server-adopted runs ignore
 // SIGTERM ... the goroutine parked in proc.readFrame". It returns a unix:// address.
 //
 // The accept goroutine blocks in io.Copy(io.Discard, conn) rather than forever: once
@@ -319,7 +320,7 @@ func newWedgedServer(t *testing.T) string {
 
 // TestShutdownRespectsContextCancellation is the B-1 regression test: before the
 // fix, Shutdown's readFrame(conn) call used a plain io.Reader with no deadline and
-// completely ignored ctx once past Dial, so a daemon that accepted the connection
+// completely ignored ctx once past Dial, so a server that accepted the connection
 // and never replied blocked Shutdown forever; ctx cancellation could not unblock
 // it. Pre-fix this test hangs past the hard bound below; post-fix it returns
 // promptly with a context error.
@@ -333,17 +334,17 @@ func TestShutdownRespectsContextCancellation(t *testing.T) {
 	err := Shutdown(ctx, addr)
 	elapsed := time.Since(start)
 
-	require.Error(t, err, "Shutdown against a wedged daemon must return an error, not hang")
+	require.Error(t, err, "Shutdown against a wedged server must return an error, not hang")
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Less(t, elapsed, 5*time.Second,
-		"Shutdown must return once ctx is done, not block on the unresponsive daemon")
+		"Shutdown must return once ctx is done, not block on the unresponsive server")
 }
 
 // TestForwardRespectsContextCancellation is B-1's highest-value case: Forward is the
-// hot path every adopted run takes, so a wedged daemon must not be able to hang the
+// hot path every adopted run takes, so a wedged server must not be able to hang the
 // client's whole process past ctx cancellation.
 func TestForwardRespectsContextCancellation(t *testing.T) {
-	t.Setenv("MAGUS_DAEMON_SOCKET", newWedgedServer(t))
+	t.Setenv("MAGUS_PROC_SOCKET", newWedgedServer(t))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -352,10 +353,10 @@ func TestForwardRespectsContextCancellation(t *testing.T) {
 	_, err := Forward(ctx, []string{"run", "build"}, "test", "")
 	elapsed := time.Since(start)
 
-	require.Error(t, err, "Forward against a wedged daemon must return an error, not hang")
+	require.Error(t, err, "Forward against a wedged server must return an error, not hang")
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Less(t, elapsed, 5*time.Second,
-		"Forward must return once ctx is done, not block on the unresponsive daemon")
+		"Forward must return once ctx is done, not block on the unresponsive server")
 }
 
 // TestStartCloseGoroutineLeak verifies that repeated Start/Close cycles do not
@@ -511,7 +512,7 @@ func TestForwardArgsWithNewline(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	t.Setenv("MAGUS_PROC_SOCKET", srv.Addr())
 
 	code, err := Forward(context.Background(), []string{"run", "build", "x\ny"}, "", "")
 	require.NoError(t, err)
@@ -522,15 +523,11 @@ func TestForwardArgsWithNewline(t *testing.T) {
 	assert.Equal(t, "x\ny", args[2])
 }
 
-// TestMain clears MAGUS_DAEMON_SOCKET before the suite runs so the package is
-// hermetic. proc.New returns ErrAlreadyAdopted when that var is set; the tests that
-// exercise adoption set it themselves via t.Setenv. But when the suite runs under
-// `magus run` with a daemon active, magus injects MAGUS_DAEMON_SOCKET into the test
-// subprocess (the recursive-call convention), tripping the guard before any test
-// opts in — so `magus run test`/`coverage` failed every proc test even though plain
-// `go test` passed. Clearing it here can't be done per-test: three sibling tests use
+// TestMain isolates the package, which among other things clears MAGUS_PROC_SOCKET.
+// proc.New returns ErrAlreadyAdopted when that var is set; the tests that exercise
+// adoption set it themselves via t.Setenv. But under `magus run` magus injects it into
+// the test subprocess (the recursive-call convention), tripping the guard before any test
+// opts in, so `magus run test`/`coverage` failed every proc test even though plain `go
+// test` passed. Clearing it here can't be done per-test: three sibling tests use
 // t.Parallel, which forbids t.Setenv.
-func TestMain(m *testing.M) {
-	os.Unsetenv("MAGUS_DAEMON_SOCKET")
-	os.Exit(m.Run())
-}
+func TestMain(m *testing.M) { testenv.Main(m) }

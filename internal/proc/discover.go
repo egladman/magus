@@ -51,7 +51,7 @@ func reapDeadSocket(path string, e os.DirEntry) {
 // ServerSocketName returns the file basename of the server's socket.
 func ServerSocketName() string { return serverSocketName }
 
-// ServerDefaultAddr is where `magus server` listens when daemon.address sets nothing.
+// ServerDefaultAddr is where `magus server` listens when server.address sets nothing.
 func ServerDefaultAddr() string { return "unix://" + filepath.Join(SockDir(), serverSocketName) }
 
 // SocketLive reports whether a server is currently accepting on addr, which may be a
@@ -144,7 +144,7 @@ func DiscoverSockets(ctx context.Context) ([]string, error) {
 	}
 
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no running magus proc server found (set MAGUS_DAEMON_SOCKET or use --socket)")
+		return nil, fmt.Errorf("no running magus proc server found (start one with `magus server start`, or use --socket)")
 	}
 	return candidates, nil
 }

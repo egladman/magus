@@ -9,5 +9,5 @@ package mocks
 import iface "github.com/egladman/magus"
 
 var (
-	_ iface.Daemon = (*MockDaemon)(nil)
+	_ iface.Server = (*MockServer)(nil)
 )

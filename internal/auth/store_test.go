@@ -254,7 +254,7 @@ func TestMintRefusesAnInvalidOrEmptyGrant(t *testing.T) {
 }
 
 // A disk that refuses the write is not the caller's mistake: the error wraps no request
-// sentinel, so the daemon answers it Internal rather than InvalidArgument.
+// sentinel, so the server answers it Internal rather than InvalidArgument.
 func TestMintDiskFailureIsNotARequestError(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	dir, err := StoreDir()

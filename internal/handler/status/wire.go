@@ -127,7 +127,7 @@ func lockToProto(l types.StatusLock) *statusv1.Lock {
 		Command: l.Command,
 		Dir:     l.Dir,
 		// The pair is what a renderer needs: the age alone says nothing without the
-		// threshold the daemon judges it by. Dropping the threshold left every console
+		// threshold the server judges it by. Dropping the threshold left every console
 		// row comparing against zero, so no held lock ever read as possibly abandoned.
 		AcquireTime:       tsFromTime(l.AcquireTime),
 		StaleAfterSeconds: int32(l.StaleAfterSeconds),
@@ -235,12 +235,12 @@ func workspaceStateToProto(s types.WorkspaceState) statusv1.Workspace_State {
 func poolToProto(p *types.StatusOutput) (*statusv1.Pool, error) {
 	var dropped []error
 	out := &statusv1.Pool{
-		ParentPid:     int32(p.ParentPID),
-		DaemonVersion: p.Version,
-		Capacity:      int32(p.Capacity),
-		Running:       int32(p.Running),
-		Queued:        int32(p.Queued),
-		Affected:      p.Affected,
+		ParentPid:    int32(p.ParentPID),
+		OwnerVersion: p.Version,
+		Capacity:     int32(p.Capacity),
+		Running:      int32(p.Running),
+		Queued:       int32(p.Queued),
+		Affected:     p.Affected,
 	}
 	for _, c := range p.RunningTargets {
 		out.RunningTargets = append(out.RunningTargets, &statusv1.RunningTarget{

@@ -2,7 +2,7 @@
 // per-interval rate is derived by diffing adjacent samples: hits / (hits + misses)
 // over each interval. A quiet interval (no cache activity) plots as a gap (null).
 //
-// When two samples may NOT be subtracted - a baseline crossover, a daemon restart, an
+// When two samples may NOT be subtracted - a baseline crossover, a server restart, an
 // unmeasured endpoint - lives in cacheRateSeries.ts, which this tile only plots.
 
 import type { DashboardState, SampleView } from "../state";

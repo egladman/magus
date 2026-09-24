@@ -744,7 +744,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.IntVar(&f.Depth, FlagRunDepth, 0, "With --graph: cap displayed depth (0 = unlimited)")
 	fs.BoolVar(&f.NoCache, FlagRunNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
 	fs.BoolVar(&f.NoDefaultCharms, FlagRunNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run")
-	fs.BoolVar(&f.Detach, FlagRunDetach, false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
+	fs.BoolVar(&f.Detach, FlagRunDetach, false, "Hand the run to the server and return immediately; follow it with magus status --watch")
 	fs.BoolVar(&f.Wait, FlagRunWait, false, "With --detach, block until the run finishes and exit with its status")
 	fs.BoolVar(&f.Open, FlagRunOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
 	fs.BoolVar(&f.Step, FlagRunStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
@@ -813,7 +813,7 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass")
 	fs.BoolVar(&f.NoRedundancyCheck, FlagAffectedNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
 	fs.StringVar(&f.Preflight, FlagAffectedPreflight, "", "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green")
-	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
+	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the server and return immediately; follow it with magus status --watch")
 	fs.BoolVar(&f.Wait, FlagAffectedWait, false, "With --detach, block until the run finishes and exit with its status")
 	fs.BoolVar(&f.Open, FlagAffectedOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
 	fs.BoolVar(&f.Step, FlagAffectedStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
@@ -983,7 +983,7 @@ func BindGraphExport(fs *flag.FlagSet, d GraphExportDefaults) *GraphExportFlags 
 	fs.BoolVar(&f.Global, FlagGraphExportGlobal, false, "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace")
 	fs.BoolVar(&f.Reproducible, FlagGraphExportReproducible, false, "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes")
 	fs.BoolVar(&f.Open, FlagGraphExportOpen, false, "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine")
-	fs.BoolVar(&f.Follow, FlagGraphExportFollow, false, "With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)")
+	fs.BoolVar(&f.Follow, FlagGraphExportFollow, false, "With --open: keep the explorer updating from the running server instead of showing a snapshot (needs magus server start)")
 	fs.BoolVar(&f.Targets, FlagGraphExportTargets, false, "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it")
 	fs.BoolVar(&f.Serve, FlagGraphExportServe, false, "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
 	fs.BoolVar(&f.Print, FlagGraphExportPrint, false, "With --open: print the explorer URL to stdout instead of launching a browser")
@@ -1174,7 +1174,7 @@ func BindStatus(fs *flag.FlagSet) *StatusFlags {
 	fs.BoolVar(&f.Compact, FlagStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
 	fs.BoolVar(&f.Compact, FlagStatusC, false, "Short for --compact")
 	fs.BoolVar(&f.Symbols, FlagStatusSymbols, false, "Include the expensive symbol-index freshness scan")
-	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir")
+	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one")
 	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
 	fs.StringVar(&f.Workspace, FlagStatusWorkspace, "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
 	return &f
@@ -1809,7 +1809,7 @@ type ServerStopFlags struct {
 // BindServerStop registers `magus server stop`'s flags on fs and returns the destination.
 func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	var f ServerStopFlags
-	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)")
+	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 	return &f
 }
 
@@ -1821,7 +1821,7 @@ type ServerStatusFlags struct {
 // BindServerStatus registers `magus server status`'s flags on fs and returns the destination.
 func BindServerStatus(fs *flag.FlagSet) *ServerStatusFlags {
 	var f ServerStatusFlags
-	fs.StringVar(&f.Socket, FlagServerStatusSocket, "", "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)")
+	fs.StringVar(&f.Socket, FlagServerStatusSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 	return &f
 }
 
@@ -1833,7 +1833,7 @@ type ServerReloadFlags struct {
 // BindServerReload registers `magus server reload`'s flags on fs and returns the destination.
 func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
 	var f ServerReloadFlags
-	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)")
+	fs.StringVar(&f.Socket, FlagServerReloadSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 	return &f
 }
 
@@ -2104,6 +2104,6 @@ type VersionFlags struct {
 // BindVersion registers `magus version`'s flags on fs and returns the destination.
 func BindVersion(fs *flag.FlagSet) *VersionFlags {
 	var f VersionFlags
-	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the daemon probe entirely")
+	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the server probe entirely")
 	return &f
 }

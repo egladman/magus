@@ -13,7 +13,7 @@ magus writes three things into a repository, and no more:
   and routing it to magus's merge driver;
 - a `merge.magus.driver` registration in the clone's own git config, because a driver
   cannot be committed;
-- the refresh, drift-notice and owed-regeneration hooks below, when the daemon starts.
+- the refresh, drift-notice and owed-regeneration hooks below, when the server starts.
 
 All three are managed sections or single config keys. Nothing rewrites your history,
 your branches, or a hook body you wrote yourself. Hooks your workspace writes in Buzz
@@ -59,8 +59,8 @@ nothing and says nothing.
 
 ## The hooks magus installs
 
-`magus server start` installs them, best-effort: a repository with no daemon never gets
-them, and a failure to write one is a warning, never a reason the daemon does not start.
+`magus server start` installs them, best-effort: a repository with no server never gets
+them, and a failure to write one is a warning, never a reason the server does not start.
 
 | Hook            | Fires on                                                         |
 | --------------- | ---------------------------------------------------------------- |
@@ -79,7 +79,7 @@ magus server job sync-graph >/dev/null 2>&1 || true
 ```
 
 That command is the whole point of the rule above. It does not reconcile anything. It
-enqueues a job on the already-running daemon and returns, so the reconciliation happens
+enqueues a job on the already-running server and returns, so the reconciliation happens
 in the background, after your `git checkout` has finished, on a process that was going
 to be running anyway. The hook's own cost is one short-lived client that posts a message.
 
@@ -97,7 +97,7 @@ Delete the section to remove the integration; the next `magus server start` puts
 ## The drift notice
 
 `post-commit` and `pre-push` carry a second managed section, `magus-drift`, in the same
-shape: post a `check-drift` job, return. The daemon compares the commit's changed sources
+shape: post a `check-drift` job, return. The server compares the commit's changed sources
 against the outputs they produce and runs `gofmt -l` over its changed, format-governed
 files, then prints the fix and the command that folds it into the offending commit
 (MGS4006 stale output, MGS4009 stale formatting).
@@ -177,7 +177,7 @@ Two limits worth knowing. A hook runs only where someone installed it and did no
 `--no-verify`, so anything that must hold belongs in CI as well. And `magus server start`
 writes managed sections into `post-checkout`, `post-merge`, `post-rewrite`, `post-commit`
 and `pre-push`; install refuses those files as hooks it did not write, so a Buzz hook for
-one of those names needs the daemon's section removed first.
+one of those names needs the server's section removed first.
 
 ## The merge driver, and what it cannot do
 
@@ -206,7 +206,7 @@ target are one entry.
 `post-merge`, `post-rewrite` and `post-commit` carry a third managed section,
 `magus-regenerate-owed`, in the same shape as the others: post a `regenerate-owed` job,
 return. `post-commit` is there because a merge git stopped on is concluded by
-`git commit`, which never fires `post-merge`. On the daemon the job:
+`git commit`, which never fires `post-merge`. On the server the job:
 
 1. returns at once when nothing is owed, which is every ordinary commit;
 2. waits up to 30 seconds for the merge or rebase to let go of the tree, because
@@ -225,7 +225,7 @@ commit, or asks for a new commit when HEAD may already be published.
 A failed regeneration leaves the record in place. `magus doctor` reports a non-empty
 record under `owed-regeneration` with the commands that settle it; run
 `magus job run regenerate-owed` to retry, or `magus server regenerate-owed` in a clone
-with no daemon, where no hook is installed. Only git records owed regenerations. Under
+with no server, where no hook is installed. Only git records owed regenerations. Under
 Mercurial and Sapling the driver logs the command to run, as before.
 
 **A forge never runs a custom merge driver.** `merge=magus` needs `merge.magus.driver` in

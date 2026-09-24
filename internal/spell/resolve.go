@@ -32,7 +32,7 @@ func builtinLabel(ctx context.Context) string {
 }
 
 // providerFrom returns ctx's telemetry provider only when it is enabled, else nil
-// so spell instrumentation stays a true no-op off the daemon path.
+// so spell instrumentation stays a true no-op off the server path.
 func providerFrom(ctx context.Context) observability.Provider {
 	p := observability.FromContext(ctx)
 	if p == nil || !p.Enabled() {

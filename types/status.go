@@ -27,7 +27,7 @@ func (b BuildInfo) Fingerprint() string {
 }
 
 // StatusSnapshot is the canonical JSON/YAML shape returned by `magus status -o json`.
-// The daemon serves the same data to the console over the typed StatusService (its live
+// The server serves the same data to the console over the typed StatusService (its live
 // fields are projected onto magus.status.v1alpha1.Status) so both consumers share one definition.
 // Fields are exported so pkg types can be read from internal packages without importing cmd/magus.
 type StatusSnapshot struct {
@@ -52,10 +52,10 @@ type StatusSnapshot struct {
 	// ObservingSince is when this server began observing (its start). The telemetry and
 	// cache counters above are cumulative from this instant and are NOT persisted across
 	// restarts, so a dashboard can be transparent that the numbers are "since <this>", not
-	// all-time. Zero (omitted) when reported by a non-daemon `magus status`.
+	// all-time. Zero (omitted) when `magus status` reported it without a server.
 	ObservingSince time.Time `json:"observing_since,omitempty" yaml:"observing_since,omitempty"`
-	// Config surfaces the daemon's RESOLVED configuration (read-only) so a dashboard can show what
-	// the daemon is set to do (the default charms it applies, the concurrency cap) without a
+	// Config surfaces the server's RESOLVED configuration (read-only) so a dashboard can show what
+	// the server is set to do (the default charms it applies, the concurrency cap) without a
 	// round-trip to the terminal. Additive JSON, not on the proto event wire.
 	Config StatusConfig `json:"config,omitempty" yaml:"config,omitempty"`
 	// SymbolIndexes reports each symbol-capable project's SCIP index freshness (up to
@@ -92,15 +92,15 @@ type StatusSnapshot struct {
 	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (an editor,
 	// IDEs, Desktop) actually connect to: its address and whether it is really serving.
 	// It is checked independently of the Pool fields above, which report the proc socket
-	// the daemon dispatches jobs on. The two listeners share a process in normal
-	// operation but can diverge (the MCP server failing to bind while the proc daemon is
-	// fine), so a "daemon is up" reading does not by itself prove the tools are reachable.
-	// Nil when reported by a process that does not probe it (e.g. the daemon's own report).
+	// the server dispatches jobs on. The two listeners share a process in normal
+	// operation but can diverge (the MCP server failing to bind while the proc server is
+	// fine), so a "server is up" reading does not by itself prove the tools are reachable.
+	// Nil when reported by a process that does not probe it (e.g. the server's own report).
 	MCPEndpoint *MCPEndpointStatus `json:"mcp_endpoint,omitempty" yaml:"mcp_endpoint,omitempty"`
-	// Console is where a person opens the console this daemon serves, in the same shape
+	// Console is where a person opens the console this server serves, in the same shape
 	// as MCPEndpoint because it answers the same question about a different listener.
 	//
-	// It is reported because the address existed only in the daemon's log, on a line
+	// It is reported because the address existed only in the server's log, on a line
 	// nobody reads ("static console mounted"), so the one surface built for a person to
 	// look at was the one surface nothing told them how to reach.
 	Console *ConsoleStatus `json:"console,omitempty" yaml:"console,omitempty"`
@@ -124,7 +124,7 @@ type ConsoleStatus struct {
 // ReadinessReport is the JSON body of GET /readyz: Ready mirrors the pass/fail gate a
 // kubelet's status-code check already enforces (200 iff Ready), and Components adds
 // component-level detail an orchestrator ignores but a browser client (the console PWA)
-// can render as per-subsystem daemon health. Adding this body does not change the gate;
+// can render as per-subsystem server health. Adding this body does not change the gate;
 // it is purely additive alongside the existing 200/503 status code.
 type ReadinessReport struct {
 	Ready      bool                 `json:"ready"`
@@ -183,7 +183,7 @@ type MCPEndpointStatus struct {
 	Note      string `json:"note,omitempty" yaml:"note,omitempty"`
 }
 
-// StatusConfig is the read-only slice of the daemon's resolved config surfaced on the status wire.
+// StatusConfig is the read-only slice of the server's resolved config surfaced on the status wire.
 type StatusConfig struct {
 	// DefaultCharms are the execution charms applied to every run (e.g. rw, cd, gha).
 	DefaultCharms []string `json:"default_charms,omitempty" yaml:"default_charms,omitempty"`
@@ -222,7 +222,7 @@ const (
 	ServiceFailed   ServiceState = "failed"
 )
 
-// StatusService is one long-running shared service the daemon is hosting, surfaced on
+// StatusService is one long-running shared service the server is hosting, surfaced on
 // the status wire so a dashboard can show what is running and how many targets depend
 // on it. It mirrors service.ServiceStatus (the registry's introspection view).
 type StatusService struct {
@@ -337,7 +337,7 @@ const (
 	TargetRunCached  TargetRunState = "cached"
 )
 
-// StatusRun is one in-flight invocation the daemon has adopted, keyed by its invocation id,
+// StatusRun is one in-flight invocation the server has adopted, keyed by its invocation id,
 // carrying the per-target execution state a dashboard renders as a live run.
 type StatusRun struct {
 	Inv       string            `json:"inv" yaml:"inv"`
@@ -410,7 +410,7 @@ type StatusRunningTarget struct {
 	Inv       string    `json:"inv,omitempty" yaml:"inv,omitempty"` // invocation id; deep-links to this running target's live log
 }
 
-// WorkspaceState is where the daemon's copy of a workspace sits.
+// WorkspaceState is where the server's copy of a workspace sits.
 type WorkspaceState string
 
 const (
@@ -445,17 +445,17 @@ type SourceDiagnostic struct {
 	Message string `json:"message" yaml:"message"`
 }
 
-// StatusWorkspace describes one workspace the daemon holds: loading, loaded, or failed.
+// StatusWorkspace describes one workspace the server holds: loading, loaded, or failed.
 type StatusWorkspace struct {
 	Root string `json:"root" yaml:"root"`
-	// State is empty from a daemon that reports only loaded workspaces, which Loaded and
+	// State is empty from a server that reports only loaded workspaces, which Loaded and
 	// every proto conversion treat as active; see Loaded's compat note.
 	State WorkspaceState `json:"state,omitempty" yaml:"state,omitempty"`
 	// Error is set only in WorkspaceFailed.
 	Error      *WorkspaceFailure `json:"error,omitempty" yaml:"error,omitempty"`
 	LoadedAt   time.Time         `json:"loaded_at" yaml:"loaded_at"`
 	LastAccess time.Time         `json:"last_access" yaml:"last_access"`
-	// Live cache activity for this workspace (daemon mode; zero otherwise).
+	// Live cache activity for this workspace (server mode; zero otherwise).
 	CacheHit   int   `json:"cache_hit,omitempty" yaml:"cache_hit,omitempty"`
 	CacheMiss  int   `json:"cache_miss,omitempty" yaml:"cache_miss,omitempty"`
 	CacheError int   `json:"cache_error,omitempty" yaml:"cache_error,omitempty"`
@@ -467,9 +467,9 @@ type StatusWorkspace struct {
 	SecretProvider string `json:"secret_provider,omitempty" yaml:"secret_provider,omitempty"`
 }
 
-// Loaded reports whether w is serving: active, or from a daemon that reports no state.
+// Loaded reports whether w is serving: active, or from a server that reports no state.
 //
-// compat(until: no daemon that predates Workspace.State is still reachable): an empty
-// State came only from a daemon built before this field existed, so it is treated as
+// compat(until: no server that predates Workspace.State is still reachable): an empty
+// State came only from a server built before this field existed, so it is treated as
 // WorkspaceActive rather than as an unrecognized state.
 func (w StatusWorkspace) Loaded() bool { return w.State == "" || w.State == WorkspaceActive }

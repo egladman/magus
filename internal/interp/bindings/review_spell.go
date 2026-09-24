@@ -36,7 +36,7 @@ func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 	// The answer needs a second round trip on every host magus ships for (GitHub names the PR's
 	// author in the payload it already returns, but not the token's owner), and this call sits
 	// under opening a diff: the path where latency is the product. A token's owner does not
-	// change while a daemon runs, so the second call is paid once and the cache spares every
+	// change while a server runs, so the second call is paid once and the cache spares every
 	// lookup after it. A provider that answers nothing leaves it empty, which reads as unknown.
 	want := cachedViewer()
 	resp, err := drv.Invoke(ctx, spells.InvokeRequest{
@@ -66,7 +66,7 @@ func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 
 // viewer caches the credential owner for the life of the process. See FindReview for why it is
 // worth caching and why a stale value is not a risk: a token's owner does not change, and a
-// different token means a different daemon.
+// different token means a different server.
 var viewer struct {
 	sync.RWMutex
 	name string

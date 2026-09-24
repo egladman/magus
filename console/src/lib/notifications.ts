@@ -1,7 +1,7 @@
 // notifications.ts - the console's notification center: a per-session history of noteworthy events
 // with a title-bar bell (a red unseen-dot when an IMPORTANT one is waiting) and a pop-out history
 // panel. In-memory ONLY: nothing is persisted, by explicit decision - a notification is a signal about
-// THIS session's daemon, not a durable record (the activity trail and the dashboard are the durable,
+// THIS session's server, not a durable record (the activity trail and the dashboard are the durable,
 // pull surfaces).
 //
 // ADMISSION DOCTRINE (the reason this module is deliberately small). A notification is PUSH - it
@@ -17,7 +17,7 @@
 // an author-declared marker):
 //   - an unwatched run/target failure   -> deep-link: the log viewer at the failing ref
 //   - a sandbox denial                  -> deep-link: the activity trail
-//   - daemon health degraded/down       -> deep-link: the dashboard
+//   - server health degraded/down       -> deep-link: the dashboard
 //   - a new remark on your review       -> deep-link: the diff surface
 //   - a rule set or toolchain pin nothing declares (MGS1028) -> deep-link: the diff, unclaimed files
 //
@@ -212,7 +212,7 @@ export function createNotificationStore(): NotificationStore {
 
 // AUTHOR MARKER SEAM. A magusfile author declares a notification from inside a build by printing a marker
 // line - `magus:alert:<message>` for the bell tier, `magus:notice:<message>` for the history tier. These
-// ride the captured output stream verbatim (the daemon does no push plumbing for them), so the console
+// ride the captured output stream verbatim (the server does no push plumbing for them), so the console
 // matches them FRONTEND-side wherever it already reads that stream. matchAuthorMarker turns one output
 // line into a NotifyInput, or null when the line carries no marker. It is pure (no DOM, no store) so the
 // matching is unit-tested here and the caller owns only the where-and-dedupe. The message is trimmed; an
@@ -304,14 +304,14 @@ export function undeclaredSeedNotice(
 }
 
 // STORAGE ALERTS. Two storage stores can grow until they hurt: the browser's localStorage (the console's
-// own persisted settings/tokens/workspace) and the daemon's on-disk cache. Both are silent until they
+// own persisted settings/tokens/workspace) and the server's on-disk cache. Both are silent until they
 // bite, so the console warns the operator ONCE when either crosses a threshold - a history-tier warn that
 // rings the bell (important) so it is not missed, but is not styled as a failure. The thresholds are
-// arbitrary-but-sane: a browser localStorage quota is ~5 MB, so 4 MB is "getting full"; the daemon cache
+// arbitrary-but-sane: a browser localStorage quota is ~5 MB, so 4 MB is "getting full"; the server cache
 // warns at 85% of its configured cap, or at an absolute 2 GiB when uncapped.
 export const LOCALSTORAGE_WARN_BYTES = 4 * 1024 * 1024;
-export const DAEMON_CACHE_WARN_FRACTION = 0.85;
-export const DAEMON_CACHE_WARN_ABS_BYTES = 2 * 1024 * 1024 * 1024;
+export const SERVER_CACHE_WARN_FRACTION = 0.85;
+export const SERVER_CACHE_WARN_ABS_BYTES = 2 * 1024 * 1024 * 1024;
 
 // A minimal Storage view (localStorage satisfies it) so estimateStorageBytes is pure and testable.
 export interface StorageLike {
@@ -342,12 +342,12 @@ export function humanBytes(bytes: number): string {
   return bytes + " B";
 }
 
-// daemonCacheOverThreshold decides whether the daemon cache warrants a warning: over 85% of its cap when
+// serverCacheOverThreshold decides whether the server cache warrants a warning: over 85% of its cap when
 // capped (capBytes > 0), else over the absolute fallback. Returns false for a zero/unknown size.
-export function daemonCacheOverThreshold(sizeBytes: number, capBytes: number): boolean {
+export function serverCacheOverThreshold(sizeBytes: number, capBytes: number): boolean {
   if (sizeBytes <= 0) return false;
-  if (capBytes > 0) return sizeBytes >= capBytes * DAEMON_CACHE_WARN_FRACTION;
-  return sizeBytes >= DAEMON_CACHE_WARN_ABS_BYTES;
+  if (capBytes > 0) return sizeBytes >= capBytes * SERVER_CACHE_WARN_FRACTION;
+  return sizeBytes >= SERVER_CACHE_WARN_ABS_BYTES;
 }
 
 // notify raises a notification from ANY bundle. It dispatches NOTIFY_EVENT on document; the shell's
@@ -378,7 +378,7 @@ export interface NotificationCenter {
   open(): void;
   close(): void;
   toggle(): void;
-  // seedDemo drops a few history-tier entries so the panel is not empty in the daemon-free demo. It is
+  // seedDemo drops a few history-tier entries so the panel is not empty in the server-free demo. It is
   // the ONE sanctioned exception to "do not notify in demo": demo data must not light the bell, so
   // these are ok/warn tier only. Idempotent - a second call is a no-op.
   seedDemo(): void;
@@ -540,7 +540,7 @@ export function mountNotificationCenter(): NotificationCenter {
       const empty = document.createElement("p");
       empty.className = "console-shell-notify__empty";
       empty.textContent =
-        "Nothing to report. Failures, sandbox denials, and daemon health changes show up here.";
+        "Nothing to report. Failures, sandbox denials, and server health changes show up here.";
       listEl.append(empty);
       clearBtn.hidden = true;
       olderWrap.hidden = true;
@@ -651,7 +651,7 @@ export function mountNotificationCenter(): NotificationCenter {
     store.notify({
       source: "Dashboard",
       kind: "ok",
-      message: "Reconnected to the daemon at 127.0.0.1:7391.",
+      message: "Reconnected to the server at 127.0.0.1:7391.",
       at: now - 6 * 60_000,
       key: "demo:reconnect",
     });

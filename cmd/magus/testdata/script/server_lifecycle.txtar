@@ -3,7 +3,7 @@
 # report that absence correctly, since it is the thing users reach for when
 # something seems stuck.
 #
-# MAGUS_DAEMON_ENABLED=false and MAGUS_BROKER=off (set by the test harness) govern
+# MAGUS_SERVER_ENABLED=false and MAGUS_BROKER=off (set by the test harness) govern
 # whether an ordinary command USES the server or the broker; they do not change what
 # `magus server` or `magus broker status` do. Every assertion below holds either way.
 #

@@ -160,9 +160,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.
 // Regenerates the Diff showcase's changeset from its .patch fixture.
 //
-// The showcase renders with NO daemon, so it cannot ask one to parse its patch - and this
+// The showcase renders with NO server, so it cannot ask one to parse its patch - and this
 // surface no longer parses patches itself, because carrying a second reader is what let the
-// browser and the daemon drift. Rendering the fixture with the same Go reader keeps one
+// browser and the server drift. Rendering the fixture with the same Go reader keeps one
 // parser without making the showcase the single consumer allowed to disagree with the product.
 //
 // It lives here rather than in the root project, which is where it was first written: the root

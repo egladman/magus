@@ -83,8 +83,8 @@ func serverUsage() {
 	fmt.Fprintf(os.Stderr, "`%s` is this workspace and this host: the broker and what holds capacity,\n", hint.Status)
 	fmt.Fprintln(os.Stderr, "the server, and what the cache and config are.")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "The socket address is taken from --daemon-address, MAGUS_DAEMON_ADDRESS,")
-	fmt.Fprintln(os.Stderr, "or daemon.address in magus.yaml. When none is set, `server start` uses:")
+	fmt.Fprintln(os.Stderr, "The socket address is taken from --server-address, MAGUS_SERVER_ADDRESS,")
+	fmt.Fprintln(os.Stderr, "or server.address in magus.yaml. When none is set, `server start` uses:")
 	fmt.Fprintln(os.Stderr, "  "+proc.ServerDefaultAddr())
 }
 
@@ -99,7 +99,7 @@ func serverUsage() {
 func serverStatus(ctx context.Context, args []string) error {
 	var socket string
 	rest, err := cmdParse("server status", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&socket, "socket", "", "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)")
+		fs.StringVar(&socket, "socket", "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server status [--socket <addr>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -178,7 +178,7 @@ func serverStatus(ctx context.Context, args []string) error {
 const serverReadyTimeout = 60 * time.Second
 
 func serverStart(ctx context.Context, args []string) error {
-	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointDaemon)
+	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointServer)
 	var sf *gen.ServerStartFlags
 	_, err := cmdParse("server start", args, func(fs *flag.FlagSet) {
 		sf = gen.BindServerStart(fs)
@@ -192,8 +192,8 @@ func serverStart(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "\nWith --foreground the server runs in this process and blocks until stopped")
 			fmt.Fprintln(os.Stderr, "(SIGINT / SIGTERM or `"+hint.ServerStop.String()+"`), logging to stderr. Use it")
 			fmt.Fprintln(os.Stderr, "under a process supervisor (systemd --user) or when debugging.")
-			fmt.Fprintln(os.Stderr, "\nSocket address: --daemon-address flag > MAGUS_DAEMON_ADDRESS env >")
-			fmt.Fprintln(os.Stderr, "daemon.address in magus.yaml > default ("+proc.ServerDefaultAddr()+")")
+			fmt.Fprintln(os.Stderr, "\nSocket address: --server-address flag > MAGUS_SERVER_ADDRESS env >")
+			fmt.Fprintln(os.Stderr, "server.address in magus.yaml > default ("+proc.ServerDefaultAddr()+")")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
 			fs.PrintDefaults()
 		}
@@ -203,7 +203,7 @@ func serverStart(ctx context.Context, args []string) error {
 	}
 	_ = sf.Foreground // the parent/child split is decided in startServerBackground; here we always run the server
 
-	addr := os.Getenv("MAGUS_DAEMON_SOCKET")
+	addr := os.Getenv(proc.SocketEnv)
 	if addr == "" {
 		return fmt.Errorf("magus server: socket not available (no workspace found, or socket bind failed)")
 	}
@@ -255,8 +255,8 @@ var startServerSurface = func(ctx context.Context, cancel context.CancelFunc) {
 	// configured intervals, idle-gated. Socket and trail base are late-bound (set during
 	// startup), so the scheduler reads them per tick.
 	maintenance.Start(ctx, maintenance.Options{
-		Schedule: globalCfg.Daemon.Maintenance,
-		Socket:   func() string { return os.Getenv("MAGUS_DAEMON_SOCKET") },
+		Schedule: globalCfg.Server.Maintenance,
+		Socket:   func() string { return os.Getenv(proc.SocketEnv) },
 		Trail:    func() string { return serverTrailBase },
 		Version:  version,
 	})
@@ -273,7 +273,7 @@ func startServerBackground(ctx context.Context, cfg config.Config, subArgs []str
 		return 0, false
 	}
 
-	addr := cfg.Daemon.Address // startup defaulted this to server.sock
+	addr := cfg.Server.Address // startup defaulted this to server.sock
 	// Idempotent start: a server already accepting on the socket means there is nothing to do.
 	if proc.SocketLive(ctx, addr) {
 		if st, err := proc.QueryStatus(ctx, addr); err == nil && st.ParentPID != 0 {
@@ -300,7 +300,7 @@ func startServerBackground(ctx context.Context, cfg config.Config, subArgs []str
 }
 
 // serverChildArgs turns a `server start` argv into the detached child's: the `start` verb
-// becomes --foreground, and every flag the person passed (a --daemon-address, say) rides
+// becomes --foreground, and every flag the person passed (a --server-address, say) rides
 // along so the child binds where the parent waits.
 func serverChildArgs(argv []string) []string {
 	out := make([]string, 0, len(argv)+1)
@@ -345,7 +345,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // detachedChildEnv returns this process's environment with the variables a detached broker
 // or server must not inherit removed.
 //
-// MAGUS_DAEMON_SOCKET: a child inheriting it believes it is already adopted, binds no
+// MAGUS_PROC_SOCKET: a child inheriting it believes it is already adopted, binds no
 // socket, and reports the parent's, leaving a server `server stop` cannot find.
 //
 // The invocation ancestry and recursion depth, because A BACKGROUND PROCESS DESCENDS FROM
@@ -356,7 +356,7 @@ func servingSuffix(st *proc.StatusReply) string {
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
 func detachedChildEnv() []string {
-	drop := []string{"MAGUS_DAEMON_SOCKET=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
+	drop := []string{proc.SocketEnv + "=", procrun.AncestorsEnvVar + "=", "MAGUS_LEVEL="}
 	env := os.Environ()
 	out := make([]string, 0, len(env))
 	for _, kv := range env {
@@ -582,7 +582,7 @@ func serverStop(ctx context.Context, args []string) error {
 
 	// Confirm a server is actually there before claiming to stop it, and capture its pid
 	// for the report. A resolved address does not guarantee a live one (a configured
-	// daemon.address, or a stale socket), so a failed status query means nothing to stop.
+	// server.address, or a stale socket), so a failed status query means nothing to stop.
 	addr := resolveServerAddr(tf.Socket)
 	st, qerr := proc.QueryStatus(ctx, addr)
 	if qerr != nil {
@@ -632,14 +632,14 @@ func waitSocketGone(ctx context.Context, addr string, timeout time.Duration) err
 }
 
 // resolveServerAddr is where the server listens: an explicit --socket, then
-// daemon.address (the flag, env and yaml all land there), then server.sock. It never
-// consults MAGUS_DAEMON_SOCKET or scans the socket directory, which could only find a
+// server.address (the flag, env and yaml all land there), then server.sock. It never
+// consults MAGUS_PROC_SOCKET or scans the socket directory, which could only find a
 // per-process pool that dies with its command, and never the server.
 func resolveServerAddr(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
-	if v := globalCfg.Daemon.Address; v != "" {
+	if v := globalCfg.Server.Address; v != "" {
 		return v
 	}
 	return proc.ServerDefaultAddr()
@@ -710,8 +710,8 @@ func printJobWatchHint(w *os.File) {
 }
 
 // consoleWatchURL builds the console dashboard URL for watching jobs, served BY this
-// daemon from its own loopback origin (http://<host>/console/dashboard/): the browser
-// loads the page and connects back to this daemon over that one loopback origin and shows
+// server from its own loopback origin (http://<host>/console/dashboard/): the browser
+// loads the page and connects back to this server over that one loopback origin and shows
 // the running pool, where a submitted job appears and deep-links to its live log. Returns
 // "" when the console is disabled.
 //
@@ -730,7 +730,7 @@ func consoleWatchURL() string {
 // looking when they need it: `server start`, `status`, and `session --brief`. Empty when
 // the console is disabled or there is no address to build one from.
 //
-// It exists because the address was only ever in the daemon's log, on a line written for a
+// It exists because the address was only ever in the server's log, on a line written for a
 // machine ("static console mounted path=/console/"), so the one surface built for a person
 // to look at was the one surface nothing told them how to reach.
 func consoleRootURL() string {
@@ -764,8 +764,8 @@ func jobRunUsage() {
 
 // serverRotateActivities is the worker for the rotate-activities job: it trims the workspace
 // activity trail back to its cap and garbage-collects orphaned payload blobs. It runs inside the
-// daemon when dispatched as a job (reusing the warm workspace) and works standalone with no
-// daemon too. The trail lives under the workspace cache dir, the same base the MCP handler
+// server when dispatched as a job (reusing the warm workspace) and works standalone with no
+// server too. The trail lives under the workspace cache dir, the same base the MCP handler
 // writes and the ActivityService reads. Normally reached via `magus job run rotate-activities`.
 func serverRotateActivities(ctx context.Context, root string, args []string) error {
 	if _, err := cmdParse("server rotate-activities", args, func(fs *flag.FlagSet) {
@@ -788,7 +788,7 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 
 // serverRotateLogs is the worker for the rotate-logs job: it trims the invocation run-log
 // journals (<cacheDir>/runs/<inv>.jsonl) to the count and byte caps and drops anything older
-// than config.Maintenance.RotateLogs, keeping the most recent ones. It runs inside the daemon
+// than config.Maintenance.RotateLogs, keeping the most recent ones. It runs inside the server
 // when dispatched as a job and works standalone too. Normally reached via
 // `magus job run rotate-logs`.
 func serverRotateLogs(ctx context.Context, root string, args []string) error {
@@ -806,14 +806,14 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("server rotate-logs: %w", err)
 	}
-	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes, globalCfg.Daemon.Maintenance.RotateLogs)
+	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes, globalCfg.Server.Maintenance.RotateLogs)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
 	return nil
 }
 
 // serverPrunePreserved is the worker for the prune-preserved job: it drops the working-copy
 // captures `vcs checkpoint --preserve` minted once they outlive the retention that flag
-// promises. It runs inside the daemon when dispatched as a job and works standalone too.
+// promises. It runs inside the server when dispatched as a job and works standalone too.
 // Normally reached via `magus job run prune-preserved`.
 //
 // The failure is RETURNED here, where Preserve's own prune deliberately discards it. The
@@ -852,10 +852,10 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 }
 
 // installRefreshHooks installs the VCS refresh hook so a history change (branch switch,
-// merge, rebase) pokes this daemon to reconcile in the background. It reuses the same
+// merge, rebase) pokes this server to reconcile in the background. It reuses the same
 // per-VCS installer as the merge driver (types.RefreshHookInstaller), so there is one
 // VCS-integration path. Best-effort: a non-git tree, a VCS with no hook support (jj), or
-// a write failure is noted, never fatal to starting the daemon.
+// a write failure is noted, never fatal to starting the server.
 func installRefreshHooks(ctx context.Context) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -883,9 +883,9 @@ func installRefreshHooks(ctx context.Context) {
 }
 
 // installDriftHooks installs the VCS drift-notice hook (types.DriftHookInstaller) so a
-// commit and the push that follows it each poke this daemon to check, in the background,
+// commit and the push that follows it each poke this server to check, in the background,
 // whether the commit left generated output stale. Same shape and same guarantees as
-// installRefreshHooks: best-effort, never fatal to starting the daemon, and a no-op on a
+// installRefreshHooks: best-effort, never fatal to starting the server, and a no-op on a
 // non-git tree or a VCS with no hook support (jj).
 func installDriftHooks(ctx context.Context) {
 	cwd, err := os.Getwd()
@@ -927,7 +927,7 @@ func installDriftHooks(ctx context.Context) {
 func serverReload(ctx context.Context, args []string) error {
 	var socket string
 	_, err := cmdParse("server reload", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&socket, "socket", "", "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)")
+		fs.StringVar(&socket, "socket", "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server reload [flags]")
 			fmt.Fprintln(os.Stderr, "\nRe-read configuration without restarting the server. Drops the workspaces")
@@ -1039,7 +1039,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
-			Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
+			Origin:    types.Origin{EntryPoint: types.EntryPointServer},
 			Workspace: m.Root(),
 			Action:    "review.said",
 			Outcome:   trail.OutcomeOK,
@@ -1062,7 +1062,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	trail.Append(ctx, m.CacheDir(), trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindJob,
-		Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
+		Origin:    types.Origin{EntryPoint: types.EntryPointServer},
 		Workspace: m.Root(),
 		Action:    "review.merged",
 		Outcome:   trail.OutcomeOK,

@@ -2,7 +2,7 @@
 title: magus status
 generated_from: internal/cli/registry.go
 description: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.
-tags: [cli, magus status, status, concurrency, pool, daemon, monitoring]
+tags: [cli, magus status, status, concurrency, pool, server, monitoring]
 ---
 
 # magus-status
@@ -38,7 +38,7 @@ snapshot on its own line for log capture.
 : Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)
 
 **--socket** *string*
-: Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir
+: Proc server to report on, as a unix:// URL or bare path; default: MAGUS_PROC_SOCKET inside a run, else every live one in the socket dir. --probe asks the server at server.address unless this names one
 
 **--symbols**
 : Include the expensive symbol-index freshness scan
@@ -72,7 +72,7 @@ magus status --compact --watch=15s
 *Inspect a specific running parent*
 
 ```sh
-magus status --socket=unix:///run/user/1000/magus/daemon.sock
+magus status --socket=unix:///run/user/1000/magus/server.sock
 ```
 
 ## See Also

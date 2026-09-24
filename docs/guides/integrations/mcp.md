@@ -43,7 +43,7 @@ Each line of output is one JSON-RPC reply. Typed at a terminal with nothing pipe
 
 A host that launches one process per workspace gets one `magus mcp` per workspace. When several clients should share one warm server instead, use `magus server`.
 
-A stdio server that runs a target asks the [broker](daemon.md) for host capacity like any other run.
+A stdio server that runs a target asks the [broker](server.md) for host capacity like any other run.
 
 ## Streamable HTTP: the server serves MCP
 
@@ -97,7 +97,7 @@ magus status --probe=liveness,mcp    # fail if the server OR the endpoint is dow
 
 The server also serves `/livez`, `/readyz`, and `/healthz` on the same port. If `state` is
 `unreachable` even though you expect a server, see
-[Keeping the server running](daemon.md#keeping-the-server-running).
+[Keeping the server running](server.md#keeping-the-server-running).
 
 With `mcp.enabled: false` the server still keeps the knowledge graph and symbol indexes
 current; turning off MCP turns off the endpoint and nothing else.
@@ -192,7 +192,7 @@ mcp:
   enabled: false
 ```
 
-Or set `MAGUS_MCP_ENABLED=0` in the environment before starting the daemon.
+Or set `MAGUS_MCP_ENABLED=0` in the environment before starting the server.
 
 To change the listen address:
 
@@ -205,7 +205,7 @@ mcp:
 Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
 A non-loopback address (`0.0.0.0:7391` for a Kubernetes health probe, say) sends
-every bearer token in cleartext, so the daemon refuses to start on one unless you
+every bearer token in cleartext, so the server refuses to start on one unless you
 also set `mcp.insecure_bind: true` (or `MAGUS_MCP_INSECURE_BIND=true`). Front such
 a listener with TLS or a tunnel.
 
@@ -219,7 +219,7 @@ The endpoint requires a **bearer token** whose grant includes `mcp=write` (see
 [Tokens and grants](../../concepts/tokens.md)). Two kinds hold it:
 
 - **A connector token** (`mgs_...`) - a named, hashed-at-rest token you mint per external client (a Claude connector, an IDE). It holds `mcp=write` and nothing else. Only its SHA-256 is stored, so it is shown once at creation; rotate by minting a new one. It always expires: 90 days by default, at most 366.
-- **The operator token** (`mgo_...`) - the one retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token`. It holds every surface, token management included, so give an MCP client a connector token instead. An agent session is denied `magus config token print` and `generate` by the guard.
+- **The operator token** (`mgo_...`) - the one retrievable secret the server generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token`. It holds every surface, token management included, so give an MCP client a connector token instead. An agent session is denied `magus config token print` and `generate` by the guard.
 
 Every `/mcp` request must carry `Authorization: Bearer <token>`. A request without one, or with a token that is wrong, expired or revoked, gets `401`; a valid token without `mcp=write` (a console token) gets `403` [MGS9015](../../reference/codes/auth/MGS9015.md). Manage connector tokens with:
 
@@ -239,7 +239,7 @@ logs and history). How you connect depends on the client:
 
 - **Claude Code** connects to the loopback endpoint directly with a header. Mint
   a connector token, then register the server at `user` scope so every workspace
-  the daemon serves shares one connection (the daemon binds one loopback port for
+  the server serves shares one connection (the server binds one loopback port for
   all of them):
 
   ```text
@@ -292,7 +292,7 @@ logs and history). How you connect depends on the client:
   For the ChatGPT desktop app or Codex IDE extension, set the variable through
   the OS environment before launching or restarting the client; exporting it in
   a terminal does not configure an already-running app. Start a new task after
-  the daemon comes up. `codex mcp list` confirms configuration, while
+  the server comes up. `codex mcp list` confirms configuration, while
   `magus status --probe=liveness,mcp` confirms the endpoint is live. If you
   change `mcp.address`, update the URL in `~/.codex/config.toml` too. In the
   desktop app, `/mcp` shows connected servers. Install matching guidance with
@@ -324,7 +324,7 @@ logs and history). How you connect depends on the client:
 
 - **The Claude API "MCP connector"** cannot reach this server: it requires a
   public `https://` URL and rejects `http://` and loopback addresses. Front the
-  daemon with a TLS tunnel first if you need that path.
+  server with a TLS tunnel first if you need that path.
 
 Treat the token as **defense in depth**, and still keep the port closed. The server binds to `127.0.0.1` by default, refuses any other address without `mcp.insecure_bind: true`, and validates the `Host` and `Origin` headers on every `/mcp` request, returning `403 Forbidden` for non-loopback values to block browser-based DNS-rebinding attacks. Anyone who reads the token gains the same workspace access, so keep it local.
 

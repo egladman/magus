@@ -32,7 +32,7 @@ type runResult struct {
 // effectiveCharms merges the workspace default_charms with the per-run charm
 // suffix parsed from the target, mirroring cmd/magus withDefaultCharms:
 // defaults first, per-run stacked on top, exact duplicates dropped. The MCP run
-// tools are the daemon equivalent of `magus run`, so default_charms apply here
+// tools are the server equivalent of `magus run`, so default_charms apply here
 // too (there is no --no-default-charms escape hatch over MCP).
 func effectiveCharms(perRun, defaults []string) []string {
 	if len(defaults) == 0 {

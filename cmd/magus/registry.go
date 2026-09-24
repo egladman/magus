@@ -57,10 +57,10 @@ func newEntry(root string, now time.Time) *wsEntry {
 func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
 	cfg, err := loadWorkspaceCfg(root)
 	if err != nil {
-		return nil, fmt.Errorf("daemon: load config %s: %w", root, err)
+		return nil, fmt.Errorf("server: load config %s: %w", root, err)
 	}
-	// Warm daemon workspaces record OTel metrics so the /dashboard can read live
-	// cache/pool/target numbers as OTLP. Every workspace shares the daemon's single
+	// Warm server workspaces record OTel metrics so the /dashboard can read live
+	// cache/pool/target numbers as OTLP. Every workspace shares the server's single
 	// provider (WithProvider), so counts survive eviction and the bridge Magus reads
 	// them; only if none was supplied do we build a per-workspace collector.
 	metricsOpt := magus.WithMetricsCollection()
@@ -69,22 +69,22 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 	}
 	opts := []magus.Option{
 		magus.WithLoadedConfig(cfg),
-		// The version lets a load failure that looks like a stale daemon say so.
+		// The version lets a load failure that looks like a stale server say so.
 		magus.WithVersion(version),
 		workspace.WithLimiter(lim),
 		metricsOpt,
 	}
 	// Every workspace the server opens shares ONE broker client, so the server holds one
-	// broker connection however many workspaces it serves. Each workspace's own broker
-	// setting still decides whether it is used. A registry built without one (every test
-	// that does) leaves Open to its own.
-	if b != nil {
+	// broker connection however many workspaces it serves. A workspace whose own broker
+	// setting is off gets none, since Open refuses a client it would not use. A registry
+	// built without one (every test that does) leaves Open to its own.
+	if b != nil && cfg.Broker.Resolved() != types.BrokerOff {
 		opts = append(opts, magus.WithBroker(b))
 	}
 	// context.Background(): workspace goroutines must outlive individual RPC contexts.
 	m, err := magus.Open(context.Background(), root, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("daemon: open workspace %s: %w", root, err)
+		return nil, fmt.Errorf("server: open workspace %s: %w", root, err)
 	}
 	return m, nil
 }
@@ -168,7 +168,7 @@ func newWSRegistry(ctx context.Context, lim *cache.Limiter, b *broker.Client, tt
 	return r
 }
 
-// resolveDeclaredWorkspaces merges cfg.Daemon.Workspaces and MAGUS_DAEMON_WORKSPACES into absolute paths.
+// resolveDeclaredWorkspaces merges cfg.Server.Workspaces and MAGUS_SERVER_WORKSPACES into absolute paths.
 func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	var raw []string
 	raw = append(raw, cfgList...)
@@ -185,7 +185,7 @@ func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	for _, p := range raw {
 		abs, err := filepath.Abs(p)
 		if err != nil {
-			slog.Warn("daemon: skipping declared workspace (cannot resolve absolute path)",
+			slog.Warn("server: skipping declared workspace (cannot resolve absolute path)",
 				"path", p, "err", err)
 			continue
 		}
@@ -193,7 +193,7 @@ func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 			continue
 		}
 		if st, err := os.Stat(abs); err != nil || !st.IsDir() {
-			slog.Warn("daemon: skipping declared workspace (not a directory)",
+			slog.Warn("server: skipping declared workspace (not a directory)",
 				"path", abs)
 			continue
 		}
@@ -233,7 +233,7 @@ func (r *wsRegistry) acquire(root string) (*wsEntry, error) {
 	if r.declared != nil {
 		if _, ok := r.declared[root]; !ok {
 			r.mu.Unlock()
-			return nil, fmt.Errorf("%w: workspace %q is not in this server's declared list; add it to daemon.workspaces (magus.yaml) or MAGUS_DAEMON_WORKSPACES and restart the server",
+			return nil, fmt.Errorf("%w: workspace %q is not in this server's declared list; add it to server.workspaces (magus.yaml) or MAGUS_SERVER_WORKSPACES and restart the server",
 				types.DiagnosticErrorf(types.SandboxPolicyMismatch, "workspace not declared"),
 				root)
 		}
@@ -316,7 +316,7 @@ func (r *wsRegistry) retry(e *wsEntry) {
 }
 
 // awaitSourceChange blocks until a file a workspace load reads changes under e.root, and
-// reports false when e left the registry or the daemon is stopping first.
+// reports false when e left the registry or the server is stopping first.
 func (r *wsRegistry) awaitSourceChange(e *wsEntry) bool {
 	ctx := r.ctx
 	if ctx == nil {
@@ -325,7 +325,7 @@ func (r *wsRegistry) awaitSourceChange(e *wsEntry) bool {
 	w, err := watch.New(ctx, watch.WithRoot(e.root),
 		watch.WithIgnore(watch.RelativeIgnore(e.root, watch.BuiltinIgnore)))
 	if err != nil {
-		slog.WarnContext(ctx, "daemon: cannot watch a failed workspace; it stays failed until `magus server reload`",
+		slog.WarnContext(ctx, "server: cannot watch a failed workspace; it stays failed until `magus server reload`",
 			slog.String("root", e.root), slog.String("error", err.Error()))
 		return false
 	}
@@ -355,7 +355,7 @@ func isWorkspaceSource(path string) bool {
 	return filepath.Ext(path) == ".buzz" || filepath.Base(path) == "magus.yaml"
 }
 
-// failBridge records the daemon's own workspace as FAILED with err, pinned like an adopted
+// failBridge records the server's own workspace as FAILED with err, pinned like an adopted
 // bridge, so status reports it and its watcher retries it.
 func (r *wsRegistry) failBridge(root string, err error) {
 	r.mu.Lock()
@@ -431,7 +431,7 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 		}
 		e, err := r.acquire(root)
 		if err != nil {
-			slog.WarnContext(ctx, "daemon: warm workspace failed (readiness probe may be delayed)",
+			slog.WarnContext(ctx, "server: warm workspace failed (readiness probe may be delayed)",
 				"root", root, "err", err)
 			continue
 		}
@@ -451,13 +451,13 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, ar
 	defer r.release(e) // hold the lease for the whole build
 	ctx = withMagus(ctx, e.m)
 	if proc.IsJob(ctx) {
-		return dispatchJob(trail.ContextWithEntryPoint(ctx, types.EntryPointDaemon), root, rc, args)
+		return dispatchJob(trail.ContextWithEntryPoint(ctx, types.EntryPointServer), root, rc, args)
 	}
-	// An adopted run is a CLI invocation the daemon executes on the client's behalf.
+	// An adopted run is a CLI invocation the server executes on the client's behalf.
 	return dispatchAdopted(trail.ContextWithEntryPoint(ctx, types.EntryPointCLI), root, rc, args)
 }
 
-// recordJobActivity appends a KIND_JOB event to the daemon-wide activity trail after a background
+// recordJobActivity appends a KIND_JOB event to the server-wide activity trail after a background
 // job (reindex, graph build, VCS refresh) completes. It is the proc OnJobDone callback. The event
 // carries the job's workspace root (resolved from the context the same way the run handler does,
 // since the context holds the caller's cwd, not necessarily the root) so the single trail stays
@@ -479,7 +479,7 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	ev := trail.Event{
 		Ts:         time.Now().Add(-dur).UnixMilli(),
 		Kind:       trail.KindJob,
-		Origin:     types.Origin{EntryPoint: types.EntryPointDaemon},
+		Origin:     types.Origin{EntryPoint: types.EntryPointServer},
 		Workspace:  root,
 		Action:     job.ActionString(args),
 		Outcome:    trail.OutcomeOK,
@@ -493,7 +493,7 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	completeJobRow(ctx, args, dur, err)
 }
 
-// serverJobStore is the daemon's ONE job store, published beside serverTrailBase and for
+// serverJobStore is the server's ONE job store, published beside serverTrailBase and for
 // the same reason: this callback needs it, and a second Store over one file would hold its
 // own mutex and serialize against nothing.
 var serverJobStore *job.Store
@@ -510,11 +510,11 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 	}
 	i := slices.IndexFunc(job.All(), func(j job.CatalogEntry) bool { return slices.Equal(j.Argv, args) })
 	if i < 0 {
-		return // an adopted run rather than one of the daemon's own, so there is no row
+		return // an adopted run rather than one of the server's own, so there is no row
 	}
 	catalog := job.All()[i]
 	if _, err := serverJobStore.Update(ctx, catalog.Name, func(row *types.Job) {
-		row.Holder = types.HolderDaemon
+		row.Holder = types.HolderServer
 		row.Criteria = catalog.Desc
 		row.State = types.StatePass
 		if jobErr != nil {
@@ -536,15 +536,15 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 	}
 }
 
-// adoptBridge registers an already-open Magus (the daemon's bridge workspace, loaded by
-// startMCPWithDaemon for MCP, health, and the warm knowledge graph) as a pinned registry
-// entry for root. Without this the daemon keeps two workspace pools: the bridge that MCP
+// adoptBridge registers an already-open Magus (the server's bridge workspace, loaded by
+// startBridge for MCP, health, and the warm knowledge graph) as a pinned registry
+// entry for root. Without this the server keeps two workspace pools: the bridge that MCP
 // tool calls actually use, and this registry that only adopted run/affected dispatches
 // populate. The WorkspaceLister reads this registry, so /readyz reported "no workspaces
 // loaded" even after a live MCP query. Adopting the bridge here unifies them: there is one
-// instance per root, the lister reports the daemon's own workspace immediately, and a later
+// instance per root, the lister reports the server's own workspace immediately, and a later
 // adopted run of the same root reuses this instance instead of opening a second. The entry
-// is pinned (inflight held, never released) so the idle janitor never evicts the daemon's
+// is pinned (inflight held, never released) so the idle janitor never evicts the server's
 // long-lived MCP workspace.
 func (r *wsRegistry) adoptBridge(root string, m *magus.Magus) {
 	r.mu.Lock()
@@ -560,7 +560,7 @@ func (r *wsRegistry) adoptBridge(root string, m *magus.Magus) {
 	// Consume the once so a later acquire()'s load() is a no-op and returns this m,
 	// rather than re-opening the workspace.
 	e.once.Do(func() {})
-	e.inflight = 1 // pin: the daemon owns this workspace for its whole lifetime
+	e.inflight = 1 // pin: the server owns this workspace for its whole lifetime
 	r.entries[root] = e
 	r.bump()
 }
@@ -586,7 +586,7 @@ func (r *wsRegistry) status() []proc.Workspace {
 			})
 			continue
 		}
-		// This workspace's cache is long-lived in the daemon, so its counters accumulate
+		// This workspace's cache is long-lived in the server, so its counters accumulate
 		// across every adopted run: the live cache activity the /dashboard shows.
 		st := e.m.CacheStats()
 		out = append(out, proc.Workspace{
@@ -607,7 +607,7 @@ func (r *wsRegistry) status() []proc.Workspace {
 }
 
 // activityWorkspaces returns every loaded workspace paired with its cache dir: the trails the
-// daemon-wide ActivityService merges. It walks the SAME entries map as status(), so the activity
+// server-wide ActivityService merges. It walks the SAME entries map as status(), so the activity
 // view and the status view can never disagree about which workspaces exist, and it takes the cache
 // dir off the already-open Magus rather than resolving root -> cache dir a second way.
 func (r *wsRegistry) activityWorkspaces() []activityhandler.Workspace {
@@ -661,7 +661,7 @@ func (r *wsRegistry) janitor(ctx context.Context) {
 // how many were left because a run was in flight.
 //
 // This is `magus server reload`. It is eviction rather than a config PATCH on purpose:
-// the daemon holds open workspaces that each captured a config when they loaded, not a
+// the server holds open workspaces that each captured a config when they loaded, not a
 // config object to overwrite, so dropping them makes the next load read magus.yaml
 // through exactly the path a cold start uses, and there is no second code path that could
 // disagree with it about what the file means.

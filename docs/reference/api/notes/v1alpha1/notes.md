@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, notesservice]
 
 NotesService lists the workspace's notes and reads one in full.
 
-Package `magus.notes.v1alpha1`, defined in `proto/magus/notes/v1alpha1/notes.proto`. Source: [notes.proto:32](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L32). Part of the [daemon API](../../index.md).
+Package `magus.notes.v1alpha1`, defined in `proto/magus/notes/v1alpha1/notes.proto`. Source: [notes.proto:32](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L32). Part of the [server API](../../index.md).
 
 ## Methods
 

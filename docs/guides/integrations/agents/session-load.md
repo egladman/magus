@@ -187,7 +187,7 @@ knowledge:
 
 `magus graph build` runs each declared adapter before it assembles, so the
 overlay is rebuilt from the same command that rebuilds everything else reading
-it, and the daemon's `sync-graph` job carries it on the daemon's own schedule
+it, and the server's `sync-graph` job carries it on the server's own schedule
 with nothing further to set up. `--no-sessions` skips them for one build;
 `knowledge.sessions.disabled` turns them off for good. An adapter that fails is
 reported and not fatal: the graph is then missing its newest sessions, which is a

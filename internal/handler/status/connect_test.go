@@ -54,7 +54,7 @@ func TestConnectGetStatusCarriesEnvelopeExtras(t *testing.T) {
 	assert.True(t, cfg.GetSandbox())
 }
 
-// A non-daemon report leaves observing_since zero, so GetStatus must omit it (not stamp epoch).
+// A non-server report leaves observing_since zero, so GetStatus must omit it (not stamp epoch).
 func TestConnectGetStatusOmitsZeroObservingSince(t *testing.T) {
 	svc := NewConnectService(fakeSource{}, types.BuildInfo{}, nil)
 	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))

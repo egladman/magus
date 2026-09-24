@@ -1,5 +1,5 @@
 /* plan.css - page-scoped styles for the console Jobs view: work drawn as the DAG it is, from either
- * of its two sources (the jobs this daemon knows about, and the derived target plan).
+ * of its two sources (the jobs this server knows about, and the derived target plan).
  *
  * PatternFly owns everything it has a component for: the source ToggleGroup, the target override's
  * form control, the empty state, the path chips are PF Labels. What PF has no
@@ -128,7 +128,7 @@
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-plan-list { margin: 0; padding: 0.3rem 0; list-style: none; }
-/* A row is the selecting button plus, on a job the daemon holds, the control that runs it. The two
+/* A row is the selecting button plus, on a job the server holds, the control that runs it. The two
    are siblings rather than nested, because a button inside a button is not markup a browser honors,
    and the run control keeps its natural width so the id beside it still gets the whole row. */
 .console-plan-list__row {
@@ -282,7 +282,7 @@
   opacity: 0.75;
 }
 /* An edge the layout had to reverse to break a cycle. The dotted stroke says the drawn direction is
-   layout fiction, not what the daemon reported. */
+   layout fiction, not what the server reported. */
 .console-plan-edge[data-back] { stroke-dasharray: 2 3; opacity: 0.5; }
 .console-plan-arrow { fill: var(--pf-t--global--border--color--default); }
 .console-plan-arrow[data-kind="depends_on"] { fill: var(--console-accent); }

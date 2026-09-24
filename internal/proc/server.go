@@ -87,8 +87,8 @@ func WithLease(ctx context.Context, lease string) context.Context {
 // "" when it claimed none or claimed one that failed validation.
 //
 // A caller that also reads the environment channel must prefer this: it is the lease
-// of the process that ASKED for the run, while the daemon's own environment describes
-// whoever happened to start the daemon.
+// of the process that ASKED for the run, while the server's own environment describes
+// whoever happened to start the server.
 func LeaseFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(leaseCtxKey).(string); ok {
 		return v
@@ -97,14 +97,14 @@ func LeaseFromContext(ctx context.Context) string {
 }
 
 // withJob marks ctx as a background job invocation (submitJob), distinct from an adopted run.
-// The daemon's handler reads it via IsJob to route jobs through the full command set while a
+// The server's handler reads it via IsJob to route jobs through the full command set while a
 // plain adopted run stays limited to run/affected.
 func withJob(ctx context.Context) context.Context {
 	return context.WithValue(ctx, jobCtxKey, true)
 }
 
 // IsJob reports whether ctx belongs to a background job (submitted via SubmitJob) rather than
-// an adopted run. The daemon's dispatch handler branches on it.
+// an adopted run. The server's dispatch handler branches on it.
 func IsJob(ctx context.Context) bool {
 	v, _ := ctx.Value(jobCtxKey).(bool)
 	return v
@@ -225,15 +225,15 @@ func (s *Server) Close() {
 	s.connWg.Wait() // wait outside the once so concurrent callers all block
 }
 
-// New constructs an unstarted Server; returns ErrAlreadyAdopted when MAGUS_DAEMON_SOCKET is set.
+// New constructs an unstarted Server; returns ErrAlreadyAdopted when MAGUS_PROC_SOCKET is set.
 // Call Start to bind the socket.
 func New(opts Options) (*Server, error) {
 	// Name the culprit in the error. This guard refuses to host a second proc server when
-	// MAGUS_DAEMON_SOCKET is set (a nested process must forward to the parent's pool, not open
+	// MAGUS_PROC_SOCKET is set (a nested process must forward to the parent's pool, not open
 	// its own socket). Surfacing the value turns an opaque "already adopted" (which reads as a
 	// mystery to anyone whose environment merely inherited the var) into an actionable one.
-	if sock := os.Getenv("MAGUS_DAEMON_SOCKET"); sock != "" {
-		return nil, fmt.Errorf("%w (MAGUS_DAEMON_SOCKET=%s)", ErrAlreadyAdopted, sock)
+	if sock := os.Getenv(SocketEnv); sock != "" {
+		return nil, fmt.Errorf("%w (%s=%s)", ErrAlreadyAdopted, SocketEnv, sock)
 	}
 
 	var ep endpoint.Endpoint
@@ -461,7 +461,7 @@ type service struct {
 	handler         func(ctx context.Context, args []string) error
 	parentCtx       context.Context
 	lim             *cache.Limiter
-	version         string // human-facing display version; surfaced as StatusReply.DaemonVersion
+	version         string // human-facing display version; surfaced as StatusReply.Version
 	gateVersion     string // adoption identity for the version gate (see adoptionIdentity); "" disables the gate
 	workspaceLister func() []Workspace
 	serverInfo      func() *types.StatusServer
@@ -482,7 +482,7 @@ func (s *service) versionAdmits(reqVersion string) bool {
 	return s.gateVersion == "" || reqVersion == "" || reqVersion == s.gateVersion
 }
 
-// admitWork refuses a request to run magus that this daemon must not execute: one over the
+// admitWork refuses a request to run magus that this server must not execute: one over the
 // argument limit, one speaking another protocol, or one from a different build.
 func (s *service) admitWork(request string, args []string, protocol, version string) error {
 	if len(args) > maxArgs {
@@ -497,7 +497,7 @@ func (s *service) admitWork(request string, args []string, protocol, version str
 	return nil
 }
 
-// trackCall adds a pool entry for work this daemon is running, so status and the Dashboard
+// trackCall adds a pool entry for work this server is running, so status and the Dashboard
 // see it. The caller runs untrack when the work ends.
 func (s *service) trackCall(args []string, workspace, inv string) (call *activeCall, untrack func()) {
 	id := s.nextID.Add(1)
@@ -521,7 +521,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 	ctx = WithCwd(ctx, req.Cwd)
 	ctx = WithLease(ctx, req.Lease)
 	// Adopt the client's ancestry (BeginInvocation appends the id minted below), so a run
-	// this daemon executes for a nested client recognizes the lock it holds for that
+	// this server executes for a nested client recognizes the lock it holds for that
 	// client's parent as its own ancestor's rather than waiting on itself forever.
 	ctx = types.WithInvocationAncestors(ctx, req.Ancestors)
 
@@ -574,7 +574,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 		reply.ExitCode = 1
 		// A failure that names its own status keeps it. Collapsing everything to 1 made
 		// the documented split (1 the work failed, 2 the invocation was wrong) depend on
-		// whether a daemon happened to be running.
+		// whether a server happened to be running.
 		if code, ok := ExitCode(err); ok {
 			reply.ExitCode = code
 		}
@@ -614,7 +614,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 	}
 
 	// The Dashboard labels the job by workspace; when the caller left Root empty (the
-	// daemon resolves it from Cwd), fall back to Cwd so the label is never blank.
+	// server resolves it from Cwd), fall back to Cwd so the label is never blank.
 	workspace := req.Root
 	if workspace == "" {
 		workspace = req.Cwd
@@ -636,8 +636,8 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		ctx = journal.WithInvocationID(ctx, inv)
 		ctx = WithSubOp(ctx, call.SubOp)
 		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist
-		// A job descends from nobody. parentCtx carries whatever ancestry the DAEMON's
-		// process environment had (which is a real value when the daemon was started from
+		// A job descends from nobody. parentCtx carries whatever ancestry the SERVER's
+		// process environment had (which is a real value when the server was started from
 		// inside a magus target), and inheriting it would attribute this job's locks to a
 		// stranger, and tell every process it forks that it descends from one.
 		ctx = types.WithInvocationAncestors(ctx, nil)

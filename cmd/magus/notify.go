@@ -19,7 +19,7 @@ import (
 
 // notifyCmd turns one attention event into a stable types.Event record. It is a
 // local command: a notification belongs on the caller's desktop, never on a
-// daemon host. A producer sends either the canonical JSON envelope or plain
+// server host. A producer sends either the canonical JSON envelope or plain
 // text on stdin. A host-specific wrapper is responsible for shaping its own
 // event before it crosses this boundary.
 //

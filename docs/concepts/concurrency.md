@@ -13,6 +13,7 @@ tags:
     machine budget,
     admission,
     memory_mb,
+    jobserver,
   ]
 ---
 
@@ -39,7 +40,7 @@ runs targets concurrently where the graph allows. `magus\needs` edges order the 
 ([dependencies](dependencies.md)); a target's `slots` and `exclusive` policy tune how
 much of it runs at once ([targets](targets.md)). Nested `magus` invocations a magusfile
 spawns adopt into this same pool rather than standing up their own
-([the broker and the server](../guides/integrations/daemon.md)).
+([the broker and the server](../guides/integrations/server.md)).
 
 All of this lives inside one process. It orders nothing in a _second_ `magus` you
 start in another terminal: the two invocations have separate graphs and separate
@@ -60,6 +61,41 @@ overrides both. A CI job that wants every core asks for it explicitly - a
 
 `concurrency_profile` sizes the machine budget's memory the same way, not just the
 pool's core count: see [below](#across-the-whole-machine-the-budget).
+
+### Tools that run their own jobs: the jobserver
+
+A slot count only helps if the tool inside the target honors it. `make`, `cargo` and
+the `cc` crate schedule their own parallel jobs, so a target holding 4 slots can still
+start 16 compilers. To close that gap, magus acts as a
+[GNU make jobserver](https://www.gnu.org/software/make/manual/html_node/Job-Slots.html)
+for every step that runs holding **two or more** slots.
+
+- The step's processes get `MAKEFLAGS` and `CARGO_MAKEFLAGS` naming a pipe preloaded
+  with one token per slot beyond the first. The process magus starts holds the
+  implicit first one, so a `make` the step runs never has more jobs going than the
+  step holds slots. Two processes the step runs side by side each hold an implicit
+  token of their own.
+- The pool belongs to one step. It is opened when the step's body starts and closed
+  when it returns, so a child that dies holding tokens cannot shrink anything else's
+  grant. A step replayed from the cache opens none.
+- `proc\withSlots(n, callback)` seats a pool of `n` for its callback, replacing the
+  step's.
+- A step holding one slot gets no pool, and that covers every target that declares
+  nothing. A pool of zero tokens would make `cargo build` run one `rustc` at a time
+  where it uses every core today. Declaring `slots` (or a `memory_mb` that converts
+  to more than one slot) is what opts a target in.
+
+The pipe form (`--jobserver-auth=3,4`) is the only one every GNU make reads: 3.81
+(macOS's `/usr/bin/make`) knows only `--jobserver-fds`, and 4.2 and 4.3 exit with an
+error on the 4.4 `fifo:` form. The limits follow from the protocol:
+
+- A `-jN` on the tool's own command line starts a pool of its own and ignores this
+  one. Run `make` without `-j` to share the step's slots.
+- ninja 1.13 reads only the `fifo:` form. It prints a warning and schedules itself as
+  it would with no magus above it.
+- A target that sets `MAKEFLAGS` in its own environment keeps its value.
+- Windows gets no pool. GNU make there shares slots through a named semaphore, and a
+  process cannot inherit extra descriptors, so children schedule themselves as before.
 
 ## Across separate runs: the workspace lock
 
@@ -190,7 +226,7 @@ load average 13.7, and tests failing because they were starved rather than wrong
 
 So before a step starts, magus takes its concurrency slots and its declared
 `memory_mb` from a budget shared by every magus on the machine: the host's capacity.
-It lives in the [broker](../guides/integrations/daemon.md) - one broker per user means
+It lives in the [broker](../guides/integrations/server.md) - one broker per user means
 one budget per machine - and a run starts one if none is up.
 
 Key properties:
@@ -231,7 +267,7 @@ worktree on the machine.
 
 ## Relationship to the broker and the server
 
-The [broker](../guides/integrations/daemon.md) is the per-user process that holds the host's
+The [broker](../guides/integrations/server.md) is the per-user process that holds the host's
 capacity and the shared services runs keep warm. It is the natural single point that
 knows what is running everywhere, which is why the budget lives there and why a run
 starts one. The server, which a person starts for MCP and the console, asks the broker
@@ -250,6 +286,6 @@ three compose - ordering inside a run, exclusion per project, capacity per machi
 
 - [Dependencies](dependencies.md): `magus\needs` and `depends_on`, how a single run is ordered.
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
-- [The broker and the server](../guides/integrations/daemon.md): the process that owns the machine budget, and the one a person starts.
+- [The broker and the server](../guides/integrations/server.md): the process that owns the machine budget, and the one a person starts.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.
 - [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, and the two ways it refuses.

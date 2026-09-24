@@ -140,7 +140,7 @@ type Cached struct {
 }
 
 // Load reads every enabled source's cached copy. It NEVER fetches: that is rule 2,
-// and it is why a build, a console page load, and a daemon start can all call this.
+// and it is why a build, a console page load, and a server start can all call this.
 //
 // A missing cache is not an error. It is StateNeverSynced, which the caller renders
 // as a state word rather than as a failure.

@@ -8,9 +8,9 @@ test("buildIdOf reads a stamped worker and ignores an unstamped one", () => {
   assert.equal(buildIdOf("self.addEventListener('fetch', () => {});"), null);
 });
 
-// A daemon restarted onto a rebuilt console serves a new sw.js while this page keeps running the
+// A server restarted onto a rebuilt console serves a new sw.js while this page keeps running the
 // build it loaded. The watch reports that once, rather than letting the old bundle render empty.
-test("a daemon that starts serving another build asks for one reload", async () => {
+test("a server that starts serving another build asks for one reload", async () => {
   const realFetch = globalThis.fetch;
   const builds = ["aaaaaaaaaaaa", "aaaaaaaaaaaa", "bbbbbbbbbbbb", "bbbbbbbbbbbb"];
   globalThis.fetch = (async () =>
