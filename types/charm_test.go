@@ -39,13 +39,13 @@ func TestHasCharmNormalizes(t *testing.T) {
 // the doctor collision check enumerates: recognition is casing/separator-blind,
 // and ReservedCharms hands back an independent copy callers cannot mutate.
 func TestReservedCharms(t *testing.T) {
-	for _, name := range []string{"rw", "cd", "gha", "update", "RW", "CD", "GHA", "UPDATE"} {
+	for _, name := range []string{"rw", "cd", "gha", "update", "extended", "RW", "CD", "GHA", "UPDATE", "Extended"} {
 		assert.Truef(t, IsReservedCharm(name), "IsReservedCharm(%q)", name)
 	}
 	assert.False(t, IsReservedCharm("container"))
 
 	got := ReservedCharms()
-	require.Equal(t, []string{"rw", "cd", "gha", "update"}, got)
+	require.Equal(t, []string{"rw", "cd", "gha", "update", "extended"}, got)
 	got[0] = "mutated"
 	assert.Equal(t, "rw", ReservedCharms()[0], "ReservedCharms() must return an independent copy")
 }
