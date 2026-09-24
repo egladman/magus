@@ -225,6 +225,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The `output-pipe`/`output-redirect` exemption for `magus query output` and
+  `magus refs --text` now sees past a global flag.** It anchored on the first argument
+  after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
+  the check now reads argv the same way the read-ack rule does, ignoring where a global
+  flag sits.
 - **A failed spell import names its magusfile.** A workspace failure located no file for
   an import error, and an error built without a relative path rendered `magusfile: exec :`.
 - **An unrecognized spawn decision ranks as deny,** not allow, when two rules' verdicts

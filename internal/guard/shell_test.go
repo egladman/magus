@@ -1194,6 +1194,20 @@ func TestGuardExemptsRefsTextFromOutputRules(t *testing.T) {
 		"a symbol lookup still renders a structured record -o shapes; only --text is exempt")
 }
 
+// TestGuardExemptsQueryOutputBehindGlobalFlags pins the fix for the exemption
+// checking only Args[0]: magus accepts its global flags before the verb, so a
+// flag ahead of `query output` must not defeat the exemption.
+func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
+	assert.Empty(t, Evaluate(testDependencies(), "magus --root /tmp/ws query output ref1a2b3c | grep x").Deny,
+		"a valued global flag ahead of the verb still resolves to the exemption")
+	assert.Empty(t, Evaluate(testDependencies(), "magus -v query output ref1a2b3c | grep x").Deny,
+		"a value-less global flag ahead of the verb still resolves to the exemption")
+	assert.Empty(t, Evaluate(testDependencies(), "magus query output ref1a2b3c | grep x").Deny,
+		"the plain form stays allowed")
+	assert.NotEmpty(t, Evaluate(testDependencies(), "magus --root /tmp/ws run test . | grep x").Deny,
+		"a global flag does not widen the exemption to any other command")
+}
+
 // TestStageEverythingDenialNamesDirectStaging pins the replacement `git add -A` is
 // denied in favour of. This assertion was inverted while the message argued there was
 // deliberately no `magus vcs` wrapper; by then `vcs add` had shipped as exactly that
