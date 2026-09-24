@@ -502,6 +502,7 @@ reference/console/
 reference/diagnostics/
 reference/faq/
 reference/go-sdk/
+reference/guard-command/
 reference/guard-spawn/
 reference/logging/
 reference/manpage/
@@ -945,6 +946,7 @@ tags/spells/
 tags/stall/
 tags/status/
 tags/stdlib/
+tags/strengthen-only/
 tags/subscribe/
 tags/supply-chain/
 tags/supported/
@@ -982,6 +984,7 @@ tags/workspace-provider/
 tags/workspace-providers/
 tags/workspace/
 tags/worktrees/
+tags/write/
 tags/writes-files/
 tags/zsh/
 targets/
