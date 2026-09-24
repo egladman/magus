@@ -70,6 +70,13 @@ default_charms: [rw]
 .magus/
 -- .gitattributes --
 # BEGIN magus-generated - do not edit this section manually
+*.go diff=golang
+*.py diff=python
+*.rs diff=rust
+*.md diff=markdown
+*.ts diff=typescript
+*.tsx diff=typescript
+*.buzz diff=buzz
 OUT.txt merge=magus linguist-generated
 # END magus-generated
 -- magusfile.buzz --

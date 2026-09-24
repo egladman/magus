@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"os"
 	"os/exec"
 	"testing"
 
@@ -39,6 +40,62 @@ func TestCheckOwedRegeneration(t *testing.T) {
 			"record: " + path,
 		},
 	}, r.checkOwedRegeneration())
+}
+
+// gitStubWorkspace resolves its VCS by detection, which registeredMergeDriver needs.
+type gitStubWorkspace struct{ rootStubWorkspace }
+
+func (gitStubWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+
+// A merge driver registered without the diff drivers fails the check naming each missing
+// piece and the command that rewires them; once installed, the same registration passes.
+// The driver is `true`, so the load probe succeeds and only the diff drivers are in question.
+func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	trueExe, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("no true executable")
+	}
+	root := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Skipf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	register := func() { git("config", "merge.magus.driver", trueExe+" vcs merge-driver %O %A %B %L %P") }
+	register()
+	r := &runner{ws: gitStubWorkspace{rootStubWorkspace{root: root}}}
+
+	assert.Equal(t, types.Check{
+		Name:   "merge-driver-loads-workspace",
+		Status: types.CheckFail,
+		Message: "the merge driver is registered without the diff drivers installed beside it, so " +
+			"hunk headers name no declaration and a footprint cannot say what a change touched",
+		Details: []string{
+			".gitattributes: *.go diff=golang",
+			".gitattributes: *.py diff=python",
+			".gitattributes: *.rs diff=rust",
+			".gitattributes: *.md diff=markdown",
+			".gitattributes: *.ts diff=typescript",
+			".gitattributes: *.tsx diff=typescript",
+			".gitattributes: *.buzz diff=buzz",
+			"git config diff.typescript.xfuncname",
+			"git config diff.buzz.xfuncname",
+			"rewire them with `" + hint.Ls.String() + "`: any command that opens the workspace does, " +
+				"and logs `merge-driver: could not refresh registration` with the cause when it cannot",
+		},
+	}, r.checkMergeDriverLoads())
+
+	installer, ok := vcs.Installer("git")
+	require.True(t, ok)
+	require.NoError(t, installer.InstallMergeDriver(t.Context(), root, nil))
+	register() // the install points the driver at a real magus; the probe needs `true`
+	assert.Equal(t, types.Check{Name: "merge-driver-loads-workspace", Status: types.CheckOK,
+		Message: "the registered merge driver loads this workspace"}, r.checkMergeDriverLoads())
 }
 
 // The registration is a command line, not a path, and vcs/git.go quotes the executable
