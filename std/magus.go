@@ -1662,9 +1662,14 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 			// itself (printed by the child when it runs as its own process, and by
 			// proc.Forward when it was adopted), so folding it into this message too
 			// produced the same paragraph twice, once truncated into a `cause:` line.
-			// Under opts.quiet nothing streams by construction, and there the caller's
-			// own ExecResult.Stderr is the account of the failure.
+			// Under opts.quiet nothing streams, and the caller that gets this error gets
+			// no ExecResult either, so the child's stderr rides in the error or is lost.
 			cmdErr = fmt.Errorf("magus.%s: %s exited with code %d", label, strings.Join(full, " "), res.Code)
+			if quiet, _ := opts["quiet"].(bool); quiet {
+				if msg := strings.TrimSpace(res.Stderr); msg != "" {
+					cmdErr = fmt.Errorf("%w: %s", cmdErr, msg)
+				}
+			}
 		}
 		if res.Started {
 			// Recorded even on a non-zero exit. A child that RAN said something, and

@@ -60,6 +60,8 @@ type run struct {
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
 	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
+	Preflight         []string // targets run first as a separate pass; see WithPreflight
+	preflight         []stage  // Preflight resolved against the selection by runResolved
 }
 
 // out is the sink the run reports through.
@@ -205,6 +207,12 @@ func (e redactedError) Unwrap() error { return e.err }
 // runResolved groups targets by name and executes them with already-applied
 // options. Shared by Run and the read-only RunCI entry point.
 func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
+	// Before anything runs or locks: a preflight outside the closure is a refusal.
+	pre, err := m.planPreflight(targets, o.Preflight)
+	if err != nil {
+		return err
+	}
+	o.preflight = pre
 	ctx = attributeRun(ctx)
 	if scope, ok := undeclaredScopeEvent(targets); ok {
 		journal.Emit(ctx, scope)
@@ -638,7 +646,11 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 // then re-runs and its body runs the gate a second time. That costs one redundant
 // generator run on the repair path, where the artifact was stale to begin with.
 func (m *Magus) runComposedSkipCacheGates(ctx context.Context, steps []cache.Step, newStep func(*types.Project, string) cache.Step, opts []cache.RunOption) error {
+	// A gate the preflight pass already ran counts as run.
 	ran := map[string]bool{}
+	for key := range preflightDoneFrom(ctx) {
+		ran[key] = true
+	}
 	for i := range steps {
 		s := &steps[i]
 		if s.NoCache || s.SkipReplay {
@@ -673,7 +685,7 @@ func (m *Magus) runComposedSkipCacheGates(ctx context.Context, steps []cache.Ste
 			// dependency.
 			handler := m.targetHandler(g.Target)
 			_, err := m.cache.RunAside(ctx, newStep(owner, g.Target), func(ctx context.Context) error {
-				return handler(buzz.WithTargetMemo(ctx, buzz.NewTargetMemo()), owner)
+				return handler(buzz.WithTargetMemo(ctx, interp.NewTargetMemoDone(preflightDoneFrom(ctx).targets(owner.Path)...)), owner)
 			}, opts...)
 			if err != nil {
 				return err
@@ -1313,7 +1325,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		dryStart := time.Now()
 		out.emit(ctx, report.RunDry{})
 		planned := 0
-		for _, st := range stages {
+		for _, st := range append(slices.Clone(opts.preflight), stages...) {
 			for _, p := range st.projects {
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
@@ -1345,7 +1357,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Run-scoped remote-cache counters. Installed here rather than held on Cache
 	// because the daemon reuses one Cache per workspace across runs and can serve two
 	// adopted runs at once; RemoteSummary below reads them back off ctx.
-	ctx = cache.WithRemoteStats(ctx)
+	ctx = cache.ContextWithRemoteStats(ctx)
 
 	var uniqueProjects []*types.Project
 	seenProj := make(map[string]struct{})
@@ -1355,7 +1367,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			uniqueProjects = append(uniqueProjects, p)
 		}
 	}
-	for _, st := range stages {
+	for _, st := range append(slices.Clone(opts.preflight), stages...) {
 		for _, p := range st.projects {
 			addProj(p)
 			// A target declaring ctx.writesFiles(<alias>.file(...)) mutates ANOTHER
@@ -1436,7 +1448,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Scoped per project to the union of the targets this invocation will key, since
 	// newStep mints steps for every stage off this one probe.
 	drivenByProject := make(map[string]map[string]bool, len(uniqueProjects))
-	for _, st := range stages {
+	for _, st := range append(slices.Clone(opts.preflight), stages...) {
 		for _, p := range st.projects {
 			if drivenByProject[p.Path] == nil {
 				drivenByProject[p.Path] = map[string]bool{}
@@ -1494,7 +1506,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			}
 		}
 	}
-	if len(steps) == 0 {
+	if len(steps) == 0 && len(opts.preflight) == 0 {
 		return nil
 	}
 
@@ -1659,77 +1671,91 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		svcSession.ReleaseAll(shutdownCtx)
 	}()
 	ctx = service.WithSession(ctx, svcSession)
+	runStep := func(handlers map[string]TargetHandler, projects map[string]*types.Project) func(context.Context, cache.Step) error {
+		return func(ctx context.Context, s cache.Step) error {
+			// Each step invocation gets a fresh TargetMemo so depends_on diamonds
+			// within one target's inline dispatch run shared deps exactly once. A
+			// target the preflight pass already passed starts out done.
+			ctx = buzz.WithTargetMemo(ctx, interp.NewTargetMemoDone(preflightDoneFrom(ctx).targets(s.ProjectPath)...))
+
+			p := projects[s.ProjectPath]
+			handler := handlers[s.Target]
+			spanCtx, endSpan := m.tel.StartSpan(
+				ctx,
+				"magus.target.run",
+				observability.Attr{Key: "magus.project", Value: s.ProjectPath},
+				observability.Attr{Key: "magus.target", Value: s.Target},
+			)
+			// In collapse mode the project's subprocess output is withheld, so attach a
+			// stage observer: it prints a progress line as each magus.needs sub-target
+			// completes, giving the reader a checklist of what ran in place of the wall.
+			if m.cache.Collapsing() {
+				spanCtx = buzz.WithObserver(spanCtx, stageObserver{out: out, label: s.Label, policies: policiesOf(p)})
+			}
+			if s.NoCache {
+				// An uncached composer still executes its body, so this is the runtime
+				// boundary at which a same-project ctx.needs target can become an
+				// independently admitted cache step. GopherBuzz resolves the actual
+				// branch and glob first, claims its TargetMemo, then delegates the
+				// already-memoed execution here.
+				spanCtx = buzz.WithTargetInterceptor(spanCtx, targetInterceptorFunc(func(memberCtx context.Context, name string, invoke func(context.Context) error) error {
+					// The member is dispatched once and awaited by every parent that needs
+					// it, so it runs under the scheduled unit rather than under whichever
+					// parent asked first; see cache.SharedStepContext for the ceiling this
+					// stops from leaking sideways.
+					memberCtx = cache.SharedStepContext(memberCtx)
+					member := newStep(p, name)
+					member.SkipReplay = opts.NoCache
+					if raceForcesNoCache(opts) {
+						member.NoCache = true
+					}
+					// A cache hit skips the member's body, so repair any skip_cache
+					// target it composes before replaying it. The helper asks whether
+					// the member is fresh first, so a miss still runs its chain once.
+					if !member.NoCache {
+						if err := m.runComposedSkipCacheGates(memberCtx, []cache.Step{member}, newStep, cacheOpts); err != nil {
+							return err
+						}
+					}
+					_, err := m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
+						if !member.NoCache {
+							// A cacheable member is now the lexical cache boundary: its
+							// own needs calls remain inline on a miss and do not acquire
+							// extra entries.
+							workerCtx = buzz.WithoutTargetInterceptor(workerCtx)
+						}
+						return invoke(workerCtx)
+					}, cacheOpts...)
+					return err
+				}))
+			}
+			var err error
+			if raceRT != nil {
+				outDirs := outputWatchDirs(m.ws, p, s.Target)
+				err = raceRT.TrackProject(s.ProjectPath, s.Target, outDirs, func() error {
+					return handler(spanCtx, p)
+				})
+			} else {
+				err = handler(spanCtx, p)
+			}
+			endSpan(err)
+			return err
+		}
+	}
+	if len(opts.preflight) > 0 {
+		done, err := m.runPreflight(ctx, opts.preflight, newStep, opts, runStep, cacheOpts)
+		if err != nil {
+			return err
+		}
+		ctx = withPreflightDone(ctx, done)
+	}
+	if len(steps) == 0 {
+		return nil
+	}
 	if err := m.runComposedSkipCacheGates(ctx, steps, newStep, cacheOpts); err != nil {
 		return err
 	}
-	results, runErr := m.cache.RunAll(ctx, steps, func(ctx context.Context, s cache.Step) error {
-		// Each step invocation gets a fresh TargetMemo so depends_on diamonds
-		// within one target's inline dispatch run shared deps exactly once.
-		ctx = buzz.WithTargetMemo(ctx, buzz.NewTargetMemo())
-
-		p := byPath[s.ProjectPath]
-		handler := handlerOf[s.Target]
-		spanCtx, endSpan := m.tel.StartSpan(
-			ctx,
-			"magus.target.run",
-			observability.Attr{Key: "magus.project", Value: s.ProjectPath},
-			observability.Attr{Key: "magus.target", Value: s.Target},
-		)
-		// In collapse mode the project's subprocess output is withheld, so attach a
-		// stage observer: it prints a progress line as each magus.needs sub-target
-		// completes, giving the reader a checklist of what ran in place of the wall.
-		if m.cache.Collapsing() {
-			spanCtx = buzz.WithObserver(spanCtx, stageObserver{out: out, label: s.Label, policies: policiesOf(p)})
-		}
-		if s.NoCache {
-			// An uncached composer still executes its body, so this is the runtime
-			// boundary at which a same-project ctx.needs target can become an
-			// independently admitted cache step. GopherBuzz resolves the actual
-			// branch and glob first, claims its TargetMemo, then delegates the
-			// already-memoed execution here.
-			spanCtx = buzz.WithTargetInterceptor(spanCtx, targetInterceptorFunc(func(memberCtx context.Context, name string, invoke func(context.Context) error) error {
-				// The member is dispatched once and awaited by every parent that needs
-				// it, so it runs under the scheduled unit rather than under whichever
-				// parent asked first; see cache.SharedStepContext for the ceiling this
-				// stops from leaking sideways.
-				memberCtx = cache.SharedStepContext(memberCtx)
-				member := newStep(p, name)
-				member.SkipReplay = opts.NoCache
-				if raceForcesNoCache(opts) {
-					member.NoCache = true
-				}
-				// A cache hit skips the member's body, so repair any skip_cache
-				// target it composes before replaying it. The helper asks whether
-				// the member is fresh first, so a miss still runs its chain once.
-				if !member.NoCache {
-					if err := m.runComposedSkipCacheGates(memberCtx, []cache.Step{member}, newStep, cacheOpts); err != nil {
-						return err
-					}
-				}
-				_, err := m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
-					if !member.NoCache {
-						// A cacheable member is now the lexical cache boundary: its
-						// own needs calls remain inline on a miss and do not acquire
-						// extra entries.
-						workerCtx = buzz.WithoutTargetInterceptor(workerCtx)
-					}
-					return invoke(workerCtx)
-				}, cacheOpts...)
-				return err
-			}))
-		}
-		var err error
-		if raceRT != nil {
-			outDirs := outputWatchDirs(m.ws, p, s.Target)
-			err = raceRT.TrackProject(s.ProjectPath, s.Target, outDirs, func() error {
-				return handler(spanCtx, p)
-			})
-		} else {
-			err = handler(spanCtx, p)
-		}
-		endSpan(err)
-		return err
-	}, cacheOpts...)
+	results, runErr := m.cache.RunAll(ctx, steps, runStep(handlerOf, byPath), cacheOpts...)
 
 	if volatilityRT != nil {
 		if err := volatilityRT.Save(ctx); err != nil {
@@ -2254,18 +2280,12 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	// have: there is no committed form for it to disagree with. Gating those was this
 	// check's first false positive, on a `ci` target whose build legitimately rewrites its
 	// own gen/ tree.
-	//
-	// A backend that cannot answer leaves the set alone rather than guessing. Guessing
-	// either way is worse than the question going unasked: assume tracked and every build
-	// artifact becomes a gate failure, assume untracked and the gate covers nothing.
-	if reporter, ok := res.VCS.(types.TrackedFileReporter); ok {
-		tracked, terr := reporter.TrackedFiles(ctx, dir, moved)
-		if terr != nil {
-			return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
-				dir, target, res.VCS.Name(), terr)
-		}
-		moved = tracked
+	tracked, terr := res.VCS.TrackedFiles(ctx, dir, moved)
+	if terr != nil {
+		return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
+			dir, target, res.VCS.Name(), terr)
 	}
+	moved = tracked
 	if len(moved) == 0 {
 		return nil
 	}
@@ -2309,7 +2329,7 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 		})
 		return nil
 	}
-	return errors.New(stale)
+	return &types.OutputDriftError{Project: p.Path, Target: target, Message: stale}
 }
 
 // driftDetail is the diff of what moved, appended to the gate's message.
@@ -2363,14 +2383,34 @@ func (m *Magus) targetHandler(name string) TargetHandler {
 		if types.HasCharm(ctx, types.CharmReadWrite) {
 			return run()
 		}
-		// Either spelling of "this target writes committed bytes": the project-wide globs,
-		// or this target's own ctx.writesFiles refs.
-		declares := len(p.Outputs) > 0 || len(p.TargetOutputs[name]) > 0
-		if !pol.Drift.Gates(declares) {
+		if !pol.Drift.Gates(declaresOutput(p, name)) {
 			return run()
 		}
 		return m.gateDrift(ctx, p, name, pol.Drift, run)
 	}
+}
+
+// declaresOutput reports whether running target writes committed bytes in p: the
+// project-wide globs, or the ctx.writesFiles refs of target or any same-project target
+// its chain composes.
+//
+// The chain is the part that matters. A composed member runs inside its composer's body
+// and never reaches targetHandler itself, so its outputs are gated here or nowhere.
+// Measured 2026-09-23: every libs/* generate composes an index-generate that writes
+// MAGUS.md, declares nothing of its own, and so rewrote a stale committed index in CI and
+// passed; five of them stayed stale on main.
+func declaresOutput(p *types.Project, target string) bool {
+	if len(p.Outputs) > 0 {
+		return true
+	}
+	found := false
+	_ = types.WalkChain(p, target, nil, func(v types.ChainVisit) error {
+		if len(v.Project.TargetOutputs[v.Target]) > 0 {
+			found = true
+		}
+		return nil
+	})
+	return found
 }
 
 // withTargetDeadline bounds one target's execution by the tighter of the target's own

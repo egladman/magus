@@ -744,12 +744,9 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		if kerr != nil {
 			return kerr
 		}
-		// Digest AND redact before comparing or showing, in that order and both: the store
-		// applies the same pair at write, so anything skipped here reads as a difference
-		// on every run rather than as drift. Digesting hides env values, which must not
-		// print merely because this machine holds them; redaction is what covers a
-		// registered credential riding a non-env class.
-		lines = cache.RedactKeyInputs(ctx, cache.DigestEnvValues(lines))
+		// Masked as the store masks at write, so anything skipped here would read as a
+		// difference on every run rather than as drift.
+		lines = cache.MaskKeyInputs(ctx, lines)
 		r := targetCacheReport{
 			Project:      e.Project,
 			Target:       e.Target,
@@ -1248,11 +1245,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		// already exists to answer: a flag would only hide the answer behind knowing
 		// to ask for it (docs/recommendations.md, fold don't add).
 		if len(e.Chain) > 0 {
-			refs := make([]string, len(e.Chain))
-			for i, s := range e.Chain {
-				refs[i] = s.Ref()
-			}
-			fmt.Printf("  chain:   %s\n", strings.Join(refs, " -> "))
+			fmt.Printf("  chain:   %s\n", types.Chain(e.Chain))
 		}
 		if len(e.DependsOn) > 0 {
 			fmt.Printf("  depends_on: %v\n", e.DependsOn)

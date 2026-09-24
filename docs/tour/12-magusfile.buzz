@@ -4,8 +4,8 @@
 //
 // A magusfile: the build definition magus reads. This one models a single
 // project (a service with a protobuf API, a Go server, and a TypeScript client,
-// built as one unit) and wires the conventional pipeline: preflight, generate,
-// format, lint, build, test, a ci anchor, and a release image.
+// built as one unit) and wires the conventional pipeline: generate, format, lint,
+// build, test, a ci anchor, and a release image.
 //
 // A larger workspace gives EACH project its own magusfile in its own directory
 // and wires cross-project order with depends_on; magus discovers them and fans a
@@ -73,9 +73,6 @@ fun ldflags(version: str) > str {
 // same name `magus run go-build` and the cache use - and pass the target's ctx
 // as the first argument, ahead of any options.
 
-// Gate the pipeline on a healthy workspace before anything builds.
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
-
 // Codegen is one `*-generate` target per generator. Each is ordinary cached
 // codegen: magus keys it on its inputs and its gen/** outputs, so it reruns only
 // when those inputs change. (Contrast with a drift-gate target that verifies
@@ -92,7 +89,6 @@ export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-gener
 // so "generate" would read the same here.) That is the payoff of naming targets by
 // a shared convention. Try `run generate`.
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(preflight);
     ctx.needs(ctx.glob("*-generate"));
 }
 
@@ -148,7 +144,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 // The conventional anchor `magus affected ci` keys off. It declares no work of
 // its own; it fans out to lint, build, and test, which share the format ->
-// generate -> preflight spine and each run once. Try `run ci` to see the plan.
+// generate spine and each run once. Try `run ci` to see the plan.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, build, test);
 }

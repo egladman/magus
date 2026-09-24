@@ -311,18 +311,13 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: --rev needs version control, but none resolved for this workspace")
 	}
-	exporter, ok := res.VCS.(types.RevisionExporter)
-	if !ok {
-		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: --rev is not supported by %s; export a baseline with `graph export -o json` instead", res.Name)
-	}
-
 	tmp, err := os.MkdirTemp("", "magus-graph-diff-")
 	if err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: create temp tree: %w", err)
 	}
 	defer os.RemoveAll(tmp)
 
-	if err := exporter.ExportRevision(ctx, root, rev, tmp); err != nil {
+	if err := res.VCS.ExportRevision(ctx, root, rev, tmp); err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: export revision %q: %w", rev, err)
 	}
 

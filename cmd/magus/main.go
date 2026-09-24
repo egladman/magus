@@ -312,6 +312,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// workspace resolution and must not forward to a daemon (the install is
 		// local to the caller's directory).
 		return dispatchProfile{needsConfig: true}
+	case "queue":
+		// Never forwarded, never preloaded. The queue works in the caller's checkout, a
+		// daemon serving another workspace must not act on it, and the verbs that need a
+		// workspace open it themselves, on the base's declarations.
+		return dispatchProfile{needsConfig: true}
 	case "vcs":
 		// Never forwarded, never preloaded. Every vcs verb writes the CALLER's index and
 		// working tree, so a daemon serving another workspace must not adopt one.
@@ -932,6 +937,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return cleanCmd(ctx, root, subArgs)
 	case "vcs":
 		return vcsCmd(ctx, root, rc, subArgs)
+	case "queue":
+		return queueCmd(ctx, root, subArgs)
 	case "doctor":
 		return doctorCmd(ctx, root, rc, subArgs)
 	case "config":
@@ -1168,8 +1175,12 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	// for as long as that daemon lived. Memory comes from what this process may commit,
 	// so a daemon inside a memory-limited container budgets the container rather than
 	// the machine it sits on; slots come from the cores, which is the same ceiling
-	// ClampConcurrency holds every individual run to.
-	machineBudget := cache.NewMachineBudget(mem.BudgetMB(mem.UsableBytes(ctx)), cache.MachineCeiling())
+	// ClampConcurrency holds every individual run to. The profile that resolved n above
+	// also decides memory's reservation (a quarter, or aggressive's small fixed floor),
+	// so both axes of "claim the whole machine" agree.
+	machineBudget := cache.NewMachineBudget(
+		mem.BudgetMB(mem.UsableBytes(ctx), cfg.ConcurrencyProfile),
+		cache.MachineCeiling())
 
 	ttl := cfg.Daemon.IdleTTL
 	if ttl <= 0 {

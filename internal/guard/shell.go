@@ -82,7 +82,7 @@ type denyRuleName string
 
 const (
 	denyRuleNotesAuthor       denyRuleName = "notes-author"
-	denyRuleReadAck           denyRuleName = "read-ack"
+	denyRulePersonOnly        denyRuleName = "person-only"
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
@@ -472,19 +472,35 @@ func magusCdTargets(command string, d Dialect) []string {
 	return out
 }
 
-// shellUsesCd reports whether the line runs the cd builtin AHEAD of other work. Parsed
-// commands are preferred so `bash -c 'cd ...'` and a subshell `(cd ... && ...)` are seen
-// the same way; the regex is only the unparseable-line fallback.
+// shellUsesCd reports whether the line runs the cd builtin ahead of a magus command, the
+// shape the catalog names: magus is CWD-relative, so a cd there is how the right command
+// lands on the wrong project. Parsed commands are preferred so `bash -c 'cd ...'` and a
+// subshell `(cd ... && ...)` are seen the same way; the regex is only the
+// unparseable-line fallback.
 //
-// A cd alone on its line passes: it relocates no later command, and on a host whose shell
-// persists across calls it is how a session moves into its own checkout.
+// A cd with no magus command AFTER it passes, alone on its line or ahead of ordinary
+// work (`cd dir && go test`, `cd dir; ls`): it relocates nothing this rule is about, and
+// on a host whose shell persists across calls a bare cd is how a session moves into its
+// own checkout.
 func shellUsesCd(cmds []hint.Invocation, parsed bool, command string) bool {
 	if parsed {
-		return len(cmds) > 1 && slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-			return c.Name == "cd" || filepath.Base(c.Name) == "cd"
-		})
+		cdAt := slices.IndexFunc(cmds, isCdInvocation)
+		if cdAt < 0 {
+			return false
+		}
+		return slices.ContainsFunc(cmds[cdAt+1:], isMagusInvocation)
 	}
-	return cdCmdRe.MatchString(command)
+	return cdCmdRe.MatchString(command) && magusMentionRe.MatchString(command)
+}
+
+func isCdInvocation(c hint.Invocation) bool {
+	return c.Name == "cd" || filepath.Base(c.Name) == "cd"
+}
+
+// isMagusInvocation reports a command that runs magus. The base name is compared exactly,
+// not by suffix, so `./magus` and an absolute path both count while `notmagus` does not.
+func isMagusInvocation(c hint.Invocation) bool {
+	return filepath.Base(c.Name) == "magus"
 }
 
 // rawWord returns a word's SOURCE text, quotes stripped.
@@ -548,15 +564,20 @@ func mentionsMagusCommand(command string, d Dialect) bool {
 // raw grep replacement whose whole purpose is being piped or redirected). Every
 // OTHER refs invocation is a symbol lookup that renders a structured record
 // `-o` already shapes, so only the --text spelling is let through.
+//
+// Both checks go through magusInvokes rather than anchoring on Args[0]/[1]: magus
+// accepts its global flags before the verb, and a position anchor missed the exemption
+// whenever one was there (`magus --root <dir> query output <ref>`).
 func trimmableMagus(cmds []hint.Invocation) bool {
 	for _, c := range cmds {
 		if c.Name != "magus" {
 			continue
 		}
-		if len(c.Args) >= 2 && c.Args[0] == "query" && c.Args[1] == "output" {
+		one := []hint.Invocation{c}
+		if magusInvokes(one, "query", "output") {
 			continue
 		}
-		if len(c.Args) >= 1 && c.Args[0] == "refs" && slices.ContainsFunc(c.Args, isRefsTextFlag) {
+		if magusInvokes(one, "refs") && slices.ContainsFunc(c.Args, isRefsTextFlag) {
 			continue
 		}
 		return true
@@ -844,6 +865,11 @@ var (
 	// Unparseable-line fallback for shellUsesCd. Anchored at a command position
 	// so a `cd` inside a commit message or a quoted string does not trip it.
 	cdCmdRe = regexp.MustCompile(cmdPos + `cd\b`)
+	// The other half of that fallback: shellUsesCd also requires a magus command
+	// somewhere on the line, and without a parse tree "somewhere" is all an unparseable
+	// line can promise. A path segment ending in "magus" counts, the way isMagusInvocation
+	// counts `./magus`.
+	magusMentionRe = regexp.MustCompile(cmdPos + `(?:\S*/)?magus\b`)
 
 	// notesWriteRe matches an invocation that would AUTHOR a note. It is the
 	// unparsable-line fallback for notesWriteFires below, the way gitGuardFallback is for
@@ -854,18 +880,20 @@ var (
 	// so `capture`, which defaults to the private one, has no other rule that sees it.
 	notesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
 
-	// readAckRe matches an invocation that would mint a read receipt.
+	// personOnlyRe matches an invocation of either verb this package folds into one
+	// rule: minting a read receipt, or closing an attention request.
 	//
-	// A receipt is a claim that a PERSON read something, and it is the only fact in a
-	// review no analysis can supply. An agent that can mint one turns the whole measure
-	// into a formality it satisfies on the way past, and it would, because stamping the
-	// changeset is the obvious tidy-up at the end of a task.
+	// A receipt is a claim that a PERSON read something, and a disposed request is a
+	// claim that a PERSON answered it; both are the only fact in their measure that no
+	// analysis can supply. An agent able to record either turns the measure into a
+	// formality it satisfies on the way past, and it would, because stamping the
+	// changeset or clearing its own block is the obvious tidy-up at the end of a task.
 	//
 	// The guard is the right place precisely because of what it sees: it is wired into
 	// agent hosts, so every command reaching it came from an agent by construction. A
 	// person at a terminal never meets this rule.
 	// The unparsable-line fallback for magusInvokes, as above.
-	readAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
+	personOnlyRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+dispose\b`)
 
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
@@ -1027,8 +1055,9 @@ var (
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
-	denyReadAck = "Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one).\n" +
-		"A read receipt records that a PERSON read a change, so only a person can record one. Say you cannot and hand back the unread list."
+	denyPersonOnly = "A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it. Only a person can record either, so every spelling of both is refused.\n" +
+		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one). Say you cannot ack and hand back the unread list.\n" +
+		"Waiting on a request instead: say you are waiting on its id and hand it back; `" + hint.SessionDispose.With("<id>") + "` is a person's to run."
 
 	denyNotesAuthor = "Use `" + hint.MemoryPut.With("<name>") + "`: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design, so every spelling of the write is denied: `capture` files a transcript as a note, `promote` writes into the SHARED store, and both put a person's name on prose they never read.\n" +
@@ -1271,16 +1300,6 @@ func ruleFires(cmds []hint.Invocation, parsed bool, command string,
 	return fallback.MatchString(command)
 }
 
-// magusRuleFires answers off the resolved argv when the line parses and off the anchored
-// pattern when it does not, the same split gitGuard and gitGuardFallback make, and for the
-// same reason: a line with no AST to read must still be judged.
-func magusRuleFires(cmds []hint.Invocation, parsed bool, command string, fallback *regexp.Regexp, words ...string) bool {
-	if parsed {
-		return magusInvokes(cmds, words...)
-	}
-	return fallback.MatchString(command)
-}
-
 // notesWriteVerbs are the `magus notes` subcommands that AUTHOR a note; `ls`, `get` and
 // `verify` read and stay allowed.
 //
@@ -1297,6 +1316,17 @@ func notesWriteFires(cmds []hint.Invocation, parsed bool, command string) bool {
 	return slices.ContainsFunc(notesWriteVerbs, func(verb string) bool {
 		return magusInvokes(cmds, "notes", verb)
 	})
+}
+
+// personOnlyFires is magusRuleFires over two shapes it cannot express as one word set:
+// minting a read receipt (`diff --ack`) and closing an attention request (`session
+// dispose`) are different verbs recording different acts, but both record that a PERSON
+// did something, so one rule and one deny cover both rather than a third rule per verb.
+func personOnlyFires(cmds []hint.Invocation, parsed bool, command string) bool {
+	if !parsed {
+		return personOnlyRe.MatchString(command)
+	}
+	return magusInvokes(cmds, "diff", "--ack") || magusInvokes(cmds, "session", "dispose")
 }
 
 // searchHints is the unscoped default translator, used when no project list is
@@ -1502,8 +1532,8 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
-	if magusRuleFires(cmds, parsed, command, readAckRe, "diff", "--ack") {
-		return ShellVerdict{Deny: denyReadAck, Rule: denyRule{Name: denyRuleReadAck}}
+	if personOnlyFires(cmds, parsed, command) {
+		return ShellVerdict{Deny: denyPersonOnly, Rule: denyRule{Name: denyRulePersonOnly}}
 	}
 	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) {
 		return ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
@@ -1531,6 +1561,14 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	// same line outranks it.
 	if chainedRunRe.MatchString(command) {
 		advisory = ShellVerdict{Context: adviseChainedRun, Rule: denyRule{Name: advisoryChainedRun}}
+		// Narrowed to the combined-run form when every magus run/affected invocation on
+		// the line names the same target: charms included. A chain of genuinely
+		// different targets stays chained-run's text, and its own domain.
+		if parsed {
+			if text, ok := splitRunLineAdvice(cmds); ok {
+				advisory = ShellVerdict{Context: text, Rule: denyRule{Name: denyRuleName(advisorySplitRun)}}
+			}
+		}
 	}
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {

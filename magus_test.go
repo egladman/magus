@@ -42,13 +42,13 @@ func TestContainsAll(t *testing.T) {
 }
 
 // TestMakeHandlerConventionalTargets asserts that targetHandler returns a
-// non-nil handler for the seven conventional target names and that invoking
+// non-nil handler for the six conventional target names and that invoking
 // it on an empty project (no packs) returns nil without panic.
 func TestTargetHandlerConventionalTargets(t *testing.T) {
 	m := &Magus{}
 	p := &types.Project{} // no packs → every handler must return nil cleanly
 	ctx := context.Background()
-	for _, name := range []string{"preflight", "build", "test", "lint", "format", "clean", "generate"} {
+	for _, name := range []string{"build", "test", "lint", "format", "clean", "generate"} {
 		h := m.targetHandler(name)
 		if !assert.NotNilf(t, h, "targetHandler(%q) = nil; expected non-nil handler", name) {
 			continue
@@ -1432,6 +1432,21 @@ func TestApplyEnvToConfig(t *testing.T) {
 	assert.False(t, cfg.Cache.WriteEnabled())
 	assert.Equal(t, 6, cfg.Concurrency)
 	assert.True(t, cfg.DryRun, "DryRun should be true")
+}
+
+// An unrecognized boolean is refused for both bool kinds, and the field keeps its value.
+func TestApplyEnv_UnrecognizedBooleanIsAnError(t *testing.T) {
+	env := map[string]string{
+		"MAGUS_SANDBOX_ENABLED":            "ture",
+		"MAGUS_CACHE_REMOTE_WRITE_ENABLED": "off",
+	}
+	cfg := config.Defaults()
+	err := configgen.ApplyEnv(&cfg, func(k string) string { return env[k] })
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `MAGUS_SANDBOX_ENABLED: "ture" is not a boolean`)
+	assert.ErrorContains(t, err, `MAGUS_CACHE_REMOTE_WRITE_ENABLED: "off" is not a boolean`)
+	assert.False(t, cfg.Sandbox.Enabled)
+	assert.Nil(t, cfg.Cache.Remote.Write.Enabled)
 }
 
 func TestApplyEnv_SandboxEnabled(t *testing.T) {

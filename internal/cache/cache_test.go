@@ -31,7 +31,7 @@ func newMutableCache(t *testing.T) (root, cdir string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
 	cdir = filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(t.Context(), cdir, WithMutable(true))
+	c, err := Open(t.Context(), cdir, WithLocalWrite(true))
 	require.NoError(t, err, "cache.Open")
 	return root, cdir, c
 }
@@ -89,7 +89,7 @@ func TestMissThenHit(t *testing.T) {
 	require.NotEmpty(t, r1.Hash, "Hash must not be empty after a successful run")
 
 	// Re-open in read-only mode so the second call can hit.
-	c2, err := Open(t.Context(), cdir, WithMutable(false))
+	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err, "cache.Open(read)")
 	r2, err := c2.Run(context.Background(), step, fn)
 	require.NoError(t, err, "Run(hit)")
@@ -124,7 +124,7 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 	require.False(t, r1.Hit, "first Run must miss")
 
 	// Re-open read-only so the second call can hit.
-	c2, err := Open(t.Context(), cdir, WithMutable(false))
+	c2, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err, "cache.Open(read)")
 
 	var stdoutOut, stderrOut string
@@ -307,7 +307,7 @@ func TestImmutableDoesNotWriteOnMiss(t *testing.T) {
 	step.Outputs = []string{"test/pkg/out.txt"}
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
-	c, err := Open(t.Context(), cdir, WithMutable(false))
+	c, err := Open(t.Context(), cdir, WithLocalWrite(false))
 	require.NoError(t, err, "cache.Open(immutable)")
 	r, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err, "first Run")
@@ -453,7 +453,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 
 	// Import into a new cache directory (immutable so we test read-after-import).
 	dstDir := filepath.Join(t.TempDir(), ".magus-dst")
-	dst, err := Open(t.Context(), dstDir, WithMutable(false))
+	dst, err := Open(t.Context(), dstDir, WithLocalWrite(false))
 	require.NoError(t, err, "Open dst")
 	require.NoError(t, dst.Import(context.Background(), &rawBuf), "Import")
 
@@ -577,13 +577,13 @@ func TestImportRejectsPoisonedBlob(t *testing.T) {
 	// Positive control: the same archive shape with matching content imports
 	// cleanly, so the rejection below is due to the content/name mismatch alone,
 	// not a malformed archive or misplaced entry.
-	cGood, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
+	cGood, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
 	require.NoError(t, cGood.Import(context.Background(), casArchive(t, name, good, time.Time{})), "control: well-formed blob must import")
 	require.FileExists(t, cGood.blobPath(name), "control: blob must be present after a valid import")
 
 	// Poison: the same (matching) name, tampered content.
-	cBad, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
+	cBad, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
 	err = cBad.Import(context.Background(), casArchive(t, name, []byte("tampered bytes"), time.Time{}))
 	require.Error(t, err, "Import must reject a blob whose content does not match its name")
@@ -601,7 +601,7 @@ func TestImportRejectedBlobKeepsTheStoredOne(t *testing.T) {
 	sum := sha256.Sum256(good)
 	name := hex.EncodeToString(sum[:])
 
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
 	require.NoError(t, c.Import(context.Background(), casArchive(t, name, good, time.Time{})), "seed: a valid blob must import")
 
@@ -643,7 +643,7 @@ func TestImportSkipsEntriesOlderThanDisk(t *testing.T) {
 		return &buf
 	}
 
-	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(false))
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
 	dest := filepath.Join(c.dir, "manifests", "test", "entry")
 	require.NoError(t, os.MkdirAll(filepath.Dir(dest), 0o755))
@@ -666,7 +666,7 @@ func TestImportSkipsEntriesOlderThanDisk(t *testing.T) {
 // that would escape the cache directory via path traversal.
 func TestExportImportUnsafePath(t *testing.T) {
 	dir := t.TempDir()
-	c, err := Open(t.Context(), filepath.Join(dir, ".magus"), WithMutable(false))
+	c, err := Open(t.Context(), filepath.Join(dir, ".magus"), WithLocalWrite(false))
 	require.NoError(t, err)
 
 	// Craft a malicious tar with a path traversal entry.

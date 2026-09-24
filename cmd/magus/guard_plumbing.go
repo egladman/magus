@@ -183,14 +183,10 @@ func checkoutStateForGuard(ctx context.Context, dir string) *types.CheckoutState
 		return nil
 	}
 	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
-	if err != nil {
+	if err != nil || res.VCS == nil {
 		return nil
 	}
-	reporter, ok := res.VCS.(types.CheckoutStateReporter)
-	if !ok {
-		return nil
-	}
-	state, err := reporter.CheckoutState(ctx, dir)
+	state, err := res.VCS.CheckoutState(ctx, dir)
 	if err != nil {
 		return nil
 	}

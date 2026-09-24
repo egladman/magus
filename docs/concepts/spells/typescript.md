@@ -7,7 +7,7 @@ tags: [typescript, spell, node, eslint, vitest, tools]
 
 # typescript
 
-The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (`pnpm exec`). It is an opaque spell: `preflight` composes the individual checks into one target.
+The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (`pnpm exec`). Each check is its own op; compose them into your own targets, such as `lint` over `tsc` and `eslint`.
 
 **Runtime name:** `typescript` (source `spells/typescript/`)
 
@@ -214,27 +214,6 @@ magus\project({ "spells": [typescript] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     typescript["eslint"](ctx);
-}
-```
-
-## preflight
-
-preflight is a no-op marker op (no command).
-
-**Command:** none; this op composes the spell's other ops (see the intro).
-
-### Example
-
-<!-- magus-run-recorder -->
-```buzz
-// preflight composes the tsc/eslint/prettier/vitest checks into one opaque target.
-import "magus";
-import "magus/spell/typescript";
-
-magus\project({ "spells": [typescript] });
-
-export fun preflight(ctx: magus\Context, args: [str]) > void {
-    typescript["preflight"](ctx);
 }
 ```
 

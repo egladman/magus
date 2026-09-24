@@ -51,7 +51,7 @@ This is the third instance of one arrangement magus already uses twice:
 
 | Wiring                         | Subsystem delegated  | The spell exports                          |
 | ------------------------------ | -------------------- | ------------------------------------------ |
-| `magus\cache.remote(github)`   | remote cache         | `enabled`, `get_artifact`, `put_artifact`  |
+| `magus\cache.remote(github)`   | remote cache         | `get_artifact`, `put_artifact`, ..         |
 | `magus\ci.provider(github)`    | CI job-log structure | `group_start`, `group_end`, `annotate`, .. |
 | `magus\workspace.provider(nx)` | the project set      | `list_projects`                            |
 

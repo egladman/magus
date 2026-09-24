@@ -1452,6 +1452,8 @@ var adviceLocalExclusions = map[string]string{
 	"first-contribution.buzz": "reads the pull request's author through its own gh call " +
 		"rather than through advice.buzz, so local mode cannot intercept it, and a working " +
 		"tree has no first-time contributor to welcome",
+	"merge-queue.buzz": "reads the pull request's review state and labels through its own gh " +
+		"call, and a working tree has no pull request to queue",
 }
 
 // adviceStep is one step of the advice composite action, reduced to the two facts this

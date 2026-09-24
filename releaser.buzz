@@ -115,7 +115,7 @@ test "isReleaseTag accepts root release tags and rejects the lookalikes" {
 // rootReleaseTag returns the first ROOT release tag in names, or "" when none is there.
 // isReleaseTag rejects a "/", so no separate prefix filter is needed.
 //
-// Shared by the magusfile's exact_release_tag and by the release preflight, which asks
+// Shared by the magusfile's exact_release_tag and by the release checks, which ask
 // what version a commit would stamp once tags exist that do not yet. A second
 // implementation of the rule could drift from this one.
 export fun rootReleaseTag(names: [str]) > str {

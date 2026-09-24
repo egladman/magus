@@ -80,10 +80,10 @@ correctly with no policy at all. See
 full set of controls and their scopes.
 
 **A canonical target vocabulary, not free-form names.** Nx targets are
-whatever string a plugin or `project.json` names them. magus has seven
-canonical names (`build`, `test`, `lint`, `format`, `clean`, `generate`,
-`preflight`) plus `ci`, with a stated [litmus test](../concepts/targets.md#when-does-a-name-earn-canonical-status)
-for adding an eighth - custom names are allowed, but the vocabulary is
+whatever string a plugin or `project.json` names them. magus has six
+canonical names (`build`, `test`, `lint`, `format`, `clean`, `generate`)
+plus `ci`, with a stated [litmus test](../concepts/targets.md#when-does-a-name-earn-canonical-status)
+for adding a seventh - custom names are allowed, but the vocabulary is
 deliberately small so `magus run lint` means the same thing in every project.
 
 **Read-only by default, not mutate-by-default.** Every magus run is read-only

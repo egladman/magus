@@ -566,5 +566,5 @@ func findCommentSources(root string) []string {
 		return nil
 	})
 	slices.Sort(out)
-	return out
+	return dropVCSIgnored(root, out)
 }

@@ -93,16 +93,11 @@ func TestRoutingProjects(t *testing.T) {
 	assert.True(t, slices.IsSorted(paths), "projects sorted by path")
 }
 
-// TestRoutingWithholdsAnchorsForMethodKind pins the routing.go fix. A method's only
-// possible edge is the fixed module-provides-it link every method gets exactly once (no
-// other relation in the graph references an individual host method), so every method node
-// ties at the same degree and the old code fell back to ranking by id, reporting whichever
-// id happened to sort first as "most connected." Anchors for method are withheld entirely
-// rather than computed and discarded, so a new host module contributing methods that sort
-// before the current first anchor cannot perturb this row (a committed index carrying it
-// would otherwise churn for a ranking that was never meaningful). The other five
-// binary-supplied kinds are unaffected: TestRoutingIgnoresRuntimeShard already pins that
-// diagnostic, for one, keeps real anchors from its documents edges.
+// TestRoutingWithholdsAnchorsForMethodKind: a method's only edge is the module-provides-it
+// link, a catalog edge, so every method sits at degree zero. Ranking them would report
+// whichever id sorts first, and a new host module whose methods sort earlier would then
+// rewrite every committed index. TestRoutingIgnoresRuntimeShard pins that diagnostic, for
+// one, keeps real anchors from its documents edges.
 func TestRoutingWithholdsAnchorsForMethodKind(t *testing.T) {
 	build := func(methodIDs ...string) *Graph {
 		g := NewGraph()
@@ -194,6 +189,62 @@ func TestRoutingIgnoresRuntimeShard(t *testing.T) {
 	g := sourceGraph()
 	g.Merge(local.Nodes, local.Edges)
 	assert.Equal(t, want, g.Routing(), "routing is identical with and without the runtime shard")
+}
+
+// TestRoutingIgnoresCatalogShape pins anchors against the binary rendering the index. The
+// two catalogs differ the way a binary built from another branch differs: typescript
+// carries three extra install ops that run pnpm. Counting catalog edges, that lifted
+// typescript over docker and pnpm over docker, so the committed index followed whichever
+// binary regenerated it. The workspace, which uses docker twice and typescript once,
+// is identical in both. The same binary gives json three more methods than fs; the two
+// modules tie at one reference page each, so that method count was all that ranked them.
+func TestRoutingIgnoresCatalogShape(t *testing.T) {
+	build := func(extra ...string) *Graph {
+		modules := []types.ModuleEntry{
+			{Name: "fs", Methods: []types.ModuleMethodEntry{{Name: "read"}, {Name: "write"}}},
+			{Name: "json", Methods: []types.ModuleMethodEntry{{Name: "parse"}}},
+		}
+		for _, name := range extra {
+			modules[1].Methods = append(modules[1].Methods, types.ModuleMethodEntry{Name: name})
+		}
+		spells := []types.Spell{
+			{Name: "docker", Targets: []string{"docker-build", "docker-push"}, OpCommands: map[string][]string{
+				"docker-build": {"docker", "build"}, "docker-push": {"docker", "push"},
+			}},
+			{Name: "typescript", Targets: append([]string{"tsc"}, extra...), OpCommands: map[string][]string{"tsc": {"pnpm", "tsc"}}},
+		}
+		for _, op := range extra {
+			spells[1].OpCommands[op] = []string{"pnpm", "install"}
+		}
+		reg := assembleRegistry(Inputs{Spells: spells, Modules: modules})
+		g := NewGraph()
+		g.Merge(reg.Nodes, reg.Edges)
+		for _, m := range modules {
+			page := "docs/reference/buzz/" + m.Name + ".md"
+			g.AddNode(types.KnowledgeNode{ID: docID(page), Kind: types.KindDoc, Label: page})
+			g.AddEdge(extractedEdge(docID(page), moduleID(m.Name), types.RelationDocuments, page))
+		}
+		for name, spell := range map[string]string{"image": "docker", "publish": "docker", "lint": "typescript"} {
+			id := targetID("pkg/a", name)
+			g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindTarget, Label: name})
+			g.AddEdge(extractedEdge(id, spellID(spell), types.RelationUses, "pkg/a"))
+		}
+		return g
+	}
+	anchors := func(r types.KnowledgeRouting) map[string][]string {
+		out := map[string][]string{}
+		for _, k := range r.Kinds {
+			out[k.Kind] = k.Anchors
+		}
+		return out
+	}
+
+	want := anchors(build().Routing())
+	assert.Equal(t, []string{"docker", "typescript"}, want[types.KindSpell], "spells rank by workspace use")
+	assert.Empty(t, want[types.KindTool], "no workspace edge reaches a tool, so none is an anchor")
+	assert.Empty(t, want[types.KindModule], "tied modules have no most connected one")
+	assert.Equal(t, want, anchors(build("pnpm-install", "pnpm-ci", "pnpm-fetch").Routing()),
+		"extra catalog ops must not move any anchor")
 }
 
 func TestProjectOfTargetID(t *testing.T) {

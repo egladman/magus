@@ -595,6 +595,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Rule = string(advisoryGraphStale)
 			}
 		}
+		// The SPLIT-RUN rule's cross-call shape: the same target run again on a different
+		// project set, as a separate command rather than chained on one line (that shape is
+		// splitRunLineAdvice's, inside Evaluate). gradeSplitRun records this call's
+		// invocation on the SESSION's facts either way, so it must run whenever nothing
+		// louder already spoke, not only when it turns out to have something to say.
+		if verdict.Decision == "pass" && preauth == "" {
+			if text, matched := gradeSplitRun(facts, input); matched {
+				if held := markers.Once(advisorySplitRun, text); held != "" {
+					verdict.Decision = "advise"
+					verdict.Context = held
+					verdict.Rule = string(advisorySplitRun)
+				}
+			}
+		}
 		// The workspace's magus\guard.command rule, last because it may only add to what
 		// every rule above said.
 		verdict, ruleRecord = gradeWorkspaceCommand(ctx, deps, verdict, commandRuleInput{
