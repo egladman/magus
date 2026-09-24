@@ -81,9 +81,23 @@ magus broker status             # capacity, every claim holding it, its services
 magus broker stop --services    # stop the services it hosts, leave it running
 magus broker stop               # stop it; running steps keep going
 magus broker                    # run one in this process, logging to stderr
+magus broker --log FILE         # the same, appending to FILE (a run passes broker.log)
 ```
 
 `magus broker status` exits non-zero when none is running, so a script can chain on it.
+
+The broker answers signals the way a supervisor expects:
+
+| Signal | The broker |
+| --- | --- |
+| `SIGHUP` | reopens its `--log` file, so a log rotator can move the old one aside |
+| first `SIGTERM` | drains: turns away every new claim and service reference, naming itself as shutting down, and exits once the runs holding it finish or `shutdown_grace` passes |
+| second `SIGTERM`, or `SIGINT` | stops its services and exits now |
+
+A run the drain turns away is refused under `broker: required` and runs unarbitrated under
+`best-effort`, each with the draining broker's pid in the message. `magus broker status`
+shows a `draining` row meanwhile. Runs still holding claims when it exits keep going and
+re-assert them on the next broker.
 
 The `broker` setting in `magus.yaml` (also `--broker` and `MAGUS_BROKER`) decides what a
 run does about it:
@@ -97,7 +111,7 @@ run does about it:
 ## The server
 
 The server is what a person asks for. It serves MCP and the console, the APIs behind
-them, background jobs (`magus job run`, `--detach`) and scheduled maintenance, and keeps
+them, background jobs (`magus job run`) and scheduled maintenance, and keeps
 each workspace's knowledge graph and symbol indexes current whether or not MCP is
 enabled. It asks the broker for capacity like any run.
 
@@ -117,6 +131,29 @@ current process, which is what a supervisor wants (see
 [Keeping the server running](#keeping-the-server-running)). A detached server logs to
 `$XDG_STATE_HOME/magus/server.log`, which survives logout; under `--foreground` it logs to
 stderr for the supervisor to keep.
+
+| Signal | The server |
+| --- | --- |
+| `SIGHUP` | reloads configuration, the same as `magus server reload` |
+| first `SIGTERM` or `SIGINT` | closes its socket, cancels the runs it adopted, and waits up to `shutdown_grace` for them to unwind |
+| a second one | exits now |
+
+`shutdown_grace` (default `5m`, `MAGUS_SHUTDOWN_GRACE`) bounds both processes' stop, and
+`0` stops at once; a negative value is a configuration error. The server cancels its runs
+because it owns them; the broker lets its holders finish because it only arbitrates them.
+
+## Detaching a run
+
+`magus run --detach` and `magus affected --detach` start the same command again in the
+background, as its own session with no terminal, and return at once:
+
+```text
+magus: detached as pid 48301; its output goes to /home/you/.local/state/magus/detached/20260924T140201-1234.log
+```
+
+The detached run is an ordinary run: it takes its own broker connection for its claims,
+and needs no server. Follow it with `tail -f` on that log, or `magus broker status` to see
+what it holds. The log directory is `$XDG_STATE_HOME/magus/detached/`, one file per run.
 
 ## Two transports
 

@@ -35,8 +35,6 @@ import (
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
-	// Kept before anything reshapes them: --detach re-submits this invocation verbatim.
-	origArgs := args
 	// Same grammar as `magus run`: the chain is split off the RAW args, before
 	// anything partitions or reorders them. affected is the CI-facing twin, and CI
 	// is exactly where "what did this produce" needs answering.
@@ -124,9 +122,6 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
-	if af.Wait && !af.Detach {
-		return usagef("magus affected: --wait applies to --detach; a plain run already blocks until it finishes")
-	}
 	preflight, err := parsePreflight(af.Preflight)
 	if err != nil {
 		return usagef("magus affected: %v", err)
@@ -135,7 +130,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return usagef("magus affected: --preflight runs targets first; it does not apply to --graph, --stdin or ls")
 	}
 	if af.Detach {
-		return detachToServer(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), af.Wait)
+		return detachRun(ctx)
 	}
 
 	if af.Step && af.Stdin {

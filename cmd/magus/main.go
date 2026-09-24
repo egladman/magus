@@ -82,7 +82,17 @@ func runCLI() int {
 
 	args := expandVerbosityArgs(os.Args[1:])
 
-	rootCtx, stopSignals, interrupted := watchInterrupts(context.Background())
+	var rootCtx context.Context
+	var stopSignals func()
+	var interrupted func() (syscall.Signal, bool)
+	// A broker or a foreground server answers its own signals (see lifecycle); a run's
+	// Ctrl+C policy would cancel it on the first SIGTERM it means to drain on.
+	if ownsItsSignals(args) {
+		rootCtx, stopSignals = context.WithCancel(context.Background())
+		interrupted = func() (syscall.Signal, bool) { return 0, false }
+	} else {
+		rootCtx, stopSignals, interrupted = watchInterrupts(context.Background())
+	}
 	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
@@ -388,11 +398,10 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		if isUsageOnlyInvocation(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
-		// --detach is the client's job for exactly the reason usage above is. It SUBMITS
-		// the run to the server and reports the job id; forwarding it would have the
-		// server submit to itself, print the id onto its own log, and leave the caller
-		// with silence and exit 0 (observed before this guard existed). It needs no
-		// workspace either: it hands off an argv and returns.
+		// --detach starts a copy of this invocation in the background and returns, so the
+		// work, the workspace load and the broker all belong to that copy. Forwarded to a
+		// server, the pid and log path it prints would land in the server's log instead
+		// of in front of the person who asked.
 		if hasDetachFlag(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}

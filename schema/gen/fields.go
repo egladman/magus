@@ -581,6 +581,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_BROKER: Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and sha...",
 	},
 	{
+		GoPath:   "ShutdownGrace",
+		YamlPath: "shutdown_grace",
+		EnvVar:   "MAGUS_SHUTDOWN_GRACE",
+		Flag:     fieldtype.FlagNames{Long: "shutdown-grace"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_SHUTDOWN_GRACE: ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM.",
+	},
+	{
 		GoPath:   "MaxFailures",
 		YamlPath: "max_failures",
 		EnvVar:   "MAGUS_MAX_FAILURES",

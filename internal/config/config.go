@@ -39,6 +39,9 @@ type Config struct {
 	// Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and shared services: required (refuse a step when none answers), best-effort (the default: run unarbitrated and say so once), or off (never start or contact one; a run hosts its services itself).
 	Broker types.BrokerPolicy `json:"broker" yaml:"broker"`
 
+	// ShutdownGrace bounds how long the broker and the server take to stop after a first SIGTERM. The broker seats nothing new and waits this long for the runs holding claims or services to finish; the server cancels the runs it adopted and waits this long for them to unwind. A second SIGTERM, or a SIGINT to the broker, stops either at once. Zero stops at once on the first signal; negative is an error.
+	ShutdownGrace time.Duration `json:"shutdown_grace" yaml:"shutdown_grace" validate:"gte=0"`
+
 	// MaxFailures bounds how many projects may fail before a run stops starting
 	// more. Zero, the default, is unlimited: a batch runs everything it can and
 	// reports every failure at once.
@@ -782,6 +785,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CONCURRENCY", "concurrency", "concurrency_profile decides", "Maximum number of concurrently running per-project build steps; overrides concurrency_profile when positive"},
 		{"MAGUS_CONCURRENCY_PROFILE", "concurrency_profile", "balanced", "Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly"},
 		{"MAGUS_BROKER", "broker", "best-effort", "Whether a run asks the broker for this host's capacity and shared services: required refuses a step when none answers (MGS3022, exit 69), best-effort runs unarbitrated and says so once, off never starts or contacts one"},
+		{"MAGUS_SHUTDOWN_GRACE", "shutdown_grace", "5m", "How long the broker (waiting for the runs holding it) and the server (waiting for the runs it cancelled to unwind) take to stop after a first SIGTERM; a second SIGTERM stops either at once, and 0 stops at once"},
 		{"MAGUS_HISTORY_PATH", "history_path", "$XDG_STATE_HOME/magus/history/v1.json", "Path to the runtime-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect"},
 		{"MAGUS_DRY_RUN", "dry_run", "false", "When 1 or true, print what would run without executing anything"},
 		{"MAGUS_DEFAULT_CHARMS", "default_charms", "", "Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run"},
@@ -820,6 +824,12 @@ func EnvVarDocs() []EnvVarDoc {
 	}
 }
 
+// DefaultShutdownGrace is shutdown_grace when nothing sets it. Long enough for most test
+// and build steps to finish; a supervisor that will not wait this long sends its own
+// second signal or SIGKILL, and runs outlive the broker anyway, re-asserting their claims
+// on the next one.
+const DefaultShutdownGrace = 5 * time.Minute
+
 // Defaults returns a Config populated with the magus built-in defaults.
 func Defaults() Config {
 	return Config{
@@ -834,7 +844,8 @@ func Defaults() Config {
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},
 		},
-		HistoryPath: DefaultHistoryPath(),
+		HistoryPath:   DefaultHistoryPath(),
+		ShutdownGrace: DefaultShutdownGrace,
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).
 		Secret: Secret{

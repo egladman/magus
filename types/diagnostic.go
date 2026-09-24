@@ -473,7 +473,6 @@ const (
 	NearDuplicateServices DiagnosticCode = "MGS5001"
 	ServiceOpDetached     DiagnosticCode = "MGS5002"
 	CommandOpNeverExits   DiagnosticCode = "MGS5003"
-	ServerRequired        DiagnosticCode = "MGS5004"
 	CharmPatchInvalid     DiagnosticCode = "MGS6001"
 	// CharmRenamed is a run activating a charm under a name magus has retired, with no
 	// selected target declaring that name for itself. The old name matches nothing, so
@@ -565,7 +564,8 @@ const (
 
 // MGS3015 is retired and deliberately absent above; docs/decisions/0001 says why. The
 // number is not reused: a retired code that comes back means two different things in one
-// search of a log archive.
+// search of a log archive. MGS5004 is retired the same way: it refused --detach with no
+// server to hand the run to, and --detach no longer hands a run to anything.
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
 // in sync with the const block above; it is the enumeration source for tooling
@@ -596,7 +596,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
-	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, ServerRequired,
+	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
 	CharmPatchInvalid, CharmRenamed,
 	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,

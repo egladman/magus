@@ -59,7 +59,7 @@ green, so a CI workflow that fans shards out from the plan starts none.
 : With --graph: cap displayed depth (0 = unlimited)
 
 **--detach**
-: Hand the run to the server and return immediately; follow it with magus status --watch
+: Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server
 
 **--detail**
 : With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to
@@ -120,9 +120,6 @@ green, so a CI workflow that fans shards out from the plan starts none.
 
 **--upstream**
 : With --graph: show dependents instead of dependencies
-
-**--wait**
-: With --detach, block until the run finishes and exit with its status
 
 ## Targets
 

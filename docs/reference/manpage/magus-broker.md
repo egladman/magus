@@ -35,7 +35,25 @@ The broker setting in magus.yaml decides what a run does about it: required
 refuses a step when none answers (MGS3022, exit 69), best-effort (the default)
 runs unarbitrated and says so once, off never starts or contacts one.
 
-Run with no target, it serves in this process and logs to stderr.
+Run with no target, it serves in this process and logs to stderr, or to the
+file --log names.
+
+Signals:
+  SIGHUP   reopen the --log file, for a log rotator that moved it aside
+  SIGTERM  drain: seat no new claim or service, turning each away with the
+           reason, and exit once the runs holding it finish or
+           shutdown_grace (default 5m) passes
+  SIGTERM  a second one, or SIGINT at any time: stop its services and exit now
+
+A run the drain turns away is refused under broker: required (MGS3022) and
+runs unarbitrated under best-effort, each naming the draining broker. Runs
+still holding claims when the broker exits keep going and re-assert them on
+the next one.
+
+## Options
+
+**--log** *string*
+: Append stdout and stderr to this file, reopening it on SIGHUP; a run that starts a broker passes $XDG_STATE_HOME/magus/broker.log
 
 ### broker stop options
 

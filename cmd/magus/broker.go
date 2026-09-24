@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,11 +30,11 @@ import (
 const brokerReadyTimeout = 10 * time.Second
 
 func brokerCmd(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return brokerServe(ctx)
+	if brokerServes(args) {
+		return brokerServe(ctx, args)
 	}
 	switch args[0] {
-	case "-h", "--help", "help":
+	case "-h", "-help", "--help", "help":
 		brokerUsage()
 		return nil
 	case hint.BrokerStatus.Leaf():
@@ -46,6 +47,19 @@ func brokerCmd(ctx context.Context, args []string) error {
 	}
 }
 
+// brokerServes reports whether a `broker` argv runs a broker in this process: no target,
+// only flags, and no request for help.
+func brokerServes(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	switch args[0] {
+	case "-h", "-help", "--help":
+		return false
+	}
+	return strings.HasPrefix(args[0], "-")
+}
+
 func brokerUsage() {
 	fmt.Fprintln(os.Stderr, "usage: magus broker [status|stop] [flags]")
 	fmt.Fprintln(os.Stderr, "")
@@ -54,9 +68,13 @@ func brokerUsage() {
 	fmt.Fprintln(os.Stderr, "listens on a unix socket only and exits once it has held nothing for ten minutes.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Targets:")
-	fmt.Fprintln(os.Stderr, "  (none)  run a broker in this process, logging to stderr")
+	fmt.Fprintln(os.Stderr, "  (none)  run a broker in this process, logging to stderr or to --log")
 	fmt.Fprintln(os.Stderr, "  status  is one up, what it holds; exits non-zero when none is")
 	fmt.Fprintln(os.Stderr, "  stop    stop it, or with --services stop only the services it hosts")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Signals: SIGHUP reopens the --log file. A first SIGTERM drains: nothing new is")
+	fmt.Fprintln(os.Stderr, "seated, and it exits once the runs holding it finish or shutdown_grace passes.")
+	fmt.Fprintln(os.Stderr, "A second SIGTERM, or a SIGINT, stops its services and exits now.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Socket: "+broker.DefaultAddr())
 	fmt.Fprintln(os.Stderr, "Log, when a run started it: "+brokerLogPath())
@@ -65,7 +83,24 @@ func brokerUsage() {
 // brokerServe is `magus broker`: serve this host's capacity and shared services until
 // idle, stopped or signalled. Losing the bind to a live broker is the ordinary end of a
 // start race, so it exits 0.
-func brokerServe(ctx context.Context) error {
+func brokerServe(ctx context.Context, args []string) error {
+	var f *gen.BrokerFlags
+	rest, err := cmdParse("broker", args, func(fs *flag.FlagSet) {
+		f = gen.BindBroker(fs)
+		fs.Usage = brokerUsage
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return usagef("magus broker: unexpected argument %q (want status or stop, or flags only to run one)", rest[0])
+	}
+	if f.Log != "" {
+		if err := redirectStdio(f.Log); err != nil {
+			return fmt.Errorf("magus broker: %w", err)
+		}
+	}
+
 	addr := broker.DefaultAddr()
 	ln, err := broker.Listen(ctx, addr)
 	if errors.Is(err, broker.ErrRunning) {
@@ -98,11 +133,23 @@ func brokerServe(ctx context.Context) error {
 	fmt.Fprintf(os.Stderr, "magus: broker (pid %d) serving %s: %d slots, %s; exits after %s holding nothing\n",
 		os.Getpid(), addr, slots, cache.FormatMB(memMB), brokerIdleText())
 
+	ctx, stopNow := context.WithCancel(ctx)
+	defer stopNow()
+	drain := make(chan struct{})
+	release := lifecycle{
+		hangup:         func() { reopenBrokerLog(ctx, f.Log) },
+		stop:           func() { close(drain) },
+		stopNow:        stopNow,
+		interruptIsNow: true,
+	}.watch(ctx)
+	defer release()
+
 	err = broker.Serve(ctx, ln,
 		broker.WithCapacity(memMB, slots),
 		broker.WithServices(serviceHost{reg}),
 		broker.WithLogger(slog.Default()),
 		broker.WithVersion(version),
+		broker.WithDrain(drain, globalCfg.ShutdownGrace),
 	)
 	// The broker's own context may be done (a signal), and Shutdown's wait for a service
 	// still starting returns at once on a done context, so teardown gets a fresh bound.
@@ -110,6 +157,20 @@ func brokerServe(ctx context.Context) error {
 	defer cancel()
 	reg.Shutdown(stopCtx)
 	return err
+}
+
+// reopenBrokerLog answers SIGHUP. A broker logging to stderr under a supervisor has no
+// file to reopen, and says so rather than exiting.
+func reopenBrokerLog(ctx context.Context, path string) {
+	if path == "" {
+		slog.InfoContext(ctx, "broker: SIGHUP reopens the --log file, and this broker logs to stderr")
+		return
+	}
+	if err := redirectStdio(path); err != nil {
+		slog.ErrorContext(ctx, "broker: could not reopen its log; still writing to the old one", slog.String("error", err.Error()))
+		return
+	}
+	slog.InfoContext(ctx, "broker: reopened its log", slog.String("log", path))
 }
 
 func brokerStatus(ctx context.Context, args []string) error {
@@ -226,7 +287,7 @@ func stateLogPath(name string) string {
 // without one being started.
 var spawnBroker = func() (pid int, logPath string, err error) {
 	logPath = brokerLogPath()
-	pid, err = spawnDetached([]string{"broker"}, logPath)
+	pid, err = spawnDetached([]string{"broker", "--" + gen.FlagBrokerLog, logPath}, logPath)
 	return pid, logPath, err
 }
 

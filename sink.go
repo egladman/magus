@@ -188,24 +188,10 @@ func (s *Sink) EmitShardTotal(ctx context.Context, shard string, nShards int, el
 	s.emit(ctx, report.ShardTotal{Shard: shard, NShards: nShards, DurationMs: elapsed.Milliseconds()})
 }
 
-// DetachState is where an invocation handed to the server with --detach stands.
-type DetachState string
-
-// The states [Sink.EmitDetach] reports.
-const (
-	DetachCoalesced DetachState = "coalesced" // an identical invocation was already running; none was queued
-	DetachQueued    DetachState = "queued"    // handed to the server, not waited on
-	DetachRunning   DetachState = "running"   // handed to the server and waited on
-	DetachUnwatched DetachState = "unwatched" // the wait stopped; the run continues on the server
-	DetachPassed    DetachState = "passed"
-	DetachFailed    DetachState = "failed"
-)
-
-// EmitDetach emits where a detached invocation stands. Prose prints it at any level,
-// with the command that reads the invocation back. elapsed is the run's duration and
-// counts only for passed and failed.
-func (s *Sink) EmitDetach(ctx context.Context, invocation string, state DetachState, elapsed time.Duration) {
-	s.emit(ctx, report.RunDetach{Invocation: invocation, State: string(state), DurationMs: elapsed.Milliseconds()})
+// EmitDetach reports a run started in the background: its pid and the log its output
+// goes to. Prose prints it at any level.
+func (s *Sink) EmitDetach(ctx context.Context, pid int, logPath string) {
+	s.emit(ctx, report.RunDetach{PID: pid, Log: logPath})
 }
 
 func (s *Sink) emit(ctx context.Context, e any) { s.enc.encode(ctx, e) }

@@ -324,6 +324,7 @@ type Broker struct {
 	StartTime       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	Capacity        *Capacity              `protobuf:"bytes,7,opt,name=capacity,proto3" json:"capacity,omitempty"`
 	IdleExitSeconds int32                  `protobuf:"varint,8,opt,name=idle_exit_seconds,json=idleExitSeconds,proto3" json:"idle_exit_seconds,omitempty"` // how long it stays up once it holds nothing
+	Draining        bool                   `protobuf:"varint,9,opt,name=draining,proto3" json:"draining,omitempty"`                                        // stopping: seats nothing new while holders finish
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -412,6 +413,13 @@ func (x *Broker) GetIdleExitSeconds() int32 {
 		return x.IdleExitSeconds
 	}
 	return 0
+}
+
+func (x *Broker) GetDraining() bool {
+	if x != nil {
+		return x.Draining
+	}
+	return false
 }
 
 // Capacity is the host's whole budget, what is held, and every claim holding it.
@@ -1805,7 +1813,7 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\x06broker\x18\b \x01(\v2\x1d.magus.status.v1alpha1.BrokerR\x06broker\x125\n" +
 	"\x06server\x18\t \x01(\v2\x1d.magus.status.v1alpha1.ServerR\x06server\x12#\n" +
 	"\rbroker_policy\x18\n" +
-	" \x01(\tR\fbrokerPolicyJ\x04\b\x03\x10\x04R\rmagus_version\"\xac\x02\n" +
+	" \x01(\tR\fbrokerPolicyJ\x04\b\x03\x10\x04R\rmagus_version\"\xc8\x02\n" +
 	"\x06Broker\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1a\n" +
@@ -1817,7 +1825,8 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\n" +
 	"start_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12;\n" +
 	"\bcapacity\x18\a \x01(\v2\x1f.magus.status.v1alpha1.CapacityR\bcapacity\x12*\n" +
-	"\x11idle_exit_seconds\x18\b \x01(\x05R\x0fidleExitSeconds\"\xba\x01\n" +
+	"\x11idle_exit_seconds\x18\b \x01(\x05R\x0fidleExitSeconds\x12\x1a\n" +
+	"\bdraining\x18\t \x01(\bR\bdraining\"\xba\x01\n" +
 	"\bCapacity\x12\x1b\n" +
 	"\tbudget_mb\x18\x01 \x01(\x05R\bbudgetMb\x12\x17\n" +
 	"\aheld_mb\x18\x02 \x01(\x05R\x06heldMb\x12!\n" +

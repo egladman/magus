@@ -132,6 +132,11 @@ type Options struct {
 	// Server, if set, is read on every Status RPC and reported as StatusReply.Server.
 	// Only `magus server` sets it.
 	Server func() *types.StatusServer
+	// CallerOwnsSignals leaves SIGINT, SIGTERM and SIGHUP to the caller. Without it Start
+	// installs a handler that shuts the server down on any of them and re-raises the
+	// signal, which is right for a proc server living inside one run and wrong for a
+	// process that reloads on SIGHUP.
+	CallerOwnsSignals bool
 }
 
 // Server listens on a Unix-domain socket and accepts forwarded RPC requests from child processes.
@@ -150,6 +155,8 @@ type Server struct {
 	once     sync.Once
 	connWg   sync.WaitGroup // tracks in-flight handleConn goroutines
 	done     chan struct{}  // closed by Close to stop the signal watcher goroutine
+
+	callerOwnsSignals bool
 }
 
 // setListener publishes the bound listener under mu.
@@ -283,6 +290,8 @@ func New(opts Options) (*Server, error) {
 		svc:    svc,
 		cancel: cancel,
 		done:   make(chan struct{}),
+
+		callerOwnsSignals: opts.CallerOwnsSignals,
 	}
 	svc.shutdownFn = srv.Close
 	return srv, nil
@@ -313,7 +322,9 @@ func (s *Server) Start() error {
 	s.setListener(ln)
 
 	go serve(s, s.svc)
-	watchSignals(s, s.cancel)
+	if !s.callerOwnsSignals {
+		watchSignals(s, s.cancel)
+	}
 	return nil
 }
 

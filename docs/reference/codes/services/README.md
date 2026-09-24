@@ -18,3 +18,7 @@ gap is visible before the work runs.
 - [MGS5001](MGS5001.md): near-duplicate services that will run as separate processes.
 - [MGS5002](MGS5002.md): a service op detaches, breaking foreground supervision.
 - [MGS5003](MGS5003.md): a command op runs a watcher and never exits.
+
+MGS5004 was retired in 2026-09. It refused `--detach` when no server was running
+to hand the run to; `--detach` now starts the run as its own session writing to
+a log file, and needs no server. The number is not reused.

@@ -47,6 +47,7 @@ message Broker {
   google.protobuf.Timestamp start_time = 6;
   Capacity capacity = 7;
   int32 idle_exit_seconds = 8;               // how long it stays up once it holds nothing
+  bool draining = 9;                         // stopping: seats nothing new while holders finish
 }
 
 // Capacity is the host's whole budget, what is held, and every claim holding it.

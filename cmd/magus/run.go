@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -31,10 +30,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return targetUsage()
 	}
-	// Kept before anything reshapes them: --detach re-submits this invocation verbatim,
-	// so it needs the args as the user wrote them, chain and all.
-	origArgs := args
-
 	// The chain is split off the RAW args, before anything else touches them.
 	// splitTargetFromArgs partitions flags from positionals and reorders them
 	// (flags first), which would hoist a verb's own --path across the separator and
@@ -120,9 +115,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if shardEnvErr != nil {
 		return usagef("magus run: %v", shardEnvErr)
 	}
-	if rf.Wait && !rf.Detach {
-		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
-	}
 	preflight, err := parsePreflight(rf.Preflight)
 	if err != nil {
 		return usagef("magus run: %v", err)
@@ -136,18 +128,15 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// the un-gated skip this flag exists to prevent.
 		return usagef("magus run: --skip applies to the run selection, not --graph")
 	}
-	// Applied before the --detach branch below, not after it: awaitInvocation polls the
-	// server until the run reports a status and has no bound of its own, so `run --detach
-	// --wait --timeout 30s` waited forever on a run that never finished. Its select
-	// already watches ctx.Done, which is all the bound it needs.
+	// After the usage checks, so a mistyped flag fails here rather than in a log nobody
+	// is reading; before the timeout, which the detached run applies to itself.
+	if rf.Detach {
+		return detachRun(ctx)
+	}
 	if rf.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
 		defer cancel()
-	}
-
-	if rf.Detach {
-		return detachToServer(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), rf.Wait)
 	}
 	// -s deliberately suppresses the usual target progress. That is useful to an
 	// agent, but a person otherwise has no positive signal that a slow invocation
@@ -886,129 +875,5 @@ func envDefault(fs *flag.FlagSet, name, value string) error {
 		return fmt.Errorf("%q is not a valid --%s: %w", value, name, err)
 	}
 	f.DefValue = value
-	return nil
-}
-
-// localOnlyFlags never travel to the server. --detach would make it detach
-// again, handing the work to itself forever; --wait describes what THIS process
-// does after submitting and means nothing to the run itself.
-//
-// Both names come from the command registry rather than from a literal. The
-// second one used to be spelled "wait" right here, beside a constant for the
-// first, and a flag whose name is a literal in one place and a constant in
-// another is a rename waiting to go half-applied.
-var localOnlyFlags = []string{gen.FlagRunDetach, gen.FlagRunWait}
-
-// withoutDetachFlag drops the local-only flags from an argv, in every spelling
-// the flag package accepts: -name, --name, and either with an inline =value.
-//
-// The argv is re-submitted verbatim to the server, so leaving one in would be
-// acted on there.
-func withoutDetachFlag(args []string) []string {
-	out := make([]string, 0, len(args))
-	for i, a := range args {
-		if a == "--" {
-			// Past the separator the tokens belong to the forwarded tool, not to
-			// magus; the argv is re-submitted verbatim, so copy the rest through
-			// unchanged instead of scanning it for --detach.
-			out = append(out, args[i:]...)
-			break
-		}
-		trimmed := strings.TrimLeft(a, "-")
-		if key, _, _ := strings.Cut(trimmed, "="); strings.HasPrefix(a, "-") && slices.Contains(localOnlyFlags, key) {
-			continue
-		}
-		out = append(out, a)
-	}
-	return out
-}
-
-// detachToServer hands this invocation to the server and returns as soon as it is queued,
-// so a caller can watch it instead of blocking or sleeping.
-//
-// It requires the server (`magus server start`), and says so rather than falling back. It
-// dials the server's own socket, which no per-process proc server binds: one of those
-// dies when its invocation exits, so submitting there would queue work that is silently
-// dropped. Refusing is the only honest answer, and the remedy is one command.
-func detachToServer(ctx context.Context, root string, argv []string, wait bool) error {
-	addr := resolveServerAddr("")
-	if _, serr := proc.QueryStatus(ctx, addr); serr != nil {
-		return types.WrapDiagnostic(types.ServerRequired, nil,
-			"--detach hands the work to the server, and none is running at %s; start one with `%s`", addr, hint.ServerStart)
-	}
-	opts, err := outputOptionsOrDefault()
-	if err != nil {
-		return err
-	}
-	sink, closeSink, err := openSink(opts)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = closeSink() }()
-	inv, err := proc.SubmitJob(ctx, addr, argv, version)
-	if err != nil {
-		return fmt.Errorf("--detach: %w", err)
-	}
-	if inv == "" {
-		sink.EmitDetach(ctx, "", magus.DetachCoalesced, 0)
-		return nil
-	}
-	if !wait {
-		sink.EmitDetach(ctx, inv, magus.DetachQueued, 0)
-		return nil
-	}
-	sink.EmitDetach(ctx, inv, magus.DetachRunning, 0)
-	return awaitInvocation(ctx, root, inv, sink)
-}
-
-// awaitInvocation blocks until the server's run records a finished event, then
-// reports its outcome and exits with it.
-//
-// This is what --detach --wait is FOR, and the combination is not a
-// contradiction: the server owns the run, so it coalesces with an identical one
-// already in flight and shares the pool, while the caller still gets a
-// synchronous answer and an exit status to branch on. Detach alone is for
-// firing and forgetting; this is for wanting the server's scheduling without
-// giving up the shell's.
-//
-// Waiting on Status, never on FinishedMs: an interrupted run has no finished
-// event, and InvocationFromEvents backfills its finish time from the last event
-// it saw, so a timestamp says "something happened last", while a status is the
-// only thing that says "this is over".
-func awaitInvocation(ctx context.Context, root, inv string, sink *magus.Sink) error {
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return err
-	}
-	for delay := 100 * time.Millisecond; ; {
-		select {
-		case <-ctx.Done():
-			sink.EmitDetach(ctx, inv, magus.DetachUnwatched, 0)
-			return ctx.Err()
-		case <-time.After(delay):
-		}
-		// A log that does not exist yet is a run the server has not started, not
-		// an error: it is the ordinary first tick.
-		header, err := m.InvocationByID(inv)
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("--wait: read run log for %s: %w", inv, err)
-		}
-		if err == nil && header.Status != "" {
-			return reportInvocation(ctx, header, inv, sink)
-		}
-		if delay < 2*time.Second {
-			delay *= 2
-		}
-	}
-}
-
-// reportInvocation prints a finished run's outcome and exits with it.
-func reportInvocation(ctx context.Context, header magus.Invocation, inv string, sink *magus.Sink) error {
-	took := time.Duration(header.FinishedMs-header.StartedMs) * time.Millisecond
-	if header.Status != "pass" {
-		sink.EmitDetach(ctx, inv, magus.DetachFailed, took)
-		return errSilent{exitCode: 1}
-	}
-	sink.EmitDetach(ctx, inv, magus.DetachPassed, took)
 	return nil
 }

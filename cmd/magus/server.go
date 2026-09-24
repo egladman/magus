@@ -211,6 +211,13 @@ func serverStart(ctx context.Context, args []string) error {
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	now := make(chan struct{})
+	release := lifecycle{
+		hangup:  func() { reloadOnHangup(ctx) },
+		stop:    cancel,
+		stopNow: func() { close(now) },
+	}.watch(ctx)
+	defer release()
 	startServerSurface(ctx, cancel)
 
 	// Block until a signal cancels ctx OR an RPC `server stop` closes the proc server. The
@@ -224,8 +231,41 @@ func serverStart(ctx context.Context, args []string) error {
 	select {
 	case <-ctx.Done():
 	case <-serverDone:
+	case <-now:
+		return nil
+	}
+	return awaitServerStop(ctx, globalCfg.ShutdownGrace, now)
+}
+
+// awaitServerStop cancels the runs the server adopted and waits for them to unwind, for
+// at most grace or until now closes. Past either the process exits with them still
+// unwinding, which ends them anyway: they are goroutines in this process.
+func awaitServerStop(ctx context.Context, grace time.Duration, now <-chan struct{}) error {
+	go stopServer()
+	if serverStopped == nil {
+		return nil
+	}
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case <-serverStopped:
+	case <-now:
+	case <-timer.C:
+		slog.WarnContext(ctx, "server: the runs it adopted did not unwind within shutdown_grace; exiting anyway",
+			slog.Duration("grace", grace))
 	}
 	return nil
+}
+
+// reloadOnHangup answers SIGHUP the way `magus server reload` is answered: drop the open
+// workspaces so the next command against each reads magus.yaml as it now stands.
+func reloadOnHangup(ctx context.Context) {
+	if serverRegistry == nil {
+		return
+	}
+	dropped, busy := serverRegistry.evictAll()
+	slog.InfoContext(ctx, "server: reloaded configuration on SIGHUP; a busy workspace keeps the config it started with",
+		slog.Int("dropped", dropped), slog.Int("busy", busy))
 }
 
 // startServerSurface opens what the server serves beyond its socket: the VCS hooks that
@@ -240,7 +280,7 @@ var startServerSurface = func(ctx context.Context, cancel context.CancelFunc) {
 	} else {
 		fmt.Fprintln(os.Stderr, "magus: no console is mounted (none is built, or console.enabled is false)")
 	}
-	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", hint.ServerStop)
+	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down; SIGHUP reloads configuration\n", hint.ServerStop)
 
 	installRefreshHooks(ctx)
 	installDriftHooks(ctx)

@@ -507,7 +507,10 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 			fmt.Sprintf("deps %d", s.Dependents),
 			portsText(s.Ports), sinceText(s.StartedAt)), "  "))
 	}
-	if st.IdleExitSeconds > 0 {
+	switch {
+	case st.Draining:
+		fmt.Fprintf(tw, "draining\t-\tseats nothing new; exits once what it holds is released\n")
+	case st.IdleExitSeconds > 0:
 		fmt.Fprintf(tw, "idle\t-\texits after %s holding nothing\n", formatDur(time.Duration(st.IdleExitSeconds)*time.Second))
 	}
 	_ = tw.Flush()

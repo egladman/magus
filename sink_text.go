@@ -227,30 +227,10 @@ func (t textEncoder) summary(ctx context.Context, e report.RunSummary) {
 	_ = t.term.EndRun(ctx, footer)
 }
 
-// detach hands back the invocation and the command that reads it, never a dashboard to
-// poll: the id is addressable, and its journal holds the outcome, timings and output
-// refs whenever the reader wants them.
+// detach names the process and the file, the two things a person needs to follow a run
+// that no longer has their terminal.
 func (t textEncoder) detach(ctx context.Context, e report.RunDetach) {
-	readIt := "  read it with: " + hint.QueryInvocation.With(e.Invocation) + "\n"
-	took := cache.FormatDuration(time.Duration(e.DurationMs) * time.Millisecond)
-	switch DetachState(e.State) {
-	case DetachCoalesced:
-		t.say(ctx, "magus: the server is already running this exact command; not queued twice\n")
-	case DetachQueued:
-		t.say(ctx, "magus: detached as %s\n%s", e.Invocation, readIt)
-	case DetachRunning:
-		t.say(ctx, "magus: running as %s on the server\n", e.Invocation)
-	case DetachUnwatched:
-		// Ctrl-C detaches the watcher, not the run: say how to pick it up again rather
-		// than implying it was cancelled.
-		t.say(ctx, "\nmagus: stopped waiting; %s is still running on the server\n%s", e.Invocation, readIt)
-	case DetachPassed:
-		t.say(ctx, "magus: %s passed (%s)\n%s", e.Invocation, took, readIt)
-	case DetachFailed:
-		t.say(ctx, "magus: %s failed (%s)\n%s", e.Invocation, took, readIt)
-	default:
-		t.say(ctx, "magus: %s %T %+v\n", unrenderedEvent, e, e)
-	}
+	t.say(ctx, "magus: detached as pid %d; its output goes to %s\n", e.PID, e.Log)
 }
 
 // notice rides the hint channel: the run that pays for a notice is often a gate run

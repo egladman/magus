@@ -35,6 +35,12 @@ The socket address is resolved in priority order:
 A detached server logs to $XDG_STATE_HOME/magus/server.log; under
 --foreground it logs to stderr for the supervisor to keep.
 
+Signals:
+  SIGHUP           reload configuration, the same as \`magus server reload\`
+  SIGTERM, SIGINT  stop: close the socket, cancel the runs it adopted, and
+                   wait up to shutdown_grace (default 5m) for them to unwind
+  a second one     exit now
+
 ### server start options
 
 **--foreground**
