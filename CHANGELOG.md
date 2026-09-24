@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The guard advises on a split `magus run` (`split-run`).** One target run on two
+  project sets, on one line or in two calls within ten minutes, gets the combined form,
+  once per session. A charm is part of the target, so `lint` and `lint:rw` never combine.
 - **The cache is two tiers under standard two-tier semantics.** Reads go local, then
   remote; a remote hit is verified and promoted into the local tier; a build is stored in
   both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
@@ -27,11 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   advisor, off by default, reads it to name the label that queues an approved pull
   request.
 - **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
-  It reads the status the base requires and who it is pinned to, auto-merge, and the
-  required checks that run on `pull_request`; `--app <slug>` prints the steps for the
-  queue's own GitHub App, which `setup-magus` turns into a token with no workflow edit.
-  `-o json` prints the setup; magus runs none of it. `apply` refuses a status pinned to
-  another integration than its token's (MGS3019).
+  `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
+  turns into a token. magus runs none of it. `apply` refuses a status pinned to another
+  integration than its token's (MGS3019).
 - **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
   partitions by them.
 - **The merge queue merges stacked changes.** A change carrying another queued or merged
@@ -292,6 +293,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   stopped an agent from closing any request, including one addressed to a person. The CLI
   now refuses with the `--ack` sentence and exit 2 outside a terminal, and the guard rule
   `person-only` (widened from `read-ack`) denies every spelling on every agent channel.
+- **The `output-pipe`/`output-redirect` exemption for `magus query output` and
+  `magus refs --text` now sees past a global flag.** It anchored on the first argument
+  after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
+  the check now reads argv the same way the read-ack rule does, ignoring where a global
+  flag sits.
 - **The GitHub Actions remote tier stores what it uploads.** The spell read the signed
   URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
   the empty URL for an existing entry: every upload reported success, nothing was stored,
@@ -387,6 +393,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+- **Three guard rules match their catalog entries.** `cd` fires only ahead of a magus
+  command. `cache-dir-write` grades only write targets, so `rsync --exclude .magus` and
+  an interpreter's quoted data pass. `stage-all`'s description now names `-u`, `.` and
+  the long forms its matcher already covered.
 - **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
   Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
   queue provider both read, in place of `GH_TOKEN`.

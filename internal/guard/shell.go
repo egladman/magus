@@ -473,19 +473,35 @@ func magusCdTargets(command string, d Dialect) []string {
 	return out
 }
 
-// shellUsesCd reports whether the line runs the cd builtin AHEAD of other work. Parsed
-// commands are preferred so `bash -c 'cd ...'` and a subshell `(cd ... && ...)` are seen
-// the same way; the regex is only the unparseable-line fallback.
+// shellUsesCd reports whether the line runs the cd builtin ahead of a magus command, the
+// shape the catalog names: magus is CWD-relative, so a cd there is how the right command
+// lands on the wrong project. Parsed commands are preferred so `bash -c 'cd ...'` and a
+// subshell `(cd ... && ...)` are seen the same way; the regex is only the
+// unparseable-line fallback.
 //
-// A cd alone on its line passes: it relocates no later command, and on a host whose shell
-// persists across calls it is how a session moves into its own checkout.
+// A cd with no magus command AFTER it passes, alone on its line or ahead of ordinary
+// work (`cd dir && go test`, `cd dir; ls`): it relocates nothing this rule is about, and
+// on a host whose shell persists across calls a bare cd is how a session moves into its
+// own checkout.
 func shellUsesCd(cmds []hint.Invocation, parsed bool, command string) bool {
 	if parsed {
-		return len(cmds) > 1 && slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-			return c.Name == "cd" || filepath.Base(c.Name) == "cd"
-		})
+		cdAt := slices.IndexFunc(cmds, isCdInvocation)
+		if cdAt < 0 {
+			return false
+		}
+		return slices.ContainsFunc(cmds[cdAt+1:], isMagusInvocation)
 	}
-	return cdCmdRe.MatchString(command)
+	return cdCmdRe.MatchString(command) && magusMentionRe.MatchString(command)
+}
+
+func isCdInvocation(c hint.Invocation) bool {
+	return c.Name == "cd" || filepath.Base(c.Name) == "cd"
+}
+
+// isMagusInvocation reports a command that runs magus. The base name is compared exactly,
+// not by suffix, so `./magus` and an absolute path both count while `notmagus` does not.
+func isMagusInvocation(c hint.Invocation) bool {
+	return filepath.Base(c.Name) == "magus"
 }
 
 // rawWord returns a word's SOURCE text, quotes stripped.
@@ -549,15 +565,20 @@ func mentionsMagusCommand(command string, d Dialect) bool {
 // raw grep replacement whose whole purpose is being piped or redirected). Every
 // OTHER refs invocation is a symbol lookup that renders a structured record
 // `-o` already shapes, so only the --text spelling is let through.
+//
+// Both checks go through magusInvokes rather than anchoring on Args[0]/[1]: magus
+// accepts its global flags before the verb, and a position anchor missed the exemption
+// whenever one was there (`magus --root <dir> query output <ref>`).
 func trimmableMagus(cmds []hint.Invocation) bool {
 	for _, c := range cmds {
 		if c.Name != "magus" {
 			continue
 		}
-		if len(c.Args) >= 2 && c.Args[0] == "query" && c.Args[1] == "output" {
+		one := []hint.Invocation{c}
+		if magusInvokes(one, "query", "output") {
 			continue
 		}
-		if len(c.Args) >= 1 && c.Args[0] == "refs" && slices.ContainsFunc(c.Args, isRefsTextFlag) {
+		if magusInvokes(one, "refs") && slices.ContainsFunc(c.Args, isRefsTextFlag) {
 			continue
 		}
 		return true
@@ -845,6 +866,11 @@ var (
 	// Unparseable-line fallback for shellUsesCd. Anchored at a command position
 	// so a `cd` inside a commit message or a quoted string does not trip it.
 	cdCmdRe = regexp.MustCompile(cmdPos + `cd\b`)
+	// The other half of that fallback: shellUsesCd also requires a magus command
+	// somewhere on the line, and without a parse tree "somewhere" is all an unparseable
+	// line can promise. A path segment ending in "magus" counts, the way isMagusInvocation
+	// counts `./magus`.
+	magusMentionRe = regexp.MustCompile(cmdPos + `(?:\S*/)?magus\b`)
 
 	// notesWriteRe matches an invocation that would AUTHOR a note. It is the
 	// unparsable-line fallback for notesWriteFires below, the way gitGuardFallback is for
@@ -1545,6 +1571,14 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	// same line outranks it.
 	if chainedRunRe.MatchString(command) {
 		advisory = ShellVerdict{Context: adviseChainedRun, Rule: denyRule{Name: advisoryChainedRun}}
+		// Narrowed to the combined-run form when every magus run/affected invocation on
+		// the line names the same target: charms included. A chain of genuinely
+		// different targets stays chained-run's text, and its own domain.
+		if parsed {
+			if text, ok := splitRunLineAdvice(cmds); ok {
+				advisory = ShellVerdict{Context: text, Rule: denyRule{Name: denyRuleName(advisorySplitRun)}}
+			}
+		}
 	}
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {
