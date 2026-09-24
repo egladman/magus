@@ -1,0 +1,175 @@
+// The advice action's one step: check what the calling step passed, then run every enabled
+// advisor as its own `magus buzz` process, in order.
+//
+// Each advisor reads the pull request and its own inputs through advice.buzz, from the
+// environment this process hands down, so nothing here restates them per advisor.
+import "advice";
+import "magus";
+import "os";
+import "std";
+// Used by the test blocks.
+import "assert";
+
+// Advisor pairs an on/off input with the script it switches.
+export object Advisor {
+    input: str = "",
+    script: str = "",
+}
+
+// The read-only advisors. Their order is the order their sections first appear in the
+// comment, and the order `magus diff` runs its local subset in (cmd/magus/diff.go,
+// localAdvisors, which a test holds to this list).
+final reading = [
+    Advisor{input = "merge-conflicts", script = "merge-conflict.buzz"},
+    Advisor{input = "hand-edited-generated", script = "hand-edited-generated.buzz"},
+    Advisor{input = "target-outputs", script = "target-outputs.buzz"},
+    Advisor{input = "doctor", script = "doctor.buzz"},
+    Advisor{input = "version-floor", script = "version-floor.buzz"},
+    Advisor{input = "unclaimed", script = "unclaimed.buzz"},
+    Advisor{input = "blast-radius", script = "blast-radius.buzz"},
+    Advisor{input = "skip-cache", script = "skip-cache.buzz"},
+    Advisor{input = "conformance", script = "conformance.buzz"},
+    Advisor{input = "missing-target", script = "missing-target.buzz"},
+    Advisor{input = "api-surface", script = "api-surface.buzz"},
+    Advisor{input = "first-contribution", script = "first-contribution.buzz"},
+    Advisor{input = "merge-queue", script = "merge-queue.buzz"},
+];
+
+// The advisors that PUSH, after every reader: a push moves the head the readers report on.
+// The merge comes first, because regenerating before the base is merged in measures drift
+// against a tree that is about to change, and the merge would then conflict with the commit
+// that measurement produced.
+final writing = [
+    Advisor{input = "fix-merge-conflict", script = "fix-merge-conflict.buzz"},
+    Advisor{input = "fix-generated-drift", script = "fix-generated-drift.buzz"},
+];
+
+// requireToken throws unless the calling step set GITHUB_TOKEN. Every advisor reads and
+// writes the comment through gh, which authenticates from it.
+export fun requireToken(token: str) > void !> str {
+    if (token != "") { return; }
+    throw "advice: GITHUB_TOKEN is not set. Set it from a secret in the env of the step that "
+        + "uses this action: `GITHUB_TOKEN: $\{\{ secrets.GITHUB_TOKEN \}\}`";
+}
+
+// enabled returns the advisors whose input is "true", readers before writers. Throws on a
+// switch that is missing or reads as anything but "true" or "false": a misspelled value
+// silently turning an advisor off is the failure this refuses.
+export fun enabled(inputs: {str: str}) > [Advisor] !> str {
+    final on = mut [<Advisor>];
+    foreach (group in [reading, writing]) {
+        foreach (a in group) {
+            final value = inputs[a.input] ?? "";
+            if (value == "true") { on.append(a); continue; }
+            if (value != "false") {
+                throw "advice: input " + a.input + " must be 'true' or 'false', got '" + value + "'";
+            }
+        }
+    }
+    return on;
+}
+
+// runEach runs every advisor, whether or not an earlier one failed, and returns one line
+// per failure.
+export fun runEach(advisors: [Advisor], run: fun(str) > void !> any) > [str] {
+    final failed = mut [<str>];
+    foreach (a in advisors) {
+        var line = "";
+        try {
+            run(a.script);
+        } catch (e: str) {
+            line = a.script + ": " + e;
+        } catch {
+            // magus\cmd raises a host error; the advisor's own message is already in the
+            // log above, printed by the child.
+            line = a.script + ": failed, see its output above";
+        }
+        if (line == "") { continue; }
+        std\print("advice: " + line);
+        failed.append(line);
+    }
+    return failed;
+}
+
+// failure is the error a run with failed advisors ends on, or "" when none failed.
+export fun failure(failed: [str]) > str {
+    if (failed.len() == 0) { return ""; }
+    return "advice: {failed.len()} advisor(s) failed:\n  " + failed.join("\n  ");
+}
+
+fun main() > void !> any {
+    final advisors = enabled(advice\decodeInputs(os\env("ADVICE_INPUTS") ?? ""));
+    requireToken(os\env("GITHUB_TOKEN") ?? "");
+    if (advice\pullRequest().number == "") {
+        std\print("advice: this event carries no pull request; nothing to advise");
+        return;
+    }
+    final dir = os\env("GITHUB_ACTION_PATH") ?? "";
+    if (dir == "") { throw "advice: GITHUB_ACTION_PATH is not set; run this as the advice action's step"; }
+
+    final message = failure(runEach(advisors, run: fun(script: str) > void !> any {
+        magus\cmd("buzz", args: [dir + "/" + script], opts: {});
+    }));
+    if (message != "") { throw message; }
+}
+
+test "enabled keeps the switched-on advisors, readers first" {
+    final inputs = mut {<str: str>};
+    foreach (group in [reading, writing]) {
+        foreach (a in group) { inputs[a.input] = "false"; }
+    }
+    inputs["fix-generated-drift"] = "true";
+    inputs["doctor"] = "true";
+    final on = enabled(inputs);
+    assert\equal(on.len(), want: 2, message: "only the two switched on");
+    assert\equal(on[0].script, want: "doctor.buzz", message: "the reader first");
+    assert\equal(on[1].script, want: "fix-generated-drift.buzz", message: "the writer last");
+}
+
+test "enabled refuses a switch it cannot read" {
+    final inputs = mut {<str: str>};
+    foreach (group in [reading, writing]) {
+        foreach (a in group) { inputs[a.input] = "false"; }
+    }
+    inputs["doctor"] = "yes";
+    final garbled = enabled(inputs) catch [Advisor{script = "refused"}];
+    assert\equal(garbled[0].script, want: "refused", message: "'yes' is not a switch value");
+    final none = enabled({<str: str>}) catch [Advisor{script = "refused"}];
+    assert\equal(none[0].script, want: "refused", message: "a missing switch is not off");
+}
+
+test "the merge fixer runs before the drift fixer" {
+    assert\equal(writing[0].script, want: "fix-merge-conflict.buzz",
+        message: "merge before regenerating, or the regeneration measures a tree about to change");
+}
+
+test "requireToken names the fix" {
+    requireToken("ghs_token");
+    var message = "";
+    try {
+        requireToken("");
+    } catch (e: str) {
+        message = e;
+    }
+    std\assert(message.indexOf("GITHUB_TOKEN is not set") != null, message: "says what is missing");
+    std\assert(message.indexOf("secrets.GITHUB_TOKEN") != null, message: "and where it comes from");
+}
+
+test "one failing advisor does not hide the rest" {
+    final ran = mut [<str>];
+    final failed = runEach(
+        [Advisor{script = "a.buzz"}, Advisor{script = "b.buzz"}, Advisor{script = "c.buzz"}],
+        run: fun(script: str) > void !> any {
+            ran.append(script);
+            if (script == "b.buzz") { throw "broken on purpose"; }
+        });
+    assert\equal(ran.len(), want: 3, message: "the advisor after the failure still ran");
+    assert\equal(failed.len(), want: 1, message: "one failure");
+    std\assert(failed[0].indexOf("b.buzz") != null, message: "names the advisor");
+    std\assert(failed[0].indexOf("broken on purpose") != null, message: "and why");
+    std\assert(failure(failed).indexOf("1 advisor(s) failed") != null, message: "the run ends on it");
+}
+
+test "a run with no failures ends clean" {
+    assert\equal(failure([<str>]), want: "", message: "nothing to throw");
+}

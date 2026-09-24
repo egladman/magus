@@ -7,8 +7,6 @@
 //
 // Usually it means a project's `sources` glob is too narrow, or the file belongs to a
 // directory nobody declared as a project yet.
-//
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "proc";
 import "advice";
 import "magus";
@@ -50,16 +48,17 @@ fun body(files: [str], total: int) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
         std\print("unclaimed: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "unclaimed: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "unclaimed: the pull request's number, base and head sha must be set together";
     }
 
     if (advice\silenced(repo, pr: pr, name: section)) {

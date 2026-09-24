@@ -33,6 +33,12 @@ not want to `false`:
 The token is never an input: the step sets `GITHUB_TOKEN` from a secret in its `env`,
 and the action fails when it is missing.
 
+Nor is the pull request. The action reads it from the event that started the workflow,
+so run the step on `pull_request` (or `pull_request_review`, for `merge-queue`); an event
+carrying no pull request, such as a push, leaves every advisor silent. A switch reads
+`'true'` or `'false'`, and anything else fails the step. An advisor that fails is
+reported, the rest still run, and the step fails at the end.
+
 To stop the comment entirely, drop the step. If you would rather keep the step and
 switch it off without editing the workflow, the job in magus's own `ci.yaml` is
 guarded by a repository variable, which you can copy:
@@ -106,9 +112,9 @@ included - the merge base is the same starting point either way. Untracked files
 outside both: `git diff` reports tracked paths, so a brand new file no project claims is
 invisible until you `git add` it.
 
-**`first-contribution` does not run.** It asks the forge who opened the pull request,
-which is not a question a working tree can answer. Neither does `merge-queue`, for the
-same reason: it reads the pull request's review state and labels.
+**`first-contribution` does not run.** It asks the forge whether the pull request's author
+has merged anything before, and a working tree has no author. Neither does `merge-queue`,
+for the same reason: it reads the pull request's review state and labels.
 
 ## What each advisor says
 

@@ -305,6 +305,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `WithReportWriter`, `Magus.LogScope`, `LogCharms`, `LogCache` and `LogBase`.** Build one
   `Sink` with `NewSink(format, stdout, stderr)` for the invocation's `-o` format, emit
   headers through it, pass it with `WithSink` and close it after the run.
+- **Breaking: the advice action's `pr-number`, `base-ref`, `head-sha`, `head-ref` and
+  `head-repo` inputs.** The action reads the pull request from the triggering event and
+  runs its advisors in one step; delete those keys from `with:`. An input switch reading
+  anything but `true` or `false` now fails the step, and one failing advisor no longer
+  stops the rest.
 
 ### Fixed
 

@@ -4,7 +4,7 @@
 //
 // Merge, not rebase - see conflictBody in merge-conflict.buzz.
 //
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_REF, PR_HEAD_REPO, FIX_CONFLICTS, FIX_LABEL.
+// Reads the `fix-merge-conflict` and `fix-label` inputs.
 import "proc";
 import "advice";
 import "magus";
@@ -72,14 +72,15 @@ export fun blockedBody(base: str, files: [str]) > str {
 
 fun main() > void !> any {
     // An advisor the workflow never enabled says nothing at all.
-    if (advice\env("FIX_CONFLICTS") != "true") { return; }
+    if (advice\input("fix-merge-conflict") != "true") { return; }
 
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final headRef = advice\env("PR_HEAD_REF");
-    final headRepo = advice\env("PR_HEAD_REPO");
-    final label = advice\env("FIX_LABEL");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final headRef = pull.headRef;
+    final headRepo = pull.headRepo;
+    final label = advice\input("fix-label");
     if (repo == "" or pr == "" or base == "" or headRef == "") {
         std\print("fix-merge-conflict: no PR context; nothing to fix");
         return;

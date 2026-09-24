@@ -39,7 +39,7 @@
 // MISSES a project that existed and gained the spell binding that moved it into this
 // cohort. Only the base graph sees that, and silence is the safe direction.
 //
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, MIN_COHORT, MIN_SHARE.
+// Reads the `missing-target-min-cohort` and `missing-target-min-share` inputs.
 import "proc";
 import "advice";
 import "magus";
@@ -193,16 +193,17 @@ fun body(items: [{str: str}]) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
         std\print("missing-target: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "missing-target: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "missing-target: the pull request's number, base and head sha must be set together";
     }
     if (advice\silenced(repo, pr: pr, name: section)) {
         // Retract rather than leave the last finding frozen on the page.
@@ -212,10 +213,10 @@ fun main() > void !> any {
     }
 
     var minCohort = 5;
-    final configuredCohort = advice\env("MIN_COHORT");
+    final configuredCohort = advice\input("missing-target-min-cohort");
     if (configuredCohort != "") { minCohort = std\parseInt(configuredCohort) ?? 5; }
     var minShare = 0.8;
-    final configuredShare = advice\env("MIN_SHARE");
+    final configuredShare = advice\input("missing-target-min-share");
     if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
 
     var projects = mut [];

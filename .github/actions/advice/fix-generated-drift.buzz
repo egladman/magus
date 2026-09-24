@@ -76,13 +76,14 @@ export fun fixedBody(files: [str], sha: str) > str {
 fun main() > void !> any {
     // The capability, from the action's input. Absent or anything but "true" means the
     // workflow never enabled it, and an advisor that is off says nothing at all.
-    if (advice\env("FIX_DRIFT") != "true") { return; }
+    if (advice\input("fix-generated-drift") != "true") { return; }
 
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final headRef = advice\env("PR_HEAD_REF");
-    final headRepo = advice\env("PR_HEAD_REPO");
-    final label = advice\env("FIX_LABEL");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final headRef = pull.headRef;
+    final headRepo = pull.headRepo;
+    final label = advice\input("fix-label");
     if (repo == "" or pr == "") {
         std\print("fix-generated-drift: no PR context; nothing to fix");
         return;

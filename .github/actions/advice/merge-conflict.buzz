@@ -5,8 +5,8 @@
 // regenerating produces, which is what `magus vcs resolve` does. Silent unless generated
 // files actually conflict - an ordinary source conflict is the author's business.
 //
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, and FIX_LABEL_OFFER from the environment,
-// and writes its section of the pull request's one magus comment through advice\publish.
+// Reads the `offer-fix-label` and `fix-label` inputs, and writes its section of the pull
+// request's one magus comment through advice\publish.
 import "proc";
 import "advice";
 import "magus";
@@ -150,12 +150,14 @@ fun conflictBody(base: str, files: [str], mine: [str], label: str) > str {
 }
 
 fun main() > void !> str {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     // Empty unless a workflow honours the label: an offer nobody can accept is noise.
-    final label = advice\env("FIX_LABEL_OFFER");
+    var label = "";
+    if (advice\input("offer-fix-label") == "true") { label = advice\input("fix-label"); }
     if (pr == "" and base == "" and head == "") {
         // No PR context at all: not a pull request, or the file was loaded to run its
         // test blocks. Either way there is nothing to advise on, and refusing to start
@@ -164,7 +166,7 @@ fun main() > void !> str {
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "merge-conflict-advice: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "merge-conflict-advice: the pull request's number, base and head sha must be set together";
     }
 
     if (advice\silenced(repo, pr: pr, name: section)) {
