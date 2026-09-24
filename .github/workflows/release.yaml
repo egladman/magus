@@ -377,7 +377,7 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
           # Not inferred from the tag name: left to the default, v0.5.0-rc.1 would take the
           # repo's `latest` pointer, which audit's compat job and `magus self update` follow.
@@ -423,7 +423,7 @@ jobs:
       - name: Publish the release index
         env:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REASON: the ${{ github.ref_name }} release
         run: magus run release-index:cd --no-default-charms -- "$REASON"
 

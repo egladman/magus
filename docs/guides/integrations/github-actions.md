@@ -336,6 +336,8 @@ kept too.
 
 ```yaml
 - uses: egladman/magus/.github/actions/advice@v0.4.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 One comment describing what your build graph noticed: generated files edited by hand,

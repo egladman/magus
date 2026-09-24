@@ -376,6 +376,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+- **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
+  Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
+  queue provider both read, in place of `GH_TOKEN`.
 
 ### Security
 

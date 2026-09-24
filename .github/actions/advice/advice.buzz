@@ -875,7 +875,7 @@ test "local mode supplies the pull-request facts a working tree has not got" {
 }
 
 test "local mode invents nothing beyond those three" {
-    assert\equal(localFallback("GH_TOKEN", base: "main"), want: "",
+    assert\equal(localFallback("GITHUB_TOKEN", base: "main"), want: "",
         message: "a credential is never conjured for a local run");
     assert\equal(localFallback("FIX_LABEL", base: "main"), want: "",
         message: "consent for a writer is not something a local default can give");
