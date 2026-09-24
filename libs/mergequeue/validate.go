@@ -360,6 +360,12 @@ func (r *validation) only(ctx context.Context) error {
 }
 
 // candidate builds c's candidate onto onto, regenerated with v.Regenerate.
+//
+// What the regeneration rewrites is committed only when the build tool proves it runs
+// none of c's code, the same proof an Applier needs before it can reproduce those bytes
+// with the base's own regeneration. Otherwise c's committed outputs are stale on top of
+// onto and only its author can regenerate them, so the candidate is refused before its
+// gate runs on a tree that could never merge.
 func (r *validation) candidate(ctx context.Context, onto string, c types.Change) (types.Candidate, error) {
 	if err := fetchHead(ctx, r.vcs, r.clone, c); err != nil {
 		return types.Candidate{}, fmt.Errorf("fetch %s: %w", c.Label(), err)
@@ -369,15 +375,38 @@ func (r *validation) candidate(ctx context.Context, onto string, c types.Change)
 	if err != nil || r.Regenerate == nil {
 		return b.Candidate, err
 	}
-	units, err := r.units(c)
-	if err == nil {
-		b.Commit, err = regenerateIn(ctx, r.vcs, s, b, r.Regenerate, units)
-	}
-	if err != nil {
+	if b.Commit, err = r.regenerate(ctx, s, b); err != nil {
 		r.discard(ctx, b.Candidate)
 		return types.Candidate{}, err
 	}
 	return b.Candidate, nil
+}
+
+func (r *validation) regenerate(ctx context.Context, s candidateSpec, b built) (string, error) {
+	regen, err := outputs(ctx, s.facts, b.touched)
+	if err != nil {
+		return "", err
+	}
+	units, err := r.units(s.change)
+	if err != nil {
+		return "", err
+	}
+	keep, err := regenerateWrites(ctx, r.vcs, s, b, r.Regenerate, regen, units)
+	if err != nil || len(keep) == 0 {
+		return b.Commit, err
+	}
+	g, err := generationOf(ctx, r.vcs, r.facts, r.clone.Root, r.plan.BaseCommit, s.change, regen)
+	if err != nil {
+		return "", err
+	}
+	if !regenerationProven(g) {
+		why, code := unprovenWhy(g, regen)
+		return "", &types.RefusedError{Paths: keep,
+			Reason: joinPaths(keep) + " are stale on top of " + short(s.onto) + ", and " + why + " (" + joinPaths(code) +
+				"), so the queue cannot regenerate them for it",
+			Remedy: "Merge `" + r.plan.Base + "` in, regenerate, commit what it writes, push, and queue it again."}
+	}
+	return commitRegenerated(ctx, r.vcs, b, keep)
 }
 
 func (r *validation) acquire(ctx context.Context) error {

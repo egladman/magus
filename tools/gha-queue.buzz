@@ -93,12 +93,22 @@ export fun planArgs(dir: str, depth: str) > [str] {
 final SCRATCH = ["--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
     "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"];
 
+// candidateMagus is a magus command run by the candidate's own magus. The job's magus is
+// main's, and a change that adds host surface its own magusfile uses cannot even be
+// loaded by it. Validation runs the change's code anyway; apply never does, and keeps
+// main's binary. `go run` builds it as one argv, since a hook gets no shell, into the
+// candidate's own GOCACHE through SCRATCH. The spell bytecode that build embeds is
+// committed output the gate's drift check holds to its sources.
+export fun candidateMagus(args: str) > str {
+    return "go run ./cmd/magus " + args;
+}
+
 // validateArgs names no project: the queue appends the change's affected projects to
 // each hook line, or "/" when that set is no proof.
 export fun validateArgs(dir: str, change: str) > [str] {
     final args = mut ["queue", "validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
-        "--gate", "magus run ci --no-default-charms",
-        "--regenerate", "magus run generate:rw"];
+        "--gate", candidateMagus("run ci --no-default-charms"),
+        "--regenerate", candidateMagus("run generate:rw")];
     foreach (a in SCRATCH) {
         args.append(a);
     }
@@ -350,10 +360,17 @@ test "outputs render a compact matrix and its count" {
 test "validation hooks are lines a person can run once they name the projects, with caches the queue keeps private" {
     assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--plan", "/t/queue/plan.json", "--only", "482",
         "--verdicts", "/t/queue/verdicts",
-        "--gate", "magus run ci --no-default-charms",
-        "--regenerate", "magus run generate:rw",
+        "--gate", "go run ./cmd/magus run ci --no-default-charms",
+        "--regenerate", "go run ./cmd/magus run generate:rw",
         "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
         "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"], message: "argv");
+}
+
+test "validation runs the candidate's own magus; apply keeps main's" {
+    assert\equal(candidateMagus("version"), want: "go run ./cmd/magus version", message: "one argv, no shell");
+    foreach (a in applyArgs("99", repo: "o/r", base: "main", committer: "", app: "")) {
+        assert\equal(a.indexOf("go run"), want: null, message: "apply builds nothing: " + a);
+    }
 }
 
 test "apply follows the validation run as its source, pinned to the base and queue.yaml, and regenerates in the sandbox" {
