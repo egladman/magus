@@ -559,7 +559,7 @@ func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []str
 		paths = outputs
 	}
 	return types.Generation{}, &types.RefusedError{Paths: paths, Reason: "merging it needs " + joinPaths(outputs) + " regenerated, and " + why + " (" + joinPaths(paths) +
-		"), so only its author can regenerate them", Remedy: r.mergeBaseIn()}
+		"), so only its author can regenerate them", Remedy: r.mergeBaseIn(), Flag: types.FlagChangesGenerator}
 }
 
 // proveOwed proves each merge of the base into c that a review covers only through
@@ -1145,7 +1145,7 @@ func refusal(r *types.RefusedError) types.Kick {
 	if r.Remedy != "" {
 		report += "\n" + r.Remedy + "\n"
 	}
-	return types.Kick{Code: types.CodeKickRefused, Report: report, Paths: r.Paths}
+	return types.Kick{Code: types.CodeKickRefused, Report: report, Paths: r.Paths, Flag: r.Flag}
 }
 
 // mergeBaseIn is the remedy for what only the author can regenerate.
@@ -1174,6 +1174,11 @@ func (r *applyRun) kick(ctx context.Context, c types.Change, k types.Kick) error
 	}
 	if err := r.post(ctx, c, c.Head, types.StateFailure, "kicked back; see the comment"); err != nil {
 		return err
+	}
+	// Before the comment that names it: planning proved only the generated files the
+	// change touches, and applying may have needed others regenerated.
+	if k.Flag != "" {
+		r.flag(ctx, c, k.Flag, true)
 	}
 	if err := r.provider.KickBack(ctx, c, c.Head, k); err != nil {
 		return fmt.Errorf("kick back %s: %w", c.Label(), err)
@@ -1208,11 +1213,14 @@ func (r *applyRun) revokeStale(ctx context.Context) error {
 
 // markStart marks queued every change the plan admitted, and clears the queued mark from
 // each unqueued change still showing one: its intent was withdrawn, or a run stopped
-// before marking what it did to it.
+// before marking what it did to it. It flags each admitted change that changes a
+// generator and unflags the rest; a change planning held keeps its flag, since planning
+// proved nothing about it.
 func (r *applyRun) markStart(ctx context.Context) {
 	for _, g := range r.plan.Partitions {
 		for _, c := range g {
 			r.mark(ctx, c, types.MarkQueued)
+			r.flag(ctx, c, types.FlagChangesGenerator, len(c.AuthorRegenerates) > 0)
 		}
 	}
 	for _, v := range r.plan.Verdicts {
@@ -1243,6 +1251,21 @@ func (r *applyRun) mark(ctx context.Context, c types.Change, m types.Mark) {
 		what := "mark #" + c.ID + " " + string(m)
 		if m == types.MarkNone {
 			what = "clear the mark on #" + c.ID
+		}
+		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: "could not " + what + ": " + err.Error()})
+	}
+}
+
+// flag shows f on c when on and clears it otherwise. A failure is a notice, as a mark's
+// is.
+func (r *applyRun) flag(ctx context.Context, c types.Change, f types.Flag, on bool) {
+	if r.DryRun {
+		return
+	}
+	if err := r.provider.Flag(ctx, c, f, on); err != nil {
+		what := "flag #" + c.ID + " " + string(f)
+		if !on {
+			what = "clear " + string(f) + " from #" + c.ID
 		}
 		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: "could not " + what + ": " + err.Error()})
 	}

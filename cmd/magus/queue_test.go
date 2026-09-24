@@ -47,6 +47,7 @@ export fun post_status(io: {str: any}) > bool { return true; }
 export fun retarget(io: {str: any}) > bool { return true; }
 export fun kick_back(io: {str: any}) > bool { return true; }
 export fun mark(io: {str: any}) > bool { return true; }
+export fun flag(io: {str: any}) > bool { return true; }
 export fun merge_change(io: {str: any}) > any { return {"merged": false, "reason": "the test merges nothing"}; }
 export fun list_artifacts(io: {str: any}) > any {
     return {"complete": true, "headers": {"Authorization": "Bearer tok"}, "artifacts": RUN};
