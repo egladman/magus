@@ -175,7 +175,7 @@ API
 write_leaf_magusfile() {
     cat > "$1/magusfile.buzz" <<'LEAFMF'
 import "magus";
-import "spells/tslib" as tslib;
+import "spells/tslib";
 magus\project({"spells": [tslib]});
 export fun build(ctx: magus\Context, args: [str]) > void { tslib["noop"](ctx); }
 export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(build); }
@@ -189,8 +189,8 @@ write_bridge_magusfile() {
     {
         echo 'import "magus";'
         echo 'import "proc";'
-        echo 'import "spells/tslib" as tslib;'
-        echo 'import "spells/jsmod" as jsmod;'
+        echo 'import "spells/tslib";'
+        echo 'import "spells/jsmod";'
         echo "import \"project/../../platform/$pkg\" as platform;"
         echo ''
         echo "magus\\project({\"spells\": [tslib, jsmod], \"depends_on\": [\"packages/platform/$pkg\"]});"
@@ -212,7 +212,7 @@ write_platform_magusfile() {
     {
         echo 'import "magus";'
         echo 'import "proc";'
-        echo 'import "spells/jsmod" as jsmod;'
+        echo 'import "spells/jsmod";'
         for dep in $deps; do
             echo "import \"project/../$dep\" as d$idx;"
             idx=$(( idx + 1 ))
@@ -277,7 +277,7 @@ for appdir in "$REPO"/apps/*/; do
     # ordering/caching).
     {
         echo 'import "magus";'
-        echo 'import "spells/nextjs" as nextjs;'
+        echo 'import "spells/nextjs";'
         idx=0
         for lib in "${libs[@]}"; do
             # Dot-relative to this magusfile's dir (apps/<app>), not repo-relative.
@@ -313,8 +313,14 @@ git -C "$REPO" -c user.name=magus-bench -c user.email=bench@magus.invalid \
 
 "$DIR/tasks.sh" "$REPO" "$ENRICHED_BRANCH"
 
-echo "==> npm install"
-( cd "$REPO" && npm install )
+# The queue scenarios (queue.sh) gate on the platform packages' node --test suites,
+# which need no dependencies; skipping the install keeps them runnable without it.
+if [[ "${BENCH_SKIP_INSTALL:-}" == "1" ]]; then
+    echo "==> npm install skipped (BENCH_SKIP_INSTALL=1)"
+else
+    echo "==> npm install"
+    ( cd "$REPO" && npm install )
+fi
 
 echo "==> setup complete: $REPO"
 echo "    next: ./bench.sh        (see README.md for tool/scenario selection)"

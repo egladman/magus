@@ -53,8 +53,7 @@ type owedPaths struct {
 // repository: git is the one backend with hooks that settle the record, so no other
 // backend records one.
 func owedPathsOf(ctx context.Context, root string) (owedPaths, bool, error) {
-	cmd := gitExec(ctx, "-C", root, "rev-parse", "--absolute-git-dir", "--git-common-dir")
-	cmd.Env = append(cmd.Env, "LC_ALL=C")
+	cmd := gitExec(ctx, root, gitOpts{Env: []string{"LC_ALL=C"}}, "rev-parse", "--absolute-git-dir", "--git-common-dir")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

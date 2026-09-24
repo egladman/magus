@@ -1345,7 +1345,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Run-scoped remote-cache counters. Installed here rather than held on Cache
 	// because the daemon reuses one Cache per workspace across runs and can serve two
 	// adopted runs at once; RemoteSummary below reads them back off ctx.
-	ctx = cache.WithRemoteStats(ctx)
+	ctx = cache.ContextWithRemoteStats(ctx)
 
 	var uniqueProjects []*types.Project
 	seenProj := make(map[string]struct{})
@@ -2254,18 +2254,12 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	// have: there is no committed form for it to disagree with. Gating those was this
 	// check's first false positive, on a `ci` target whose build legitimately rewrites its
 	// own gen/ tree.
-	//
-	// A backend that cannot answer leaves the set alone rather than guessing. Guessing
-	// either way is worse than the question going unasked: assume tracked and every build
-	// artifact becomes a gate failure, assume untracked and the gate covers nothing.
-	if reporter, ok := res.VCS.(types.TrackedFileReporter); ok {
-		tracked, terr := reporter.TrackedFiles(ctx, dir, moved)
-		if terr != nil {
-			return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
-				dir, target, res.VCS.Name(), terr)
-		}
-		moved = tracked
+	tracked, terr := res.VCS.TrackedFiles(ctx, dir, moved)
+	if terr != nil {
+		return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
+			dir, target, res.VCS.Name(), terr)
 	}
+	moved = tracked
 	if len(moved) == 0 {
 		return nil
 	}
@@ -2363,14 +2357,34 @@ func (m *Magus) targetHandler(name string) TargetHandler {
 		if types.HasCharm(ctx, types.CharmReadWrite) {
 			return run()
 		}
-		// Either spelling of "this target writes committed bytes": the project-wide globs,
-		// or this target's own ctx.writesFiles refs.
-		declares := len(p.Outputs) > 0 || len(p.TargetOutputs[name]) > 0
-		if !pol.Drift.Gates(declares) {
+		if !pol.Drift.Gates(declaresOutput(p, name)) {
 			return run()
 		}
 		return m.gateDrift(ctx, p, name, pol.Drift, run)
 	}
+}
+
+// declaresOutput reports whether running target writes committed bytes in p: the
+// project-wide globs, or the ctx.writesFiles refs of target or any same-project target
+// its chain composes.
+//
+// The chain is the part that matters. A composed member runs inside its composer's body
+// and never reaches targetHandler itself, so its outputs are gated here or nowhere.
+// Measured 2026-09-23: every libs/* generate composes an index-generate that writes
+// MAGUS.md, declares nothing of its own, and so rewrote a stale committed index in CI and
+// passed; five of them stayed stale on main.
+func declaresOutput(p *types.Project, target string) bool {
+	if len(p.Outputs) > 0 {
+		return true
+	}
+	found := false
+	_ = types.WalkChain(p, target, nil, func(v types.ChainVisit) error {
+		if len(v.Project.TargetOutputs[v.Target]) > 0 {
+			found = true
+		}
+		return nil
+	})
+	return found
 }
 
 // withTargetDeadline bounds one target's execution by the tighter of the target's own

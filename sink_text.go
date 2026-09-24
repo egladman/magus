@@ -124,8 +124,8 @@ func (t textEncoder) encode(ctx context.Context, e any) {
 			level = slog.LevelWarn
 		}
 		if t.enabled(level) {
-			t.say(ctx, "remote: %d restored, %d published, %d failed (%s down, %s up)\n",
-				e.Hits, e.Published, e.Failures, cache.FormatBytes(int(e.DownBytes)), cache.FormatBytes(int(e.UpBytes)))
+			t.say(ctx, "remote: %d restored, %d missed, %d stored, %d failed (%s down, %s up)\n",
+				e.Hits, e.Misses, e.Stored, e.Failures, cache.FormatBytes(int(e.DownBytes)), cache.FormatBytes(int(e.UpBytes)))
 		}
 	case report.ShardTotal:
 		if t.enabled(slog.LevelDebug) {
