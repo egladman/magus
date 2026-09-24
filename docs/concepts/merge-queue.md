@@ -58,17 +58,17 @@ the queue's `merge-queue` status is main's required check, auto-merge cannot fir
 own: GitHub waits for that status, and the queue sets it to `success` only when it is
 about to see that pull request merged.
 
-| To                            | Do                                                          |
-| ----------------------------- | ----------------------------------------------------------- |
-| queue a pull request          | `gh pr merge <n> --auto --squash` (or `--rebase`)           |
-| queue a stack                 | label its top pull request `queue: squash`                  |
-| take it out                   | `gh pr merge <n> --disable-auto`, or remove the label       |
-| list what is queued           | `magus queue ls --provider github --base main`              |
-| tell one is queued            | it carries the label `merge-queue: queued`                  |
-| tell one was kicked back      | it carries the label `merge-queue: rejected`                |
-| see why one is waiting        | its `merge-queue` status, which reads `waiting: <why>`      |
-| see why one was kicked back   | the queue's newest comment on it                            |
-| land it past the queue        | `gh pr merge <n> --admin`: an admin's bypass, see below     |
+| To                          | Do                                                      |
+| --------------------------- | ------------------------------------------------------- |
+| queue a pull request        | `gh pr merge <n> --auto --squash` (or `--rebase`)       |
+| queue a stack               | label its top pull request `queue: squash`              |
+| take it out                 | `gh pr merge <n> --disable-auto`, or remove the label   |
+| list what is queued         | `magus queue ls --provider github --base main`          |
+| tell one is queued          | it carries the label `merge-queue: queued`              |
+| tell one was kicked back    | it carries the label `merge-queue: rejected`            |
+| see why one is waiting      | its `merge-queue` status, which reads `waiting: <why>`  |
+| see why one was kicked back | the queue's newest comment on it                        |
+| land it past the queue      | `gh pr merge <n> --admin`: an admin's bypass, see below |
 
 A pull request the queue kicks back gets a new comment, and its auto-merge or label is
 removed. The comment says what failed on which commits, links the validation run, and
