@@ -1624,8 +1624,8 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 // object) when the child can't launch or exits non-zero, mirroring proc.exec. label
 // names the calling method for error messages.
 //
-// The child runs in the working directory carried by ctx (WithCwd), so a nested project
-// describes its own project rather than the root workspace. opts may carry "root",
+// The child runs in the working directory carried by ctx (WithCwd) but loads the whole
+// workspace, so a command scoped to one project names it. opts may carry "root",
 // emitted as the global --root flag, which precedes the subcommand.
 // nestedExecOptions is how a nested magus is launched: where it runs, what it inherits, and
 // what it is fed.

@@ -1399,7 +1399,8 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
 // content-generate target). This root magusfile only owns the roff manpages
 // (man-generate above), which are a distribution artifact rather than site content.
 
-// Renders MAGUS.md via `magus describe graph`.
+// Renders MAGUS.md via `magus describe graph`. Unscoped, so it is the one index carrying
+// the workspace-wide routing tables; every other project's is scoped to that project.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
@@ -1411,8 +1412,8 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // adapter expects. Written into gen/ because they are generated, not authored: the
 // knowledge graph previously sat at docs/graph.json as a hand-run export with no
 // generating target at all, which made it stale by construction with nothing to say so.
-// Whole-workspace scope is why this lives at the root rather than in docs/ - a describe
-// from inside a project only sees that project.
+// Whole-workspace scope is why this lives at the root rather than in docs/, whose index
+// is scoped to docs alone.
 export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     // Declared although gitignored: console's build needs this target and copies the
     // pair, so the files are an output it consumes, not residue it happens to find.
@@ -2751,9 +2752,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
     // test inputs.
     ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
-    // The setup action and the queue's apply workflow: the release trust anchor and the
-    // queue app's credential rules are asserted against them.
-    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/queue-apply.yaml");
+    // The setup action and the workflows: the release trust anchor, the queue app's
+    // credential rules and the no-cache rule for trusted jobs are asserted against them.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/*.yaml");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays

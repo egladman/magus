@@ -2843,6 +2843,8 @@ var establishedCompoundNames = map[string]bool{
 	"jsonv2":  true, // names the GOEXPERIMENT
 	"libproc": true, // the Darwin API
 	"vmstat":  true, // the Darwin tool
+	// GNU make's name for the token protocol internal/proc/run implements.
+	"jobserver": true,
 }
 
 // grandfatheredCompoundNames are concatenations already in the tree when this check
@@ -3655,6 +3657,154 @@ func TestSetupMagusMintsTheQueueAppTokenOnlyAsAnOutput(t *testing.T) {
 	assert.Equal(t, "${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}", setup.With["queue-app-client-id"])
 	assert.NotContains(t, string(raw), "github.token", "a workflow names the token as secrets.GITHUB_TOKEN")
 	assert.NotContains(t, string(raw), "GH_TOKEN", "gh reads GITHUB_TOKEN")
+}
+
+// A job holding a secret, a write token or id-token restores no Actions cache. main's
+// cache scope is writable by any main-scoped run, and the merge queue validates
+// pull-request code in one; a hook that escapes can read the runtime token and plant an
+// entry every branch and tag run restores. queue.yaml restores nothing either: its
+// verdicts decide merges. See docs/concepts/merge-queue.md, Trust model.
+func TestTrustedJobsRestoreNoActionsCache(t *testing.T) {
+	// The input that turns an action's restore off, and whether off is its default.
+	type restoreSwitch struct {
+		input        string
+		offByDefault bool
+	}
+	switches := map[string]restoreSwitch{
+		"jdx/mise-action@":              {input: "cache"},
+		"./.github/actions/setup-magus": {input: "restore-history", offByDefault: true},
+		"docker/setup-qemu-action@":     {input: "cache-image"},
+		"docker/setup-buildx-action@":   {input: "cache-binary"},
+		"msys2/setup-msys2@":            {input: "cache"},
+		"actions/setup-go@":             {input: "cache"},
+	}
+	// Restores only on a pull request, where a secret gated off pull requests is absent.
+	const prOnly = "${{ github.event_name == 'pull_request' }}"
+	const prOnlyIf = "github.event_name == 'pull_request'"
+	const offPR = "github.event_name != 'pull_request'"
+	alwaysUntrusted := map[string]bool{"queue.yaml": true}
+	// TODO: queue-apply.yaml belongs to another change; delete this entry once its
+	// mise-action carries cache: false. The test fails when the entry is no longer needed.
+	exempt := map[string]string{
+		"queue-apply.yaml/apply": "jdx/mise-action restores main's scope beside the queue's write token",
+	}
+
+	grantsWrite := func(n *yaml.Node) bool {
+		switch n.Kind {
+		case 0:
+			// Undeclared means the repository default, which can be write.
+			return true
+		case yaml.ScalarNode:
+			return n.Value == "write-all"
+		case yaml.MappingNode:
+			for i := 1; i < len(n.Content); i += 2 {
+				if n.Content[i].Value == "write" {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	exprRe := regexp.MustCompile(`\$\{\{(.*?)\}\}`)
+	secretRe := regexp.MustCompile(`secrets\.(\w+)`)
+	// secrets reports whether the nodes name a secret other than GITHUB_TOKEN, and
+	// whether every such mention sits in an expression that is empty on a pull request.
+	secrets := func(nodes ...*yaml.Node) (found, gated bool) {
+		gated = true
+		var walk func(*yaml.Node)
+		walk = func(n *yaml.Node) {
+			if n.Kind == yaml.ScalarNode {
+				for _, m := range exprRe.FindAllStringSubmatch(n.Value, -1) {
+					for _, s := range secretRe.FindAllStringSubmatch(m[1], -1) {
+						if s[1] == "GITHUB_TOKEN" {
+							continue
+						}
+						found = true
+						if !strings.Contains(m[1], offPR) {
+							gated = false
+						}
+					}
+				}
+			}
+			for _, c := range n.Content {
+				walk(c)
+			}
+		}
+		for _, n := range nodes {
+			walk(n)
+		}
+		return found, gated
+	}
+
+	paths, err := filepath.Glob(filepath.Join(".github", "workflows", "*.yaml"))
+	require.NoError(t, err)
+	require.NotEmpty(t, paths)
+	used := map[string]bool{}
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err)
+		var wf struct {
+			Permissions yaml.Node            `yaml:"permissions"`
+			Env         yaml.Node            `yaml:"env"`
+			Jobs        map[string]yaml.Node `yaml:"jobs"`
+		}
+		require.NoError(t, yaml.Unmarshal(raw, &wf), path)
+		file := filepath.Base(path)
+		for name, node := range wf.Jobs {
+			var job struct {
+				Permissions yaml.Node    `yaml:"permissions"`
+				Steps       []actionStep `yaml:"steps"`
+			}
+			require.NoError(t, node.Decode(&job), "%s/%s", file, name)
+			perms := &job.Permissions
+			if perms.Kind == 0 {
+				perms = &wf.Permissions
+			}
+			found, gated := secrets(&node, &wf.Env)
+			always := alwaysUntrusted[file] || grantsWrite(perms) || (found && !gated)
+			// Trusted off pull requests only: a secret every mention of which is gated.
+			prAllowed := !always && found
+			if !always && !found {
+				continue
+			}
+
+			var violations []string
+			for _, step := range job.Steps {
+				if strings.HasPrefix(step.Uses, "actions/cache@") || strings.HasPrefix(step.Uses, "actions/cache/restore@") {
+					if prGated := prAllowed && step.If == prOnlyIf; !prGated {
+						violations = append(violations, step.Uses)
+					}
+					continue
+				}
+				for prefix, sw := range switches {
+					if !strings.HasPrefix(step.Uses, prefix) {
+						continue
+					}
+					v, set := step.With[sw.input]
+					restores := !sw.offByDefault
+					if set {
+						restores = v != "false"
+					}
+					if prGated := prAllowed && v == prOnly; restores && !prGated {
+						violations = append(violations, fmt.Sprintf("%s (%s: %q)", step.Uses, sw.input, v))
+					}
+				}
+			}
+
+			key := file + "/" + name
+			if _, ok := exempt[key]; ok {
+				used[key] = true
+				assert.NotEmpty(t, violations, "%s no longer restores a cache; delete its exemption", key)
+				continue
+			}
+			assert.Empty(t, violations,
+				"%s holds a secret, a write token or id-token (or is the queue), so it restores no Actions cache;\n"+
+					"turn each restore off (mise-action cache: false, setup-magus restore-history unset)", key)
+		}
+	}
+	for key := range exempt {
+		assert.True(t, used[key], "exemption %s names no trusted job; delete it", key)
+	}
 }
 
 // sockdirPackage is the one place magus resolves the per-user runtime directory, where

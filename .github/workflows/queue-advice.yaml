@@ -38,11 +38,13 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
+      # No restore either: this job holds pull-requests: write, and a pull request run
+      # restores main's cache scope, which the queue's validation can write.
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
           version: '2026.4.8'
           env: false
-          cache_save: false
+          cache: false
 
       - uses: ./.github/actions/setup-magus
         with:
@@ -55,7 +57,6 @@ jobs:
         with:
           merge-queue: 'true'
           merge-conflicts: 'false'
-          hand-edited-generated: 'false'
           target-outputs: 'false'
           doctor: 'false'
           version-floor: 'false'

@@ -397,6 +397,8 @@ const (
 	FlagQueryURL = "url"
 	// queue apply: --app
 	FlagQueueApplyApp = "app"
+	// queue apply: --base
+	FlagQueueApplyBase = "base"
 	// queue apply: --committer
 	FlagQueueApplyCommitter = "committer"
 	// queue apply: --facts
@@ -411,12 +413,16 @@ const (
 	FlagQueueApplyRegenerate = "regenerate"
 	// queue apply: --remote
 	FlagQueueApplyRemote = "remote"
+	// queue apply: --scratch-env
+	FlagQueueApplyScratchEnv = "scratch-env"
 	// queue apply: --status-context
 	FlagQueueApplyStatusContext = "status-context"
 	// queue apply: --target
 	FlagQueueApplyTarget = "target"
 	// queue apply: --vcs
 	FlagQueueApplyVCS = "vcs"
+	// queue apply: --workflow
+	FlagQueueApplyWorkflow = "workflow"
 	// queue describe: --app
 	FlagQueueDescribeApp = "app"
 	// queue describe: --base
@@ -469,6 +475,8 @@ const (
 	FlagQueueValidateRegenerate = "regenerate"
 	// queue validate: --remote
 	FlagQueueValidateRemote = "remote"
+	// queue validate: --scratch-env
+	FlagQueueValidateScratchEnv = "scratch-env"
 	// queue validate: --target
 	FlagQueueValidateTarget = "target"
 	// queue validate: --vcs
@@ -1331,6 +1339,9 @@ func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 }
 
 // QueueValidateFlags are the flags declared for `magus queue validate`.
+//
+// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type QueueValidateFlags struct {
 	Plan       string // --plan
 	Gate       string // --gate
@@ -1361,8 +1372,13 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 }
 
 // QueueApplyFlags are the flags declared for `magus queue apply`.
+//
+// It does NOT carry --scratch-env: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type QueueApplyFlags struct {
 	Provider      string        // --provider
+	Base          string        // --base
+	Workflow      string        // --workflow
 	StatusContext string        // --status-context
 	Once          bool          // --once
 	Interval      time.Duration // --interval
@@ -1379,6 +1395,8 @@ type QueueApplyFlags struct {
 func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	var f QueueApplyFlags
 	fs.StringVar(&f.Provider, FlagQueueApplyProvider, "", "`provider`: a built-in name (github) or a .buzz file")
+	fs.StringVar(&f.Base, FlagQueueApplyBase, "", "`branch` the queue merges into; a plan naming another is refused (MGS3028), and a run: source must have run on it")
+	fs.StringVar(&f.Workflow, FlagQueueApplyWorkflow, "", "`definition` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)")
 	fs.StringVar(&f.StatusContext, FlagQueueApplyStatusContext, "merge-queue", "Commit status the queue posts; branch protection requires it")
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")

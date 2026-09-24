@@ -31,7 +31,10 @@ type Validator struct {
 	// candidate. Nil leaves them as merged, which is only right when nothing generates
 	// them.
 	Regenerate types.RegenerateFunc
-	Events     *Events
+	// Reproduce is the hook command lines the gate and Regenerate run, recorded on
+	// every verdict so a kick-back can say how to run them again. Zero records none.
+	Reproduce types.Reproduction
+	Events    *Events
 
 	vcs     types.BuildVCS
 	clone   Clone
@@ -182,7 +185,7 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []types.Ch
 		if out.err != nil {
 			return fmt.Errorf("gate %s: %w", head.change.Label(), out.err)
 		}
-		green, err := r.verdict(ctx, head, out, true)
+		green, err := r.verdict(head, out, true)
 		if err != nil {
 			return err
 		}
@@ -299,7 +302,7 @@ func (r *validation) only(ctx context.Context) error {
 			}
 			var refused *types.RefusedError
 			if errors.As(err, &refused) {
-				_, err := r.verdict(ctx, f, outcome{refused: refused, summary: refused.Reason}, len(built) == 0)
+				_, err := r.verdict(f, outcome{refused: refused, summary: refused.Reason}, len(built) == 0)
 				return err
 			}
 			return r.hold(f, err)
@@ -319,7 +322,7 @@ func (r *validation) only(ctx context.Context) error {
 		if out.err != nil {
 			return fmt.Errorf("gate %s: %w", c.Label(), out.err)
 		}
-		_, err = r.verdict(ctx, f, out, f.depth == 1)
+		_, err = r.verdict(f, out, f.depth == 1)
 		return err
 	}
 	return nil
@@ -370,7 +373,7 @@ func (r *validation) start(ctx context.Context, group int, f *flight) {
 // verdict decides a gated or refused change and reports whether it was green.
 // attributable says everything beneath the candidate is validated, so a red is the
 // change's own.
-func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attributable bool) (bool, error) {
+func (r *validation) verdict(f *flight, out outcome, attributable bool) (bool, error) {
 	v := types.Verdict{Change: f.change, After: f.after, Onto: f.onto, CandidateCommit: f.cand.Commit, Method: f.change.Method,
 		Depth: f.depth, DurationMS: out.took.Milliseconds()}
 	if !out.green {
@@ -386,40 +389,17 @@ func (r *validation) verdict(ctx context.Context, f *flight, out outcome, attrib
 		}
 		v.Decision = types.DecisionKick
 		v.Reason = what + ": " + out.summary
-		detail := out.summary
-		if out.refused != nil && out.refused.Remedy != "" {
-			detail += ". " + out.refused.Remedy
+		remedy := ""
+		if out.refused != nil {
+			remedy = out.refused.Remedy
+		} else if out.summary != "" {
+			v.Reason = out.summary
 		}
-		v.Report = failureReport(r.plan.Base, f.change.Head, what, detail)
+		v.Report = failureReport(r.plan.Base, f.change.Head, f.onto, f.after, v.Reason, remedy)
 		return false, r.decide(v)
 	}
-	msg, err := squashMessage(ctx, r.vcs, r.clone.Root, r.plan.BaseCommit, f.change)
-	if err != nil {
-		return false, fmt.Errorf("squash message of %s: %w", f.change.Label(), err)
-	}
-	v.Decision, v.Message = types.DecisionMerge, msg
+	v.Decision = types.DecisionMerge
 	return true, r.decide(v)
-}
-
-// squashMessage is the conventional squash body for c's own commits: one "* subject"
-// paragraph each, oldest first, merges left out. A stacked change's own commits start
-// at its stack base.
-func squashMessage(ctx context.Context, v types.ReadVCS, root, baseCommit string, c types.Change) (string, error) {
-	from := baseCommit
-	if c.StackBase != "" {
-		from = c.StackBase
-	}
-	commits, err := v.RangeCommits(ctx, root, from, c.Head, nil)
-	if err != nil {
-		return "", err
-	}
-	var parts []string
-	for _, cm := range slices.Backward(commits) {
-		if len(cm.Parents) <= 1 {
-			parts = append(parts, "* "+cm.Subject)
-		}
-	}
-	return strings.Join(parts, "\n\n"), nil
 }
 
 // ground stops a flight's gate, waits for it, and removes its checkout.
@@ -438,7 +418,7 @@ func (r *validation) discard(ctx context.Context, cand types.Candidate) {
 // decide records v. A verdict the Applier would refuse to read is refused here, where
 // the step that wrote it can say so.
 func (r *validation) decide(v types.Verdict) error {
-	v.BaseCommit = r.plan.BaseCommit
+	v.BaseCommit, v.Gate, v.Regenerate = r.plan.BaseCommit, r.Reproduce.Gate, r.Reproduce.Regenerate
 	if err := v.Check(); err != nil {
 		return err
 	}
@@ -458,9 +438,18 @@ func conflictAhead(after string, conf sourceConflict) string {
 	return "conflicts with " + with + " in " + joinPaths(conf.paths) + "; retried once it merges"
 }
 
-func failureReport(base, head, what, summary string) string {
-	return fmt.Sprintf("The merge queue validated this change at `%s` on `%s`, and %s.\n\n%s\n\nPush a fix and queue the change again.\n",
-		short(head), base, what, summary)
+// failureReport says what failed on which commits. How to run it again, the files at
+// issue and how to queue the change again are the provider's to render from the kick.
+func failureReport(base, head, onto, after, failed, remedy string) string {
+	on := "`" + base + "` at `" + short(onto) + "`"
+	if after != "" {
+		on = "the candidate of #" + after + " (`" + short(onto) + "`)"
+	}
+	report := fmt.Sprintf("The merge queue built this change at `%s` onto %s, and %s.\n", short(head), on, failed)
+	if remedy != "" {
+		report += "\n" + remedy + "\n"
+	}
+	return report
 }
 
 func joinPaths(paths []string) string {
