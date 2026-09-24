@@ -12,7 +12,6 @@ import (
 // guard type), but the kinds enrolled below are this package's vocabulary, not hint's.
 
 const (
-	advisoryStaleBinary   hint.MarkerKind = "stale-binary"
 	advisoryCodeSearch    hint.MarkerKind = "code-search"
 	advisoryDocSearch     hint.MarkerKind = "doc-search"
 	advisorySourceRead    hint.MarkerKind = "source-read"

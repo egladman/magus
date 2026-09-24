@@ -189,6 +189,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   installs a shim for each `<hook>.buzz` in a directory you name, honoring
   `core.hooksPath` and linked worktrees; `remove` deletes only its own. It writes only
   under `rw`, and a hook it did not write is an error.
+- **A command rule sees where a line runs and which binary judges it.** The request
+  carries `dir` and `workspace`, each command its `path` when the line names the program
+  by one, and `magus\guard.binary()` returns the hook binary's `path` and the `stamp` its
+  build linked in.
+- **MGS1021 from a binary built from the checkout it cannot load names the way out.**
+  Such a binary cannot rebuild itself, so the error names the source link to run instead.
 
 ### Changed
 
@@ -319,6 +325,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **The `stale-binary` advisory and the `go -C` deny into another checkout of magus.**
+  Both judged only magus's own repository, which now keeps them in its guard policy.
 - **The `preflight` target convention.** The starter magusfile and the docs no longer
   declare one, and the `typescript` spell's no-op `preflight` op is gone; `--preflight`
   replaces the idea. A target you named `preflight` keeps working.

@@ -428,8 +428,7 @@ names the focus it judged against.
 ## Advisories are said once
 
 The advisories that carry a standing fact rather than a correction to the
-command in front of you are held to one firing per session: the stale-binary
-notice, the graph-beats-grep hint, the classify-before-staging reminder, the
+command in front of you are held to one firing per session: the graph-beats-grep hint, the classify-before-staging reminder, the
 index-staleness advisory, the enroll-a-lease notice an unleased write draws, the
 host-wiring notice, the terminal-lease notice, and
 the repository-scoped path rules above. The focus advisory is held twice over:
@@ -530,8 +529,8 @@ installed skill is generated and the next `--force` install erases the edit, and
 a new source directory is a structural choice worth making deliberately rather
 than by where a file happened to land.
 
-Two more fire only inside magus's own checkout, identified the way the
-stale-binary notice identifies it, and are inert in every other workspace: a
+Two more fire only inside magus's own checkout, identified by the markers only
+its sources carry, and are inert in every other workspace: a
 write to a shipped skill body or the MCP tool registry routes through the
 authoring method those files are maintained by, and a write to a generator input
 (a `.proto`, a Buzz host module descriptor) says to regenerate in the same

@@ -290,7 +290,7 @@ func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceR
 // EVALUATED, and therefore where a name this build does not provide actually surfaces.
 // Discover, above, only walks the tree; it cannot fail this way.
 func (m *Magus) explainStale(err error) error {
-	return ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion)
+	return withOwnBuildEscape(ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion), m.Root())
 }
 
 // WorkspaceLoadFailure describes err, a failed Open of root, as the daemon reports a FAILED

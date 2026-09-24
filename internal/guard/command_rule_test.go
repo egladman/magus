@@ -42,6 +42,8 @@ const claudeBashEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PreToolU
 // command, and who is calling, so a policy never tokenizes a shell line itself.
 func TestCommandRuleSeesTheNormalizedRequest(t *testing.T) {
 	ctx, _ := spawnFixture(t)
+	at := hookLocation(ctx, Dependencies{})
+	require.NotEmpty(t, at.dir)
 	probe := &commandRuleProbe{}
 	v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: claudeBashEnvelope, Host: "claude-code"})
 	assert.Equal(t, "pass", v.Decision)
@@ -52,6 +54,8 @@ func TestCommandRuleSeesTheNormalizedRequest(t *testing.T) {
 		Description: "watch ci",
 		Commands:    []types.CommandInvocation{{Program: "gh", Args: []string{"pr", "checks", "183", "--watch"}}},
 		Role:        types.AgentRoleRoot,
+		Dir:         at.dir,
+		Workspace:   at.workspace,
 	}, probe.asked[0])
 	assert.Equal(t, SessionKey("claude-code", "8f2c6a1e"), probe.gates[0].Session())
 }
@@ -89,8 +93,24 @@ func TestCommandInvocations(t *testing.T) {
 	}{
 		{"wrappers peel to the program", `env -u X nohup sh -c 'gh run watch 1'`,
 			[]types.CommandInvocation{{Program: "gh", Args: []string{"run", "watch", "1"}}}},
-		{"a path names its base program", `/opt/bin/gh pr list`,
-			[]types.CommandInvocation{{Program: "gh", Args: []string{"pr", "list"}}}},
+		{"a path names its base program and its file", `/opt/bin/gh pr list`,
+			[]types.CommandInvocation{{Program: "gh", Args: []string{"pr", "list"}, Path: "/opt/bin/gh"}}},
+		{"a relative path resolves against the line's directory", `timeout 60 ./magus run lint .`,
+			[]types.CommandInvocation{{Program: "magus", Args: []string{"run", "lint", "."}, Path: "/work/tree/magus"}}},
+		{"a quoted path is still literal", `"../other/magus" ls`,
+			[]types.CommandInvocation{{Program: "magus", Args: []string{"ls"}, Path: "/work/other/magus"}}},
+		{"a program found on PATH has no file", `magus ls`,
+			[]types.CommandInvocation{{Program: "magus", Args: []string{"ls"}}}},
+		{"a variable leaves the file unknown", `$T/magus --root $T ls`,
+			[]types.CommandInvocation{{Program: "magus", Args: []string{"--root", "", "ls"}}}},
+		{"a cd earlier on the line leaves a relative file unknown", `cd sub && ./magus ls && /abs/magus ls`,
+			[]types.CommandInvocation{
+				{Program: "cd", Args: []string{"sub"}},
+				{Program: "magus", Args: []string{"ls"}},
+				{Program: "magus", Args: []string{"ls"}, Path: "/abs/magus"},
+			}},
+		{"a program reparsed from a -c payload has no file", `sh -c './magus ls'`,
+			[]types.CommandInvocation{{Program: "magus", Args: []string{"ls"}}}},
 		{"a while loop marks its condition and body", `while true; do gh run list; sleep 5; done; echo done`,
 			[]types.CommandInvocation{
 				{Program: "true", Args: []string{}, Repeats: true},
@@ -109,7 +129,7 @@ func TestCommandInvocations(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, commandInvocations(tc.line, DialectBash))
+			assert.Equal(t, tc.want, commandInvocations(tc.line, DialectBash, "/work/tree"))
 		})
 	}
 }

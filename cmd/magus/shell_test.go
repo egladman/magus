@@ -1216,7 +1216,7 @@ func TestHookCmdAdvisesAnInvalidLeaseOnEverySurface(t *testing.T) {
 
 // TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease: the undeclared refusal used to return
 // from hookCmd before anything else ran, so it outranked the cache-dir rule against both
-// files' stated order and skipped the stale-binary notice at the tail.
+// files' stated order.
 func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")

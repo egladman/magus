@@ -1692,6 +1692,7 @@ func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
 func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("program", vm.StrValue(v.Program))
+	out.MapSet("path", vm.StrValue(v.Path))
 	itemsArgs := make([]vm.Value, len(v.Args))
 	for indexArgs := range v.Args {
 		itemsArgs[indexArgs] = vm.StrValue(v.Args[indexArgs])
@@ -1735,6 +1736,8 @@ func ObjectCommandRequest(v types.CommandRequest) vm.Value {
 		optCheckout = ObjectCheckoutState((*v.Checkout))
 	}
 	out.MapSet("checkout", optCheckout)
+	out.MapSet("dir", vm.StrValue(v.Dir))
+	out.MapSet("workspace", vm.StrValue(v.Workspace))
 	return out
 }
 
@@ -1761,5 +1764,12 @@ func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", vm.StrValue(string(v.Decision)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
+	return out
+}
+
+func ObjectGuardBinary(v types.GuardBinary) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("stamp", vm.StrValue(v.Stamp))
 	return out
 }

@@ -116,10 +116,9 @@ func hasMagusBinary(root string) bool {
 
 const bootstrapRebuild = "`./magus run go-build .`, which regenerates the embedded spell bytecode a bare link bakes in stale"
 
-// ownBuildOutcome is the tail of a correction rankOwnBuild applies once bootstrapsMagus
-// already holds for the matched call: whether root already has a binary, whether the
-// bootstrap build shared its line with something else, and the verdict to use for
-// neither.
+// ownBuildOutcome is the correction rankOwnBuild applies once bootstrapsMagus holds for
+// the denied call: whether root already has a binary, whether the bootstrap build shared
+// its line with something else, and the verdict to use for neither.
 type ownBuildOutcome struct {
 	root         string
 	hasBinary    bool
@@ -127,8 +126,7 @@ type ownBuildOutcome struct {
 	advisory     ShellVerdict
 }
 
-// apply layers this outcome onto v, the deny the raw-tool case refines in place or the
-// escapes-workspace case starts fresh.
+// apply layers this outcome onto v, the raw-tool deny it refines.
 func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
 	case o.hasBinary:
@@ -139,17 +137,6 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		return o.advisory
 	}
 	return v
-}
-
-// ownBuildCorrection is what rankOwnBuild needs to re-judge a go command aimed at a
-// checkout of magus itself. At most one side is used, chosen by the verdict already in
-// hand: rawTool refines a deny Evaluate's pure pass already produced for the raw-tool
-// rule; escaped pairs a fresh deny (that pass let a -C outside the workspace through,
-// since a foreign tree is not its to funnel) with its own outcome.
-type ownBuildCorrection struct {
-	rawTool     *ownBuildOutcome
-	escapedDeny ShellVerdict
-	escaped     *ownBuildOutcome
 }
 
 // ownBuildOutcomeFor builds the outcome rankOwnBuild layers onto the deny for denied,
@@ -170,80 +157,44 @@ func ownBuildOutcomeFor(deps Dependencies, command string, d Dialect, denied hin
 	}
 }
 
-// ownBuildVerdict computes the two corrections rankOwnBuild may apply for a go command
-// aimed at magus's own module, the one tree whose targets the guard can name:
+// ownBuildVerdict is the BOOTSTRAP correction for a go command aimed at magus's own
+// module: a fresh checkout has no ./magus, and every route to one runs through magus or
+// a raw build. `go build -o magus ./cmd/magus`, alone on its line, into a root with no
+// binary yet, is advised through instead of denied. Nil when the line holds no such
+// build.
 //
-//   - The BOOTSTRAP: a fresh checkout has no ./magus, and every route to one runs through
-//     magus or a raw build. `go build -o magus ./cmd/magus`, alone on its line, into a
-//     root with no binary yet, is advised through instead of denied.
-//   - Another checkout by -C: the pure rule passes a -C outside the workspace, because a
-//     foreign tree is not its to funnel. A sibling checkout of magus is, so the deny holds
-//     there too.
+// A -C outside the workspace passes the pure rule, since a foreign tree is not its to
+// funnel; a -C into another checkout of magus is this repository's policy to judge
+// (tools/policy/guard.buzz), bootstrap included.
 //
 // It reads the filesystem, so it lives beside Judge rather than inside Evaluate.
-func ownBuildVerdict(deps Dependencies, cwd, command string, d Dialect) ownBuildCorrection {
-	var oc ownBuildCorrection
+func ownBuildVerdict(deps Dependencies, cwd, command string, d Dialect) *ownBuildOutcome {
 	if cwd == "" {
-		return oc
+		return nil
 	}
 	cmds, parsed := ParseCommandsDialect(command, d)
 	if !parsed {
-		return oc
+		return nil
 	}
-
-	if i := slices.IndexFunc(cmds, func(c hint.Invocation) bool { return rawToolDenied(deps, c) }); i >= 0 {
-		if call, ok := readGoCall(cmds[i]); ok {
-			if root := call.buildRoot(cwd); ownSourceRoot(root) && call.bootstrapsMagus(root) {
-				oc.rawTool = ownBuildOutcomeFor(deps, command, d, cmds[i], root, len(cmds) > 1, cwd)
-			}
-		}
+	i := slices.IndexFunc(cmds, func(c hint.Invocation) bool { return rawToolDenied(deps, c) })
+	if i < 0 {
+		return nil
 	}
-
-	for _, c := range cmds {
-		call, ok := readGoCall(c)
-		if !ok || call.chdir == "" || !escapesWorkspace(call.chdir) {
-			continue
-		}
-		root := call.buildRoot(cwd)
-		if !ownSourceRoot(root) {
-			continue
-		}
-		match, covered := rawToolMatch(deps, hint.Invocation{Name: "go", Args: call.args})
-		if !covered {
-			continue
-		}
-		oc.escapedDeny = ShellVerdict{
-			Deny: explainDeny(command, c, runGuardAdvice(match)+"\n"+root+" is a checkout of magus itself, so run the target from that checkout."),
-			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(c)},
-		}
-		if call.bootstrapsMagus(root) {
-			oc.escaped = ownBuildOutcomeFor(deps, command, d, c, root, len(cmds) > 1, cwd)
-		}
-		break
+	call, ok := readGoCall(cmds[i])
+	if !ok {
+		return nil
 	}
-
-	return oc
+	if root := call.buildRoot(cwd); ownSourceRoot(root) && call.bootstrapsMagus(root) {
+		return ownBuildOutcomeFor(deps, command, d, cmds[i], root, len(cmds) > 1, cwd)
+	}
+	return nil
 }
 
-// rankOwnBuild ranks the own-build correction against the verdict the other rules
-// reached: rawTool only refines a deny already keyed to the raw-tool rule, escaped only
-// replaces a silence, and every other verdict passes through untouched.
-func rankOwnBuild(v ShellVerdict, oc ownBuildCorrection) ShellVerdict {
-	switch {
-	case v.Rule.Name == denyRuleRawTool && v.Deny != "":
-		if oc.rawTool == nil {
-			return v
-		}
-		return oc.rawTool.apply(v)
-	case v.Deny == "":
-		if oc.escapedDeny.Deny == "" {
-			return v
-		}
-		if oc.escaped == nil {
-			return oc.escapedDeny
-		}
-		return oc.escaped.apply(oc.escapedDeny)
-	default:
+// rankOwnBuild refines a raw-tool deny with the bootstrap correction; every other verdict
+// passes through untouched.
+func rankOwnBuild(v ShellVerdict, oc *ownBuildOutcome) ShellVerdict {
+	if oc == nil || v.Rule.Name != denyRuleRawTool || v.Deny == "" {
 		return v
 	}
+	return oc.apply(v)
 }

@@ -321,8 +321,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	//
 	// Applied INSIDE each arm rather than returned from here, so the documented order
 	// holds: the cache-dir rule and the workspace-wide denies are true whoever runs the
-	// call, and the stale-binary notice at the tail reaches this verdict like any other.
-	// A pre-authorization does not stand it down either, since an id nobody declared means
+	// call. A pre-authorization does not stand it down either, since an id nobody declared means
 	// nothing graded the call at all.
 	//
 	// --observe is exempt, as it is from every other verdict: it carries none.
@@ -649,34 +648,6 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			note = nothingRanNote(input, effectiveDialect(deps.ShellDialect))
 		}
 		verdict.Reason, verdictRef = shapeDeny(ctx, markers, verdict.Rule, verdict.Reason, note)
-	}
-	// Said last and on EVERY surface: a stale binary's verdicts are all suspect, not
-	// just the ones that matched a rule.
-	//
-	// A deny most of all. That is the verdict the caller cannot see past, so a block
-	// from rules they have already changed is the case this rule exists for, and the
-	// first version of it skipped exactly that arm. The reason comes first, because
-	// the block has to be explained before it can be doubted.
-	//
-	// It is the loudest of the repeated advisories and so the one held to once per
-	// session, EXCEPT on a deny, where it is appended every time and spends no firing.
-	// A denial explains itself whenever it refuses, and this is the sentence that
-	// says the refusal may be coming from rules the caller has already changed.
-	if notice := staleGuardNotice(); notice != "" && !req.Observe {
-		// An ask blocks until the person answers, so it is explained like a deny and never
-		// overwritten by the advise below, which a host renders as an allow.
-		if verdict.Decision == "deny" || verdict.Decision == "ask" {
-			verdict.Reason += "\n\n" + notice
-		} else if held := markers.Once(advisoryStaleBinary, notice); held != "" {
-			if verdict.Decision == "advise" {
-				// Appended, so the rule stays whatever MATCHED the command: this notice
-				// is a standing fact about the binary, and naming it here would report
-				// the footnote instead of the finding.
-				verdict.Context += "\n\n" + held
-			} else {
-				verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryStaleBinary)
-			}
-		}
 	}
 	// An observation is not a judgment, and the trail already knows the difference: an
 	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".

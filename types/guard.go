@@ -170,6 +170,24 @@ type CommandRequest struct {
 	// pushes, since reading it costs processes. Nil otherwise, and when the checkout's
 	// version control cannot report it: a rule reads nil as unknown.
 	Checkout *CheckoutState
+	// Dir is the directory the line runs in, as the host reported it; empty when it
+	// reported none.
+	Dir string
+	// Workspace is the root of the workspace holding Dir, empty when none does.
+	Workspace string
+}
+
+// GuardBinary is the magus binary answering a guard hook, as magus\guard.binary() reports
+// it to a rule.
+type GuardBinary struct {
+	// Path is the running executable, absolute with symlinks resolved; empty when the
+	// operating system cannot say.
+	Path string
+	// Stamp is the text the build passed through the linker (`-X
+	// github.com/egladman/magus/internal/interp/bindings.buildStamp=<text>`), empty for a
+	// build that passed none. magus never reads it: its format is whatever the build that
+	// wrote it and the rule that reads it agree on.
+	Stamp string
 }
 
 // WriteRequest is what a magus\guard.write rule is handed: one file an agent is about to
@@ -199,6 +217,12 @@ type WriteRequest struct {
 type CommandInvocation struct {
 	// Program is the program's base name as the line spells it.
 	Program string
+	// Path is the program's file when the line names it by a path (`./magus`,
+	// `/opt/bin/magus`): absolute against the request's Dir and cleaned, symlinks left
+	// as spelled. Empty for a program found on PATH, and whenever the file is not known
+	// before the line runs: a word holding a variable or substitution, a relative path
+	// after a `cd` on the same line, or no Dir to resolve it against.
+	Path string
 	// Args are its arguments, each rendered to the literal text the shell would pass; a
 	// word whose value is known only at run time (a variable, a substitution) renders empty.
 	Args []string
