@@ -124,6 +124,15 @@ export object DriftResult {
     files: [Path] = [],
 }
 
+export object Check {
+    name: str = "",
+    status: CheckStatus = CheckStatus.none,
+    message: str = "",
+    details: [str] = [],
+    evidence: str = "",
+    fix: [str] = [],
+}
+
 export object DiffSymbol {
     id: str = "",
     label: str = "",
@@ -136,6 +145,7 @@ export object DiffSymbol {
     qualified: str = "",
     signature: str = "",
     baseSignature: str = "",
+    checks: [Check] = [],
 }
 
 export object DiffTouch {
@@ -194,6 +204,17 @@ export object DiffReviewed {
     files: int = 0,
 }
 
+export object Diagnostic {
+    code: str = "",
+    message: str = "",
+    url: str = "",
+}
+
+export object DiffUncovered {
+    project: str = "",
+    reason: DiffUncoveredReason = DiffUncoveredReason.none,
+}
+
 export object Diff {
     base: str = "",
     files: [DiffFile] = [],
@@ -202,15 +223,8 @@ export object Diff {
     notes: [str] = [],
     api: DiffAPI? = null,
     reviewed: DiffReviewed = DiffReviewed{},
-}
-
-export object DoctorCheck {
-    name: str = "",
-    status: DoctorCheckStatus = DoctorCheckStatus.none,
-    message: str = "",
-    details: [str] = [],
-    evidence: str = "",
-    fix: [str] = [],
+    conformanceError: Diagnostic? = null,
+    uncovered: [DiffUncovered] = [],
 }
 
 export object DoctorSummary {
@@ -222,7 +236,7 @@ export object DoctorSummary {
 
 export object DoctorReport {
     workspace: str = "",
-    checks: [DoctorCheck] = [],
+    checks: [Check] = [],
     summary: DoctorSummary = DoctorSummary{},
 }
 
@@ -538,9 +552,27 @@ export object JobUnattributedWrite {
     at: int = 0,
 }
 
-export object JobActor {
-    session: str = "",
+export object Grant {
+    tokens: int = 0,
+    mcp: int = 0,
+    console: int = 0,
+}
+
+export object Credential {
+    class: str = "",
+    id: str = "",
+    name: str = "",
+    grant: Grant = Grant{},
+}
+
+export object Origin {
+    user: str = "",
+    uid: str = "",
+    entryPoint: str = "",
     host: str = "",
+    session: str = "",
+    agent: str = "",
+    credential: Credential = Credential{},
 }
 
 export object JobResultValidation {
@@ -610,7 +642,7 @@ export object Job {
     writeProof: str = "",
     reportedBase: str = "",
     baseVerdict: str = "",
-    registeredBy: JobActor = JobActor{},
+    registeredBy: Origin = Origin{},
     registered: int = 0,
     created: int = 0,
     updated: int = 0,

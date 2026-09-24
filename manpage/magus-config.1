@@ -71,7 +71,7 @@ Write the archive to this file (default: stdout)
 .RS
 .TP
 \fB\-\-expires\fR \fIstring\fR
-Lifetime: a duration like 90d or 48h, or "never" (default 90d)
+Lifetime: a duration like 90d or 48h, at most 366d (default 90d)
 .TP
 \fB\-\-name\fR \fIstring\fR
 Name for this connector token (default: connector\-N)
@@ -85,8 +85,11 @@ Overwrite an existing token (rotation)
 .SS config console token create options
 .RS
 .TP
+\fB\-\-code\fR
+Print a one\-time code instead, for a console link's #code=; the console trades it for the token within a minute, once
+.TP
 \fB\-\-expires\fR \fIstring\fR
-Lifetime: a duration like 90d or 48h, or "never" (default 90d)
+Lifetime: a duration like 90d or 48h, at most 366d (default 90d)
 .TP
 \fB\-\-name\fR \fIstring\fR
 Name for this console token (default: console\-N)
@@ -110,7 +113,7 @@ Manage forecaster runtime history
 Manage the build cache (prune)
 .TP
 \fBmcp\fR
-Manage the MCP server auth token
+Manage MCP connector tokens
 .TP
 \fBtoken\fR
 Manage the operator token (every surface)

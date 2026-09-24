@@ -128,7 +128,7 @@ for the same reason: it reads the pull request's review state and labels.
 | `blast-radius`          | the change reaches a large share of the workspace, with the chain that pulled each project in                                                            |
 | `doctor`                | `magus doctor` reports a failing check; run it locally for the advice tier and its detail                                                                |
 | `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                                                          |
-| `conformance`           | a new target's name diverges from what the rest of the workspace already calls the same work                                                             |
+| `conformance`           | a new target, or a symbol the change adds, renames or re-signs, departs from what the rest of the workspace does with the same work or declaration       |
 | `missing-target`        | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                                                        |
 | `api-surface`           | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
 | `first-contribution`    | the author has no merged pull request here yet                                                                                                           |
@@ -155,6 +155,41 @@ by them, as this repository's `queue-advice.yaml` does:
 `blast-radius` takes a `fanout-share` (default `0.5`): the share of the workspace a
 change must reach before it says anything. It is a share rather than a count because
 five projects is most of a small workspace and a rounding error in a large one.
+
+## Conformance on code
+
+The symbol half of `conformance` reads `magus diff`'s `checks` on each symbol the change
+adds, renames or re-signs. Every check derives its norm from the workspace's own symbol
+index, needs `conformance-min-cohort` declarations agreeing at `conformance-min-share` or
+more (the same two inputs as the target half, default 5 and 0.8), never counts the change's
+own new names toward a norm, and states a fact with its counts rather than a rule:
+
+| check             | it reports                                                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `naming-affix`    | a function or type missing the leading or trailing word pair most declarations of its shape that share a word with it carry |
+| `name-collision`  | a name at a project's top level that a target, spell, op, charm or diagnostic already carries                               |
+| `rename-leftover` | a renamed symbol whose old two-word-or-longer name still appears in the files that reference it                             |
+| `param-order`     | a function taking two parameters in the reverse of the order most functions in its scope that take both do                  |
+
+The checks read what every language's index holds (names, kinds, scopes, references) and,
+where a language reports it, the declaration's shape: `param-order` needs a language whose
+index renders parameter names (Go and TypeScript today).
+
+Before the checks run, `magus diff` brings the symbol index of every project the change
+touched up to date through that project's `scip` target, so a current index replays and a
+stale one rebuilds only itself. When it cannot (the indexer is missing or fails, or cache
+writes are off so nothing vouches for the rebuilt index), the review carries
+[MGS7003](../../reference/codes/knowledge/MGS7003.md) in place of findings, and this section
+says so and fails its step. It never reads as a change with nothing to report. The job running
+the advisors therefore needs cache writes on (`MAGUS_CACHE_WRITE_ENABLED: 'true'`); without a
+signing key that still publishes nothing to a shared cache.
+
+A `baseline` sharpens this half as it sharpens `api-surface`. With one, what the change
+adds, renames and re-signs is read from the two indexes. Without one it is read from the
+change's own patch: a symbol is new when its definition line is an added line that no
+removed line in the patch names, and a re-signed symbol is not compared at all. When the
+workflow's baseline step fails, the section says so under its findings rather than quietly
+reporting less.
 
 ## The bump is a floor
 

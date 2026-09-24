@@ -1156,7 +1156,7 @@ func statusLinePath(line string) string {
 // reader must be able to tell "nothing depends on this" from "nothing was measured", which is
 // what Notes is for.
 func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
-	return m.diff(ctx, paths, diffConfig{})
+	return m.DiffWith(ctx, paths, types.DiffOptions{})
 }
 
 func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types.Diff, error) {
@@ -1188,9 +1188,21 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// radius could not be walked would make the useful part unreachable, and the Note is
 		// what keeps the absence visible rather than silent.
 		out.Notes = append(out.Notes, "blast radius unavailable: "+ierr.Error())
+		out.ConformanceError = &types.Diagnostic{
+			Message: "the conformance checks could not run: the blast radius could not be computed: " + ierr.Error(),
+		}
 		out.SortForReading()
 		return out, nil //nolint:nilerr // reported as a Note, see above
 	}
+	// Before the graph loads, so the symbols it merges describe the tree under review.
+	var touched []string
+	for _, f := range out.Files {
+		if f.Project != "" && !slices.Contains(touched, f.Project) {
+			touched = append(touched, f.Project)
+		}
+	}
+	freshErr := m.freshenSymbolIndexes(ctx, touched)
+	out.Uncovered = uncoveredProjects(out.Files, m.symbolCapableIn(touched))
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
@@ -1289,16 +1301,64 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			f.Coverage = &cov
 		}
 	}
+	in := conformanceInput{minCohort: cfg.minCohort, minShare: cfg.minShare, patch: cfg.patch}
 	if cfg.baseline != nil {
 		if indexed {
-			attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
+			in.changes, in.removed = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
 		} else {
 			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
 		}
 	}
+	switch {
+	case freshErr != nil:
+		d := diagnosticOf(freshErr)
+		out.ConformanceError = &d
+	case !indexed && len(m.symbolCapableIn(touched)) > 0:
+		d := diagnosticOf(types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
+			"no symbol index loaded for %s, so the conformance checks could not run; build it with `magus graph build`",
+			strings.Join(m.symbolCapableIn(touched), ", ")))
+		out.ConformanceError = &d
+	case indexed:
+		m.conformance(ctx, &out, byPath, graph, paths, cfg, in)
+	}
 
 	out.SortForReading()
 	return out, nil
+}
+
+// conformance runs the conformance checks for diff. Whatever keeps them from running is set as
+// out.ConformanceError, in place of findings; a weaker input they fall back to is a Note.
+func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[string]*types.DiffFile,
+	graph *knowledge.Graph, paths []string, cfg diffConfig, in conformanceInput,
+) {
+	fail := func(msg string, err error) {
+		d := types.Diagnostic{Message: "the conformance checks could not run: " + msg + ": " + err.Error()}
+		out.ConformanceError = &d
+	}
+	if in.changes == nil {
+		if cfg.baseline != nil {
+			out.Notes = append(out.Notes, "conformance: the baseline could not be compared, so what the change adds was read from its patch, which cannot tell a re-signed symbol from an unchanged one")
+		}
+		if !cfg.patchGiven {
+			patch, err := m.WorkingDiff(ctx, paths)
+			if err != nil {
+				fail("the working tree's patch could not be read", err)
+				return
+			}
+			in.patch = patch
+		}
+	}
+	generated, err := m.generatedFiles(ctx, graph)
+	if err != nil {
+		fail("generated files could not be classified", err)
+		return
+	}
+	in.generated = generated
+	in.read = func(path string) (string, bool) {
+		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
+		return string(b), err == nil
+	}
+	attachConformance(byPath, graph, in)
 }
 
 // authorEditedProjects narrows a seed set to the projects a PERSON changed something in.

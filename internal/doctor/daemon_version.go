@@ -19,7 +19,7 @@ import (
 // The predicate carries no judgment: two version strings match or they do not. For a
 // normal install both sides are one binary and this never fires, so it is not an advisory
 // competing for attention and uptake is the wrong measure of it.
-func (r *runner) checkDaemonVersion() types.DoctorCheck {
+func (r *runner) checkDaemonVersion() types.Check {
 	const name = "daemon-version"
 
 	di := r.opts.daemonInfo
@@ -28,18 +28,18 @@ func (r *runner) checkDaemonVersion() types.DoctorCheck {
 		// A PERSISTENT daemon only. magus adopts a per-process proc server for ordinary
 		// commands, and that one is this very binary, so comparing against it would always
 		// match and would hide exactly the case this check exists for.
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown,
+		return types.Check{
+			Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
 			Message: "no persistent daemon answered, so nothing here is served by another build",
 		}
 	case di.DaemonVersion == "" || di.ClientVersion == "":
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown,
+		return types.Check{
+			Name: name, Status: types.CheckOK, Evidence: types.EvidenceUnknown,
 			Message: "one side did not report a version, so the two cannot be compared",
 		}
 	case di.DaemonVersion == di.ClientVersion:
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: fmt.Sprintf("the daemon serving this workspace is this build (%s)", di.ClientVersion),
 		}
 	}
@@ -54,9 +54,9 @@ func (r *runner) checkDaemonVersion() types.DoctorCheck {
 		fmt.Sprintf("restart it to pick up this build: `%s` then `%s`", hint.ServerStop, hint.ServerStart),
 		"it may be serving other workspaces, which stop for them too",
 	)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:   name,
-		Status: types.DoctorFail,
+		Status: types.CheckFail,
 		Message: fmt.Sprintf("this magus is %s and the daemon serving it is %s (pid %d)",
 			di.ClientVersion, di.DaemonVersion, di.ParentPID),
 		Details: details,

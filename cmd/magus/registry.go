@@ -450,9 +450,10 @@ func (r *wsRegistry) dispatch(ctx context.Context, root string, rc runConfig, ar
 	defer r.release(e) // hold the lease for the whole build
 	ctx = withMagus(ctx, e.m)
 	if proc.IsJob(ctx) {
-		return dispatchJob(ctx, root, rc, args)
+		return dispatchJob(trail.ContextWithEntryPoint(ctx, types.EntryPointDaemon), root, rc, args)
 	}
-	return dispatchAdopted(ctx, root, rc, args)
+	// An adopted run is a CLI invocation the daemon executes on the client's behalf.
+	return dispatchAdopted(trail.ContextWithEntryPoint(ctx, types.EntryPointCLI), root, rc, args)
 }
 
 // recordJobActivity appends a KIND_JOB event to the daemon-wide activity trail after a background
@@ -477,7 +478,7 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 	ev := trail.Event{
 		Ts:         time.Now().Add(-dur).UnixMilli(),
 		Kind:       trail.KindJob,
-		Actor:      "daemon",
+		Origin:     types.Origin{EntryPoint: types.EntryPointDaemon},
 		Workspace:  root,
 		Action:     job.ActionString(args),
 		Outcome:    trail.OutcomeOK,

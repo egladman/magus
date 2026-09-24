@@ -96,6 +96,8 @@ var boundaryTypes = []boundaryType{
 	// magus.review's bundle, leaf-first. A Buzz advisor annotating `> Review` gets
 	// compile-checked field access on the same shape the console and the CLI read, which is
 	// what keeps one definition of review order serving all three.
+	// DiffSymbol.checks are [Check], shared with DoctorReport.
+	{Name: "Check", Type: reflect.TypeFor[types.Check](), RuntimeObject: true},
 	{Name: "DiffSymbol", Type: reflect.TypeFor[types.DiffSymbol](), RuntimeObject: true},
 	{Name: "DiffChurn", Type: reflect.TypeFor[types.DiffChurn](), RuntimeObject: true},
 	{Name: "DiffTouch", Type: reflect.TypeFor[types.DiffTouch](), RuntimeObject: true},
@@ -103,10 +105,10 @@ var boundaryTypes = []boundaryType{
 	{Name: "DiffReviewed", Type: reflect.TypeFor[types.DiffReviewed](), RuntimeObject: true},
 	{Name: "DiffAPI", Type: reflect.TypeFor[types.DiffAPI](), RuntimeObject: true},
 	{Name: "VCSCheckpoint", Type: reflect.TypeFor[types.VCSCheckpoint](), RuntimeObject: true},
+	// A thrown error's shape, and also returned: Diff.conformanceError is one.
+	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic](), RuntimeObject: true},
+	{Name: "DiffUncovered", Type: reflect.TypeFor[types.DiffUncovered](), RuntimeObject: true},
 	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
-	// Not a RuntimeObject: it reaches Buzz through a thrown error, not a return.
-	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic]()},
-	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
 	// magus.insight's bundle, leaf-first. Element names are not uniform on purpose:
@@ -154,10 +156,13 @@ var boundaryTypes = []boundaryType{
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
 	// magus\job's bundle (put/list), leaf-first: Job.releases and
 	// JobList.overlaps are each a list of the other two, and Job.registeredBy is
-	// one of the actor.
+	// an Origin.
 	{Name: "JobRelease", Type: reflect.TypeFor[types.JobRelease](), RuntimeObject: true},
 	{Name: "JobUnattributedWrite", Type: reflect.TypeFor[types.JobUnattributedWrite](), RuntimeObject: true},
-	{Name: "JobActor", Type: reflect.TypeFor[types.JobActor](), RuntimeObject: true},
+	// Leaf first: Origin.credential is a Credential, whose grant is a Grant.
+	{Name: "Grant", Type: reflect.TypeFor[types.Grant](), RuntimeObject: true},
+	{Name: "Credential", Type: reflect.TypeFor[types.Credential](), RuntimeObject: true},
+	{Name: "Origin", Type: reflect.TypeFor[types.Origin](), RuntimeObject: true},
 	{Name: "LeaseCheck", Type: reflect.TypeFor[types.LeaseCheck](), RuntimeObject: true},
 	{Name: "CompletionGate", Type: reflect.TypeFor[types.CompletionGate](), RuntimeObject: true},
 	{Name: "GateEvidence", Type: reflect.TypeFor[types.GateEvidence](), RuntimeObject: true},
@@ -231,8 +236,8 @@ var boundaryEnums = []boundaryEnum{
 		Cases: []enumCase{{"none", ""}, {"go", "go"}, {"uname", "uname"}},
 	},
 	{
-		Name:  "DoctorCheckStatus",
-		Type:  reflect.TypeFor[types.DoctorCheckStatus](),
+		Name:  "CheckStatus",
+		Type:  reflect.TypeFor[types.CheckStatus](),
 		Cases: []enumCase{{"none", ""}, {"ok", "ok"}, {"fail", "fail"}, {"advice", "advice"}},
 	},
 	{
@@ -263,6 +268,11 @@ var boundaryEnums = []boundaryEnum{
 		Type: reflect.TypeFor[types.SymbolIndexFreshness](),
 		Cases: []enumCase{{"none", ""}, {"upToDate", "up-to-date"}, {"outOfDate", "out-of-date"},
 			{"notIndexed", "not-indexed"}},
+	},
+	{
+		Name:  "DiffUncoveredReason",
+		Type:  reflect.TypeFor[types.DiffUncoveredReason](),
+		Cases: []enumCase{{"none", ""}, {"noIndexer", "no-indexer"}},
 	},
 	{
 		Name: "TargetRunState",

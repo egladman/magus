@@ -33,7 +33,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	if verdict.Decision != "pass" && verdict.Decision != "advise" {
 		return verdict, workspaceRuleRecord{}
 	}
-	facts := hint.NewGate(at.cacheDir, who.sessionKey())
+	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	role, row := actingRole(ctx, at, lease)
 	req := types.WriteRequest{
 		Host:      who.Host,

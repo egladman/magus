@@ -55,13 +55,13 @@ var remediationSections = map[string]bool{
 // codeURL is a parameter rather than a direct types.CodeURL call so a test can hand it a
 // domain that routes a code nowhere; that branch is unreachable through the real one,
 // which is the point of guarding it.
-func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func(types.DiagnosticCode) string) types.DoctorCheck {
+func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func(types.DiagnosticCode) string) types.Check {
 	const name = "diagnostic-docs"
 
 	if _, err := os.Stat(codeDocsRoot(root)); err != nil {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:     name,
-			Status:   types.DoctorOK,
+			Status:   types.CheckOK,
 			Evidence: types.EvidenceUnknown,
 			Message:  "no docs" + codeDocsMarker + " tree; skipped (the MGS pages ship with magus's own sources)",
 		}
@@ -100,33 +100,33 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 		if len(silent) > 0 {
 			msg += fmt.Sprintf("; a further %d have a page that never names a next step", len(silent))
 		}
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
+			Status:  types.CheckFail,
 			Message: msg,
 			Details: append(broken, silent...),
 		}
 	}
 	if len(silent) > 0 {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:   name,
-			Status: types.DoctorAdvice,
+			Status: types.CheckAdvice,
 			Message: fmt.Sprintf(
 				"%d of %d diagnostic code(s) have a page that says what fires them and not what to do about it",
 				len(silent), len(codes)),
 			Details: silent,
 		}
 	}
-	return types.DoctorCheck{
+	return types.Check{
 		Name:    name,
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: fmt.Sprintf("%d diagnostic code(s) resolve to a docs page carrying a remediation section", pages),
 	}
 }
 
 // checkDiagnosticDocs reports diagnostic codes whose docs page is missing or names no
 // next step.
-func (r *runner) checkDiagnosticDocs() types.DoctorCheck {
+func (r *runner) checkDiagnosticDocs() types.Check {
 	return checkDiagnosticDocs(r.root, types.AllDiagnosticCodes(), types.CodeURL)
 }
 

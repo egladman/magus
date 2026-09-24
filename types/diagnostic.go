@@ -402,6 +402,12 @@ const (
 	// WorkspaceStillLoading is a daemon call against a workspace still being loaded. The
 	// transient twin of MGS3016: the same call succeeds once the load finishes.
 	WorkspaceStillLoading DiagnosticCode = "MGS3017"
+	// WritePathIsDirectory is a job fork whose write paths name an existing directory that
+	// is not a project root. A directory claims every file under it, so the job overlaps
+	// every other job that edits anything there, and the overlap report fills with pairs
+	// that share no file. A project root the job owns whole, and a directory the job
+	// creates, stay declarable.
+	WritePathIsDirectory DiagnosticCode = "MGS3018"
 	// QueueCredentialMismatch is a merge queue whose base requires the queue's commit
 	// status from one integration while apply holds another's credential. The provider
 	// counts none of the statuses the queue posts, so every change would wait forever;
@@ -463,19 +469,23 @@ const (
 	// CharmRenamed is a run activating a charm under a name magus has retired, with no
 	// selected target declaring that name for itself. The old name matches nothing, so
 	// without this the run would go ahead without the grant it asked for.
-	CharmRenamed             DiagnosticCode = "MGS6002"
-	UnresolvableBuzzImport   DiagnosticCode = "MGS7001"
-	DanglingDocReference     DiagnosticCode = "MGS7002"
+	CharmRenamed           DiagnosticCode = "MGS6002"
+	UnresolvableBuzzImport DiagnosticCode = "MGS7001"
+	DanglingDocReference   DiagnosticCode = "MGS7002"
+	// SymbolIndexNotCurrent is a review whose symbol index could not be brought up to date
+	// for the projects the change touched, so the conformance checks did not run: the
+	// indexer is missing or failed, or the cache recorded nothing to vouch for the result.
+	SymbolIndexNotCurrent    DiagnosticCode = "MGS7003"
 	OutputRefMissing         DiagnosticCode = "MGS8001"
 	OutputRefAmbiguous       DiagnosticCode = "MGS8002"
 	OutputRefMalformed       DiagnosticCode = "MGS8003"
 	OutputRefForeignMachine  DiagnosticCode = "MGS8004"
 	BearerRejected           DiagnosticCode = "MGS9001"
 	InsecureTokenPermissions DiagnosticCode = "MGS9002"
-	ConnectorStoreTooNew     DiagnosticCode = "MGS9003"
+	TokenStoreTooNew         DiagnosticCode = "MGS9003"
 	NoAuthToken              DiagnosticCode = "MGS9004"
-	ConnectorNameExists      DiagnosticCode = "MGS9005"
-	ConnectorNotFound        DiagnosticCode = "MGS9006"
+	TokenNameExists          DiagnosticCode = "MGS9005"
+	TokenNotFound            DiagnosticCode = "MGS9006"
 	// HostNotAllowed is a request whose Host or Origin names a host the daemon does not
 	// serve: the DNS-rebinding guard, answered 403.
 	HostNotAllowed DiagnosticCode = "MGS9007"
@@ -498,6 +508,27 @@ const (
 	// ShareUnavailable is a share whose LAN listener could not start: no private-range
 	// interface is up, or the listener could not bind.
 	ShareUnavailable DiagnosticCode = "MGS9014"
+	// GrantInsufficient is a valid credential presented to a route that needs more than its
+	// grant holds, answered 403. The body names the need.
+	GrantInsufficient DiagnosticCode = "MGS9015"
+	// OperatorTokenFormat is an operator token file that does not hold an mgo_ token: it
+	// predates the class prefix, or was edited by hand.
+	OperatorTokenFormat DiagnosticCode = "MGS9016"
+	// TokenStoreTooOld is a stored token written before grants existed, which this magus
+	// refuses rather than guess a grant for.
+	TokenStoreTooOld DiagnosticCode = "MGS9017"
+	// TokenLifetimeOutOfRange is a stored token or a share link asked to live outside its
+	// bound, never included: refused rather than shortened.
+	TokenLifetimeOutOfRange DiagnosticCode = "MGS9018"
+	// TokenRecordInvalid is a file in the token store that no mint could have written: a
+	// grant a stored token may not hold, an expiry past the bound, a name that is not its
+	// filename, a malformed hash. It is skipped, and the rest of the store still loads.
+	TokenRecordInvalid DiagnosticCode = "MGS9019"
+	// ShareRequestMalformed is a share request whose body is not the JSON it takes.
+	ShareRequestMalformed DiagnosticCode = "MGS9020"
+	// TokenRequestInvalid is a mint or revoke that asks for something no token can be: an
+	// invalid or empty grant, or a name that is not a valid name or looks like an id.
+	TokenRequestInvalid DiagnosticCode = "MGS9021"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -551,18 +582,21 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
-	WorkspaceLoadFailed, WorkspaceStillLoading, QueueCredentialMismatch, PreflightFailed, PreflightOutsideClosure,
+	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
+	PreflightFailed, PreflightOutsideClosure,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid, CharmRenamed,
-	UnresolvableBuzzImport, DanglingDocReference,
+	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
-	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
-	NoAuthToken, ConnectorNameExists, ConnectorNotFound,
+	BearerRejected, InsecureTokenPermissions, TokenStoreTooNew,
+	NoAuthToken, TokenNameExists, TokenNotFound,
 	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
 	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
+	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
+	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

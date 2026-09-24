@@ -18,6 +18,10 @@ docs/concepts/spells.md
 docs/concepts/knowledge.md
 CHANGELOG.md
 
+# Changelog fragments are slices of CHANGELOG.md's [Unreleased], so each starts at a
+# `### <group>` heading; changes/README.md holds their format and is linted.
+changes/unreleased/
+
 # The AGENTS.md section template is embedded into a larger AGENTS.md, so it intentionally
 # starts at "## magus" - the first-line-h1 rule does not apply to a fragment.
 internal/agent/agents-section.md

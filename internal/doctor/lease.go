@@ -14,19 +14,19 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func (r *runner) checkJobTree() types.DoctorCheck {
+func (r *runner) checkJobTree() types.Check {
 	return checkJobTree(r.ws.Root(), r.opts.cfg.Jobs, time.Now().Unix())
 }
 
 // checkJobTree reports live jobs nobody is left to wait on, including a job blocked on a
 // dependency that ended without passing. It only reports: magus never
 // transitions a row, so the finding names the exit command a person runs instead.
-func checkJobTree(root string, limits config.Jobs, now int64) types.DoctorCheck {
+func checkJobTree(root string, limits config.Jobs, now int64) types.Check {
 	const name = "job-tree"
 
 	rows, err := job.NewStore(job.Location{Root: root}).List()
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Evidence: types.EvidenceUnknown,
+		return types.Check{Name: name, Status: types.CheckFail, Evidence: types.EvidenceUnknown,
 			Message: fmt.Sprintf("could not read the job store: %v", err)}
 	}
 	flagged := types.NewJobList(rows).Flag(now, limits.StaleAfter)
@@ -48,7 +48,7 @@ func checkJobTree(root string, limits config.Jobs, now int64) types.DoctorCheck 
 		}
 	}
 	if len(parts) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every live job has a live root and a recent update"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "every live job has a live root and a recent update"}
 	}
 	seen := map[string]bool{}
 	for _, id := range append(append(slices.Clone(flagged.Orphans), flagged.Stale...), stuck...) {
@@ -58,10 +58,10 @@ func checkJobTree(root string, limits config.Jobs, now int64) types.DoctorCheck 
 		}
 	}
 	details = append(details, "magus reports these and never ends a row itself")
-	return types.DoctorCheck{Name: name, Status: types.DoctorAdvice, Message: strings.Join(parts, "; "), Details: details}
+	return types.Check{Name: name, Status: types.CheckAdvice, Message: strings.Join(parts, "; "), Details: details}
 }
 
-func (r *runner) checkBoundLease() types.DoctorCheck {
+func (r *runner) checkBoundLease() types.Check {
 	return checkBoundLease(r.runCtx(), r.cacheDir(), r.ws.Root(), workspaceHarnesses(r.ws)...)
 }
 
@@ -76,24 +76,25 @@ func (r *runner) checkBoundLease() types.DoctorCheck {
 //
 // Named for the subject (the bound lease), not "binding": that word rhymes with
 // guard-wiring / checkpoint-wiring and suggests a wiring check, which this is not.
-func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string) types.DoctorCheck {
+func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string) types.Check {
 	const name = "bound-lease"
 
-	id := job.ActingLease(cacheDir)
-	if id == "" {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no lease bound; the guard advises only"}
+	claimed := trail.LeaseFromEnv()
+	id, from, err := job.ActingLease(cacheDir, claimed)
+	if err != nil {
+		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
-	// Asked through job.LeaseConflict rather than compared here: since the marker WINS,
-	// a comparison against the resolved id can never differ from the marker, so a second
-	// copy of this rule in this file would be one that silently stopped firing.
-	if marker, claimed, conflicted := job.LeaseConflict(cacheDir); conflicted {
-		return types.DoctorCheck{
+	if id == "" {
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no lease bound; the guard advises only"}
+	}
+	if from == types.LeaseSourceContested {
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
-			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", marker, claimed),
+			Status:  types.CheckFail,
+			Message: fmt.Sprintf("this checkout's marker binds lease %q while the environment claims %q", id, claimed),
 			Details: []string{
 				"the marker is what `" + hint.JobExec.String() + "` wrote here, so magus grades every write under " +
-					marker + " and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
+					id + " and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
 				"unset " + trail.EnvBaggage + ", or take the lease you mean here with `" + hint.JobExec.With(claimed) + "`",
 			},
 		}
@@ -101,18 +102,18 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 
 	rows, err := job.NewStore(job.Location{Root: root}).List()
 	if err != nil {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:     name,
-			Status:   types.DoctorFail,
+			Status:   types.CheckFail,
 			Evidence: types.EvidenceUnknown,
 			Message:  fmt.Sprintf("could not read the job store: %v", err),
 		}
 	}
 	i := slices.IndexFunc(rows, func(lease types.Job) bool { return lease.ID == id })
 	if i < 0 {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
+			Status:  types.CheckFail,
 			Message: fmt.Sprintf("lease %q is bound here, and no row declares it", id),
 			Details: []string{
 				"the guard grades every write here as an unattributed edit: advisory, never denied",
@@ -130,35 +131,35 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 		if state == "" {
 			state = "no state"
 		}
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
+			Status:  types.CheckFail,
 			Message: fmt.Sprintf("lease %q is bound here and not live (%s), so its lease-scoped rules are inert", id, state),
 			Details: []string{"every write here grades as an unattributed edit until this checkout binds a live lease"},
 		}
 	}
 
 	if row.Registered == 0 {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
+			Status:  types.CheckFail,
 			Message: fmt.Sprintf("lease %q is bound here and live, but has no registered base, so the guard denies every write until one is recorded", id),
 			Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then exec it on this lease"},
 		}
 	}
 
 	if len(guardHookConfigs(ctx, root, wired...)) == 0 {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorAdvice,
+			Status:  types.CheckAdvice,
 			Message: fmt.Sprintf("lease %q is bound here, live and registered, but no host hook config in this checkout invokes the guard", id),
 			Details: []string{"the guard-wiring check names what is missing; the MCP surface is not checked here"},
 		}
 	}
 
-	return types.DoctorCheck{
+	return types.Check{
 		Name:    name,
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: fmt.Sprintf("lease %q is bound here, live, registered, and a host hook is wired to judge it", id),
 	}
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -10,9 +10,11 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -70,12 +72,12 @@ func configMCPConnector(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Named, hashed-at-rest, expiring tokens for external MCP clients. Each is")
 		fmt.Fprintln(os.Stderr, "shown ONCE at creation and only its SHA-256 is stored; rotate by creating a")
-		fmt.Fprintln(os.Stderr, "new one. The daemon accepts any non-expired connector token (or the cli token).")
+		fmt.Fprintln(os.Stderr, "new one. Each holds mcp=write and expires, at most 366 days out.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  create   mint a new connector token (prints the secret once)")
-		fmt.Fprintln(os.Stderr, "  ls       show names, fingerprints, and expiry (never the secret)")
-		fmt.Fprintln(os.Stderr, "  revoke   delete a connector token by name or fingerprint")
+		fmt.Fprintln(os.Stderr, "  ls       show names, ids, grants, and expiry (never the secret)")
+		fmt.Fprintln(os.Stderr, "  revoke   delete a connector token by name or id")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp connector <subcommand> -h` for flags.")
 	}
@@ -113,7 +115,7 @@ func configMCPConnectorCreate(args []string) error {
 	bindDisplayFlags(fs)
 	cf := gen.BindConfigMCPConnectorCreate(fs)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector create [--name <n>] [--expires <dur|never>]")
+		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector create [--name <n>] [--expires <dur>]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Mint a new connector token in the mgs_ format, store its SHA-256 0600 in the")
 		fmt.Fprintln(os.Stderr, "user state dir, and print the secret ONCE. The secret cannot be retrieved")
@@ -126,40 +128,15 @@ func configMCPConnectorCreate(args []string) error {
 		return err
 	}
 
-	exp, err := parseExpiry(time.Now(), cf.Expires)
+	ttl, err := parseExpiry(cf.Expires)
 	if err != nil {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
-
-	store, err := auth.LoadConnectorStore()
+	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: types.GrantConnector, TTL: ttl}, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
-	chosen := strings.TrimSpace(cf.Name)
-	if chosen == "" {
-		chosen = defaultConnectorName(store)
-	}
-
-	secret, c, err := store.Create(chosen, exp, auth.ScopeMCP)
-	if err != nil {
-		if errors.Is(err, auth.ErrConnectorExists) {
-			return types.DiagnosticErrorf(types.ConnectorNameExists, "magus config mcp connector create: a connector named %q already exists; pass a different --name", chosen)
-		}
-		return err
-	}
-
-	// The secret prints ONCE to stdout (pipeable); all guidance goes to stderr.
-	fmt.Println(secret)
-	fmt.Fprintf(os.Stderr, "\nmagus config mcp connector create: created %q (fingerprint %s)\n", c.Name, c.Fingerprint)
-	if c.Expires.IsZero() {
-		fmt.Fprintln(os.Stderr, "Expires: never")
-	} else {
-		fmt.Fprintf(os.Stderr, "Expires: %s\n", c.Expires.Format(time.RFC3339))
-	}
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "This secret is shown once and cannot be retrieved later. Store it now.")
-	// Deliberately do NOT repeat the secret on stderr: stdout is the sole carrier,
-	// so `... > secret.txt` keeps the plaintext off the terminal and out of logs.
+	printMinted("magus config mcp connector create", secret, rec)
 	fmt.Fprintln(os.Stderr, "The token was printed above (stdout). Send it as a header:")
 	fmt.Fprintln(os.Stderr, "  Authorization: Bearer <token>")
 	// The two scopes reach disjoint surfaces, so naming the wrong one here would send
@@ -170,34 +147,43 @@ func configMCPConnectorCreate(args []string) error {
 }
 
 func configMCPConnectorList(args []string) error {
-	if err := noFlags("config mcp connector list", args); err != nil {
-		return err
-	}
-	store, err := auth.LoadConnectorStore()
-	if err != nil {
-		return err
-	}
-	conns := store.ListScope(auth.ScopeMCP)
-	if len(conns) == 0 {
-		fmt.Fprintln(os.Stderr, "no connector tokens; create one with `"+hint.ConfigMCPConnectorCreate.String()+"`")
-		return nil
-	}
-	now := time.Now()
-	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tFINGERPRINT\tCREATED\tEXPIRES")
-	for _, c := range conns {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", c.Name, c.Fingerprint, c.Created.Format("2006-01-02"), expiresColumn(c, now))
-	}
-	return tw.Flush()
+	return tokenList("config mcp connector ls", args)
 }
 
 func configMCPConnectorRevoke(args []string) error {
-	fs := flag.NewFlagSet("config mcp connector revoke", flag.ContinueOnError)
+	return tokenRevoke("config mcp connector revoke", args)
+}
+
+// tokenList prints every stored token, whatever its grant: the console and connector commands
+// read one store and show all of it, so neither hides a token the other minted.
+func tokenList(cmd string, args []string) error {
+	if err := noFlags(cmd, args); err != nil {
+		return err
+	}
+	store, err := openTokenStore()
+	if err != nil {
+		return err
+	}
+	toks, err := store.List()
+	if err != nil {
+		return err
+	}
+	if len(toks) == 0 {
+		fmt.Fprintln(os.Stderr, "no stored tokens; mint one with `"+hint.ConfigConsoleTokenCreate.String()+"` or `"+hint.ConfigMCPConnectorCreate.String()+"`")
+		return nil
+	}
+	return tokenTable(toks)
+}
+
+// tokenRevoke deletes the stored token its one argument names: by exact id when it is 8 hex
+// digits, by exact name otherwise.
+func tokenRevoke(cmd string, args []string) error {
+	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector revoke <name|fingerprint>")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Delete a connector token. The daemon stops accepting it immediately.")
+		fmt.Fprintf(os.Stderr, "Usage: magus %s <id|name>\n\n", cmd)
+		fmt.Fprintln(os.Stderr, "Delete a stored token by its exact 8-hex id or its exact name. The daemon stops")
+		fmt.Fprintln(os.Stderr, "accepting it at once, open streams included.")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -205,81 +191,125 @@ func configMCPConnectorRevoke(args []string) error {
 	rest := fs.Args()
 	if len(rest) != 1 {
 		fs.Usage()
-		return fmt.Errorf("magus config mcp connector revoke: expected exactly one <name|fingerprint>")
+		return fmt.Errorf("magus %s: expected exactly one <id|name>", cmd)
 	}
-	q := rest[0]
-
-	store, err := auth.LoadConnectorStore()
+	store, err := openTokenStore()
 	if err != nil {
 		return err
 	}
-	// Confined to the MCP pool: see configConsoleTokenRevoke for the mirror of this.
-	removed, err := store.RevokeScoped(q, []auth.ClientScope{auth.ScopeMCP})
-	if errors.Is(err, auth.ErrConnectorNotFound) {
-		if matchesScoped(store.ListScope(consoleScopes...), q) {
-			return usagef("magus config mcp connector revoke: %q is a console token, not an MCP connector; revoke it with `"+hint.ConfigConsoleTokenRevoke.With("%s")+"`", q, q)
-		}
-		return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config mcp connector revoke: no connector matches %q", q)
-	}
+	removed, err := store.Revoke(types.GrantOperator, rest[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("magus %s: %w", cmd, err)
 	}
-	fmt.Fprintf(os.Stderr, "magus config mcp connector revoke: removed %q (fingerprint %s)\n", removed.Name, removed.Fingerprint)
+	fmt.Fprintf(os.Stderr, "magus %s: removed %q (id %s, %s)\n", cmd, removed.Name, removed.ID, removed.Grant)
 	return nil
 }
 
-// defaultConnectorName returns the first unused "connector-N" name (N starting
-// at 1), so `create` without --name never collides with an existing entry.
-func defaultConnectorName(store *auth.ConnectorStore) string {
-	taken := make(map[string]struct{})
-	for _, c := range store.List() {
-		taken[c.Name] = struct{}{}
+func openTokenStore() (*auth.Store, error) {
+	dir, err := auth.StoreDir()
+	if err != nil {
+		return nil, err
 	}
-	for i := 1; ; i++ {
-		name := fmt.Sprintf("connector-%d", i)
-		if _, ok := taken[name]; !ok {
-			return name
-		}
-	}
+	return auth.LoadStore(dir)
 }
 
-// parseExpiry converts an --expires flag value into an absolute expiry time
-// relative to now. "" yields the default 90-day TTL; "never" (any case) yields
-// the zero time (no expiry); "<N>d" is N days; anything else is parsed as a Go
-// duration (e.g. "48h"). A non-positive lifetime is rejected.
-func parseExpiry(now time.Time, s string) (time.Time, error) {
+// parseExpiry converts an --expires flag value into a token lifetime. "" is
+// auth.DefaultTokenTTL; "<N>d" is N days; anything else is a Go duration ("48h"). A token must
+// expire, so "never" is refused, as is a lifetime that is not positive or exceeds
+// auth.MaxTokenTTL; nothing is shortened to fit.
+func parseExpiry(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	switch {
 	case s == "":
-		return now.Add(auth.DefaultConnectorTTL), nil
+		return auth.DefaultTokenTTL, nil
 	case strings.EqualFold(s, "never"):
-		return time.Time{}, nil
+		return 0, outOfBound(s)
 	}
 
 	var d time.Duration
 	if rest, ok := strings.CutSuffix(s, "d"); ok {
 		days, err := strconv.Atoi(rest)
 		if err != nil {
-			return time.Time{}, fmt.Errorf("invalid --expires %q (use e.g. 90d, 48h, or never)", s)
+			return 0, fmt.Errorf("invalid --expires %q (use e.g. 90d or 48h)", s)
 		}
-		// Bound the day count so days*24h cannot overflow int64 nanoseconds and
-		// silently wrap to a bogus near-term expiry. 36500d (100 years) is well
-		// under the ~292-year int64 duration ceiling.
-		if days > 36500 {
-			return time.Time{}, fmt.Errorf("invalid --expires %q: at most 36500d (100 years)", s)
+		// Checked before multiplying, so a huge day count cannot wrap int64 nanoseconds.
+		if days > int(auth.MaxTokenTTL/(24*time.Hour)) {
+			return 0, outOfBound(s)
 		}
 		d = time.Duration(days) * 24 * time.Hour
 	} else {
 		parsed, err := time.ParseDuration(s)
 		if err != nil {
-			return time.Time{}, fmt.Errorf("invalid --expires %q (use e.g. 90d, 48h, or never)", s)
+			return 0, fmt.Errorf("invalid --expires %q (use e.g. 90d or 48h)", s)
 		}
 		d = parsed
 	}
-	if d <= 0 {
-		return time.Time{}, fmt.Errorf("invalid --expires %q: must be a positive lifetime", s)
+	if d <= 0 || d > auth.MaxTokenTTL {
+		return 0, outOfBound(s)
 	}
-	return now.Add(d), nil
+	return d, nil
+}
+
+// outOfBound is the --expires refusal for a lifetime a token cannot have: the same
+// TokenLifetimeOutOfRange a mint returns, matching auth.ErrTokenLifetime.
+func outOfBound(s string) error {
+	return types.WrapDiagnostic(types.TokenLifetimeOutOfRange, auth.ErrTokenLifetime,
+		"invalid --expires %q: a token must expire, more than 0 and at most 366d out", s)
+}
+
+// mintToken mints a stored token from the CLI, or with code a one-time exchange code standing
+// for one. The shell is the user, so the minter is the operator grant; the grant is still
+// checked, and the lifetime refused rather than shortened. Every mint is recorded to the
+// activity trail of the workspace the command runs in.
+func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
+	store, err := openTokenStore()
+	if err != nil {
+		return "", auth.Token{}, err
+	}
+	mint, action := store.Mint, "cli.mint"
+	if code {
+		mint, action = store.MintCode, "link.code"
+	}
+	secret, rec, err := mint(types.GrantOperator, req)
+	if err != nil {
+		return "", auth.Token{}, err
+	}
+	operator := types.Credential{Class: types.ClassOperator, Grant: types.GrantOperator}
+	auditMint(action, trail.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
+	return secret, rec, nil
+}
+
+// auditMint records a CLI mint to the activity trail of the workspace the command runs in, and
+// says on stderr when there is no workspace to record it in.
+func auditMint(action string, rec trail.MintRecord) {
+	if root := resolveRootOrEmpty(""); root != "" {
+		if base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg)); err == nil {
+			trail.AppendMint(context.Background(), base, action, rec)
+			return
+		}
+	}
+	fmt.Fprintln(os.Stderr, "note: no magus workspace here, so this mint is recorded in no activity trail")
+}
+
+// printMinted writes a freshly minted token: the secret alone on stdout, so `... > secret.txt`
+// or `$(...)` captures exactly it, and everything else on stderr.
+func printMinted(cmd string, secret string, rec auth.Token) {
+	fmt.Println(secret)
+	fmt.Fprintf(os.Stderr, "\n%s: created %q (id %s, grant %s)\n", cmd, rec.Name, rec.ID, rec.Grant)
+	fmt.Fprintf(os.Stderr, "Expires: %s\n", rec.Expires.Format(time.RFC3339))
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "This secret is shown once and cannot be retrieved later. Store it now.")
+}
+
+// tokenTable prints stored tokens: never a secret or a hash, only what identifies each. The
+// store's List has already removed the expired ones.
+func tokenTable(toks []auth.Token) error {
+	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "NAME\tID\tCLASS\tGRANT\tCREATED\tEXPIRES")
+	for _, t := range toks {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Class, t.Grant, t.Created.Format("2006-01-02"), t.Expires.Format("2006-01-02"))
+	}
+	return tw.Flush()
 }
 
 // noFlags rejects any argument for subcommands that take none, so a stray flag

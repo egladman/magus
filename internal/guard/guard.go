@@ -177,16 +177,24 @@ type Request struct {
 	IsPath bool
 	// Observe records the input as a path the agent REACHED and judges nothing.
 	Observe bool
-	// Lease is the job row this call acts as; empty falls back to the bound marker.
+	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
 	// The attribution the caller knows about itself. No verdict reads any of it.
 	Host string
-	// Transport is the form of the installed hook that called, such as sh or buzz, as
-	// that form declares it. Two forms wired into one session are two callers.
-	Transport  string
-	Session    string
+	// Form is the form of the installed hook that called, such as sh or buzz, as that form
+	// declares it (`magus shell --transport`). Two forms wired into one session are two
+	// callers.
+	Form    string
+	Session string
+	// Agent is the host's subagent id, for a wiring that forwards one field of the event
+	// rather than the whole envelope; an envelope's own agent_id fills it otherwise.
+	Agent      string
 	Transcript string
 	Event      string
+	// Window names the terminal the call runs in, empty off a terminal. It keys what the
+	// guard remembers for a caller no host delivered a session for, and is never recorded
+	// as a session: a terminal window is not a host's conversation.
+	Window string
 	// ObservesSkillLoads is the one CAPABILITY on this struct rather than attribution: the
 	// host's wiring reports skill loads to magus, so a rule may require one. It is set by
 	// the wiring that provides the observation, never inferred from Host, because guard
@@ -228,6 +236,8 @@ type Verdict struct {
 	// An added optional field is not a schema bump: a glue that does not read it is
 	// unaffected, which is the rule agent.GuardSchemaVersion states.
 	Lease string `json:"lease,omitempty"`
+	// LeaseFrom is which source answered Lease; see types.LeaseSource.
+	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
 }
 
 // Judge evaluates one request against this workspace's rules and reports the verdict.
@@ -238,7 +248,7 @@ type Verdict struct {
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	input := req.Input
 	hasInput := input != ""
-	who := hookAttribution{Host: req.Host, Transport: req.Transport, Session: req.Session, Transcript: req.Transcript, Event: req.Event}
+	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
 	isPath := req.IsPath
 	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
 	// there to pin a location.
@@ -265,11 +275,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if who.Event == "" {
 			who.Event = env.Who.Event
 		}
-		who.Agent = env.Who.Agent
+		if who.Agent == "" {
+			who.Agent = env.Who.Agent
+		}
 		if env.LoadedSkill != "" {
 			// Recorded, never judged. The gate is built here rather than reusing the one
 			// below because this arm returns before it: same cacheDir, same session.
-			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.sessionKey()), env.LoadedSkill)
+			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), env.LoadedSkill)
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		if env.NothingToJudge {
@@ -278,7 +290,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			// JSON as a shell line, so a denied command merely NAMED inside a todo blocked
 			// the tool call that wrote the todo.
 			if env.AgentTranscript != "" {
-				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.sessionKey()), who.Agent, env.AgentTranscript)
+				recordAgentUsage(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), who.Agent, env.AgentTranscript)
 			}
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
@@ -298,14 +310,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// inside the payload would otherwise be graded as having reported none, and every
 	// session on that host would share the anonymous bucket. The acting lease is resolved
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
-	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
-	// two tiers cannot disagree about who is acting (see job.LeaseMarkerName).
 	location := hookLocation(ctx, deps)
 	policyDigest := recordPolicy(ctx, deps, location, false)
 	ctx = withJobStoreRows(ctx, location)
 	markers := hint.NewGate(location.cacheDir, who.callerKey())
-	facts := hint.NewGate(location.cacheDir, who.sessionKey())
-	actingLease := actingLeaseFor(who, location, facts, req.Lease)
+	facts := hint.NewGate(location.cacheDir, who.factsKey())
+	actingLease, leaseFrom, leaseErr := actingLeaseFor(who, location, facts, req.Lease)
 	tool := hookToolCommand
 	switch {
 	case req.Observe:
@@ -313,7 +323,18 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	case isPath:
 		tool = hookToolWrite
 	}
-	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease}
+	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease, LeaseFrom: leaseFrom}
+	if leaseErr != nil && !req.Observe {
+		// The repair and a help read stay open, or a checkout with a bad marker would be one
+		// no agent could recover.
+		if !isPath && repairsUnreadableMarker(input) {
+			verdict.Decision, verdict.Context = "advise", leaseErr.Error()
+		} else {
+			verdict.Decision, verdict.Reason = "deny", denyUnresolvedLease(leaseErr)
+		}
+		appendHookActivity(ctx, location, input, who, tool, actingLease, "", "", policyDigest, verdict, workspaceRuleRecord{})
+		return verdict
+	}
 	// Where the acting lease STANDS, read once and before any rule. An id the job store does
 	// not carry is refused, because every lease-scoped rule below reads that row and
 	// finding nothing is how they all fall silent at once: the call would be graded by
@@ -380,6 +401,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// dir: what it is editing is whether the boundary was checked.
 		if reason := denyCacheDirPath(location, input); reason != "" {
 			verdict.Decision, verdict.Reason = "deny", reason
+		}
+		if reason := denyTokenStatePath(location, input); reason != "" {
+			verdict.Decision, verdict.Reason, verdict.Rule = "deny", reason, string(denyRuleTokenState)
 		}
 		denyUndeclared("")
 		if verdict.Decision != "deny" {
@@ -498,6 +522,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		v = rankSiblingCheckout(v, denySiblingCheckout(input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
 		v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD))
+		v = rankTokenState(v, denyTokenStateCommand(location, input, shellD))
 		// Outside Evaluate for the same reason the two rules above are: it reads session
 		// state (which skills have loaded) rather than the line alone, and Evaluate's
 		// verdict is a pure function of what was handed in.
@@ -523,7 +548,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
-		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyWriteOutsideLease} {
+		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedHarness, denyWriteOutsideLease} {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
@@ -971,47 +996,59 @@ type hookRequest struct {
 // discover which agent host started it. It travels beside the input rather than
 // inside the judged text because the guard's verdict must never depend on it.
 type hookAttribution struct {
-	Host       string
-	Transport  string
+	Host string
+	// Form is the form of the installed hook that called, such as sh or buzz.
+	Form       string
 	Session    string
 	Transcript string
 	Event      string
 	// Agent is the subagent making the call, "" for a root session or a host that does
 	// not say.
 	Agent string
+	// Window is the terminal the call runs in; see [Request.Window].
+	Window string
+}
+
+// callerID is the id this caller goes by: the host's session, else the terminal window.
+func (who hookAttribution) callerID() string {
+	if s := strings.TrimSpace(who.Session); s != "" {
+		return s
+	}
+	return strings.TrimSpace(who.Window)
 }
 
 // callerKeyEscaper keeps the key's delimiter out of every part. '%' is escaped too, so a
 // part that already holds "%2F" cannot collide with one that held "/".
 var callerKeyEscaper = strings.NewReplacer("%", "%25", "/", "%2F")
 
-// sessionKey keys FACTS about a session, what a rule reads as "did this happen": a skill
-// load, the projects written. `<host>/<session>`, each part escaped, because two hosts may
-// present the same id. The transport is left out so a session wiring some surfaces as sh
-// and others as Buzz sees one set of facts. Empty without a session, so hint.Gate falls
-// back to its anonymous window rather than keying every unattributed caller together.
-func (who hookAttribution) sessionKey() string { return SessionKey(who.Host, who.Session) }
+// factsKey keys FACTS about a caller, what a rule reads as "did this happen": a skill
+// load, the projects written. `<host>/<caller>`, each part escaped, because two hosts may
+// present the same id. The hook form is left out so a session wiring some surfaces as sh
+// and others as Buzz sees one set of facts. A caller with no session is keyed on its
+// terminal window; with neither it is empty, so hint.Gate falls back to its anonymous
+// window rather than keying every unattributed caller together.
+func (who hookAttribution) factsKey() string { return FactsKey(who.Host, who.callerID()) }
 
-// SessionKey is the marker key the guard files a session's facts under, for a reader
-// outside the package: `<host>/<session>` with each part escaped, or "" without a session.
-func SessionKey(host, session string) string {
-	session = strings.TrimSpace(session)
-	if session == "" {
+// FactsKey is the marker key the guard files a caller's facts under, for a reader outside
+// the package: `<host>/<callerID>` with each part escaped, or "" when callerID is empty.
+// callerID is a host session id or a terminal window key.
+func FactsKey(host, callerID string) string {
+	callerID = strings.TrimSpace(callerID)
+	if callerID == "" {
 		return ""
 	}
-	return callerKeyEscaper.Replace(host) + "/" + callerKeyEscaper.Replace(session)
+	return callerKeyEscaper.Replace(host) + "/" + callerKeyEscaper.Replace(callerID)
 }
 
 // callerKey keys TEXT a caller has already rendered, a fire-once notice or a deny's full
-// reason: `<host>/<transport>/<session>`. The sh and Buzz forms of one hook are two
-// readers of their own replies, so each is told a rule in full once. Empty without a
-// session, like sessionKey.
+// reason: `<host>/<form>/<caller>`. The sh and Buzz forms of one hook are two readers of
+// their own replies, so each is told a rule in full once. Keyed and empty like factsKey.
 func (who hookAttribution) callerKey() string {
-	session := strings.TrimSpace(who.Session)
-	if session == "" {
+	id := who.callerID()
+	if id == "" {
 		return ""
 	}
-	return callerKeyEscaper.Replace(who.Host) + "/" + callerKeyEscaper.Replace(who.Transport) + "/" + callerKeyEscaper.Replace(session)
+	return callerKeyEscaper.Replace(who.Host) + "/" + callerKeyEscaper.Replace(who.Form) + "/" + callerKeyEscaper.Replace(id)
 }
 
 type location struct {
@@ -1081,17 +1118,20 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		return
 	}
 	command := trail.AgentCommand{
-		PolicyDigest:    policyDigest,
-		DecidedBy:       cmp.Or(rule.decidedBy, decidedBy(verdict)),
-		RuleFailures:    rule.failures,
-		Actor:           "agent",
+		PolicyDigest: policyDigest,
+		DecidedBy:    cmp.Or(rule.decidedBy, decidedBy(verdict)),
+		RuleFailures: rule.failures,
+		// A call typed at a terminal entered through the CLI, not a hook.
+		EntryPoint:      trail.EntryPointFromContext(ctx),
 		Workspace:       location.workspace,
 		Host:            who.Host,
 		Session:         who.Session,
+		Agent:           who.Agent,
 		Transcript:      who.Transcript,
 		Event:           who.Event,
 		Tool:            tool,
 		Lease:           lease,
+		LeaseFrom:       verdict.LeaseFrom,
 		PreauthorizedBy: preauth,
 		Decision:        verdict.Decision,
 		Reason:          verdict.Reason,
@@ -1135,10 +1175,11 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Continue:      req.IsContinue,
 		Target:        rec.target,
 		RuleFailures:  rec.ruleFailures,
-		Actor:         "agent",
 		Workspace:     location.workspace,
+		EntryPoint:    trail.EntryPointFromContext(ctx),
 		Host:          who.Host,
 		Session:       who.Session,
+		Agent:         who.Agent,
 		Event:         who.Event,
 		Tool:          req.Tool,
 		Child:         req.Child,

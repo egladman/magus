@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -214,7 +215,7 @@ func TestOpenPrunesTheStore(t *testing.T) {
 		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
 	})
 
-	_, err := Open(dir, "current", SessionStart{Workspace: "/repo"})
+	_, err := Open(dir, "current", InvocationStart{Workspace: "/repo"})
 	require.NoError(t, err)
 
 	assert.Empty(t, storedSessions(t, dir))
@@ -225,19 +226,19 @@ func TestOpenPrunesTheStore(t *testing.T) {
 func TestOpenPrunesAtMostOncePerInterval(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	_, err := Open(dir, "first", SessionStart{})
+	_, err := Open(dir, "first", InvocationStart{})
 	require.NoError(t, err)
 
 	writeAged(t, dir, "ancient", 400*24*time.Hour, []Record{
 		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
 	})
-	_, err = Open(dir, "second", SessionStart{})
+	_, err = Open(dir, "second", InvocationStart{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"ancient"}, storedSessions(t, dir))
 
 	stale := time.Now().Add(-2 * pruneInterval)
 	require.NoError(t, os.Chtimes(filepath.Join(dir, pruneStamp), stale, stale))
-	_, err = Open(dir, "third", SessionStart{})
+	_, err = Open(dir, "third", InvocationStart{})
 	require.NoError(t, err)
 	assert.Empty(t, storedSessions(t, dir))
 }
@@ -252,7 +253,7 @@ func TestOpenNeverPrunesItsOwnSessionFile(t *testing.T) {
 		attRecord(t, "resumed", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
 	})
 
-	w, err := Open(dir, "resumed", SessionStart{})
+	w, err := Open(dir, "resumed", InvocationStart{})
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
 
@@ -296,17 +297,42 @@ func TestReadAllTreatsAFileThatVanishedMidFoldAsAbsent(t *testing.T) {
 	fold, err := ReadAll(dir)
 	require.NoError(t, err, "a pruned file must not fail the fold")
 	assert.Len(t, fold.Records, 1)
-	assert.Equal(t, 1, fold.Sessions, "a file that is no longer there is not a session anybody can read")
+	assert.Equal(t, 1, fold.Invocations, "a file that is no longer there is not an invocation anybody can read")
 	assert.Zero(t, fold.Skipped, "pruning is not damage")
 }
 
 func TestReadFileReportsAMissingFileAsVanishedNotSkipped(t *testing.T) {
 	t.Parallel()
 
-	records, skipped, vanished := readFile(filepath.Join(t.TempDir(), "never-existed"+fileExt))
+	records, skipped, legacy, vanished := readFile(filepath.Join(t.TempDir(), "never-existed"+fileExt))
 	assert.Empty(t, records)
 	assert.Zero(t, skipped)
+	assert.Zero(t, legacy)
 	assert.True(t, vanished)
+}
+
+// A store written before the invocation rename holds schema-1 lines keyed `session`. The
+// clean break stands, so this build reads none of them, but it must neither delete their
+// files nor report them as damage: a reader has to be told they exist and why they are not
+// shown.
+func TestASchemaOneFileIsCountedAndNeverPruned(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	old := time.Now().Add(-90 * 24 * time.Hour)
+	path := filepath.Join(dir, "0123456789abcdef"+fileExt)
+	line := fmt.Sprintf(`{"v":1,"session":"0123456789abcdef","seq":1,"kind":"session_start","ts":%d,"payload":{}}`+"\n", old.UnixMilli())
+	require.NoError(t, os.WriteFile(path, []byte(line+line), 0o644))
+	require.NoError(t, os.Chtimes(path, old, old))
+
+	Prune(dir, DefaultRetention)
+	assert.FileExists(t, path, "a file this build cannot read is never pruned")
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	assert.Empty(t, fold.Records)
+	assert.Equal(t, 2, fold.Legacy)
+	assert.Zero(t, fold.Skipped, "a line written before the rename is not damage")
 }
 
 // TestClaimStalePruneStampPrunesExactlyOnceUnderConcurrency pins the fix for a plain

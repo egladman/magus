@@ -109,6 +109,17 @@ var denyRuleDocs = []RuleDoc{
 		Why: "A note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. " +
 			"That is why it is refused however the write is spelled: `capture` files a review transcript as a note and `promote` writes a memory record into the SHARED store, where the commit puts a person's name on prose they never read. " +
 			"`magus memory put <name>` is the agent-writable store, where every entry cites a ref a later reader can re-run."},
+	{Name: string(denyRuleCredentialVerb), Decision: "deny",
+		Catches: "an agent minting, printing, rotating or revoking a credential through the CLI",
+		Why: "An agent holds the token it was given, and a session that mints another holds a grant nobody handed it. " +
+			"Refused: the console and connector token `create` and `revoke` commands, `magus graph export --open --follow` (its link carries a sign-in code), and `magus config token print`, `generate` and `revoke`, the operator token that reaches token management. " +
+			"It holds however the binary is spelled: `./magus`, a path, `go run ./cmd/magus`, or inside a `$(...)` substitution. " +
+			"This is a seatbelt for a harness that opted in, not a boundary: a process running as the user can reach the same files."},
+	{Name: string(denyRuleTokenState), Decision: "deny",
+		Catches: "an agent reading or writing the token secrets: the operator token file or the token store",
+		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the daemon checks, so reading one hands a session a grant and writing one mints a token. " +
+			"Refused on both graded surfaces: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
+			"Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user."},
 	{Name: string(denyRuleOutputPipe), Decision: "deny",
 		Catches: "magus output piped into a filter, when magus projects the record itself",
 		Why: "magus projects its own record, so the filter is answering a question the command takes a flag for: `-o name` for ids, `-o json` for the whole record, `-o template='{{.field}}'` for one field, `-s` to silence progress. " +

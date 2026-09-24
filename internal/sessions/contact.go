@@ -99,8 +99,9 @@ func ReadPathContact(dir, path string) PathContact {
 		if ev.Denied {
 			out.Denials++
 		}
-		if !slices.Contains(seen, rec.Session) {
-			seen = append(seen, rec.Session)
+		// A loaded event's invocation id is the host session it was filed under.
+		if !slices.Contains(seen, rec.Invocation) {
+			seen = append(seen, rec.Invocation)
 		}
 		// A zero AtMs is "the host recorded no time", not 1970. Taken literally it is
 		// After every real Last, so one undated event would date the whole contact to the

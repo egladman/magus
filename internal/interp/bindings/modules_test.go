@@ -1796,7 +1796,7 @@ std\assert(port > 0, message: "native http.server still bound a port");
 }
 
 // TestCrossBundleDeclarationsStillImport is the degradation path. magus's own
-// declarations name DoctorCheckStatus, which is declared in a DIFFERENT bundle,
+// declarations name CheckStatus, which is declared in a DIFFERENT bundle,
 // so executing them standalone fails. That must leave the import working exactly
 // as it did before (collected and checkable) rather than taking it down.
 func TestCrossBundleDeclarationsStillImport(t *testing.T) {

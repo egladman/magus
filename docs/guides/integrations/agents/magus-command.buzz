@@ -41,6 +41,9 @@
 //   HOST_TOOL_PATH   dot-path to the tool name, which decides whether the whole envelope
 //                    is forwarded rather than one field selected out of it
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+//   HOST_AGENT_PATH  dot-path to the subagent id inside your host's event, so a
+//                    subagent's command is graded under the job it was spawned for
+//                    rather than as its parent
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 //   HOST_RESPONSE    Go template rendering your host's reply
 //   HOST_ADVISE_BRANCH  the advise arm of that template
@@ -66,7 +69,8 @@
 // __MAGUS_AGENT_NAME and the session are ATTRIBUTION, not policy. magus records them on
 // its activity event so a reader can tell which host produced an observation;
 // neither one can change the verdict, and a host whose event carries no session
-// id records none and is judged exactly the same.
+// id records none and is judged exactly the same. The subagent id is the exception:
+// magus grades a subagent it saw spawned under that spawn's job.
 //
 // __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 // magus's own configuration surface, so a variable this template invents must stay
@@ -102,7 +106,7 @@
 // wired to magus-command.sh. The arms ship ahead of the wiring for the same reason
 // the deny arm shipped ahead of its first rule, so a Codex config can move to Buzz
 // without a window where a decision renders as nothing.
-// magus-guard-template: 16
+// magus-guard-template: 17
 // magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
 // claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
@@ -650,6 +654,7 @@ fun main(args: [str]) > void {
 
     final eventPath = envOr("HOST_EVENT_PATH", fallback: "tool_input.command");
     final sessionPath = envOr("HOST_SESSION_PATH", fallback: "session_id");
+    final agentPath = envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
     final agentName = envOr("__MAGUS_AGENT_NAME", fallback: "claude-code");
     // Overridable alongside the other dot-paths rather than fixed: a host that points
@@ -661,6 +666,9 @@ fun main(args: [str]) > void {
     // Read BEFORE the availability check below, because the notices that check prints
     // are held to one firing per session and the session id is what keys them.
     final session = field(event, dotPath: sessionPath);
+    // Forwarded because this file selects one field out of the envelope: without it a
+    // subagent's command reaches magus looking like its parent's.
+    final agent = field(event, dotPath: agentPath);
     final transcript = field(event, dotPath: transcriptPath);
     final eventName = field(event, dotPath: "hook_event_name");
     final toolName = field(event, dotPath: toolPath);
@@ -703,7 +711,7 @@ fun main(args: [str]) > void {
 
     // Attribution is BEST EFFORT; the verdict is not.
     //
-    // --agent-name and --session postdate the current magus release, and this template is
+    // --agent-name, --session and --agent postdate the current magus release, and this template is
     // downloaded and run against whatever binary a reader already has. Passing them
     // unconditionally does not degrade the guard, it BREAKS it: an older binary rejects the
     // unknown flag, prints its usage to stdout, and exits non-zero, so the host receives no
@@ -723,7 +731,7 @@ fun main(args: [str]) > void {
     // deny's full text and its once-per-session notices per host, transport and session.
     final attributed = mut [<str>];
     foreach (flag in guard.flags) { attributed.append(flag); }
-    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--transcript", transcript]) {
+    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
         attributed.append(word);
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }

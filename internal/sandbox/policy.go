@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // ErrUnsupported is returned by Apply when landlock is unavailable (non-Linux, kernel <5.13, LSM disabled).
@@ -33,6 +34,8 @@ type Policy struct {
 	// [Policy.Fingerprint] input, because the kernel ruleset is built from FS and two
 	// policies with equal rules must still share one landlock application.
 	Lease string
+	// LeaseFrom is which source answered Lease, recorded beside it on a denial.
+	LeaseFrom types.LeaseSource
 }
 
 // CheckRead reports whether the policy permits a read of path; nil Policy permits everything.
@@ -110,20 +113,18 @@ func recordDenial(ctx context.Context, p *Policy, access, path string, err error
 	if base == "" {
 		return
 	}
-	lease := ""
+	var lease string
+	var leaseFrom types.LeaseSource
 	if p != nil {
-		lease = p.Lease
+		lease, leaseFrom = p.Lease, p.LeaseFrom
 	}
 	trail.Append(ctx, base, trail.Event{
 		Ts:   time.Now().UnixMilli(),
 		Kind: trail.KindSandboxDenial,
 		// Set only on a lease-narrowed policy, so a reader can tell a boundary a lease
 		// declared for itself from the workspace default every run already has.
-		Lease: lease,
-		// The magusfile is what asked, and no identity below this layer knows who ran it.
-		// Naming a person or an agent magus cannot identify would be worse than naming the
-		// file that made the request.
-		Actor: "magusfile",
+		Lease:     lease,
+		LeaseFrom: leaseFrom,
 		// Reads as a sentence where the console renders it: "Sandbox denied read of <path>."
 		Action:  access + " of " + path,
 		Outcome: trail.OutcomeError,

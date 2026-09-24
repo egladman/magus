@@ -7,17 +7,17 @@
 // two pages that hide that dependency, this is one page whose second half fills in when the first
 // half succeeds.
 //
-// WHY SHOW AUTH AT ALL when the link already carries the token. Because it does carry it: the daemon
-// mints a URL with #token=, the console swallows it, scrubs the fragment, and silently trades the
-// operator credential for a console-scoped one. Everything works and nothing ever says that a
-// credential changed hands - so nobody learns that the link IS the credential, or that forwarding it
-// forwards access. Showing the filled-in field is not friction for its own sake; it is the only
-// moment the system admits what it just did.
+// WHY SHOW AUTH AT ALL when the link already signed you in. Because it did: the link carried a
+// one-time code, the console traded it for a console token, scrubbed the fragment, and stored the
+// token. Everything works and nothing ever says that a credential changed hands - so nobody learns
+// that the browser now holds one, or that it opens the console until it expires. Showing the
+// filled-in field is not friction for its own sake; it is the only moment the system admits what
+// it just did.
 //
 // The workspace is PRESELECTED, never auto-applied. A remembered pick fills the answer in so the
 // common case is one click, but the click still happens - an inherited scope you never chose is
 // exactly the "where did my work go" failure this screen exists to prevent.
-import { getLiveToken, hasScopedToken, resolveDaemonHost } from "../lib/daemon";
+import { getLiveToken, resolveDaemonHost } from "../lib/daemon";
 import { ALL_WORKSPACES, setWorkspaceScope, shortName, workspaceScope } from "../lib/scope";
 
 const ASKED_KEY = "magus:workspace-asked";
@@ -75,7 +75,9 @@ function rememberPick(root: string): void {
 function tokenEvidence(token: string | null): string {
   if (!token) return "None. Nothing here came from an authenticated daemon.";
   const tail = token.length > 4 ? token.slice(-4) : token;
-  return "From your link, ending " + tail + (hasScopedToken() ? " (console-scoped)" : "");
+  return (
+    "From your link, ending " + tail + (token.startsWith("mgo_") ? " (the operator token)" : "")
+  );
 }
 
 let asking = false;

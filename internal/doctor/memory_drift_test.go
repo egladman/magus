@@ -50,7 +50,7 @@ func TestMemoryDeclarationsReportsUnderDeclaration(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {MemoryMB: 2048}}),
 	})
 
-	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "declares 2048MB and reached at least 9000MB")
 }
@@ -65,7 +65,7 @@ func TestMemoryDeclarationsNeverReportsOverDeclaration(t *testing.T) {
 		projectWith(".", map[string]types.Target{"test": {MemoryMB: 10240}}),
 	})
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Empty(t, got.Details)
 }
 
@@ -77,7 +77,7 @@ func TestMemoryDeclarationsReportsAHeavyUndeclaredTarget(t *testing.T) {
 		projectWith("console", nil),
 	})
 
-	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Equal(t, types.CheckAdvice, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "declares no memory_mb anywhere in what it runs and reached at least 5312MB")
 }
@@ -103,7 +103,7 @@ func TestMemoryDeclarationsStaysQuiet(t *testing.T) {
 			got := newRunner(path).checkMemoryDeclarations([]*types.Project{
 				projectWith(".", map[string]types.Target{"test": {MemoryMB: tc.declared}}),
 			})
-			assert.Equal(t, types.DoctorOK, got.Status)
+			assert.Equal(t, types.CheckOK, got.Status)
 			assert.Empty(t, got.Details)
 		})
 	}
@@ -130,6 +130,6 @@ func TestMemoryDeclarationsSaysWhenNothingHasRun(t *testing.T) {
 	got := newRunner(filepath.Join(t.TempDir(), "absent.json")).
 		checkMemoryDeclarations([]*types.Project{projectWith(".", nil)})
 
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "nothing to compare")
 }

@@ -30,15 +30,15 @@ const judgeableRetries = 3
 //
 // Advice, never a failure. A retry that has not paid off yet may still be correct about
 // the target, and doctor does not know the flake magus has not seen.
-func (r *runner) checkRetryDeclarations(projects []*types.Project) types.DoctorCheck {
+func (r *runner) checkRetryDeclarations(projects []*types.Project) types.Check {
 	const name = "retry-declarations"
 
 	var h forecast.History
 	if err := h.Load(r.runCtx(), r.opts.cfg.HistoryPath); err != nil {
 		// Advice rather than OK: the check could not RUN, which is a different answer
 		// from "every declaration still holds".
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorAdvice,
+		return types.Check{
+			Name: name, Status: types.CheckAdvice,
 			Message: "run history is unreadable, so retry_on_volatile declarations could not be checked against what magus recorded",
 			Details: []string{err.Error()},
 		}
@@ -61,21 +61,21 @@ func (r *runner) checkRetryDeclarations(projects []*types.Project) types.DoctorC
 	}
 
 	if declared == 0 {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: "no target declares retry_on_volatile, so no failure is retried",
 		}
 	}
 	if len(details) == 0 {
-		return types.DoctorCheck{
-			Name: name, Status: types.DoctorOK,
+		return types.Check{
+			Name: name, Status: types.CheckOK,
 			Message: fmt.Sprintf("%d declared retry policy(s) still rescue the failures they retry", declared),
 		}
 	}
 	slices.Sort(details)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:   name,
-		Status: types.DoctorAdvice,
+		Status: types.CheckAdvice,
 		Message: fmt.Sprintf(
 			"%d of %d declared retry policy(s) have not rescued a run; a retry that never turns a failure into a pass buys a second run and no verdict",
 			len(details), declared),

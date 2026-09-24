@@ -87,17 +87,17 @@ func usedSchemaKeys(projects []*types.Project) []gatedKey {
 // reasoning that a source build is compiled from the workspace it runs against; that
 // holds for one checkout and not for a `./magus` carried between worktrees on different
 // branches, which is how this deadlock was actually hit.
-func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
+func (r *runner) checkSchemaFloor(projects []*types.Project) types.Check {
 	const name = "required-version-covers-schema"
 	used := usedSchemaKeys(projects)
 	if len(used) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK,
+		return types.Check{Name: name, Status: types.CheckOK,
 			Message: "no version-gated magusfile keys in use"}
 	}
 
 	cfg, err := config.LoadWithRoot("", r.root)
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorAdvice,
+		return types.Check{Name: name, Status: types.CheckAdvice,
 			Message: fmt.Sprintf("could not read config to check the floor: %v", err)}
 	}
 	declared := strings.TrimSpace(cfg.RequiredVersion)
@@ -113,9 +113,9 @@ func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
 	}
 
 	if declared == "" {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:   name,
-			Status: types.DoctorAdvice,
+			Status: types.CheckAdvice,
 			Message: fmt.Sprintf("magus.yaml declares no required_version, but this workspace uses "+
 				"magusfile keys an older magus cannot load; add `required_version: \">= %s\"`", need),
 			Details: details,
@@ -128,25 +128,25 @@ func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
 	c, cerr := semver.NewConstraint(declared)
 	needV, verr := semver.NewVersion(need)
 	if cerr != nil || verr != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorAdvice,
+		return types.Check{Name: name, Status: types.CheckAdvice,
 			Message: fmt.Sprintf("required_version %q is not a constraint this check can evaluate", declared),
 			Details: details}
 	}
 	if c.Check(needV) && !c.Check(highestBelow(needV)) {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK,
+		return types.Check{Name: name, Status: types.CheckOK,
 			Message: fmt.Sprintf("required_version %q covers %d version-gated key(s)", declared, len(used)),
 			Details: details}
 	}
 	if c.Check(highestBelow(needV)) {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:   name,
-			Status: types.DoctorAdvice,
+			Status: types.CheckAdvice,
 			Message: fmt.Sprintf("required_version %q admits a magus older than %s, which cannot load "+
 				"this workspace's magusfiles; raise it to \">= %s\"", declared, need, need),
 			Details: details,
 		}
 	}
-	return types.DoctorCheck{Name: name, Status: types.DoctorOK,
+	return types.Check{Name: name, Status: types.CheckOK,
 		Message: fmt.Sprintf("required_version %q covers %d version-gated key(s)", declared, len(used)),
 		Details: details}
 }

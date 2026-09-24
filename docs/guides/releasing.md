@@ -131,7 +131,7 @@ release: OK   workflow tag trigger - `v*` is what .github/workflows/release.yaml
 release: OK   branch collision - no branch is named `v0.5.0`
 release: OK   asset names - version `v0.5.0` names assets `dist/magus_*.tar.gz` matches on every platform release.yaml builds
 release: OK   release manifest - releases/v0.5.0.yaml is absent, as cut requires
-release: OK   changelog - CHANGELOG.md's [Unreleased] section has content for cut to move
+release: OK   changelog - changes/unreleased/ holds 12 fragment(s) for cut to fold
 release: OK   workflow trigger - `v0.5.0` matches `v*` and starts the release
 ```
 
@@ -193,8 +193,8 @@ refuses on two things the release checks can see now:
 
 - `releases/v<version>.yaml` already exists. Release manifests are immutable once
   committed.
-- `CHANGELOG.md`'s `[Unreleased]` section is empty. Write the entry before
-  tagging, not after.
+- `changes/unreleased/` holds no changelog fragments. Write the entries before
+  tagging, not after. The cut folds them into the manifest and deletes them.
 
 ### The workflow contract
 

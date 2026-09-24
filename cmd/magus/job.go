@@ -609,6 +609,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return usagef("magus job fork: %s", err)
 	}
 	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths}
+	if err := job.RefuseDirectoryWritePaths(store, row.ID, candidate); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
 	if err := job.RefuseSharedCheckout(store, plan, row.ID, candidate); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
@@ -726,7 +729,11 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	}
 	here := job.Checkout{CacheDir: cacheDir, Session: strings.TrimSpace(session)}
 	if len(pos) == 0 {
-		if id := here.Marker(); id != "" {
+		id, err := here.Marker()
+		if err != nil {
+			return fmt.Errorf("magus job exec: %w", err)
+		}
+		if id != "" {
 			fmt.Printf("this checkout holds the lease on %s\n", id)
 			return nil
 		}
@@ -786,7 +793,16 @@ func jobExec(ctx context.Context, root string, args []string) error {
 // boundary left to protect, the same fail-open reading the guard gives an unreadable
 // ledger.
 func jobExecVacate(root string, here job.Checkout) error {
-	id := here.Marker()
+	id, err := here.Marker()
+	if err != nil {
+		// A marker that does not read binds no row there is a state to check, and clearing
+		// it is the fix the error names.
+		if _, verr := here.Vacate(); verr != nil {
+			return fmt.Errorf("magus job exec --vacate: %w", verr)
+		}
+		fmt.Printf("cleared a lease marker that did not read (%v)\n", err)
+		return nil
+	}
 	if id == "" {
 		fmt.Println("this checkout holds no job; nothing to vacate")
 		return nil
@@ -966,7 +982,11 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if actor := store.Actor(); actor.Bound() {
+	actor, err := store.Actor()
+	if err != nil {
+		return fmt.Errorf("magus job wait: %w", err)
+	}
+	if actor.Bound() {
 		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work."+
 			" Exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
 	}

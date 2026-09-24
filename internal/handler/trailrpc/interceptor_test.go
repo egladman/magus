@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
+	"github.com/egladman/magus/types"
 )
 
 func TestClassify(t *testing.T) {
@@ -112,11 +113,11 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		fakeTokenService{},
-		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindTokenLifecycle)),
+		connect.WithInterceptors(Interceptor(dir, trail.KindTokenLifecycle)),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(verifiedAs(console1, mux))
 	defer srv.Close()
 
 	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
@@ -126,7 +127,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	if _, err := client.ListTokens(ctx, connect.NewRequest(&tokenv1.ListTokensRequest{})); err != nil {
 		t.Fatalf("ListTokens: %v", err)
 	}
-	// A mutation IS recorded, with the server-stamped actor and the method as the action.
+	// A mutation IS recorded, naming the credential the guard verified and the method as the action.
 	if _, err := client.RevokeToken(ctx, connect.NewRequest(&tokenv1.RevokeTokenRequest{Name: "abc"})); err != nil {
 		t.Fatalf("RevokeToken: %v", err)
 	}
@@ -139,9 +140,69 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 		t.Fatalf("recorded %d events, want exactly 1 (the mutation; the read must not record): %+v", len(events), events)
 	}
 	got := events[0]
-	if got.Action != "RevokeToken" || got.Actor != "operator" || got.Kind != trail.KindTokenLifecycle || got.Outcome != trail.OutcomeOK {
-		t.Errorf("recorded event = %+v, want RevokeToken/operator/token_lifecycle/ok", got)
+	if got.Action != "RevokeToken" || got.Credential != console1 || got.EntryPoint != types.EntryPointRPC ||
+		got.Kind != trail.KindTokenLifecycle || got.Outcome != trail.OutcomeOK {
+		t.Errorf("recorded event = %+v, want RevokeToken/console-1/rpc/token_lifecycle/ok", got)
 	}
+	if got.RequestRef != "" {
+		t.Errorf("without WithSubject nothing but the method is recorded, got request ref %q", got.RequestRef)
+	}
+}
+
+var (
+	console1 = types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+	operator = types.Credential{Class: types.ClassOperator, ID: "0badf00d", Grant: types.GrantOperator}
+)
+
+// subjectService answers a revoke with a named token, so the WithSubject test can show the
+// subject lands in the trail.
+type subjectService struct{ fakeTokenService }
+
+func (subjectService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
+	return connect.NewResponse(&tokenv1.TokenInfo{Id: "3fa9c1d2", Name: "laptop"}), nil
+}
+
+func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
+	dir := t.TempDir()
+	subject := func(resp connect.AnyResponse) ([]byte, string) {
+		switch msg := resp.Any().(type) {
+		case *tokenv1.TokenInfo:
+			return []byte(`{"id":"` + msg.GetId() + `"}`), "token " + msg.GetId()
+		case *tokenv1.CreateTokenResponse:
+			return []byte(`{"identifier":"minted"}`), "token minted"
+		}
+		return nil, ""
+	}
+	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(subjectService{},
+		connect.WithInterceptors(Interceptor(dir, trail.KindTokenLifecycle, WithSubject(subject))))
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(verifiedAs(operator, mux))
+	defer srv.Close()
+	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
+	if _, err := client.RevokeToken(context.Background(), connect.NewRequest(&tokenv1.RevokeTokenRequest{Name: "laptop"})); err != nil {
+		t.Fatalf("RevokeToken: %v", err)
+	}
+	events, err := trail.ReadRecent(dir, 10)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("ReadRecent = %d events, %v", len(events), err)
+	}
+	if events[0].Preview != "token 3fa9c1d2" || events[0].RequestRef == "" {
+		t.Fatalf("the subject was not recorded: %+v", events[0])
+	}
+	blob, err := trail.ReadBlob(dir, events[0].RequestRef)
+	if err != nil || !strings.Contains(string(blob), "3fa9c1d2") {
+		t.Fatalf("subject blob = %q, %v", blob, err)
+	}
+}
+
+// verifiedAs stands in for the bearer guard, which puts the verified credential and the rpc
+// entry point on the request context before any service sees it.
+func verifiedAs(credential types.Credential, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := trail.ContextWithEntryPoint(trail.ContextWithCredential(r.Context(), credential), types.EntryPointRPC)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // TestInterceptorAuditReadsRecordsRead pins the WithAuditReads opt-in: with it set, a read verb
@@ -151,11 +212,11 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		fakeTokenService{},
-		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindMemory, WithAuditReads())),
+		connect.WithInterceptors(Interceptor(dir, trail.KindMemory, WithAuditReads())),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(verifiedAs(operator, mux))
 	defer srv.Close()
 
 	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
@@ -176,17 +237,15 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("recorded %d events, want 2 (the read AND the mutation, audit-reads on): %+v", len(events), events)
 	}
-	// Newest-first: the mutation, then the read. Both stamped memory/operator/ok.
-	got := []struct{ action, actor string }{
-		{events[0].Action, events[0].Actor},
-		{events[1].Action, events[1].Actor},
+	// Newest-first: the mutation, then the read, both naming the operator credential.
+	type row struct {
+		action     string
+		credential types.Credential
 	}
-	want := []struct{ action, actor string }{
-		{"RevokeToken", "operator"},
-		{"ListTokens", "operator"},
-	}
+	got := []row{{events[0].Action, events[0].Credential}, {events[1].Action, events[1].Credential}}
+	want := []row{{"RevokeToken", operator}, {"ListTokens", operator}}
 	if got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("recorded events = %+v, want RevokeToken then ListTokens (both operator)", got)
+		t.Errorf("recorded events = %+v, want RevokeToken then ListTokens (both the operator credential)", got)
 	}
 	if events[0].Kind != trail.KindMemory || events[1].Kind != trail.KindMemory {
 		t.Errorf("recorded kinds = %v,%v, want both %v", events[0].Kind, events[1].Kind, trail.KindMemory)
@@ -205,7 +264,7 @@ func TestInterceptorRecordsFailedMutation(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		erroringTokenService{},
-		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindTokenLifecycle)),
+		connect.WithInterceptors(Interceptor(dir, trail.KindTokenLifecycle)),
 	)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)

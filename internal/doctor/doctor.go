@@ -192,7 +192,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 
 	for _, c := range out.Checks {
 		// A check that did not run is counted as unknown whatever status it carries.
-		// Those checks return DoctorOK because there was nothing to report, and
+		// Those checks return CheckOK because there was nothing to report, and
 		// tallying that as a pass is how "44 ok" came to include checks that never
 		// looked at anything.
 		if c.Evidence == types.EvidenceUnknown {
@@ -200,11 +200,11 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 			continue
 		}
 		switch c.Status {
-		case types.DoctorOK:
+		case types.CheckOK:
 			out.Summary.OK++
-		case types.DoctorFail:
+		case types.CheckFail:
 			out.Summary.Fail++
-		case types.DoctorAdvice:
+		case types.CheckAdvice:
 			out.Summary.Advice++
 		}
 	}
@@ -214,13 +214,13 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 // checkWorkspace reports whether the magusfile loaded, and is the hinge every check
 // below it in the registry hangs on: a failure here skips them rather than running them
 // against a workspace that is not there.
-func (r *runner) checkWorkspace(projects []*types.Project) types.DoctorCheck {
+func (r *runner) checkWorkspace(projects []*types.Project) types.Check {
 	if r.wsErr != nil {
-		return types.DoctorCheck{Name: "workspace", Status: types.DoctorFail, Message: r.wsErr.Error()}
+		return types.Check{Name: "workspace", Status: types.CheckFail, Message: r.wsErr.Error()}
 	}
-	return types.DoctorCheck{
+	return types.Check{
 		Name:    "workspace",
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: fmt.Sprintf("%d projects discovered", len(projects)),
 	}
 }

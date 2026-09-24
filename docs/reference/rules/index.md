@@ -21,6 +21,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [cache-dir-write](cache-dir-write.md)         | a write into this checkout's magus cache dir, which magus alone owns                                         |
 | [capture-filter](capture-filter.md)           | a filter over a run capture or log, which cuts the failure block apart                                       |
 | [cd](cd.md)                                   | a `cd` before a magus command, when the project is an argument                                               |
+| [credential-verb](credential-verb.md)         | an agent minting, printing, rotating or revoking a credential through the CLI                                |
 | [exit-status-echo](exit-status-echo.md)       | a trailing `echo $?`, which repeats an exit status the harness already reports                               |
 | [interpreter-rewrite](interpreter-rewrite.md) | an inline interpreter rewriting a file this tree already carries                                             |
 | [merge-side-checkout](merge-side-checkout.md) | a checkout of one merge side over a conflicted file, which discards the merge                                |
@@ -39,6 +40,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [stage-all](stage-all.md)                     | a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output                      |
 | [symbol-search](symbol-search.md)             | a recursive text search for a symbol the index defines and can enumerate                                     |
 | [throwaway-copy](throwaway-copy.md)           | a run inside a temp or scratchpad copy, which leaves the real tree unverified                                |
+| [token-state](token-state.md)                 | an agent reading or writing the token secrets: the operator token file or the token store                    |
 | [whole-tree](whole-tree.md)                   | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                                   |
 | [worktree-remove](worktree-remove.md)         | removing a worktree, which may hold another session's uncommitted work                                       |
 

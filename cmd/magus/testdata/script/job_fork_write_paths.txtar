@@ -1,0 +1,24 @@
+# `magus job fork` refuses a write path naming an existing directory that is not a project
+# root (MGS3018), and writes no row. A file, a project root and a directory the job
+# creates all fork.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus init -local -vcs git
+mkdir src/pkg
+cp $WORK/code.go src/pkg/code.go
+
+! exec magus job fork wave/dir --write-paths src/pkg
+stderr 'MGS3018'
+stderr '"src/pkg", inside project "."'
+stderr 'List the files the job will edit'
+! exec magus job fork wave/glob --write-paths 'src/**'
+stderr '"src/\*\*" \(matching the directory "src"\)'
+exec magus ls jobs -o name
+! stdout .
+
+exec magus job fork wave/file --write-paths src/pkg/code.go
+exec magus job fork wave/root --write-paths .
+exec magus job fork wave/new --write-paths src/fresh
+
+-- code.go --
+package pkg

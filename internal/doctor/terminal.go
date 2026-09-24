@@ -30,7 +30,7 @@ const minInteractiveHeight = 15
 // and neither is the workspace: magus degrades to plain output on every one of
 // them. What a reader needs is to know WHICH way it degraded before they wonder
 // why the colors or the mouse are missing.
-func (r *runner) checkTerminal() types.DoctorCheck {
+func (r *runner) checkTerminal() types.Check {
 	const name = "terminal-capabilities"
 
 	// The FORMAT decides this before the terminal gets a say. pretty and plain
@@ -43,9 +43,9 @@ func (r *runner) checkTerminal() types.DoctorCheck {
 		format = "pretty"
 	}
 	if format != "pretty" && format != "plain" {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: fmt.Sprintf("log format is %q, so magus emits structured records and draws no interactive surface", format),
 			Details: []string{formatSource(format), "set log.format to pretty for the pinned band, live status and notifications"},
 		}
@@ -56,9 +56,9 @@ func (r *runner) checkTerminal() types.DoctorCheck {
 	canRender := tty.CanRender(os.Stderr, tty.SystemProbe)
 	canRead := tty.IsTerminalReader(os.Stdin, tty.SystemProbe)
 	if !canRender || !canRead {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: "not an interactive terminal; magus renders plain output",
 			Details: terminalDetails(canRender, canRead, false),
 		}
@@ -111,16 +111,16 @@ func (r *runner) checkTerminal() types.DoctorCheck {
 		degraded = append(degraded, fmt.Sprintf("only %d rows; the pinned band needs a scrolling area above it and stands down below about %d", height, minInteractiveHeight))
 	}
 	if len(degraded) == 0 {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: "interactive terminal, fully capable",
 			Details: details,
 		}
 	}
-	return types.DoctorCheck{
+	return types.Check{
 		Name:    name,
-		Status:  types.DoctorAdvice,
+		Status:  types.CheckAdvice,
 		Message: "interactive terminal with reduced capability; magus degrades rather than failing",
 		Details: append(details, degraded...),
 	}

@@ -57,7 +57,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if verdict.Decision != "pass" && verdict.Decision != "advise" {
 		return verdict, workspaceRuleRecord{}
 	}
-	facts := hint.NewGate(at.cacheDir, who.sessionKey())
+	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	req := commandRequest(ctx, in, who, at, facts)
 	if deps.CheckoutState != nil {
 		if dir, ok := gitPushDir(req.Commands, cmp.Or(at.dir, at.workspace)); ok {

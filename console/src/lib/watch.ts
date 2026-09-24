@@ -14,7 +14,7 @@
 import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
-import { TokenService, TokenScope } from "@wire/token/v1alpha1/token_pb";
+import { CredentialClass, TokenService } from "@wire/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, resolveDaemonHost, surfaceLink } from "./daemon";
 import { showToast } from "./refresh-toast";
 import { mergedNotice, saidNotice } from "./review-notice";
@@ -64,12 +64,12 @@ async function revokeActiveShareToken(host: string): Promise<void> {
   const tokens = createClient(TokenService, createDaemonTransport(host, getLiveToken()));
   try {
     const resp = await tokens.listTokens({});
-    const share = resp.tokens.find((t) => t.scope === TokenScope.SHARE_READ);
+    const share = resp.tokens.find((t) => t.class === CredentialClass.SHARE);
     if (!share) {
       showToast("Share", "No active share token to revoke.");
       return;
     }
-    await tokens.revokeToken({ name: share.identifier });
+    await tokens.revokeToken({ name: share.id });
     showToast("Share", "Revoked the share token; the share listener is closed.");
   } catch (e) {
     showToast(

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 )
 
 // Kinds carrying the attention queue: an agent raises a block, a person closes it.
@@ -32,17 +33,19 @@ const (
 // file is read by binaries older than the one that wrote it, and nesting an envelope
 // that carries its own schema version would leave such a reader two versions to
 // reconcile for one fact.
-// Lease is the lease the RAISING session was launched under, which is what lets a
-// person reading the queue see which slice of a fleet's work is blocked. It is attribution and
-// not identity: see [RequestID] for why it stays out of the id.
+// Lease is the lease the RAISING session acted under, which is what lets a person reading
+// the queue see which slice of a fleet's work is blocked, and LeaseFrom is which source
+// answered it. It is attribution and not identity: see [RequestID] for why it stays out of
+// the id.
 type AttentionOpen struct {
-	Request  string `json:"request"`
-	Outcome  string `json:"outcome"`
-	Severity string `json:"severity,omitempty"`
-	Source   string `json:"source,omitempty"`
-	Where    string `json:"where,omitempty"`
-	Lease    string `json:"lease,omitempty"`
-	Message  string `json:"message"` // clamped to MaxMessageBytes when written
+	Request   string            `json:"request"`
+	Outcome   string            `json:"outcome"`
+	Severity  string            `json:"severity,omitempty"`
+	Source    string            `json:"source,omitempty"`
+	Where     string            `json:"where,omitempty"`
+	Lease     string            `json:"lease,omitempty"`
+	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	Message   string            `json:"message"` // clamped to MaxMessageBytes when written
 }
 
 // MaxMessageBytes bounds the Message one [AttentionOpen] may carry into the store.
@@ -88,16 +91,17 @@ func boundMessage(s string) string {
 
 // AttentionDispose is the payload of a person closing a request.
 //
-// The disposing session is the enclosing [Record.Session]; repeating it in the
+// The disposing invocation is the enclosing [Record.Invocation]; repeating it in the
 // payload would be a second copy of one fact, free to disagree with the envelope.
 type AttentionDispose struct {
 	Request string `json:"request"`
 	Note    string `json:"note,omitempty"`
 }
 
-// RequestID derives the identity of one blocked request from the session that raised
-// it and what o says. Exactly three of o's fields are read (Source, Where and
-// Message), and the result is stable: the same session and the same three values
+// RequestID derives the identity of one blocked request from sourceID, the id the raising
+// source goes by (an agent host's session id), and what o says. Exactly three of o's
+// fields are read (Source, Where and Message), and the result is stable: the same source
+// id and the same three values
 // always name the same request, on any machine and in any worktree.
 //
 // That determinism is the whole dedupe mechanism. An agent re-fires a block freely
@@ -117,27 +121,29 @@ type AttentionDispose struct {
 //
 // Fields are joined with NUL, which none of them can contain, so no pair of values
 // can concatenate into another pair's digest.
-func RequestID(session string, o AttentionOpen) string {
-	sum := sha256.Sum256([]byte(session + "\x00" + o.Source + "\x00" + o.Where + "\x00" + o.Message))
+func RequestID(sourceID string, o AttentionOpen) string {
+	sum := sha256.Sum256([]byte(sourceID + "\x00" + o.Source + "\x00" + o.Where + "\x00" + o.Message))
 	return "att-" + hex.EncodeToString(sum[:])[:12]
 }
 
 // AttentionRequest is one request as a reader meets it: what was raised, and whether
 // anybody has disposed of it.
 type AttentionRequest struct {
-	ID       string `json:"id"`
-	Session  string `json:"session"` // the session that raised it
-	OpenedMs int64  `json:"opened_ms"`
-	Outcome  string `json:"outcome"`
-	Severity string `json:"severity,omitempty"`
-	Source   string `json:"source,omitempty"`
-	Where    string `json:"where,omitempty"`
-	Lease    string `json:"lease,omitempty"`
-	Message  string `json:"message"`
+	ID         string `json:"id"`
+	Invocation string `json:"invocation"` // the invocation that raised it
+	OpenedMs   int64  `json:"opened_ms"`
+	Outcome    string `json:"outcome"`
+	Severity   string `json:"severity,omitempty"`
+	Source     string `json:"source,omitempty"`
+	Where      string `json:"where,omitempty"`
+	Lease      string `json:"lease,omitempty"`
+	// LeaseFrom is which source answered Lease; see types.LeaseSource.
+	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
+	Message   string            `json:"message"`
 
 	Disposed   bool   `json:"disposed"`
 	DisposedMs int64  `json:"disposed_ms,omitempty"`
-	DisposedBy string `json:"disposed_by,omitempty"` // the session that closed it
+	DisposedBy string `json:"disposed_by,omitempty"` // the invocation that closed it
 	Note       string `json:"note,omitempty"`
 	// Disposes counts the dispose records naming this id since it was last raised.
 	// The FIRST one closed the request and is the one reported above; a count over 1
@@ -163,7 +169,7 @@ type AttentionRequest struct {
 //     kind this build does not know.
 //
 // "First" is well defined because [ReadAll] has already ordered the fold by
-// (Ts, Session, Seq). Records are consumed in that order and must not be handed to
+// (Ts, Invocation, Seq). Records are consumed in that order and must not be handed to
 // this function out of it; the returned slice is sorted separately, by when each
 // request was last raised.
 func Attention(fold Fold) []AttentionRequest {
@@ -187,15 +193,16 @@ func Attention(fold Fold) []AttentionRequest {
 				order = append(order, open.Request)
 			}
 			*req = AttentionRequest{
-				ID:       open.Request,
-				Session:  rec.Session,
-				OpenedMs: rec.Ts,
-				Outcome:  open.Outcome,
-				Severity: open.Severity,
-				Source:   open.Source,
-				Where:    open.Where,
-				Lease:    open.Lease,
-				Message:  open.Message,
+				ID:         open.Request,
+				Invocation: rec.Invocation,
+				OpenedMs:   rec.Ts,
+				Outcome:    open.Outcome,
+				Severity:   open.Severity,
+				Source:     open.Source,
+				Where:      open.Where,
+				Lease:      open.Lease,
+				LeaseFrom:  open.LeaseFrom,
+				Message:    open.Message,
 			}
 		case KindAttentionDispose:
 			var dispose AttentionDispose
@@ -212,7 +219,7 @@ func Attention(fold Fold) []AttentionRequest {
 			}
 			req.Disposed = true
 			req.DisposedMs = rec.Ts
-			req.DisposedBy = rec.Session
+			req.DisposedBy = rec.Invocation
 			req.Note = dispose.Note
 		}
 	}
@@ -284,7 +291,7 @@ type DisposedError struct {
 }
 
 func (e *DisposedError) Error() string {
-	return fmt.Sprintf("request %s was already disposed by session %s at %s",
+	return fmt.Sprintf("request %s was already disposed by invocation %s at %s",
 		e.ID, e.DisposedBy, time.UnixMilli(e.DisposedMs).Format(time.RFC3339))
 }
 
@@ -338,8 +345,9 @@ func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
 // notification nobody happened to be looking at is still answerable afterwards, from any
 // worktree of the repository.
 //
-// agentSession is the AGENT's session id, not this magus invocation's: a re-fire is a
-// second magus process, and keying on that would mint a fresh id every time. It fills
+// sourceID is the raising source's id (an agent host's session id), not this magus
+// invocation's: a re-fire is a second magus process, and keying on that would mint a
+// fresh id every time. It fills
 // open.Request via [RequestID], so the caller must not set that field.
 //
 // Re-filing a block that is already open is a no-op reporting opened=false. An agent
@@ -347,11 +355,11 @@ func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
 // one per attempt. A block that was raised, disposed, and has come back opens again;
 // see [Attention] for why.
 //
-// start describes the writing invocation; its Command is set here, and the session id is
-// minted by [NewID]. The returned id is the request's, addressable whether or not this
-// call wrote anything.
-func OpenRequest(dir, agentSession string, open AttentionOpen, start SessionStart) (id string, opened bool, err error) {
-	open.Request = RequestID(agentSession, open)
+// start describes the writing invocation; its Command is set here, and its id is minted
+// by [NewID]. The returned id is the request's, addressable whether or not this call
+// wrote anything.
+func OpenRequest(dir, sourceID string, open AttentionOpen, start InvocationStart) (id string, opened bool, err error) {
+	open.Request = RequestID(sourceID, open)
 	fold, err := ReadAll(dir)
 	if err != nil {
 		return open.Request, false, err
@@ -378,14 +386,14 @@ func OpenRequest(dir, agentSession string, open AttentionOpen, start SessionStar
 // reporting success here would credit this caller with a closure it did not perform.
 // Unresolvable refs surface as [ErrNoRequest] or [AmbiguousRequestError].
 //
-// The disposal writes its OWN session, because a disposal IS its own invocation: it is
-// what makes the store say which run of magus closed the request, and by extension which
-// person was at the keyboard. start describes it; its Command is set here.
+// The disposal writes its OWN invocation file: it is what makes the store say which run
+// of magus closed the request, and start's origin says whose account it ran as and
+// through which entry point. start describes it; its Command is set here.
 //
 // The returned request is re-read from the store rather than patched in memory: the
-// disposal's timestamp and session are whatever landed on disk, and a hand-assembled
+// disposal's timestamp and invocation are whatever landed on disk, and a hand-assembled
 // answer could disagree with what every other worktree is about to read.
-func DisposeRequest(dir, ref, reason string, start SessionStart) (AttentionRequest, error) {
+func DisposeRequest(dir, ref, reason string, start InvocationStart) (AttentionRequest, error) {
 	fold, err := ReadAll(dir)
 	if err != nil {
 		return AttentionRequest{}, err

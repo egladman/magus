@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -1746,6 +1747,86 @@ func TestGuardDeniesExitStatusEcho(t *testing.T) {
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleExitStatusEcho, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "exits 0", "the masked failure is the fact a reader cannot see: %s", cmd)
+	}
+}
+
+// Every command the guard judges came from an agent, and an agent holds the token it was given:
+// every credential verb is refused however the line spells it, the binary included. Listing
+// tokens and asking whether the operator token exists stay allowed.
+func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
+	for _, cmd := range []string{
+		"magus config token print",
+		"./magus config token print",
+		"/usr/local/bin/magus config token print",
+		"magus --root . config token print",
+		"magus config token generate --force",
+		"magus config token revoke",
+		"magus config console token create",
+		"magus config console token create --viewer --expires 1h",
+		"magus config console token create --code --expires 12h",
+		"magus -C . config console token create",
+		"magus config mcp connector create --name agent",
+		"magus config console token revoke laptop",
+		"magus config mcp connector revoke 3fa9c1d2",
+		"magus graph export --open --follow",
+		"magus graph export --open --follow --print",
+		"magus graph export --follow --open --targets",
+		"go run ./cmd/magus config console token create",
+		"go run github.com/egladman/magus/cmd/magus@latest config mcp connector create",
+		"go run -tags dev ./cmd/magus config token print",
+		`export MAGUS_MCP_TOKEN="$(magus config token print)"`,
+		`open "http://127.0.0.1:7391/console/#code=$(magus config console token create --code --expires 12h)"`,
+		`sh -c "magus config console token create"`,
+		`bash -lc 'magus config mcp connector create'`,
+		"env FOO=1 magus config console token create",
+		"timeout 5 magus config mcp connector create",
+		`eval "magus config token print"`,
+		"magus config token print | pbcopy",
+		"true && magus config token generate",
+		"magus config token print && (",                 // unparsable: the pattern answers
+		"magus config console token create --code && (", // unparsable: the pattern answers
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleCredentialVerb, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "config mcp connector create", "the reason names what a person runs: %s", cmd)
+	}
+	for _, cmd := range []string{
+		"magus config token status",
+		"magus config console token ls",
+		"magus config mcp connector ls",
+		"magus graph export --open",
+		"magus graph export --open --print",
+		"magus run go::go-test . -- -run 'Token'",
+		"grep -rn 'config token print' docs",
+		"magus describe rule credential-verb",
+		"go run ./cmd/magus-docs config console token create",
+	} {
+		assert.NotEqual(t, denyRuleCredentialVerb, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
+// Every credential verb names a command, and flag, the CLI registry declares, so a rename in
+// the registry fails here rather than silently dropping a verb from the rule.
+func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
+	for _, inv := range credentialInvocations {
+		spelled := strings.Join(inv.words, " ")
+		cmds := cli.All
+		var found *cli.Command
+		for _, w := range inv.words {
+			i := slices.IndexFunc(cmds, func(c cli.Command) bool { return c.Name == w })
+			if !assert.GreaterOrEqual(t, i, 0, "%q: no command %q in the registry", spelled, w) {
+				found = nil
+				break
+			}
+			found = &cmds[i]
+			cmds = found.Children
+		}
+		if found == nil || inv.flag == "" {
+			continue
+		}
+		assert.True(t, slices.ContainsFunc(found.Flags, func(f cli.Flag) bool { return f.Name == inv.flag }),
+			"%q: no flag --%s in the registry", spelled, inv.flag)
 	}
 }
 

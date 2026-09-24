@@ -24,7 +24,7 @@ import (
 // thing CI and a new contributor both run.
 //
 // A failure, not advice: the workspace asked for something this magus cannot do.
-func (r *runner) checkIgnoredOptions(projects []*types.Project) types.DoctorCheck {
+func (r *runner) checkIgnoredOptions(projects []*types.Project) types.Check {
 	const name = "magusfile-options-understood"
 
 	var details []string
@@ -35,14 +35,14 @@ func (r *runner) checkIgnoredOptions(projects []*types.Project) types.DoctorChec
 		}
 	}
 	if len(details) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK,
+		return types.Check{Name: name, Status: types.CheckOK,
 			Message: "every magus.project key in this workspace is one this magus understands"}
 	}
 	slices.Sort(details)
 	details = slices.Compact(details)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:   name,
-		Status: types.DoctorFail,
+		Status: types.CheckFail,
 		Message: fmt.Sprintf("%d magusfile option(s) were dropped because this magus does not recognize them, "+
 			"so the policy each declares is not in force; %s", len(details), hint.IgnoredKeyAdvice()),
 		Details: details,

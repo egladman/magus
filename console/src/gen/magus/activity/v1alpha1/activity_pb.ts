@@ -27,17 +27,16 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/activity/v1alpha1/activity.proto.
  */
 export const file_magus_activity_v1alpha1_activity: GenFile = /*@__PURE__*/
-  fileDesc("CiZtYWd1cy9hY3Rpdml0eS92MWFscGhhMS9hY3Rpdml0eS5wcm90bxIXbWFndXMuYWN0aXZpdHkudjFhbHBoYTEisgMKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoEa2luZBgCIAEoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEjEKB291dGNvbWUYBSABKA4yIC5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJEgwKBGhvc3QYDiABKAkSDwoHc2Vzc2lvbhgPIAEoCRIMCgR1bml0GBAgASgJEhEKCWNvbnRlc3RlZBgRIAMoCSK9AQoNQWN0aXZpdHlRdWVyeRIsCgVraW5kcxgBIAMoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDgoGYWN0b3JzGAIgAygJEg8KB2FjdGlvbnMYAyADKAkSLQoEdGltZRgEIAEoCzIfLm1hZ3VzLnF1ZXJ5LnYxYWxwaGExLlRpbWVSYW5nZRINCgV1bml0cxgFIAMoCRIQCghzZXNzaW9ucxgGIAMoCRINCgVwYXRocxgHIAMoCSKGAQoZTGlzdEFjdGl2aXR5RXZlbnRzUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgCIAEoCRI2CgZmaWx0ZXIYAyABKAsyJi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5BY3Rpdml0eVF1ZXJ5Im0KGkxpc3RBY3Rpdml0eUV2ZW50c1Jlc3BvbnNlEjYKBmV2ZW50cxgBIAMoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5RXZlbnQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJInIKGldhdGNoQWN0aXZpdHlFdmVudHNSZXF1ZXN0EjYKBmZpbHRlchgBIAEoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5UXVlcnkSHAoIYmFja2ZpbGwYAiABKAVCCrpIBxoFGOgHKAAiPgoRR2V0UGF5bG9hZFJlcXVlc3QSKQoDcmVmGAEgASgJQhy6SBlyFzIVXlthLXpdezIsOH1bMC05YS1mXSskIisKB1BheWxvYWQSDAoEYm9keRgBIAEoDBISCgpzaXplX2J5dGVzGAIgASgDKrICCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIWChJLSU5EX01DUF9UT09MX0NBTEwQARIMCghLSU5EX0pPQhACEhYKEktJTkRfQ09ORklHX0NIQU5HRRADEhgKFEtJTkRfVE9LRU5fTElGRUNZQ0xFEAQSFwoTS0lORF9TQU5EQk9YX0RFTklBTBAFEg8KC0tJTkRfTUVNT1JZEAYSFgoSS0lORF9BR0VOVF9DT01NQU5EEAcSGQoVS0lORF9DUkVERU5USUFMX0dSQU5UEAgSFAoQS0lORF9BR0VOVF9TUEFXThAJEg4KCktJTkRfTk9URVMQChIUChBLSU5EX0ZJTEVfQ0hBTkdFEAsSDAoIS0lORF9SVU4QDBIVChFLSU5EX0dVQVJEX1BPTElDWRANKkUKB091dGNvbWUSFwoTT1VUQ09NRV9VTlNQRUNJRklFRBAAEg4KCk9VVENPTUVfT0sQARIRCg1PVVRDT01FX0VSUk9SEAIy4gIKD0FjdGl2aXR5U2VydmljZRJ9ChJMaXN0QWN0aXZpdHlFdmVudHMSMi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5MaXN0QWN0aXZpdHlFdmVudHNSZXF1ZXN0GjMubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuTGlzdEFjdGl2aXR5RXZlbnRzUmVzcG9uc2USWgoKR2V0UGF5bG9hZBIqLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkdldFBheWxvYWRSZXF1ZXN0GiAubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuUGF5bG9hZBJ0ChNXYXRjaEFjdGl2aXR5RXZlbnRzEjMubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuV2F0Y2hBY3Rpdml0eUV2ZW50c1JlcXVlc3QaJi5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5BY3Rpdml0eUV2ZW50MAFC+wEKG2NvbS5tYWd1cy5hY3Rpdml0eS52MWFscGhhMUINQWN0aXZpdHlQcm90b1ABWk9naXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9hY3Rpdml0eS92MWFscGhhMTthY3Rpdml0eXYxYWxwaGExogIDTUFYqgIXTWFndXMuQWN0aXZpdHkuVjFhbHBoYTHKAhdNYWd1c1xBY3Rpdml0eVxWMWFscGhhMeICI01hZ3VzXEFjdGl2aXR5XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIZTWFndXM6OkFjdGl2aXR5OjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
+  fileDesc("CiZtYWd1cy9hY3Rpdml0eS92MWFscGhhMS9hY3Rpdml0eS5wcm90bxIXbWFndXMuYWN0aXZpdHkudjFhbHBoYTEisQQKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoEa2luZBgCIAEoDjIdLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEjEKB291dGNvbWUYBSABKA4yIC5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJEgwKBGhvc3QYDiABKAkSDwoHc2Vzc2lvbhgPIAEoCRIMCgR1bml0GBAgASgJEhEKCWNvbnRlc3RlZBgRIAMoCRIMCgR1c2VyGBIgASgJEhMKC2VudHJ5X3BvaW50GBMgASgJEjcKCmNyZWRlbnRpYWwYFCABKAsyIy5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5DcmVkZW50aWFsEg0KBWFnZW50GBUgASgJEhIKCmxlYXNlX2Zyb20YFiABKAkiRAoKQ3JlZGVudGlhbBINCgVjbGFzcxgBIAEoCRIKCgJpZBgCIAEoCRIMCgRuYW1lGAMgASgJEg0KBWdyYW50GAQgASgJIr0BCg1BY3Rpdml0eVF1ZXJ5EiwKBWtpbmRzGAEgAygOMh0ubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuS2luZBIOCgZhY3RvcnMYAiADKAkSDwoHYWN0aW9ucxgDIAMoCRItCgR0aW1lGAQgASgLMh8ubWFndXMucXVlcnkudjFhbHBoYTEuVGltZVJhbmdlEg0KBXVuaXRzGAUgAygJEhAKCHNlc3Npb25zGAYgAygJEg0KBXBhdGhzGAcgAygJIoYBChlMaXN0QWN0aXZpdHlFdmVudHNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUY6AcoABISCgpwYWdlX3Rva2VuGAIgASgJEjYKBmZpbHRlchgDIAEoCzImLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5UXVlcnkibQoaTGlzdEFjdGl2aXR5RXZlbnRzUmVzcG9uc2USNgoGZXZlbnRzGAEgAygLMiYubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuQWN0aXZpdHlFdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkicgoaV2F0Y2hBY3Rpdml0eUV2ZW50c1JlcXVlc3QSNgoGZmlsdGVyGAEgASgLMiYubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuQWN0aXZpdHlRdWVyeRIcCghiYWNrZmlsbBgCIAEoBUIKukgHGgUY6AcoACI+ChFHZXRQYXlsb2FkUmVxdWVzdBIpCgNyZWYYASABKAlCHLpIGXIXMhVeW2Etel17Miw4fVswLTlhLWZdKyQiKwoHUGF5bG9hZBIMCgRib2R5GAEgASgMEhIKCnNpemVfYnl0ZXMYAiABKAMqsgIKBEtpbmQSFAoQS0lORF9VTlNQRUNJRklFRBAAEhYKEktJTkRfTUNQX1RPT0xfQ0FMTBABEgwKCEtJTkRfSk9CEAISFgoSS0lORF9DT05GSUdfQ0hBTkdFEAMSGAoUS0lORF9UT0tFTl9MSUZFQ1lDTEUQBBIXChNLSU5EX1NBTkRCT1hfREVOSUFMEAUSDwoLS0lORF9NRU1PUlkQBhIWChJLSU5EX0FHRU5UX0NPTU1BTkQQBxIZChVLSU5EX0NSRURFTlRJQUxfR1JBTlQQCBIUChBLSU5EX0FHRU5UX1NQQVdOEAkSDgoKS0lORF9OT1RFUxAKEhQKEEtJTkRfRklMRV9DSEFOR0UQCxIMCghLSU5EX1JVThAMEhUKEUtJTkRfR1VBUkRfUE9MSUNZEA0qRQoHT3V0Y29tZRIXChNPVVRDT01FX1VOU1BFQ0lGSUVEEAASDgoKT1VUQ09NRV9PSxABEhEKDU9VVENPTUVfRVJST1IQAjLiAgoPQWN0aXZpdHlTZXJ2aWNlEn0KEkxpc3RBY3Rpdml0eUV2ZW50cxIyLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkxpc3RBY3Rpdml0eUV2ZW50c1JlcXVlc3QaMy5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5MaXN0QWN0aXZpdHlFdmVudHNSZXNwb25zZRJaCgpHZXRQYXlsb2FkEioubWFndXMuYWN0aXZpdHkudjFhbHBoYTEuR2V0UGF5bG9hZFJlcXVlc3QaIC5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5QYXlsb2FkEnQKE1dhdGNoQWN0aXZpdHlFdmVudHMSMy5tYWd1cy5hY3Rpdml0eS52MWFscGhhMS5XYXRjaEFjdGl2aXR5RXZlbnRzUmVxdWVzdBomLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExLkFjdGl2aXR5RXZlbnQwAUL7AQobY29tLm1hZ3VzLmFjdGl2aXR5LnYxYWxwaGExQg1BY3Rpdml0eVByb3RvUAFaT2dpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL2FjdGl2aXR5L3YxYWxwaGExO2FjdGl2aXR5djFhbHBoYTGiAgNNQViqAhdNYWd1cy5BY3Rpdml0eS5WMWFscGhhMcoCF01hZ3VzXEFjdGl2aXR5XFYxYWxwaGEx4gIjTWFndXNcQWN0aXZpdHlcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhlNYWd1czo6QWN0aXZpdHk6OlYxYWxwaGExYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
 
 /**
  * ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
  * kind, action, outcome) is common to every kind; the payload refs point into the activity
  * blob store (fetched via GetPayload) so a large request/response body never bloats the line.
- * For an MCP tool call: actor is the agent id, action is the tool name, request is the
- * arguments, response is the result. For an agent command observation: actor is the host-supplied
- * agent/session identity when available, action is the host tool name, request is the normalized
- * invocation, and response is the guard decision. For a token lifecycle event: actor is "cli",
- * action is "connector.create"/"connector.revoke", and the refs are empty.
+ * For an MCP tool call: action is the tool name, request is the arguments, response is the
+ * result. For an agent command observation: action is the host tool name, request is the
+ * normalized invocation, and response is the guard decision. For a token lifecycle event:
+ * action is the RPC method and the refs are empty.
  *
  * @generated from message magus.activity.v1alpha1.ActivityEvent
  */
@@ -55,7 +54,7 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
   kind: Kind;
 
   /**
-   * who: an agent id, "cli", a user
+   * the origin fields below as one label: "eli via claude-code", "daemon", "unattributed"
    *
    * @generated from field: string actor = 3;
    */
@@ -130,9 +129,9 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
    * The agent host behind the action and that host's own session id, empty when the producer
    * could not know them. The name is an opaque label the caller supplies, not a set magus
    * enumerates: a hook is told its host by the wrapper that ran it, because no local process can
-   * discover which agent host started it. An MCP call has no such wrapper and is attributed from
-   * its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by
-   * host rather than switching on kind first.
+   * discover which agent host started it. An MCP call is attributed from the client's handshake
+   * name, or its HTTP User-Agent when it recorded none, mapped into this same field so one view
+   * can group both kinds by host rather than switching on kind first.
    *
    * They ride the EVENT rather than the request blob, which also carries them: a 200-row feed
    * grouped by host must not cost 200 GetPayload calls.
@@ -174,6 +173,44 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
    * @generated from field: repeated string contested = 17;
    */
   contested: string[];
+
+  /**
+   * Where the action came from, one field per channel, so a reader never guesses which kind of
+   * value a single string holds. user is the OS account the recording process ran as, read from
+   * the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, daemon).
+   * credential is the bearer a daemon request presented, as the daemon verified it. agent is the
+   * host's subagent id within session. actor above is these rendered as one label for a row
+   * head.
+   *
+   * @generated from field: string user = 18;
+   */
+  user: string;
+
+  /**
+   * @generated from field: string entry_point = 19;
+   */
+  entryPoint: string;
+
+  /**
+   * @generated from field: magus.activity.v1alpha1.Credential credential = 20;
+   */
+  credential?: Credential;
+
+  /**
+   * @generated from field: string agent = 21;
+   */
+  agent: string;
+
+  /**
+   * Which source answered unit (the lease), where the producer resolved one: flag, agent (the
+   * spawn magus recorded for the calling subagent), marker (the checkout's `magus job exec`
+   * binding), contested (the marker, over a BAGGAGE claim naming another lease), or env (the
+   * BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so
+   * it takes magus's word for the concept rather than unit's.
+   *
+   * @generated from field: string lease_from = 22;
+   */
+  leaseFrom: string;
 };
 
 /**
@@ -182,6 +219,50 @@ export type ActivityEvent = Message<"magus.activity.v1alpha1.ActivityEvent"> & {
  */
 export const ActivityEventSchema: GenMessage<ActivityEvent> = /*@__PURE__*/
   messageDesc(file_magus_activity_v1alpha1_activity, 0);
+
+/**
+ * Credential is a verified bearer, never its secret: which class it is, its stable id, the name
+ * it was minted under, and the grant it held when the action was recorded. The id is the
+ * identity; the name is a label a later token can reuse.
+ *
+ * @generated from message magus.activity.v1alpha1.Credential
+ */
+export type Credential = Message<"magus.activity.v1alpha1.Credential"> & {
+  /**
+   * operator, token or share
+   *
+   * @generated from field: string class = 1;
+   */
+  class: string;
+
+  /**
+   * first 8 hex of the secret's SHA-256
+   *
+   * @generated from field: string id = 2;
+   */
+  id: string;
+
+  /**
+   * empty for the operator and a share link
+   *
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * e.g. "console=write" or "mcp=write"
+   *
+   * @generated from field: string grant = 4;
+   */
+  grant: string;
+};
+
+/**
+ * Describes the message magus.activity.v1alpha1.Credential.
+ * Use `create(CredentialSchema)` to create a new message.
+ */
+export const CredentialSchema: GenMessage<Credential> = /*@__PURE__*/
+  messageDesc(file_magus_activity_v1alpha1_activity, 1);
 
 /**
  * ActivityQuery narrows the listing server-side. Fields AND together; repeated values within
@@ -198,7 +279,7 @@ export type ActivityQuery = Message<"magus.activity.v1alpha1.ActivityQuery"> & {
   kinds: Kind[];
 
   /**
-   * restrict to these actors
+   * restrict to events whose origin names one of these in a single field: user, host, agent, the credential's class, id or name, or entry_point, matched exactly (never the actor label)
    *
    * @generated from field: repeated string actors = 2;
    */
@@ -252,7 +333,7 @@ export type ActivityQuery = Message<"magus.activity.v1alpha1.ActivityQuery"> & {
  * Use `create(ActivityQuerySchema)` to create a new message.
  */
 export const ActivityQuerySchema: GenMessage<ActivityQuery> = /*@__PURE__*/
-  messageDesc(file_magus_activity_v1alpha1_activity, 1);
+  messageDesc(file_magus_activity_v1alpha1_activity, 2);
 
 /**
  * @generated from message magus.activity.v1alpha1.ListActivityEventsRequest
@@ -279,7 +360,7 @@ export type ListActivityEventsRequest = Message<"magus.activity.v1alpha1.ListAct
  * Use `create(ListActivityEventsRequestSchema)` to create a new message.
  */
 export const ListActivityEventsRequestSchema: GenMessage<ListActivityEventsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_activity_v1alpha1_activity, 2);
+  messageDesc(file_magus_activity_v1alpha1_activity, 3);
 
 /**
  * @generated from message magus.activity.v1alpha1.ListActivityEventsResponse
@@ -303,7 +384,7 @@ export type ListActivityEventsResponse = Message<"magus.activity.v1alpha1.ListAc
  * Use `create(ListActivityEventsResponseSchema)` to create a new message.
  */
 export const ListActivityEventsResponseSchema: GenMessage<ListActivityEventsResponse> = /*@__PURE__*/
-  messageDesc(file_magus_activity_v1alpha1_activity, 3);
+  messageDesc(file_magus_activity_v1alpha1_activity, 4);
 
 /**
  * WatchActivityEventsRequest subscribes to the merged feed.
@@ -332,7 +413,7 @@ export type WatchActivityEventsRequest = Message<"magus.activity.v1alpha1.WatchA
  * Use `create(WatchActivityEventsRequestSchema)` to create a new message.
  */
 export const WatchActivityEventsRequestSchema: GenMessage<WatchActivityEventsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_activity_v1alpha1_activity, 4);
+  messageDesc(file_magus_activity_v1alpha1_activity, 5);
 
 /**
  * @generated from message magus.activity.v1alpha1.GetPayloadRequest
@@ -351,7 +432,7 @@ export type GetPayloadRequest = Message<"magus.activity.v1alpha1.GetPayloadReque
  * Use `create(GetPayloadRequestSchema)` to create a new message.
  */
 export const GetPayloadRequestSchema: GenMessage<GetPayloadRequest> = /*@__PURE__*/
-  messageDesc(file_magus_activity_v1alpha1_activity, 5);
+  messageDesc(file_magus_activity_v1alpha1_activity, 6);
 
 /**
  * Payload is one stored request or response body, resolved from an ActivityEvent's ref.
@@ -375,7 +456,7 @@ export type Payload = Message<"magus.activity.v1alpha1.Payload"> & {
  * Use `create(PayloadSchema)` to create a new message.
  */
 export const PayloadSchema: GenMessage<Payload> = /*@__PURE__*/
-  messageDesc(file_magus_activity_v1alpha1_activity, 6);
+  messageDesc(file_magus_activity_v1alpha1_activity, 7);
 
 /**
  * Kind classifies the recorded action by its source. A reader switches on kind; new sources

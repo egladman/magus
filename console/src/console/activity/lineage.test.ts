@@ -238,6 +238,14 @@ test("sessionLabel names the host, the counts and the leases", () => {
   ]);
   assert.equal(sessionLabel(s1), "claude, 2 commands, 1 denied, harness/one");
 
+  // The source a command's lease came from rides beside it, so a claim reads apart from a record.
+  const [s3] = sessionLineage([
+    cmd("s3", { unit: "harness/one", leaseFrom: "contested" }),
+    cmd("s3", { unit: "harness/two", leaseFrom: "env" }),
+    cmd("s3", { unit: "harness/one", leaseFrom: "marker" }),
+  ]);
+  assert.equal(sessionLabel(s3), "claude, 3 commands, harness/one (contested), harness/two (env)");
+
   const [s2] = sessionLineage([cmd("s2", { host: "" })]);
   assert.equal(sessionLabel(s2), "unknown host, 1 command");
 });

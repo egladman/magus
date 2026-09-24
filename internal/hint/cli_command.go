@@ -15,7 +15,10 @@ package hint
 // a path nothing renders buys nothing though (it drifts just as quietly, with no
 // output depending on it), so declare one when an emitter starts using it.
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Command is a canonical magus command path (the tokens after "magus"). Values
 // are declared once below; call sites render them with String or With.
@@ -73,6 +76,12 @@ func (c Command) Head() string { return c.tokens[0] }
 // positional a parent command matches to route here. Compare against this in a
 // dispatcher instead of a bare literal to keep it tied to the hint.
 func (c Command) Leaf() string { return c.tokens[len(c.tokens)-1] }
+
+// MatchedBy reports whether words, the bare subcommand words of a magus argv, begin with
+// this command's path. Words past the path are operands and do not stop a match.
+func (c Command) MatchedBy(words []string) bool {
+	return len(words) >= len(c.tokens) && slices.Equal(words[:len(c.tokens)], c.tokens)
+}
 
 // Canonical commands referenced from user-facing output. Register every new one
 // in AllCommands so the drift test walks it.
@@ -142,6 +151,7 @@ var (
 	AgentStarter        = cmd("agent", "starter")
 	AgentHarnessApply   = cmd("agent", "harness", "apply")
 	AgentHarnessInstall = cmd("agent", "harness", "install")
+	AgentHarnessRemove  = cmd("agent", "harness", "remove")
 	AgentHarnessVerify  = cmd("agent", "harness", "verify")
 	ConfigView          = cmd("config", "view")
 	ConfigToken         = cmd("config", "token")
@@ -192,7 +202,7 @@ var AllCommands = []Command{
 	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobWatch, JobRun, JobRm, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,
-	AgentHarnessApply, AgentHarnessInstall, AgentHarnessVerify,
+	AgentHarnessApply, AgentHarnessInstall, AgentHarnessRemove, AgentHarnessVerify,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
 	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,

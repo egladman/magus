@@ -55,6 +55,7 @@ config log.stream
 config max_failures
 config mcp.address
 config mcp.enabled
+config mcp.insecure_bind
 config report.filter
 config required_version
 config sandbox.allow.<name>.mode
@@ -127,6 +128,8 @@ flag buzz/test
 flag clean/cache
 flag diff/ack
 flag diff/baseline
+flag diff/conformance-min-cohort
+flag diff/conformance-min-share
 flag diff/generated
 flag diff/impact
 flag diff/no-tui
@@ -188,6 +191,7 @@ flag run/wait
 flag session/brief
 flag session/limit
 flag session/since
+flag shell/agent
 flag shell/agent-name
 flag shell/event
 flag shell/lease

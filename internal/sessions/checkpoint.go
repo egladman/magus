@@ -33,11 +33,9 @@ const KindCheckpoint = "checkpoint"
 // which is a different problem from a stale branch and wants a different fix; no branch
 // name reveals it.
 //
-// Host and HostSession are attribution when a tool was driving, and empty when a person
-// was. HostSession is spelled in full because [Record.Session] and
-// [AttentionRequest.Session] are magus's own session and this is not: one store holding
-// two things called "session" is a bug report waiting for a quiet week. Transcript is a
-// pointer magus records and never opens, on the same terms as the guard's --transcript.
+// Host and HostSession are attribution when a host was driving, and empty when none
+// delivered them. Transcript is a pointer magus records and never opens, on the same
+// terms as the guard's --transcript.
 //
 // Note is prose, clamped to [MaxMessageBytes] and otherwise untouched. magus does not
 // fill it from a host's payload: a sentence about where the work stands is written by
@@ -73,20 +71,20 @@ type CheckpointRecord struct {
 // The returned Checkpoint is what went to disk, Note already clamped, so a caller
 // reporting what it recorded cannot print something the store does not hold.
 //
-// start describes the writing invocation. Its Command and session id are set here.
-func RecordCheckpoint(dir string, c Checkpoint, start SessionStart) (stored Checkpoint, recorded bool, err error) {
+// start describes the writing invocation. Its Command and invocation id are set here.
+func RecordCheckpoint(dir string, c Checkpoint, start InvocationStart) (stored Checkpoint, recorded bool, err error) {
 	c.Note = boundMessage(c.Note)
-	session := checkpointSessionID(checkpointKey(c))
+	id := checkpointInvocationID(checkpointKey(c))
 	// One file, not the whole store. Every checkpoint for this line of work is in the
-	// file checkpointSessionID names and nowhere else, so folding the store would
+	// file checkpointInvocationID names and nowhere else, so folding the store would
 	// decode a 30-day history to answer a question one file holds, on every turn of
 	// every session, which is when this runs.
-	records, _, _ := readFile(filepath.Join(dir, session+fileExt))
+	records, _, _, _ := readFile(filepath.Join(dir, id+fileExt))
 	if prev, ok := latestCheckpoint(records); ok && prev == c {
 		return c, false, nil
 	}
 	start.Command = "session checkpoint"
-	w, err := Open(dir, session, start)
+	w, err := Open(dir, id, start)
 	if err != nil {
 		return c, false, err
 	}
@@ -150,10 +148,10 @@ func checkpointKey(c Checkpoint) string {
 	}
 }
 
-// checkpointSessionID is the session file one line of work appends its checkpoints to.
+// checkpointInvocationID is the file one line of work appends its checkpoints to.
 //
 // Derived from the key rather than minted per checkpoint: a hook that fires every turn
-// would otherwise write one session file per turn, and `magus session` would list forty
+// would otherwise write one file per turn, and `magus session` would list forty
 // rows of checkpoint ahead of the runs a reader opened it for.
 //
 // Two processes checkpointing one line of work concurrently therefore open the same
@@ -161,7 +159,7 @@ func checkpointKey(c Checkpoint) string {
 // stamp one sequence number, which leaves the pair ordering those two records
 // arbitrarily. Both are still read, and the newest by timestamp still wins, so the cost
 // is an ambiguous order between two records written in the same instant.
-func checkpointSessionID(key string) string {
+func checkpointInvocationID(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return "checkpoint-" + hex.EncodeToString(sum[:])[:12]
 }

@@ -115,6 +115,8 @@ const (
 	FlagConfigCachePruneOlderThan = "older-than"
 	// config cache prune: --remote
 	FlagConfigCachePruneRemote = "remote"
+	// config console token create: --code
+	FlagConfigConsoleTokenCreateCode = "code"
 	// config console token create: --expires
 	FlagConfigConsoleTokenCreateExpires = "expires"
 	// config console token create: --name
@@ -165,6 +167,10 @@ const (
 	FlagDiffAck = "ack"
 	// diff: --baseline
 	FlagDiffBaseline = "baseline"
+	// diff: --conformance-min-cohort
+	FlagDiffConformanceMinCohort = "conformance-min-cohort"
+	// diff: --conformance-min-share
+	FlagDiffConformanceMinShare = "conformance-min-share"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
 	// diff: --impact
@@ -561,6 +567,8 @@ const (
 	FlagSessionLimit = "limit"
 	// session: --since
 	FlagSessionSince = "since"
+	// shell: --agent
+	FlagShellAgent = "agent"
 	// shell: --agent-name
 	FlagShellAgentName = "agent-name"
 	// shell: --event
@@ -1192,6 +1200,7 @@ type ShellFlags struct {
 	AgentName          string // --agent-name
 	Transport          string // --transport
 	Session            string // --session
+	Agent              string // --agent
 	Transcript         string // --transcript
 	Event              string // --event
 	ObservesSkillLoads bool   // --observes-skill-loads
@@ -1203,10 +1212,11 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	var f ShellFlags
 	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
-	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)")
+	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
 	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only)")
 	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session")
 	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
+	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down")
@@ -1495,7 +1505,7 @@ type ConfigMCPConnectorCreateFlags struct {
 func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFlags {
 	var f ConfigMCPConnectorCreateFlags
 	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
-	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
+	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
 	return &f
 }
 
@@ -1516,14 +1526,16 @@ type ConfigConsoleTokenCreateFlags struct {
 	Name    string // --name
 	Expires string // --expires
 	Viewer  bool   // --viewer
+	Code    bool   // --code
 }
 
 // BindConfigConsoleTokenCreate registers `magus config console token create`'s flags on fs and returns the destination.
 func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFlags {
 	var f ConfigConsoleTokenCreateFlags
 	fs.StringVar(&f.Name, FlagConfigConsoleTokenCreateName, "", "Name for this console token (default: console-N)")
-	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
+	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)")
 	fs.BoolVar(&f.Viewer, FlagConfigConsoleTokenCreateViewer, false, "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share")
+	fs.BoolVar(&f.Code, FlagConfigConsoleTokenCreateCode, false, "Print a one-time code instead, for a console link's #code=; the console trades it for the token within a minute, once")
 	return &f
 }
 
@@ -1538,8 +1550,8 @@ type SessionFlags struct {
 func BindSession(fs *flag.FlagSet) *SessionFlags {
 	var f SessionFlags
 	fs.BoolVar(&f.Brief, FlagSessionBrief, false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
-	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many sessions (0 for all)")
-	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
+	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many invocations (0 for all)")
+	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 	return &f
 }
 
@@ -1743,17 +1755,21 @@ func BindNotesPromote(fs *flag.FlagSet) *NotesPromoteFlags {
 }
 
 // DiffFlags are the flags declared for `magus diff`.
+//
+// It does NOT carry --conformance-min-share: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type DiffFlags struct {
-	Generated bool   // --generated
-	Impact    bool   // --impact
-	NoTui     bool   // --no-tui
-	Watch     bool   // --watch
-	Ack       bool   // --ack
-	Reason    string // --reason
-	Prompt    bool   // --prompt
-	Rev       string // --rev
-	Patch     string // --patch
-	Baseline  string // --baseline
+	Generated            bool   // --generated
+	Impact               bool   // --impact
+	NoTui                bool   // --no-tui
+	Watch                bool   // --watch
+	Ack                  bool   // --ack
+	Reason               string // --reason
+	Prompt               bool   // --prompt
+	Rev                  string // --rev
+	Patch                string // --patch
+	Baseline             string // --baseline
+	ConformanceMinCohort int    // --conformance-min-cohort
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
@@ -1769,6 +1785,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
 	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
 	fs.StringVar(&f.Baseline, FlagDiffBaseline, "", "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves")
+	fs.IntVar(&f.ConformanceMinCohort, FlagDiffConformanceMinCohort, 0, "How many declarations a conformance norm needs before a changed symbol is compared against it (default 5)")
 	return &f
 }
 

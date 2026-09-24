@@ -457,8 +457,8 @@ func TestIsReleaseAsset(t *testing.T) {
 }
 
 // TestRunCut_HappyPath verifies that runCut writes a complete ReleaseManifest
-// from a directory containing real artifacts and a CHANGELOG.md with an
-// [Unreleased] section.
+// from a directory containing real artifacts and the changelog fragments, and
+// deletes the fragments it folded.
 func TestRunCut_HappyPath(t *testing.T) {
 	// Build a temp artifacts directory with a tarball and SHA256SUMS.
 	artifactsDir := t.TempDir()
@@ -467,18 +467,20 @@ func TestRunCut_HappyPath(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, tarName), tarContent, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "SHA256SUMS"), []byte("abc123  "+tarName+"\n"), 0o644))
 
-	// Build a temp CHANGELOG.md with an Unreleased section.
-	changelogContent := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **Brand new feature.**\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(changelogPath, []byte(changelogContent), 0o644))
+	unreleasedDir := t.TempDir()
+	writeFragment(t, unreleasedDir, "b-fix.md", "### Fixed\n\n- **A fix.** It\n  wraps.\n")
+	writeFragment(t, unreleasedDir, "a-feature.md", "### Added\n\n- **Brand new feature.**\n")
 
 	outDir := t.TempDir()
 	require.NoError(t, runCut([]string{
 		"-version", "v0.2.0",
 		"-artifacts", artifactsDir,
-		"-changelog", changelogPath,
+		"-unreleased", unreleasedDir,
 		"-out", outDir,
 	}))
+	left, err := os.ReadDir(unreleasedDir)
+	require.NoError(t, err)
+	require.Empty(t, left, "every folded fragment is deleted")
 
 	// Read and unmarshal the written manifest.
 	data, err := os.ReadFile(filepath.Join(outDir, "v0.2.0.yaml"))
@@ -500,8 +502,9 @@ func TestRunCut_HappyPath(t *testing.T) {
 		Date:    got.Date, // date is time.Now()-derived; just check it is populated
 		Notes: ReleaseNotes{
 			Added: []string{"**Brand new feature.**"},
+			Fixed: []string{"**A fix.** It\nwraps."},
 		},
-		Body: "### Added\n\n- **Brand new feature.**",
+		Body: "### Added\n\n- **Brand new feature.**\n\n### Fixed\n\n- **A fix.** It\n  wraps.",
 		Artifacts: []ReleaseArtifact{
 			{
 				Name:     "SHA256SUMS",
@@ -522,27 +525,29 @@ func TestRunCut_HappyPath(t *testing.T) {
 }
 
 // TestCutThenGenerateChangelogDoesNotDuplicate walks the pair of commands a
-// release runs. CHANGELOG.md is generated back out of the manifests, so a cut
-// that left [Unreleased] populated would print the shipped entries twice.
+// release runs. The docs page renders the fragments under [Unreleased], so a cut
+// that left them behind would print the shipped entries twice.
 func TestCutThenGenerateChangelogDoesNotDuplicate(t *testing.T) {
 	artifactsDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
 
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(changelogPath,
-		[]byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **Brand new feature.**\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"), 0o644))
+	unreleasedDir := t.TempDir()
+	writeFragment(t, unreleasedDir, "feature.md", "### Added\n\n- **Brand new feature.**\n")
+	pagePath := filepath.Join(t.TempDir(), "changelog.md")
 
 	relDir := t.TempDir()
 	writeManifestFile(t, relDir, ReleaseManifest{Version: "v0.1.0", Date: "2026-07-05", Body: "Old."})
 	require.NoError(t, runCut([]string{
-		"-version", "v0.2.0", "-artifacts", artifactsDir, "-changelog", changelogPath, "-out", relDir,
+		"-version", "v0.2.0", "-artifacts", artifactsDir, "-unreleased", unreleasedDir, "-out", relDir,
 	}))
-	require.NoError(t, runGenerateChangelog([]string{"-releases", relDir, "-changelog", changelogPath}))
+	require.NoError(t, runGenerateChangelog([]string{
+		"-releases", relDir, "-changelog", pagePath, "-unreleased", unreleasedDir,
+	}))
 
-	got, err := os.ReadFile(changelogPath)
+	got, err := os.ReadFile(pagePath)
 	require.NoError(t, err)
 	require.Equal(t, 1, strings.Count(string(got), "- **Brand new feature.**"), "the entry belongs to v0.2.0 alone:\n%s", got)
-	require.Contains(t, string(got), "## [Unreleased]\n\n## [v0.2.0]", "Unreleased is emptied, not removed")
+	require.Contains(t, string(got), "## [Unreleased]\n\n## [v0.2.0]", "Unreleased is empty, not removed")
 }
 
 // TestRunCut_ImmutabilityGuard covers all three things runCut does when the manifest is
@@ -550,43 +555,55 @@ func TestCutThenGenerateChangelogDoesNotDuplicate(t *testing.T) {
 // be a state a rerun passes THROUGH when the bytes agree, and a refusal when they do not.
 func TestRunCut_ImmutabilityGuard(t *testing.T) {
 	const tarball = "magus_v0.1.0_linux_amd64.tar.gz"
-	setup := func(t *testing.T, payload string) (artifactsDir, changelogPath, outDir string) {
+	setup := func(t *testing.T, payload string) (artifactsDir, unreleasedDir, outDir string) {
 		t.Helper()
 		artifactsDir = t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, tarball), []byte(payload), 0o644))
-		changelogPath = filepath.Join(t.TempDir(), "CHANGELOG.md")
-		require.NoError(t, os.WriteFile(changelogPath,
-			[]byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **X.**\n"), 0o644))
-		return artifactsDir, changelogPath, t.TempDir()
+		unreleasedDir = t.TempDir()
+		writeFragment(t, unreleasedDir, "x.md", "### Added\n\n- **X.**\n")
+		return artifactsDir, unreleasedDir, t.TempDir()
 	}
-	cut := func(artifactsDir, changelogPath, outDir string) error {
+	cut := func(artifactsDir, unreleasedDir, outDir string) error {
 		return runCut([]string{
 			"-version", "v0.1.0", "-artifacts", artifactsDir,
-			"-changelog", changelogPath, "-out", outDir,
+			"-unreleased", unreleasedDir, "-out", outDir,
 		})
 	}
 
 	t.Run("a rerun over the same artifacts converges", func(t *testing.T) {
-		artifactsDir, changelogPath, outDir := setup(t, "x")
-		require.NoError(t, cut(artifactsDir, changelogPath, outDir))
+		artifactsDir, unreleasedDir, outDir := setup(t, "x")
+		require.NoError(t, cut(artifactsDir, unreleasedDir, outDir))
 		first, err := os.ReadFile(filepath.Join(outDir, "v0.1.0.yaml"))
 		require.NoError(t, err)
 
-		// The rerun runs against the tree the first call left, [Unreleased] now empty.
-		// Restoring the original changelog would test a state the workflow never produces.
-		require.NoError(t, cut(artifactsDir, changelogPath, outDir), "a rerun must not fail")
+		// The rerun runs against the tree the first call left, its fragments now gone.
+		// Restoring them would test a state the workflow never produces.
+		require.NoError(t, cut(artifactsDir, unreleasedDir, outDir), "a rerun must not fail")
 		again, err := os.ReadFile(filepath.Join(outDir, "v0.1.0.yaml"))
 		require.NoError(t, err)
 		assert.Equal(t, string(first), string(again), "the committed manifest is left untouched")
 	})
 
+	t.Run("a rerun finishes deleting what the manifest folded and keeps a newer fragment", func(t *testing.T) {
+		artifactsDir, unreleasedDir, outDir := setup(t, "x")
+		require.NoError(t, cut(artifactsDir, unreleasedDir, outDir))
+		// An interrupted deletion leaves a folded fragment behind; a fragment the
+		// manifest does not carry is not this release's.
+		writeFragment(t, unreleasedDir, "x.md", "### Added\n\n- **X.**\n")
+		writeFragment(t, unreleasedDir, "y.md", "### Fixed\n\n- **Y.**\n")
+
+		require.NoError(t, cut(artifactsDir, unreleasedDir, outDir))
+		assert.NoFileExists(t, filepath.Join(unreleasedDir, "x.md"))
+		assert.FileExists(t, filepath.Join(unreleasedDir, "y.md"))
+	})
+
 	t.Run("different bytes under a shipped tag are refused", func(t *testing.T) {
-		artifactsDir, changelogPath, outDir := setup(t, "x")
-		require.NoError(t, cut(artifactsDir, changelogPath, outDir))
+		artifactsDir, unreleasedDir, outDir := setup(t, "x")
+		require.NoError(t, cut(artifactsDir, unreleasedDir, outDir))
 
 		// A rebuild: same tag, same filename, different content, so a different digest.
 		require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, tarball), []byte("rebuilt"), 0o644))
-		err := cut(artifactsDir, changelogPath, outDir)
+		err := cut(artifactsDir, unreleasedDir, outDir)
 		require.Error(t, err, "a rebuild under a shipped tag is not a rerun")
 		assert.Contains(t, err.Error(), "immutable")
 		assert.Contains(t, err.Error(), tarball, "the report names the artifact that moved")
@@ -594,39 +611,49 @@ func TestRunCut_ImmutabilityGuard(t *testing.T) {
 	})
 
 	t.Run("an unparseable manifest is refused rather than overwritten", func(t *testing.T) {
-		artifactsDir, changelogPath, outDir := setup(t, "x")
+		artifactsDir, unreleasedDir, outDir := setup(t, "x")
 		require.NoError(t, os.WriteFile(filepath.Join(outDir, "v0.1.0.yaml"), []byte("existing"), 0o644))
-		err := cut(artifactsDir, changelogPath, outDir)
+		err := cut(artifactsDir, unreleasedDir, outDir)
 		require.Error(t, err, "must refuse to overwrite an existing manifest")
 		assert.Contains(t, err.Error(), "already exists", "error must mention existing file")
 	})
 }
 
-// TestRunCut_FailedChangelogClearIsRetryable: the manifest used to be written
-// before the changelog was cleared, so a failure in the second step left an
-// immutable manifest on disk and [Unreleased] still populated; every retry then
-// died on "already exists" and the release could only proceed by hand.
-func TestRunCut_FailedChangelogClearIsRetryable(t *testing.T) {
+// TestRunCut_FailedFragmentDeleteIsRetryable: a cut that wrote its manifest but
+// could not delete the fragments must neither lose the notes nor wedge a retry on
+// "manifests are immutable".
+func TestRunCut_FailedFragmentDeleteIsRetryable(t *testing.T) {
 	if os.Geteuid() == 0 {
-		t.Skip("root ignores the read-only bit this test uses to fail the changelog write")
+		t.Skip("root ignores the read-only bit this test uses to fail the delete")
 	}
 	artifactsDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
 
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **X.**\n"), 0o444))
+	unreleasedDir := t.TempDir()
+	writeFragment(t, unreleasedDir, "x.md", "### Added\n\n- **X.**\n")
+	require.NoError(t, os.Chmod(unreleasedDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(unreleasedDir, 0o755) })
 
 	outDir := t.TempDir()
-	args := []string{"-version", "v0.2.0", "-artifacts", artifactsDir, "-changelog", changelogPath, "-out", outDir}
-	require.Error(t, runCut(args))
+	args := []string{"-version", "v0.2.0", "-artifacts", artifactsDir, "-unreleased", unreleasedDir, "-out", outDir}
+	require.ErrorContains(t, runCut(args), "rerun cut to finish")
+	require.FileExists(t, filepath.Join(outDir, "v0.2.0.yaml"), "the notes landed before any delete")
 
-	entries, err := os.ReadDir(outDir)
-	require.NoError(t, err)
-	require.Empty(t, entries, "a cut that could not clear the changelog must leave no manifest behind")
-
-	require.NoError(t, os.Chmod(changelogPath, 0o644))
+	require.NoError(t, os.Chmod(unreleasedDir, 0o755))
 	require.NoError(t, runCut(args), "the retry must not be wedged on an immutable manifest")
-	require.FileExists(t, filepath.Join(outDir, "v0.2.0.yaml"))
+	require.NoFileExists(t, filepath.Join(unreleasedDir, "x.md"))
+}
+
+// TestRunCut_RefusesNoFragments: a release with no notes is a mistake, not an
+// empty changelog section.
+func TestRunCut_RefusesNoFragments(t *testing.T) {
+	artifactsDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "magus_v0.2.0_linux_amd64_static.tar.gz"), []byte("x"), 0o644))
+	outDir := t.TempDir()
+	err := runCut([]string{"-version", "v0.2.0", "-artifacts", artifactsDir,
+		"-unreleased", filepath.Join(t.TempDir(), "absent"), "-out", outDir})
+	require.ErrorContains(t, err, "holds no changelog fragments")
+	require.NoFileExists(t, filepath.Join(outDir, "v0.2.0.yaml"))
 }
 
 // TestRunCut_NoArtifactsGuard verifies that runCut refuses to write a hollow
@@ -636,22 +663,21 @@ func TestRunCut_NoArtifactsGuard(t *testing.T) {
 	// Only an unrelated file: no tarballs or SHA256SUMS.
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "README.txt"), []byte("ignore me"), 0o644))
 
-	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	require.NoError(t, os.WriteFile(changelogPath, []byte("# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **X.**\n"), 0o644))
+	unreleasedDir := t.TempDir()
+	writeFragment(t, unreleasedDir, "x.md", "### Added\n\n- **X.**\n")
 
 	err := runCut([]string{
 		"-version", "v0.2.0",
 		"-artifacts", artifactsDir,
-		"-changelog", changelogPath,
+		"-unreleased", unreleasedDir,
 		"-out", t.TempDir(),
 	})
 	require.Error(t, err, "must refuse when no release artifacts are found")
 	require.Contains(t, err.Error(), "no release artifacts found", "error must name the problem")
 }
 
-// TestRunGenerateChangelog verifies that runGenerateChangelog rewrites CHANGELOG.md
-// from releases/*.yaml, preserving the [Unreleased] section verbatim and
-// regenerating released sections from manifests.
+// TestRunGenerateChangelog verifies that runGenerateChangelog renders the
+// fragments under [Unreleased] and regenerates released sections from manifests.
 func TestRunGenerateChangelog(t *testing.T) {
 	relDir := t.TempDir()
 	writeManifestFile(t, relDir, ReleaseManifest{
@@ -665,28 +691,46 @@ func TestRunGenerateChangelog(t *testing.T) {
 		Body:    "### Added\n\n- first",
 	})
 
-	// CHANGELOG.md with an existing [Unreleased] section to preserve.
+	unreleasedDir := t.TempDir()
+	writeFragment(t, unreleasedDir, "soon.md", "### Added\n\n- **Coming soon.**\n")
+
 	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
-	initial := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- coming soon\n\n## [v0.1.0] - 2026-07-05\n\nOld content to be replaced.\n"
+	initial := "# Changelog\n\n## [Unreleased]\n\n## [v0.1.0] - 2026-07-05\n\nOld content to be replaced.\n"
 	require.NoError(t, os.WriteFile(changelogPath, []byte(initial), 0o644))
 
 	require.NoError(t, runGenerateChangelog([]string{
 		"-releases", relDir,
 		"-changelog", changelogPath,
+		"-unreleased", unreleasedDir,
 	}))
 
 	data, err := os.ReadFile(changelogPath)
 	require.NoError(t, err)
 	body := string(data)
 
-	require.Contains(t, body, "## [Unreleased]", "Unreleased heading preserved")
-	require.Contains(t, body, "- coming soon", "Unreleased content preserved")
+	require.Contains(t, body, "## [Unreleased]\n\n### Added\n\n- **Coming soon.**\n\n## [v0.2.0]", "fragments render under Unreleased")
 	require.Contains(t, body, "## [v0.2.0] - 2026-08-01", "v0.2.0 heading generated")
 	require.Contains(t, body, "### Added\n\n- new thing", "v0.2.0 body generated")
 	require.Contains(t, body, "## [v0.1.0] - 2026-07-05", "v0.1.0 heading generated")
 	require.Contains(t, body, "### Added\n\n- first", "v0.1.0 body generated")
 	// v0.2.0 must appear before v0.1.0 (newest-first).
 	require.Less(t, index(body, "## [v0.2.0]"), index(body, "## [v0.1.0]"), "newest release first")
+}
+
+// Without -unreleased, a hand-written [Unreleased] entry is refused rather than
+// regenerated away.
+func TestGenerateChangelogRefusesHandWrittenUnreleased(t *testing.T) {
+	relDir := t.TempDir()
+	writeManifestFile(t, relDir, ReleaseManifest{Version: "v0.1.0", Date: "2026-07-05", Body: "Old."})
+	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
+	before := "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- **Hand written.**\n\n## [v0.1.0] - 2026-07-05\n\nOld.\n"
+	require.NoError(t, os.WriteFile(changelogPath, []byte(before), 0o644))
+
+	err := runGenerateChangelog([]string{"-releases", relDir, "-changelog", changelogPath})
+	require.ErrorContains(t, err, "changes/unreleased/")
+	after, err := os.ReadFile(changelogPath)
+	require.NoError(t, err)
+	require.Equal(t, before, string(after), "the entry survives")
 }
 
 // TestReadUnreleasedSection verifies extraction of the [Unreleased] body.
@@ -745,13 +789,17 @@ func TestPlatformFromNameReadsBothVariantSpellings(t *testing.T) {
 	}
 }
 
-// The repository's own [Unreleased] section is what `cut` turns into the next release's
-// notes, so it is held to the formula on every change rather than discovered wrong at
-// release time.
-func TestUnreleasedChangelogFollowsTheFormat(t *testing.T) {
+// The repository's own fragments are what `cut` turns into the next release's notes,
+// so they are held to the formula on every change rather than discovered wrong at
+// release time. CHANGELOG.md's [Unreleased] stays empty: fragments replace it.
+func TestUnreleasedFragmentsFollowTheFormat(t *testing.T) {
+	frags, err := readFragments(filepath.Join("..", "..", "changes", "unreleased"))
+	require.NoError(t, err, "fix the fragment; the format is in changes/README.md")
+	assert.Empty(t, lintUnreleased(renderUnreleased(frags)))
+
 	body, err := readUnreleasedSection(filepath.Join("..", "..", "CHANGELOG.md"))
 	require.NoError(t, err)
-	assert.Empty(t, lintUnreleased(body), "fix CHANGELOG.md [Unreleased]; the format is in lintUnreleased's doc comment")
+	assert.Empty(t, strings.TrimSpace(body), "move CHANGELOG.md's [Unreleased] entries into changes/unreleased/")
 }
 
 func TestLintUnreleased(t *testing.T) {

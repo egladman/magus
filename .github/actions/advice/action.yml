@@ -80,7 +80,8 @@ inputs:
     description: >
       Comment when the pull request adds a target whose name diverges from what the rest
       of the workspace already calls the same work, derived by grouping targets on the
-      ops they invoke. Silent unless a large cohort agrees overwhelmingly, so a workspace
+      ops they invoke, or a symbol whose name or size diverges from declarations of the
+      same shape. Silent unless a large cohort agrees overwhelmingly, so a workspace
       with no convention produces nothing.
     required: false
     default: 'true'
@@ -200,14 +201,16 @@ inputs:
     description: >
       A `magus graph export --symbols -o json` of the revision this pull request started
       from, which api-surface reads to say what each changed symbol did to the API and the
-      smallest semver bump that proves.
+      smallest semver bump that proves, and conformance reads to tell a symbol the change
+      adds, renames or re-signs from one it only edits.
 
       Signatures are compared as the indexer rendered them, so the base must be indexed with
       the same indexers as the head, and ideally in the same checkout: two environments
       render one declaration differently and every difference reads as a changed signature.
 
       Without it api-surface reports who can see the change and claims no bump, which is
-      what it did before a baseline was possible.
+      what it did before a baseline was possible, and conformance reads what is new from the
+      patch, compares no re-signed symbol, and says so under its findings.
     required: false
     default: ''
 

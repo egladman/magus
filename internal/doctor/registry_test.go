@@ -67,6 +67,8 @@ func TestCheckCodesAreRoutable(t *testing.T) {
 // encodes: a workspace that will not load still gets the host checks answered, and gets
 // them without any check dereferencing the workspace that is not there.
 func TestRunSkipsWorkspaceChecksWhenLoadFailed(t *testing.T) {
+	// The tokens check reads the state dir; the real one says nothing about this contract.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	report := Run(t.Context(), t.TempDir(), nil, assert.AnError)
 
 	var want int
@@ -78,12 +80,12 @@ func TestRunSkipsWorkspaceChecksWhenLoadFailed(t *testing.T) {
 	require.Len(t, report.Checks, want)
 	assert.Equal(t, 1, report.Summary.Fail)
 
-	byName := map[string]types.DoctorCheck{}
+	byName := map[string]types.Check{}
 	for _, c := range report.Checks {
 		byName[c.Name] = c
 	}
 	require.Contains(t, byName, "workspace")
-	assert.Equal(t, types.DoctorFail, byName["workspace"].Status)
+	assert.Equal(t, types.CheckFail, byName["workspace"].Status)
 	assert.NotContains(t, byName, "vcs-base-ref")
 }
 
@@ -99,9 +101,9 @@ func TestEveryRunCheckStatesItsEvidence(t *testing.T) {
 
 // TestSkippedCheckReportsUnknown pins the half of the summary arithmetic that can be
 // reached without a workspace: a check that could not look says so, rather than
-// returning the bare DoctorOK the ok count would then absorb.
+// returning the bare CheckOK the ok count would then absorb.
 func TestSkippedCheckReportsUnknown(t *testing.T) {
 	got := (&runner{}).checkCITarget(nil)
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 }

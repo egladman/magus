@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -69,7 +70,7 @@ type workspaceSource interface {
 // what its own description promises ("it tells you what they have already seen, so you can
 // skip it").
 type diffState struct {
-	*types.DiffSession
+	*types.DiffReview
 	// Patch is the unified diff the hunks below index into.
 	Patch string `json:"patch"`
 	// Hunks are the addressable coordinates, with the same content digests Viewed holds.
@@ -248,11 +249,14 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		if verr := t.validateAnchor(ctx, path, hunk); verr != nil {
 			return spells.InvokeResponse{}, verr
 		}
+		// The MCP client's name is recorded once, as the origin's Host the call's ctx carries;
+		// agent_name stays the separate label the caller chose.
 		out := t.sessions.AddComment(t.root, types.DiffComment{
 			Path:      path,
 			Hunk:      hunk,
 			Body:      body,
 			AgentName: strings.TrimSpace(paramString(req.Params, "agent_name", "")),
+			Origin:    trail.StampOrigin(ctx, types.Origin{}),
 		}, types.DiffAuthorAgent)
 		// The author here is transport-stamped, never read off the payload, which is what makes
 		// it safe as an attribute: it says which DOOR the remark came through, and the agent's
@@ -308,23 +312,23 @@ func wantsThreads(projection string) bool {
 	return projection == "" || projection == "full" || projection == "conversation"
 }
 
-func (t *diffTool) state(ctx context.Context, sess *types.DiffSession, withThreads bool) (diffState, error) {
+func (t *diffTool) state(ctx context.Context, sess *types.DiffReview, withThreads bool) (diffState, error) {
 	if t.src == nil {
 		// No recompute source: serve what is held rather than nothing, and say the change
 		// itself is unavailable rather than implying there is none.
-		return diffState{DiffSession: sess}, nil
+		return diffState{DiffReview: sess}, nil
 	}
 	patch, err := t.src.WorkingDiff(ctx, nil)
 	if err != nil {
 		return diffState{}, err
 	}
-	st := diffState{DiffSession: sess, Patch: patch, Hunks: changeset.ParseHunks(patch)}
+	st := diffState{DiffReview: sess, Patch: patch, Hunks: changeset.ParseHunks(patch)}
 	if now := changeset.PatchDigest(patch); now != sess.AsOf {
 		rev, rerr := t.src.Diff(ctx, changedPaths(st.Hunks))
 		if rerr != nil {
 			return diffState{}, rerr
 		}
-		st.DiffSession = t.sessions.Attach(t.root, rev.Base, rev, now)
+		st.DiffReview = t.sessions.Attach(t.root, rev.Base, rev, now)
 		st.Recomputed = true
 	}
 	if withThreads {

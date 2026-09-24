@@ -29,16 +29,16 @@ const worktreesDirRel = ".claude/worktrees"
 // worktree and removes on `git worktree remove`/`prune`. A pruned-but-not-deleted
 // directory therefore reads as stale without shelling out to git, which keeps the
 // check cheap enough to run every time and correct when git is unavailable.
-func checkStaleWorktrees(root string) types.DoctorCheck {
+func checkStaleWorktrees(root string) types.Check {
 	const name = "stale-worktrees"
 	dir := filepath.Join(root, filepath.FromSlash(worktreesDirRel))
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no " + worktreesDirRel + " directory"}
+			return types.Check{Name: name, Status: types.CheckOK, Message: "no " + worktreesDirRel + " directory"}
 		}
-		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: fmt.Sprintf("scan %s: %v", worktreesDirRel, err)}
+		return types.Check{Name: name, Status: types.CheckFail, Message: fmt.Sprintf("scan %s: %v", worktreesDirRel, err)}
 	}
 
 	var stale []string
@@ -60,7 +60,7 @@ func checkStaleWorktrees(root string) types.DoctorCheck {
 		stale = append(stale, e.Name())
 	}
 	if len(stale) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: fmt.Sprintf("%d live worktree(s); none orphaned", live)}
+		return types.Check{Name: name, Status: types.CheckOK, Message: fmt.Sprintf("%d live worktree(s); none orphaned", live)}
 	}
 	sort.Strings(stale)
 
@@ -69,9 +69,9 @@ func checkStaleWorktrees(root string) types.DoctorCheck {
 		details = append(details, filepath.Join(worktreesDirRel, s))
 	}
 	details = append(details, "remove the directory, or restore it with `git worktree add` if the work is still wanted")
-	return types.DoctorCheck{
+	return types.Check{
 		Name:    name,
-		Status:  types.DoctorFail,
+		Status:  types.CheckFail,
 		Message: fmt.Sprintf("%d directory(ies) under %s are not live worktrees; they duplicate spell sources and can trip MGS1002 and fail tests", len(stale), worktreesDirRel),
 		Details: details,
 	}

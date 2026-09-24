@@ -318,9 +318,9 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 // caller reaches this line only after every grading path has already declined to speak. A
 // process that lies about its ancestry buys itself one paragraph of teaching.
 //
-// A person editing their own repository carries no traceparent, which is what keeps this
-// off a human's screen. So does an already-enrolled worker: naming a lease is the whole
-// thing being asked for.
+// A process that claims no parent span is never advised, whoever it is: without the claim
+// there is nothing to teach from. Neither is an already-enrolled worker: naming a lease is
+// the whole thing being asked for.
 func adviseUnleasedWorker(actingLease string) writeGrade {
 	if actingLease != "" || trail.SpawnFromEnv().ParentSpanID == "" {
 		return writeGrade{}

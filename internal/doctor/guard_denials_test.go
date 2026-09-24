@@ -19,9 +19,9 @@ func TestCheckRecurringGuardDenialsReportsNoTrailAsClean(t *testing.T) {
 
 	got := (&runner{root: root}).checkRecurringGuardDenials()
 
-	assert.Equal(t, types.DoctorCheck{
+	assert.Equal(t, types.Check{
 		Name:    "recurring-guard-denials",
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: "no guard denial has recurred across sessions",
 	}, got)
 }
@@ -35,9 +35,9 @@ func TestCheckRecurringGuardDenialsIgnoresAOneOffDenial(t *testing.T) {
 
 	got := (&runner{root: root}).checkRecurringGuardDenials()
 
-	assert.Equal(t, types.DoctorCheck{
+	assert.Equal(t, types.Check{
 		Name:    "recurring-guard-denials",
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: "no guard denial has recurred across sessions",
 	}, got)
 }
@@ -59,9 +59,9 @@ func TestCheckRecurringGuardDenialsReportsFactsOnly(t *testing.T) {
 
 	got := (&runner{root: root}).checkRecurringGuardDenials()
 
-	assert.Equal(t, types.DoctorCheck{
+	assert.Equal(t, types.Check{
 		Name:     "recurring-guard-denials",
-		Status:   types.DoctorAdvice,
+		Status:   types.CheckAdvice,
 		Evidence: types.EvidenceInferred,
 		Message:  "1 guard rule(s) denied the same shape more than once; the friction is real whether the rule is right or the reader is",
 		Details:  []string{"raw-tool on shell.command: 3 denial(s) across 1 session(s), followed 1/1"},
@@ -79,9 +79,9 @@ func TestCheckRecurringGuardDenialsCountsTwoSessionsWithoutClaimingFollowUp(t *t
 
 	got := (&runner{root: root}).checkRecurringGuardDenials()
 
-	assert.Equal(t, types.DoctorCheck{
+	assert.Equal(t, types.Check{
 		Name:     "recurring-guard-denials",
-		Status:   types.DoctorAdvice,
+		Status:   types.CheckAdvice,
 		Evidence: types.EvidenceInferred,
 		Message:  "1 guard rule(s) denied the same shape more than once; the friction is real whether the rule is right or the reader is",
 		Details:  []string{"raw-tool on shell.command: 2 denial(s) across 2 session(s), followed 0/2"},

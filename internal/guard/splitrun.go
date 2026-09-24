@@ -24,7 +24,7 @@ import (
 //     them, so this rung reads and writes a per-session fact instead: the target and
 //     project set of the last magus run/affected invocation. gradeScopeDrift's
 //     touched-projects file is the precedent for this, on the SAME `facts` gate guard.go
-//     already keys on the session (SessionKey) rather than the caller, so no new store
+//     already keys on the caller's facts (FactsKey) rather than its rendered text, so no new store
 //     is needed.
 
 // splitRunWindow bounds how far apart two calls may be and still read as one mistake

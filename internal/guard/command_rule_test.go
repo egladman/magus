@@ -57,7 +57,7 @@ func TestCommandRuleSeesTheNormalizedRequest(t *testing.T) {
 		Dir:         at.dir,
 		Workspace:   at.workspace,
 	}, probe.asked[0])
-	assert.Equal(t, SessionKey("claude-code", "8f2c6a1e"), probe.gates[0].Session())
+	assert.Equal(t, FactsKey("claude-code", "8f2c6a1e"), probe.gates[0].Session())
 }
 
 // A bare command string, the form a host with no envelope sends, reaches the rule too.

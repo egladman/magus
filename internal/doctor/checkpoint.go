@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func (r *runner) checkCheckpointWiring() types.DoctorCheck {
+func (r *runner) checkCheckpointWiring() types.Check {
 	return checkCheckpointWiring(r.ws.Root(), workspaceHarnesses(r.ws)...)
 }
 
@@ -27,7 +27,7 @@ func (r *runner) checkCheckpointWiring() types.DoctorCheck {
 //
 // Advice rather than a failure. Not every workspace wants this wired, and a doctor that
 // fails over an optional hook teaches people to stop reading it.
-func checkCheckpointWiring(root string, wired ...string) types.DoctorCheck {
+func checkCheckpointWiring(root string, wired ...string) types.Check {
 	const name = "checkpoint-wiring"
 
 	var hosts, recording []string
@@ -44,25 +44,25 @@ func checkCheckpointWiring(root string, wired ...string) types.DoctorCheck {
 
 	switch {
 	case len(hosts) == 0:
-		return types.DoctorCheck{
+		return types.Check{
 			Name:     name,
-			Status:   types.DoctorOK,
+			Status:   types.CheckOK,
 			Evidence: types.EvidenceUnknown,
 			Message:  "no agent-host hook config in this checkout, so there is nothing to record from; skipped",
 		}
 	case len(recording) == 0:
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorAdvice,
+			Status:  types.CheckAdvice,
 			Message: fmt.Sprintf("%d host hook config(s) wired, none recording a checkpoint; nothing says where work stood when a session stopped", len(hosts)),
 			Details: append(append([]string{}, hosts...),
 				"wire a stop hook to "+checkpointTemplate+": docs/guides/integrations/agents.md",
 				"or record one by hand: "+hint.SessionCheckpoint.With(`--note "..."`)),
 		}
 	default:
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorOK,
+			Status:  types.CheckOK,
 			Message: fmt.Sprintf("%d of %d host hook config(s) record a checkpoint", len(recording), len(hosts)),
 			Details: recording,
 		}

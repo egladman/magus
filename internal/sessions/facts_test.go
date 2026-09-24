@@ -41,7 +41,7 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
-	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run build", Version: "test-version"})
+	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build", Version: "test-version"})
 	require.NotNil(t, h)
 
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
@@ -55,13 +55,13 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 
 	summaries := Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, "inv1", summaries[0].Session, "the invocation id is the session id")
+	assert.Equal(t, "inv1", summaries[0].Invocation, "the journal's invocation id files the facts")
 	assert.Equal(t, "run build", summaries[0].Command)
 	assert.Equal(t, root, summaries[0].Workspace)
 
 	// One session-start plus one fact per result, and the start is always seq 1.
 	require.Len(t, fold.Records, 4)
-	assert.Equal(t, KindSessionStart, fold.Records[0].Kind)
+	assert.Equal(t, KindInvocationStart, fold.Records[0].Kind)
 	assert.Equal(t, uint64(1), fold.Records[0].Seq)
 	assert.Equal(t, SchemaVersion, fold.Records[0].V)
 }
@@ -70,7 +70,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
-	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run ci"})
+	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run ci"})
 	require.NotNil(t, h)
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail})
@@ -96,7 +96,7 @@ func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
-	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run build"})
+	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build"})
 	require.NotNil(t, h)
 	emitFact(t, h, journal.Event{Kind: journal.KindOutput, Inv: "inv1", Text: "compiling"})
 	emitFact(t, h, journal.Event{Kind: journal.KindExec, Inv: "inv1", Target: "build", Text: "go build"})
@@ -124,9 +124,9 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"),
 		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "feature")+"\n"), 0o644))
 
-	mainH := NewFactHandler(main, SessionStart{Workspace: main, Command: "run build"})
+	mainH := NewFactHandler(main, InvocationStart{Workspace: main, Command: "run build"})
 	require.NotNil(t, mainH)
-	linkedH := NewFactHandler(linked, SessionStart{Workspace: linked, Command: "run test"})
+	linkedH := NewFactHandler(linked, InvocationStart{Workspace: linked, Command: "run test"})
 	require.NotNil(t, linkedH)
 
 	emitFact(t, mainH, journal.Event{Kind: journal.KindResult, Inv: "invMain", Target: "build", Project: "api", Status: journal.StatusPass})
@@ -141,7 +141,7 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 	require.Len(t, summaries, 2, "both worktrees write into one store")
 	var ids []string
 	for _, s := range summaries {
-		ids = append(ids, s.Session)
+		ids = append(ids, s.Invocation)
 	}
 	slices.Sort(ids)
 	assert.Equal(t, []string{"invLinked", "invMain"}, ids)
@@ -161,7 +161,7 @@ func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 	// permission bit a test running as root would then ignore.
 	require.NoError(t, os.WriteFile(dir, []byte("not a directory"), 0o644))
 
-	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run build"})
+	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build"})
 	require.NotNil(t, h)
 
 	logged := captureFactWarnings(t, func() {
@@ -181,7 +181,7 @@ func TestFactHandlerStampsTheSuppliedLeaseOnEveryFact(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
-	h := NewFactHandler(root, SessionStart{Workspace: root, Command: "run ci", Lease: "fleet/f3"})
+	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run ci", Lease: "fleet/f3"})
 	require.NotNil(t, h)
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Status: journal.StatusPass})
@@ -209,5 +209,5 @@ func TestNewFactHandlerIsNilWithoutAStateDir(t *testing.T) {
 	t.Setenv("USERPROFILE", "")
 	t.Setenv("LocalAppData", "")
 
-	assert.Nil(t, NewFactHandler(t.TempDir(), SessionStart{}))
+	assert.Nil(t, NewFactHandler(t.TempDir(), InvocationStart{}))
 }

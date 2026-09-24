@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 )
 
 // magus shell is the guard with one door.
@@ -116,16 +117,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// host. A wrapper that cannot extract a session id must still get a verdict;
 	// erroring here would block a tool call over metadata.
 	sf := gen.BindShell(fset)
-	// The environment supplies the DEFAULT, so an explicit --lease still wins: a shell
-	// that exported the variable for a whole session must not outrank a per-call
-	// override. Same shape `magus run` uses for MAGUS_SHARD.
-	// trail.LeaseFromEnv, never a raw Getenv: the journal producers read the variable
-	// through the same helper, and two readers with different trimming rules split one
-	// exported lease into a journal identity and an unguarded write.
-	// Discarded, unlike `magus run`'s shard pair: --lease is a plain string flag whose
-	// Set cannot fail, and a guard that refused to answer over a malformed lease would
-	// block the tool call this comment's first line says must always get a verdict.
-	_ = envDefault(fset, gen.FlagShellLease, trail.LeaseFromEnv())
+	// --lease has no environment default: the guard reads BAGGAGE itself and ranks it below
+	// the spawn record and the marker, and a default here would pass that claim in as a
+	// flag that outranks both.
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule: a flag accepted on most commands teaches
@@ -164,14 +158,22 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		}
 		return enforceVerdictTo(errOut, opts, verdict)
 	}
-	verdict := guard.Judge(ctx, guardDependencies(), guard.Request{
+	// A hook's stdout is the host's pipe; a terminal on it means someone typed this.
+	window := terminalWindow()
+	entry := types.EntryPointHook
+	if window != "" {
+		entry = types.EntryPointCLI
+	}
+	verdict := guard.Judge(trail.ContextWithEntryPoint(ctx, entry), guardDependencies(), guard.Request{
 		Input:      input,
 		IsPath:     sf.Path,
 		Observe:    sf.Observe,
 		Lease:      sf.Lease,
 		Host:       sf.AgentName,
-		Transport:  sf.Transport,
-		Session:    sessionOrTerminal(sf.Session),
+		Form:       sf.Transport,
+		Session:    strings.TrimSpace(sf.Session),
+		Agent:      strings.TrimSpace(sf.Agent),
+		Window:     window,
 		Transcript: sf.Transcript,
 		Event:      sf.Event,
 		// Declared by the wiring, because only a host that observes skill loads can
@@ -195,18 +197,11 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	return enforceVerdictTo(errOut, opts, verdict)
 }
 
-// sessionOrTerminal keeps the caller's --session when it named one, and otherwise derives
-// a session for a person from the terminal they are sitting at.
-//
-// The flag always wins: a host that reports a session id means it, and an id magus
-// invented would split that host's markers in two. Only the caller who named nothing
-// falls through, and for them the terminal is a better answer than the clock they used
-// to get, because a session is what they close the window on.
-func sessionOrTerminal(declared string) string {
-	if strings.TrimSpace(declared) != "" {
-		return declared
-	}
-	return hint.SessionFromTerminal(os.Getenv, os.Getppid(),
+// terminalWindow names the terminal window this process writes to, or "" when stdout is
+// not a terminal. It keys fire-once notices for a caller no host gave a session, and is
+// never recorded as one.
+func terminalWindow() string {
+	return hint.WindowFromTerminal(os.Getenv, os.Getppid(),
 		tty.IsTerminalWriter(os.Stdout, tty.SystemProbe))
 }
 

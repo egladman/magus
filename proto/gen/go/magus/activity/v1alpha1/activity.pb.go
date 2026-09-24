@@ -208,16 +208,15 @@ func (Outcome) EnumDescriptor() ([]byte, []int) {
 // ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
 // kind, action, outcome) is common to every kind; the payload refs point into the activity
 // blob store (fetched via GetPayload) so a large request/response body never bloats the line.
-// For an MCP tool call: actor is the agent id, action is the tool name, request is the
-// arguments, response is the result. For an agent command observation: actor is the host-supplied
-// agent/session identity when available, action is the host tool name, request is the normalized
-// invocation, and response is the guard decision. For a token lifecycle event: actor is "cli",
-// action is "connector.create"/"connector.revoke", and the refs are empty.
+// For an MCP tool call: action is the tool name, request is the arguments, response is the
+// result. For an agent command observation: action is the host tool name, request is the
+// normalized invocation, and response is the guard decision. For a token lifecycle event:
+// action is the RPC method and the refs are empty.
 type ActivityEvent struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Time     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"` // when the action occurred
 	Kind     Kind                   `protobuf:"varint,2,opt,name=kind,proto3,enum=magus.activity.v1alpha1.Kind" json:"kind,omitempty"`
-	Actor    string                 `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`   // who: an agent id, "cli", a user
+	Actor    string                 `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`   // the origin fields below as one label: "eli via claude-code", "daemon", "unattributed"
 	Action   string                 `protobuf:"bytes,4,opt,name=action,proto3" json:"action,omitempty"` // the specific action: a tool name, "connector.create"
 	Outcome  Outcome                `protobuf:"varint,5,opt,name=outcome,proto3,enum=magus.activity.v1alpha1.Outcome" json:"outcome,omitempty"`
 	Error    string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`       // error text when outcome is OUTCOME_ERROR
@@ -236,9 +235,9 @@ type ActivityEvent struct {
 	// The agent host behind the action and that host's own session id, empty when the producer
 	// could not know them. The name is an opaque label the caller supplies, not a set magus
 	// enumerates: a hook is told its host by the wrapper that ran it, because no local process can
-	// discover which agent host started it. An MCP call has no such wrapper and is attributed from
-	// its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by
-	// host rather than switching on kind first.
+	// discover which agent host started it. An MCP call is attributed from the client's handshake
+	// name, or its HTTP User-Agent when it recorded none, mapped into this same field so one view
+	// can group both kinds by host rather than switching on kind first.
 	//
 	// They ride the EVENT rather than the request blob, which also carries them: a 200-row feed
 	// grouped by host must not cost 200 GetPayload calls.
@@ -262,7 +261,23 @@ type ActivityEvent struct {
 	// one event a damaged plan most needs to surface gets dropped. A filter on units matches a
 	// contested event that names one of them, which is deliberate: the event is attributed to
 	// nobody and is still that reader's business.
-	Contested     []string `protobuf:"bytes,17,rep,name=contested,proto3" json:"contested,omitempty"`
+	Contested []string `protobuf:"bytes,17,rep,name=contested,proto3" json:"contested,omitempty"`
+	// Where the action came from, one field per channel, so a reader never guesses which kind of
+	// value a single string holds. user is the OS account the recording process ran as, read from
+	// the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, daemon).
+	// credential is the bearer a daemon request presented, as the daemon verified it. agent is the
+	// host's subagent id within session. actor above is these rendered as one label for a row
+	// head.
+	User       string      `protobuf:"bytes,18,opt,name=user,proto3" json:"user,omitempty"`
+	EntryPoint string      `protobuf:"bytes,19,opt,name=entry_point,json=entryPoint,proto3" json:"entry_point,omitempty"`
+	Credential *Credential `protobuf:"bytes,20,opt,name=credential,proto3" json:"credential,omitempty"`
+	Agent      string      `protobuf:"bytes,21,opt,name=agent,proto3" json:"agent,omitempty"`
+	// Which source answered unit (the lease), where the producer resolved one: flag, agent (the
+	// spawn magus recorded for the calling subagent), marker (the checkout's `magus job exec`
+	// binding), contested (the marker, over a BAGGAGE claim naming another lease), or env (the
+	// BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so
+	// it takes magus's word for the concept rather than unit's.
+	LeaseFrom     string `protobuf:"bytes,22,opt,name=lease_from,json=leaseFrom,proto3" json:"lease_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -416,12 +431,118 @@ func (x *ActivityEvent) GetContested() []string {
 	return nil
 }
 
+func (x *ActivityEvent) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetEntryPoint() string {
+	if x != nil {
+		return x.EntryPoint
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetCredential() *Credential {
+	if x != nil {
+		return x.Credential
+	}
+	return nil
+}
+
+func (x *ActivityEvent) GetAgent() string {
+	if x != nil {
+		return x.Agent
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetLeaseFrom() string {
+	if x != nil {
+		return x.LeaseFrom
+	}
+	return ""
+}
+
+// Credential is a verified bearer, never its secret: which class it is, its stable id, the name
+// it was minted under, and the grant it held when the action was recorded. The id is the
+// identity; the name is a label a later token can reuse.
+type Credential struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Class         string                 `protobuf:"bytes,1,opt,name=class,proto3" json:"class,omitempty"` // operator, token or share
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`       // first 8 hex of the secret's SHA-256
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`   // empty for the operator and a share link
+	Grant         string                 `protobuf:"bytes,4,opt,name=grant,proto3" json:"grant,omitempty"` // e.g. "console=write" or "mcp=write"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Credential) Reset() {
+	*x = Credential{}
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Credential) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Credential) ProtoMessage() {}
+
+func (x *Credential) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Credential.ProtoReflect.Descriptor instead.
+func (*Credential) Descriptor() ([]byte, []int) {
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Credential) GetClass() string {
+	if x != nil {
+		return x.Class
+	}
+	return ""
+}
+
+func (x *Credential) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Credential) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Credential) GetGrant() string {
+	if x != nil {
+		return x.Grant
+	}
+	return ""
+}
+
 // ActivityQuery narrows the listing server-side. Fields AND together; repeated values within
 // a field OR; the time window bounds it.
 type ActivityQuery struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Kinds   []Kind                 `protobuf:"varint,1,rep,packed,name=kinds,proto3,enum=magus.activity.v1alpha1.Kind" json:"kinds,omitempty"` // restrict to these action kinds
-	Actors  []string               `protobuf:"bytes,2,rep,name=actors,proto3" json:"actors,omitempty"`                                         // restrict to these actors
+	Actors  []string               `protobuf:"bytes,2,rep,name=actors,proto3" json:"actors,omitempty"`                                         // restrict to events whose origin names one of these in a single field: user, host, agent, the credential's class, id or name, or entry_point, matched exactly (never the actor label)
 	Actions []string               `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`                                       // restrict to these actions (e.g. tool names)
 	Time    *v1alpha1.TimeRange    `protobuf:"bytes,4,opt,name=time,proto3" json:"time,omitempty"`                                             // action-time window
 	// The three narrowings a person watching a worker asks for. They are here rather than on
@@ -440,7 +561,7 @@ type ActivityQuery struct {
 
 func (x *ActivityQuery) Reset() {
 	*x = ActivityQuery{}
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[1]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -452,7 +573,7 @@ func (x *ActivityQuery) String() string {
 func (*ActivityQuery) ProtoMessage() {}
 
 func (x *ActivityQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[1]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -465,7 +586,7 @@ func (x *ActivityQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityQuery.ProtoReflect.Descriptor instead.
 func (*ActivityQuery) Descriptor() ([]byte, []int) {
-	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{1}
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ActivityQuery) GetKinds() []Kind {
@@ -528,7 +649,7 @@ type ListActivityEventsRequest struct {
 
 func (x *ListActivityEventsRequest) Reset() {
 	*x = ListActivityEventsRequest{}
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[2]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -540,7 +661,7 @@ func (x *ListActivityEventsRequest) String() string {
 func (*ListActivityEventsRequest) ProtoMessage() {}
 
 func (x *ListActivityEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[2]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -553,7 +674,7 @@ func (x *ListActivityEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListActivityEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListActivityEventsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{2}
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListActivityEventsRequest) GetPageSize() int32 {
@@ -587,7 +708,7 @@ type ListActivityEventsResponse struct {
 
 func (x *ListActivityEventsResponse) Reset() {
 	*x = ListActivityEventsResponse{}
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[3]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -599,7 +720,7 @@ func (x *ListActivityEventsResponse) String() string {
 func (*ListActivityEventsResponse) ProtoMessage() {}
 
 func (x *ListActivityEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[3]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -612,7 +733,7 @@ func (x *ListActivityEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListActivityEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListActivityEventsResponse) Descriptor() ([]byte, []int) {
-	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{3}
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListActivityEventsResponse) GetEvents() []*ActivityEvent {
@@ -644,7 +765,7 @@ type WatchActivityEventsRequest struct {
 
 func (x *WatchActivityEventsRequest) Reset() {
 	*x = WatchActivityEventsRequest{}
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[4]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -656,7 +777,7 @@ func (x *WatchActivityEventsRequest) String() string {
 func (*WatchActivityEventsRequest) ProtoMessage() {}
 
 func (x *WatchActivityEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[4]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -669,7 +790,7 @@ func (x *WatchActivityEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchActivityEventsRequest.ProtoReflect.Descriptor instead.
 func (*WatchActivityEventsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{4}
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *WatchActivityEventsRequest) GetFilter() *ActivityQuery {
@@ -696,7 +817,7 @@ type GetPayloadRequest struct {
 
 func (x *GetPayloadRequest) Reset() {
 	*x = GetPayloadRequest{}
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -708,7 +829,7 @@ func (x *GetPayloadRequest) String() string {
 func (*GetPayloadRequest) ProtoMessage() {}
 
 func (x *GetPayloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -721,7 +842,7 @@ func (x *GetPayloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPayloadRequest.ProtoReflect.Descriptor instead.
 func (*GetPayloadRequest) Descriptor() ([]byte, []int) {
-	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{5}
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetPayloadRequest) GetRef() string {
@@ -742,7 +863,7 @@ type Payload struct {
 
 func (x *Payload) Reset() {
 	*x = Payload{}
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[6]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -754,7 +875,7 @@ func (x *Payload) String() string {
 func (*Payload) ProtoMessage() {}
 
 func (x *Payload) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[6]
+	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -767,7 +888,7 @@ func (x *Payload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Payload.ProtoReflect.Descriptor instead.
 func (*Payload) Descriptor() ([]byte, []int) {
-	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{6}
+	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Payload) GetBody() []byte {
@@ -788,7 +909,7 @@ var File_magus_activity_v1alpha1_activity_proto protoreflect.FileDescriptor
 
 const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\n" +
-	"&magus/activity/v1alpha1/activity.proto\x12\x17magus.activity.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/query/v1alpha1/query.proto\"\xd1\x04\n" +
+	"&magus/activity/v1alpha1/activity.proto\x12\x17magus.activity.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/query/v1alpha1/query.proto\"\x80\x06\n" +
 	"\rActivityEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.magus.activity.v1alpha1.KindR\x04kind\x12\x14\n" +
@@ -808,7 +929,22 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x04host\x18\x0e \x01(\tR\x04host\x12\x18\n" +
 	"\asession\x18\x0f \x01(\tR\asession\x12\x12\n" +
 	"\x04unit\x18\x10 \x01(\tR\x04unit\x12\x1c\n" +
-	"\tcontested\x18\x11 \x03(\tR\tcontested\"\xf3\x01\n" +
+	"\tcontested\x18\x11 \x03(\tR\tcontested\x12\x12\n" +
+	"\x04user\x18\x12 \x01(\tR\x04user\x12\x1f\n" +
+	"\ventry_point\x18\x13 \x01(\tR\n" +
+	"entryPoint\x12C\n" +
+	"\n" +
+	"credential\x18\x14 \x01(\v2#.magus.activity.v1alpha1.CredentialR\n" +
+	"credential\x12\x14\n" +
+	"\x05agent\x18\x15 \x01(\tR\x05agent\x12\x1d\n" +
+	"\n" +
+	"lease_from\x18\x16 \x01(\tR\tleaseFrom\"\\\n" +
+	"\n" +
+	"Credential\x12\x14\n" +
+	"\x05class\x18\x01 \x01(\tR\x05class\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x14\n" +
+	"\x05grant\x18\x04 \x01(\tR\x05grant\"\xf3\x01\n" +
 	"\rActivityQuery\x123\n" +
 	"\x05kinds\x18\x01 \x03(\x0e2\x1d.magus.activity.v1alpha1.KindR\x05kinds\x12\x16\n" +
 	"\x06actors\x18\x02 \x03(\tR\x06actors\x12\x18\n" +
@@ -878,42 +1014,44 @@ func file_magus_activity_v1alpha1_activity_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_activity_v1alpha1_activity_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_magus_activity_v1alpha1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_magus_activity_v1alpha1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_magus_activity_v1alpha1_activity_proto_goTypes = []any{
 	(Kind)(0),                          // 0: magus.activity.v1alpha1.Kind
 	(Outcome)(0),                       // 1: magus.activity.v1alpha1.Outcome
 	(*ActivityEvent)(nil),              // 2: magus.activity.v1alpha1.ActivityEvent
-	(*ActivityQuery)(nil),              // 3: magus.activity.v1alpha1.ActivityQuery
-	(*ListActivityEventsRequest)(nil),  // 4: magus.activity.v1alpha1.ListActivityEventsRequest
-	(*ListActivityEventsResponse)(nil), // 5: magus.activity.v1alpha1.ListActivityEventsResponse
-	(*WatchActivityEventsRequest)(nil), // 6: magus.activity.v1alpha1.WatchActivityEventsRequest
-	(*GetPayloadRequest)(nil),          // 7: magus.activity.v1alpha1.GetPayloadRequest
-	(*Payload)(nil),                    // 8: magus.activity.v1alpha1.Payload
-	(*timestamppb.Timestamp)(nil),      // 9: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),        // 10: google.protobuf.Duration
-	(*v1alpha1.TimeRange)(nil),         // 11: magus.query.v1alpha1.TimeRange
+	(*Credential)(nil),                 // 3: magus.activity.v1alpha1.Credential
+	(*ActivityQuery)(nil),              // 4: magus.activity.v1alpha1.ActivityQuery
+	(*ListActivityEventsRequest)(nil),  // 5: magus.activity.v1alpha1.ListActivityEventsRequest
+	(*ListActivityEventsResponse)(nil), // 6: magus.activity.v1alpha1.ListActivityEventsResponse
+	(*WatchActivityEventsRequest)(nil), // 7: magus.activity.v1alpha1.WatchActivityEventsRequest
+	(*GetPayloadRequest)(nil),          // 8: magus.activity.v1alpha1.GetPayloadRequest
+	(*Payload)(nil),                    // 9: magus.activity.v1alpha1.Payload
+	(*timestamppb.Timestamp)(nil),      // 10: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),        // 11: google.protobuf.Duration
+	(*v1alpha1.TimeRange)(nil),         // 12: magus.query.v1alpha1.TimeRange
 }
 var file_magus_activity_v1alpha1_activity_proto_depIdxs = []int32{
-	9,  // 0: magus.activity.v1alpha1.ActivityEvent.time:type_name -> google.protobuf.Timestamp
+	10, // 0: magus.activity.v1alpha1.ActivityEvent.time:type_name -> google.protobuf.Timestamp
 	0,  // 1: magus.activity.v1alpha1.ActivityEvent.kind:type_name -> magus.activity.v1alpha1.Kind
 	1,  // 2: magus.activity.v1alpha1.ActivityEvent.outcome:type_name -> magus.activity.v1alpha1.Outcome
-	10, // 3: magus.activity.v1alpha1.ActivityEvent.duration:type_name -> google.protobuf.Duration
-	0,  // 4: magus.activity.v1alpha1.ActivityQuery.kinds:type_name -> magus.activity.v1alpha1.Kind
-	11, // 5: magus.activity.v1alpha1.ActivityQuery.time:type_name -> magus.query.v1alpha1.TimeRange
-	3,  // 6: magus.activity.v1alpha1.ListActivityEventsRequest.filter:type_name -> magus.activity.v1alpha1.ActivityQuery
-	2,  // 7: magus.activity.v1alpha1.ListActivityEventsResponse.events:type_name -> magus.activity.v1alpha1.ActivityEvent
-	3,  // 8: magus.activity.v1alpha1.WatchActivityEventsRequest.filter:type_name -> magus.activity.v1alpha1.ActivityQuery
-	4,  // 9: magus.activity.v1alpha1.ActivityService.ListActivityEvents:input_type -> magus.activity.v1alpha1.ListActivityEventsRequest
-	7,  // 10: magus.activity.v1alpha1.ActivityService.GetPayload:input_type -> magus.activity.v1alpha1.GetPayloadRequest
-	6,  // 11: magus.activity.v1alpha1.ActivityService.WatchActivityEvents:input_type -> magus.activity.v1alpha1.WatchActivityEventsRequest
-	5,  // 12: magus.activity.v1alpha1.ActivityService.ListActivityEvents:output_type -> magus.activity.v1alpha1.ListActivityEventsResponse
-	8,  // 13: magus.activity.v1alpha1.ActivityService.GetPayload:output_type -> magus.activity.v1alpha1.Payload
-	2,  // 14: magus.activity.v1alpha1.ActivityService.WatchActivityEvents:output_type -> magus.activity.v1alpha1.ActivityEvent
-	12, // [12:15] is the sub-list for method output_type
-	9,  // [9:12] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	11, // 3: magus.activity.v1alpha1.ActivityEvent.duration:type_name -> google.protobuf.Duration
+	3,  // 4: magus.activity.v1alpha1.ActivityEvent.credential:type_name -> magus.activity.v1alpha1.Credential
+	0,  // 5: magus.activity.v1alpha1.ActivityQuery.kinds:type_name -> magus.activity.v1alpha1.Kind
+	12, // 6: magus.activity.v1alpha1.ActivityQuery.time:type_name -> magus.query.v1alpha1.TimeRange
+	4,  // 7: magus.activity.v1alpha1.ListActivityEventsRequest.filter:type_name -> magus.activity.v1alpha1.ActivityQuery
+	2,  // 8: magus.activity.v1alpha1.ListActivityEventsResponse.events:type_name -> magus.activity.v1alpha1.ActivityEvent
+	4,  // 9: magus.activity.v1alpha1.WatchActivityEventsRequest.filter:type_name -> magus.activity.v1alpha1.ActivityQuery
+	5,  // 10: magus.activity.v1alpha1.ActivityService.ListActivityEvents:input_type -> magus.activity.v1alpha1.ListActivityEventsRequest
+	8,  // 11: magus.activity.v1alpha1.ActivityService.GetPayload:input_type -> magus.activity.v1alpha1.GetPayloadRequest
+	7,  // 12: magus.activity.v1alpha1.ActivityService.WatchActivityEvents:input_type -> magus.activity.v1alpha1.WatchActivityEventsRequest
+	6,  // 13: magus.activity.v1alpha1.ActivityService.ListActivityEvents:output_type -> magus.activity.v1alpha1.ListActivityEventsResponse
+	9,  // 14: magus.activity.v1alpha1.ActivityService.GetPayload:output_type -> magus.activity.v1alpha1.Payload
+	2,  // 15: magus.activity.v1alpha1.ActivityService.WatchActivityEvents:output_type -> magus.activity.v1alpha1.ActivityEvent
+	13, // [13:16] is the sub-list for method output_type
+	10, // [10:13] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_magus_activity_v1alpha1_activity_proto_init() }
@@ -927,7 +1065,7 @@ func file_magus_activity_v1alpha1_activity_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_activity_v1alpha1_activity_proto_rawDesc), len(file_magus_activity_v1alpha1_activity_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

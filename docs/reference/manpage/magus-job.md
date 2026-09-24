@@ -202,7 +202,7 @@ them and magus describe job prints one job's terms.
 *Declare a job*
 
 ```sh
-magus job fork session-load/core --write-paths internal/sessions --check 'test internal/sessions'
+magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'
 ```
 
 *Declare it from a record*

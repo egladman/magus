@@ -271,7 +271,7 @@ the delegated half of every fanned-out session goes with them.
 # by the session-parity gate, which fails the build when an adapter drops a
 # dimension or the guide's table disagrees with it. A host that supplies less
 # declares less; the report then says unobservable rather than zero.
-# magus-guard-template: 16
+# magus-guard-template: 17
 # magus-session-coverage: schema=1 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes
 
 # NO `set -e`. Every failure below is a transcript this run does not read, not a
@@ -465,7 +465,7 @@ exit-like signal describes a patch rather than a command.
 # command. The coverage line says so, and a report reading it says unobservable
 # for those dimensions rather than zero. Declaring commands=yes on the strength
 # of what the other hosts supply is the failure this line exists to prevent.
-# magus-guard-template: 16
+# magus-guard-template: 17
 # magus-session-coverage: schema=1 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes
 
 # NO `set -e`: a rollout this run cannot read is not a reason to abandon the rest.
@@ -618,7 +618,7 @@ a command's exit code, and the only one with no hook records and no spawn part.
 # OpenCode is the only host of the three that records a command's exit code, and
 # the only one with neither hook records nor a spawn part. The coverage line says
 # both; a report reading it says unobservable, never zero.
-# magus-guard-template: 16
+# magus-guard-template: 17
 # magus-session-coverage: schema=1 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes
 
 # NO `set -e`: a session whose export fails is not a reason to abandon the rest.
