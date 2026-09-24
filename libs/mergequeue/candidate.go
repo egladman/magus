@@ -183,21 +183,11 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 			return built{}, err
 		}
 	}
-	// A directory of its own per candidate, so no hook run on one can have planted
-	// anything where another will look.
-	box, err := os.MkdirTemp(s.scratch, "candidate-"+c.ID+"-")
+	cand, err := checkout(ctx, v, root, s.scratch, "candidate-"+c.ID, from)
 	if err != nil {
 		return built{}, err
 	}
-	cand := types.Candidate{Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
-	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
-		_ = os.RemoveAll(box)
-		return built{}, err
-	}
-	if err := v.CreateCheckout(ctx, root, cand.Dir, from); err != nil {
-		_ = os.RemoveAll(box)
-		return built{}, err
-	}
+	cand.Change = c.ID
 	defer func() {
 		if err != nil {
 			// The build's own error is what the caller acts on.
@@ -216,6 +206,26 @@ func buildMerge(ctx context.Context, v types.BuildVCS, s candidateSpec) (b built
 		return built{}, err
 	}
 	return built{Candidate: cand, touched: slices.Compact(slices.Sorted(slices.Values(slices.Concat(touched, settled)))), settled: settled}, nil
+}
+
+// checkout checks commit out in a directory of its own under scratch, named from name,
+// beside a scratch directory private to it, so no hook run in another checkout can have
+// planted anything where one run here will look. On error nothing is left behind.
+func checkout(ctx context.Context, v types.BuildVCS, root, scratch, name, commit string) (types.Candidate, error) {
+	box, err := os.MkdirTemp(scratch, name+"-")
+	if err != nil {
+		return types.Candidate{}, err
+	}
+	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
+	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
+		_ = os.RemoveAll(box)
+		return types.Candidate{}, err
+	}
+	if err := v.CreateCheckout(ctx, root, cand.Dir, commit); err != nil {
+		_ = os.RemoveAll(box)
+		return types.Candidate{}, err
+	}
+	return cand, nil
 }
 
 // discard removes a candidate's checkout and its private directory.
@@ -291,7 +301,7 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 	if len(regen) == 0 {
 		return b.Commit, nil
 	}
-	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Onto: s.onto, Change: s.change, Paths: regen, Units: units}); err != nil {
+	if err := regenerate(ctx, types.Regeneration{Dir: b.Dir, Scratch: b.Scratch, Change: s.change, Paths: regen, Units: units}); err != nil {
 		return "", err
 	}
 	written, err := v.DirtyFiles(ctx, b.Dir, nil)

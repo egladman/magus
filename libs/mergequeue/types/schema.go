@@ -104,9 +104,10 @@ const (
 	CodeWaitWithdrawn       Code = "WAIT_WITHDRAWN"        // its merge intent was withdrawn since it was listed
 	CodeWaitUnqueuedBelow   Code = "WAIT_UNQUEUED_BELOW"   // it carries the commits of an open change nobody queued
 	CodeWaitNoCommitter     Code = "WAIT_NO_COMMITTER"     // it needs an update commit, and nothing names who commits it
+	CodeWaitBaseRed         Code = "WAIT_BASE_RED"         // the gate was red on its candidate and on what that was built onto
 
 	CodeKickConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
-	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate
+	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate and green on what that was built onto
 	CodeKickRefused  Code = "KICK_REFUSED"  // something the author has to fix that is neither
 )
 
@@ -115,7 +116,8 @@ func (c Code) decision() Decision {
 	switch c {
 	case CodeWaitNotApproved, CodeWaitHeadMoved, CodeWaitBehind, CodeWaitConflictAhead, CodeWaitRevalidate,
 		CodeWaitBranchMoved, CodeWaitProviderRefused, CodeWaitBelow, CodeWaitBelowKicked, CodeWaitRestack,
-		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow, CodeWaitNoCommitter:
+		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow, CodeWaitNoCommitter,
+		CodeWaitBaseRed:
 		return DecisionWait
 	case CodeKickConflict, CodeKickRed, CodeKickRefused:
 		return DecisionKick

@@ -36,7 +36,8 @@ From there the queue:
 - refuses changes from forks, whose branches it cannot push to.
 
 It kicks an author back only for what their own change did: a real conflict, a red gate
-on a candidate whose every change beneath is validated, a regeneration their code broke,
+on a candidate whose every change beneath is validated and whose base is green on the
+same projects, a regeneration their code broke,
 generated files only they can regenerate, or a stack it cannot merge. A gate killed by a
 signal, an OOM kill included, is that change's red. Only what the queue can prove is the
 machine's (a hook that could not start, the queue's own cancellation) stops a partition
@@ -117,8 +118,8 @@ generated file, a candidate tree or a review proof from a verdict.
   differing only in generated files is covered only when main's regeneration, run on the
   plain merge, gives exactly that merge's tree.
 - **Candidates share nothing.** Each candidate gets a checkout and a scratch directory
-  of its own (`MERGEQUEUE_SCRATCH`), so no change's hook can plant a cache entry another
-  candidate's gate replays; `tools/gha-queue.buzz` points magus's and Go's caches there
+  of its own, so no change's hook can plant a cache entry another candidate's gate
+  replays; `tools/gha-queue.buzz` points magus's and Go's caches there
   with `--scratch-env`. Every
   process a hook starts is killed when the hook exits, before its verdict is recorded; a
   process that leaves the hook's process group ends with the CI job.
@@ -158,16 +159,17 @@ errors go to stderr. A usage mistake exits 2; a queue that ran and failed exits 
 magus queue ls --provider github --base main > changes.json
 magus queue plan --changes changes.json --provider github --out plan.json
 magus queue validate --plan plan.json --verdicts verdicts \
-  --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \
-  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"' \
+  --gate 'magus run ci --no-default-charms' \
+  --regenerate 'magus run generate:rw' \
   --scratch-env MAGUS_CACHE_DIR=magus --scratch-env GOCACHE=go-build
 magus queue apply --provider github \
-  --regenerate 'MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS' \
+  --regenerate 'magus --sandbox-enabled run generate:rw' \
   --scratch-env MAGUS_CACHE_DIR=magus verdicts
 ```
 
-`--scratch-env NAME=DIR`, on `validate` and `apply` and repeatable, sets `NAME` to
-`$MERGEQUEUE_SCRATCH/DIR` in every hook's environment, creating the directory. It keeps
+`--scratch-env NAME=DIR`, on `validate` and `apply` and repeatable, sets `NAME` to `DIR`
+inside the checkout's scratch directory in every hook's environment, creating the
+directory. It keeps
 each candidate's caches its own without the hook line saying so, which leaves the line
 one a person can paste and run; each verdict records the lines validation ran.
 
@@ -325,25 +327,39 @@ part of the run.
 
 ## Hooks on each candidate
 
-`--gate` and `--regenerate` run with `sh -c`, in a process group of their own, in the
-candidate's checkout, with:
+A hook is a command and its arguments, not a shell line. `--gate`, `--regenerate` and
+`--facts` are read once, when the flags are, as sh words: quotes and backslashes group
+and escape, and nothing else is shell. A variable, a command substitution, a pipe, `;`,
+`&&`, a redirection, a glob, a comment or a leading `NAME=value` is refused with
+[MGS3026](../reference/codes/sandbox/MGS3026.md); put such a line in a script and point
+the flag at the script. The queue runs the command directly, in a process group of its
+own, in the candidate's checkout, and appends its inputs as arguments, the way `magus
+run <target> [project...]` takes projects:
 
-| Variable                 | Value                                                           |
-| ------------------------ | --------------------------------------------------------------- |
-| `MERGEQUEUE_CHANGE`      | the change's id                                                 |
-| `MERGEQUEUE_HEAD`        | the change's head commit                                        |
-| `MERGEQUEUE_BASE`        | the branch the queue merges into                                |
-| `MERGEQUEUE_BASE_COMMIT` | the commit every partition starts on                            |
-| `MERGEQUEUE_ONTO`        | the commit this candidate was built onto                        |
-| `MERGEQUEUE_CANDIDATE`   | the candidate (gate only)                                       |
-| `MERGEQUEUE_SCRATCH`     | a directory private to this candidate, for caches               |
-| `MERGEQUEUE_UNITS`       | what regenerates the paths on stdin (apply's regeneration only) |
+| Hook                    | Arguments                                                               | Stdin                          |
+| ----------------------- | ----------------------------------------------------------------------- | ------------------------------ |
+| `validate --gate`       | the change's affected projects                                          | nothing                        |
+| `validate --regenerate` | the change's affected projects                                          | the generated paths to rewrite |
+| `apply --regenerate`    | the projects that generate those paths, proven to run no change's code  | the generated paths to rewrite |
+| `--facts`               | the fact asked for: `affected`, `outputs`, `generation` or `all`        | what that fact takes           |
+
+A change whose affected set is no proof (unknown, or `unbounded_by` set) gets every
+project instead, spelled as the build tool spells it: `/` for magus, and what the facts
+command answers to `all` for another tool. A change that reaches no project has nothing
+to gate and validates green. So `magus run ci --no-default-charms` runs as `magus run ci
+--no-default-charms libs/parser apps/web`, a line a person can run as it stands.
 
 The gate is green on exit 0, and anything else its processes do is red: another exit
 status, a death by signal, or exit 75 (`EX_TEMPFAIL`, which magus returns when a lock or
-the machine budget is busy) three times running. Gating against `$MERGEQUEUE_ONTO` runs
-only what the top change adds. Each candidate is a checkout of its own (a git worktree)
-with a scratch directory of its own; keep every cache there.
+the machine budget is busy) three times running. Its projects are the top change's, so
+it runs only what that change adds. When a candidate whose every change beneath is
+validated is red, the queue gates the commit it was built onto with the same command
+and the same projects, once a run for every change that asks. Red there, the change waits
+with `WAIT_BASE_RED`, keeps its place and is told nothing; green, it is kicked back with
+`KICK_RED`. The gate's output lines on stderr are tagged with the commit and the change
+(`[4b1c0e9a2f31 #482]`), or with `base` for a commit gated as it stands. Each candidate
+is a checkout of its own (a git worktree) with a scratch directory of its own; point
+every cache there with `--scratch-env`.
 
 A generated-file conflict takes the change's side and `--regenerate` rewrites it, with
 the generated paths on stdin; without a hook, a file either side deleted stays deleted.
@@ -420,8 +436,9 @@ a change the plan did not admit is dropped.
 | `WAIT_WITHDRAWN`        | its merge intent was withdrawn since it was listed                   |
 | `WAIT_UNQUEUED_BELOW`   | it carries the commits of an open change nobody queued               |
 | `WAIT_NO_COMMITTER`     | it needs an update commit, and nothing names who commits it          |
+| `WAIT_BASE_RED`         | the gate was red on its candidate and on what that was built onto    |
 | `KICK_CONFLICT`         | a real conflict with the base in files that are not generated        |
-| `KICK_RED`              | the gate was red on its candidate                                    |
+| `KICK_RED`              | the gate was red on its candidate, green on what it was built onto   |
 | `KICK_REFUSED`          | something the author has to fix that is neither                      |
 
 ## Applying as each candidate goes green
@@ -696,15 +713,16 @@ command hooks.
 | `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)    | magus's `types.VCSDriver`   |
 | `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation) | magus's `types.VCSDriver`   |
 | `PushVCS`        | `BuildVCS` plus a leased push (applying)                                | magus's `types.VCSDriver`   |
-| `BuildFacts`     | a change's affected set, how paths are written, what regenerating runs  | `client.Workspace`          |
+| `BuildFacts`     | affected sets, all units, how paths are written, what regenerating runs | `client.Workspace`          |
 | `Provider`       | list, describe, approve, set statuses, retarget, merge, kick back, mark | the `provider` Buzz scripts |
 | `ArtifactLister` | the artifacts a validation run uploaded                                 | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so
 which merge base a prediction takes, which conflicts are the author's and which
 differences a review need not see are decided once, whatever the version control.
-`CommandFacts` is the `BuildFacts` behind `--facts`. Asked for `outputs`, with the paths
-on stdin, the command prints `{"outputs": [path], "updated": [path], "maintained":
+`CommandFacts` is the `BuildFacts` behind `--facts`, which gets the fact it is asked for
+as its one argument. Asked for `all`, it prints `{"units": [unit]}`, how the build tool
+names every unit. Asked for `outputs`, with the paths on stdin, the command prints `{"outputs": [path], "updated": [path], "maintained":
 [path]}`: the paths a target writes whole, the ones a target rewrites in place, and the
 ones the build tool rewrites itself on every run. A missing key names none, so a command
 that prints only `outputs` declares no update and maintains nothing.

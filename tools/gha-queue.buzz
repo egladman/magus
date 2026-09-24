@@ -85,11 +85,12 @@ export fun planArgs(dir: str, depth: str) > [str] {
 final SCRATCH = ["--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
     "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"];
 
-// validateArgs keeps $MERGEQUEUE_ONTO literal: the queue sets it for each hook.
+// validateArgs names no project: the queue appends the change's affected projects to
+// each hook line, or "/" when that set is no proof.
 export fun validateArgs(dir: str, change: str) > [str] {
     final args = mut ["queue", "validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
-        "--gate", `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`,
-        "--regenerate", `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`];
+        "--gate", "magus run ci --no-default-charms",
+        "--regenerate", "magus run generate:rw"];
     foreach (a in SCRATCH) {
         args.append(a);
     }
@@ -104,7 +105,7 @@ export fun validateArgs(dir: str, change: str) > [str] {
 // provider names who commits each update commit and the credential is the job's token.
 export fun applyArgs(run: str, repo: str, committer: str, app: str) > [str] {
     final args = mut ["queue", "apply", "--provider", "github", "--status-context", "merge-queue", "--interval", "15s",
-        "--regenerate", `MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`];
+        "--regenerate", "magus --sandbox-enabled run generate:rw"];
     foreach (a in SCRATCH) {
         args.append(a);
     }
@@ -320,11 +321,11 @@ test "outputs render a compact matrix and its count" {
     assert\equal(outputs([<str>]), want: `matrix={"include":[]}` + "\ncount=0\n", message: "no jobs");
 }
 
-test "validation hooks are lines a person can run, with MERGEQUEUE_ONTO unexpanded and caches the queue keeps private" {
+test "validation hooks are lines a person can run once they name the projects, with caches the queue keeps private" {
     assert\equal(validateArgs("/t/queue", change: "482"), want: ["queue", "validate", "--plan", "/t/queue/plan.json", "--only", "482",
         "--verdicts", "/t/queue/verdicts",
-        "--gate", `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`,
-        "--regenerate", `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`,
+        "--gate", "magus run ci --no-default-charms",
+        "--regenerate", "magus run generate:rw",
         "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
         "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache"], message: "argv");
 }
@@ -332,7 +333,7 @@ test "validation hooks are lines a person can run, with MERGEQUEUE_ONTO unexpand
 test "apply follows the validation run as its source and regenerates in the sandbox" {
     assert\equal(applyArgs("99", repo: "o/r", committer: "", app: ""), want: ["queue", "apply", "--provider", "github", "--status-context", "merge-queue",
         "--interval", "15s",
-        "--regenerate", `MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`,
+        "--regenerate", "magus --sandbox-enabled run generate:rw",
         "--scratch-env", "MAGUS_CACHE_DIR=magus", "--scratch-env", "GOCACHE=go-build",
         "--scratch-env", "GOMODCACHE=go-mod", "--scratch-env", "XDG_CACHE_HOME=cache", "run:o/r/runs/99"], message: "argv");
 }

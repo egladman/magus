@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -596,7 +595,7 @@ func (r *applyRun) proveOwed(ctx context.Context, c types.Change, owed []regener
 		if err != nil {
 			return err
 		}
-		got, err := r.regenerateAt(ctx, c, from, ob.Onto, ob.Paths, g.Units)
+		got, err := r.regenerateAt(ctx, c, from, ob.Paths, g.Units)
 		if err != nil {
 			return err
 		}
@@ -613,23 +612,14 @@ func (r *applyRun) proveOwed(ctx context.Context, c types.Change, owed []regener
 
 // regenerateAt regenerates paths in a checkout of commit and returns the tree that
 // leaves.
-func (r *applyRun) regenerateAt(ctx context.Context, c types.Change, commit, onto string, paths, units []string) (string, error) {
-	box, err := os.MkdirTemp(r.scratch, "proof-"+c.ID+"-")
+func (r *applyRun) regenerateAt(ctx context.Context, c types.Change, commit string, paths, units []string) (string, error) {
+	cand, err := checkout(ctx, r.vcs, r.clone.Root, r.scratch, "proof-"+c.ID, commit)
 	if err != nil {
-		return "", err
-	}
-	cand := types.Candidate{Commit: commit, Dir: filepath.Join(box, "checkout"), Scratch: filepath.Join(box, "scratch")}
-	if err := os.Mkdir(cand.Scratch, 0o700); err != nil {
-		_ = os.RemoveAll(box)
-		return "", err
-	}
-	if err := r.vcs.CreateCheckout(ctx, r.clone.Root, cand.Dir, commit); err != nil {
-		_ = os.RemoveAll(box)
 		return "", err
 	}
 	defer r.discard(ctx, cand)
 	b := built{Candidate: cand, touched: paths}
-	s := candidateSpec{clone: r.clone, facts: r.facts, onto: onto, change: c, scratch: r.scratch}
+	s := candidateSpec{clone: r.clone, facts: r.facts, change: c, scratch: r.scratch}
 	after, err := regenerateIn(ctx, r.vcs, s, b, r.Regenerate, units)
 	if err != nil {
 		return "", err

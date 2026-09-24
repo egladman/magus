@@ -1397,8 +1397,7 @@ export fun merge_change(io: {str: any}) > any !> any {
 // carrying it.
 final KICK_MARKER = "<!-- mergequeue: ";
 
-// shQuote single-quotes s for sh, so a hook line pastes as one argument with its
-// $MERGEQUEUE_* references left for the queue to expand.
+// shQuote single-quotes s for sh, so a hook flag's value pastes as one argument.
 fun shQuote(s: str) > str {
     return "'" + s.replace("'", with: "'\\''") + "'";
 }
@@ -1435,7 +1434,7 @@ fun reproduction(number: str, run: {str: str}, repoArg: str, base: str, gate: st
     }
     lines.append("```");
     lines.append("");
-    lines.append("The queue sets `$MERGEQUEUE_ONTO` and the other `MERGEQUEUE_*` variables for each hook, so leave them quoted. "
+    lines.append("The queue appends the change's affected projects to each hook line. "
         + "Run it in a checkout of `{base}` whose `origin` is {repoArg}; the plan artifact is kept for a day.");
     lines.append("");
     lines.append("</details>");
@@ -2024,7 +2023,7 @@ test "a red gate's kick-back links the run, reproduces it locally and lists the 
         "id": "300", "base": "main", "method": "squash", "code": "KICK_RED", "candidate_commit": "c0ffee",
         "report": "The merge queue built this change at `4d028a1474d1` onto `main` at `9f2e01234567`, and the gate exited 1.\n",
         "source": "egladman/magus/runs/123",
-        "reproduce": {"gate": `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`, "regenerate": `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`},
+        "reproduce": {"gate": "magus run ci --no-default-charms", "regenerate": "magus run generate:rw"},
         "paths": ["libs/a.go"], "with": ["abc123 touch a"],
     };
     final got = kickComment(io, web: "https://github.com", requeue: requeueLine("300", method: "squash", fork: false, label: "", top: ""));
@@ -2040,11 +2039,11 @@ test "a red gate's kick-back links the run, reproduces it locally and lists the 
         "```sh",
         "gh run download 123 -R egladman/magus -n mergequeue-plan -D mq-300",
         "magus queue validate --only 300 --plan mq-300/plan.json --verdicts mq-300/verdicts \\",
-        `  --gate 'magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms' \`,
-        `  --regenerate 'magus affected generate:rw --base "$MERGEQUEUE_ONTO"'`,
+        `  --gate 'magus run ci --no-default-charms' \`,
+        `  --regenerate 'magus run generate:rw'`,
         "```",
         "",
-        "The queue sets `$MERGEQUEUE_ONTO` and the other `MERGEQUEUE_*` variables for each hook, so leave them quoted. "
+        "The queue appends the change's affected projects to each hook line. "
             + "Run it in a checkout of `main` whose `origin` is egladman/magus; the plan artifact is kept for a day.",
         "",
         "</details>",
@@ -2081,7 +2080,7 @@ test "a conflict planning found links the run and reproduces nothing" {
 
 test "a hook line's single quotes survive sh quoting" {
     assert\equal(shQuote("echo 'hi' there"), want: `'echo '\''hi'\'' there'`, message: "each quote closes, escapes and reopens");
-    assert\equal(shQuote(`magus run x --base "$MERGEQUEUE_ONTO"`), want: `'magus run x --base "$MERGEQUEUE_ONTO"'`, message: "the variable stays literal");
+    assert\equal(shQuote(`magus run x "$HOME"`), want: `'magus run x "$HOME"'`, message: "the variable stays literal");
     final lines = reproduction("5", run: {"repo": "o/r", "id": "2"}, repoArg: "o/r", base: "main", gate: "test 'x' = x", regenerate: "");
     assert\equal(lines[4], want: "magus queue validate --only 5 --plan mq-5/plan.json --verdicts mq-5/verdicts \\", message: "continued");
     assert\equal(lines[5], want: `  --gate 'test '\''x'\'' = x'`, message: "no regeneration: the gate line ends the command");

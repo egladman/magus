@@ -1183,7 +1183,6 @@ func TestApplyProvesAReviewAcrossAMergeOfTheBaseByRegenerating(t *testing.T) {
 			}
 			require.NoError(t, a.Run(t.Context(), planOf([]types.Change{c})))
 			require.Len(t, ran, 1)
-			assert.Equal(t, onBase, ran[0].Onto)
 			assert.Equal(t, []string{"gen/x.go"}, ran[0].Paths)
 			assert.Equal(t, []string{"gen"}, ran[0].Units)
 		})

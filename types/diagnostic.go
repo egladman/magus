@@ -420,7 +420,12 @@ const (
 	// PreflightOutsideClosure is a --preflight target the invoked target never reaches
 	// through ctx.needs in any selected project. Running it first would add work rather
 	// than reorder it, so the invocation is refused before anything runs.
-	PreflightOutsideClosure   DiagnosticCode = "MGS3021"
+	PreflightOutsideClosure DiagnosticCode = "MGS3021"
+	// QueueHookNotACommand is a merge queue hook flag whose value is not a command and
+	// its arguments: it holds shell syntax (a variable, a substitution, an operator, a
+	// redirection, a glob, an assignment prefix) that nothing would act on, since the
+	// queue runs a hook with no shell. Refused before anything runs.
+	QueueHookNotACommand      DiagnosticCode = "MGS3026"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -583,7 +588,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure,
+	PreflightFailed, PreflightOutsideClosure, QueueHookNotACommand,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
