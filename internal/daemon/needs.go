@@ -7,11 +7,12 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
+	mcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/types"
 )
 
 var (
-	needMCP          = types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
+	needMCP          = mcp.ToolNeed
 	needTokens       = types.Need{Surface: types.SurfaceTokens, Level: types.LevelWrite}
 	needConsoleRead  = types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
 	needConsoleWrite = types.Need{Surface: types.SurfaceConsole, Level: types.LevelWrite}

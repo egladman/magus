@@ -171,8 +171,9 @@ func (n Need) Validate() error {
 	return nil
 }
 
-// CredentialClass is which kind of bearer a credential is. It is carried in the token string
-// itself, as the prefix, so a verifier knows which store to consult before it hashes anything.
+// CredentialClass is which kind of bearer a credential is. A bearer's class is carried in the
+// token string itself, as the prefix, so a verifier knows which store to consult before it
+// hashes anything. [ClassStdio] is the one class with no token.
 type CredentialClass string
 
 const (
@@ -186,10 +187,20 @@ const (
 	// never a bearer: the console trades it once, within a minute, for the stored token it
 	// stands for.
 	ClassExchange CredentialClass = "exchange"
+	// ClassStdio is the caller of `magus mcp`: the process an agent host launched with pipes
+	// on its stdin and stdout. It presents no token and has no prefix, so no verifier can
+	// return it. The host started the process as the local user, the trust the CLI itself
+	// runs on.
+	ClassStdio CredentialClass = "stdio"
 )
 
-// Credential is a bearer the daemon verified: what it is, which one, what its owner called
-// it, and what it may do. The Grant is copied at verification, so a record stays
+// CredentialStdio is what a `magus mcp` tool call is admitted as: the MCP surface and nothing
+// past it, the grant a connector token holds. It has no ID because it has no secret, and one
+// process serves one caller.
+var CredentialStdio = Credential{Class: ClassStdio, Grant: GrantConnector}
+
+// Credential is what a request was admitted as, a bearer the daemon verified or
+// [CredentialStdio]: what it is, which one, what its owner called it, and what it may do. The Grant is copied at verification, so a record stays
 // self-contained after the token is revoked. It never holds a secret or a full hash.
 type Credential struct {
 	Class CredentialClass `json:"class,omitempty" yaml:"class,omitempty"`
@@ -213,6 +224,8 @@ func (c Credential) Phrase() string {
 		return strings.TrimSpace("share link " + c.ID)
 	case c.Class == ClassExchange:
 		return strings.TrimSpace("link code " + c.ID)
+	case c.Class == ClassStdio:
+		return "stdio"
 	case c.Name != "" && c.ID != "":
 		return "token " + c.Name + " (" + c.ID + ")"
 	case c.Name != "":

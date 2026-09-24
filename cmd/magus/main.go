@@ -375,6 +375,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// own throwaway proc server, then shut THAT down instead of the real daemon: a silent
 		// no-op stop. The rotate-* job workers that need a workspace load one themselves.
 		return dispatchProfile{needsConfig: true}
+	case "mcp":
+		// Never forwarded: this process's stdin and stdout ARE the protocol, and a daemon
+		// that adopted the call would serve its own. The preload opens the workspace the
+		// host launched it in and hosts the proc server the tools' runs share.
+		return dispatchProfile{needsConfig: true, needsWorkspace: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
@@ -956,7 +961,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "server":
 		return serverCmd(ctx, root, subArgs)
 	case "mcp":
-		return mcpCmd(ctx, subArgs)
+		return mcpCmd(ctx, root, subArgs)
 	case "completion":
 		return completion(subArgs)
 	case "man":
