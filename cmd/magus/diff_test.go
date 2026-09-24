@@ -1516,21 +1516,18 @@ func TestLocalAdvisorsMatchAdviseBuzz(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join(dir, "advise.buzz"))
 	require.NoError(t, err)
 	readOnly := adviseScripts(t, string(src), "reading")
-	writers := adviseScripts(t, string(src), "writing")
-	if len(readOnly) == 0 || len(writers) == 0 {
-		t.Fatalf("the scan found %d read-only advisors and %d writers: it is measuring "+
-			"nothing, and every comparison below would pass on an empty file",
-			len(readOnly), len(writers))
+	if len(readOnly) == 0 {
+		t.Fatalf("the scan found no advisors: it is measuring nothing, and every " +
+			"comparison below would pass on an empty file")
 	}
 
-	// The lists are hand-kept, so the thing that makes an advisor a writer is checked
-	// against its source: a script that passes "push" to git belongs in writing, where it
-	// runs last and never reaches `magus diff`.
+	// The action runs pull request code with a read-only token, so an advisor that passes
+	// "push" to git has no place in it at all, and localAdvisors would run it on a laptop.
 	for _, file := range readOnly {
 		body, err := os.ReadFile(filepath.Join(dir, file))
 		require.NoError(t, err)
 		if strings.Contains(string(body), `"push"`) {
-			t.Errorf("%s pushes, so it belongs in advise.buzz's writing list, not reading", file)
+			t.Errorf("%s pushes; the advice action only reads, so it does not belong in advise.buzz", file)
 		}
 	}
 
@@ -1556,15 +1553,14 @@ func TestLocalAdvisorsMatchAdviseBuzz(t *testing.T) {
 			mismatched = true
 			t.Errorf("advise.buzz runs read-only advisor %q and `magus diff` does not. Add it "+
 				"to localAdvisors, or name it in adviceLocalExclusions with the reason it has "+
-				"no local meaning. If it WRITES it belongs in neither: move it to advise.buzz's "+
-				"writing list.", file)
+				"no local meaning.", file)
 		}
 	}
 	for _, file := range localAdvisors {
 		if !slices.Contains(want, file) {
 			mismatched = true
 			t.Errorf("localAdvisors runs %q, which advise.buzz does not run as a read-only "+
-				"advisor: it was renamed, removed, or has become a writer.", file)
+				"advisor: it was renamed or removed.", file)
 		}
 	}
 	if !mismatched {

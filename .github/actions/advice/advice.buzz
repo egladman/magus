@@ -71,11 +71,6 @@ export object PullRequest {
     // merge commit, which already contains the base, so comparing that against the base
     // would find nothing.
     headSha: str = "",
-    // The head BRANCH, which is what a fixer pushes to.
-    headRef: str = "",
-    // owner/name of the repository holding headRef. Differs from repo on a fork, which the
-    // job's token cannot push to.
-    headRepo: str = "",
     author: str = "",
 }
 
@@ -94,16 +89,11 @@ export fun eventPullRequest(payload: str, repo: str) > PullRequest !> any {
         number = "{number!}",
         base = pr.q(["base", "ref"]).stringValue(),
         headSha = pr.q(["head", "sha"]).stringValue(),
-        headRef = pr.q(["head", "ref"]).stringValue(),
-        // null when the fork was deleted; "" then reads as not a fork, and the fixers'
-        // branch check still refuses to push.
-        headRepo = pr.q(["head", "repo", "full_name"]).stringValue(),
         author = pr.q(["user", "login"]).stringValue(),
     };
 }
 
-// localPullRequest is the stand-in a local run advises on. headRef stays empty, so no
-// fixer finds a branch to push to.
+// localPullRequest is the stand-in a local run advises on.
 export fun localPullRequest(repo: str, base: str) > PullRequest {
     return PullRequest{repo = repo, number = local_pr, base = base, headSha = local_head};
 }
@@ -986,9 +976,7 @@ test "local mode supplies the pull-request facts a working tree has not got" {
 
 test "local mode invents nothing beyond those three" {
     final pr = localPullRequest("", base: "main");
-    assert\equal(pr.headRef, want: "", message: "no branch, so no fixer has anywhere to push");
-    assert\equal(pr.headRepo, want: "", message: "no head repository either");
-    assert\equal(pr.author, want: "", message: "and nobody to welcome");
+    assert\equal(pr.author, want: "", message: "nobody to welcome");
 }
 
 test "eventPullRequest reads a pull_request event" {
@@ -1003,28 +991,7 @@ test "eventPullRequest reads a pull_request event" {
     assert\equal(pr.number, want: "42", message: "the number, as text");
     assert\equal(pr.base, want: "main", message: "the base branch");
     assert\equal(pr.headSha, want: "abc123", message: "the head commit, not the merge commit");
-    assert\equal(pr.headRef, want: "topic", message: "the head branch");
-    assert\equal(pr.headRepo, want: "o/r", message: "the head repository");
     assert\equal(pr.author, want: "someone", message: "who opened it");
-}
-
-test "eventPullRequest names a fork's head repository" {
-    final payload = serialize\jsonEncode({"pull_request": {
-        "number": 7,
-        "base": {"ref": "main"},
-        "head": {"sha": "def456", "ref": "patch-1", "repo": {"full_name": "fork/r"}},
-    }});
-    final pr = eventPullRequest(payload, repo: "o/r");
-    std\assert(pr.headRepo != pr.repo, message: "a fork reads as one, so no fixer pushes to it");
-    assert\equal(pr.headRepo, want: "fork/r", message: "and says whose it is");
-}
-
-test "eventPullRequest tolerates a fork that was deleted" {
-    final payload = serialize\jsonEncode({"pull_request": {
-        "number": 7, "base": {"ref": "main"}, "head": {"sha": "def456", "ref": "x", "repo": null},
-    }});
-    assert\equal(eventPullRequest(payload, repo: "o/r").headRepo, want: "",
-        message: "GitHub sends null for a deleted head repository");
 }
 
 test "an event with no pull request advises on nothing" {

@@ -153,50 +153,6 @@ inputs:
     description: The `magus queue` provider, a built-in name or a .buzz file.
     required: false
     default: 'github'
-  fix-generated-drift:
-    description: >
-      Regenerate drifted generated files and PUSH the result to the pull request branch.
-
-      OFF by default, because it is the one advisor that writes. Turning it on here is
-      only half the consent: the pull request must ALSO carry the label named by
-      `fix-label`, so the repository allows the capability and a human asks for it per
-      change. Needs `contents: write` on the job, and cannot work on a fork PR (the
-      token has no write access to the fork) - it says so in the comment rather than
-      failing.
-    required: false
-    default: 'false'
-  offer-fix-label:
-    description: >
-      Name `fix-label` in the merge-conflict comment, so the reader can hand the work to
-      magus instead of doing it locally.
-
-      Its own input rather than a consequence of `fix-merge-conflict`, because the two
-      run in different jobs: the comment is written by a read-only advisor, and the fixer
-      needs `contents: write` and the head branch checked out, so a repository that
-      honours the label does so from a job this one cannot see. Set it where such a job
-      exists - an offer nobody can accept is worse than no offer.
-    required: false
-    default: 'false'
-  fix-merge-conflict:
-    description: >
-      Merge the base branch in and settle the resulting conflicts by regenerating, then
-      PUSH the merge to the pull request branch. Applies only when every conflict is in a
-      file the workspace declares as output; anything else is left for a human and named
-      in the comment.
-
-      OFF by default, for the same reason as fix-generated-drift: it writes. Same two-party
-      consent - this input plus the `fix-label` label. Needs `contents: write`, and the
-      job must check out the PR HEAD BRANCH by name, not the default ephemeral merge ref;
-      the advisor refuses rather than pushing the wrong commit.
-    required: false
-    default: 'false'
-  fix-label:
-    description: >
-      The label REQUESTING a fix. One label for both fixers: "magus, settle what you can
-      here", not "run this script". STANDING - it is never retired, so the same PR is
-      settled again the next time main breaks it. Remove it to stop.
-    required: false
-    default: 'magus:regenerate:requested'
   baseline:
     description: >
       A `magus graph export --symbols -o json` of the revision this pull request started
@@ -219,8 +175,8 @@ inputs:
 # naming that fix when it is missing. No expression spells it out here: a composite
 # action has no secrets context, and GitHub refuses to load one that names it.
 #
-# It reads and posts the comment, and pushes when a fixer is on, so it needs
-# `pull-requests: write`, which GitHub withholds on a pull request from a fork.
+# It reads the tree and posts the comment, so it needs `pull-requests: write` and never
+# `contents: write`. GitHub withholds the former on a pull request from a fork.
 runs:
   using: composite
   steps:

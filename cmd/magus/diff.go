@@ -2481,16 +2481,11 @@ var adviceDirRel = filepath.Join(".github", "actions", "advice")
 // script (advise.buzz) runs them. advise.buzz is the source of truth for that set; this
 // list restates it.
 //
-// Restating it rather than reading the directory is deliberate, and the deciding reason
-// is safety. Three of the scripts in that directory PUSH to a branch, and nothing about a
-// filename separates them from the read-only ones: `fix-generated-drift.buzz` and
-// `fix-merge-conflict.buzz` share a prefix that `settle-fix-labels.buzz` does not. A
-// sweep of *.buzz would therefore enroll a writer into a local command the moment someone
-// added one, and the failure mode of getting that wrong is a `magus diff` that pushes.
-//
-// Two lesser reasons: the directory also holds `advice.buzz` and `advise.buzz`, the shared
-// library and the entry script, neither an advisor. And filename order is not the order
-// advise.buzz chose.
+// Restating it rather than reading the directory is deliberate. A sweep of *.buzz would
+// enroll any script someone drops there, a writer included, into a local command, and a
+// `magus diff` that pushes is the failure that costs most. The directory also holds
+// `advice.buzz` and `advise.buzz`, the shared library and the entry script, neither an
+// advisor, and filename order is not the order advise.buzz chose.
 //
 // first-contribution.buzz and merge-queue.buzz are the read-only advisors deliberately left
 // out: each asks the forge about the pull request through its own `gh` call, and neither
