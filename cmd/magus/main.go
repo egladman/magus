@@ -1169,8 +1169,12 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	// for as long as that daemon lived. Memory comes from what this process may commit,
 	// so a daemon inside a memory-limited container budgets the container rather than
 	// the machine it sits on; slots come from the cores, which is the same ceiling
-	// ClampConcurrency holds every individual run to.
-	machineBudget := cache.NewMachineBudget(mem.BudgetMB(mem.UsableBytes(ctx)), cache.MachineCeiling())
+	// ClampConcurrency holds every individual run to. The profile that resolved n above
+	// also decides memory's reservation (a quarter, or aggressive's small fixed floor),
+	// so both axes of "claim the whole machine" agree.
+	machineBudget := cache.NewMachineBudget(
+		mem.BudgetMB(mem.UsableBytes(ctx), cfg.ConcurrencyProfile),
+		cache.MachineCeiling())
 
 	ttl := cfg.Daemon.IdleTTL
 	if ttl <= 0 {

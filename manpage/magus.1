@@ -27,7 +27,7 @@ Config file path. Default: search for magus.yaml in CWD, workspace root, and $XD
 Output format: text (default), json, yaml, name, jsonl, or template[=<go\-template>]. Honored by subcommands that emit structured data. A template body renders a Go text/template over the same value \-o json emits (field names are the json keys); a bare \-o template with no body lists that output's fields instead of rendering \- the json keys usable in \-o json and \-o template, with each field's type and doc.
 .TP
 \fB\-\-concurrency\fR \fIN\fR
-Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or min(NumCPU,8)).
+Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or concurrency_profile, balanced (min(NumCPU,8)) by default).
 .TP
 \fB\-v\fR
 Increase log verbosity. Repeat for more detail (\-v, \-vv, \-vvv).
@@ -173,7 +173,10 @@ Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.
 Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: \fBlog.level\fR.
 .TP
 \fBMAGUS_CONCURRENCY\fR
-Maximum number of concurrently running per\-project build steps (default: min(NumCPU,8)). Equivalent magus.yaml key: \fBconcurrency\fR.
+Maximum number of concurrently running per\-project build steps; overrides concurrency_profile when positive (default: concurrency_profile decides). Equivalent magus.yaml key: \fBconcurrency\fR.
+.TP
+\fBMAGUS_CONCURRENCY_PROFILE\fR
+Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly (default: balanced). Equivalent magus.yaml key: \fBconcurrency_profile\fR.
 .TP
 \fBMAGUS_HISTORY_PATH\fR
 Path to the runtime\-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: \fBhistory_path\fR.

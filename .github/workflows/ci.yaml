@@ -179,7 +179,7 @@ jobs:
       # without it generate compares them against HEAD and fails on drift, which is the
       # gate. See docs/concepts/targets.md.
       - name: Fail fast on uncommitted generated output
-        run: magus run generate --no-default-charms
+        run: magus run generate --no-default-charms --concurrency-profile aggressive
 
       # Determinism, in this job rather than its own: the saving is a runner and a from-source
       # magus build, not a generate pass.
@@ -197,7 +197,7 @@ jobs:
       # destabilising a generator no diff touched. Replay under rw answers byte-stability
       # only; drift against HEAD is decided here and in the shards, nowhere else.
       - name: Replay every gated generator and compare declared outputs
-        run: magus run generate:rw --race=replay
+        run: magus run generate:rw --race=replay --concurrency-profile aggressive
 
       # last-passed on a push, the configured default on a pull request.
       #
@@ -523,8 +523,10 @@ jobs:
           # inline annotation format, so a lint or test failure lands on the diff instead
           # of scrolling past in a log magus then truncates. It survives the ci gate (only
           # rw is stripped), and --no-default-charms drops the workspace default without
-          # touching an explicitly named one.
-          command:  run ci:gha --no-default-charms ${{ matrix.projects }}
+          # touching an explicitly named one. --concurrency-profile aggressive is the
+          # explicit ask for the whole runner: magus reads no environment variable to
+          # guess it is in CI, so every invocation that wants the machine says so itself.
+          command:  run ci:gha --no-default-charms --concurrency-profile aggressive ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 
