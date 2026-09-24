@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
+  targets run first across every selected project; a failure stops everything before the
+  invoked target starts, exits 3 (MGS3020) and names the target, projects and fix. A green
+  pass is not repeated and moves no cache key. A name outside the invoked target's
+  `ctx.needs` closure is refused, exit 2 (MGS3021). With `affected --plan` a red pass
+  prints no plan, which is how this repo's CI now fails fast on drift.
+
 - **A merge's kept generated files regenerate after it finishes.** The merge driver records
   the owed target in the git dir, and `post-merge`, `post-rewrite` and `post-commit` submit
   a `regenerate-owed` job that runs each once, deepest project first, and stages the
@@ -208,6 +215,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **The `preflight` target convention.** The starter magusfile and the docs no longer
+  declare one, and the `typescript` spell's no-op `preflight` op is gone; `--preflight`
+  replaces the idea. A target you named `preflight` keeps working.
 - **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
   Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
   descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`

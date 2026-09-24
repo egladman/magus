@@ -76,8 +76,8 @@ human-authored notes anchor a file or symbol you touched, and what the authors
 asked magus while writing it. It is the same question magus affected --impact
 answers, asked of a changeset instead of a target. It is context and never a
 verdict - nothing is gated on it and the exit code is unchanged; neither the
-flag nor the section it prints says "preflight", because in this workspace's
-magusfiles a preflight target IS a gate and this must never read as one. Each
+flag nor the section it prints says "preflight", because run --preflight IS a
+gate and this must never read as one. Each
 section says when it could not measure something, so an empty one reads as
 "nobody looked" rather than as a clean bill of health.
 

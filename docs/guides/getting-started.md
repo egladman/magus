@@ -68,8 +68,7 @@ import "proc";
 // spell's tool-native op from its body, or run a command with proc\exec
 // (build below). Leave a stage as a no-op until you wire it.
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
-export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); }
+export fun generate(ctx: magus\Context, args: [str]) > void {}
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
 export fun build(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(format); proc\exec("echo", ["Hello from magus"]); }
@@ -79,7 +78,7 @@ export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); }
 // not hardcode its steps - compose them here with ctx.needs. magus runs
 // ci read-only. Each stage declares its own prerequisites so the DAG is expressed
 // as edges: ci fans out lint/build/test in parallel; they each wait for format,
-// which waits for generate, which waits for preflight. Shared deps run once.
+// which waits for generate. Shared deps run once.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, build, test);
 }

@@ -1396,8 +1396,8 @@ func declaredTargetNames(path string) []string {
 // omitted return arrows, non-optional fiber yields) and plain syntax errors.
 //
 // Every magusfile is parsed before returning, so one run reports everything wrong
-// rather than stopping at the first failure, what makes it useful in the CI
-// preflight target: one `magus doctor` surfaces all magusfile problems at once.
+// rather than stopping at the first failure, what makes it useful as a CI gate:
+// one `magus doctor` surfaces all magusfile problems at once.
 func (r *runner) checkMagusfileSyntax(projects []*types.Project) types.DoctorCheck {
 	const name = "magusfile-syntax"
 	var problems []string

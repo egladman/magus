@@ -88,15 +88,18 @@ Two consequences:
 
 `ci` is the only target magus requires. Every other name below is a CONVENTION - a shared vocabulary for phases that recur across toolchains, not a set you must declare. A project that defines only `ci` is complete and correct. The type is `project.Target` (a `string` alias).
 
-| Name        | Meaning                                          |
-| ----------- | ------------------------------------------------ |
-| `preflight` | pre-run checks (workspace health, missing tools) |
-| `build`     | produce artifacts that are NOT committed         |
-| `test`      | run the test suite                               |
-| `lint`      | static analysis, type-check                      |
-| `format`    | format source files                              |
-| `clean`     | remove local build artifacts                     |
-| `generate`  | produce files that ARE committed                 |
+| Name       | Meaning                                  |
+| ---------- | ---------------------------------------- |
+| `build`    | produce artifacts that are NOT committed |
+| `test`     | run the test suite                       |
+| `lint`     | static analysis, type-check              |
+| `format`   | format source files                      |
+| `clean`    | remove local build artifacts             |
+| `generate` | produce files that ARE committed         |
+
+There is no conventional "run this first" target. To check something cheap across
+every project before the expensive part starts, name a target `ci` already composes
+with [`--preflight`](#failing-fast-with---preflight).
 
 ### `generate` or `build`?
 
@@ -167,11 +170,11 @@ that already has a home:
 3. **Pipeline membership** - `ci` must need to order it against the other
    phases. A step nobody's `ci` ever sequences against `build`/`test`/`lint`
    has weak claim on a name of its own.
-4. **Tooling weight** - some names carry engine semantics beyond "a bucket of
-   ops": `preflight` and `generate` get drift-gating (see
-   [operations.md](operations.md)) when you declare them. That is a reason to
-   reuse an existing name rather than invent a near-synonym, since the behavior
-   attaches to the name.
+4. **Tooling weight** - `ci` is the one name the engine treats specially. Every
+   other behavior attaches to a declaration, not a name: any target that declares
+   output is drift-gated when it runs without `rw` (see
+   [operations.md](operations.md)), whatever it is called. Reuse an existing name
+   for what readers already expect of it, not for behavior.
 
 The recommended vocabulary is deliberately small, and `ci` is the only member the
 engine requires. `deploy`,
@@ -179,6 +182,48 @@ engine requires. `deploy`,
 but they are workspace-specific enough (which environment, which registry,
 which port) that forcing one shape on them would be more prescriptive than
 useful.
+
+## Failing fast with --preflight
+
+A CI fan-out pays for every shard before the first one can fail. When the likeliest
+failure is also the cheapest check, such as generated output nobody regenerated, it
+should run first, everywhere, and stop the rest. `--preflight` does that without a new
+target:
+
+```bash
+magus affected ci --preflight generate
+magus run ci --preflight generate,lint
+```
+
+The named targets run as a separate pass across every selected project before the
+invoked target starts anywhere. Then:
+
+- **A failure stops everything.** The first failing step stops admission and cancels
+  the preflight steps still in flight; nothing of `ci` starts. The command exits 3
+  ([MGS3020](../reference/codes/sandbox/MGS3020.md)), and the error's first line names
+  the target, the failing projects and the fix. For drift that is the rw form:
+  `` preflight generate failed in docs; fix with `magus run generate:rw docs` ``.
+- **A green pass is not repeated.** The main run treats the preflight targets as done,
+  so a `ctx.needs(generate)` inside `lint` returns at once. Every cache key is the one a
+  run without the flag computes, so the two share entries.
+
+A preflight must be a target the invoked target already runs: one its `ctx.needs`
+chain reaches, directly or transitively, as `magus describe target ci` shows. Anything
+else would add work rather than reorder it, so it is refused before anything runs
+([MGS3021](../reference/codes/sandbox/MGS3021.md), exit 2). A project whose `ci` does
+not reach the name runs no preflight for it.
+
+In a sharded workflow, gate the plan itself. With `--plan`, the pass runs across every
+planned project before the plan prints, and a red pass prints nothing, so no shard is
+ever started from it:
+
+```bash
+magus affected ci --plan --preflight generate   # prints the shard plan only when generate is green
+```
+
+The pass covers the planned projects only. A generator whose output depends on
+projects outside the affected set is not checked when only those change. `--dry-run`
+lists the preflight steps ahead of the rest of a run.
 
 ## Name normalization (casing & delimiters)
 
@@ -420,7 +465,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.                             |
 | **Path**   | Project path relative to the workspace root. Empty or `/` means all projects.                                                    |
-| **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `clean`, `generate`.              |
+| **Name**   | The target name: the operation to run. Any exported target; the conventional ones are listed under The target name.              |
 | **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                                         |
 | **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.                           |
 | **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).                         |

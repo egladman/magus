@@ -22,9 +22,13 @@ aliases: [ci]
 ```buzz
 export fun ci(ctx: magus\Context, args: [str]) > void {
     // declare the edges you want; independent steps run in parallel
-    ctx.needs(preflight, generate, format, lint, build, test);
+    ctx.needs(generate, format, lint, build, test);
 }
 ```
+
+To run a cheap step everywhere before the rest, name it on the command line rather
+than in a target: `magus affected ci --preflight generate`. See
+[Failing fast with --preflight](../targets.md#failing-fast-with---preflight).
 
 ## Recommendations
 

@@ -69,12 +69,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `preflight`                        |
-| libs/coldread                   |       8 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
-| libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
+| libs/coldread                   |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
+| libs/diagnostics                |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
-| libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
-| libs/pricing                    |       8 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
-| libs/testlayout                 |       8 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
+| libs/gopherbuzz                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| libs/pricing                    |       7 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
+| libs/testlayout                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `preflight`, `test`                              |
 | proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
 

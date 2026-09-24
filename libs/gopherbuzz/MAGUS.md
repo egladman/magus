@@ -69,12 +69,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `preflight`                        |
-| libs/coldread                   |       8 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
-| libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
+| libs/coldread                   |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
+| libs/diagnostics                |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
-| libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
-| libs/pricing                    |       8 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
-| libs/testlayout                 |       8 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
+| libs/gopherbuzz                 |       9 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| libs/pricing                    |       7 | `magus query project=libs/pricing`                    | `format`, `build`, `lint`                                |
+| libs/testlayout                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `preflight`, `test`                              |
 | proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
 
@@ -197,7 +197,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                              |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `preflight`      |                                                                                                                                                              |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                            |
 
 ## Project: libs/diagnostics
@@ -210,7 +209,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                            |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                            |
-| `preflight`      |                                                                                                                                                            |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                          |
 
 ## Project: libs/diagram
@@ -232,7 +230,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-build`     | Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.                                                                                                                                                       |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                                                                                             |
 | `conformance`    | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).                                                                                                    |
-| `preflight`      |                                                                                                                                                                                                                                                                             |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                                                                                                                                           |
 
 ## Project: libs/pricing
@@ -245,7 +242,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                                                                              |
 | `test`           | No coverage profile, unlike the sibling libraries: those are separate modules whose statements the root suite never enters.                                                                                  |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                                                                              |
-| `preflight`      |                                                                                                                                                                                                              |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                                                                            |
 
 ## Project: libs/testlayout
@@ -258,7 +254,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build`          |                                                                                                                                                              |
 | `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured. |
 | `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                              |
-| `preflight`      |                                                                                                                                                              |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                            |
 
 ## Project: libs/textsearch

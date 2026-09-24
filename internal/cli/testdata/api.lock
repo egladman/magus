@@ -100,6 +100,7 @@ flag affected/no-redundancy-check
 flag affected/null
 flag affected/open
 flag affected/plan
+flag affected/preflight
 flag affected/race
 flag affected/stdin
 flag affected/step
@@ -175,6 +176,7 @@ flag run/no-default-charms
 flag run/no-redundancy-check
 flag run/no-volatility-retry
 flag run/open
+flag run/preflight
 flag run/race
 flag run/shard
 flag run/skip
