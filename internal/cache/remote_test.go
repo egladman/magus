@@ -10,11 +10,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,7 +78,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 		root = t.TempDir()
 		c, err = Open(t.Context(),
 			filepath.Join(t.TempDir(), ".magus"),
-			WithMutable(true),
+			WithLocalWrite(true),
 			WithRemoteBackend(remote),
 			WithInsecureRemote(),
 		)
@@ -136,7 +139,7 @@ func TestRemoteImportRefusesCrossPlatform(t *testing.T) {
 		root = t.TempDir()
 		c, err = Open(t.Context(),
 			filepath.Join(t.TempDir(), ".magus"),
-			WithMutable(true),
+			WithLocalWrite(true),
 			WithRemoteBackend(remote),
 			WithInsecureRemote(),
 			withPlatform(platform),
@@ -191,7 +194,7 @@ func (b *staticBackend) Active(context.Context) bool { return true }
 
 func (b *staticBackend) GetArtifact(_ context.Context, project, hash string) (io.ReadCloser, error) {
 	if project != b.project || hash != b.hash {
-		return nil, nil // miss
+		return nil, ErrRemoteMiss
 	}
 	return io.NopCloser(bytes.NewReader(b.entry)), nil
 }
@@ -199,6 +202,10 @@ func (b *staticBackend) GetArtifact(_ context.Context, project, hash string) (io
 func (b *staticBackend) PutArtifact(_ context.Context, _, _ string, r io.Reader) error {
 	_, _ = io.Copy(io.Discard, r) // drain so the export pipe closes cleanly
 	return nil
+}
+
+func (b *staticBackend) HasArtifact(context.Context, string, string) (bool, error) {
+	return false, errors.ErrUnsupported
 }
 
 // flattenProject mirrors the cache's project→directory mapping for tar paths.
@@ -269,7 +276,7 @@ func runAgainst(t *testing.T, backend RemoteBackend) (hit bool, output string, r
 	t.Helper()
 	root := t.TempDir()
 	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
-		WithMutable(true), WithRemoteBackend(backend),
+		WithLocalWrite(true), WithRemoteBackend(backend),
 		WithInsecureRemote()) // integrity-only path: no trust set
 	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")
@@ -333,7 +340,7 @@ func genKeypair(t *testing.T) (pub []byte, seed []byte) {
 func openSigned(t *testing.T, remote RemoteBackend, seed []byte, trusted [][]byte) (root string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
-	opts := []Option{WithMutable(true), WithRemoteBackend(remote)}
+	opts := []Option{WithLocalWrite(true), WithRemoteBackend(remote)}
 	if seed != nil {
 		opts = append(opts, WithSigningKey(seed))
 	}
@@ -433,10 +440,10 @@ func TestRemoteRequiresTrustSetOrOptOut(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
 	require.NoError(t, err, "NewFSRemoteBackend")
 	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
-		WithMutable(true), WithRemoteBackend(remote))
+		WithLocalWrite(true), WithRemoteBackend(remote))
 	assert.Error(t, err, "Open accepted a remote backend with no trust set and no opt-out")
 	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
-		WithMutable(true), WithRemoteBackend(remote),
+		WithLocalWrite(true), WithRemoteBackend(remote),
 		WithInsecureRemote())
 	assert.NoError(t, err, "Open rejected remote + explicit opt-out")
 }
@@ -514,7 +521,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 
 	root := t.TempDir()
 	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
-		WithMutable(true),
+		WithLocalWrite(true),
 		WithRemoteBackend(&staticBackend{project: project, hash: hash, entry: entry}),
 		WithInsecureRemote(),
 		WithMaxImportBytes(2000)) // fits manifest + one blob, not both
@@ -538,7 +545,14 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 // them, mirroring how Magus.Run installs them for a real run.
 func buildWithStats(t *testing.T, root string, c *Cache) (Result, bool, *remoteStats) {
 	t.Helper()
-	ctx := WithRemoteStats(t.Context())
+	ctx := ContextWithRemoteStats(t.Context())
+	r, ran := buildIn(t, ctx, root, c)
+	return r, ran, remoteStatsFrom(ctx)
+}
+
+// buildIn runs the canonical step under ctx, writing "built" on a miss.
+func buildIn(t *testing.T, ctx context.Context, root string, c *Cache) (Result, bool) {
+	t.Helper()
 	writeMain(t, root, "package main")
 	touchOut(t, root)
 	step := makeStep(root)
@@ -550,7 +564,7 @@ func buildWithStats(t *testing.T, root string, c *Cache) (Result, bool, *remoteS
 		return os.WriteFile(out, []byte("built"), 0o644)
 	})
 	require.NoError(t, err, "run")
-	return r, ran, remoteStatsFrom(ctx)
+	return r, ran
 }
 
 // The counters exist to separate "the backend returned success" from "bytes moved",
@@ -563,10 +577,10 @@ func TestRemoteCountersRecordRealTransfer(t *testing.T) {
 
 	root1, producer := openSigned(t, remote, seed, trusted)
 	_, ran, pStats := buildWithStats(t, root1, producer)
-	require.True(t, ran, "producer: expected a build to publish")
+	require.True(t, ran, "producer: expected a build to store")
 
-	assert.Equal(t, int64(1), pStats.puts.Load())
-	assert.Positive(t, pStats.up.Load(), "published bytes must be counted, not assumed")
+	assert.Equal(t, int64(1), pStats.stores.Load())
+	assert.Positive(t, pStats.up.Load(), "stored bytes must be counted, not assumed")
 	assert.Zero(t, pStats.fails.Load())
 
 	root2, consumer := openSigned(t, remote, nil, trusted)
@@ -579,43 +593,119 @@ func TestRemoteCountersRecordRealTransfer(t *testing.T) {
 	assert.Zero(t, cStats.fails.Load())
 }
 
-// A trust set with no signing key is the half-finished CI setup: every run reports
-// success and the store stays empty. Asserted against the STORE, not just the
-// counters, so the test still fails if the counters are never wired.
-func TestRemotePublishesNothingWithoutASigningKey(t *testing.T) {
+// A trust set with no signing key is the half-finished CI setup. The run header says
+// why the remote tier is read-only, and the store stays empty. Asserted against the
+// STORE, not just the counters, so the test still fails if the counters are never wired.
+func TestRemoteStoresNothingWithoutASigningKey(t *testing.T) {
 	store := t.TempDir()
 	remote, err := NewFSRemoteBackend(store)
 	require.NoError(t, err, "NewFSRemoteBackend")
 	pub, _ := genKeypair(t)
 
 	root, c := openSigned(t, remote, nil, [][]byte{pub})
+	_, mode := c.Description()
+	assert.Equal(t, "read+write local, read-only remote; no signing key", mode)
 	_, ran, stats := buildWithStats(t, root, c)
 	require.True(t, ran, "expected a local build")
 
 	entries, err := os.ReadDir(store)
 	require.NoError(t, err, "read remote store")
 	assert.Empty(t, entries, "a machine with no signing key must leave the store empty")
-	assert.Zero(t, stats.puts.Load(), "and must not claim to have published")
-	assert.Zero(t, stats.fails.Load(), "declining to publish is not a failure")
+	assert.Zero(t, stats.stores.Load(), "and must not claim to have stored anything")
+	assert.Zero(t, stats.fails.Load(), "declining to store is not a failure")
 }
 
-// A remote that errors on GET must not end the run on "failures=0": that reads as a
-// clean local-only run, which is the exact confusion the summary exists to remove.
-func TestRemoteGetFailureIsCounted(t *testing.T) {
-	root, c := openSigned(t, errRemote{}, nil, nil)
+// The pull-request posture: the local tier keeps the entry for the next push, and the
+// remote tier stays empty even though this machine could sign.
+func TestRemoteTierWriteOffStillWritesTheLocalTier(t *testing.T) {
+	store := t.TempDir()
+	remote, err := NewFSRemoteBackend(store)
+	require.NoError(t, err, "NewFSRemoteBackend")
+	pub, seed := genKeypair(t)
+
+	root := t.TempDir()
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
+		WithRemoteBackend(remote), WithSigningKey(seed), WithTrustedKeys([][]byte{pub}),
+		WithRemoteWrite(false))
+	require.NoError(t, err, "cache.Open")
+	_, mode := c.Description()
+	assert.Equal(t, "read+write local, read-only remote; remote writes are off", mode)
+
 	_, ran, stats := buildWithStats(t, root, c)
+	require.True(t, ran, "first run builds")
+	entries, err := os.ReadDir(store)
+	require.NoError(t, err, "read remote store")
+	assert.Empty(t, entries, "the remote tier stays empty")
+	assert.Zero(t, stats.stores.Load())
 
-	require.True(t, ran, "expected a local build after the remote errored")
-	// Two: the fetch before the build and the push after it both fail against an
-	// unreachable store. The regression this guards is either of them landing on the
-	// miss counter, which would end the run on failures=0 at Info.
-	assert.Equal(t, int64(2), stats.fails.Load(), "transport errors are failures, not misses")
-	assert.Zero(t, stats.hits.Load())
-	assert.Zero(t, stats.misses.Load(), "an error is not the store saying it has nothing")
+	r, ran, _ := buildWithStats(t, root, c)
+	assert.True(t, r.Hit, "the local tier answers the next run")
+	assert.False(t, ran)
 }
 
-// errRemote is active and fails every fetch, standing in for an unreachable store.
-type errRemote struct{}
+// A remote-tier lookup that finds nothing is counted and named, so a run that asked the
+// remote tier reads differently from one that never did. The debug digests go through
+// the same masking as stored key inputs.
+func TestRemoteTierMissIsCountedAndNamed(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err, "NewFSRemoteBackend")
+	pub, _ := genKeypair(t)
+	root, c := openSigned(t, remote, nil, [][]byte{pub})
+	var buf bytes.Buffer
+	c.log = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	r, ran, stats := buildWithStats(t, root, c)
+	require.True(t, ran)
+	assert.Equal(t, int64(1), stats.misses.Load())
+	assert.Zero(t, stats.fails.Load())
+
+	miss := logRecord(t, &buf, "cache.remote.miss")
+	assert.Equal(t, "test/pkg", miss["project"])
+	assert.Equal(t, r.Hash, miss["hash"])
+	assert.Equal(t, PortableRef(r.Hash), miss["ref"], "the ref the producing run printed for this key")
+
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	var lines []string
+	_, err = c.hashStepInputs(t.Context(), &step, &lines)
+	require.NoError(t, err)
+	for _, d := range ClassDigests(MaskKeyInputs(t.Context(), lines)) {
+		assert.Equal(t, fmt.Sprintf("%s (%d)", d.Digest, d.Count), miss["inputs."+d.Class], "class %s", d.Class)
+	}
+}
+
+// Digests describe the key they were computed for: a recomputed key that differs means
+// the inputs moved, and its lines would explain a different miss.
+func TestRemoteTierMissSkipsDigestsForAMovedKey(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	var buf bytes.Buffer
+	c.log = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+	c.logRemoteMiss(t.Context(), &step, strings.Repeat("0", 64))
+
+	miss := logRecord(t, &buf, "cache.remote.miss")
+	for k := range miss {
+		assert.False(t, strings.HasPrefix(k, "inputs."), "digest %s for a key the inputs no longer hash to", k)
+	}
+}
+
+// logRecord returns the last JSON log record named msg.
+func logRecord(t *testing.T, buf *bytes.Buffer, msg string) map[string]any {
+	t.Helper()
+	var rec map[string]any
+	for line := range strings.SplitSeq(buf.String(), "\n") {
+		if strings.Contains(line, `"msg":"`+msg+`"`) {
+			rec = nil
+			require.NoError(t, json.Unmarshal([]byte(line), &rec))
+		}
+	}
+	require.NotNil(t, rec, "no %s record in: %s", msg, buf.String())
+	return rec
+}
+
+// errRemote is active and fails every call, standing in for an unreachable store.
+type errRemote struct{ gets *atomic.Int64 }
 
 func (errRemote) Name() string                { return "err" }
 func (errRemote) Active(context.Context) bool { return true }
@@ -623,14 +713,21 @@ func (errRemote) PutArtifact(context.Context, string, string, io.Reader) error {
 	return errors.New("unreachable")
 }
 
-func (errRemote) GetArtifact(context.Context, string, string) (io.ReadCloser, error) {
+func (e errRemote) GetArtifact(context.Context, string, string) (io.ReadCloser, error) {
+	if e.gets != nil {
+		e.gets.Add(1)
+	}
 	return nil, errors.New("unreachable")
+}
+
+func (errRemote) HasArtifact(context.Context, string, string) (bool, error) {
+	return false, errors.New("unreachable")
 }
 
 // Called on every run, and most runs have no remote at all.
 func TestRemoteSummaryToleratesNoBackendAndNoStats(t *testing.T) {
 	c := testCacheDir(t)
-	_, ok := c.RemoteSummary(WithRemoteStats(t.Context()))
+	_, ok := c.RemoteSummary(ContextWithRemoteStats(t.Context()))
 	assert.False(t, ok, "local-only run: backend nil")
 	_, ok = c.RemoteSummary(t.Context())
 	assert.False(t, ok, "no stats on ctx: a caller outside Magus.Run")

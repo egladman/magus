@@ -71,7 +71,7 @@ returns (a Command's `{bin, args, charms}` or a Service's `{command, readiness?,
 a long-running process `magus run` blocks on). The op's kind is inferred from that
 value, so one spell mixes both. A remote cache backend
 is not an op: it is a spell that exports the backend functions
-(`enabled`/`get_artifact`/`put_artifact`/`prune`), detected by name and wired with
+(`enabled`/`get_artifact`/`put_artifact`/`has_artifact`/`prune`), detected by name and wired with
 `magus\cache.remote` (see [Remote caching](cache/remote.md)).
 
 **Doc-comment capture.** Buzz captures a handler's doc comment at compile time

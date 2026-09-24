@@ -11,13 +11,18 @@ name: CI
 #
 # ci also runs on main pushes, and that is not a publish step: the push run is what
 # populates the shared cache and the run-duration history a pull request may only read.
-# See MAGUS_CACHE_WRITE_ENABLED below.
+# See MAGUS_CACHE_REMOTE_WRITE_ENABLED below.
+#
+# workflow_dispatch is the merge queue's main run: its merges use the Actions token, whose
+# pushes start no workflow, so queue-apply.yaml dispatches this on main instead. Every
+# check below that means "a main run" is therefore `!= 'pull_request'`, not `== 'push'`.
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 # On a PR the newest push supersedes the ones before it, so cancelling is right: the only
 # verdict anyone acts on is the one for the head commit.
@@ -37,8 +42,15 @@ env:
   # PR-controlled mise.toml must not execute config hooks or plugins.
   MISE_SAFE: '1'
   GOEXPERIMENT: jsonv2
-  # PRs may read the cache but cannot publish to it.
-  MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
+  # PRs read both cache tiers and write only the local tier, which the shard job carries
+  # to the PR's next push. Declared false rather than left to the missing signing key.
+  #
+  # main leaves it unset rather than declaring true: declared true makes a remote-tier
+  # write REQUIRED, so an Actions cache hiccup would fail main. Unset, main writes the
+  # remote tier because it holds the signing key, degrades to the local tier when the
+  # remote tier fails, and backfills the remote tier from local-tier hits whose key the
+  # remote tier lacks, so an entry a failed upload missed is stored by the next main run.
+  MAGUS_CACHE_REMOTE_WRITE_ENABLED: ${{ github.event_name == 'pull_request' && 'false' || '' }}
   # The trust set is what wires the shared cache (see the `if` at magusfile.buzz's
   # cache.remote block) AND what verifies it. MAGUS_CACHE_REMOTE_INSECURE used to be
   # set here too, which was the whole configuration doing two wrong things at once:
@@ -203,7 +215,7 @@ jobs:
       - id: plan
         name: Compute shard matrix
         env:
-          MAGUS_VCS_BASE_REF: ${{ github.event_name == 'push' && 'last-passed' || '' }}
+          MAGUS_VCS_BASE_REF: ${{ github.event_name != 'pull_request' && 'last-passed' || '' }}
           # Read by the github spell's last_green_run alone. Unset, it answers null
           # and the plan fans out as it always has.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,7 +241,7 @@ jobs:
   # A push by the Actions token starts no workflow run, so a fix cannot trigger itself.
   regenerate:
     name: magus regenerate
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -252,7 +264,7 @@ jobs:
         name: Find what wants regenerating
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
           CONFLICTING: ${{ runner.temp }}/conflicting.txt
         run: |
@@ -313,6 +325,8 @@ jobs:
       - name: Regenerate the pull request
         if: github.event_name == 'pull_request' && steps.work.outputs.requested == 'true'
         uses: ./.github/actions/advice
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           fix-merge-conflict: 'true'
           fix-generated-drift: 'true'
@@ -334,10 +348,10 @@ jobs:
       # needs its own branch checked out by name. main's copy of them, taken before any branch
       # is checked out over the workspace.
       - name: Settle labelled pull requests this push put in conflict
-        if: github.event_name == 'push' && steps.work.outputs.requested == 'true'
+        if: github.event_name != 'pull_request' && steps.work.outputs.requested == 'true'
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           BUZZ_INCLUDE_PATH: ${{ runner.temp }}/advice
           CONFLICTING: ${{ runner.temp }}/conflicting.txt
@@ -365,7 +379,12 @@ jobs:
     permissions:
       contents: read
     env:
-      MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
+      MAGUS_CACHE_SIGNING_KEY: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') && secrets.MAGUS_CACHE_SIGNING_KEY || '' }}
+      # Caps the local tier, and so every saved store below, at 256 MiB: the saves share
+      # the repository's Actions cache quota with the remote tier's entries, and an
+      # unbounded one would evict them. A shard's entries uploaded 1.7 MiB at most on
+      # main (run 35882427621), so the cap binds only on something unexpected.
+      MAGUS_CACHE_SIZE_MB: '256'
     strategy:
       fail-fast: false
       max-parallel: ${{ fromJSON(needs.plan.outputs.max_parallel) }}
@@ -465,6 +484,38 @@ jobs:
             magus describe project "$p" -o 'template={{range .projects}}::notice title=affected::{{.path}}{{end}}'
           done
 
+      # The local cache tier of a pull request, restored before the run and saved after
+      # it. magus reads the local tier, then the remote tier, so this answers a rerun of
+      # what only this pull request built, without the pull request writing the remote
+      # tier. What main built needs no save here: main writes it to the remote tier, which
+      # every pull request already reads.
+      #
+      # Pull requests only, so saves never compete with main's remote-tier entries for
+      # the Actions cache quota beyond the 256 MiB cap each. A save is scoped to its pull
+      # request's ref, so no other pull request, and not main, can restore it.
+      #
+      #   key:          CI-magus-store-v1-<os>-<shard label>-<run id>-<attempt>
+      #   restore-keys: CI-magus-store-v1-<os>-<shard label>-   (this shard's newest)
+      #                 CI-magus-store-v1-<os>-                 (any shard's newest)
+      #
+      # The attempt keeps a rerun's save from colliding with the first attempt's key,
+      # which Actions refuses to overwrite.
+      #
+      # cas, manifests and logs carry a hit (docs/concepts/cache.md). mtimes stays out:
+      # it keys on file mtime, which a fresh checkout resets, so a restored memo only misses.
+      - name: Restore the local cache tier
+        if: github.event_name == 'pull_request'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/cas
+            .magus/manifests
+            .magus/logs
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-
+            ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-
+
       - name: Run CI for shard
         uses: ./.github/actions/magus
         with:
@@ -476,6 +527,19 @@ jobs:
           command:  run ci:gha --no-default-charms ${{ matrix.projects }}
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
+
+      # Saved on a red shard too: what passed before the failure is a valid hit for the
+      # rerun, the run that most needs it. Not on cancel, where the store may be half
+      # written.
+      - name: Save the local cache tier
+        if: github.event_name == 'pull_request' && (success() || failure())
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .magus/cas
+            .magus/manifests
+            .magus/logs
+          key: ${{ github.workflow }}-magus-store-v1-${{ runner.os }}-${{ matrix.label }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       # The notes store's anchors, gated on the ONE finding worth blocking a merge for.
       #
@@ -534,17 +598,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    env:
-      # The symbol index needs a WRITABLE cache, which the workflow-wide value denies a pull
-      # request. A scip run records its manifest in the cache, and the freshness probe reads
-      # that manifest back; with nothing recorded, every index reads as "predates the sources
-      # it covers" and ingestion drops it. Measured: the same tree indexes 9 projects and
-      # then answers `magus refs` with "unknown, not absent" under the false, and resolves
-      # under the true. That silently cost this job reach, public surface and the API delta.
-      #
-      # It publishes nothing either way: the shared cache needs MAGUS_CACHE_SIGNING_KEY,
-      # which only a main push holds.
-      MAGUS_CACHE_WRITE_ENABLED: 'true'
+    # The symbol index needs a WRITABLE local cache tier, so never set
+    # MAGUS_CACHE_WRITE_ENABLED false here. A scip run records its manifest in the cache and
+    # the freshness probe reads it back; with nothing recorded, every index reads as
+    # "predates the sources it covers" and ingestion drops it, silently costing this job
+    # reach, public surface and the API delta.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -607,6 +665,8 @@ jobs:
       # The fixers are not here: they write, and the regenerate job runs them on the label.
       # offer-fix-label is what tells the conflict comment that job exists.
       - uses: ./.github/actions/advice
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           offer-fix-label: 'true'
           baseline: ${{ steps.baseline.outputs.path }}
@@ -694,7 +754,7 @@ jobs:
       # runs whose timings the forecaster most needs are the ones that went red. This
       # used to be one composite step whose own merge steps carried always(); splitting
       # the summary out moved that guard up here.
-      - if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: ./.github/actions/magus
         with:
           merge-history: 'true'

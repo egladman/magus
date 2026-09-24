@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"time"
@@ -14,6 +15,12 @@ import (
 // is off, so a disabled build pays nothing — no wrapping, no byte counting. The
 // optional [cache.RemotePruner] capability is preserved: a backend that supports
 // prune still does after wrapping (the prune sweep is traced too).
+//
+// These metrics meter the TRANSPORT: what the backend answered. The run's remote tally
+// meters OUTCOMES, so the two differ by design: a fetched artifact that fails
+// verification or replay is a hit here and a failure in the tally, and a store the
+// backend reports as already present is a put here and neither an upload nor a failure
+// in the tally.
 func InstrumentRemoteBackend(b cache.RemoteBackend, p Provider) cache.RemoteBackend {
 	if b == nil || p == nil || !p.Enabled() {
 		return b
@@ -25,7 +32,7 @@ func InstrumentRemoteBackend(b cache.RemoteBackend, p Provider) cache.RemoteBack
 	return base
 }
 
-// instrumentedBackend forwards Active unchanged (a cheap, cached probe not worth
+// instrumentedBackend forwards Active and HasArtifact unchanged (cheap probes not worth
 // metering) and instruments GetArtifact/PutArtifact.
 type instrumentedBackend struct {
 	cache.RemoteBackend
@@ -35,38 +42,47 @@ type instrumentedBackend struct {
 // GetArtifact traces the fetch and records the outcome. On a hit the span and
 // metrics close when the returned reader is closed, so the recorded byte count
 // is the artifact size the cache actually imported.
-func (b *instrumentedBackend) GetArtifact(ctx context.Context, projectPath, hash string) (io.ReadCloser, error) {
-	ctx, end := b.p.StartSpan(ctx, "magus.cache.remote.get", Attr{Key: "magus.project", Value: projectPath})
+func (b *instrumentedBackend) GetArtifact(ctx context.Context, namespace, key string) (io.ReadCloser, error) {
+	ctx, end := b.p.StartSpan(ctx, "magus.cache.remote.get", Attr{Key: "magus.project", Value: namespace})
 	start := time.Now()
-	rc, err := b.RemoteBackend.GetArtifact(ctx, projectPath, hash)
+	rc, err := b.RemoteBackend.GetArtifact(ctx, namespace, key)
+	if errors.Is(err, cache.ErrRemoteMiss) {
+		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "miss", Duration: time.Since(start).Seconds()})
+		end(nil)
+		return nil, err
+	}
 	if err != nil {
 		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "error", Duration: time.Since(start).Seconds()})
 		end(err)
 		return nil, err
 	}
-	if rc == nil {
-		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "miss", Duration: time.Since(start).Seconds()})
-		end(nil)
-		return nil, nil //nolint:nilnil // documented miss: nil reader = not found (see GetArtifact)
-	}
-	return &countingReadCloser{ReadCloser: rc, onClose: func(n int64) {
+	counted := &countingReadCloser{CountingReader: cache.CountingReader{Reader: rc}, closer: rc}
+	counted.onClose = func(n int64) {
 		b.p.RecordRemoteOp(ctx, RemoteOp{Method: "get", Outcome: "hit", Duration: time.Since(start).Seconds(), Bytes: n})
 		end(nil)
-	}}, nil
+	}
+	return counted, nil
 }
 
 // PutArtifact traces the upload and records the bytes streamed to the backend.
-func (b *instrumentedBackend) PutArtifact(ctx context.Context, projectPath, hash string, r io.Reader) error {
-	ctx, end := b.p.StartSpan(ctx, "magus.cache.remote.put", Attr{Key: "magus.project", Value: projectPath})
-	cr := &countingReader{Reader: r}
+func (b *instrumentedBackend) PutArtifact(ctx context.Context, namespace, key string, r io.Reader) error {
+	ctx, end := b.p.StartSpan(ctx, "magus.cache.remote.put", Attr{Key: "magus.project", Value: namespace})
+	cr := &cache.CountingReader{Reader: r}
 	start := time.Now()
-	err := b.RemoteBackend.PutArtifact(ctx, projectPath, hash, cr)
+	err := b.RemoteBackend.PutArtifact(ctx, namespace, key, cr)
 	outcome := "stored"
-	if err != nil {
+	switch {
+	case errors.Is(err, cache.ErrRemoteExists):
+		outcome = "exists"
+	case err != nil:
 		outcome = "error"
 	}
-	b.p.RecordRemoteOp(ctx, RemoteOp{Method: "put", Outcome: outcome, Duration: time.Since(start).Seconds(), Bytes: cr.n})
-	end(err)
+	b.p.RecordRemoteOp(ctx, RemoteOp{Method: "put", Outcome: outcome, Duration: time.Since(start).Seconds(), Bytes: cr.N})
+	if outcome == "exists" {
+		end(nil)
+	} else {
+		end(err)
+	}
 	return err
 }
 
@@ -85,36 +101,18 @@ func (b *instrumentedPruner) PruneArtifacts(ctx context.Context, policy cache.Re
 	return err
 }
 
-// countingReader tallies bytes read from a put stream.
-type countingReader struct {
-	io.Reader
-	n int64
-}
-
-func (c *countingReader) Read(p []byte) (int, error) {
-	n, err := c.Reader.Read(p)
-	c.n += int64(n)
-	return n, err
-}
-
-// countingReadCloser tallies bytes read from a get stream and fires onClose once,
-// when the cache has finished importing the artifact.
+// countingReadCloser counts a get stream and fires onClose once, when the cache has
+// finished importing the artifact.
 type countingReadCloser struct {
-	io.ReadCloser
-	n       int64
+	cache.CountingReader
+	closer  io.Closer
 	once    sync.Once
 	onClose func(n int64)
 }
 
-func (c *countingReadCloser) Read(p []byte) (int, error) {
-	n, err := c.ReadCloser.Read(p)
-	c.n += int64(n)
-	return n, err
-}
-
 func (c *countingReadCloser) Close() error {
-	err := c.ReadCloser.Close()
-	c.once.Do(func() { c.onClose(c.n) })
+	err := c.closer.Close()
+	c.once.Do(func() { c.onClose(c.N) })
 	return err
 }
 

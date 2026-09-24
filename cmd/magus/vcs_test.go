@@ -126,7 +126,7 @@ func TestFilterStageable(t *testing.T) {
 	// the path that must be dropped, not fed to `git add`.
 	paths := []string{"tracked.txt", "present.txt", "stale.txt"}
 
-	stageable, dropped, err := filterStageable(context.Background(), dir, "git", paths)
+	stageable, dropped, err := filterStageable(context.Background(), dir, resolveGitDriver(t, dir), paths)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"tracked.txt", "present.txt"}, stageable)
 	assert.Equal(t, []string{"stale.txt"}, dropped)
@@ -136,7 +136,9 @@ func TestFilterStageable(t *testing.T) {
 // abort-the-whole-invocation behavior, rather than shelling out to a missing command.
 func TestFilterStageableNonGit(t *testing.T) {
 	dir := t.TempDir()
-	stageable, dropped, err := filterStageable(context.Background(), dir, "hg", []string{"gone.txt"})
+	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{Name: "hg"})
+	require.NoError(t, err)
+	stageable, dropped, err := filterStageable(context.Background(), dir, res.VCS, []string{"gone.txt"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"gone.txt"}, stageable)
 	assert.Empty(t, dropped)
@@ -157,7 +159,7 @@ func TestStagePathsSurvivesStalePath(t *testing.T) {
 	dir := initGitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
 
-	staged, dropped, err := stagePaths(context.Background(), dir, "git", gitConflictResolver(t, dir), []string{"present.txt", "stale.txt"})
+	staged, dropped, err := stagePaths(context.Background(), dir, resolveGitDriver(t, dir), []string{"present.txt", "stale.txt"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"present.txt"}, staged)
 	assert.Equal(t, []string{"stale.txt"}, dropped, "the stale path is reported, not silently discarded")
@@ -166,16 +168,6 @@ func TestStagePathsSurvivesStalePath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "present.txt\n", string(out),
 		"present.txt must be staged even though stale.txt was handed to the same call")
-}
-
-// gitConflictResolver returns the git driver as the capability staging uses.
-func gitConflictResolver(t *testing.T, dir string) types.ConflictResolver {
-	t.Helper()
-	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})
-	require.NoError(t, err)
-	cr, ok := res.VCS.(types.ConflictResolver)
-	require.True(t, ok, "the git driver must implement types.ConflictResolver")
-	return cr
 }
 
 // TestWorkspaceRelPathsRejectsEmptyRoot pins the guard on a caller bug that read as a user

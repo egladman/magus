@@ -31,18 +31,22 @@ func (f *fakeBackend) GetArtifact(context.Context, string, string) (io.ReadClose
 		return nil, f.getErr
 	}
 	if f.data == nil {
-		return nil, nil
+		return nil, cache.ErrRemoteMiss
 	}
 	return io.NopCloser(bytes.NewReader(f.data)), nil
 }
 
 func (f *fakeBackend) PutArtifact(_ context.Context, _, _ string, r io.Reader) error {
+	b, err := io.ReadAll(r)
+	f.put = b
 	if f.putErr != nil {
 		return f.putErr
 	}
-	b, err := io.ReadAll(r)
-	f.put = b
 	return err
+}
+
+func (f *fakeBackend) HasArtifact(context.Context, string, string) (bool, error) {
+	return f.data != nil, nil
 }
 
 // fakePruner adds the optional RemotePruner capability.
@@ -79,11 +83,32 @@ func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 	b := InstrumentRemoteBackend(&fakeBackend{data: nil}, rec)
 
 	rc, err := b.GetArtifact(context.Background(), "p", "h")
-	require.NoError(t, err)
-	assert.Nil(t, rc, "expected nil reader on miss")
+	require.ErrorIs(t, err, cache.ErrRemoteMiss, "a miss passes through as the sentinel")
+	assert.Nil(t, rc)
 	require.Len(t, rec.remoteOps, 1)
 	assert.Equal(t, "miss", rec.remoteOps[0].Outcome)
 	assert.Equal(t, int64(0), rec.remoteOps[0].Bytes)
+}
+
+// A put the store answers "already present" is its own outcome, not an error.
+func TestInstrumentRemoteBackend_PutExists(t *testing.T) {
+	t.Parallel()
+	rec := &recorder{}
+	b := InstrumentRemoteBackend(&fakeBackend{putErr: cache.ErrRemoteExists}, rec)
+
+	err := b.PutArtifact(context.Background(), "p", "h", bytes.NewReader([]byte("world")))
+	require.ErrorIs(t, err, cache.ErrRemoteExists)
+	require.Len(t, rec.remoteOps, 1)
+	assert.Equal(t, "exists", rec.remoteOps[0].Outcome)
+}
+
+// HasArtifact reaches the wrapped backend, so backfill works with telemetry on.
+func TestInstrumentRemoteBackend_HasPassesThrough(t *testing.T) {
+	t.Parallel()
+	b := InstrumentRemoteBackend(&fakeBackend{data: []byte("x")}, &recorder{})
+	has, err := b.HasArtifact(context.Background(), "p", "h")
+	require.NoError(t, err)
+	assert.True(t, has)
 }
 
 func TestInstrumentRemoteBackend_GetError(t *testing.T) {
