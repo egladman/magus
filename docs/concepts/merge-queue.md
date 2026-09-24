@@ -597,7 +597,10 @@ On GitHub, `merge_change` for a pull request with auto-merge on waits up to a mi
 GitHub to merge it once the queue's status went green, then merges it itself through the
 API, pinned to the head. A merge GitHub made in the meantime reads as GitHub's unless
 the Actions bot made it. A stack, queued by label, has no auto-merge, so the queue always
-merges it itself. No merge needs a bypass actor.
+merges it itself. No merge needs a bypass actor. Its `describe` narrows `methods` to what
+the repository settings and every active ruleset rule targeting the base branch both
+allow, dropping `merge` when one of those rules requires a linear history, and errors
+when nothing is left in common.
 
 ## The library
 
