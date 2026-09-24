@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   label and who commits the queue's update commits. The new `merge-queue` pull request
   advisor, off by default, reads it to name the label that queues an approved pull
   request.
+- **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
+  `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
+  turns into a token. magus runs none of it. `apply` refuses a status pinned to another
+  integration than its token's (MGS3019).
 - **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
   partitions by them.
 - **The merge queue merges stacked changes.** A change carrying another queued or merged
@@ -388,6 +392,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+- **Three guard rules match their catalog entries.** `cd` fires only ahead of a magus
+  command. `cache-dir-write` grades only write targets, so `rsync --exclude .magus` and
+  an interpreter's quoted data pass. `stage-all`'s description now names `-u`, `.` and
+  the long forms its matcher already covered.
 - **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
   Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
   queue provider both read, in place of `GH_TOKEN`.
