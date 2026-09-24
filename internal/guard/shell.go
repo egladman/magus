@@ -83,7 +83,7 @@ type denyRuleName string
 
 const (
 	denyRuleNotesAuthor       denyRuleName = "notes-author"
-	denyRulePersonOnly        denyRuleName = "person-only"
+	denyRuleAgentSignOff      denyRuleName = "agent-sign-off"
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
@@ -914,7 +914,7 @@ var (
 	// so `capture`, which defaults to the private one, has no other rule that sees it.
 	notesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
 
-	// personOnlyRe matches an invocation of either verb this package folds into one
+	// agentSignOffRe matches an invocation of either verb this package folds into one
 	// rule: minting a read receipt, or closing an attention request.
 	//
 	// A receipt is a claim that a PERSON read something, and a disposed request is a
@@ -927,7 +927,7 @@ var (
 	// agent hosts, so every command reaching it came from an agent by construction. A
 	// person at a terminal never meets this rule.
 	// The unparsable-line fallback for magusInvokes, as above.
-	personOnlyRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+dispose\b`)
+	agentSignOffRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+dispose\b`)
 
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
@@ -1089,7 +1089,7 @@ var (
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
-	denyPersonOnly = "A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it. Only a person can record either, so every spelling of both is refused.\n" +
+	denyAgentSignOff = "A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it. Only a person can record either, so every spelling of both is refused.\n" +
 		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one). Say you cannot ack and hand back the unread list.\n" +
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `" + hint.SessionDispose.With("<id>") + "` is a person's to run."
 
@@ -1360,13 +1360,13 @@ func notesWriteFires(cmds []hint.Invocation, parsed bool, command string) bool {
 	})
 }
 
-// personOnlyFires is magusRuleFires over two shapes it cannot express as one word set:
+// agentSignOffFires is magusRuleFires over two shapes it cannot express as one word set:
 // minting a read receipt (`diff --ack`) and closing an attention request (`session
 // dispose`) are different verbs recording different acts, but both record that a PERSON
 // did something, so one rule and one deny cover both rather than a third rule per verb.
-func personOnlyFires(cmds []hint.Invocation, parsed bool, command string) bool {
+func agentSignOffFires(cmds []hint.Invocation, parsed bool, command string) bool {
 	if !parsed {
-		return personOnlyRe.MatchString(command)
+		return agentSignOffRe.MatchString(command)
 	}
 	return magusInvokes(cmds, "diff", "--ack") || magusInvokes(cmds, "session", "dispose")
 }
@@ -1574,8 +1574,8 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
-	if personOnlyFires(cmds, parsed, command) {
-		return ShellVerdict{Deny: denyPersonOnly, Rule: denyRule{Name: denyRulePersonOnly}}
+	if agentSignOffFires(cmds, parsed, command) {
+		return ShellVerdict{Deny: denyAgentSignOff, Rule: denyRule{Name: denyRuleAgentSignOff}}
 	}
 	// A credential rule, so it holds however the line is spelled, before any rule about shape.
 	if credentialVerbFires(cmds, parsed, command) {

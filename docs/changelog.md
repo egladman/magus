@@ -18,6 +18,9 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 
 - **`AncestryReporter` answers whether one revision reaches another.** All four backends
   implement `IsAncestor`.
+- **A target holding two or more slots is a GNU make jobserver.** `make`, cargo, and
+  other clients of the protocol it runs share the target's slots instead of
+  choosing a width of their own. A target that declares no `slots` is unchanged.
 - **`broker: required | best-effort | off` decides what a run does without a broker.**
   `required` refuses a step (MGS3022, exit 69), `best-effort` (the default) runs
   unarbitrated and says so once, and `off` never starts or contacts one. Also
@@ -121,6 +124,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
 - **`magus job fork` declares a job from the terminal.** Flags cover one row
   (`--criteria`, `--write-paths`, `--read-paths`, `--check`, `--model`, `--read-only`);
   `--stdin` takes a full record and `--schema` prints its contract.
+- **`magus mcp` serves MCP over stdio.** An agent host registers `{"command": "magus", "args": ["mcp"]}`
+  and gets every tool for the workspace it launches in, with no daemon and no token. Each call
+  carries a `stdio` credential holding `mcp=write`, and every MCP tool call, over either
+  transport, is refused below that with MGS9015.
 - **The magus-multi-agent skill adds a coalescing rule and a typed brief and report.**
 - **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
   `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
@@ -250,6 +257,29 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   which the loopback daemon refuses. Stored tokens live at most 366 days and share links
   24 hours; longer, or `never`, is MGS9018. An old operator file is MGS9016, anything in
   `connectors.d` MGS9017.
+- **Breaking: the `daemon` block in `magus.yaml` is now `server`.** Every key moves as is:
+  `daemon.enabled`, `daemon.address`, `daemon.idle_ttl`, `daemon.workspaces` and
+  `daemon.maintenance.*` become `server.enabled`, `server.address`, `server.idle_ttl`,
+  `server.workspaces` and `server.maintenance.*`. The flags follow, `--daemon-*` to
+  `--server-*`. A `daemon` key is refused with an error naming its replacement.
+- **Breaking: `MAGUS_DAEMON_*` variables are now `MAGUS_SERVER_*`.** `MAGUS_DAEMON_ENABLED`,
+  `MAGUS_DAEMON_ADDRESS`, `MAGUS_DAEMON_IDLE_TTL`, `MAGUS_DAEMON_WORKSPACES` and the
+  `MAGUS_DAEMON_MAINTENANCE_*` family keep their suffix under `MAGUS_SERVER_`; setting an
+  old name is an error that names the new one. The pool pointer magus exports to its
+  children, `MAGUS_DAEMON_SOCKET`, is now `MAGUS_PROC_SOCKET`.
+- **Breaking for SDK callers: `magus.Open` refuses a broker it would never use.**
+  `WithBroker` given a nil client, or a client while `WithBrokerPolicy` or the workspace's
+  `broker` setting resolves to `off`, is an error from `Open` rather than a client silently
+  ignored. Pass one or the other.
+- **Breaking for SDK callers: the daemon names are gone from the Go API.** `magus.Daemon`,
+  `SetDaemon` and `ServeDaemon` are `Server`, `SetServer` and `Serve`;
+  `types.EntryPointDaemon`, `HolderDaemon`, `DaemonRequired` and `DaemonSocketWithheld`
+  are `EntryPointServer`, `HolderServer`, `ServerRequired` and `ProcSocketWithheld`. The
+  `internal/daemon` package is `internal/serverhttp`.
+- **Breaking: the wire says server where it said daemon.** `Pool.daemon_version` is
+  reserved and replaced by `owner_version`; `JOB_HOLDER_DAEMON` is reserved and replaced by
+  `JOB_HOLDER_SERVER`; the entry point recorded on an event is `server`, not `daemon`; and
+  the doctor check `daemon-version` is `server-version`.
 - **Breaking: sockets and logs moved.** `$XDG_RUNTIME_DIR/magus/broker.sock` and
   `server.sock` replace `magus-daemon.sock`, and a detached broker or server logs to
   `$XDG_STATE_HOME/magus/`, which survives logout, instead of beside its socket. The
@@ -311,6 +341,10 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   job exec <other>`, `job wait`, `job fork`, `op=clear`). Reads and `--schema` pass.
 - **The guard denies process-table polling** (`pgrep`, `pidof`, `ps`). Use `magus status
   --watch`.
+- **A `for` loop that sleeps between passes is a polling loop.** The `busy-wait` rule
+  denies `for i in $(seq 1 60); do sleep 10; done`, and a workspace command rule sees
+  each program inside such a loop with `repeats` set, as it already did for `while` and
+  `until`. A `for` loop over a list with no `sleep` still repeats nothing.
 - **The guard routes unbounded source dumps to `magus refs`.**
 - **"Handoff journal" is renamed to memory** across the command, docs and manpage.
 - **Breaking: a holder's rendered terms carry commands.** `footer` is replaced by
@@ -452,6 +486,11 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   `magus\guard.spawn` rule runs on every spawn whatever the working tree holds; resolving
   it too slowly denies. A skipped rule says what applied. A workspace advise joins a
   built-in one, and the idle clock follows the agent's id.
+- **Status, doctor and the console see both background processes.** The liveness probe
+  asks the configured server rather than whichever socket a run inherited; doctor's
+  `sockets` check reports `broker.sock` and `server.sock` by name; the compact status line
+  names each; and the dashboard gains broker and server tiles. `MAGUS_*` settings now
+  apply in a workspace with no `magus.yaml`.
 - **A run killed outright releases its claims and services at once.** Claims and
   service references ride the run's one broker connection, so the kernel closing it
   releases them; this replaces pid polling and the 24-hour cap. When the broker
@@ -528,8 +567,12 @@ Entries for the next release wait as one file each under `changes/unreleased/`.
   five library indexes go stale.
 - **`magus session dispose` refuses without an interactive terminal and is denied to
   agents.** Disposing an attention request records that a PERSON answered it. Outside a
-  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `person-only`
+  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `agent-sign-off`
   (widened from `read-ack`) denies every spelling on every agent channel.
+- **One magus can pipe into another that needs the same project, even through `jq` or
+  `tee`.** The reader, proven from the kernel on linux and macOS, waits until the
+  upstream is done with its projects, draining the pipe; before, the stage that lost
+  the race exited 75. Different projects still stream. A looping pipe is MGS3023.
 - **A `MAGUS_*` value that does not parse stops the load.** A bad number or duration was
   ignored, and `magus.Open` skipped validating the environment at all.
 - **`magus vcs resolve --against` works in a linked worktree, and paths stage literally.**

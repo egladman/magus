@@ -1,10 +1,10 @@
 ---
-title: "person-only: an agent stamping a read receipt or closing an attention request, which only a person may do"
+title: "agent-sign-off: an agent stamping a read receipt or closing an attention request, which only a person may do"
 description: "A deny rule: it refuses an agent stamping a read receipt or closing an attention request, which only a person may do, and names what to run instead."
-tags: [guard, rules, person-only, deny]
+tags: [guard, rules, agent-sign-off, deny]
 ---
 
-# person-only
+# agent-sign-off
 
 A deny rule: it refuses an agent stamping a read receipt or closing an attention request, which only a person may do, and names what to run instead.
 
@@ -21,10 +21,10 @@ This is not a permission an agent is missing: there is no spelling of either an 
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [person-only]: ...
+deny [agent-sign-off]: ...
 ```
 
-`magus describe rule person-only` prints the same entry at a terminal, and
+`magus describe rule agent-sign-off` prints the same entry at a terminal, and
 `magus describe rules` lists every rule this workspace enforces.
 
 ## See also
