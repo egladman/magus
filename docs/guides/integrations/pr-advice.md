@@ -74,7 +74,7 @@ magus diff --impact
 ```
 
 Same scripts, same graph, same wording - the difference is where the answers go. In CI
-they are composed into one comment; locally they are a section of the preflight report,
+they are composed into one comment; locally they are a section of the `--impact` report,
 where acting on a finding still costs one edit rather than a review round trip.
 
 Four things differ, all deliberate:

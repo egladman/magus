@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
+  targets run first across every selected project; a failure stops everything, exits 3
+  (MGS3020) and names the target, projects and fix. A green pass is not repeated. A name
+  outside the invoked target's `ctx.needs` closure is refused, exit 2 (MGS3021). With
+  `affected --plan` a red pass prints no plan.
+
 - **The guard advises on a split `magus run` (`split-run`).** One target run on two
   project sets, on one line or in two calls within ten minutes, gets the combined form,
   once per session. A charm is part of the target, so `lint` and `lint:rw` never combine.
@@ -282,6 +288,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **The `preflight` target convention.** The starter magusfile and the docs no longer
+  declare one, and the `typescript` spell's no-op `preflight` op is gone; `--preflight`
+  replaces the idea. A target you named `preflight` keeps working.
 - **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
   Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
   descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
