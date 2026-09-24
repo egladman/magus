@@ -132,7 +132,8 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 }
 
 // A candidate adds only regenerated files to what was merged: a regeneration writing
-// anything no target declares is refused, as the change's own doing.
+// anything no target declares as output or edits in place is refused, as the change's
+// own doing.
 func TestRegenerateInCommitsOnlyDeclaredOutputs(t *testing.T) {
 	c := change("1")
 	b := built{Candidate: types.Candidate{Commit: head("cand"), Dir: "/co", Scratch: "/scratch"}, touched: []string{"a.go", "gen/a.go"}}
@@ -141,14 +142,21 @@ func TestRegenerateInCommitsOnlyDeclaredOutputs(t *testing.T) {
 		assert.Equal(t, types.Regeneration{Dir: "/co", Scratch: "/scratch", Onto: base, Change: c, Paths: []string{"gen/a.go"}, Units: []string{"gen"}}, r)
 		return nil
 	}
+	// doc.md is hand-written with a generated region: a target edits it in place.
+	edited := map[string]bool{"doc.md": true}
 	for name, tc := range map[string]struct {
 		written []string
-		want    string
-		wantErr string
+		// stray is what Outputs leaves of written, which EditedInPlace is asked about.
+		stray     []string
+		want      string
+		wantErr   string
+		wantPaths []string
 	}{
-		"nothing rewritten":   {want: head("cand")},
-		"an output rewritten": {written: []string{"gen/a.go"}, want: head("regenerated")},
-		"a source rewritten":  {written: []string{"gen/a.go", "a.go"}, wantErr: "regeneration wrote files no target declares as output: a.go"},
+		"nothing rewritten":             {want: head("cand")},
+		"an output rewritten":           {written: []string{"gen/a.go"}, want: head("regenerated")},
+		"an edited-in-place file":       {written: []string{"gen/a.go", "doc.md"}, stray: []string{"doc.md"}, want: head("regenerated")},
+		"a source rewritten":            {written: []string{"gen/a.go", "a.go"}, stray: []string{"a.go"}, wantErr: "regeneration wrote files no target declares as output or edits in place: a.go", wantPaths: []string{"a.go"}},
+		"a source beside an edited one": {written: []string{"doc.md", "a.go"}, stray: []string{"doc.md", "a.go"}, wantErr: "regeneration wrote files no target declares as output or edits in place: a.go", wantPaths: []string{"a.go"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
@@ -158,6 +166,9 @@ func TestRegenerateInCommitsOnlyDeclaredOutputs(t *testing.T) {
 			if len(tc.written) > 0 {
 				d.facts.EXPECT().Outputs(mock.Anything, tc.written).Return(map[string]bool{"gen/a.go": true}, nil)
 			}
+			if len(tc.stray) > 0 {
+				d.facts.EXPECT().EditedInPlace(mock.Anything, tc.stray).Return(edited, nil)
+			}
 			if tc.want == head("regenerated") {
 				d.vcs.EXPECT().Commit(mock.Anything, "/co", magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: tc.written}).Return(tc.want, nil)
 			}
@@ -166,7 +177,7 @@ func TestRegenerateInCommitsOnlyDeclaredOutputs(t *testing.T) {
 				var refused *types.RefusedError
 				require.ErrorAs(t, err, &refused)
 				assert.Equal(t, tc.wantErr, refused.Reason)
-				assert.Equal(t, []string{"a.go"}, refused.Paths)
+				assert.Equal(t, tc.wantPaths, refused.Paths)
 				return
 			}
 			require.NoError(t, err)

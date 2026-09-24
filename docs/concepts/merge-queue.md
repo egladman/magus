@@ -329,8 +329,8 @@ with a scratch directory of its own; keep every cache there.
 
 A generated-file conflict takes the change's side and `--regenerate` rewrites it, with
 the generated paths on stdin; without a hook, a file either side deleted stays deleted. A
-regeneration that fails, or writes anything no target declares as output, kicks that
-change back and the run goes on.
+regeneration that fails, or writes anything no target declares as output or edits in
+place (`ctx.modifiesExistingFiles`), kicks that change back and the run goes on.
 
 ## What a review covers
 

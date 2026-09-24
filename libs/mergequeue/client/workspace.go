@@ -10,6 +10,7 @@ import (
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/libs/mergequeue/types"
+	magustypes "github.com/egladman/magus/types"
 
 	// Without the engine no magusfile is evaluated, and every path would be attributed
 	// to its project by directory alone, a wrong affected set with no error.
@@ -75,6 +76,22 @@ func (w *Workspace) Outputs(ctx context.Context, paths []string) (map[string]boo
 	out := make(map[string]bool, len(paths))
 	for i, e := range entries {
 		if len(e.OutputOf) > 0 {
+			out[paths[i]] = true
+		}
+	}
+	return out, nil
+}
+
+// EditedInPlace reports which of paths some target declares through
+// ctx.modifiesExistingFiles: the "update" claims of `magus describe file`.
+func (w *Workspace) EditedInPlace(ctx context.Context, paths []string) (map[string]bool, error) {
+	entries, err := w.m.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(paths))
+	for i, e := range entries {
+		if slices.ContainsFunc(e.Claims, func(c magustypes.FileClaim) bool { return c.Role == "update" }) {
 			out[paths[i]] = true
 		}
 	}

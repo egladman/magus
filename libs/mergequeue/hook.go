@@ -306,7 +306,9 @@ func CommandRegenerate(line string, plan types.Plan, log *HookLog) types.Regener
 //	affected    stdin: the change's paths, one per line
 //	            prints {"affected": [unit], "unbounded_by": why}; a missing "affected" is unbounded
 //	outputs     stdin: paths, one per line
-//	            prints {"outputs": [path]}, the ones some target declares as its output
+//	            prints {"outputs": [path], "modified": [path]}: the ones some target
+//	            declares as its output, and the ones some target edits in place
+//	            ("modified" may be omitted)
 //	generation  stdin: {"outputs": [path], "changed": [path]}
 //	            prints {"units": [unit], "code": [path], "unbounded": why}
 //
@@ -372,6 +374,27 @@ func (f commandFacts) Outputs(ctx context.Context, paths []string) (map[string]b
 		return nil, err
 	}
 	for _, p := range ans.Outputs {
+		if slices.Contains(paths, p) {
+			out[p] = true
+		}
+	}
+	return out, nil
+}
+
+// EditedInPlace asks the outputs query again and reads its optional "modified" key, so a
+// hook written before the key existed answers that nothing is edited in place.
+func (f commandFacts) EditedInPlace(ctx context.Context, paths []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(paths) == 0 {
+		return out, nil
+	}
+	var ans struct {
+		Modified []string `json:"modified"`
+	}
+	if err := f.ask(ctx, "outputs", "outputs", nil, strings.Join(paths, "\n")+"\n", &ans); err != nil {
+		return nil, err
+	}
+	for _, p := range ans.Modified {
 		if slices.Contains(paths, p) {
 			out[p] = true
 		}

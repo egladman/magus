@@ -72,6 +72,11 @@ type BuildFacts interface {
 	// generated: a path a VCS attribute or anything else marks generated is source,
 	// and a reviewer has to see it.
 	Outputs(ctx context.Context, paths []string) (map[string]bool, error)
+	// EditedInPlace reports which of paths some target declares it edits in place: a
+	// hand-written file carrying a generated region. A regeneration may rewrite one, but
+	// it is source everywhere else, so a conflict in one is never settled by
+	// regenerating.
+	EditedInPlace(ctx context.Context, paths []string) (map[string]bool, error)
 	// Generation reports what regenerating outputs runs, and which of changed it would
 	// run as code.
 	Generation(ctx context.Context, outputs, changed []string) (Generation, error)

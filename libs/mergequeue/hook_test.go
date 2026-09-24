@@ -174,3 +174,18 @@ func TestCommandFactsAnswerOutputsAndGeneration(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"outputs": ["gen/a"], "changed": ["app/gen.go", "docs/x.md"]}`, string(asked))
 }
+
+// The in-place edits ride the outputs answer, so a hook that never prints "modified"
+// reports none rather than failing.
+func TestCommandFactsReadEditedInPlaceFromTheOutputsAnswer(t *testing.T) {
+	ctx := context.Background()
+	with := CommandFacts(`[ "$MERGEQUEUE_QUERY" = outputs ] && echo '{"outputs": [], "modified": ["doc.md", "elsewhere"]}'`, t.TempDir(), nil)
+	got, err := with.EditedInPlace(ctx, []string{"doc.md", "a.go"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]bool{"doc.md": true}, got, "only what was asked about")
+
+	without := CommandFacts(`echo '{"outputs": ["gen/a"]}'`, t.TempDir(), nil)
+	got, err = without.EditedInPlace(ctx, []string{"doc.md"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]bool{}, got)
+}

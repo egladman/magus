@@ -38,6 +38,16 @@ func TestInject(t *testing.T) {
 	assert.Error(t, inject(path, map[string]string{"missing": "x"}))
 }
 
+// TestReviewFixtureHasNoIndexer: a spell in the review fixture gives its project a symbol
+// indexer, and `magus diff` then runs it, so the captured page would depend on whether that
+// indexer is installed on the machine that regenerated it.
+func TestReviewFixtureHasNoIndexer(t *testing.T) {
+	assert.NotContains(t, fixtures[reviewFixture]["magusfile.buzz"], "magus/spell/")
+	for _, ex := range examples {
+		assert.Contains(t, fixtures, ex.fixture, "example %q names an unknown fixture", ex.slug)
+	}
+}
+
 // TestDocsHaveExampleMarkers: every example the generator produces has a marker pair on
 // the page it names, so `content-generate` can never render an example with nowhere to
 // land. Each example is checked against ITS OWN page rather than one shared file: an

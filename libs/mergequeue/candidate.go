@@ -270,8 +270,8 @@ func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir string)
 }
 
 // regenerateIn runs regenerate on the generated files among b.touched and commits what
-// it rewrote. A rewrite of anything no target declares as its output is refused: a
-// candidate adds only regenerated files to what was merged.
+// it rewrote. A rewrite of anything no target declares as its output or edits in place
+// is refused: a candidate adds only regenerated files to what was merged.
 func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b built, regenerate types.RegenerateFunc, units []string) (string, error) {
 	out, err := s.facts.Outputs(ctx, b.touched)
 	if err != nil {
@@ -293,7 +293,14 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 		return "", err
 	}
 	if len(stray) > 0 {
-		return "", &types.RefusedError{Reason: "regeneration wrote files no target declares as output: " + strings.Join(stray, ", "), Paths: stray}
+		edited, err := s.facts.EditedInPlace(ctx, stray)
+		if err != nil {
+			return "", fmt.Errorf("edited in place: %w", err)
+		}
+		stray = slices.DeleteFunc(stray, func(p string) bool { return edited[p] })
+	}
+	if len(stray) > 0 {
+		return "", &types.RefusedError{Reason: "regeneration wrote files no target declares as output or edits in place: " + strings.Join(stray, ", "), Paths: stray}
 	}
 	return v.Commit(ctx, b.Dir, magustypes.CheckoutCommit{CommitMeta: queueMeta("regenerate generated files"), Paths: written})
 }
