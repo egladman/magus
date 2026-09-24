@@ -326,12 +326,28 @@ type ArtifactLister interface {
 
 // ArtifactListing is one listing of a validation run's artifacts.
 type ArtifactListing struct {
+	// Run is what started the run and what it ran, read in the same listing.
+	Run RunOrigin
 	// Complete says the run has finished, so nothing more will be uploaded.
 	Complete bool
 	// Headers are what a download needs, its credential included. They are sent to each
 	// artifact's URL and dropped on a redirect to another host.
 	Headers   map[string]string
 	Artifacts []Artifact
+}
+
+// RunOrigin is what the provider says started a validation run and what it ran. A run
+// a change started ran that change's own definition, so what it uploaded is the change
+// author's claim, never validation's.
+type RunOrigin struct {
+	Repo       string // repository the run belongs to
+	HeadRepo   string // repository whose commit it ran
+	HeadBranch string // branch it ran on
+	Event      string // what started it, in the provider's words (github: push, pull_request, ...)
+	// BranchEvent says Event runs the definition HeadBranch holds (github: push and
+	// workflow_dispatch), never one a change supplied.
+	BranchEvent bool
+	Definition  string // what it ran (github: the workflow file's path)
 }
 
 // Artifact is one uploaded zip archive.
