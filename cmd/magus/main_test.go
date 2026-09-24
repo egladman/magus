@@ -709,6 +709,17 @@ func TestMain(m *testing.M) {
 	if err := os.Unsetenv("BAGGAGE"); err != nil {
 		panic(err)
 	}
+	// The MAGUS_* configuration a job exports leaks the same way: the merge queue's gate
+	// sets MAGUS_CACHE_DIR per candidate, which moved every test's cache, attention
+	// store and journal into one shared directory. Not when this binary is a script's
+	// `exec magus`: that environment is the script's own, set on purpose.
+	if filepath.Base(os.Args[0]) != "magus" {
+		for _, v := range config.EnvVarDocs() {
+			if err := os.Unsetenv(v.EnvVar); err != nil {
+				panic(err)
+			}
+		}
+	}
 	testscript.Main(m, map[string]func(){
 		"magus": func() { os.Exit(runCLI()) },
 	})
