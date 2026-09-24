@@ -65,7 +65,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{}
 
 		got := r.checkUnexplainedHotspots(nil)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 	})
 
@@ -81,7 +81,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 2}
 
 		got := r.checkUnexplainedHotspots(nil)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 		assert.Contains(t, got.Message, "no history lens")
 	})
@@ -99,7 +99,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 3, Files: []string{"internal/cache/key.go"}}
 
 		got := r.checkUnexplainedHotspots(nil)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, types.EvidenceInferred, got.Evidence)
 		assert.Contains(t, got.Message, "1 of the 2")
 	})
@@ -109,7 +109,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 3, Files: []string{"elsewhere.go"}}
 
 		got := r.checkUnexplainedHotspots(nil)
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		require.Len(t, got.Details, 3) // two bare files, then the remedy
 		assert.Contains(t, got.Details[0], "a.go")
 		assert.Contains(t, got.Details[1], "b.go")
@@ -123,7 +123,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 1, Files: []string{"/w/pkg/a.go"}}
 
 		got := r.checkUnexplainedHotspots(nil)
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "1 of the 1")
 	})
 

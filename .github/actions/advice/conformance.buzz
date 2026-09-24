@@ -31,6 +31,11 @@
 //
 // It never renames anything. Renaming a target breaks every caller, CI config, and
 // script outside the workspace, so this advises and stops.
+//
+// The symbol half says the same thing about code: a symbol the change adds, renames or
+// re-signs that differs from how the rest of the workspace declares the same kind of thing.
+// magus\diff computes it from the symbol index (one pass over every declaration, too large for
+// a script) and hands each changed symbol its `checks`; this renders them, one table per check.
 import "proc";
 import "advice";
 import "magus";
@@ -163,7 +168,7 @@ export fun keepAdded(all: [{str: str}], added: [str], seeded: [str]) > [{str: st
     return kept;
 }
 
-fun body(items: [{str: str}]) > str {
+fun targetTable(items: [{str: str}]) > str {
     final parts = mut ["**This adds a target whose name differs from what the rest of the "
         + "workspace calls the same work.**\n\n"
         + "| target | runs | the rest of the workspace calls this |\n| --- | --- | --- |\n"];
@@ -172,16 +177,92 @@ fun body(items: [{str: str}]) > str {
             + (f["ops"] ?? "") + "` | `" + (f["majority"] ?? "") + "` ("
             + (f["evidence"] ?? "") + ") |\n");
     }
+    return parts.join("") + "\n";
+}
+
+// symbolChecks is one table per conformance check, in the order the body renders them. Every
+// check magus\diff can report has a row here; TestConformanceTablesCoverEveryCheck holds the
+// two lists together, so a new check cannot land and go unrendered.
+final symbolChecks = [
+    {"check": "naming-affix", "heading": "This adds a name missing the word pattern most declarations of its shape share"},
+    {"check": "name-collision", "heading": "This adds a name a workspace entity already carries"},
+    {"check": "rename-leftover", "heading": "This renames a symbol whose old name still appears where it is used"},
+    {"check": "param-order", "heading": "This takes parameters in the reverse of the order its neighbors take them"},
+];
+
+// symbolRow flattens one finding to primitives, so the rendering is testable: a host object
+// cannot be built inside a test block.
+export fun symbolRow(path: str, check: str, message: str, details: [str]) > {str: str} {
+    return {"path": path, "check": check, "message": message, "evidence": details.join("; ")};
+}
+
+// symbolTables renders a table for each check with rows, and "" when none has any.
+export fun symbolTables(rows: [{str: str}]) > str {
+    final parts = mut [<str>];
+    foreach (c in symbolChecks) {
+        var lines = mut [<str>];
+        foreach (r in rows) {
+            if ((r["check"] ?? "") != (c["check"] ?? "")) { continue; }
+            lines.append("| " + cell(r["path"] ?? "") + " | " + cell(r["message"] ?? "") + " | "
+                + cell(r["evidence"] ?? "") + " |\n");
+        }
+        if (lines.len() == 0) { continue; }
+        parts.append("**" + (c["heading"] ?? "") + ".**\n\n| file | finding | evidence |\n| --- | --- | --- |\n"
+            + lines.join("") + "\n");
+    }
+    return parts.join("");
+}
+
+// cell makes text safe inside one table cell: a pipe would split it, a newline would end the
+// row, and a backtick from a file name could open a code span that swallows the rest.
+export fun cell(text: str) > str {
+    return text.replace("\\", with: "\\\\").replace("|", with: "\\|").replace("`", with: "\\`")
+        .replace("\r", with: " ").replace("\n", with: " ");
+}
+
+// parseGate reads a silence gate from the named action input, and refuses a value it cannot
+// read rather than quietly using the default in its place.
+fun parseGate(name: str, fallback: double) > double !> any {
+    final raw = advice\input(name);
+    if (raw == "") { return fallback; }
+    final v = std\parseDouble(raw);
+    if (v == null) { throw "conformance: {name}={raw} is not a number"; }
+    return v!;
+}
+
+// uncoveredLine names one touched project the symbol checks could not see, so a table of
+// findings is never read as covering it. reason is a DiffUncoveredReason value; one this script
+// does not know yet renders as itself.
+export fun uncoveredLine(project: str, reason: str) > str {
+    var why = reason;
+    if (reason == "no-indexer") { why = "no symbol indexer"; }
+    return "Not checked: `" + project + "` (" + why + ").";
+}
+
+// uncheckedBody is the section when magus could not run the symbol checks at all, which must
+// never read like a change with nothing to report.
+export fun uncheckedBody(code: str, message: str, url: str) > str {
+    var link = "";
+    if (url != "") { link = " ([{code}]({url}))"; }
+    return "**magus could not check this change's symbols against the workspace's conventions.** "
+        + "No finding below means nothing was checked, not that nothing was found.\n\n"
+        + "`" + code + "`" + link + ": " + cell(message) + "\n";
+}
+
+fun body(items: [{str: str}], rows: [{str: str}], caveats: [str]) > str {
+    final parts = mut [<str>];
+    if (items.len() > 0) { parts.append(targetTable(items)); }
+    parts.append(symbolTables(rows));
+    foreach (c in caveats) { parts.append("_" + cell(c) + "_\n\n"); }
     return parts.join("")
-        + "\nNobody wrote this convention down. magus derived it by grouping every target "
-        + "in the workspace by the ops it invokes and looking at what those targets are "
-        + "named, so the count above is what other teams already do, not a rule imposed "
-        + "on you.\n\n"
-        + "Renaming now is cheap. Later it means changing every caller, CI config, and "
-        + "script that names the target, across teams that each have to be persuaded "
+        + "Nobody wrote these conventions down. magus derived them from the workspace: targets "
+        + "grouped by the ops they invoke, declarations by their shape. Each count above is "
+        + "what the rest of the code already does, not a rule imposed on you.\n\n"
+        + "Renaming now is cheap. Later it means changing every caller, and for a target every "
+        + "CI config and script that names it, across teams that each have to be persuaded "
         + "separately.\n\n"
-        + "If you diverged on purpose, because this target really is a different job that "
-        + "happens to run the same tool, then this finding is wrong and worth ignoring. "
+        + "If you diverged on purpose, because this really is a different thing that happens to "
+        + "look the same, then this finding is wrong and worth ignoring. "
         + "Add the `magus:silence:" + section + "` label to keep it quiet.\n";
 }
 
@@ -205,12 +286,9 @@ fun main() > void !> any {
         return;
     }
 
-    var minCohort = 5;
-    final configuredCohort = advice\input("conformance-min-cohort");
-    if (configuredCohort != "") { minCohort = std\parseInt(configuredCohort) ?? 5; }
-    var minShare = 0.8;
-    final configuredShare = advice\input("conformance-min-share");
-    if (configuredShare != "") { minShare = std\parseDouble(configuredShare) ?? 0.8; }
+    // The symbol half reads the same two gates through magus\diff (advice\review passes them).
+    final minCohort = parseGate("conformance-min-cohort", fallback: 5.0);
+    final minShare = parseGate("conformance-min-share", fallback: 0.8);
 
     var members = mut [];
     foreach (p in magus\targets().projects) {
@@ -234,22 +312,48 @@ fun main() > void !> any {
         added.append(magus\canonicalName(n));
     }
 
-    var seeded = mut [<str>];
-    foreach (p in magus\affectedImpact("origin/" + base).affectedProjects) {
-        if (p.seed) { seeded.append(p.path); }
+    // The same review api-surface reads, computed once per run: the range on the forge, the
+    // working tree locally. Its seed projects are the ones the author edited, which is what
+    // keepAdded needs to place a name.
+    final review = advice\review(base, head: head);
+    if (review.conformanceError != null) {
+        // Could not check is never published as nothing found: the section says so, and the
+        // step fails.
+        final e = review.conformanceError!;
+        advice\publish(repo, pr: pr, name: section, title: "Conformance could not check this change",
+            body: uncheckedBody(e.code, message: e.message, url: e.url));
+        throw "conformance: [{e.code}] {e.message}";
+    }
+    final items = keepAdded(findings(members, minCohort: std\toInt(minCohort), minShare: minShare),
+        added: added, seeded: review.seedProjects);
+
+    var rows = mut [<{str: str}>];
+    foreach (f in review.files) {
+        foreach (sym in f.symbols) {
+            foreach (c in sym.checks) {
+                rows.append(symbolRow(f.path, check: c.name, message: c.message, details: c.details));
+            }
+        }
+    }
+    // What weakened the symbol half is said beside its findings, never left to be inferred.
+    var caveats = mut [<str>];
+    foreach (u in review.uncovered) { caveats.append(uncoveredLine(u.project, reason: u.reason)); }
+    if (!advice\collecting() and advice\input("baseline") == "") {
+        caveats.append("No baseline graph reached this run, so what the change adds was read from its patch, "
+            + "and a symbol whose signature changed was not compared.");
     }
 
-    final items = keepAdded(findings(members, minCohort: minCohort, minShare: minShare),
-        added: added, seeded: seeded);
-    if (items.len() == 0) {
-        advice\publish(repo, pr: pr, name: section, title: "A target name diverges from the workspace", body: "");
+    final count = items.len() + rows.len();
+    if (count == 0) {
+        // An empty body retracts the section, so a name fixed on the next push stops being reported.
+        advice\publish(repo, pr: pr, name: section, title: "A name diverges from the workspace", body: "");
         std\print("conformance: nothing to say ({members.len()} targets, {added.len()} added by this change)");
         return;
     }
     advice\publish(repo, pr: pr, name: section,
-        title: "A target name diverges from the workspace ({items.len()})",
-        body: body(items));
-    std\print("conformance: advised on {items.len()} target(s)");
+        title: "A name diverges from the workspace ({count})",
+        body: body(items, rows: rows, caveats: caveats));
+    std\print("conformance: advised on {items.len()} target(s) and {rows.len()} symbol name(s)");
 }
 
 
@@ -341,9 +445,58 @@ test "keepAdded does not blame another project for a name it already had" {
 
 test "body shows the evidence and names the escape hatch" {
     final text = body([{"project": "apps/checkout", "name": "unit-test",
-        "majority": "test", "evidence": "47 of 48", "ops": "node:jest"}]);
+        "majority": "test", "evidence": "47 of 48", "ops": "node:jest"}], rows: [], caveats: []);
     std\assert(text.indexOf("47 of 48") != null, message: "the count is the argument");
     std\assert(text.indexOf("`unit-test` in `apps/checkout`") != null, message: "names the target");
     std\assert(text.indexOf("`magus:silence:conformance` label") != null,
         message: "declining must be easy and permanent, and the label is how");
+    std\assert(text.indexOf("| file | finding |") == null, message: "no symbol finding, no symbol table");
+}
+
+test "a symbol finding carries its counts and its exemplars" {
+    final row = symbolRow("internal/trail/trail.go", check: "naming-affix",
+        message: "`EntryPointFrom`: 33 of 35 functions shaped `func(ctx) value` that say From or Context are named `<X>FromContext`",
+        details: ["named <X>FromContext: BaseFromContext, CwdFromContext", "not: RecorderFrom, StepReplFrom"]);
+    std\assert(row["evidence"] == "named <X>FromContext: BaseFromContext, CwdFromContext; not: RecorderFrom, StepReplFrom",
+        message: "the family, its members and its outliers");
+
+    final text = body([], rows: [row], caveats: ["conformance: the baseline could not be compared"]);
+    std\assert(text.indexOf("missing the word pattern") != null, message: "the affix table's heading");
+    std\assert(text.indexOf("| internal/trail/trail.go | \\`EntryPointFrom\\`: 33 of 35") != null, message: "one row");
+    std\assert(text.indexOf("_conformance: the baseline could not be compared_") != null, message: "what weakened it is said");
+    std\assert(text.indexOf("This adds a target") == null, message: "no target finding, no target table");
+}
+
+test "each check gets its own table, in symbolChecks order" {
+    final text = symbolTables([
+        symbolRow("run.go", check: "rename-leftover", message: "a | b", details: ["run.go:3"]),
+        symbolRow("sink.go", check: "name-collision", message: "`Format` is also the name of target `.:format`", details: []),
+    ]);
+    std\assert(text.indexOf("a workspace entity already carries") != null, message: "collision table");
+    std\assert(text.indexOf("old name still appears") != null, message: "rename table");
+    std\assert(text.indexOf("a \\| b") != null, message: "a pipe cannot split the table");
+    std\assert(text.indexOf("already carries") < text.indexOf("old name still appears"), message: "symbolChecks order");
+}
+
+test "a change that could not be checked never reads as one with nothing to report" {
+    final text = uncheckedBody("MGS7003", message: "the symbol index could not be brought current",
+        url: "https://eli.gladman.cc/magus/reference/codes/knowledge/MGS7003/");
+    std\assert(text.indexOf("could not check") != null, message: "says it could not check");
+    std\assert(text.indexOf("`MGS7003`") != null, message: "carries the code");
+    std\assert(text.indexOf("not that nothing was found") != null, message: "names the misreading it prevents");
+    std\assert(text != "", message: "an empty body would retract the section, which reads as clean");
+}
+
+test "a project the checks could not see is named beside the findings" {
+    final text = body([], rows: [symbolRow("a.go", check: "param-order", message: "m", details: [])],
+        caveats: [uncoveredLine("docs", reason: "no-indexer")]);
+    std\assert(text.indexOf("Not checked: \\`docs\\` (no symbol indexer).") != null, message: "the uncovered project is said");
+}
+
+test "a cell holds whatever a path or message contains" {
+    std\assert(cell("a|b\nc`d") == "a\\|b c\\`d", message: "pipe, newline and backtick");
+}
+
+test "no findings render nothing, which is what retracts a fixed name" {
+    std\assert(symbolTables([]) == "", message: "an empty body retracts the section");
 }

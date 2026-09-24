@@ -27,7 +27,7 @@ func TestCheckTokens(t *testing.T) {
 	t.Run("absent operator token and no stored tokens", func(t *testing.T) {
 		isolate(t)
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "operator token: absent")
 		assert.Contains(t, got.Message, "0 stored token(s)")
 		assert.Empty(t, got.Details)
@@ -58,7 +58,7 @@ func TestCheckTokens(t *testing.T) {
 			require.NoError(t, err)
 		}
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, got.Message, "2 stored token(s)")
 		joined := strings.Join(got.Details, "\n")
 		assert.Contains(t, joined, `token "soon" (mcp=write) expires in`)
@@ -72,7 +72,7 @@ func TestCheckTokens(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(old), 0o700))
 		require.NoError(t, os.WriteFile(old, []byte(`{"version":1}`), 0o600))
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		joined := strings.Join(got.Details, "\n")
 		assert.Contains(t, joined, "MGS9016")
 		assert.Contains(t, joined, "MGS9017")
@@ -94,7 +94,7 @@ func TestCheckTokens(t *testing.T) {
 			`","grant":{"tokens":"write","mcp":"write","console":"write"},"created":"2026-01-01T00:00:00Z","expires":"9999-01-01T00:00:00Z"}`
 		require.NoError(t, os.WriteFile(planted, []byte(body), 0o600))
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		joined := strings.Join(got.Details, "\n")
 		assert.Contains(t, joined, "MGS9019")
 		assert.Contains(t, joined, planted)
@@ -105,7 +105,7 @@ func TestCheckTokens(t *testing.T) {
 		state := isolate(t)
 		require.NoError(t, os.Chmod(filepath.Join(state, "magus"), 0o755))
 		got := (&runner{}).checkTokens()
-		assert.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Equal(t, types.CheckAdvice, got.Status)
 		assert.Contains(t, strings.Join(got.Details, "\n"), "chmod 700")
 	})
 }
@@ -119,13 +119,13 @@ func TestCheckTokens(t *testing.T) {
 func TestProbeBridgeReachability(t *testing.T) {
 	t.Run("console disabled skips", func(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &DaemonInfo{})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "console.enabled: false")
 	})
 
 	t.Run("mcp disabled skips", func(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &DaemonInfo{BridgeEnabled: true})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "mcp.enabled is false")
 	})
 
@@ -134,7 +134,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &DaemonInfo{
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, MCPAddr: "127.0.0.1:1",
 		})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 		assert.Contains(t, got.Message, "no persistent daemon")
 	})
@@ -146,7 +146,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, Persistent: true,
 			MCPAddr: unreachableAddr(t),
 		})
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "bridge endpoint not reachable")
 	})
 
@@ -160,7 +160,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, Persistent: true,
 			MCPAddr: strings.TrimPrefix(srv.URL, "http://"),
 		})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "reachable at")
 	})
 }

@@ -1385,7 +1385,7 @@ func (s *Session) declareObjectTypes(src string) {
 	//
 	// Collecting a declaration source merges its types into the session-wide list,
 	// so a file may reference a type another bundle declares and still check
-	// cleanly; magus's own declarations do exactly that, naming DoctorCheckStatus
+	// cleanly; magus's own declarations do exactly that, naming CheckStatus
 	// from gen/types/doctorcheck.buzz. Executing has no such luxury: it needs the
 	// source to be self-contained, and a cross-bundle reference is undefined.
 	//

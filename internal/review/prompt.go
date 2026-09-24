@@ -103,6 +103,16 @@ func Prompt(in PromptInput) string {
 		Items(promptFiles(in.Changeset.Files), promptFileLimit,
 			"Ask magus for the rest with `magus diff -o json`.")
 
+	if e := in.Changeset.ConformanceError; e != nil {
+		b.Section("Conformance").
+			Note("magus could not check this change against the workspace's conventions. Nothing below means nothing was found.").
+			Items([]string{"[" + e.Code + "] " + e.Message}, 0, "")
+	} else {
+		b.Section("Conformance").
+			Note("Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.").
+			Items(promptConformance(in.Changeset), 0, "")
+	}
+
 	b.Section("What magus could not measure").
 		Note("Do not read any of these as evidence that there is nothing there.").
 		Items(in.Changeset.Notes, 0, "")
@@ -155,6 +165,24 @@ func promptFiles(files []types.DiffFile) []string {
 			line += " - " + strings.Join(facts, "; ")
 		}
 		out = append(out, line)
+	}
+	return out
+}
+
+// promptConformance is one line per conformance finding, then one per project the checks could
+// not see, so no silence here is read as a clean project that was never checked. The lens
+// already caps findings per change, so no limit is needed here.
+func promptConformance(rev types.Diff) []string {
+	var out []string
+	for _, f := range rev.Files {
+		for _, s := range f.Symbols {
+			for _, c := range s.Checks {
+				out = append(out, c.Message+" (`"+f.Path+"`)")
+			}
+		}
+	}
+	for _, u := range rev.Uncovered {
+		out = append(out, "not checked: `"+u.Project+"` ("+u.Reason.Sentence()+")")
 	}
 	return out
 }

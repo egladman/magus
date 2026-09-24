@@ -35,78 +35,78 @@ func TestCheckDiagnosticDocs(t *testing.T) {
 	cases := []struct {
 		name       string
 		body       string
-		wantStatus types.DoctorCheckStatus
+		wantStatus types.CheckStatus
 		wantDetail string
 	}{
 		{
 			"a page naming the next step",
 			"# MGS1001\n\n## Why\n\nBecause.\n\n## Resolution\n\nDeclare a ci target.\n",
-			types.DoctorOK, "",
+			types.CheckOK, "",
 		},
 		{
 			"a page that only explains",
 			"# MGS1001\n\n## Why\n\nBecause.\n\n## What this is NOT\n\nNot that.\n",
-			types.DoctorAdvice, "declares no remediation section",
+			types.CheckAdvice, "declares no remediation section",
 		},
 		{
 			"a remediation section with nothing under it",
 			"# MGS1001\n\n## Resolution\n\n## See also\n\n- something\n",
-			types.DoctorAdvice, "declares no remediation section",
+			types.CheckAdvice, "declares no remediation section",
 		},
 		{
 			"verifying the fix is not the fix",
 			"# MGS1001\n\n## Confirming the fix\n\nRun magus ls.\n",
-			types.DoctorAdvice, "declares no remediation section",
+			types.CheckAdvice, "declares no remediation section",
 		},
 		{
 			"a heading inside a fenced block is sample output",
 			"# MGS1001\n\n```text\n## Resolution\n```\n",
-			types.DoctorAdvice, "declares no remediation section",
+			types.CheckAdvice, "declares no remediation section",
 		},
 		{
 			"a heading inside a four-backtick fence quoting a three-backtick example",
 			"# MGS1001\n\n````text\n```\n## Resolution\n```\n````\n",
-			types.DoctorAdvice, "declares no remediation section",
+			types.CheckAdvice, "declares no remediation section",
 		},
 		{
 			// The inner ``` line closing the outer fence would leave every later
 			// heading reading as sample output, this one included.
 			"a section after a four-backtick fence",
 			"# MGS1001\n\n````text\n```\n## Not this one\n```\n````\n\n## Resolution\n\nDeclare it.\n",
-			types.DoctorOK, "",
+			types.CheckOK, "",
 		},
 		{
 			"a closed ATX heading",
 			"# MGS1001\n\n## Resolution ##\n\nDeclare it.\n",
-			types.DoctorOK, "",
+			types.CheckOK, "",
 		},
 		{
 			"a heading indented three spaces",
 			"# MGS1001\n\n   ## Resolution\n\nDeclare it.\n",
-			types.DoctorOK, "",
+			types.CheckOK, "",
 		},
 		{
 			"a fourth space makes it an indented code block",
 			"# MGS1001\n\n    ## Resolution\n\nDeclare it.\n",
-			types.DoctorAdvice, "declares no remediation section",
+			types.CheckAdvice, "declares no remediation section",
 		},
 		{
 			"a deeper subsection with nothing under it",
 			"# MGS1001\n\n## Fix\n\n### Declaring one\n\n## See also\n\n- something\n",
-			types.DoctorAdvice, "declares no remediation section",
+			types.CheckAdvice, "declares no remediation section",
 		},
 		{
 			// MGS4001's shape: the section's whole body is numbered subsections.
 			"a deeper subsection carrying the prose",
 			"# MGS1001\n\n## Fix\n\n### 1. Declare a ci target\n\nAdd one to the magusfile.\n",
-			types.DoctorOK, "",
+			types.CheckOK, "",
 		},
 		// The spellings already in the tree: the pages say Resolution, Fix, The fix,
 		// Fixing it and Resolve it, and all five are the same section.
-		{"spelled Fix", "# MGS1001\n\n## Fix\n\nDeclare it.\n", types.DoctorOK, ""},
-		{"spelled The fix", "# MGS1001\n\n## The fix\n\nDeclare it.\n", types.DoctorOK, ""},
-		{"spelled Fixing it", "# MGS1001\n\n## Fixing it\n\nDeclare it.\n", types.DoctorOK, ""},
-		{"spelled Resolve it", "# MGS1001\n\n## Resolve it\n\nDeclare it.\n", types.DoctorOK, ""},
+		{"spelled Fix", "# MGS1001\n\n## Fix\n\nDeclare it.\n", types.CheckOK, ""},
+		{"spelled The fix", "# MGS1001\n\n## The fix\n\nDeclare it.\n", types.CheckOK, ""},
+		{"spelled Fixing it", "# MGS1001\n\n## Fixing it\n\nDeclare it.\n", types.CheckOK, ""},
+		{"spelled Resolve it", "# MGS1001\n\n## Resolve it\n\nDeclare it.\n", types.CheckOK, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -134,7 +134,7 @@ func TestCheckDiagnosticDocsMissingPage(t *testing.T) {
 	writeCodePage(t, root, types.NoCITarget, "# MGS1001\n\n## Resolution\n\nDeclare it.\n")
 
 	got := checkDiagnosticDocs(root, []types.DiagnosticCode{types.NoCITarget, types.SpellShadowed}, types.CodeURL)
-	require.Equal(t, types.DoctorFail, got.Status)
+	require.Equal(t, types.CheckFail, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "MGS1002")
 	assert.Contains(t, got.Details[0], "docs/reference/codes/magusfile/MGS1002.md",
@@ -157,7 +157,7 @@ func TestCheckDiagnosticDocsUnroutableCode(t *testing.T) {
 	}
 
 	got := checkDiagnosticDocs(root, []types.DiagnosticCode{types.NoCITarget, stray}, url)
-	require.Equal(t, types.DoctorFail, got.Status)
+	require.Equal(t, types.CheckFail, got.Status)
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "no see: target")
 	assert.Contains(t, got.Details[0], "types/diagnostic.go")
@@ -168,7 +168,7 @@ func TestCheckDiagnosticDocsUnroutableCode(t *testing.T) {
 // every user of magus.
 func TestCheckDiagnosticDocsSilentElsewhere(t *testing.T) {
 	got := (&runner{root: t.TempDir()}).checkDiagnosticDocs()
-	require.Equal(t, types.DoctorOK, got.Status)
+	require.Equal(t, types.CheckOK, got.Status)
 	require.Contains(t, got.Message, "skipped")
 }
 
@@ -183,7 +183,7 @@ func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 		writeCodePage(t, root, types.NoCITarget, "# MGS1001\n\n## Resolution\n\nDeclare it.\n")
 
 		got := checkDiagnosticDocs(root, codes, func(types.DiagnosticCode) string { return "" })
-		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		require.Equal(t, types.CheckFail, got.Status, got.Message)
 		require.Len(t, got.Details, 2)
 		assert.Contains(t, got.Details[0], "no see: target")
 	})
@@ -193,7 +193,7 @@ func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 		writeCodesTree(t, root)
 
 		got := checkDiagnosticDocs(root, codes, types.CodeURL)
-		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		require.Equal(t, types.CheckFail, got.Status, got.Message)
 		require.Len(t, got.Details, 2)
 		assert.Contains(t, got.Details[0], "docs/reference/codes/magusfile/MGS1001.md")
 	})
@@ -204,12 +204,12 @@ func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 // A code shipped without a page, or with a page naming no next step, fails here; there is
 // no allowlist, because the remedy for a listed code is to write the section.
 //
-// The message is asserted too: DoctorOK is also what the out-of-scope skip returns, so a
+// The message is asserted too: CheckOK is also what the out-of-scope skip returns, so a
 // status assertion alone passes on a check that resolved no page at all.
 func TestDiagnosticCatalogPassesItsOwnCheck(t *testing.T) {
 	got := (&runner{root: filepath.Join("..", "..")}).checkDiagnosticDocs()
 
-	require.Equalf(t, types.DoctorOK, got.Status, "%s\n%s", got.Message, strings.Join(got.Details, "\n"))
+	require.Equalf(t, types.CheckOK, got.Status, "%s\n%s", got.Message, strings.Join(got.Details, "\n"))
 	require.Equal(t, fmt.Sprintf(
 		"%d diagnostic code(s) resolve to a docs page carrying a remediation section",
 		len(types.AllDiagnosticCodes())), got.Message)

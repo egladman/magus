@@ -52,9 +52,9 @@ func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
-	require.Equal(t, types.DoctorCheck{
+	require.Equal(t, types.Check{
 		Name:    "bound-lease",
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: "no lease bound; the guard advises only",
 	}, got)
 }
@@ -66,9 +66,9 @@ func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
-	require.Equal(t, types.DoctorCheck{
+	require.Equal(t, types.Check{
 		Name:    "bound-lease",
-		Status:  types.DoctorFail,
+		Status:  types.CheckFail,
 		Message: `this checkout's marker binds lease "adj/marker" while the environment claims "adj/from-env"`,
 		Details: []string{
 			"the marker is what `magus job exec` wrote here, so magus grades every write under adj/marker and ignores the claim: a record of where the work is beats an assertion a shell can rewrite",
@@ -109,7 +109,7 @@ func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
-	require.Equal(t, types.DoctorFail, got.Status)
+	require.Equal(t, types.CheckFail, got.Status)
 	require.Equal(t, types.EvidenceUnknown, got.Evidence)
 	require.Contains(t, got.Message, "could not read the job store")
 }
@@ -120,9 +120,9 @@ func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
-	require.Equal(t, types.DoctorCheck{
+	require.Equal(t, types.Check{
 		Name:    "bound-lease",
-		Status:  types.DoctorFail,
+		Status:  types.CheckFail,
 		Message: `lease "adj/no-such-lease" is bound here, and no row declares it`,
 		Details: []string{
 			"the guard grades every write here as an unattributed edit: advisory, never denied",
@@ -138,9 +138,9 @@ func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
-	require.Equal(t, types.DoctorCheck{
+	require.Equal(t, types.Check{
 		Name:    "bound-lease",
-		Status:  types.DoctorFail,
+		Status:  types.CheckFail,
 		Message: `lease "adj/done" is bound here and not live (pass), so its lease-scoped rules are inert`,
 		Details: []string{"every write here grades as an unattributed edit until this checkout binds a live lease"},
 	}, got)
@@ -153,9 +153,9 @@ func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
-	require.Equal(t, types.DoctorCheck{
+	require.Equal(t, types.Check{
 		Name:    "bound-lease",
-		Status:  types.DoctorFail,
+		Status:  types.CheckFail,
 		Message: `lease "adj/stateless" is bound here and not live (no state), so its lease-scoped rules are inert`,
 		Details: []string{"every write here grades as an unattributed edit until this checkout binds a live lease"},
 	}, got)
@@ -168,9 +168,9 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
-	require.Equal(t, types.DoctorCheck{
+	require.Equal(t, types.Check{
 		Name:    "bound-lease",
-		Status:  types.DoctorFail,
+		Status:  types.CheckFail,
 		Message: `lease "adj/live" is bound here and live, but has no registered base, so the guard denies every write until one is recorded`,
 		Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then exec it on this lease"},
 	}, got)
@@ -181,9 +181,9 @@ func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root)
 
-	require.Equal(t, types.DoctorCheck{
+	require.Equal(t, types.Check{
 		Name:    "bound-lease",
-		Status:  types.DoctorAdvice,
+		Status:  types.CheckAdvice,
 		Message: `lease "adj/unwired" is bound here, live and registered, but no host hook config in this checkout invokes the guard`,
 		Details: []string{"the guard-wiring check names what is missing; the MCP surface is not checked here"},
 	}, got)
@@ -195,9 +195,9 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 
 	got := checkBoundLease(context.Background(), cacheDir, root, "test-host")
 
-	require.Equal(t, types.DoctorCheck{
+	require.Equal(t, types.Check{
 		Name:    "bound-lease",
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: `lease "adj/enforcing" is bound here, live, registered, and a host hook is wired to judge it`,
 	}, got)
 }
@@ -223,14 +223,14 @@ func TestCheckJobTreeFlagsOrphansAndStaleJobs(t *testing.T) {
 
 	now := time.Now().Unix()
 	got := checkJobTree(root, config.Jobs{}, now)
-	require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
+	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
 	details := strings.Join(got.Details, "\n")
 	assert.Contains(t, got.Message, "root/orphan")
 	assert.Contains(t, details, hint.JobExit.With("root/orphan"))
 	assert.NotContains(t, details, hint.JobExit.With("live"), "a live root is nobody's orphan, and staleness is unset")
 
 	stale := checkJobTree(root, config.Jobs{StaleAfter: time.Minute}, now+3600)
-	require.Equal(t, types.DoctorAdvice, stale.Status)
+	require.Equal(t, types.CheckAdvice, stale.Status)
 	assert.Contains(t, strings.Join(stale.Details, "\n"), hint.JobExit.With("live"))
 	assert.Contains(t, stale.Message, "jobs.stale_after")
 }
@@ -240,7 +240,7 @@ func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 
 	got := checkJobTree(root, config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
-	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 }
 
 func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
@@ -251,7 +251,7 @@ func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
 	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
 
 	got := checkJobTree(root, config.Jobs{}, time.Now().Unix())
-	require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
+	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
 	assert.Contains(t, got.Message, "waiter is blocked on dep which is fail")
 	assert.NotContains(t, got.Message, "queued", "a dependency still running is a plan in order, not a finding")
 }

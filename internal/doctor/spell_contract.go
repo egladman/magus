@@ -34,10 +34,10 @@ import (
 // only ever observes the registered spell, never the descriptor it was built from.
 // Catching declaration-versus-application drift needs a test over magus's own
 // construction paths, not a workspace diagnostic. See TestSpellOptionsApplied.
-func checkSpellContract(spells []*spells.Spell) types.DoctorCheck {
+func checkSpellContract(spells []*spells.Spell) types.Check {
 	const name = "spell-contract"
 	if len(spells) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no spells registered"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no spells registered"}
 	}
 
 	var broken, details []string
@@ -58,16 +58,16 @@ func checkSpellContract(spells []*spells.Spell) types.DoctorCheck {
 
 	if len(broken) > 0 {
 		sort.Strings(broken)
-		return types.DoctorCheck{
+		return types.Check{
 			Name:    name,
-			Status:  types.DoctorFail,
+			Status:  types.CheckFail,
 			Message: fmt.Sprintf("%d spell(s) do not satisfy the required mgs_ contract", len(broken)),
 			Details: broken,
 		}
 	}
-	return types.DoctorCheck{
+	return types.Check{
 		Name:    name,
-		Status:  types.DoctorOK,
+		Status:  types.CheckOK,
 		Message: fmt.Sprintf("%d spell(s) satisfy the required mgs_ contract", len(spells)),
 		Details: details,
 	}

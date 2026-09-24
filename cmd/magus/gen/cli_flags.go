@@ -167,6 +167,10 @@ const (
 	FlagDiffAck = "ack"
 	// diff: --baseline
 	FlagDiffBaseline = "baseline"
+	// diff: --conformance-min-cohort
+	FlagDiffConformanceMinCohort = "conformance-min-cohort"
+	// diff: --conformance-min-share
+	FlagDiffConformanceMinShare = "conformance-min-share"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
 	// diff: --impact
@@ -1751,17 +1755,21 @@ func BindNotesPromote(fs *flag.FlagSet) *NotesPromoteFlags {
 }
 
 // DiffFlags are the flags declared for `magus diff`.
+//
+// It does NOT carry --conformance-min-share: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type DiffFlags struct {
-	Generated bool   // --generated
-	Impact    bool   // --impact
-	NoTui     bool   // --no-tui
-	Watch     bool   // --watch
-	Ack       bool   // --ack
-	Reason    string // --reason
-	Prompt    bool   // --prompt
-	Rev       string // --rev
-	Patch     string // --patch
-	Baseline  string // --baseline
+	Generated            bool   // --generated
+	Impact               bool   // --impact
+	NoTui                bool   // --no-tui
+	Watch                bool   // --watch
+	Ack                  bool   // --ack
+	Reason               string // --reason
+	Prompt               bool   // --prompt
+	Rev                  string // --rev
+	Patch                string // --patch
+	Baseline             string // --baseline
+	ConformanceMinCohort int    // --conformance-min-cohort
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
@@ -1777,6 +1785,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
 	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
 	fs.StringVar(&f.Baseline, FlagDiffBaseline, "", "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves")
+	fs.IntVar(&f.ConformanceMinCohort, FlagDiffConformanceMinCohort, 0, "How many declarations a conformance norm needs before a changed symbol is compared against it (default 5)")
 	return &f
 }
 

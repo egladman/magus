@@ -463,9 +463,13 @@ const (
 	// CharmRenamed is a run activating a charm under a name magus has retired, with no
 	// selected target declaring that name for itself. The old name matches nothing, so
 	// without this the run would go ahead without the grant it asked for.
-	CharmRenamed             DiagnosticCode = "MGS6002"
-	UnresolvableBuzzImport   DiagnosticCode = "MGS7001"
-	DanglingDocReference     DiagnosticCode = "MGS7002"
+	CharmRenamed           DiagnosticCode = "MGS6002"
+	UnresolvableBuzzImport DiagnosticCode = "MGS7001"
+	DanglingDocReference   DiagnosticCode = "MGS7002"
+	// SymbolIndexNotCurrent is a review whose symbol index could not be brought up to date
+	// for the projects the change touched, so the conformance checks did not run: the
+	// indexer is missing or failed, or the cache recorded nothing to vouch for the result.
+	SymbolIndexNotCurrent    DiagnosticCode = "MGS7003"
 	OutputRefMissing         DiagnosticCode = "MGS8001"
 	OutputRefAmbiguous       DiagnosticCode = "MGS8002"
 	OutputRefMalformed       DiagnosticCode = "MGS8003"
@@ -578,7 +582,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnformattedCommit,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid, CharmRenamed,
-	UnresolvableBuzzImport, DanglingDocReference,
+	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, TokenStoreTooNew,
 	NoAuthToken, TokenNameExists, TokenNotFound,

@@ -54,7 +54,17 @@ import {
   type Row,
   type ViewMode,
 } from "./rows";
-import { modeChange, order, visibleFiles, stats, riskChips, type OrderedChangeset } from "./order";
+import {
+  conformanceUncovered,
+  conformanceUnchecked,
+  modeChange,
+  order,
+  visibleFiles,
+  stats,
+  riskChips,
+  type OrderedChangeset,
+} from "./order";
+import { reportFailure } from "../../lib/notifications";
 import { languageFor, tokenize, type Language } from "./syntax";
 import {
   fetchPatch,
@@ -2098,6 +2108,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
           "Edited counts projects a person changed a source file in; generated-only changes do not count as an edit. Rebuild is the full downstream closure over every changed path, generated included, because a regenerated output still invalidates a cache key.",
         ),
       );
+    }
+    const unchecked = conformanceUnchecked(state.session?.diff);
+    if (unchecked) {
+      const err = h("p", "console-diff-overview__note");
+      err.dataset.tone = "error";
+      err.textContent = unchecked;
+      box.append(err);
+      reportFailure("diff", unchecked, "conformance-unchecked");
+    }
+    for (const line of conformanceUncovered(state.session?.diff)) {
+      const note = h("p", "console-diff-overview__note");
+      note.textContent = line;
+      box.append(note);
     }
     for (const n of state.session?.diff?.notes ?? []) {
       const note = h("p", "console-diff-overview__note");

@@ -399,7 +399,7 @@ func AnyVal(v any) vm.Value {
 	case map[string]string:
 		return StrMapVal(x)
 	}
-	// A DEFINED type over a basic kind (types.DoctorCheckStatus, types.TargetRunState,
+	// A DEFINED type over a basic kind (types.CheckStatus, types.TargetRunState,
 	// spells.PatchOpKind) matches none of the cases above, because a type switch
 	// matches on identity and not on underlying type. That is the same trap the
 	// BuzzObject case documents, and it had the same symptom one layer down: a

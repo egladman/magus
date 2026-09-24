@@ -15,6 +15,7 @@ import "fs";
 import "time";
 import "serialize";
 import "std";
+import "magus";
 // Used by the test blocks; advice_test runs this file.
 import "assert";
 
@@ -199,6 +200,41 @@ export fun diffRange(base: str, head: str) > str !> any {
     // failure, one place, one explanation.
     if (!merged.ok) { return "origin/" + base + "..." + head; }
     return merged.stdout.trim();
+}
+
+// reviewOpts says which changeset magus\diff should read, and what to compare it against.
+//
+// ON THE FORGE the checkout is CLEAN: a pull request's changes are commits, so the
+// working-tree default is empty and an advisor reading it reported nothing at all, on every
+// pull request, for as long as api-surface had existed. The range is what it has to read.
+//
+// LOCALLY the working tree is right and the range would be wrong: `magus diff --impact` is
+// run before committing, and the uncommitted edit IS the change its reader is weighing.
+//
+// baseline is the base's `graph export --symbols`, when the workflow built one. Without it
+// every symbol's `change` is empty and `api` is null. minCohort and minShare are the
+// conformance checks' silence gates, passed through as given; "" keeps the defaults.
+export fun reviewOpts(baseline: str, base: str, head: str, local: bool, minCohort: str, minShare: str) > {str: any} {
+    var opts = mut {<str: any>};
+    if (baseline != "") { opts["baseline"] = baseline; }
+    if (!local) { opts["rev"] = "origin/" + base + "..." + head; }
+    if (minCohort != "") { opts["minCohort"] = minCohort; }
+    if (minShare != "") { opts["minShare"] = minShare; }
+    return opts;
+}
+
+// review_env names a file holding the change's `magus diff -o json`, which `magus diff
+// --impact` writes once per local run so every advisor reading the review reads that one
+// value rather than diffing again. The action sets none, so on the forge each reader diffs.
+final review_env = "ADVICE_REVIEW";
+
+// review is the change under advice, as magus\diff annotates it: the saved review when the run
+// wrote one, and otherwise computed here from the baseline and conformance gate inputs.
+export fun review(base: str, head: str) > magus\Diff !> any {
+    final saved = os\env(review_env) ?? "";
+    if (saved != "") { return magus\diff({"from": saved}); }
+    return magus\diff(reviewOpts(baseline: input("baseline"), base: base, head: head, local: collecting(),
+        minCohort: input("conformance-min-cohort"), minShare: input("conformance-min-share")));
 }
 
 // addedTargets returns the target names a diff introduces, read from its added
@@ -427,6 +463,19 @@ fun withoutFooter(text: str) > str {
     }
     if (at == null) { return text.trim(); }
     return text.sub(0, len: at!).trim();
+}
+
+test "on the forge the changeset is the RANGE, and locally it is the working tree" {
+    final ci = reviewOpts(baseline: "/tmp/base.json", base: "main", head: "abc123", local: false,
+        minCohort: "", minShare: "");
+    std\assert(ci["rev"] == "origin/main...abc123", message: "a clean checkout has to be told the range");
+    std\assert(ci["baseline"] == "/tmp/base.json", message: "and what to compare it against");
+    std\assert(ci["minCohort"] == null, message: "an unset gate keeps its default");
+
+    final here = reviewOpts(baseline: "", base: "main", head: "HEAD", local: true, minCohort: "3", minShare: "0.9");
+    std\assert(here["rev"] == null, message: "the uncommitted edit is what a local reader is weighing");
+    std\assert(here["baseline"] == null, message: "no baseline, no bump claimed");
+    std\assert(here["minCohort"] == "3" and here["minShare"] == "0.9", message: "the gates reach magus\\diff as given");
 }
 
 test "withoutFooter ignores a changed timestamp" {
