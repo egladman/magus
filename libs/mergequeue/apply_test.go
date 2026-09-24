@@ -346,7 +346,7 @@ func TestAnUpdateCommitIsCommittedByTheConfiguredCommitterElseTheProviders(t *te
 			c := change("1", "a")
 			c.Branch = "feature"
 			v := validated(c, base, "")
-			d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main"}).
+			d.provider.EXPECT().Describe(mock.Anything, applyQuery).
 				Return(types.Capabilities{StackMerge: types.StackMergeSequential, Methods: []types.MergeMethod{types.MethodSquash}, Committer: tc.named}, nil)
 			d.updating(c, v)
 			if tc.want == (magustypes.Person{}) {
@@ -694,7 +694,7 @@ func (d doubles) atomicStack() atomicStack {
 	s.v1 = validated(s.one, base, "")
 	s.v2 = validated(s.two, s.v1.CandidateCommit, "1")
 	s.plan = planOf([]types.Change{s.one, s.two})
-	d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main"}).
+	d.provider.EXPECT().Describe(mock.Anything, applyQuery).
 		Return(types.Capabilities{StackMerge: types.StackMergeAtomic, Methods: []types.MergeMethod{types.MethodSquash}}, nil)
 	d.bases(base)
 	d.rechecks(s.one, approvedAs(s.one))
@@ -920,7 +920,7 @@ func FuzzRetarget(f *testing.F) {
 // merged as a squash, on a provider that keeps stacked branches linear, so the plain
 // merge of c brings back what m's squash left out and c's own delta from m does not.
 func (d doubles) restacking(c types.Change, m types.MergedChange, v types.Verdict) {
-	d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main"}).
+	d.provider.EXPECT().Describe(mock.Anything, applyQuery).
 		Return(types.Capabilities{StackMerge: types.StackMergeSequential, LinearStacks: true, Methods: []types.MergeMethod{types.MethodSquash}, Committer: bot}, nil)
 	d.bases(base)
 	d.rechecks(c, approvedAs(c))
@@ -1152,6 +1152,54 @@ func TestApplyCarriesAnApprovalOverARebaseAgainstThePlansChanges(t *testing.T) {
 			a.Events = NewEvents(&out)
 			require.NoError(t, a.Run(t.Context(), plan))
 			assert.Equal(t, tc.carried, strings.Contains(out.String(), "rebased with its diff unchanged, so its approval carried over"))
+		})
+	}
+}
+
+// A base requiring the queue's status from an integration other than the credential's
+// counts none of the statuses apply would post, so apply refuses before it writes
+// anything: no stale success is reset, no status posted.
+func TestApplyRefusesAStatusPinnedToAnotherIntegration(t *testing.T) {
+	for name, tc := range map[string]struct {
+		app        string
+		credential types.Integration
+		pinned     string
+	}{
+		"pinned to the Actions token, holding an app's": {app: "acme-queue", credential: types.Integration{ID: "812", Name: "acme queue"}, pinned: "15368"},
+		"pinned to an app, holding the Actions token":   {credential: types.Integration{ID: "15368", Name: "GitHub Actions"}, pinned: "812"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			setup := &types.Setup{StatusContext: DefaultStatusContext, Credential: tc.credential,
+				RequiredChecks: []types.RequiredCheck{{Context: "ci gate"}, {Context: DefaultStatusContext, Integration: tc.pinned}}}
+			d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main", StatusContext: DefaultStatusContext, App: tc.app}).
+				Return(types.Capabilities{StackMerge: types.StackMergeSequential, Methods: []types.MergeMethod{types.MethodSquash}, Setup: setup}, nil)
+			a, err := NewApplier(d.vcs, clone, d.provider, d.src, d.facts, t.TempDir())
+			require.NoError(t, err)
+			a.App = tc.app
+			err = a.Run(t.Context(), planOf([]types.Change{change("1", "a")}))
+			var diag *magustypes.DiagnosticError
+			require.ErrorAs(t, err, &diag)
+			assert.Equal(t, magustypes.QueueCredentialMismatch, diag.Code)
+			assert.ErrorContains(t, err, `main requires status "merge-queue" from integration `+tc.pinned+`, and the queue's credential posts it as `+tc.credential.String())
+		})
+	}
+}
+
+func TestCheckCredentialPassesWhatTheProviderCounts(t *testing.T) {
+	actions := types.Integration{ID: "15368"}
+	for name, s := range map[string]*types.Setup{
+		"no setup reported": nil,
+		"pinned to the credential": {StatusContext: "merge-queue", Credential: actions,
+			RequiredChecks: []types.RequiredCheck{{Context: "merge-queue", Integration: "15368"}}},
+		"required from anyone": {StatusContext: "merge-queue", Credential: actions,
+			RequiredChecks: []types.RequiredCheck{{Context: "merge-queue"}}},
+		"not required": {StatusContext: "merge-queue", Credential: actions},
+		"another context pinned elsewhere": {StatusContext: "merge-queue", Credential: actions,
+			RequiredChecks: []types.RequiredCheck{{Context: "deploy", Integration: "812"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.NoError(t, checkCredential(s, "main"))
 		})
 	}
 }
