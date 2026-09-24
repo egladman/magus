@@ -296,10 +296,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **`magus session dispose` refuses without an interactive terminal and is denied to
-  agents.** Disposing an attention request records that a PERSON answered it, and nothing
-  stopped an agent from closing any request, including one addressed to a person. The CLI
-  now refuses with the `--ack` sentence and exit 2 outside a terminal, and the guard rule
-  `person-only` (widened from `read-ack`) denies every spelling on every agent channel.
+  agents.** Disposing an attention request records that a PERSON answered it. Outside a
+  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `person-only`
+  (widened from `read-ack`) denies every spelling on every agent channel.
 - **The `output-pipe`/`output-redirect` exemption for `magus query output` and
   `magus refs --text` now sees past a global flag.** It anchored on the first argument
   after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
