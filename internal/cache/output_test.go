@@ -380,39 +380,6 @@ func TestVolatileFailuresAccumulateAttemptsUnderOneRef(t *testing.T) {
 	}
 }
 
-// TestPrePortableStoreResolves pins backward compatibility: a store written before
-// portable refs (execution-unique 8-hex file stems, v1 descriptors with no schema/key
-// fields) keeps resolving (by its old ref exactly, and at the step level once the key
-// directory is addressed), and Attempts backfills the attempt id from the file stem.
-func TestPrePortableStoreResolves(t *testing.T) {
-	dir := t.TempDir()
-	const key = "0123456789abcdef0123456789abcdef"
-	keyDir := filepath.Join(dir, "outputs", key)
-	require.NoError(t, os.MkdirAll(keyDir, 0o755))
-	const oldRef = "out1a2b3c4d" // v1 shape: RefPrefix + 8 hex, minted per execution
-	require.NoError(t, os.WriteFile(filepath.Join(keyDir, oldRef+outExt), []byte("legacy bytes\n"), 0o644))
-	v1 := []byte(`{"ref":"` + oldRef + `","project":"pkg/a","target":"build","failed":false,"timestamp_ms":100,"duration_ms":5}`)
-	require.NoError(t, os.WriteFile(filepath.Join(keyDir, oldRef+descExt), v1, 0o644))
-
-	s := NewOutputStore(dir)
-
-	data, desc, err := s.ByRef(oldRef) // the exact ref a v1 run printed
-	require.NoError(t, err)
-	assert.Equal(t, "legacy bytes\n", string(data))
-	assert.Equal(t, oldRef, desc.Ref)
-
-	data, _, err = s.ByRef(PortableRef(key)) // the step-level ref the same key mints today
-	require.NoError(t, err)
-	assert.Equal(t, "legacy bytes\n", string(data))
-
-	assert.Equal(t, PortableRef(key), s.StepRef(key), "a pre-portable dir already answers with the portable ref")
-
-	attempts, err := s.Attempts(oldRef)
-	require.NoError(t, err)
-	require.Len(t, attempts, 1)
-	assert.Equal(t, oldRef, attempts[0].Attempt, "the v1 file stem backfills the attempt id")
-}
-
 // TestLatestRefsByTarget: the newest execution per (project, target) is returned, keyed
 // by descriptor timestamp; the charm suffix reproTarget stores ("build:rw") is collapsed
 // to the bare declared target, so a target's newest run is picked across its charm

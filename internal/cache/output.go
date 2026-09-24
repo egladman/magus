@@ -334,10 +334,6 @@ func attemptBlobsNewestFirst(dir string) []string {
 		}
 		a := attempt{path: filepath.Join(dir, f.Name()), name: f.Name()}
 		if d, derr := readDescriptor(filepath.Join(dir, stem+descExt)); derr == nil {
-			// compat: see the v1-descriptor note in Attempts.
-			if d.Attempt == "" {
-				d.Attempt = stem
-			}
 			a.desc, a.hasDesc = d, true
 		} else if info, ierr := f.Info(); ierr == nil {
 			a.mod = info.ModTime()
@@ -639,8 +635,7 @@ func uniqueDirRefs(dirs []string) []string {
 // Attempts lists every stored execution of the step ref names, newest first: the
 // keep-last-K history behind one portable ref (`magus query output <ref> --attempts`).
 // ref may be the step ref, a unique prefix, or any attempt id within the step; the
-// whole directory answers either way. Pre-portable descriptors carry no Attempt field;
-// their file stem (which was the v1 ref) fills it so every row is addressable. A blob
+// whole directory answers either way. A blob
 // whose descriptor is missing or unreadable (a Persist that died between its two
 // writes) still rows up (minimally, from the blob itself) because a listing that
 // silently omits a retrievable execution reads as "it does not exist".
@@ -666,15 +661,6 @@ func (s *OutputStore) Attempts(ref string) ([]OutputDescriptor, error) {
 			if info, ierr := f.Info(); ierr == nil {
 				d.TimestampMs = info.ModTime().UnixMilli()
 			}
-		}
-		// compat(until: no store holds schema-1 descriptors): a v1 descriptor predates
-		// the Attempt field, so its file stem (which WAS its ref) fills in, keeping
-		// every row addressable. Delete when the oldest reachable store has been
-		// written by a schema-2 magus for longer than the retention window; the
-		// descriptors age out on their own, so this needs no migration. Observable:
-		// deletion makes pre-portable rows list with an empty attempt id.
-		if d.Attempt == "" {
-			d.Attempt = stem
 		}
 		out = append(out, d)
 	}
