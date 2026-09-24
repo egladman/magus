@@ -80,7 +80,11 @@ func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 // supersession in both directions: it may take a lock from an earlier gate on this same
 // tree, and a later one may take its locks (MGS3014). See projectLocker.acquire for
 // which other contentions queue and which are refused.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer) (*projectHold, error) {
+//
+// stdio, when the invocation runs in this process, first holds the acquisition back
+// while a magus upstream of it in a shell pipe still needs one of these projects (see
+// ProcessStdio), and publishes the finished lock set for the stage downstream.
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool, rw *report.Writer, stdio *ProcessStdio) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
@@ -97,14 +101,59 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if gate {
 		lopts = append(lopts, asGate())
 	}
+	if stdio != nil {
+		lopts = append(lopts, withStdio(stdio))
+	}
 	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, lopts...)
-	unlock, err := l.acquireAll(ctx, paths)
+	unlock, _, err := l.takeRunLocks(ctx, paths)
 	if err != nil {
 		return nil, err
 	}
 	hold := &projectHold{locker: l, paths: paths, unlock: unlock}
 	hold.stopWatchdog = watchWorkspaceRoot(ctx, m.ws.Root, rootWatchdogInterval, hold.unlockOnce)
 	return hold, nil
+}
+
+// takeRunLocks is one invocation's whole acquisition: wait out a pipe upstream (see
+// awaitUpstream), take every lock, then publish the set for the stage downstream. The
+// spool is non-nil when stdin was held back and is now relayed from it.
+func (l *projectLocker) takeRunLocks(ctx context.Context, paths []string) (func(), *stdinSpool, error) {
+	sp, ups, err := l.awaitUpstream(ctx, paths)
+	if err != nil {
+		return nil, nil, err
+	}
+	unlock, err := l.acquireAll(ctx, paths)
+	// An upstream that has stopped writing is exiting, and the kernel closes its pipe
+	// before its lock files. The flock it still holds for that instant is not contention.
+	for deadline := time.Now().Add(upstreamExitGrace); err != nil && l.heldByUpstream(err, ups) && time.Now().Before(deadline); {
+		select {
+		case <-ctx.Done():
+			return nil, sp, fmt.Errorf("workspace lock: gave up waiting on an exiting upstream: %w", ctx.Err())
+		case <-time.After(lockPollEvery):
+		}
+		unlock, err = l.acquireAll(ctx, paths)
+	}
+	if err != nil {
+		return nil, sp, err
+	}
+	retract := l.publishHolds(ctx, paths)
+	return func() { retract(); unlock() }, sp, nil
+}
+
+// upstreamExitGrace bounds how long a run retries a lock still held by an upstream stage
+// that has stopped writing its pipe. Exit takes milliseconds; an upstream that closed
+// its stdout and kept running past this is refused like any other holder.
+const upstreamExitGrace = 2 * time.Second
+
+// heldByUpstream reports a refusal whose holder is one of this run's proven upstream
+// stages.
+func (l *projectLocker) heldByUpstream(err error, ups []upstreamStage) bool {
+	var c *lockContendedError
+	if !errors.As(err, &c) {
+		return false
+	}
+	holder := l.readOwner(c.Project).PID
+	return holder != 0 && slices.ContainsFunc(ups, func(u upstreamStage) bool { return u.pid == holder })
 }
 
 // rootWatchdogInterval is how often a lock-holding run re-checks that its workspace
@@ -221,6 +270,9 @@ type projectLocker struct {
 	// which would otherwise be free text on a stream a caller is parsing. The lock is
 	// taken before Run wraps ctx with the writer, so it is threaded in directly.
 	rw *report.Writer
+	// stdio is the invocation's own standard streams, set only when it runs in this
+	// process. See ProcessStdio.
+	stdio *ProcessStdio
 }
 
 // lockPollEvery paces the two acquires that wait on another process's flock, which has no
