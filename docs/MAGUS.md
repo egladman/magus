@@ -49,9 +49,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `test`                                                                                 |
 | spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                                  |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                             |
-| tool       | built in | `magus query kind=tool`       | `go`, `pnpm`, `buf`                                                                                                         |
+| tool       | built in | `magus query kind=tool`       |                                                                                                                             |
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
-| module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
+| module     | built in | `magus query kind=module`     |                                                                                                                             |
 | method     | built in | `magus query kind=method`     |                                                                                                                             |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS1002`, `MGS3009`, `MGS1028`                                                                                             |
 | doc        |     400+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md` |

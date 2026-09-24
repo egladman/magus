@@ -288,6 +288,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`MAGUS.md` routing indexes are byte-identical on every machine.** Example columns rank
+  by the repository's own edges, not the binary's spell catalog; gitignored sources are
+  skipped; and the drift gate now catches an output a composed step writes, which let
+  five library indexes go stale.
 - **`magus session dispose` refuses without an interactive terminal and is denied to
   agents.** Disposing an attention request records that a PERSON answered it. Outside a
   terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `person-only`
