@@ -48,6 +48,14 @@ func TestReviewFixtureHasNoIndexer(t *testing.T) {
 	}
 }
 
+// TestFixtureEnvDropsMagusState: a MAGUS_* variable in the generator's environment,
+// such as the merge queue's MAGUS_CACHE_DIR, would point the fixture's magus at state
+// the fixture does not own.
+func TestFixtureEnvDropsMagusState(t *testing.T) {
+	got := fixtureEnv([]string{"PATH=/bin", "MAGUS_CACHE_DIR=/scratch/magus", "MAGUS_LEVEL=1", "BAGGAGE=magus.lease=x", "HOME=/h"})
+	assert.Equal(t, []string{"PATH=/bin", "HOME=/h"}, got)
+}
+
 // TestDocsHaveExampleMarkers: every example the generator produces has a marker pair on
 // the page it names, so `content-generate` can never render an example with nowhere to
 // land. Each example is checked against ITS OWN page rather than one shared file: an
