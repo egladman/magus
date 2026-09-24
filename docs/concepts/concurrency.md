@@ -168,11 +168,14 @@ with its own. A read-only upstream, like `magus ls` or `magus status --watch`, n
 holds a reader back. Three or more magus stages work the same way: each stage
 considers every magus stage upstream of it.
 
-The upstream is proven from the kernel, never taken on trust: the run checks that the
-process writing its stdin runs the same magus executable. That covers only adjacent
-magus stages. Put `jq` or `cat` between them and the two meet at the lock as strangers,
-so one is refused as above. The same happens with two different magus binaries, and on
-Windows, where no kernel interface proves who writes an anonymous pipe. A run nested in
+The upstream is proven from the kernel, never taken on trust: the run follows its stdin
+back to the processes writing it, and counts one as a magus stage only when it runs the
+same magus executable. Tools in between, like `magus ... | jq ... | magus ...` or
+`| tee log |`, are followed through the same way: the run reads which pipes they hold,
+never their arguments. Input that no magus feeds, like `echo x | cat | magus run ...`,
+proves nothing, so a lock held elsewhere is refused as above. Two different magus
+binaries also meet as strangers, and so does everything on Windows, where no kernel
+interface proves who writes an anonymous pipe. A run nested in
 another never waits on its own ancestor, which is still
 [MGS3007](../reference/codes/sandbox/MGS3007.md). A pipe that loops back into the run
 reading it is refused with [MGS3023](../reference/codes/sandbox/MGS3023.md).

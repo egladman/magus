@@ -1,11 +1,26 @@
-# Only an adjacent magus stage is proven. With `cat` between them the reader's writer is
-# cat, so the two magus stages meet at the lock as strangers, as before: exactly one of
-# them is refused, naming the other.
+# A tool between two magus stages changes nothing: the reader follows the pipe back
+# through it, from the kernel, to the magus writing into it, and waits as it would for
+# an adjacent stage. The tool's own arguments are never read.
 [windows] skip 'no kernel API proves the writer of an anonymous pipe'
 
-! exec bash -c 'set -o pipefail; magus run holdslow . | cat | magus run consume .'
+exec bash -c 'set -o pipefail; magus run holdslow . | cat | magus run consume .'
+stderr 'magus: waiting for pid [0-9]+ \(.*run holdslow'
+! stderr 'locked by another magus process'
+grep 'done' consumed
+
+rm consumed
+exec bash -c 'set -o pipefail; magus run holdslow . | tee copy | cat | magus run consume .'
+! stderr 'locked by another magus process'
+grep 'done' consumed
+grep 'done' copy
+
+# A tool that no magus feeds proves nothing: a lock held elsewhere is refused at once.
+exec magus run holdslow . &
+exec bash -c 'for i in $(seq 200); do [ -f ready ] && exit 0; sleep 0.05; done; exit 1'
+exec bash -c 'echo x | cat | magus run consume .; [ $? -eq 75 ]'
 stderr 'locked by another magus process'
 ! stderr 'waiting for pid'
+wait
 
 -- magus.yaml --
 {}
@@ -14,6 +29,7 @@ stderr 'locked by another magus process'
 -- magusfile.buzz --
 import "magus";
 import "io";
+import "fs";
 import "proc";
 
 magus\project({
@@ -25,10 +41,10 @@ magus\project({
 });
 
 export fun holdslow(ctx: magus\Context, args: [str]) > void !> any {
-    proc\exec("sleep", ["2"]);
+    proc\exec("sh", ["-c", "touch ready; sleep 2"]);
     io\stdout.write("done\n");
 }
 
 export fun consume(ctx: magus\Context, args: [str]) > void !> any {
-    io\stdin.readAll();
+    fs\writeFile("consumed", io\stdin.readAll());
 }

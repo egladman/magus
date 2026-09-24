@@ -628,6 +628,110 @@ func TestPipeCycleIsRefused(t *testing.T) {
 	}
 }
 
+// through starts `cat` reading in and writing out, and closes this process's copies of
+// both ends it was handed, so cat is the only process between the two pipes.
+func through(t *testing.T, in, out *os.File) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command("cat")
+	cmd.Stdin, cmd.Stdout = in, out
+	startStage(t, cmd)
+	_ = in.Close()
+	_ = out.Close()
+	return cmd
+}
+
+// TestUpstreamThroughANonMagusStage: `a | cat | b` behaves as `a | b`. The pipe graph
+// is followed through cat from the kernel alone; cat's own arguments are never read.
+func TestUpstreamThroughANonMagusStage(t *testing.T) {
+	cacheDir := t.TempDir()
+	r1, w1 := shellPipe(t)
+	r2, w2 := shellPipe(t)
+	ready := readyFile(t)
+	up := pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "500", "WRITE_AFTER": "plan"})
+	upstreamOf(t, up, w1)
+	through(t, r1, w2)
+	waitForFile(t, ready, 5*time.Second)
+
+	var out bytes.Buffer
+	release, sp, err := downstream(cacheDir, r2, writingTo(&out)).takeRunLocks(context.Background(), []string{"p"})
+	if err != nil {
+		t.Fatalf("takeRunLocks: %v (the magus behind cat holds p)", err)
+	}
+	defer release()
+	if sp == nil {
+		t.Fatalf("did not wait on the magus stage behind cat")
+	}
+	got, _ := io.ReadAll(r2)
+	sp.wait()
+	if string(got) != "plan" {
+		t.Fatalf("stdin = %q, want plan relayed through cat", got)
+	}
+	if !strings.Contains(out.String(), fmt.Sprintf("waiting for pid %d (", up.Process.Pid)) {
+		t.Fatalf("decision %q does not name the magus stage behind cat", out.String())
+	}
+}
+
+// TestNonMagusStageNotFedByMagusIsUnchanged: `echo x | cat | b` has no magus upstream,
+// so a lock held elsewhere is refused at once, as before.
+func TestNonMagusStageNotFedByMagusIsUnchanged(t *testing.T) {
+	cacheDir := t.TempDir()
+	r1, w1 := shellPipe(t)
+	r2, w2 := shellPipe(t)
+	writer := exec.Command("sh", "-c", "echo x; sleep 5")
+	writer.Stdout = w1
+	startStage(t, writer)
+	_ = w1.Close()
+	through(t, r1, w2)
+	ready := readyFile(t)
+	startStage(t, pipeStage(t, cacheDir, map[string]string{"PROJECTS": "p", "READY": ready, "HOLD_MS": "5000"}))
+	waitForFile(t, ready, 5*time.Second)
+
+	start := time.Now()
+	_, _, err := downstream(cacheDir, r2).takeRunLocks(context.Background(), []string{"p"})
+	var c *lockContendedError
+	if !errors.As(err, &c) || time.Since(start) > time.Second {
+		t.Fatalf("takeRunLocks = %v after %s, want an immediate refusal", err, time.Since(start))
+	}
+}
+
+// TestPipeCycleThroughANonMagusStage: this run -> magus H -> cat -> this run.
+func TestPipeCycleThroughANonMagusStage(t *testing.T) {
+	cacheDir := t.TempDir()
+	r1, w1 := shellPipe(t)
+	r2, w2 := shellPipe(t)
+	r3, w3 := shellPipe(t)
+	defer w3.Close()
+	h := pipeStage(t, cacheDir, map[string]string{"HOLD_MS": "5000"})
+	h.Stdin = r3
+	upstreamOf(t, h, w2)
+	_ = r3.Close()
+	through(t, r2, w1)
+	time.Sleep(100 * time.Millisecond)
+
+	start := time.Now()
+	_, _, err := downstream(cacheDir, r1).takeRunLocks(context.Background(), []string{"p"})
+	if !errors.Is(err, types.PipeCycle) || time.Since(start) > 2*time.Second {
+		t.Fatalf("takeRunLocks = %v after %s, want MGS3023", err, time.Since(start))
+	}
+}
+
+// TestALoopThroughToolsAloneIsNotACycle: this run -> cat -> this run holds nobody's lock,
+// so it is neither refused as a cycle nor waited on.
+func TestALoopThroughToolsAloneIsNotACycle(t *testing.T) {
+	cacheDir := t.TempDir()
+	r1, w1 := shellPipe(t)
+	r2, w2 := shellPipe(t)
+	defer w2.Close()
+	through(t, r2, w1)
+	time.Sleep(50 * time.Millisecond)
+
+	release, sp, err := downstream(cacheDir, r1).takeRunLocks(context.Background(), []string{"p"})
+	if err != nil || sp != nil {
+		t.Fatalf("takeRunLocks = %v (waited: %v), want an ordinary acquisition", err, sp != nil)
+	}
+	release()
+}
+
 func TestStdioOnAFileKeepsTheFailFast(t *testing.T) {
 	cacheDir := t.TempDir()
 	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))

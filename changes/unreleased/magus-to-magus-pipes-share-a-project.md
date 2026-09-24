@@ -1,5 +1,6 @@
 ### Fixed
 
-- **One magus can pipe into another that needs the same project.** The reader, proven
-  from the kernel on linux and macOS, takes no lock until the upstream is done with the
-  projects it needs, draining the pipe; before, whichever stage lost the race exited 75. Stages on different projects still stream. A looping pipe is MGS3023.
+- **One magus can pipe into another that needs the same project, even through `jq` or
+  `tee`.** The reader, proven from the kernel on linux and macOS, waits until the
+  upstream is done with its projects, draining the pipe; before, the stage that lost
+  the race exited 75. Different projects still stream. A looping pipe is MGS3023.

@@ -220,10 +220,12 @@ func (l *projectLocker) waitOut(ctx context.Context, ups []upstreamStage, blocki
 	return sp, nil
 }
 
-// upstream walks back from the pipe this run reads, through every magus stage writing
-// it, to the stages writing theirs. It stops at a writer that is not this executable (a
-// shell, cat, a harness) and skips this run's own ancestors, which write its stdin by
-// design (magus.run's stdin option) and wait for it, so they are never waited on.
+// upstream walks back from the pipe this run reads, through every process writing it,
+// to the processes writing theirs, and returns the magus stages among them. A stage that
+// is not this executable (cat, tee, jq) is walked through but never weighed: only its
+// pipes are read, never its arguments. The walk skips this run's own ancestors, which
+// write its stdin by design (magus.run's stdin option) and wait for it, so they are
+// never waited on; that also keeps it out of the shell and harness that launched it.
 func (l *projectLocker) upstream(ctx context.Context, in pipepeer.Pipe) ([]upstreamStage, error) {
 	self := os.Getpid()
 	ancestors := ancestorPIDs(ctx, self)
@@ -238,18 +240,22 @@ func (l *projectLocker) upstream(ctx context.Context, in pipepeer.Pipe) ([]upstr
 				continue
 			}
 			for _, w := range writers {
-				if w == self && depth > 0 {
+				// A loop through nothing but other tools holds nobody's lock, so only a
+				// loop through a magus stage would wait on itself.
+				if w == self && depth > 0 && len(out) > 0 {
 					return nil, types.DiagnosticErrorf(types.PipeCycle,
 						"this run's standard input is written, through magus pid %s, by this run itself; each stage would wait on the one before it, so it is refused instead."+
 							" Break the loop so one stage's input does not depend on its own output.", joinPIDs(out))
 				}
-				if seen[w] || ancestors[w] || !pipepeer.SameExecutable(w) {
+				if seen[w] || ancestors[w] {
 					continue
 				}
 				seen[w] = true
-				argv, aerr := pipepeer.Args(w)
-				takes := aerr != nil || l.stdio.TakesLocks == nil || l.stdio.TakesLocks(argv)
-				out = append(out, upstreamStage{pid: w, writes: p, argv: argv, takesLocks: takes})
+				if pipepeer.SameExecutable(w) {
+					argv, aerr := pipepeer.Args(w)
+					takes := aerr != nil || l.stdio.TakesLocks == nil || l.stdio.TakesLocks(argv)
+					out = append(out, upstreamStage{pid: w, writes: p, argv: argv, takesLocks: takes})
+				}
 				if wp, err := pipepeer.ReadEnd(w, 0); err == nil {
 					next = append(next, wp)
 				}

@@ -421,8 +421,8 @@ const (
 	// through ctx.needs in any selected project. Running it first would add work rather
 	// than reorder it, so the invocation is refused before anything runs.
 	PreflightOutsideClosure DiagnosticCode = "MGS3021"
-	// PipeCycle is a run whose standard input is written, through a chain of magus
-	// processes, by itself. Each would wait for the one before it to settle its locks,
+	// PipeCycle is a run whose standard input is written, through a chain of processes
+	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
 	// so none ever would; the run is refused before it takes any lock.
 	PipeCycle                 DiagnosticCode = "MGS3023"
 	RaceDetected              DiagnosticCode = "MGS4001"
