@@ -12,7 +12,6 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
 )
 
@@ -22,42 +21,32 @@ import (
 // harness that opted in, not a boundary: a process running as the user can read those files
 // whatever the guard says, which docs/concepts/tokens.md states plainly.
 
-// credentialInvocation is one CLI spelling that mints, prints, rotates or revokes a
-// credential, read off the registry: the command's words, and the flag that makes it one
-// when the command alone does not.
+// credentialInvocation is one magus command that mints, prints, rotates or revokes a
+// credential: its words, and the flag that makes it one when the command alone does not.
 type credentialInvocation struct {
 	words []string
 	flag  string
 }
 
-// credentialInvocations walks internal/cli's registry once, so a verb marked Credential there
-// is refused here without a second list to keep in step.
-var credentialInvocations = sync.OnceValue(func() []credentialInvocation {
-	var out []credentialInvocation
-	var walk func(prefix []string, cmds []cli.Command)
-	walk = func(prefix []string, cmds []cli.Command) {
-		for _, c := range cmds {
-			words := append(slices.Clone(prefix), c.Name)
-			if c.Credential {
-				out = append(out, credentialInvocation{words: words})
-			}
-			for _, f := range c.Flags {
-				if f.Credential {
-					out = append(out, credentialInvocation{words: words, flag: f.Name})
-				}
-			}
-			walk(words, c.Children)
-		}
-	}
-	walk(nil, cli.All)
-	return out
-})
+// credentialInvocations is every such command. TestCredentialVerbsExistInTheRegistry holds
+// each to a command internal/cli declares, so a rename fails there rather than dropping out.
+var credentialInvocations = []credentialInvocation{
+	{words: []string{"config", "token", "print"}},
+	{words: []string{"config", "token", "generate"}},
+	{words: []string{"config", "token", "revoke"}},
+	{words: []string{"config", "mcp", "connector", "create"}},
+	{words: []string{"config", "mcp", "connector", "revoke"}},
+	{words: []string{"config", "console", "token", "create"}},
+	{words: []string{"config", "console", "token", "revoke"}},
+	// Its link carries a console sign-in code.
+	{words: []string{"graph", "export"}, flag: "follow"},
+}
 
-// credentialVerbRe is the unparsable-line fallback: any registry spelling after a word
-// ending in magus, with its flag when it needs one.
+// credentialVerbRe is the unparsable-line fallback: any listed spelling after a word ending in
+// magus, with its flag when it needs one.
 var credentialVerbRe = sync.OnceValue(func() *regexp.Regexp {
-	alts := make([]string, 0, len(credentialInvocations()))
-	for _, inv := range credentialInvocations() {
+	alts := make([]string, 0, len(credentialInvocations))
+	for _, inv := range credentialInvocations {
 		alt := strings.Join(inv.words, `\s+`) + `\b`
 		if inv.flag != "" {
 			alt += `[^|;&]*\s--?` + regexp.QuoteMeta(inv.flag) + `\b`
@@ -79,7 +68,7 @@ func credentialVerbFires(cmds []hint.Invocation, parsed bool, command string) bo
 			continue
 		}
 		words := magusSubcommandWords(args)
-		for _, inv := range credentialInvocations() {
+		for _, inv := range credentialInvocations {
 			if len(words) >= len(inv.words) && slices.Equal(words[:len(inv.words)], inv.words) &&
 				(inv.flag == "" || magusFlag(args, inv.flag)) {
 				return true

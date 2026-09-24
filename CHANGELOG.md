@@ -220,7 +220,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `connectors.d` MGS9017.
 - **Console links carry a one-time code, never a token.** `#code=` lives a minute and
   works once; the console trades it at `POST /api/v1/token/exchange` for a 12-hour console
-  token. The guard denies agents every credential verb the CLI registry marks
+  token. The guard denies agents the commands that mint or revoke tokens
   (`credential-verb`) and the token files (`token-state`). A non-loopback `mcp.address`
   needs `mcp.insecure_bind: true`, and the operator token is refused off loopback.
 - **A planted token record cannot outrank a minted one.** The store skips, with MGS9019,

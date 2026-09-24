@@ -14,7 +14,7 @@ An agent minting, printing, rotating or revoking a credential through the CLI.
 
 ## Why
 
-An agent holds the token it was given, and a session that mints another holds a grant nobody handed it. Every command the CLI registry marks as a credential verb is refused: `magus config console token create`, `magus config mcp connector create`, `magus graph export --open --follow` (its link carries a sign-in code), and `magus config token print`, `generate` and `revoke`, the operator token that reaches token management. The list is read from the registry, so a new minting verb is covered by being declared, and it holds however the binary is spelled: `./magus`, a path, `go run ./cmd/magus`, or inside a `$(...)` substitution. This is a seatbelt for a harness that opted in, not a boundary: a process running as the user can reach the same files.
+An agent holds the token it was given, and a session that mints another holds a grant nobody handed it. Refused: the console and connector token `create` and `revoke` commands, `magus graph export --open --follow` (its link carries a sign-in code), and `magus config token print`, `generate` and `revoke`, the operator token that reaches token management. It holds however the binary is spelled: `./magus`, a path, `go run ./cmd/magus`, or inside a `$(...)` substitution. This is a seatbelt for a harness that opted in, not a boundary: a process running as the user can reach the same files.
 
 ## Seeing it
 

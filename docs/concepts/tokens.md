@@ -151,9 +151,9 @@ when it cannot.
 
 ## Agents
 
-Every command the CLI registry marks as a credential verb is denied to an agent
-session (rule [credential-verb](../reference/rules/credential-verb.md)): the
-console and connector `create` commands, `magus graph export --open --follow`
+Every credential verb is denied to an agent session (rule
+[credential-verb](../reference/rules/credential-verb.md)): the console and
+connector token `create` and `revoke` commands, `magus graph export --open --follow`
 (its link carries a code), and `magus config token print`, `generate` and
 `revoke`, however the binary is spelled. The operator file and `tokens.d` are
 denied too (rule [token-state](../reference/rules/token-state.md)), to an editor

@@ -61,11 +61,6 @@ type Command struct {
 	// command-specific meaning, or a code a neighbouring tool has trained them to
 	// expect and this one does not use.
 	ExitStatus []ExitCode
-
-	// Credential marks a command that mints, prints, rotates or revokes a credential. The guard
-	// refuses every marked command to an agent session, so a new minting verb is covered by
-	// being declared here rather than by a second list in the guard.
-	Credential bool
 }
 
 // ExitCode is one documented exit status.
@@ -159,11 +154,6 @@ type Flag struct {
 	// then did nothing. Every generated struct field is a GROUP: the primary plus
 	// its aliases, bound to a single address.
 	AliasOf string
-
-	// Credential marks a flag that makes its command mint a credential, as `graph export
-	// --open` mints a console link's code. The guard refuses the command to an agent session
-	// when the flag is set; see Command.Credential.
-	Credential bool
 
 	// No Enum field, deliberately. Every closed-set value in this CLI belongs to
 	// the GLOBAL -o flag, which this registry does not model (see Flags above), and

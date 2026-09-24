@@ -661,7 +661,7 @@ Subcommands (the first argument):
 			{Name: "global", Kind: FlagBool, Doc: "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace"},
 			{Name: "reproducible", Kind: FlagBool, Doc: "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes"},
 			{Name: "open", Kind: FlagBool, Doc: "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine"},
-			{Name: "follow", Kind: FlagBool, Credential: true, Doc: "With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)"},
+			{Name: "follow", Kind: FlagBool, Doc: "With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)"},
 			{Name: "targets", Kind: FlagBool, Doc: "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it"},
 			{Name: "serve", Kind: FlagBool, Doc: "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)"},
 			{Name: "print", Kind: FlagBool, Doc: "With --open: print the explorer URL to stdout instead of launching a browser"},
@@ -1021,9 +1021,8 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					Short: "Manage connector tokens (mcp=write)",
 					Children: []Command{
 						{
-							Name:       "create",
-							Short:      "Mint a connector token",
-							Credential: true,
+							Name:  "create",
+							Short: "Mint a connector token",
 							Flags: []Flag{
 								{Name: "name", Kind: FlagString, Doc: "Name for this connector token (default: connector-N)"},
 								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},
@@ -1040,15 +1039,14 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 			Short: "Manage the operator token (every surface)",
 			Children: []Command{
 				{
-					Name:       "generate",
-					Short:      "Create the operator token",
-					Credential: true,
+					Name:  "generate",
+					Short: "Create the operator token",
 					Flags: []Flag{
 						{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
 					},
 				},
-				{Name: "print", Short: "Print the current operator token to stdout (denied to agent sessions)", Credential: true},
-				{Name: "revoke", Short: "Delete the operator token (the daemon mints a fresh one on next start)", Credential: true},
+				{Name: "print", Short: "Print the current operator token to stdout (denied to agent sessions)"},
+				{Name: "revoke", Short: "Delete the operator token (the daemon mints a fresh one on next start)"},
 				{Name: "status", Short: "Show whether an operator token exists and its fingerprint"},
 			},
 		},
@@ -1061,9 +1059,8 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 					Short: "Manage console tokens",
 					Children: []Command{
 						{
-							Name:       "create",
-							Short:      "Mint a console token",
-							Credential: true,
+							Name:  "create",
+							Short: "Mint a console token",
 							Flags: []Flag{
 								{Name: "name", Kind: FlagString, Doc: "Name for this console token (default: console-N)"},
 								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, at most 366d (default 90d)"},

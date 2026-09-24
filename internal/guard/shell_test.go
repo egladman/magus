@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -1750,9 +1751,8 @@ func TestGuardDeniesExitStatusEcho(t *testing.T) {
 }
 
 // Every command the guard judges came from an agent, and an agent holds the token it was given:
-// every verb the CLI registry marks as a credential verb is refused however the line spells
-// it, the binary included. Listing tokens and asking whether the operator token exists stay
-// allowed.
+// every credential verb is refused however the line spells it, the binary included. Listing
+// tokens and asking whether the operator token exists stay allowed.
 func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 	for _, cmd := range []string{
 		"magus config token print",
@@ -1766,6 +1766,8 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 		"magus config console token create --code --expires 12h",
 		"magus -C . config console token create",
 		"magus config mcp connector create --name agent",
+		"magus config console token revoke laptop",
+		"magus config mcp connector revoke 3fa9c1d2",
 		"magus graph export --open --follow",
 		"magus graph export --open --follow --print",
 		"magus graph export --follow --open --targets",
@@ -1793,7 +1795,6 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 		"magus config token status",
 		"magus config console token ls",
 		"magus config mcp connector ls",
-		"magus config console token revoke laptop",
 		"magus graph export --open",
 		"magus graph export --open --print",
 		"magus run go::go-test . -- -run 'Token'",
@@ -1805,25 +1806,28 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 	}
 }
 
-// The credential verbs are read off the registry, so a verb marked there is refused without a
-// second list here to keep in step.
-func TestCredentialVerbsComeFromTheRegistry(t *testing.T) {
-	var words []string
-	for _, inv := range credentialInvocations() {
-		w := strings.Join(inv.words, " ")
-		if inv.flag != "" {
-			w += " --" + inv.flag
+// Every credential verb names a command, and flag, the CLI registry declares, so a rename in
+// the registry fails here rather than silently dropping a verb from the rule.
+func TestCredentialVerbsExistInTheRegistry(t *testing.T) {
+	for _, inv := range credentialInvocations {
+		spelled := strings.Join(inv.words, " ")
+		cmds := cli.All
+		var found *cli.Command
+		for _, w := range inv.words {
+			i := slices.IndexFunc(cmds, func(c cli.Command) bool { return c.Name == w })
+			if !assert.GreaterOrEqual(t, i, 0, "%q: no command %q in the registry", spelled, w) {
+				found = nil
+				break
+			}
+			found = &cmds[i]
+			cmds = found.Children
 		}
-		words = append(words, w)
+		if found == nil || inv.flag == "" {
+			continue
+		}
+		assert.True(t, slices.ContainsFunc(found.Flags, func(f cli.Flag) bool { return f.Name == inv.flag }),
+			"%q: no flag --%s in the registry", spelled, inv.flag)
 	}
-	assert.ElementsMatch(t, []string{
-		"config mcp connector create",
-		"config token generate",
-		"config token print",
-		"config token revoke",
-		"config console token create",
-		"graph export --follow",
-	}, words)
 }
 
 // The rule refuses only a status printed and dropped. Every form here can feed $? into
