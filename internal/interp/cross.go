@@ -24,6 +24,9 @@ type CrossDispatch struct {
 	mu  sync.Mutex
 	m   map[string]*crossEntry
 	run func(ctx context.Context, dir, target string) error // RunDir; swappable in tests
+	// passed maps a project dir to the targets MarkDone recorded in it, which a remote
+	// run into that dir must not repeat.
+	passed map[string][]string
 }
 
 type crossEntry struct {
@@ -54,6 +57,37 @@ func WithCrossDispatch(ctx context.Context, c *CrossDispatch) context.Context {
 func CrossDispatchFromContext(ctx context.Context) *CrossDispatch {
 	c, _ := ctx.Value(crossDispatchCtxKey{}).(*CrossDispatch)
 	return c
+}
+
+// MarkDone records that target already passed in the project at dir earlier in this
+// run: a later Dispatch of it returns nil without running, and a remote run into dir
+// treats it as done where that body needs it. Safe for concurrent use.
+func (c *CrossDispatch) MarkDone(dir, target string) {
+	e := &crossEntry{done: make(chan struct{})}
+	close(e.done)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.m[dir+"\x00"+target]; !ok {
+		c.m[dir+"\x00"+target] = e
+	}
+	if c.passed == nil {
+		c.passed = map[string][]string{}
+	}
+	if !slices.Contains(c.passed[dir], target) {
+		c.passed[dir] = append(c.passed[dir], target)
+	}
+}
+
+// NewTargetMemoDone returns a TargetMemo on which every name has already completed
+// without error, so a ctx.needs of one of them returns at once instead of running it.
+func NewTargetMemoDone(names ...string) *buzz.TargetMemo {
+	memo := buzz.NewTargetMemo()
+	for _, name := range names {
+		if isNew, _ := memo.TryRun("", name); isNew {
+			memo.Complete(name, nil)
+		}
+	}
+	return memo
 }
 
 func withCrossAncestor(ctx context.Context, key string) context.Context {
@@ -99,12 +133,13 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 	types.ActiveDispatchFromContext(ctx).Mark(dir)
 	e := &crossEntry{done: make(chan struct{})}
 	c.m[key] = e
+	passed := slices.Clone(c.passed[dir])
 	c.mu.Unlock()
 
 	// A fresh memo so the remote project's internal depends_on dedups within its own
 	// run without colliding with the caller's (target names are per-project). The
 	// ancestor key guards a cycle back through this same remote target.
-	rctx := buzz.WithTargetMemo(ctx, buzz.NewTargetMemo())
+	rctx := buzz.WithTargetMemo(ctx, NewTargetMemoDone(passed...))
 	// Same reason the memo is fresh, applied to the dispatch ancestor stack: its
 	// entries are bare target names, and a name only means something within one
 	// project. Carried across, a sub-project target that merely SHARES a name with

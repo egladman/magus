@@ -145,9 +145,9 @@ export fun findings(members: [{str: str}], minCohort: int, minShare: double) > [
 // tree settles it. Sharing those checks is why they live in advice.
 //
 // The project still has to be one the diff seeded, because a diff yields NAMES and a name
-// is not unique across a workspace. Eight projects here declare `preflight`, so adding a
-// ninth would otherwise report the eight already standing, which is the mistake
-// target-outputs made once with that exact name.
+// is not unique across a workspace. Several projects here declare `generate`, so adding
+// one more would otherwise report the ones already standing, which is the mistake
+// target-outputs made once with `preflight`.
 export fun keepAdded(all: [{str: str}], added: [str], seeded: [str]) > [{str: str}] {
     var kept = mut [];
     foreach (f in all) {

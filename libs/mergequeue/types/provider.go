@@ -88,6 +88,16 @@ type CommitStatus struct {
 type ListQuery struct {
 	Base      string // branch the queue merges into
 	RemoteURL string // the remote's URL, for the provider to name its repository
+
+	// The fields below are Describe's alone. StatusContext asks it for a [Setup]: what
+	// the base requires and who the write credential posts as. App names the app whose
+	// credential the queue writes with (github: a GitHub App's slug); empty is the
+	// provider's default credential. SetupSteps also asks for the steps that finish
+	// wiring the queue, which cost the provider more reads, some needing permissions an
+	// apply job does not hold.
+	StatusContext string
+	App           string
+	SetupSteps    bool
 }
 
 // StackMerge is how a provider merges a stack of changes.
@@ -114,6 +124,81 @@ type Capabilities struct {
 	// Committer is the identity the provider's automation pushes as, which commits what
 	// the queue writes to a change's branch. Zero when the provider names none.
 	Committer magustypes.Person
+	// Setup is nil unless [ListQuery.StatusContext] asked for it and the provider reports
+	// one.
+	Setup *Setup
+}
+
+// Setup is how the queue is wired on the provider as the provider reads it now, and the
+// steps that finish wiring it. The queue never runs a step: a person does.
+type Setup struct {
+	// StatusContext is the commit status the queue posts, as asked.
+	StatusContext string `json:"status_context"`
+	// Credential is who the write credential posts statuses as.
+	Credential Integration `json:"credential"`
+	// RequiredChecks are the checks the base requires before a change merges, the queue's
+	// own status among them once it is wired.
+	RequiredChecks []RequiredCheck `json:"required_checks"`
+	// Settings are the provider's repository settings the queue depends on.
+	Settings []Setting `json:"settings,omitempty"`
+	// App is the app the credential belongs to, when [ListQuery.App] named one and steps
+	// were asked for.
+	App *App `json:"app,omitempty"`
+	// Steps are what a person runs or opens, in order; empty when the provider reports
+	// nothing left to do or steps were not asked for.
+	Steps []SetupStep `json:"steps"`
+}
+
+// Integration is who posts a commit status: a GitHub App's id and name, say.
+type Integration struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
+// String renders i as "id (name)", or the id alone when it has no name.
+func (i Integration) String() string {
+	if i.Name == "" {
+		return i.ID
+	}
+	return i.ID + " (" + i.Name + ")"
+}
+
+// RequiredCheck is one check the base requires.
+type RequiredCheck struct {
+	Context string `json:"context"`
+	// Integration is the only integration whose status counts; empty accepts anyone's.
+	Integration string `json:"integration,omitempty"`
+	// Events are the events the provider saw report this check, when steps were asked
+	// for ("pull_request"); empty when it saw none report it.
+	Events []string `json:"events,omitempty"`
+}
+
+// Setting is one repository setting: its value now and the value the queue needs.
+type Setting struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	Want  string `json:"want"`
+}
+
+// App is the app a write credential belongs to and where a person manages it.
+type App struct {
+	Slug            string `json:"slug"`
+	ID              string `json:"id"`
+	ClientID        string `json:"client_id,omitempty"`
+	RegistrationURL string `json:"registration_url,omitempty"`
+	InstallURL      string `json:"install_url,omitempty"`
+	// Environment, Variable and Secret name where the queue job reads the app's
+	// credential from.
+	Environment string `json:"environment,omitempty"`
+	Variable    string `json:"variable,omitempty"`
+	Secret      string `json:"secret,omitempty"`
+}
+
+// SetupStep is one thing a person does: run Command, or open URL.
+type SetupStep struct {
+	Title   string `json:"title"`
+	Command string `json:"command,omitempty"`
+	URL     string `json:"url,omitempty"`
 }
 
 // Check reports whether c names a known stack merge and at least one valid merge method.
@@ -131,6 +216,31 @@ func (c Capabilities) Check() error {
 	}
 	if c.Committer != (magustypes.Person{}) && (c.Committer.Name == "" || c.Committer.Email == "") {
 		return fmt.Errorf("provider names committer %q <%s>, which needs a name and an email", c.Committer.Name, c.Committer.Email)
+	}
+	if c.Setup != nil {
+		return c.Setup.Check()
+	}
+	return nil
+}
+
+// Check reports whether s names the status it describes, who the credential posts as,
+// and steps a person can follow.
+func (s Setup) Check() error {
+	switch {
+	case s.StatusContext == "":
+		return errors.New("provider describes a setup for no status context")
+	case s.Credential.ID == "":
+		return errors.New("provider describes a setup without the integration its credential posts as")
+	}
+	for _, rc := range s.RequiredChecks {
+		if rc.Context == "" {
+			return errors.New("provider describes a required check with no context")
+		}
+	}
+	for _, st := range s.Steps {
+		if st.Title == "" || (st.Command == "") == (st.URL == "") {
+			return fmt.Errorf("provider describes setup step %q, which needs a title and exactly one of a command or a URL", st.Title)
+		}
 	}
 	return nil
 }

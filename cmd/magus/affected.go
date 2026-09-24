@@ -127,6 +127,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if af.Wait && !af.Detach {
 		return usagef("magus affected: --wait applies to --detach; a plain run already blocks until it finishes")
 	}
+	preflight, err := parsePreflight(af.Preflight)
+	if err != nil {
+		return usagef("magus affected: %v", err)
+	}
+	if len(preflight) > 0 && (af.Graph || af.Stdin || target == "ls") {
+		return usagef("magus affected: --preflight runs targets first; it does not apply to --graph, --stdin or ls")
+	}
 	if af.Detach {
 		return detachToDaemon(ctx, root, append([]string{"affected"}, withoutDetachFlag(origArgs)...), af.Wait)
 	}
@@ -333,6 +340,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	if af.NoCache {
 		runOpts = append(runOpts, magus.WithNoCache())
+	}
+	if len(preflight) > 0 {
+		runOpts = append(runOpts, magus.WithPreflight(preflight...))
 	}
 	runOpts = append(runOpts, magus.WithSink(sink))
 	if len(extraArgs) > 0 {
@@ -689,6 +699,19 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	if pf.Null && !pf.Stdin {
 		return fmt.Errorf("magus affected --plan: --null requires --stdin")
 	}
+	preflight, err := parsePreflight(pf.Preflight)
+	if err != nil {
+		return usagef("magus affected --plan: %v", err)
+	}
+	// A --stdin plan describes proposed paths, not the tree on disk, so there is nothing
+	// real for a preflight to check; and without --preflight a plan runs nothing, so no
+	// charm set would be read.
+	if len(preflight) > 0 && pf.Stdin {
+		return usagef("magus affected --plan: --preflight checks the tree on disk; it does not apply to --stdin")
+	}
+	if pf.NoDefaultCharms && len(preflight) == 0 {
+		return usagef("magus affected --plan: --no-default-charms applies to the --preflight pass; a plan alone runs nothing")
+	}
 
 	m, err := loadMagus(ctx, root)
 	if err != nil {
@@ -720,6 +743,14 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		// carrying two, which a CI provider reads as a promise about this matrix.
 		if plan.MaxParallel > len(plan.Shards) {
 			plan.MaxParallel = len(plan.Shards)
+		}
+	}
+
+	// Before inheritance can empty the shards: the pass covers every project the plan
+	// selected, and a red pass means no plan is printed, so nothing fans out from it.
+	if len(preflight) > 0 {
+		if err := planPreflight(ctx, m, target, plan.Shards, preflight, pf.NoDefaultCharms); err != nil {
+			return err
 		}
 	}
 
@@ -812,6 +843,33 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	default:
 		return emitFormatted(opts, out)
 	}
+}
+
+// planPreflight runs the --preflight pass for a shard plan: across every project the
+// shards cover, under the charms target would run with, the same pass `magus affected
+// <target> --preflight` runs before its own fan-out.
+func planPreflight(ctx context.Context, m *magus.Magus, target string, shards []types.Shard, names []string, noDefaultCharms bool) error {
+	var targets []types.Target
+	for _, s := range shards {
+		for _, p := range s.ProjectPaths {
+			targets = append(targets, types.Target{Path: p, Name: target})
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	charms := withDefaultCharms(nil, globalCfg.DefaultCharms, noDefaultCharms)
+	if target == types.TargetCI {
+		charms = magus.CharmsForCI(charms)
+	}
+	opts := []magus.RunOption{magus.WithPreflight(names...)}
+	if len(charms) > 0 {
+		opts = append(opts, magus.WithCharms(charms...))
+	}
+	if globalCfg.DryRun {
+		opts = append(opts, magus.WithDryRun())
+	}
+	return m.RunPreflight(ctx, targets, opts...)
 }
 
 func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {

@@ -221,6 +221,16 @@ every project except a named few without any shell filtering. It takes the same
 project reference a positional does, and refuses a reference no project matches
 rather than skipping nothing quietly.
 
+--preflight names targets to run first, as a separate pass across every
+selected project, before the invoked target starts anywhere. Each must be a
+target the invoked target already reaches through ctx.needs (the chain magus
+describe target prints); one it never reaches is refused before anything runs
+(MGS3021). If a preflight target fails, no further preflight step starts, the
+ones in flight are cancelled, nothing of the invoked target starts, and the run
+exits 3 (MGS3020) with a first line naming the target, the failing projects and
+the command that fixes them. When the pass is green the run proceeds and treats
+those targets as done, so nothing runs twice and no cache key changes.
+
 The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
@@ -247,10 +257,12 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "n-shards", Kind: FlagInt, Doc: "Total shard count for this CI matrix run; paired with --shard"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
+		{Name: "preflight", Kind: FlagString, Doc: "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)"},
 	},
 	Targets: commonTargets,
 	Examples: []Example{
 		{"Build everything", "magus run build"},
+		{"Check for drift everywhere before any project runs ci", "magus run ci --preflight generate"},
 		{"Test one project", "magus run test api/gateway"},
 		{"Build two specific projects", "magus run build api/gateway web/studio"},
 		{"Every project that declares generate except two", "magus run generate --skip docs --skip console"},
@@ -265,7 +277,8 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 	ExitStatus: []ExitCode{
 		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
 		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
-		{2, "Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation."},
+		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, or a --preflight target the invoked target never reaches (MGS3021)."},
+		{3, "A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them."},
 		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
 }
@@ -368,7 +381,14 @@ Forensic modes reason about the affected set instead of executing a target.
 --explain shows why a project is in the set. --plan emits a provider-neutral
 JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
 plan of proposed paths before editing. --bisect drives VCS bisect using run
-history to find the commit that introduced a regression.`,
+history to find the commit that introduced a regression.
+
+--preflight works as it does for magus run: the named targets run first across
+the affected set, a failure stops everything with exit 3 (MGS3020), and a name
+outside the invoked target's ctx.needs closure is refused (MGS3021). With --plan
+it gates the plan itself: the pass runs across the planned projects under the
+charms the invoked target would run with, and the plan prints only when it is
+green, so a CI workflow that fans shards out from the plan starts none.`,
 	Usage: "magus affected <target> [flags]",
 	Flags: []Flag{
 		{Name: "impact", Kind: FlagBool, Modes: []string{"impact"}, Doc: "Report the blast radius of the changeset (read-only; runs nothing)"},
@@ -377,8 +397,9 @@ history to find the commit that introduced a regression.`,
 		{Name: "null", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "With --stdin: expect NUL-separated paths and double-NUL between batches"},
 		{Name: "b", Kind: FlagString, AliasOf: "base", Modes: []string{"", "plan", "impact"}, Doc: "Short for --base"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
-		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
+		{Name: "no-default-charms", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only"},
+		{Name: "preflight", Kind: FlagString, Modes: []string{"", "plan"}, Doc: "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green"},
 		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the daemon and return immediately; follow it with magus status --watch"},
 		{Name: "wait", Kind: FlagBool, Doc: "With --detach, block until the run finishes and exit with its status"},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
@@ -406,13 +427,16 @@ history to find the commit that introduced a regression.`,
 		{"Show dependency graph for the affected scope", "magus affected build --graph"},
 		{"Graph as DOT for piping to Graphviz", "magus affected build --graph -o dot | dot -Tsvg > graph.svg"},
 		{"Emit a CI shard plan for the affected set", "magus affected ci --plan"},
+		{"Fail fast on drift before the affected set runs ci", "magus affected ci --preflight generate"},
+		{"Gate a CI shard plan on drift: no plan, and no shards, unless generate passes", "magus affected ci --plan --preflight generate"},
 		{"Shard a test plan across at most four workers", "magus affected test --plan --max-shards 4"},
 		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
 	},
 	ExitStatus: []ExitCode{
 		{0, "Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs-only commit."},
 		{1, "At least one target failed, already reported with the path to its captured log."},
-		{2, "Misuse: no target named, or --step without an interactive terminal."},
+		{2, "Misuse: no target named, --step without an interactive terminal, or a --preflight target the invoked target never reaches (MGS3021)."},
+		{3, "A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them."},
 		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
 }
@@ -1607,11 +1631,25 @@ apply report what would merge and call nothing on the provider.`,
 	Children: []Command{
 		{
 			Name:  "describe",
-			Short: "Ask the provider what it supports on a base: its merge methods and how a change is queued; prints a mergequeue.capabilities/v1 document",
+			Short: "Ask the provider what it supports on a base and what wiring the queue up still takes; prints the steps to run, or a mergequeue.capabilities/v1 document with -o json",
+			Long: `Ask the provider what it supports on a base, its merge methods and how a change
+is queued, and read how the queue is wired there: the status the base requires
+and which integration it is pinned to, the repository settings the queue depends
+on, and the required checks a queue push would leave unreported. It prints the
+commands that finish the wiring; magus never runs them, a person does.
+
+--app names the app whose credential apply will write with (github: a GitHub
+App's slug), and the steps become that app's: install it, store its credential,
+and pin the status to its id. Every read goes to the provider over the network,
+with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
+
+-o json prints the mergequeue.capabilities/v1 document with the setup inside it.`,
 			Usage: "magus queue describe --provider <provider> --base <branch> [flags]",
 			Flags: append([]Flag{
 				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
 				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
+				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup"},
+				{Name: "app", Kind: FlagString, Doc: "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential"},
 			}, queueCheckout...),
 		},
 		{
@@ -1658,12 +1696,14 @@ apply report what would merge and call nothing on the provider.`,
 				{Name: "once", Kind: FlagBool, Doc: "Apply what <source> holds now and stop, rather than following it until it is complete"},
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
+				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
 				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it"},
 			}, queueFacts...), queueCheckout...),
 		},
 	},
 	Examples: []Example{
-		{"See the merge methods and the queue label", "magus queue describe --provider github --base main"},
+		{"Print the commands that wire the queue up", "magus queue describe --provider github --base main"},
+		{"Print the commands that move it onto your own GitHub App", "magus queue describe --provider github --base main --app acme-magus-queue"},
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
 		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'"},
@@ -2222,8 +2262,8 @@ human-authored notes anchor a file or symbol you touched, and what the authors
 asked magus while writing it. It is the same question magus affected --impact
 answers, asked of a changeset instead of a target. It is context and never a
 verdict - nothing is gated on it and the exit code is unchanged; neither the
-flag nor the section it prints says "preflight", because in this workspace's
-magusfiles a preflight target IS a gate and this must never read as one. Each
+flag nor the section it prints says "preflight", because run --preflight IS a
+gate and this must never read as one. Each
 section says when it could not measure something, so an empty one reads as
 "nobody looked" rather than as a clean bill of health.
 

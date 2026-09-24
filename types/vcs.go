@@ -1110,6 +1110,17 @@ func ClassifyDrift(inputDirty bool, magusVersion string) (DiagnosticCode, string
 	}
 }
 
+// OutputDriftError is a drift gate's failure: Target left declared output stale in
+// Project, and re-running it under the rw charm is the fix. Its message is the gate's
+// report; the fields let a caller name that fix without parsing it.
+type OutputDriftError struct {
+	Project string
+	Target  string
+	Message string
+}
+
+func (e *OutputDriftError) Error() string { return e.Message }
+
 // SplitExplainedOutputs divides the dirty declared outputs into the ones this change
 // accounts for and the ones it does not.
 //

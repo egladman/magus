@@ -47,6 +47,20 @@ schedulers, and neither can see the other's plan. What they DO share is the mach
 budget below, which is what stops them from starting more work than the host can
 carry.
 
+### How wide the pool is by default
+
+`concurrency` (`-j`) sets the pool width outright; leaving it unset falls back to
+`concurrency_profile`: `conservative` (half the cores), `balanced` (`min(cores, 8)`,
+the default), or `aggressive` (every core). The default is `balanced` everywhere: magus
+reads no environment variable to guess where it is running, so the same command run
+the same way behaves the same on a laptop and on any CI provider. `MAGUS_CONCURRENCY`
+overrides both. A CI job that wants every core asks for it explicitly - a
+`--concurrency-profile aggressive` flag, `MAGUS_CONCURRENCY_PROFILE=aggressive`, or
+`concurrency_profile: aggressive` in `magus.yaml` - the same way any other caller would.
+
+`concurrency_profile` sizes the machine budget's memory the same way, not just the
+pool's core count: see [below](#across-the-whole-machine-the-budget).
+
 ## Across separate runs: the workspace lock
 
 That second invocation is the problem the workspace lock exists for. Two `magus`
@@ -141,8 +155,13 @@ per machine - and a run starts one if none is up.
 Key properties:
 
 - **Per machine, not per workspace.** The whole point is the worktree this run
-  cannot see. The budget is a fraction of the memory the daemon may commit, and the
-  daemon's concurrency capacity.
+  cannot see. The budget is a share of the memory the daemon may commit, and the
+  daemon's concurrency capacity - both sized by the same `concurrency_profile` that
+  decided the pool's width above: `balanced` and `conservative` reserve a quarter of
+  memory for the OS, the daemon's own process, and everything else sharing the
+  machine; `aggressive` reserves none of that, taking every usable megabyte down to a
+  fixed 512 MiB floor for the kernel and its page cache. A CI job that asks for
+  `aggressive` claims memory the same way it claims cores.
 - **Declared, not observed.** It arbitrates what targets say they need
   ([`memory_mb`](targets.md)), so the same command on the same machine reaches the
   same verdict whatever else is running. Observed pressure warns separately and

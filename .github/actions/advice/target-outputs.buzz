@@ -60,8 +60,8 @@ fun main() > void !> any {
     // The loaded graph decides, not the diff: a target's footprint can be declared
     // anywhere in its body, and only magus knows what it resolved to.
     //
-    // QUALIFIED by project, because a target name is not unique across a workspace. Eight
-    // projects here declare `preflight`, and matching on the bare name reported the same
+    // QUALIFIED by project, because a target name is not unique across a workspace. When
+    // eight projects here declared `preflight`, matching on the bare name reported the same
     // name eight times for one edited magusfile - a list that told a reader nothing.
     var bare = mut [];
     foreach (project in magus\targets().projects) {

@@ -58,7 +58,7 @@ fun main() > void !> any {
     final viewed = proc\exec("gh", args: ["pr", "view", pr, "--repo", repo, "--json",
         "state,reviewDecision,baseRefName,labels,isCrossRepository,autoMergeRequest"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
-    final described = magus\cmd("queue", args: ["describe", "--provider", provider, "--base", queueBase],
+    final described = magus\cmd("queue", args: ["describe", "-o", "json", "--status-context", "", "--provider", provider, "--base", queueBase],
         opts: {"quiet": true, "allow_failure": true});
     if (!viewed.ok or !described.ok) {
         // Unknown is not queueable: retract rather than leave an answer nobody checked.

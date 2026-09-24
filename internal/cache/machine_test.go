@@ -482,10 +482,13 @@ func TestMachineGateRefusesWhatCanNeverFit(t *testing.T) {
 	assert.Contains(t, err.Error(), "Waiting would not help")
 }
 
-// The refusal an author meets with a 26 GiB target on a 32 GiB machine. magus budgets 0.75
-// of the machine, so the figure in the message is smaller than the RAM the reader can see,
-// and a refusal that does not say so reads as arithmetic magus got wrong.
-func TestMachineRefusalNamesTheFractionAndTheDeclarationCheck(t *testing.T) {
+// The refusal an author meets with a 26 GiB target on a 32 GiB machine. magus budgets less
+// than the whole machine (a quarter under balanced/conservative, all but a small floor
+// under aggressive), so the figure in the message is smaller than the RAM the reader can
+// see, and a refusal that does not say so reads as arithmetic magus got wrong. It names no
+// fixed percentage: which reservation applied is not something this budget records, and a
+// number right for one profile is a lie for the other.
+func TestMachineRefusalExplainsTheGapAndTheDeclarationCheck(t *testing.T) {
 	b, _, _ := testBudget(t, 4000, 8)
 	g, _ := testGate(t, b)
 
@@ -495,8 +498,8 @@ func TestMachineRefusalNamesTheFractionAndTheDeclarationCheck(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "3.9 GiB", "the budget it did not fit in")
 	assert.Contains(t, err.Error(), "declares 25.4 GiB", "and the declaration held against it")
-	assert.Contains(t, err.Error(), "75% of the memory available here",
-		"a budget smaller than the machine reads as a miscount unless the share is named")
+	assert.Contains(t, err.Error(), "not the whole machine",
+		"a budget smaller than the machine reads as a miscount unless the gap is explained")
 	assert.Contains(t, err.Error(), "MGS1030",
 		"magus has measured this target's peak, so the author is sent to the check rather than to a guess")
 }

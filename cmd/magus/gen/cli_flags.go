@@ -47,6 +47,8 @@ const (
 	FlagAffectedOpen = "open"
 	// affected: --plan
 	FlagAffectedPlan = "plan"
+	// affected: --preflight
+	FlagAffectedPreflight = "preflight"
 	// affected: --race
 	FlagAffectedRace = "race"
 	// affected: --stdin
@@ -385,6 +387,8 @@ const (
 	FlagQuerySecrets = "secrets"
 	// query: --url
 	FlagQueryURL = "url"
+	// queue apply: --app
+	FlagQueueApplyApp = "app"
 	// queue apply: --committer
 	FlagQueueApplyCommitter = "committer"
 	// queue apply: --facts
@@ -405,12 +409,16 @@ const (
 	FlagQueueApplyTarget = "target"
 	// queue apply: --vcs
 	FlagQueueApplyVCS = "vcs"
+	// queue describe: --app
+	FlagQueueDescribeApp = "app"
 	// queue describe: --base
 	FlagQueueDescribeBase = "base"
 	// queue describe: --provider
 	FlagQueueDescribeProvider = "provider"
 	// queue describe: --remote
 	FlagQueueDescribeRemote = "remote"
+	// queue describe: --status-context
+	FlagQueueDescribeStatusContext = "status-context"
 	// queue describe: --vcs
 	FlagQueueDescribeVCS = "vcs"
 	// queue ls: --base
@@ -487,6 +495,8 @@ const (
 	FlagRunNoVolatilityRetry = "no-volatility-retry"
 	// run: --open
 	FlagRunOpen = "open"
+	// run: --preflight
+	FlagRunPreflight = "preflight"
 	// run: --race
 	FlagRunRace = "race"
 	// run: --shard
@@ -715,6 +725,7 @@ type RunFlags struct {
 	NShards           int           // --n-shards
 	NoVolatilityRetry bool          // --no-volatility-retry
 	NoRedundancyCheck bool          // --no-redundancy-check
+	Preflight         string        // --preflight
 }
 
 // BindRun registers `magus run`'s flags on fs and returns the destination.
@@ -735,6 +746,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.IntVar(&f.NShards, FlagRunNShards, 0, "Total shard count for this CI matrix run; paired with --shard")
 	fs.BoolVar(&f.NoVolatilityRetry, FlagRunNoVolatilityRetry, false, "Disable volatility auto-retry for this run")
 	fs.BoolVar(&f.NoRedundancyCheck, FlagRunNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
+	fs.StringVar(&f.Preflight, FlagRunPreflight, "", "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)")
 	return &f
 }
 
@@ -770,6 +782,7 @@ type AffectedFlags struct {
 	NoCache           bool          // --no-cache
 	NoDefaultCharms   bool          // --no-default-charms
 	NoRedundancyCheck bool          // --no-redundancy-check
+	Preflight         string        // --preflight
 	Detach            bool          // --detach
 	Wait              bool          // --wait
 	Open              bool          // --open
@@ -789,8 +802,9 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
 	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
 	fs.BoolVar(&f.NoCache, FlagAffectedNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
-	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run")
+	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass")
 	fs.BoolVar(&f.NoRedundancyCheck, FlagAffectedNoRedundancyCheck, false, "Run the ci gate even when an identical-or-equivalent gate already passed for this branch on this machine (MGS3010); ci target only")
+	fs.StringVar(&f.Preflight, FlagAffectedPreflight, "", "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green")
 	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
 	fs.BoolVar(&f.Wait, FlagAffectedWait, false, "With --detach, block until the run finishes and exit with its status")
 	fs.BoolVar(&f.Open, FlagAffectedOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
@@ -823,6 +837,8 @@ type AffectedPlanFlags struct {
 	Base              string // --base, -b
 	Stdin             bool   // --stdin
 	Null              bool   // --null
+	NoDefaultCharms   bool   // --no-default-charms
+	Preflight         string // --preflight
 	MaxShards         int    // --max-shards
 	MaxParallelBudget int    // --max-parallel-budget
 	Detail            bool   // --detail
@@ -842,6 +858,8 @@ func BindAffectedPlan(fs *flag.FlagSet, d AffectedPlanDefaults) *AffectedPlanFla
 	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
 	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
 	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
+	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass")
+	fs.StringVar(&f.Preflight, FlagAffectedPreflight, "", "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green")
 	fs.IntVar(&f.MaxShards, FlagAffectedMaxShards, d.MaxShards, "With --plan: maximum CI shards (-1 = unlimited)")
 	fs.IntVar(&f.MaxParallelBudget, FlagAffectedMaxParallelBudget, d.MaxParallelBudget, "With --plan: cross-shard concurrency cap; 0 = unlimited")
 	fs.BoolVar(&f.Detail, FlagAffectedDetail, false, "With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to")
@@ -1236,10 +1254,12 @@ func BindVCSCheckpoint(fs *flag.FlagSet) *VCSCheckpointFlags {
 
 // QueueDescribeFlags are the flags declared for `magus queue describe`.
 type QueueDescribeFlags struct {
-	Provider string // --provider
-	Base     string // --base
-	Remote   string // --remote
-	VCS      string // --vcs
+	Provider      string // --provider
+	Base          string // --base
+	StatusContext string // --status-context
+	App           string // --app
+	Remote        string // --remote
+	VCS           string // --vcs
 }
 
 // BindQueueDescribe registers `magus queue describe`'s flags on fs and returns the destination.
@@ -1247,6 +1267,8 @@ func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
 	var f QueueDescribeFlags
 	fs.StringVar(&f.Provider, FlagQueueDescribeProvider, "", "`provider`: a built-in name (github) or a .buzz file")
 	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
+	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
+	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential")
 	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f
@@ -1335,6 +1357,7 @@ type QueueApplyFlags struct {
 	Once          bool          // --once
 	Interval      time.Duration // --interval
 	Committer     string        // --committer
+	App           string        // --app
 	Regenerate    string        // --regenerate
 	Facts         string        // --facts
 	Target        string        // --target
@@ -1350,6 +1373,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.BoolVar(&f.Once, FlagQueueApplyOnce, false, "Apply what <source> holds now and stop, rather than following it until it is complete")
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
+	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)")
 	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it")
 	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueApplyTarget, "ci", "magus `target` the affected set is computed for; not with --facts")

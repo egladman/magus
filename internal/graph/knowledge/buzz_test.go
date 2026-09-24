@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -89,4 +90,23 @@ export fun f(ctx: magus\Context, args: [str]) > void {}
 	miss, ok := nodeByID(out, "import:spells/missing")
 	require.True(t, ok)
 	assert.Equal(t, string(types.UnresolvableBuzzImport), miss.Attrs[attrDiagnostic])
+}
+
+// TestSourceWalksSkipVCSIgnored: the file and function rows of a committed MAGUS.md rank
+// what these walks find, so an ignored build output must not reach them. Measured
+// 2026-09-23: one .buzz file under the ignored dist/ put itself second in the file row
+// and its hub function first in the function row.
+func TestSourceWalksSkipVCSIgnored(t *testing.T) {
+	root := t.TempDir()
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = root
+	require.NoError(t, cmd.Run())
+	writeFile(t, root, ".gitignore", "/dist/\n")
+	writeFile(t, root, "kept.buzz", "fun kept() > void {}\n")
+	writeFile(t, root, "kept.go", "package kept\n")
+	writeFile(t, root, "dist/built.buzz", "fun built() > void {}\n")
+	writeFile(t, root, "dist/built.go", "package built\n")
+
+	assert.Equal(t, []string{"kept.buzz"}, findBuzzFiles(root))
+	assert.Equal(t, []string{"kept.buzz", "kept.go"}, findCommentSources(root))
 }

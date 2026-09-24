@@ -46,11 +46,8 @@ magus\project({
 // A pure library, so the pipeline is the Go lifecycle plus index-generate, matching
 // libs/diagnostics. Each target delegates to the go spell's ops.
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
-
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/testlayout");
     ctx.needs(index_generate);
 }

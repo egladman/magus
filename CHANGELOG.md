@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
+  targets run first across every selected project; a failure stops everything, exits 3
+  (MGS3020) and names the target, projects and fix. A green pass is not repeated. A name
+  outside the invoked target's `ctx.needs` closure is refused, exit 2 (MGS3021). With
+  `affected --plan` a red pass prints no plan.
+
+- **The guard advises on a split `magus run` (`split-run`).** One target run on two
+  project sets, on one line or in two calls within ten minutes, gets the combined form,
+  once per session. A charm is part of the target, so `lint` and `lint:rw` never combine.
 - **The cache is two tiers under standard two-tier semantics.** Reads go local, then
   remote; a remote hit is verified and promoted into the local tier; a build is stored in
   both, each under its own gate. `cache.remote.write.enabled` gates the remote tier:
@@ -26,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   label and who commits the queue's update commits. The new `merge-queue` pull request
   advisor, off by default, reads it to name the label that queues an approved pull
   request.
+- **`magus queue describe` prints the `gh` commands that finish setting the queue up.**
+  `--app <slug>` adds the steps for the queue's own GitHub App, which `setup-magus`
+  turns into a token. magus runs none of it. `apply` refuses a status pinned to another
+  integration than its token's (MGS3019).
 - **`magus affected --plan` prints `affected` and `unbounded_by`.** The merge queue
   partitions by them.
 - **The merge queue merges stacked changes.** A change carrying another queued or merged
@@ -156,6 +169,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The GitHub-hosted 4-core hard-code is removed.** A larger runner gets its real core
+  count. magus reads no environment variable to guess it runs in CI, so the same command
+  behaves the same everywhere, and `concurrency_profile` stays `balanced`
+  (`min(cores, 8)`) unless something asks otherwise.
+- **`aggressive` now claims memory, not just cores.** `balanced` and `conservative`
+  still reserve a quarter of memory for everything else on the machine; `aggressive`
+  takes every usable megabyte down to a fixed 512 MiB floor for the kernel.
+- **CI asks for the whole machine explicitly.** Every `magus` invocation in this
+  repo's own `.github/workflows/*.yaml` that runs a build, test, lint, or generate
+  target now passes `--concurrency-profile aggressive` on the command line, the same
+  flag any other caller would use - not an environment variable read by magus itself.
 - **The merge queue needs no bypass actor.** Apply posts `success` right before a merge,
   once main is still at the predicted tip, and GitHub's auto-merge merges; apply merges
   itself after a minute. A success it cannot follow through goes back to `pending`.
@@ -264,6 +288,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **The `preflight` target convention.** The starter magusfile and the docs no longer
+  declare one, and the `typescript` spell's no-op `preflight` op is gone; `--preflight`
+  replaces the idea. A target you named `preflight` keeps working.
 - **Breaking: `harnesses/*.json` compat descriptors are removed.** All four shipped hosts are
   Buzz spells under `spells/harness/`, wired with `magus\harness.provider(...)`. JSON
   descriptors under `harnesses/`, `.magus/harnesses/` and `$XDG_CONFIG_HOME/magus/harnesses`
@@ -286,6 +313,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The GitHub provider no longer offers a merge method a ruleset refuses.** `describe`
+  intersected repository settings alone; it now narrows `methods` to what every active
+  ruleset rule targeting the base branch also allows, drops `merge` under a required
+  linear history, and errors when nothing is left in common.
+- **`MAGUS.md` routing indexes are byte-identical on every machine.** Example columns rank
+  by the repository's own edges, not the binary's spell catalog; gitignored sources are
+  skipped; and the drift gate now catches an output a composed step writes, which let
+  five library indexes go stale.
+- **`magus session dispose` refuses without an interactive terminal and is denied to
+  agents.** Disposing an attention request records that a PERSON answered it. Outside a
+  terminal the CLI exits 2 with the `--ack` sentence, and the guard rule `person-only`
+  (widened from `read-ack`) denies every spelling on every agent channel.
+- **The `output-pipe`/`output-redirect` exemption for `magus query output` and
+  `magus refs --text` now sees past a global flag.** It anchored on the first argument
+  after `magus`, so `magus --root <dir> query output <ref> | grep x` was wrongly denied;
+  the check now reads argv the same way the read-ack rule does, ignoring where a global
+  flag sits.
 - **The GitHub Actions remote tier stores what it uploads.** The spell read the signed
   URLs under their lowerCamel names while the service answers `signed_upload_url`, and took
   the empty URL for an existing entry: every upload reported success, nothing was stored,
@@ -381,6 +425,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A failed remote-cache exchange names the step that failed.**
 - **`magus doctor` sees the checkpoint hook template again** (template revision 11).
 - **`magus doctor` reports an unregistered merge driver from an explicit boolean.**
+- **Three guard rules match their catalog entries.** `cd` fires only ahead of a magus
+  command. `cache-dir-write` grades only write targets, so `rsync --exclude .magus` and
+  an interpreter's quoted data pass. `stage-all`'s description now names `-u`, `.` and
+  the long forms its matcher already covered.
 - **A quiet `magus\cmd` that fails carries the child's stderr in its error.** The
   Workflows pass `secrets.GITHUB_TOKEN` as `GITHUB_TOKEN`, which `gh` and the github
   queue provider both read, in place of `GH_TOKEN`.

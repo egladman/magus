@@ -62,6 +62,7 @@ type capabilitiesDoc struct {
 	Methods      []types.MergeMethod `json:"methods"`
 	QueueLabel   string              `json:"queue_label,omitempty"`
 	Committer    *personDoc          `json:"committer,omitempty"`
+	Setup        *types.Setup        `json:"setup,omitempty"`
 }
 
 type personDoc struct {
@@ -77,6 +78,17 @@ func WriteCapabilities(w io.Writer, base string, c types.Capabilities) error {
 	}
 	doc := capabilitiesDoc{Schema: types.SchemaCapabilities, Base: base, StackMerge: c.StackMerge,
 		LinearStacks: c.LinearStacks, Methods: c.Methods, QueueLabel: c.QueueLabel}
+	if c.Setup != nil {
+		s := *c.Setup
+		// [] rather than null for a reader iterating them.
+		if s.RequiredChecks == nil {
+			s.RequiredChecks = []types.RequiredCheck{}
+		}
+		if s.Steps == nil {
+			s.Steps = []types.SetupStep{}
+		}
+		doc.Setup = &s
+	}
 	if c.Committer.Name != "" {
 		doc.Committer = &personDoc{Name: c.Committer.Name, Email: c.Committer.Email}
 	}
