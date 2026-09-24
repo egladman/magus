@@ -53,6 +53,19 @@ inputs:
     required: false
     default: ''
 
+  queue-app-client-id:
+    description: >
+      Client id of the merge queue's own GitHub App (vars.MAGUS_QUEUE_APP_CLIENT_ID).
+      Its private key is never an input: the calling step puts it in its env as
+      MAGUS_QUEUE_APP_PRIVATE_KEY (secrets.MAGUS_QUEUE_APP_PRIVATE_KEY). With both,
+      this action mints an installation token for this repository alone and reports
+      it as queue-token; with neither, the queue runs on the job's own token. One
+      without the other fails the job: a queue that silently fell back to the job's
+      token would stop starting main's workflows and posting a status its ruleset
+      counts.
+    required: false
+    default: ''
+
 outputs:
   version:
     description: >
@@ -76,10 +89,35 @@ outputs:
       The commit the installed binary was built from, as it reports itself. Pins what
       actually ran when `version` is a tag shared by rebuilds, or a describe string.
     value: ${{ steps.installed.outputs.commit }}
+  # Outputs, never $GITHUB_ENV: this action also runs in jobs that execute pull-request
+  # code, and an output reaches only the steps that name it.
+  queue-token:
+    description: >
+      An installation token of the queue's GitHub App, scoped to this repository with
+      contents, pull-requests, statuses, actions and workflows write; revoked when the
+      job ends. Empty when no app is configured.
+    value: ${{ steps.queue-app-token.outputs.token }}
+  queue-committer:
+    description: >
+      The app's bot as a committer, "<slug>[bot] <id+<slug>[bot]@users.noreply.github.com>",
+      for `magus queue apply --committer`. Empty when no app is configured.
+    value: ${{ steps.queue-app-bot.outputs.committer }}
+  queue-app-slug:
+    description: >
+      The app's slug, for `magus queue apply --app`, which reads the app's integration
+      id to check the queue's status is required from it. Empty when no app is configured.
+    value: ${{ steps.queue-app-token.outputs.app-slug }}
 
 runs:
   using: composite
   steps:
+    - name: Reject half a queue app
+      if: (inputs.queue-app-client-id == '') != (env.MAGUS_QUEUE_APP_PRIVATE_KEY == '')
+      shell: bash
+      run: |
+        echo "::error::magus: the queue app needs both queue-app-client-id and MAGUS_QUEUE_APP_PRIVATE_KEY in the calling step's env, or neither; exactly one is set" >&2
+        exit 1
+
     # source-path silently losing to a release install would be the worst
     # possible failure here: the job would look green while testing a magus
     # that is not the one on disk.
@@ -364,3 +402,29 @@ runs:
           echo "::warning::magus: the installed binary carries no version stamp; a caller comparing this action's version output against a pin cannot use it"
         fi
         cat "$REPORT" >> "$GITHUB_OUTPUT"
+
+    - name: Mint the queue app's token
+      id: queue-app-token
+      if: inputs.queue-app-client-id != ''
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        client-id: ${{ inputs.queue-app-client-id }}
+        private-key: ${{ env.MAGUS_QUEUE_APP_PRIVATE_KEY }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ github.event.repository.name }}
+        permission-contents: write
+        permission-pull-requests: write
+        permission-statuses: write
+        permission-actions: write
+        permission-workflows: write
+
+    - name: Resolve the queue app's bot
+      id: queue-app-bot
+      if: inputs.queue-app-client-id != ''
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.queue-app-token.outputs.token }}
+        SLUG: ${{ steps.queue-app-token.outputs.app-slug }}
+      run: |
+        id="$(gh api "/users/${SLUG}[bot]" --jq .id)"
+        echo "committer=${SLUG}[bot] <${id}+${SLUG}[bot]@users.noreply.github.com>" >> "$GITHUB_OUTPUT"

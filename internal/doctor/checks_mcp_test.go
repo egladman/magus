@@ -18,7 +18,7 @@ func TestCheckMCPTokens(t *testing.T) {
 	t.Run("absent cli token and no connectors", func(t *testing.T) {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 		got := (&runner{}).checkMCPTokens()
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "cli token: absent")
 		assert.Contains(t, got.Message, "0 connector token(s)")
 		assert.Empty(t, got.Details)
@@ -47,7 +47,7 @@ func TestCheckMCPTokens(t *testing.T) {
 		require.NoError(t, err)
 
 		got := (&runner{}).checkMCPTokens()
-		assert.Equal(t, types.DoctorOK, got.Status, "credential state is informational, never a failure")
+		assert.Equal(t, types.CheckOK, got.Status, "credential state is informational, never a failure")
 		assert.Contains(t, got.Message, "3 connector token(s)")
 
 		joined := strings.Join(got.Details, "\n")
@@ -67,13 +67,13 @@ func TestCheckMCPTokens(t *testing.T) {
 func TestProbeBridgeReachability(t *testing.T) {
 	t.Run("console disabled skips", func(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &DaemonInfo{})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "console.enabled: false")
 	})
 
 	t.Run("mcp disabled skips", func(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &DaemonInfo{BridgeEnabled: true})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "mcp.enabled is false")
 	})
 
@@ -82,7 +82,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &DaemonInfo{
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, MCPAddr: "127.0.0.1:1",
 		})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 		assert.Contains(t, got.Message, "no persistent daemon")
 	})
@@ -94,7 +94,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, Persistent: true,
 			MCPAddr: unreachableAddr(t),
 		})
-		assert.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "bridge endpoint not reachable")
 	})
 
@@ -108,7 +108,7 @@ func TestProbeBridgeReachability(t *testing.T) {
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, Persistent: true,
 			MCPAddr: strings.TrimPrefix(srv.URL, "http://"),
 		})
-		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "reachable at")
 	})
 }

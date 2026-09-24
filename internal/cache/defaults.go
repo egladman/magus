@@ -13,27 +13,19 @@ import (
 func DefaultConcurrency() int { return ProfileConcurrency(types.ProfileBalanced) }
 
 // ProfileConcurrency returns the width a configured profile names on this machine.
-// MAGUS_CONCURRENCY, when set to a positive int, overrides every profile.
-//
-// On a GitHub-hosted runner the core count is 4 whatever NumCPU says: the runner reports
-// its host's CPUs while giving the job a slice, so NumCPU over-subscribes badly there.
-//
-// This is the one place magus names a CI provider outside a spell, and it
-// is startup ordering that forces it: the limiter is built before the
-// magusfile is evaluated (see cmd/magus/main.go), so the CI provider spell
-// that would otherwise answer this is not loaded yet. Everything else
-// provider-specific lives in a spell; see internal/ci/annotate.
+// MAGUS_CONCURRENCY, when set to a positive int, overrides every profile. An unset
+// profile (the zero value) sizes to balanced, the same everywhere: magus reads no
+// environment variable to guess where it is running, so a magusfile behaves
+// identically on a laptop and on a CI runner unless something explicitly asked
+// otherwise. A CI runner that wants every core passes concurrency_profile: aggressive
+// (a flag, env var, or magus.yaml) like any other caller would.
 func ProfileConcurrency(profile types.ConcurrencyProfile) int {
 	if v := os.Getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}
 	}
-	cores := runtime.NumCPU()
-	if os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("RUNNER_ENVIRONMENT") != "self-hosted" {
-		cores = 4
-	}
-	return profile.Width(cores)
+	return profile.Width(runtime.NumCPU())
 }
 
 // ResolveConcurrency returns the width a run actually gets: an explicit configured value

@@ -139,6 +139,10 @@ type Magus struct {
 	// guard rule can come from. Nil until preloadMagusfiles runs.
 	policyLog *interp.SourceLog
 
+	// magusfileExports are the target keys each project's magusfile registered when
+	// load evaluated it, by project path. A project absent here was not evaluated.
+	magusfileExports map[string][]string
+
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
 	resolver *secret.Resolver
@@ -373,6 +377,7 @@ func (m *Magus) load(ctx context.Context) error {
 		// never populated. The shadow ward reads only the tree, so it still reports.
 		return errors.Join(err, m.spellShadows())
 	}
+	m.magusfileExports = customTargets
 	// Workspace providers run HERE, in the one window where both facts they need are
 	// true: the magusfiles have been evaluated (so magus\workspace.provider has named
 	// its spells, and those spells are registered), and the registry has not been
@@ -735,7 +740,12 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 
 	cacheDir := resolveCacheDir(m.ws.Root, m.cfg)
-	cfgOpts := []cache.Option{cache.WithMutable(m.cfg.Cache.WriteEnabled())}
+	cfgOpts := []cache.Option{cache.WithLocalWrite(m.cfg.Cache.WriteEnabled())}
+	// Only a declared value is passed: undeclared, the cache decides from the signing
+	// key, while a declared true is a requirement it must be able to honor.
+	if v := m.cfg.Cache.Remote.Write.Enabled; v != nil {
+		cfgOpts = append(cfgOpts, cache.WithRemoteWrite(*v))
+	}
 	if m.cfg.Cache.SizeMB != 0 {
 		cfgOpts = append(cfgOpts, cache.WithSizeMB(m.cfg.Cache.SizeMB))
 	}
@@ -947,8 +957,8 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 		// this is an empty answer rather than a gap: the distinction the error below exists for.
 		return nil, nil
 	}
-	reporter, ok := res.VCS.(types.BranchChangeReporter)
-	if !ok {
+	out, err := res.VCS.BranchChanges(ctx, m.ws.Root, res.Base, limit)
+	if errors.Is(err, types.ErrVCSUnsupported) {
 		// NAMED, not swallowed. A backend that cannot answer and a repository where nothing
 		// competes are different facts, and a surface shown the same emptiness for both tells
 		// the reader "nothing competes", reassurance magus has not earned. The caller reports
@@ -958,9 +968,8 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 		// Still wraps ErrVCSUnsupported: callers match the sentinel, not the prose.
 		return nil, fmt.Errorf("%w: %w",
 			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not report branch changes", res.Name),
-			types.ErrVCSUnsupported)
+			err)
 	}
-	out, err := reporter.BranchChanges(ctx, m.ws.Root, res.Base, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -989,13 +998,7 @@ func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string
 				"this workspace has version control disabled, so there is no revision range to read"),
 			types.ErrVCSUnsupported)
 	}
-	reporter, ok := res.VCS.(types.RangeDiffReporter)
-	if !ok {
-		return "", fmt.Errorf("%w: %w",
-			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not diff a revision range", res.Name),
-			types.ErrVCSUnsupported)
-	}
-	return reporter.RangeDiff(ctx, m.ws.Root, base, head, paths)
+	return res.VCS.RangeDiff(ctx, m.ws.Root, base, head, paths)
 }
 
 // RevisionCheckpoint resolves a revision expression to the checkpoint that names it.
@@ -1033,13 +1036,7 @@ func (m *Magus) FileAt(ctx context.Context, rev, path string) (string, error) {
 				"this workspace has version control disabled, so there is no revision to read %s at", path),
 			types.ErrVCSUnsupported)
 	}
-	reader, ok := res.VCS.(types.RevisionFileReader)
-	if !ok {
-		return "", fmt.Errorf("%w: %w",
-			types.DiagnosticErrorf(types.VCSCapabilityMissing, "%s does not read a file at a revision", res.Name),
-			types.ErrVCSUnsupported)
-	}
-	return reader.ReadFileAt(ctx, m.ws.Root, rev, path)
+	return res.VCS.ReadFileAt(ctx, m.ws.Root, rev, path)
 }
 
 // ReviewOrigin reports the branch this tree is on and the remote it would be pushed to, for a
@@ -1050,9 +1047,9 @@ func (m *Magus) FileAt(ctx context.Context, rev, path string) (string, error) {
 // than a failure. The caller's next question ("is a review open?") has the same answer for
 // all of them, so making this fail would only move a branch nobody needs up a layer.
 //
-// The remote is read through the optional RemoteReporter capability rather than by shelling a
-// git command, so it works on every backend that implements one and degrades to empty on the
-// ones that do not.
+// The remote is read through the RemoteReporter capability rather than by shelling a git
+// command, so it works on every backend that answers and degrades to empty on the ones that
+// cannot.
 func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
@@ -1062,10 +1059,8 @@ func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 	if meta, err := res.VCS.Metadata(ctx, m.ws.Root); err == nil {
 		out.Branch = meta.Ref
 	}
-	if reporter, ok := res.VCS.(types.RemoteReporter); ok {
-		if remote, err := reporter.RemoteURL(ctx, m.ws.Root); err == nil {
-			out.Remote = remote
-		}
+	if remote, err := res.VCS.RemoteURL(ctx, m.ws.Root, ""); err == nil {
+		out.Remote = remote
 	}
 	return out
 }
@@ -1076,13 +1071,8 @@ func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 // Untracked paths are derived from two capabilities the backends already expose rather than
 // by parsing status output (DirtyFiles lists everything dirty, TrackedFiles says which of
 // those the VCS knows), so this stays backend-agnostic instead of learning git's porcelain
-// column format. A backend implementing neither yields no untracked half, which is the honest
-// degradation.
+// column format.
 func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, paths []string) (string, error) {
-	tracker, ok := driver.(types.TrackedFileReporter)
-	if !ok {
-		return "", nil
-	}
 	lines, err := driver.DirtyFiles(ctx, m.ws.Root, paths)
 	if err != nil || len(lines) == 0 {
 		return "", err
@@ -1096,7 +1086,7 @@ func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, path
 	if len(dirty) == 0 {
 		return "", nil
 	}
-	known, err := tracker.TrackedFiles(ctx, m.ws.Root, dirty)
+	known, err := driver.TrackedFiles(ctx, m.ws.Root, dirty)
 	if err != nil {
 		return "", err
 	}
@@ -1166,7 +1156,7 @@ func statusLinePath(line string) string {
 // reader must be able to tell "nothing depends on this" from "nothing was measured", which is
 // what Notes is for.
 func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
-	return m.diff(ctx, paths, diffConfig{})
+	return m.DiffWith(ctx, paths, types.DiffOptions{})
 }
 
 func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types.Diff, error) {
@@ -1198,9 +1188,21 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// radius could not be walked would make the useful part unreachable, and the Note is
 		// what keeps the absence visible rather than silent.
 		out.Notes = append(out.Notes, "blast radius unavailable: "+ierr.Error())
+		out.ConformanceError = &types.Diagnostic{
+			Message: "the conformance checks could not run: the blast radius could not be computed: " + ierr.Error(),
+		}
 		out.SortForReading()
 		return out, nil //nolint:nilerr // reported as a Note, see above
 	}
+	// Before the graph loads, so the symbols it merges describe the tree under review.
+	var touched []string
+	for _, f := range out.Files {
+		if f.Project != "" && !slices.Contains(touched, f.Project) {
+			touched = append(touched, f.Project)
+		}
+	}
+	freshErr := m.freshenSymbolIndexes(ctx, touched)
+	out.Uncovered = uncoveredProjects(out.Files, m.symbolCapableIn(touched))
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
@@ -1299,16 +1301,64 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			f.Coverage = &cov
 		}
 	}
+	in := conformanceInput{minCohort: cfg.minCohort, minShare: cfg.minShare, patch: cfg.patch}
 	if cfg.baseline != nil {
 		if indexed {
-			attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
+			in.changes, in.removed = attachAPIDelta(&out, byPath, graph, cfg, m.externalReferents)
 		} else {
 			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
 		}
 	}
+	switch {
+	case freshErr != nil:
+		d := diagnosticOf(freshErr)
+		out.ConformanceError = &d
+	case !indexed && len(m.symbolCapableIn(touched)) > 0:
+		d := diagnosticOf(types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
+			"no symbol index loaded for %s, so the conformance checks could not run; build it with `magus graph build`",
+			strings.Join(m.symbolCapableIn(touched), ", ")))
+		out.ConformanceError = &d
+	case indexed:
+		m.conformance(ctx, &out, byPath, graph, paths, cfg, in)
+	}
 
 	out.SortForReading()
 	return out, nil
+}
+
+// conformance runs the conformance checks for diff. Whatever keeps them from running is set as
+// out.ConformanceError, in place of findings; a weaker input they fall back to is a Note.
+func (m *Magus) conformance(ctx context.Context, out *types.Diff, byPath map[string]*types.DiffFile,
+	graph *knowledge.Graph, paths []string, cfg diffConfig, in conformanceInput,
+) {
+	fail := func(msg string, err error) {
+		d := types.Diagnostic{Message: "the conformance checks could not run: " + msg + ": " + err.Error()}
+		out.ConformanceError = &d
+	}
+	if in.changes == nil {
+		if cfg.baseline != nil {
+			out.Notes = append(out.Notes, "conformance: the baseline could not be compared, so what the change adds was read from its patch, which cannot tell a re-signed symbol from an unchanged one")
+		}
+		if !cfg.patchGiven {
+			patch, err := m.WorkingDiff(ctx, paths)
+			if err != nil {
+				fail("the working tree's patch could not be read", err)
+				return
+			}
+			in.patch = patch
+		}
+	}
+	generated, err := m.generatedFiles(ctx, graph)
+	if err != nil {
+		fail("generated files could not be classified", err)
+		return
+	}
+	in.generated = generated
+	in.read = func(path string) (string, bool) {
+		b, err := os.ReadFile(filepath.Join(m.ws.Root, filepath.FromSlash(path)))
+		return string(b), err == nil
+	}
+	attachConformance(byPath, graph, in)
 }
 
 // authorEditedProjects narrows a seed set to the projects a PERSON changed something in.

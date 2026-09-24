@@ -30,17 +30,17 @@ import (
 // `vcs merge-driver` perfectly and still be unable to read this magusfile, and that is
 // exactly the shape this exists to name: EnsureMergeDriver accepts a driver on the
 // strength of the first probe alone.
-func (r *runner) checkMergeDriverLoads() types.DoctorCheck {
+func (r *runner) checkMergeDriverLoads() types.Check {
 	const name = "merge-driver-loads-workspace"
 
 	registered := r.registeredMergeDriver()
 	if registered == "" {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK,
+		return types.Check{Name: name, Status: types.CheckOK,
 			Message: "no merge driver registered, so generated conflicts fall back to a hand merge"}
 	}
 	exe := driverExecutable(registered)
 	if exe == "" {
-		return types.DoctorCheck{Name: name, Status: types.DoctorFail,
+		return types.Check{Name: name, Status: types.CheckFail,
 			Message: "the registered merge driver names no executable: " + registered}
 	}
 
@@ -49,9 +49,9 @@ func (r *runner) checkMergeDriverLoads() types.DoctorCheck {
 	probe := exec.Command(exe, "ls")
 	probe.Dir = r.ws.Root()
 	if out, err := probe.CombinedOutput(); err != nil {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:   name,
-			Status: types.DoctorFail,
+			Status: types.CheckFail,
 			Message: "the registered merge driver cannot load this workspace, so every conflict in a " +
 				"generated file falls back to markers with nothing naming the cause",
 			Details: []string{
@@ -62,21 +62,23 @@ func (r *runner) checkMergeDriverLoads() types.DoctorCheck {
 			},
 		}
 	}
-	return types.DoctorCheck{Name: name, Status: types.DoctorOK,
+	return types.Check{Name: name, Status: types.CheckOK,
 		Message: "the registered merge driver loads this workspace"}
 }
 
-// registeredMergeDriver returns the effective merge.magus.driver for this worktree, or ""
-// when none is set. Effective, not --local: a worktree override is the whole point of
-// install-dogfood, and reading the shared scope would report the wrong one.
+// registeredMergeDriver returns the merge driver the workspace's VCS would run, or "" when
+// none is registered or the backend registers none. It is the effective registration, so a
+// worktree override, which is the whole point of install-dogfood, is the one reported.
 func (r *runner) registeredMergeDriver() string {
-	cmd := exec.Command("git", "config", "merge.magus.driver")
-	cmd.Dir = r.ws.Root()
-	out, err := cmd.Output()
+	res, err := vcs.Resolve(r.runCtx(), r.ws.Root(), "", r.ws.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return ""
+	}
+	cmd, err := res.VCS.MergeDriverCommand(r.runCtx(), r.ws.Root())
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	return cmd
 }
 
 // driverExecutable pulls the program out of a registered driver command, unwrapping the
@@ -97,15 +99,15 @@ func driverExecutable(registered string) string {
 // settled yet. Each names generated files still holding one side of a merge, so a
 // commit made now carries stale output. The record outlives a failed job or a clone
 // with no daemon to run it, and this is where that becomes visible.
-func (r *runner) checkOwedRegeneration() types.DoctorCheck {
+func (r *runner) checkOwedRegeneration() types.Check {
 	const name = "owed-regeneration"
 	ctx := r.runCtx()
 	owed, err := vcs.OwedRegenerations(ctx, r.ws.Root())
 	if err != nil {
-		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: err.Error()}
+		return types.Check{Name: name, Status: types.CheckFail, Message: err.Error()}
 	}
 	if len(owed) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no merge left a regeneration owed"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no merge left a regeneration owed"}
 	}
 	path, _ := vcs.OwedRegenerationPath(ctx, r.ws.Root())
 	details := make([]string, 0, len(owed)+2)
@@ -116,9 +118,9 @@ func (r *runner) checkOwedRegeneration() types.DoctorCheck {
 	details = append(details,
 		"settle them with `"+hint.JobRun.With(job.NameRegenerateOwed)+"`, or `magus server "+job.NameRegenerateOwed+"` without a daemon",
 		"record: "+path)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:    name,
-		Status:  types.DoctorFail,
+		Status:  types.CheckFail,
 		Message: fmt.Sprintf("%d regeneration(s) a merge kept one side for have not run, so those generated files are stale", len(owed)),
 		Details: details,
 	}

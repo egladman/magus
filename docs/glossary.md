@@ -283,9 +283,21 @@ lives in [doctrine.md](doctrine.md).
 
 ### Session
 
+An agent host's conversation, by the id the host delivers to its hooks. magus
+never mints one: a record with no session is unattributed, and the OS user it
+carries says whose account ran it.
+
+### Invocation
+
 One magus process's recorded facts - the targets it finished, their outcomes,
-and the lease it acted as - kept in a repo-scoped store every worktree shares.
-`magus session` lists them; the store prunes itself by last-fact age.
+the lease it acted as, and the session it ran in when a host delivered one -
+kept in a repo-scoped store every worktree shares. `magus session` lists them;
+the store prunes itself by last-fact age.
+
+### Window
+
+The terminal a command runs in. It keys fire-once notices for a caller no host
+gave a session, and is never recorded as a session.
 
 ### Attention request
 
@@ -339,9 +351,9 @@ and `-_./:` only.
 What a spawning tool said about itself in the environment: `TRACEPARENT` (the
 W3C trace and the parent span this process runs under) and the
 `magus.spawner` baggage member (a label for whoever spawned it). magus records
-each verbatim beside the session's own minted span id, and no verdict reads
-any of them - the ancestry is a relation between recorded sessions, the way a
-process tree is a relation between pids.
+each verbatim beside the invocation's own minted span id, and no verdict reads
+any of them - the ancestry is a relation between recorded invocations, the way
+a process tree is a relation between pids.
 
 ### Advisor
 

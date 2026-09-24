@@ -23,7 +23,7 @@ import (
 //
 // The shape is easy to reach honestly. Rendering the expected content and writing it are one
 // line apart, and moving the write inside the branch looks like a refactor, not a fix.
-func (r *runner) checkWriteWithoutRWCharm(projects []*types.Project) types.DoctorCheck {
+func (r *runner) checkWriteWithoutRWCharm(projects []*types.Project) types.Check {
 	const name = "writes-without-rw-charm"
 	var details []string
 	for _, p := range projects {
@@ -39,12 +39,12 @@ func (r *runner) checkWriteWithoutRWCharm(projects []*types.Project) types.Docto
 		}
 	}
 	if len(details) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no target writes the tree when it was given no rw charm"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no target writes the tree when it was given no rw charm"}
 	}
 	slices.Sort(details)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:   name,
-		Status: types.DoctorFail,
+		Status: types.CheckFail,
 		Message: fmt.Sprintf(
 			"%d fs\\writeFile call(s) sit outside the target's own rw branch, so a run given no rw charm edits the tree "+
 				"it was asked to judge and then reports its own edit (see %s)",
@@ -69,7 +69,7 @@ func (r *runner) checkWriteWithoutRWCharm(projects []*types.Project) types.Docto
 //
 // Only DECLARED refs are visible. A target that writes a file without ctx.writesFiles is
 // undetectable here, and that omission is its own defect.
-func (*runner) checkSourceIsAlsoOutput(projects []*types.Project) types.DoctorCheck {
+func (*runner) checkSourceIsAlsoOutput(projects []*types.Project) types.Check {
 	const name = "source-is-also-output"
 	var details []string
 	for _, p := range projects {
@@ -95,12 +95,12 @@ func (*runner) checkSourceIsAlsoOutput(projects []*types.Project) types.DoctorCh
 		}
 	}
 	if len(details) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no target reads a file it declares as its own output"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no target reads a file it declares as its own output"}
 	}
 	slices.Sort(details)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:   name,
-		Status: types.DoctorFail,
+		Status: types.CheckFail,
 		Message: fmt.Sprintf(
 			"%d path(s) declared as both a source and an output of one target; the cache restores the file before the target reads it, "+
 				"so an edit to it can neither miss the cache nor be seen (see %s)",
@@ -125,7 +125,7 @@ func (*runner) checkSourceIsAlsoOutput(projects []*types.Project) types.DoctorCh
 // Total omission only. Naming one *.go path is the narrowing its author meant and says
 // nothing about the rest; naming no Go file under a target that runs the Go toolchain is
 // the mistake, and the two are told apart without knowing what an op reads.
-func (*runner) checkFootprintDropsOpGlobs(projects []*types.Project) types.DoctorCheck {
+func (*runner) checkFootprintDropsOpGlobs(projects []*types.Project) types.Check {
 	const name = "footprint-drops-op-globs"
 	var details []string
 	for _, p := range projects {
@@ -160,12 +160,12 @@ func (*runner) checkFootprintDropsOpGlobs(projects []*types.Project) types.Docto
 		}
 	}
 	if len(details) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every narrowed footprint still names the files its ops read"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "every narrowed footprint still names the files its ops read"}
 	}
 	slices.Sort(details)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:   name,
-		Status: types.DoctorFail,
+		Status: types.CheckFail,
 		Message: fmt.Sprintf(
 			"%d target(s) replace their cache footprint and then run an op over files that footprint never names, so an edit to those files replays "+
 				"the op instead of running it (see %s)",

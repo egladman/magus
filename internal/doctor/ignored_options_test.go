@@ -19,7 +19,7 @@ func TestIgnoredOptionsFailsAndNamesTheKey(t *testing.T) {
 		{Path: "console", Name: "console", IgnoredOptions: []string{"gate_something_new"}},
 	})
 
-	assert.Equal(t, types.DoctorFail, got.Status, "the workspace asked for something this magus cannot do")
+	assert.Equal(t, types.CheckFail, got.Status, "the workspace asked for something this magus cannot do")
 	require.Len(t, got.Details, 1)
 	assert.Contains(t, got.Details[0], "gate_something_new")
 	assert.Contains(t, got.Message, "not in force")
@@ -28,6 +28,6 @@ func TestIgnoredOptionsFailsAndNamesTheKey(t *testing.T) {
 
 func TestIgnoredOptionsIsQuietWhenEveryKeyWasUnderstood(t *testing.T) {
 	got := (&runner{}).checkIgnoredOptions([]*types.Project{{Path: ".", Name: "magus"}})
-	assert.Equal(t, types.DoctorOK, got.Status)
+	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Empty(t, got.Details)
 }

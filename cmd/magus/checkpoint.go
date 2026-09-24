@@ -88,11 +88,18 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 		return err
 	}
 	spawn := trail.SpawnFromEnv()
-	stored, recorded, err := sessions.RecordCheckpoint(dir, c, sessions.SessionStart{
-		Host:      c.Host,
+	lease, leaseFrom, err := checkoutLease(wsRoot, spawn.Lease)
+	if err != nil {
+		return fmt.Errorf("magus session checkpoint: %w", err)
+	}
+	origin := trail.LocalOrigin(ctx)
+	origin.Host, origin.Session = c.Host, c.HostSession
+	stored, recorded, err := sessions.RecordCheckpoint(dir, c, sessions.InvocationStart{
+		Origin:    origin,
 		Workspace: wsRoot,
 		Version:   version,
-		Lease:     spawn.Lease,
+		Lease:     lease,
+		LeaseFrom: leaseFrom,
 		TraceID:   spawn.TraceID,
 		SpanID:    trail.NewSpanID(),
 		Spawner:   spawn.Spawner,

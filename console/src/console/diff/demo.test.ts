@@ -170,7 +170,7 @@ test("applyDemoOp posts a comment as the human, whatever the payload says", () =
     body: "Accepts is O(n) - fine for two audiences.",
   });
   const posted = (after.comments ?? []).at(-1);
-  assert.equal(posted?.author, "human");
+  assert.equal(posted?.author, "unattributed");
   assert.equal(posted?.path, "libs/authkit/audience.go");
   assert.equal(posted?.resolved, false);
   assert.equal((session.comments ?? []).length + 1, (after.comments ?? []).length);

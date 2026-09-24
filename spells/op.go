@@ -177,7 +177,22 @@ const (
 	// the only kind a spell does not author directly, and the tag is what lets the
 	// runner recognize an index run without matching the op's NAME.
 	OpKindSymbolIndex = "symbol-index"
+	// OpKindInstall tags an op magus synthesizes from the Installs a spell's manifests
+	// declare. A spell may synthesize several (one per Install.Name: typescript
+	// registers both pnpm-install and npm-ci), each scoped to its own lock candidates,
+	// so the runner still resolves the live one from the project's lockfile at run time
+	// within that op's scope.
+	OpKindInstall = "install"
 )
+
+// InstallSpec is what an install op carries so it can run from the op alone, as a
+// magusfile's spell-handle call does.
+type InstallSpec struct {
+	// Spell is the declaring spell's name, which keys its install apart from another
+	// spell's on the same project.
+	Spell     string     `json:"spell"`
+	Manifests []Manifest `json:"manifests"`
+}
 
 // Service is the declarative description of a long-running process a service op
 // manages. Command (required) is the process. Run directly (`magus run <target>`) it
@@ -231,6 +246,10 @@ type Op struct {
 	// Service is set only for a service op (Kind == OpKindService); nil otherwise.
 	Service *Service `json:"service,omitempty"`
 	Capture bool     `json:"capture,omitempty"`
+	// Install is set only for an install op (Kind == OpKindInstall). The embedded
+	// Command is the first declared install's, for describe and charm discovery; the
+	// runner resolves the real one against the project's lockfile.
+	Install *InstallSpec `json:"install,omitempty"`
 	// Doc is the handler function's documentation comment (see buzz Chunk.Doc),
 	// surfaced by `magus describe` and enforced by `magus doctor` for local Buzz
 	// spells. Empty for command built-ins (their Doc is not serialized in bytecode).

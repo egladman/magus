@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -17,6 +20,12 @@ import (
 // attentionTestRoot isolates one test's queue: the store is keyed by repository
 // identity under the user state dir, so without both of these a test would file
 // requests into whatever repo the test binary happens to be running in.
+//
+// Dispose now refuses without an interactive terminal (finding F1), and the test
+// binary's own stdin/stderr are not one, so every test here is given a fake terminal by
+// default: that is what the vast majority of these tests are exercising (the store
+// logic), not the terminal gate itself. The one test for the gate
+// (TestAttentionDisposeRefusesWithoutATerminal) overrides this back.
 func attentionTestRoot(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
@@ -24,8 +33,35 @@ func attentionTestRoot(t *testing.T) string {
 	// these tests raise. A test that wants one sets it after this call.
 	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
+	withInteractiveTTY(t)
 	return t.TempDir()
 }
+
+// withInteractiveTTY makes isInteractiveTTY() report true for the duration of t, the
+// way [internal/interp/bindings.TestReadinessCancelledProbeIsNotMemoized] fakes a
+// terminal for readiness's interactive wait. FixedProbe answers every descriptor as a
+// terminal, so it stands in for both stdin and stderr's checks at once.
+func withInteractiveTTY(t *testing.T) {
+	t.Helper()
+	prev := tty.SystemProbe
+	tty.SystemProbe = tty.FixedProbe(80, 24)
+	t.Cleanup(func() { tty.SystemProbe = prev })
+}
+
+// withoutInteractiveTTY is withInteractiveTTY's opposite: every descriptor reads as NOT
+// a terminal, regardless of what the test binary's own stdio happens to be, so
+// TestAttentionDisposeRefusesWithoutATerminal does not depend on how it was invoked.
+func withoutInteractiveTTY(t *testing.T) {
+	t.Helper()
+	prev := tty.SystemProbe
+	tty.SystemProbe = neverTerminalProbe{}
+	t.Cleanup(func() { tty.SystemProbe = prev })
+}
+
+type neverTerminalProbe struct{}
+
+func (neverTerminalProbe) IsTerminal(uintptr) bool        { return false }
+func (neverTerminalProbe) Size(uintptr) (int, int, error) { return 0, 0, nil }
 
 func blockedEvent(message string) types.Event {
 	return types.Event{
@@ -133,19 +169,43 @@ func TestRecordAttentionOpenKeepsTheIDWhenTheLeaseChanges(t *testing.T) {
 	assert.Equal(t, first, openRequestIDs(t, root), "a re-partitioned fleet must not re-key an open request")
 }
 
-// The store carries the lease, not just the rendering: the console reads these records too.
+// The store carries the lease and the source that answered it, not just the rendering: the
+// console reads these records too. The checkout's binding outranks the BAGGAGE claim, as it
+// does for every lease magus resolves.
 func TestRecordAttentionOpenStoresTheLease(t *testing.T) {
-	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/f3")
-	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	type answer struct {
+		Lease string
+		From  types.LeaseSource
+	}
+	for name, tc := range map[string]struct {
+		claim, bound string
+		want         answer
+	}{
+		"the claim alone":                    {claim: "fleet/f3", want: answer{"fleet/f3", types.LeaseSourceEnv}},
+		"the binding alone":                  {bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceMarker}},
+		"the binding over a different claim": {claim: "fleet/f3", bound: "fleet/bound", want: answer{"fleet/bound", types.LeaseSourceContested}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := attentionTestRoot(t)
+			if tc.bound != "" {
+				cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+				require.NoError(t, err)
+				require.NoError(t, job.BindLease(cacheDir, tc.bound))
+			}
+			if tc.claim != "" {
+				t.Setenv(trail.EnvBaggage, trail.BaggageLease+"="+tc.claim)
+			}
+			require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
-	dir, err := sessions.Dir(root)
-	require.NoError(t, err)
-	fold, err := sessions.ReadAll(dir)
-	require.NoError(t, err)
-	open := sessions.AttentionQueue(fold)
-	require.Len(t, open, 1)
-	assert.Equal(t, "fleet/f3", open[0].Lease)
+			dir, err := sessions.Dir(root)
+			require.NoError(t, err)
+			fold, err := sessions.ReadAll(dir)
+			require.NoError(t, err)
+			open := sessions.AttentionQueue(fold)
+			require.Len(t, open, 1)
+			assert.Equal(t, tc.want, answer{open[0].Lease, open[0].LeaseFrom})
+		})
+	}
 }
 
 // An id that fails the rule attributes nothing rather than smuggling free text into a field the
@@ -432,4 +492,42 @@ func TestAttentionDisposeReportsAPrefixThatMatchesNothing(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no request matches")
 	assert.Contains(t, err.Error(), "magus session attention", "the refusal names how to see the open ids")
+}
+
+// TestAttentionDisposeRefusesWithoutATerminal is finding F1's fix: disposing closes a
+// request that exists to reach a PERSON (docs/doctrine.md, "Manual on purpose"), and
+// until now nothing here checked that a person, rather than a script, was running it.
+// The guard denies the command outright (rule person-only), but it fails OPEN where it
+// is unwired, the same gap `diff --ack` closed this way first.
+func TestAttentionDisposeRefusesWithoutATerminal(t *testing.T) {
+	root := attentionTestRoot(t)
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs approval to push")))
+	id := openRequestIDs(t, root)[0]
+
+	withoutInteractiveTTY(t)
+	var err error
+	errText := captureStderr(t, func() {
+		err = sessionCmd(context.Background(), root, []string{"dispose", id})
+	})
+
+	var silent errSilent
+	require.ErrorAs(t, err, &silent, "the flags are fine and the caller is not who this is for, the same 2 --ack uses")
+	assert.Equal(t, 2, silent.exitCode)
+	assert.Contains(t, errText, "interactive terminal")
+	assert.Len(t, openRequestIDs(t, root), 1, "a refused dispose closes nothing")
+}
+
+// TestAttentionDisposeSucceedsWithATerminal is the negative half of
+// TestAttentionDisposeRefusesWithoutATerminal: a person at a real terminal must still be
+// able to close a request the fix does not exist to block.
+func TestAttentionDisposeSucceedsWithATerminal(t *testing.T) {
+	root := attentionTestRoot(t) // interactive by default, see withInteractiveTTY
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs approval to push")))
+	id := openRequestIDs(t, root)[0]
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"dispose", id}))
+	})
+	assert.Contains(t, out, "disposed "+id)
+	assert.Empty(t, openRequestIDs(t, root))
 }

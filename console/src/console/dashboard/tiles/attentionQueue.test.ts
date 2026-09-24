@@ -17,7 +17,7 @@ test("parseRequests reads the documented shape", () => {
     requests: [
       {
         id: "att-0123456789ab",
-        session: "agent-1",
+        invocation: "inv-1",
         opened_ms: 1755300000000,
         outcome: "permission",
         severity: "high",
@@ -32,7 +32,7 @@ test("parseRequests reads the documented shape", () => {
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0], {
     id: "att-0123456789ab",
-    session: "agent-1",
+    invocation: "inv-1",
     opened_ms: 1755300000000,
     outcome: "permission",
     severity: "high",

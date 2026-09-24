@@ -25,8 +25,8 @@ import { authHeaders } from "../../../lib/daemon";
 // "undefined".
 export interface AttentionRequest {
   readonly id: string;
-  // The AGENT session that raised the block, not the one that will close it.
-  readonly session: string;
+  // The magus invocation that raised the block, not the one that will close it.
+  readonly invocation: string;
   // Unix MILLISECONDS, as the route serves them - numbers, never strings. Coerced as a string
   // the field reads as 0, and the tile then cannot tell a block raised an hour ago from one
   // raised a moment ago, which is the single most useful thing about a queue.
@@ -35,10 +35,10 @@ export interface AttentionRequest {
   readonly severity: string;
   readonly source: string;
   readonly where: string;
-  // The lease the RAISING session was launched under: which slice of a fleet's work is
+  // The lease the RAISING invocation was launched under: which slice of a fleet's work is
   // blocked. Attribution, never identity - the request id does not key on it, so a fleet
-  // re-partitioning does not re-key the row a person was about to close. Empty for anything a
-  // person started by hand, which is not an error.
+  // re-partitioning does not re-key the row a person was about to close. Empty when the
+  // raiser claimed none, which is not an error.
   readonly lease: string;
   readonly message: string;
 }
@@ -67,7 +67,7 @@ export function parseRequests(body: unknown): AttentionRequest[] {
     if (!id) continue;
     out.push({
       id,
-      session: str(r.session),
+      invocation: str(r.invocation),
       opened_ms: num(r.opened_ms),
       outcome: str(r.outcome),
       severity: str(r.severity),

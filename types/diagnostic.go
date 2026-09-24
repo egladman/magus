@@ -258,11 +258,11 @@ const (
 	// path holds no spell, the spell there has another name than the embedded one it
 	// replaces, or it names an embedded spell this magus does not ship.
 	SpellOverrideInvalid DiagnosticCode = "MGS1044"
-	// GuardSpawnMisdeclared is a magus\guard.spawn registration the workspace cannot use:
-	// one that is not a function, a second one in the same load, or one outside the root
-	// magusfile. The load stops, because a rule that silently did not register is a guard
-	// that looks enforced and is not.
-	GuardSpawnMisdeclared DiagnosticCode = "MGS1045"
+	// GuardRuleMisdeclared is a magus\guard.spawn, command or write registration the
+	// workspace cannot use: one that is not a function, a second one in the same load, or
+	// one outside the root magusfile. The load stops, because a rule that silently did not
+	// register is a guard that looks enforced and is not.
+	GuardRuleMisdeclared DiagnosticCode = "MGS1045"
 	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
 	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
 	// keying the target are the bytes the cache wrote: an edit to that file can neither
@@ -407,7 +407,20 @@ const (
 	// every other job that edits anything there, and the overlap report fills with pairs
 	// that share no file. A project root the job owns whole, and a directory the job
 	// creates, stay declarable.
-	WritePathIsDirectory      DiagnosticCode = "MGS3018"
+	WritePathIsDirectory DiagnosticCode = "MGS3018"
+	// QueueCredentialMismatch is a merge queue whose base requires the queue's commit
+	// status from one integration while apply holds another's credential. The provider
+	// counts none of the statuses the queue posts, so every change would wait forever;
+	// apply refuses at its start instead.
+	QueueCredentialMismatch DiagnosticCode = "MGS3019"
+	// PreflightFailed is a --preflight pass that failed in at least one project, so
+	// nothing of the invoked target started. Exits 3, apart from 1, so a CI script can
+	// tell "the cheap check failed" from "the fan-out failed".
+	PreflightFailed DiagnosticCode = "MGS3020"
+	// PreflightOutsideClosure is a --preflight target the invoked target never reaches
+	// through ctx.needs in any selected project. Running it first would add work rather
+	// than reorder it, so the invocation is refused before anything runs.
+	PreflightOutsideClosure   DiagnosticCode = "MGS3021"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -456,9 +469,13 @@ const (
 	// CharmRenamed is a run activating a charm under a name magus has retired, with no
 	// selected target declaring that name for itself. The old name matches nothing, so
 	// without this the run would go ahead without the grant it asked for.
-	CharmRenamed             DiagnosticCode = "MGS6002"
-	UnresolvableBuzzImport   DiagnosticCode = "MGS7001"
-	DanglingDocReference     DiagnosticCode = "MGS7002"
+	CharmRenamed           DiagnosticCode = "MGS6002"
+	UnresolvableBuzzImport DiagnosticCode = "MGS7001"
+	DanglingDocReference   DiagnosticCode = "MGS7002"
+	// SymbolIndexNotCurrent is a review whose symbol index could not be brought up to date
+	// for the projects the change touched, so the conformance checks did not run: the
+	// indexer is missing or failed, or the cache recorded nothing to vouch for the result.
+	SymbolIndexNotCurrent    DiagnosticCode = "MGS7003"
 	OutputRefMissing         DiagnosticCode = "MGS8001"
 	OutputRefAmbiguous       DiagnosticCode = "MGS8002"
 	OutputRefMalformed       DiagnosticCode = "MGS8003"
@@ -537,20 +554,21 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	FootprintDropsOpGlobs, ObservationKeyedAsVersion, RemovedOption, MagusNotImported,
 	UnknownConfigKey, RemoteSpellUndeclared, RemoteSpellDigestMismatch, RemoteSpellLockStale,
-	SpellOverrideInvalid, GuardSpawnMisdeclared,
+	SpellOverrideInvalid, GuardRuleMisdeclared,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
-	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory,
+	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
+	PreflightFailed, PreflightOutsideClosure,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid, CharmRenamed,
-	UnresolvableBuzzImport, DanglingDocReference,
+	UnresolvableBuzzImport, DanglingDocReference, SymbolIndexNotCurrent,
 	OutputRefMissing, OutputRefAmbiguous, OutputRefMalformed, OutputRefForeignMachine,
 	BearerRejected, InsecureTokenPermissions, ConnectorStoreTooNew,
 	NoAuthToken, ConnectorNameExists, ConnectorNotFound,

@@ -10,10 +10,13 @@
 // that the remote-cache subsystem detects by name and invokes with the work-unit
 // Target and an input callback cb, reading the boolean result of:
 //
-//   enabled(target, cb)   -> bool   active here? (gates fetch/push; ignores cb)
-//   get_artifact(target, cb) -> bool   download artifact into dest; true=hit
-//   put_artifact(target, cb) -> bool   upload artifact at src;     true=stored
-//   prune(target, cb)     -> bool   evict artifacts by retention policy; true=swept
+//   enabled(target, cb)      -> bool   active here? (gates fetch/push; ignores cb)
+//   get_artifact(target, cb) -> bool   download artifact into dest; true=hit, false=miss
+//   has_artifact(target, cb) -> bool   stored? (HEAD, no download)
+//   put_artifact(target, cb) -> bool   upload artifact at src; true=stored
+//   prune(target, cb)        -> bool   evict artifacts by retention policy; true=swept
+//
+// A request that fails throws: the cache counts it as a failure, never as a miss.
 //
 // A contract function reads its inputs by calling cb(io): the host writes
 // {project, hash, dest/src} (or, for prune, {older_than_secs, keep_last, dry_run})
@@ -214,29 +217,49 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
     return access() != "" and secret() != "" and bucket() != "";
 }
 
-// get_artifact downloads the object for io.hash into io.dest. true on a hit (200),
-// false on a miss (404) or when not configured.
+// get_artifact downloads the object for io.hash into io.dest: true on a hit (200),
+// false on a miss (404) or when not configured. Any other status throws, so a failing
+// store is counted as failed rather than read as a cold cache.
 export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
     final io = {};
     cb(io);
     final path = "/" + bucket() + "/" + cache_key("{io["hash"]}");
     final headers = sign("GET", path, "", EMPTY_SHA256);
-    return http\download(endpoint() + path, "{io["dest"]}", headers) == 200;
+    final code = http\download(endpoint() + path, "{io["dest"]}", headers);
+    if (code == 404) { return false; }
+    if (code != 200) { throw "s3 cache: GET {path}: status {code}"; }
+    return true;
 }
 
-// put_artifact uploads the file at io.src as the object for io.hash. true on a 200
-// store, false otherwise. The payload hash is the file's SHA-256 (S3 verifies it
-// against x-amz-content-sha256).
-export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
+// has_artifact asks for the object's metadata only (HEAD): true on 200, false on 404,
+// and any other status throws.
+export fun has_artifact(target: Target, cb: fun(any)) > bool !> any {
     if (access() == "" or bucket() == "") { return false; }
+    final io = {};
+    cb(io);
+    final path = "/" + bucket() + "/" + cache_key("{io["hash"]}");
+    final headers = sign("HEAD", path, "", EMPTY_SHA256);
+    final res = http\request("HEAD", endpoint() + path, "", headers);
+    if (res["status"] == 404) { return false; }
+    if (res["status"] != 200) { throw "s3 cache: HEAD {path}: status {res["status"]}"; }
+    return true;
+}
+
+// put_artifact uploads the file at io.src as the object for io.hash: true on a 200
+// store; any other status throws. S3 overwrites, so it never answers "already
+// present". The payload hash is the file's SHA-256 (S3 verifies it against
+// x-amz-content-sha256).
+export fun put_artifact(target: Target, cb: fun(any)) > bool !> any {
+    if (access() == "" or bucket() == "") { throw "s3 cache: put_artifact: no credentials or bucket configured"; }
     final io = {};
     cb(io);
     final src = "{io["src"]}";
     final path = "/" + bucket() + "/" + cache_key("{io["hash"]}");
     final headers = sign("PUT", path, "", crypto\sha256File(src));
     final res = http\upload_chunked("PUT", endpoint() + path, src, 0, headers);
-    return res[0] == 200;
+    if (res[0] != 200) { throw "s3 cache: PUT {path}: status {res[0]}"; }
+    return true;
 }
 
 // listPage fetches one page of the bucket listing (S3 ListObjects v1, path-style)

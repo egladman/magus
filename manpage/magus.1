@@ -27,7 +27,7 @@ Config file path. Default: search for magus.yaml in CWD, workspace root, and $XD
 Output format: text (default), json, yaml, name, jsonl, or template[=<go\-template>]. Honored by subcommands that emit structured data. A template body renders a Go text/template over the same value \-o json emits (field names are the json keys); a bare \-o template with no body lists that output's fields instead of rendering \- the json keys usable in \-o json and \-o template, with each field's type and doc.
 .TP
 \fB\-\-concurrency\fR \fIN\fR
-Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or min(NumCPU,8)).
+Maximum number of concurrent build steps. 0 means use the configured value (or MAGUS_CONCURRENCY, or concurrency_profile, balanced (min(NumCPU,8)) by default).
 .TP
 \fB\-v\fR
 Increase log verbosity. Repeat for more detail (\-v, \-vv, \-vvv).
@@ -85,6 +85,9 @@ Check a command against this workspace's conventions before running it. See \fBm
 \fBvcs\fR
 Staging and conflict resolution that knows what is generated. See \fBmagus\-vcs\fR(1).
 .TP
+\fBqueue\fR
+Merge approved changes through a speculative, partitioned merge queue. See \fBmagus\-queue\fR(1).
+.TP
 \fBdoctor\fR
 Validate the workspace. See \fBmagus\-doctor\fR(1).
 .TP
@@ -92,7 +95,7 @@ Validate the workspace. See \fBmagus\-doctor\fR(1).
 View or update magus configuration. See \fBmagus\-config\fR(1).
 .TP
 \fBsession\fR
-What sessions did and what they are blocked on: humans read and dispose, hosts write. See \fBmagus\-session\fR(1).
+What magus invocations did and what agents are blocked on: humans read and dispose, hosts write. See \fBmagus\-session\fR(1).
 .TP
 \fBmemory\fR
 Durable cross\-session project memory. See \fBmagus\-memory\fR(1).
@@ -145,6 +148,9 @@ Override the default cache location (.magus/ in the workspace root). Equivalent 
 \fBMAGUS_CACHE_WRITE_ENABLED\fR
 When false (or 0), replay cache hits but never write new entries, locally or to a remote (default: true). Equivalent magus.yaml key: \fBcache.write.enabled\fR.
 .TP
+\fBMAGUS_CACHE_REMOTE_WRITE_ENABLED\fR
+When false (or 0), write the local cache tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required: an error without a signing key or with cache.write.enabled false, and a failed remote write fails the step (default: cache.write.enabled). Equivalent magus.yaml key: \fBcache.remote.write.enabled\fR.
+.TP
 \fBMAGUS_CACHE_INCLUDE_OS_ENABLED\fR
 When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross\-platform replay (default: false). Equivalent magus.yaml key: \fBcache.include.os.enabled\fR.
 .TP
@@ -167,7 +173,10 @@ Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.
 Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: \fBlog.level\fR.
 .TP
 \fBMAGUS_CONCURRENCY\fR
-Maximum number of concurrently running per\-project build steps (default: min(NumCPU,8)). Equivalent magus.yaml key: \fBconcurrency\fR.
+Maximum number of concurrently running per\-project build steps; overrides concurrency_profile when positive (default: concurrency_profile decides). Equivalent magus.yaml key: \fBconcurrency\fR.
+.TP
+\fBMAGUS_CONCURRENCY_PROFILE\fR
+Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly (default: balanced). Equivalent magus.yaml key: \fBconcurrency_profile\fR.
 .TP
 \fBMAGUS_HISTORY_PATH\fR
 Path to the runtime\-history JSON shared by volatility detection, the CI forecaster, graph timing, and bisect (default: $XDG_STATE_HOME/magus/history/v1.json). Equivalent magus.yaml key: \fBhistory_path\fR.
@@ -296,6 +305,7 @@ MAGUS_CACHE_DIR.
 \fBmagus\-clean\fR(1),
 \fBmagus\-shell\fR(1),
 \fBmagus\-vcs\fR(1),
+\fBmagus\-queue\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-session\fR(1),

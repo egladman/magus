@@ -21,13 +21,13 @@ const recurringGuardDenialLimit = 500
 // defect. What is reportable is that it KEEPS happening, because that is the part no single
 // session can see. This states the evidence only; choosing a destination is a human's job,
 // and the magus-workspace-rules skill carries the method for choosing it.
-func (r *runner) checkRecurringGuardDenials() types.DoctorCheck {
+func (r *runner) checkRecurringGuardDenials() types.Check {
 	const name = "recurring-guard-denials"
 	feedback, err := trail.RecentGuardFeedback(r.cacheDir(), "", recurringGuardDenialLimit)
 	if err != nil {
-		return types.DoctorCheck{
+		return types.Check{
 			Name:     name,
-			Status:   types.DoctorOK,
+			Status:   types.CheckOK,
 			Evidence: types.EvidenceUnknown,
 			Message:  "no readable activity trail, so nothing can be said about recurring denials",
 		}
@@ -39,7 +39,7 @@ func (r *runner) checkRecurringGuardDenials() types.DoctorCheck {
 		}
 	}
 	if len(recurring) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no guard denial has recurred across sessions"}
+		return types.Check{Name: name, Status: types.CheckOK, Message: "no guard denial has recurred across sessions"}
 	}
 	details := make([]string, 0, len(recurring))
 	for _, c := range recurring {
@@ -47,9 +47,9 @@ func (r *runner) checkRecurringGuardDenials() types.DoctorCheck {
 			c.Rule, c.Surface, c.Denied, c.Sessions, c.FollowedSessions, c.Sessions))
 	}
 	slices.Sort(details)
-	return types.DoctorCheck{
+	return types.Check{
 		Name:     name,
-		Status:   types.DoctorAdvice,
+		Status:   types.CheckAdvice,
 		Evidence: types.EvidenceInferred,
 		Message: fmt.Sprintf("%d guard rule(s) denied the same shape more than once; the friction is real whether the rule is right or the reader is",
 			len(recurring)),

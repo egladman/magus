@@ -102,26 +102,26 @@ jobs:
       # NOT needed: build-playground compiles the playground wasm from ./cmd/buzz-playground
       # with the stock Go toolchain this job already provisions, straight into gen/.
       - name: Render the docs site
-        run: magus run build docs
+        run: magus run build docs --concurrency-profile aggressive
 
       - name: Build the console app
-        run: magus run build console
+        run: magus run build console --concurrency-profile aggressive
 
       # Leaves console/coverage.txt, the TypeScript figure coverage-render publishes. The
       # root cannot need this target itself, because the console imports the root.
       - name: Test the console
-        run: magus run test console
+        run: magus run test console --concurrency-profile aggressive
 
       # Assembles gen/site: docs at the root of it, console under /console/. Reproduce the
       # exact published tree locally with the same commands.
       - name: Assemble the deploy tree
-        run: magus run deploy-generate .
+        run: magus run deploy-generate . --concurrency-profile aggressive
 
       # The ONLY producer of the README's coverage badges. Runs every Go module's suite and
       # buzz-test, then writes go-, buzz- and typescript-coverage.svg into gen/site/assets/.
       # Nothing is committed back, which is why this job keeps read-only contents.
       - name: Measure coverage and render the badges
-        run: magus run coverage-render .
+        run: magus run coverage-render . --concurrency-profile aggressive
 
       # enablement: true turns Pages on (with the Actions source) the first time this
       # runs, so no manual Settings -> Pages step is needed. If your org blocks
@@ -198,7 +198,7 @@ jobs:
       # what makes the release verify command in
       # docs/setup/container-image.md reject a per-commit image.
       - name: Build, push, and sign the per-commit image
-        run: magus run image-build:cd --no-default-charms
+        run: magus run image-build:cd --no-default-charms --concurrency-profile aggressive
 
       # The knowledge graph of the same commit, as an OCI artifact under the same account
       # and the same short-commit tag, so one string addresses both. It carries the SCIP
@@ -211,7 +211,7 @@ jobs:
         env:
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: magus run graph-generate:cd,rw --no-default-charms
+        run: magus run graph-generate:cd,rw --no-default-charms --concurrency-profile aggressive
 
       # No summary step here on purpose: image-build writes $GITHUB_STEP_SUMMARY itself,
       # from the references it actually pushed. A step that re-derived them would be

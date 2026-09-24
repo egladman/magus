@@ -111,10 +111,18 @@ backend changes.
 | `magus.cache.remote.duration` | histogram  | `s`      | `op ∈ {get, put}`, `outcome`       | Wall-clock of a single remote operation                                 |
 | `magus.cache.remote.io.size`  | histogram  | `By`     | `op ∈ {get, put}`                  | Bytes transferred, recorded on hits and puts only (egress/ingress cost) |
 
-`outcome ∈ {hit, miss, stored, error}`; `stored` is a successful `put`.
-**Remote hit-rate** is `hits / (hits + misses)`. **Put success** is the
+`outcome ∈ {hit, miss, stored, exists, error}`; `stored` is a successful `put`, and
+`exists` a `put` the store answered with "already stored" (another writer holds the
+key). **Remote hit-rate** is `hits / (hits + misses)`. **Put success** is the
 `magus.cache.remote.duration` count for `op=put` minus
 `magus.cache.remote.errors` for `op=put`.
+
+These metrics meter the **transport**: what the backend answered. The end-of-run
+`remote:` line (the `run.remote` record) meters **outcomes**, so the two differ by
+design. An artifact the backend returned but that failed verification or replay is a
+`hit` here and a failure there; an `exists` put is neither an upload nor a failure
+there; and a run the remote tier already failed stops calling the backend, so later
+lookups appear in neither.
 
 ### Graph
 
@@ -164,7 +172,7 @@ what it counts, not for the whole surface.
 | -------------------------------------- | ---------- | ---------------- | --------------------------------------- | -------------------------------------------------- |
 | `magus.lease.registrations`            | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on |
 | `magus.attention.disposition.duration` | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed |
-| `magus.review.remarks`                 | counter    | `{remark}`       | `author ∈ {human, agent}`               | A remark drafted on a change                       |
+| `magus.review.remarks`                 | counter    | `{remark}`       | `author ∈ {unattributed, agent}`        | A remark drafted on a change                       |
 | `magus.review.publishes`               | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed     |
 
 `verdict` on registrations is `match`, `revision-match`, `diverged` or `unknown`;

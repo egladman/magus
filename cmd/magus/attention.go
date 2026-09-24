@@ -177,11 +177,22 @@ func attentionDispose(root string, args []string) error {
 		return usagef("magus session dispose: needs exactly one request id (got %d); run `"+hint.SessionAttention.String()+"` to list the open ids", len(rest))
 	}
 
+	// Disposing closes a request that exists to reach a PERSON (docs/doctrine.md,
+	// "Manual on purpose"): an agent answering its own block, or another agent's,
+	// removes the person the queue exists to reach. The guard denies this outright
+	// (rule person-only), but it fails OPEN where it is not wired, the same gap
+	// --ack closed this way first (diff.go).
+	if !isInteractiveTTY() {
+		fmt.Fprintln(os.Stderr, "magus: session dispose records that a person closed this request, so it needs an interactive terminal")
+		return errSilent{exitCode: 2}
+	}
+
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return err
 	}
-	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.SessionStart{
+	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.InvocationStart{
+		Origin:    localOrigin(types.EntryPointCLI),
 		Workspace: root,
 		Version:   version,
 	})
@@ -200,11 +211,11 @@ func attentionDispose(root string, args []string) error {
 	if opts.Format != outputText {
 		return emitFormatted(opts, req)
 	}
-	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from session %s\n",
+	fmt.Fprintf(os.Stdout, "disposed %s, open %s, raised by %s from invocation %s\n",
 		req.ID,
 		orDash(formatDur(time.Since(time.UnixMilli(req.OpenedMs)))),
 		orDash(req.Source),
-		req.Session)
+		req.Invocation)
 	fmt.Fprintf(os.Stdout, "  %s\n", attentionOneLine(req.Message))
 	if reason != "" {
 		fmt.Fprintf(os.Stdout, "  reason: %s\n", reason)
@@ -266,18 +277,24 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		return err
 	}
 
-	open := sessions.AttentionOpen{
-		Outcome:  string(ev.Outcome),
-		Severity: string(ev.Severity),
-		Source:   sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
-		Where:    attentionWhere(ev.Where),
-		// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so
-		// the queue can say WHOSE work is blocked without the row's identity moving when a
-		// fleet re-partitions.
-		Lease:   trail.LeaseFromEnv(),
-		Message: ev.Message,
+	// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so the
+	// queue can say WHOSE work is blocked without the row's identity moving when a fleet
+	// re-partitions.
+	lease, leaseFrom, err := checkoutLease(root, trail.LeaseFromEnv())
+	if err != nil {
+		return err
 	}
-	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.SessionStart{
+	open := sessions.AttentionOpen{
+		Outcome:   string(ev.Outcome),
+		Severity:  string(ev.Severity),
+		Source:    sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
+		Where:     attentionWhere(ev.Where),
+		Lease:     lease,
+		LeaseFrom: leaseFrom,
+		Message:   ev.Message,
+	}
+	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.InvocationStart{
+		Origin:    localOrigin(types.EntryPointHook),
 		Workspace: root,
 		Version:   version,
 	})

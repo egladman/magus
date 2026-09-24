@@ -408,7 +408,7 @@ func targetGraphIR(out types.TargetGraphOutput) renderGraph {
 		}
 		// Edges point in run order, not dependency order: an arrow from a target's
 		// dependency to the target itself, so the graph reads "what runs first" left
-		// to right (preflight → … → ci), the inverse of the "depends on" relation.
+		// to right (generate → … → ci), the inverse of the "depends on" relation.
 		for _, n := range p.Nodes {
 			to := prefix + mermaidID(n.Name)
 			for _, d := range n.Dependencies {

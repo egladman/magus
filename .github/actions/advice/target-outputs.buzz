@@ -8,8 +8,6 @@
 //
 // Only NEW targets, read from the diff: an existing target without outputs is a decision
 // already made, and re-litigating it on every unrelated push is how a bot gets muted.
-//
-// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "proc";
 import "advice";
 import "magus";
@@ -30,16 +28,17 @@ fun body(targets: [str]) > str {
 }
 
 fun main() > void !> any {
-    final repo = advice\env("REPO");
-    final pr = advice\env("PR_NUMBER");
-    final base = advice\env("PR_BASE");
-    final head = advice\env("PR_HEAD_SHA");
+    final pull = advice\pullRequest();
+    final repo = pull.repo;
+    final pr = pull.number;
+    final base = pull.base;
+    final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
         std\print("target-outputs: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "target-outputs: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+        throw "target-outputs: the pull request's number, base and head sha must be set together";
     }
 
     if (advice\silenced(repo, pr: pr, name: section)) {
@@ -61,8 +60,8 @@ fun main() > void !> any {
     // The loaded graph decides, not the diff: a target's footprint can be declared
     // anywhere in its body, and only magus knows what it resolved to.
     //
-    // QUALIFIED by project, because a target name is not unique across a workspace. Eight
-    // projects here declare `preflight`, and matching on the bare name reported the same
+    // QUALIFIED by project, because a target name is not unique across a workspace. When
+    // eight projects here declared `preflight`, matching on the bare name reported the same
     // name eight times for one edited magusfile - a list that told a reader nothing.
     var bare = mut [];
     foreach (project in magus\targets().projects) {

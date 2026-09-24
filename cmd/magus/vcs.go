@@ -8,7 +8,6 @@ import (
 	"io"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -151,9 +150,8 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	if err != nil {
 		return fmt.Errorf("vcs resolve: no VCS resolved for this workspace: %w", err)
 	}
-	resolver, ok := res.VCS.(types.ConflictResolver)
-	if !ok {
-		return fmt.Errorf("vcs resolve: %s cannot report conflicts; resolve this merge by hand", res.Name)
+	if res.VCS == nil {
+		return errors.New("vcs resolve: version control is disabled for this workspace; resolve this merge by hand")
 	}
 
 	if rf.Against != "" {
@@ -164,7 +162,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		defer undo()
 	}
 
-	conflicts, err := resolver.Conflicts(ctx, m.Root())
+	conflicts, err := res.VCS.Conflicts(ctx, m.Root())
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
@@ -177,7 +175,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return nil
 	}
 
-	plan, err := planResolution(ctx, m, resolver, conflicts)
+	plan, err := planResolution(ctx, m, res.VCS, conflicts)
 	if err != nil {
 		return err
 	}
@@ -185,7 +183,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	if globalCfg.DryRun {
 		return unresolvedError(plan)
 	}
-	return applyResolution(ctx, root, rc, m, res.VCS, resolver, plan, stale)
+	return applyResolution(ctx, root, rc, m, res.VCS, plan, stale)
 }
 
 // startMergeAgainst begins the merge that --against settles, and returns the function that
@@ -200,10 +198,6 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 // So a dry run merges for real and aborts, which is why a clean tree is required up
 // front: `git merge --abort` does not guarantee uncommitted work survives.
 func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution, ref string) (undo func(), err error) {
-	starter, ok := res.VCS.(types.MergeStarter)
-	if !ok {
-		return nil, fmt.Errorf("vcs resolve: %s cannot start a merge through magus; merge %q yourself, then run `"+hint.VCSResolve.String()+"`", res.Name, ref)
-	}
 	dirty, err := res.VCS.DirtyFiles(ctx, root, nil)
 	if err != nil {
 		return nil, fmt.Errorf("vcs resolve: read tree status: %w", err)
@@ -211,7 +205,8 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 	if len(dirty) > 0 {
 		return nil, fmt.Errorf("vcs resolve: --against needs a clean tree, and %d path(s) are uncommitted; commit or stash them first so backing the merge out cannot lose them", len(dirty))
 	}
-	if err := starter.StartMerge(ctx, root, ref); err != nil {
+	// The person resolving, as the box knows them: the merge is theirs to conclude.
+	if err := res.VCS.StartMerge(ctx, root, ref, types.Person{}); err != nil {
 		return nil, fmt.Errorf("vcs resolve: %w", err)
 	}
 	if !globalCfg.DryRun {
@@ -219,7 +214,7 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 		return func() {}, nil
 	}
 	return func() {
-		if err := starter.AbortMerge(ctx, root); err != nil {
+		if err := res.VCS.AbortMerge(ctx, root); err != nil {
 			// Reported, never swallowed: the tree is NOT as this dry run found it, and a
 			// caller told "nothing was touched" would go on to do something else in it.
 			fmt.Fprintf(os.Stderr, "vcs resolve: could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort): %v\n", err)
@@ -238,11 +233,11 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 // markers and recording paths are decisions ABOUT the conflicts, which either side's
 // declarations answer the same way, while regenerating PRODUCES bytes, and a merge that
 // touched a generator would have this produce output matching neither side.
-func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver, resolver types.ConflictResolver, plan resolutionPlan, staleDecls bool) error {
-	if err := resolver.KeepIncoming(ctx, m.Root(), slices.Concat(plan.keep, plan.rederive)); err != nil {
+func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver, plan resolutionPlan, staleDecls bool) error {
+	if err := driver.KeepIncoming(ctx, m.Root(), slices.Concat(plan.keep, plan.rederive)); err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
-	if err := resolver.RemoveConflicts(ctx, m.Root(), plan.gone); err != nil {
+	if err := driver.RemoveConflicts(ctx, m.Root(), plan.gone); err != nil {
 		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "the conflict markers were already cleared"))
 	}
 	if staleDecls {
@@ -265,7 +260,7 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 	// call before staging anything, so a single conflict involving a RENAME took the other
 	// forty paths down with it: regeneration complete, index untouched, and an error naming
 	// a file the rename had legitimately removed. filterStageable splits those out first.
-	staged, dropped, err := stagePaths(ctx, m.Root(), driver.Name(), resolver, settled)
+	staged, dropped, err := stagePaths(ctx, m.Root(), driver, settled)
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "regeneration completed"))
 	}
@@ -295,15 +290,7 @@ func committedMagusfiles(ctx context.Context, root string) map[string]string {
 	if err != nil || res.VCS == nil {
 		return nil
 	}
-	resolver, ok := res.VCS.(types.ConflictResolver)
-	if !ok {
-		return nil
-	}
-	reader, ok := res.VCS.(types.RevisionFileReader)
-	if !ok {
-		return nil
-	}
-	conflicts, err := resolver.Conflicts(ctx, root)
+	conflicts, err := res.VCS.Conflicts(ctx, root)
 	if err != nil {
 		return nil
 	}
@@ -314,7 +301,7 @@ func committedMagusfiles(ctx context.Context, root string) map[string]string {
 		}
 		// "" is the committed revision in whichever backend this is; naming HEAD here
 		// would be correct for git alone.
-		content, rerr := reader.ReadFileAt(ctx, root, "", c.Path)
+		content, rerr := res.VCS.ReadFileAt(ctx, root, "", c.Path)
 		if rerr != nil {
 			return nil
 		}
@@ -739,12 +726,6 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	if err != nil || res.VCS == nil {
 		return fmt.Errorf("vcs add: no VCS resolved for this workspace")
 	}
-	// The write goes through the capability `vcs resolve` uses, so a backend that cannot
-	// record paths is refused up front rather than part-way through.
-	recorder, ok := res.VCS.(types.ConflictResolver)
-	if !ok {
-		return fmt.Errorf("vcs add: %s cannot record paths through magus; stage with %s directly", res.Name, res.Name)
-	}
 
 	paths, err := workspaceRelPaths(root, pos)
 	if err != nil {
@@ -817,7 +798,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 
 	var dropped []string
 	if !globalCfg.DryRun && len(stage) > 0 {
-		staged, gone, err := stagePaths(ctx, root, res.Name, recorder, stage)
+		staged, gone, err := stagePaths(ctx, root, res.VCS, stage)
 		if err != nil {
 			return err
 		}
@@ -984,8 +965,8 @@ func splitMaintained(undeclared []string) (maintained, unclaimed []string) {
 //
 // It returns what it staged and dropped rather than printing either, so `-o json` gets
 // the same answer the terminal does.
-func stagePaths(ctx context.Context, root, vcsName string, recorder types.ConflictResolver, paths []string) (staged, dropped []string, err error) {
-	stageable, dropped, err := filterStageable(ctx, root, vcsName, paths)
+func stagePaths(ctx context.Context, root string, driver types.VCSDriver, paths []string) (staged, dropped []string, err error) {
+	stageable, dropped, err := filterStageable(ctx, root, driver, paths)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -994,7 +975,7 @@ func stagePaths(ctx context.Context, root, vcsName string, recorder types.Confli
 	}
 	// MarkResolved batches the pathspecs, which matters here: `vcs add` over a whole
 	// dirty tree is the largest path list these commands hand to the VCS.
-	if err := recorder.MarkResolved(ctx, root, stageable); err != nil {
+	if err := driver.MarkResolved(ctx, root, stageable); err != nil {
 		return nil, nil, fmt.Errorf("vcs add: %w", err)
 	}
 	return stageable, dropped, nil
@@ -1023,7 +1004,7 @@ func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, 
 // filterStageable separates paths git add can actually act on from ones that
 // would abort the whole `git add` call. See stagePaths for why a missing-but-
 // tracked path (a deletion or the old half of a rename) must still be staged.
-func filterStageable(ctx context.Context, root, vcsName string, paths []string) (stageable, dropped []string, err error) {
+func filterStageable(ctx context.Context, root string, driver types.VCSDriver, paths []string) (stageable, dropped []string, err error) {
 	var maybeGone []string
 	for _, p := range paths {
 		if _, statErr := os.Stat(filepath.Join(root, p)); statErr == nil {
@@ -1036,14 +1017,20 @@ func filterStageable(ctx context.Context, root, vcsName string, paths []string) 
 		return stageable, nil, nil
 	}
 	// The abort-the-whole-invocation behavior this guards against is git's. Other
-	// backends get the paths passed through rather than probed with a missing command.
-	if vcsName != "git" {
+	// backends get the paths passed through rather than probed.
+	if driver.Name() != "git" {
 		return append(stageable, maybeGone...), nil, nil
 	}
 
-	tracked, err := gitTrackedPaths(ctx, root, maybeGone)
+	// The tracked listing does not care whether a file is still on disk, so a
+	// tracked-but-deleted path is kept and its deletion gets recorded.
+	known, err := driver.TrackedFiles(ctx, root, maybeGone)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("vcs add: %w", err)
+	}
+	tracked := make(map[string]bool, len(known))
+	for _, p := range known {
+		tracked[p] = true
 	}
 	for _, p := range maybeGone {
 		if tracked[p] {
@@ -1054,31 +1041,3 @@ func filterStageable(ctx context.Context, root, vcsName string, paths []string) 
 	}
 	return stageable, dropped, nil
 }
-
-// gitTrackedPaths reports which of paths git already has in its index. That
-// index listing is unaffected by whether the file still exists on disk, which
-// is exactly the property filterStageable needs: a tracked-but-deleted path
-// must still be staged so the deletion gets recorded.
-func gitTrackedPaths(ctx context.Context, root string, paths []string) (map[string]bool, error) {
-	tracked := make(map[string]bool)
-	// Batched like the vcs package's own pathspec calls: a dirty tree runs to hundreds of
-	// paths and an unbounded argv hits E2BIG.
-	for start := 0; start < len(paths); start += gitLsFilesChunk {
-		chunk := paths[start:min(start+gitLsFilesChunk, len(paths))]
-		cmd := exec.CommandContext(ctx, "git", append([]string{"ls-files", "-z", "--"}, chunk...)...)
-		cmd.Dir = root
-		out, err := cmd.Output()
-		if err != nil {
-			return nil, fmt.Errorf("vcs add: git ls-files: %w", err)
-		}
-		for _, p := range strings.Split(strings.TrimRight(string(out), "\x00"), "\x00") {
-			if p != "" {
-				tracked[p] = true
-			}
-		}
-	}
-	return tracked, nil
-}
-
-// gitLsFilesChunk bounds pathspecs per `git ls-files` call; see gitTrackedPaths.
-const gitLsFilesChunk = 256

@@ -206,7 +206,7 @@ var (
 	_ graphResolver = (*magus.Magus)(nil)
 )
 
-func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string) {
+func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, originFn func(context.Context) origin.Client, trailDir string) {
 	// The MCP tool ctx is not stamped with the telemetry provider, so grab the
 	// shared one here and close over it in wrap. Telemetry() returns a nil-safe
 	// disabledProvider when telemetry is off; a nil Magus (some test paths)
@@ -275,13 +275,16 @@ func unregisteredDrivers(tools []spells.Driver, reg []ToolDescriptor) []string {
 // both sides of the exchange captured as content-addressed blobs) and records
 // the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
 // only; never by argument values or result content). A nil tel is a no-op.
-func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string, withSecrets func(context.Context) context.Context, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
+func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailDir string, withSecrets func(context.Context) context.Context, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		o := originFn(ctx)
-		agentID := o.Agent
+		agentID := o.Name
 		toolName := req.Params.Name
 
 		ctx = origin.WithContext(ctx, o)
+		// The one boundary where the client's name is known: every record made under this
+		// call is stamped with it as the origin's Host.
+		ctx = trail.ContextWithHost(trail.ContextWithEntryPoint(ctx, types.EntryPointMCP), o.Name)
 		// The workspace's secret resolver, so the trail writes below are redacted.
 		//
 		// This context is an ANCESTOR of any run a tool starts, never a descendant, so it
@@ -328,9 +331,10 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 
 		dur := time.Since(start)
 		ev := trail.Event{
-			Ts:            start.UnixMilli(),
-			Kind:          trail.KindMCPToolCall,
-			Actor:         agentID,
+			Ts:   start.UnixMilli(),
+			Kind: trail.KindMCPToolCall,
+			// Append stamps the origin from ctx: the entry point, the client's name as Host,
+			// and the credential the bearer guard verified (absent over stdio).
 			UserAgent:     o.UserAgent,
 			Action:        toolName,
 			Outcome:       trail.OutcomeOK,

@@ -14,6 +14,11 @@ import "./tools/commits" as commits;
 import "./tools/changelog" as changelog;
 // This repository's own git hooks, tools/git-hooks/<hook>.buzz; see git_hooks_install.
 import "spells/git/hooks" as githooks;
+// This repository's rules for the agents that work on it; see tools/policy/guard.buzz.
+import "./tools/policy/guard" as agentpolicy;
+magus\guard.command(agentpolicy\judge);
+magus\guard.spawn(agentpolicy\judgeSpawn);
+magus\guard.write(agentpolicy\judgeWrite);
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";
@@ -57,6 +62,7 @@ import "project/libs/gopherbuzz";
 import "project/libs/diagnostics";
 import "project/libs/coldread";
 import "project/libs/testlayout";
+import "project/libs/mergequeue";
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
 //
@@ -138,8 +144,8 @@ magus\project({
     // non-input only makes an unrelated edit invalidate a cache. Four groups:
     //
     //   - Nothing reads them: .gitignore, NOTICE, .github/actions/*/action.yml (GitHub
-    //     reads those, no target does), and the nested internal/spell/gen/.gitattributes,
-    //     which only git reads.
+    //     reads those; `test` declares setup-magus's, which its suite reads), and the nested
+    //     internal/spell/gen/.gitattributes, which only git reads.
     //   - LICENSE, read only by release-build, which is skip_cache: declaring it would
     //     invalidate build/test/lint to key nothing.
     //   - The benchmark corpora under benchmarks/ (fixtures, task meta.json, manifests,
@@ -344,7 +350,7 @@ magus\project({
 // The ROOT release tag HEAD sits EXACTLY on, or "" when HEAD carries none. Compares revision
 // ids, so it cannot read distance past a tag as the prerelease a version string would show.
 //
-// The shape check is releaser\rootReleaseTag, which the release preflight also asks, so a
+// The shape check is releaser\rootReleaseTag, which the release checks also ask, so a
 // rehearsal and a build cannot disagree about which tag names the version. It rejects both
 // lookalikes a `v*` refspec admits: this repository's `verified-refinements` tag, and the
 // per-module tag a release commit also carries, which would let the root adopt
@@ -353,10 +359,10 @@ fun exact_release_tag() > str !> any {
     return releaser\rootReleaseTag(tag_names_on_head());
 }
 
-// Every tag name HEAD carries. Separated from the selection above so the release preflight
+// Every tag name HEAD carries. Separated from the selection above so the release checks
 // can ask the same question of a tag set that does not exist yet.
 //
-// Unpatterned: the preflight needs the namespaced tags too, since those are what `git
+// Unpatterned: the release checks need the namespaced tags too, since those are what `git
 // describe` picks from when no root tag outranks them, and a glob wildcard stops at "/" so
 // no pattern could select them.
 fun tag_names_on_head() > [str] !> any {
@@ -443,7 +449,9 @@ fun ld_flags() > str !> any {
 
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(gopherbuzz\build);
+    // The merge queue is compiled in as `magus queue`, and its sources are a project of
+    // their own, which this target's globs stop at.
+    ctx.needs(gopherbuzz\build, mergequeue\build);
     // The compiled built-in spells are go:embed'd into this binary, so the link has to
     // happen AFTER they are regenerated. The cache key cannot express that on its own:
     // spells/**/*.buzz is a project source, so editing a spell does invalidate this
@@ -1664,7 +1672,7 @@ export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
 //
 // Parsing is worse in both directions: the globs live in five `path:` block scalars plus a
 // `tags:` sequence, so reading them means a YAML walk that can itself be wrong, and it
-// would make the workflow the source of truth for a rule the preflight applies on a laptop
+// would make the workflow the source of truth for a rule the release checks apply on a laptop
 // before any workflow exists. A constant plus a containment check names whichever side
 // moves.
 //
@@ -1681,7 +1689,7 @@ final RELEASE_TAG_REFSPEC = "v*";
 final RELEASE_WORKFLOW = ".github/workflows/release.yaml";
 
 // The one place a release asset name is spelled. build_release_variant writes it and the
-// preflight predicts it, so a change to the scheme cannot reach a tag while only one of
+// release checks predict it, so a change to the scheme cannot reach a tag while only one of
 // them knows.
 fun release_asset_name(v: str, goos: str, goarch: str, suffix: str) > str {
     return "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz";
@@ -1834,7 +1842,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     //
     // Nothing re-checks the written files after the upload step, because there is nothing
     // left to find: every name in a job shares one version, so the glob selects all of them
-    // or none, and release_preflight pins RELEASE_ASSET_GLOB to the workflow's own text
+    // or none, and release_checks pins RELEASE_ASSET_GLOB to the workflow's own text
     // before the tag exists.
     if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, releaser\toSlash(asset))) {
         throw "release-build: the asset would be `" + asset + "`, which `"
@@ -2148,7 +2156,7 @@ export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// One preflight verdict. `ok` is the gate; `detail` is the line the rehearsal prints on a
+// One release-check verdict. `ok` is the gate; `detail` is the line the rehearsal prints on a
 // pass as much as on a failure, because which checks ran is half of what a rehearsal shows.
 //
 // `note` is a third rendering rather than a third gate state: a noted verdict passes. It
@@ -2191,7 +2199,7 @@ fun local_branches() > [str] !> any {
 //
 // Neither constant is derived from the workflow, so nothing but this notices when one side
 // is edited alone. An asset glob the uploader no longer uses is worse than no constant at
-// all, because the preflight would go on approving names against a pattern nobody reads.
+// all, because the release checks would go on approving names against a pattern nobody reads.
 fun verify_release_workflow() > [Verdict] !> any {
     if (!fs\exists(RELEASE_WORKFLOW)) {
         return [failed("workflow", RELEASE_WORKFLOW + " is missing, so neither the upload glob nor the tag trigger can be confirmed")];
@@ -2226,7 +2234,7 @@ fun verify_release_workflow() > [Verdict] !> any {
 //
 // Returns a LIST rather than throwing on the first failure. A rehearsal that stops at the
 // first problem hides the second one, and a noted verdict is not a problem at all.
-fun release_preflight(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
+fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
     var checks = mut [<Verdict>];
     final onHead = tag_names_on_head();
     final branches = local_branches();
@@ -2237,7 +2245,7 @@ fun release_preflight(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
     // git supports the state rather than tolerating it. The v0.4.0 incident was magus asking
     // for %(refname:short), which renders an ambiguous tag as `tags/v0.4.0`; that was a bug
     // in the query and it is fixed. Refusing a release over it would contradict the reason
-    // this preflight exists, which is to survive a messy repository rather than demand it be
+    // these checks exist, which is to survive a messy repository rather than demand it be
     // tidied first.
     //
     // What survives is a handling detail worth knowing before you push: a bare name is
@@ -2448,7 +2456,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("release: {m["key"]} - {at}"
             + ", next: patch {n.patch} | minor {n.minor} | major {n.major}");
         // A candidate whose name a branch already holds, said here because the survey is
-        // where the number gets chosen. The preflight notes it again for the tag actually
+        // where the number gets chosen. The release checks note it again for the tag actually
         // named; neither stops the release, and both exist so the choice is informed.
         foreach (c in [n.patch, n.minor, n.major]) {
             final tag = m["prefix"] + c;
@@ -2532,7 +2540,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
 
-    // PREFLIGHT. The refusals above answer whether the version is legal; these answer
+    // RELEASE CHECKS. The refusals above answer whether the version is legal; these answer
     // whether the release that follows the tag works, which is what v0.4.0 got wrong in CI
     // an hour after the tag was immovable.
     //
@@ -2550,7 +2558,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     if (wanted["magus"] != null) { rootVersion = "{wanted["magus"]}"; }
 
     var failures = 0;
-    foreach (c in verify_release_workflow() + release_preflight(wouldBeTags, rootVersion: rootVersion)) {
+    foreach (c in verify_release_workflow() + release_checks(wouldBeTags, rootVersion: rootVersion)) {
         if (c.note) {
             magus\log.warn("release: NOTE " + c.name + " - " + c.detail);
         } else if (c.ok) {
@@ -2564,7 +2572,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // sends you back for the second, and a dirty tree is the one fact `git status` already
     // reports, so it should not be what hides a branch collision.
     if (failures > 0 and deliver) {
-        throw "release: " + failures + " preflight check(s) failed; nothing was tagged. "
+        throw "release: " + failures + " release check(s) failed; nothing was tagged. "
             + "Drop the cd charm to rehearse until they pass.";
     }
     if (deliver and dirty) { throw "release: tree is dirty; commit before releasing"; }
@@ -2573,7 +2581,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         magus\log.info("release: DRY RUN - add the cd charm to execute");
         if (dirty) { magus\log.info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
         if (failures > 0) {
-            magus\log.info("release: NOTE - " + failures + " preflight check(s) failed; cd will refuse until they pass");
+            magus\log.info("release: NOTE - " + failures + " release check(s) failed; cd will refuse until they pass");
         }
     }
 
@@ -2739,6 +2747,13 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // this key unmoved and the suite replays a pass computed against the old table.
     // Its embedded pricing.json is named for the same reason go:embed'd key rings are.
     ctx.readsFiles("libs/pricing/**/*.go", "libs/pricing/pricing.json");
+    // libs/mergequeue likewise: a project, and packages of this module that magus
+    // compiles in as `magus queue`. Its provider is go:embed'd Buzz and its fuzz seeds are
+    // test inputs.
+    ctx.readsFiles("libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz", "libs/mergequeue/testdata/**");
+    // The setup action and the queue's apply workflow: the release trust anchor and the
+    // queue app's credential rules are asserted against them.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", ".github/workflows/queue-apply.yaml");
     // TestNodeKindPaletteDrift (types/knowledge_test.go) reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
@@ -2949,7 +2964,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz");
+        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz", "tools/policy/*.buzz");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
@@ -2990,8 +3005,8 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
     //
     // The MODE is per file, not per directory, because tools/ is not uniform.
-    // registry.buzz is the only one invoked bare, so it is the only one that has to
-    // survive strict; advisories, drift and toolchain-policy are magusfile imports and
+    // registry.buzz and gha-queue.buzz are invoked bare by workflows, so they are the ones
+    // that have to survive strict; advisories, drift and toolchain-policy are magusfile imports and
     // therefore always embedded, and running THEM strict would fail a top-level `if`
     // or an unlabeled second argument that is legal everywhere they actually load - a
     // red for a defect that does not exist. (toolchain.buzz has no importer and no
@@ -3000,11 +3015,15 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         cover_for(mod.value, ["--embedded"], {});
     }
     foreach (mod in fs\glob("tools/*.buzz")) {
-        if (mod.value == "tools/registry.buzz") {
+        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz") {
             cover_for(mod.value, [], {});
         } else {
             cover_for(mod.value, ["--embedded"], {});
         }
+    }
+    // The agent policy is a magusfile import like the tools above it.
+    foreach (mod in fs\glob("tools/policy/*.buzz")) {
+        cover_for(mod.value, ["--embedded"], {});
     }
     // Spell sources and the docs libraries carry ~90 more `test "..." {}` blocks that
     // nothing ran until 2026-08-09. That gap is why a broken escaper shipped: every one
@@ -3059,17 +3078,14 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// This project deliberately declares NO preflight: doctor running in one fails the build
-// on a finding, making workspace conventions a blocker for everyone downstream. The
-// advice action reports the same findings on the pull request, non-blocking - and unlike
-// a preflight gate, that works for a consumer who never wired doctor into their own
-// pipeline.
+// This project declares no doctor gate: doctor failing the build on a finding makes
+// workspace conventions a blocker for everyone downstream. The advice action reports the
+// same findings on the pull request, non-blocking, and that works for a consumer who
+// never wired doctor into their own pipeline.
 //
-// What was left behind was an EMPTY preflight with no callers, which reported `[pass]` for
-// doing nothing. The TypeScript projects keep theirs because it does real work there (an
-// unconditional pnpm install), but a target that cannot fail and that nothing depends on
-// is not a phase - it is a name. `preflight` is a convention, not a requirement; only `ci`
-// is required (see docs/concepts/targets.md).
+// There is no `preflight` target either. The TypeScript projects keep one because it does
+// real work there (an unconditional pnpm install); to fail fast before a fan-out, name a
+// target ci already composes with `--preflight` (see docs/concepts/targets.md).
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
@@ -3145,7 +3161,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/coldread/**/*.go",
                    // A project, so the tree globs below stop at its directory, but also a
                    // package of this module that golangci-lint and go vet both compile.
-                   "libs/pricing/**/*.go", "libs/pricing/pricing.json");
+                   "libs/pricing/**/*.go", "libs/pricing/pricing.json",
+                   "libs/mergequeue/**/*.go", "libs/mergequeue/provider/*.buzz");
     // The tree this target analyzes, restated for the reason the same block on `test`
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this

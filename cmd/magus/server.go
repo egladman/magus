@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/egladman/magus/cmd/magus/gen"
@@ -179,6 +180,7 @@ const daemonDetachEnv = "MAGUS_DAEMON_DETACH"
 const daemonReadyTimeout = 60 * time.Second
 
 func serverStart(ctx context.Context, args []string) error {
+	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointDaemon)
 	var sf *gen.ServerStartFlags
 	_, err := cmdParse("server start", args, func(fs *flag.FlagSet) {
 		sf = gen.BindServerStart(fs)
@@ -966,15 +968,14 @@ func installRefreshHooks(ctx context.Context) {
 	if err != nil || res.VCS == nil {
 		return
 	}
-	installer, ok := res.VCS.(types.RefreshHookInstaller)
-	if !ok {
-		return // this VCS has no hook support
-	}
 	root, err := res.VCS.Root(ctx, cwd)
 	if err != nil {
 		root = cwd
 	}
-	installed, err := installer.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))
+	installed, err := res.VCS.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		return // this VCS has no hook support
+	}
 	if err != nil {
 		slog.WarnContext(ctx, "server start: could not install VCS refresh hook", slog.String("error", err.Error()))
 		return
@@ -998,15 +999,14 @@ func installDriftHooks(ctx context.Context) {
 	if err != nil || res.VCS == nil {
 		return
 	}
-	installer, ok := res.VCS.(types.DriftHookInstaller)
-	if !ok {
-		return // this VCS has no hook support
-	}
 	root, err := res.VCS.Root(ctx, cwd)
 	if err != nil {
 		root = cwd
 	}
-	installed, err := installer.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
+	installed, err := res.VCS.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
+	if errors.Is(err, types.ErrVCSUnsupported) {
+		return // this VCS has no hook support
+	}
 	if err != nil {
 		slog.WarnContext(ctx, "server start: could not install VCS drift-notice hook", slog.String("error", err.Error()))
 		return
@@ -1141,12 +1141,12 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
-	// The watermark is the READER's; see DiffSession.SeenThreads for why it cannot be the job's.
-	if unseen := (types.DiffSession{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
+	// The watermark is the READER's; see DiffReview.SeenThreads for why it cannot be the job's.
+	if unseen := (types.DiffReview{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
-			Actor:     "daemon",
+			Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
 			Workspace: m.Root(),
 			Action:    "review.said",
 			Outcome:   trail.OutcomeOK,
@@ -1169,7 +1169,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	trail.Append(ctx, m.CacheDir(), trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindJob,
-		Actor:     "daemon",
+		Origin:    types.Origin{EntryPoint: types.EntryPointDaemon},
 		Workspace: m.Root(),
 		Action:    "review.merged",
 		Outcome:   trail.OutcomeOK,

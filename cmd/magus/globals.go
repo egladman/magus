@@ -48,6 +48,17 @@ var outputFormatHelp = "Output format (" + JoinFormats(CommonFormats, "|") +
 	"|template[=<go-template>]); default: text. Bare -o template lists the available " +
 	"template fields (they are the -o json names)"
 
+// bindGlobalFlags registers the flags magus accepts before its subcommand, bar the display
+// set bindDisplayFlags adds. The guard reads a magus argv with its own copy of both
+// (guard.MagusFlagTakesValue), held to them by TestGuardKnowsEveryGlobalFlag.
+func bindGlobalFlags(fs *flag.FlagSet, root, cfgPath *string) {
+	fs.StringVar(root, "root", "", "Path to start the workspace search from, -C after make (must precede subcommand; default: cwd)")
+	fs.StringVar(root, "C", "", "Short for --root")
+	fs.StringVar(cfgPath, "config", "", "Config file path (must precede subcommand; default: search magus.yaml in CWD / XDG)")
+	fs.StringVar(cfgPath, "c", "", "Short for --config")
+	gen.BindFlags(fs, &globalCfg)
+}
+
 func bindDisplayFlags(fs *flag.FlagSet) {
 	fs.StringVar(&global.output, "output", global.output, outputFormatHelp)
 	fs.StringVar(&global.output, "o", global.output, "Short for --output")
@@ -101,6 +112,10 @@ var commandsWithoutOutput = map[string]bool{
 	"notes capture":            true,
 	"notes edit":               true,
 	"notes promote":            true,
+	"queue apply":              true,
+	"queue ls":                 true,
+	"queue plan":               true,
+	"queue validate":           true,
 	"server prune-preserved":   true,
 	"server reload":            true,
 	"server rotate-activities": true,

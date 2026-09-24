@@ -261,10 +261,17 @@ func (s *ConnectorStore) ListScope(want ...ClientScope) []ConnectorToken {
 // create against the token file itself, not a lock, so a concurrent Create of
 // the same name cannot duplicate it; only the final append to the in-memory
 // snapshot runs under s.mu.
+//
+// The names [CLICredential] and [ShareCredential] are refused: every record names the
+// credential a request presented, and a token minted under one of them would read as the
+// cli token or a share link.
 func (s *ConnectorStore) Create(name string, expires time.Time, scope ClientScope) (secret string, c ConnectorToken, err error) {
 	name = strings.TrimSpace(name)
 	if err := dropin.ValidName(name); err != nil {
 		return "", ConnectorToken{}, fmt.Errorf("auth: connector %w", err)
+	}
+	if name == CLICredential || name == ShareCredential {
+		return "", ConnectorToken{}, fmt.Errorf("auth: %q names a credential magus mints itself; choose another name", name)
 	}
 
 	secret, err = mintToken()
@@ -432,21 +439,21 @@ func indexConnector(tokens []ConnectorToken, q string) (int, error) {
 }
 
 // VerifyScope reports whether presented is a valid, non-expired connector token
-// minted for scope. It rejects a malformed or checksum-failing token OFFLINE before
-// any hash work, then compares SHA-256 digests with subtle.ConstantTimeCompare
-// against every non-expired stored record carrying that scope. Expired records never
-// match, and neither does a token minted for a different surface; that filter is
-// what keeps the tiers disjoint rather than merely labeled.
-func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) bool {
+// minted for scope, and the name it was minted with. It rejects a malformed or
+// checksum-failing token OFFLINE before any hash work, then compares SHA-256 digests
+// with subtle.ConstantTimeCompare against every non-expired stored record carrying
+// that scope. Expired records never match, and neither does a token minted for a
+// different surface; that filter is what keeps the tiers disjoint rather than merely
+// labeled.
+func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) (name string, ok bool) {
 	if !validTokenFormat(presented) {
-		return false
+		return "", false
 	}
 	sum := sha256.Sum256([]byte(presented))
 	got := []byte(hex.EncodeToString(sum[:]))
 	now := time.Now()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	match := false
 	for _, t := range s.tokens {
 		if t.expired(now) || t.EffectiveScope() != scope {
 			continue
@@ -454,10 +461,10 @@ func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) bool {
 		// Keep scanning even after a match so total work does not depend on
 		// WHICH record matched (defense in depth; the set is tiny anyway).
 		if subtle.ConstantTimeCompare([]byte(t.SHA256), got) == 1 {
-			match = true
+			name, ok = t.Name, true
 		}
 	}
-	return match
+	return name, ok
 }
 
 // mintToken generates a fresh connector token in the mgs_ format: a 256-bit

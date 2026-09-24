@@ -13,7 +13,7 @@ import (
 // it.
 func TestGateRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	start := SessionStart{Workspace: "/repo", Command: "gate"}
+	start := InvocationStart{Workspace: "/repo", Command: "gate"}
 	g := GateResult{
 		Target:      "ci",
 		Ref:         "polish",
@@ -46,7 +46,7 @@ func TestGateRoundTrip(t *testing.T) {
 // redundancy check must see a red branch, not the stale green behind it.
 func TestGateNewestWins(t *testing.T) {
 	dir := t.TempDir()
-	start := SessionStart{Workspace: "/repo"}
+	start := InvocationStart{Workspace: "/repo"}
 	pass := GateResult{Target: "ci", Ref: "b", Commit: "c1", Outcome: OutcomePass, Fingerprint: "f1"}
 	require.NoError(t, RecordGate(dir, pass, start))
 	// Records order by (Ts, Session, Seq); a same-millisecond write would tie.
@@ -76,7 +76,7 @@ func TestLatestGateEmptyStore(t *testing.T) {
 // the full id, and a deferral never counts as a verdict.
 func TestGateAtMatchesTheCommitOnAnyRef(t *testing.T) {
 	dir := t.TempDir()
-	start := SessionStart{Workspace: "/repo"}
+	start := InvocationStart{Workspace: "/repo"}
 	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Ref: "a", Commit: "a89dee5c7f00", Outcome: OutcomePass}, start))
 	time.Sleep(5 * time.Millisecond)
 	require.NoError(t, RecordGate(dir, GateResult{Target: "ci", Ref: "b", Commit: "a89dee5c7f00", Outcome: OutcomeDeferred}, start))

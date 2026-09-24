@@ -178,7 +178,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	require.NoError(t, err)
 
 	// One session, one failing target: the run history the brief reads back.
-	handlers := withSessionJournal(ctx, nil, root, "run", []string{"test"})
+	handlers := withInvocationJournal(ctx, nil, root, "run", []string{"test"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{
 		Kind: journal.KindResult, Inv: "invBrief", Target: "test",

@@ -87,7 +87,7 @@ const (
 	Kind_KIND_RUN Kind = 12
 	// The effective workspace guard rules changed. action is loaded, tightened, loosen_pending,
 	// committed or removed; the request blob names each source file by its working-tree and
-	// approved git blob ids, never its body. Written only on a change, so these rows read as the
+	// approved content ids, never its body. Written only on a change, so these rows read as the
 	// lineage of the workspace's policy, and a verdict event's policy digest points at one.
 	Kind_KIND_GUARD_POLICY Kind = 13
 )
@@ -208,16 +208,15 @@ func (Outcome) EnumDescriptor() ([]byte, []int) {
 // ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
 // kind, action, outcome) is common to every kind; the payload refs point into the activity
 // blob store (fetched via GetPayload) so a large request/response body never bloats the line.
-// For an MCP tool call: actor is the agent id, action is the tool name, request is the
-// arguments, response is the result. For an agent command observation: actor is the host-supplied
-// agent/session identity when available, action is the host tool name, request is the normalized
-// invocation, and response is the guard decision. For a token lifecycle event: actor is "cli",
-// action is "connector.create"/"connector.revoke", and the refs are empty.
+// For an MCP tool call: action is the tool name, request is the arguments, response is the
+// result. For an agent command observation: action is the host tool name, request is the
+// normalized invocation, and response is the guard decision. For a token lifecycle event:
+// action is the RPC method and the refs are empty.
 type ActivityEvent struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Time     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"` // when the action occurred
 	Kind     Kind                   `protobuf:"varint,2,opt,name=kind,proto3,enum=magus.activity.v1alpha1.Kind" json:"kind,omitempty"`
-	Actor    string                 `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`   // who: an agent id, "cli", a user
+	Actor    string                 `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`   // the origin fields below as one label: "eli via claude-code", "daemon", "unattributed"
 	Action   string                 `protobuf:"bytes,4,opt,name=action,proto3" json:"action,omitempty"` // the specific action: a tool name, "connector.create"
 	Outcome  Outcome                `protobuf:"varint,5,opt,name=outcome,proto3,enum=magus.activity.v1alpha1.Outcome" json:"outcome,omitempty"`
 	Error    string                 `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`       // error text when outcome is OUTCOME_ERROR
@@ -236,9 +235,9 @@ type ActivityEvent struct {
 	// The agent host behind the action and that host's own session id, empty when the producer
 	// could not know them. The name is an opaque label the caller supplies, not a set magus
 	// enumerates: a hook is told its host by the wrapper that ran it, because no local process can
-	// discover which agent host started it. An MCP call has no such wrapper and is attributed from
-	// its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by
-	// host rather than switching on kind first.
+	// discover which agent host started it. An MCP call is attributed from the client's handshake
+	// name, or its HTTP User-Agent when it recorded none, mapped into this same field so one view
+	// can group both kinds by host rather than switching on kind first.
 	//
 	// They ride the EVENT rather than the request blob, which also carries them: a 200-row feed
 	// grouped by host must not cost 200 GetPayload calls.
@@ -262,7 +261,23 @@ type ActivityEvent struct {
 	// one event a damaged plan most needs to surface gets dropped. A filter on units matches a
 	// contested event that names one of them, which is deliberate: the event is attributed to
 	// nobody and is still that reader's business.
-	Contested     []string `protobuf:"bytes,17,rep,name=contested,proto3" json:"contested,omitempty"`
+	Contested []string `protobuf:"bytes,17,rep,name=contested,proto3" json:"contested,omitempty"`
+	// Where the action came from, one field per channel, so a reader never guesses which kind of
+	// value a single string holds. user is the OS account the recording process ran as, read from
+	// the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, daemon).
+	// credential names the bearer credential a daemon request presented, as the daemon verified
+	// it. agent is the host's subagent id within session. actor above is these rendered as one
+	// label for a row head, and filters match that label.
+	User       string `protobuf:"bytes,18,opt,name=user,proto3" json:"user,omitempty"`
+	EntryPoint string `protobuf:"bytes,19,opt,name=entry_point,json=entryPoint,proto3" json:"entry_point,omitempty"`
+	Credential string `protobuf:"bytes,20,opt,name=credential,proto3" json:"credential,omitempty"`
+	Agent      string `protobuf:"bytes,21,opt,name=agent,proto3" json:"agent,omitempty"`
+	// Which source answered unit (the lease), where the producer resolved one: flag, agent (the
+	// spawn magus recorded for the calling subagent), marker (the checkout's `magus job exec`
+	// binding), contested (the marker, over a BAGGAGE claim naming another lease), or env (the
+	// BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so
+	// it takes magus's word for the concept rather than unit's.
+	LeaseFrom     string `protobuf:"bytes,22,opt,name=lease_from,json=leaseFrom,proto3" json:"lease_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -416,12 +431,47 @@ func (x *ActivityEvent) GetContested() []string {
 	return nil
 }
 
+func (x *ActivityEvent) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetEntryPoint() string {
+	if x != nil {
+		return x.EntryPoint
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetCredential() string {
+	if x != nil {
+		return x.Credential
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetAgent() string {
+	if x != nil {
+		return x.Agent
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetLeaseFrom() string {
+	if x != nil {
+		return x.LeaseFrom
+	}
+	return ""
+}
+
 // ActivityQuery narrows the listing server-side. Fields AND together; repeated values within
 // a field OR; the time window bounds it.
 type ActivityQuery struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Kinds   []Kind                 `protobuf:"varint,1,rep,packed,name=kinds,proto3,enum=magus.activity.v1alpha1.Kind" json:"kinds,omitempty"` // restrict to these action kinds
-	Actors  []string               `protobuf:"bytes,2,rep,name=actors,proto3" json:"actors,omitempty"`                                         // restrict to these actors
+	Actors  []string               `protobuf:"bytes,2,rep,name=actors,proto3" json:"actors,omitempty"`                                         // restrict to events whose origin names one of these in a single field: user, host, agent, credential or entry_point, matched exactly (never the actor label)
 	Actions []string               `protobuf:"bytes,3,rep,name=actions,proto3" json:"actions,omitempty"`                                       // restrict to these actions (e.g. tool names)
 	Time    *v1alpha1.TimeRange    `protobuf:"bytes,4,opt,name=time,proto3" json:"time,omitempty"`                                             // action-time window
 	// The three narrowings a person watching a worker asks for. They are here rather than on
@@ -788,7 +838,7 @@ var File_magus_activity_v1alpha1_activity_proto protoreflect.FileDescriptor
 
 const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\n" +
-	"&magus/activity/v1alpha1/activity.proto\x12\x17magus.activity.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/query/v1alpha1/query.proto\"\xd1\x04\n" +
+	"&magus/activity/v1alpha1/activity.proto\x12\x17magus.activity.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a magus/query/v1alpha1/query.proto\"\xdb\x05\n" +
 	"\rActivityEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.magus.activity.v1alpha1.KindR\x04kind\x12\x14\n" +
@@ -808,7 +858,16 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x04host\x18\x0e \x01(\tR\x04host\x12\x18\n" +
 	"\asession\x18\x0f \x01(\tR\asession\x12\x12\n" +
 	"\x04unit\x18\x10 \x01(\tR\x04unit\x12\x1c\n" +
-	"\tcontested\x18\x11 \x03(\tR\tcontested\"\xf3\x01\n" +
+	"\tcontested\x18\x11 \x03(\tR\tcontested\x12\x12\n" +
+	"\x04user\x18\x12 \x01(\tR\x04user\x12\x1f\n" +
+	"\ventry_point\x18\x13 \x01(\tR\n" +
+	"entryPoint\x12\x1e\n" +
+	"\n" +
+	"credential\x18\x14 \x01(\tR\n" +
+	"credential\x12\x14\n" +
+	"\x05agent\x18\x15 \x01(\tR\x05agent\x12\x1d\n" +
+	"\n" +
+	"lease_from\x18\x16 \x01(\tR\tleaseFrom\"\xf3\x01\n" +
 	"\rActivityQuery\x123\n" +
 	"\x05kinds\x18\x01 \x03(\x0e2\x1d.magus.activity.v1alpha1.KindR\x05kinds\x12\x16\n" +
 	"\x06actors\x18\x02 \x03(\tR\x06actors\x12\x18\n" +

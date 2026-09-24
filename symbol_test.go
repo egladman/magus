@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -350,4 +351,107 @@ func TestDispatchDueSkipsARunAlreadyInFlight(t *testing.T) {
 	proj, due := si.pickDue()
 	assert.True(t, due, "and the project stays due, so the next tick picks it up")
 	assert.Equal(t, "pkg/a", proj)
+}
+
+// indexWorld is freshenIndexes' outside world: which indexes are current, and what a build does.
+type indexWorld struct {
+	current  map[string]bool
+	built    []string
+	buildErr error
+	recorded bool // whether a build leaves the cache a record to vouch by
+}
+
+func (w *indexWorld) probe(ps []*types.Project) map[string]bool {
+	out := map[string]bool{}
+	for _, p := range ps {
+		out[p.Path] = w.current[p.Path]
+	}
+	return out
+}
+
+func (w *indexWorld) build(p *types.Project) error {
+	w.built = append(w.built, p.Path)
+	if w.buildErr != nil {
+		return w.buildErr
+	}
+	w.current[p.Path] = w.recorded
+	return nil
+}
+
+func freshenProjects() ([]*types.Project, map[string]string) {
+	return []*types.Project{{Path: ".", Dir: "/ws"}, {Path: "web", Dir: "/ws/web"}},
+		map[string]string{".": "go", "web": "typescript"}
+}
+
+// A stale index is rebuilt through its own target before the review reads it, and a current
+// one is left alone.
+func TestFreshenIndexesRebuildsOnlyTheStale(t *testing.T) {
+	ps, langs := freshenProjects()
+	w := &indexWorld{current: map[string]bool{"web": true}, recorded: true}
+
+	require.NoError(t, freshenIndexes(ps, langs, w.probe, w.build, true))
+
+	assert.Equal(t, []string{"."}, w.built)
+	assert.True(t, w.current["."], "the review then reads a current index")
+}
+
+func TestFreshenIndexesFailsWithACodeWhenTheIndexerCannotRun(t *testing.T) {
+	ps, langs := freshenProjects()
+	w := &indexWorld{current: map[string]bool{}, buildErr: errors.New(`exec: "scip-go": executable file not found`)}
+
+	err := freshenIndexes(ps, langs, w.probe, w.build, true)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.Contains(t, err.Error(), "scip-go")
+	assert.Contains(t, err.Error(), symbols.InstallHint("go"), "the cause comes with its fix")
+}
+
+// Another magus holding the project's lock refuses the refresh at once; the review says so,
+// with the holder named, rather than reporting a missing indexer or reading the stale index.
+func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {
+	ps, langs := freshenProjects()
+	held := fmt.Errorf("run .:scip: %w", &lockContendedError{Project: ".", Owner: "pid 4242, `magus run test .`"})
+	w := &indexWorld{current: map[string]bool{"web": true}, buildErr: held}
+
+	err := freshenIndexes(ps, langs, w.probe, w.build, true)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.Contains(t, err.Error(), "locked by another magus process")
+	assert.Contains(t, err.Error(), "pid 4242")
+	assert.NotContains(t, err.Error(), symbols.InstallHint("go"), "the indexer never ran, so it is not missing")
+}
+
+// A read-only cache runs the indexer and records nothing, so the fresh index is one nothing can
+// vouch for: that is the error, never a stale index read as current.
+func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
+	ps, langs := freshenProjects()
+	w := &indexWorld{current: map[string]bool{"web": true}, recorded: false}
+
+	err := freshenIndexes(ps, langs, w.probe, w.build, false)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.Contains(t, err.Error(), "cache writes are off")
+}
+
+// A touched project with no indexer is named, so "found nothing" is only ever said about
+// projects that were checked. A regenerated file is not a change of its own.
+func TestUncoveredProjectsAreTheOnesTheChecksCannotSee(t *testing.T) {
+	files := []types.DiffFile{
+		{Path: "a.go", Project: "."},
+		{Path: "docs/x.md", Project: "docs"},
+		{Path: "docs/y.md", Project: "docs"},
+		{Path: "web/gen/z.ts", Project: "web", Role: types.DiffRoleOutput},
+		{Path: "README", Project: ""},
+	}
+
+	assert.Equal(t, []types.DiffUncovered{{Project: "docs", Reason: types.DiffUncoveredNoIndexer}},
+		uncoveredProjects(files, []string{"."}))
+}
+
+func TestDiagnosticOfKeepsTheCode(t *testing.T) {
+	d := diagnosticOf(types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale"))
+	assert.Equal(t, "MGS7003", d.Code)
+	assert.Equal(t, "stale", d.Message)
+	assert.NotEmpty(t, d.URL)
+	assert.Equal(t, types.Diagnostic{Message: "plain"}, diagnosticOf(errors.New("plain")))
 }

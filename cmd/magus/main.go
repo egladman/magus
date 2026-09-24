@@ -93,6 +93,8 @@ func runCLI() int {
 	// process environment later, but it must not shed the job identity it was handed
 	// before invoking another Magus entry point.
 	rootCtx = proc.WithLease(rootCtx, trail.LeaseFromEnv())
+	// The verbs that are another entry point (the hook, the daemon) restamp this.
+	rootCtx = trail.ContextWithEntryPoint(rootCtx, types.EntryPointCLI)
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)
@@ -312,6 +314,11 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// workspace resolution and must not forward to a daemon (the install is
 		// local to the caller's directory).
 		return dispatchProfile{needsConfig: true}
+	case "queue":
+		// Never forwarded, never preloaded. The queue works in the caller's checkout, a
+		// daemon serving another workspace must not act on it, and the verbs that need a
+		// workspace open it themselves, on the base's declarations.
+		return dispatchProfile{needsConfig: true}
 	case "vcs":
 		// Never forwarded, never preloaded. Every vcs verb writes the CALLER's index and
 		// working tree, so a daemon serving another workspace must not adopt one.
@@ -333,6 +340,12 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// thing that should route through a remote process, notify must reach the local
 		// OS notifier rather than one on the daemon's host, and a listing is one
 		// directory read with no warm daemon state to reuse.
+		return dispatchProfile{needsConfig: true}
+	case "shell":
+		// The guard an agent host calls before every tool call. It reads the root magusfile's
+		// guard rules itself (loadGuardRules), and the few rules that need the workspace open
+		// it lazily, so a preload would put a full workspace load in front of every tool
+		// call for nothing. Never forwarded: a verdict is not adoptable work.
 		return dispatchProfile{needsConfig: true}
 	case "events":
 		// Reads the run-log directory; the magusfile never. Loading the workspace would
@@ -727,11 +740,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		cfgPath string
 	)
 	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
-	fs.StringVar(&root, "root", "", "Path to start the workspace search from, -C after make (must precede subcommand; default: cwd)")
-	fs.StringVar(&root, "C", "", "Short for --root")
-	fs.StringVar(&cfgPath, "config", "", "Config file path (must precede subcommand; default: search magus.yaml in CWD / XDG)")
-	fs.StringVar(&cfgPath, "c", "", "Short for --config")
-	gen.BindFlags(fs, &globalCfg)
+	bindGlobalFlags(fs, &root, &cfgPath)
 	bindDisplayFlags(fs)
 	fs.Usage = usage
 	// Parse until first non-flag arg (the subcommand). ErrHelp means an explicit -h or
@@ -926,6 +935,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return cleanCmd(ctx, root, subArgs)
 	case "vcs":
 		return vcsCmd(ctx, root, rc, subArgs)
+	case "queue":
+		return queueCmd(ctx, root, subArgs)
 	case "doctor":
 		return doctorCmd(ctx, root, rc, subArgs)
 	case "config":
@@ -1162,8 +1173,12 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	// for as long as that daemon lived. Memory comes from what this process may commit,
 	// so a daemon inside a memory-limited container budgets the container rather than
 	// the machine it sits on; slots come from the cores, which is the same ceiling
-	// ClampConcurrency holds every individual run to.
-	machineBudget := cache.NewMachineBudget(mem.BudgetMB(mem.UsableBytes(ctx)), cache.MachineCeiling())
+	// ClampConcurrency holds every individual run to. The profile that resolved n above
+	// also decides memory's reservation (a quarter, or aggressive's small fixed floor),
+	// so both axes of "claim the whole machine" agree.
+	machineBudget := cache.NewMachineBudget(
+		mem.BudgetMB(mem.UsableBytes(ctx), cfg.ConcurrencyProfile),
+		cache.MachineCeiling())
 
 	ttl := cfg.Daemon.IdleTTL
 	if ttl <= 0 {

@@ -9,47 +9,45 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// TestDefaultConcurrency_GitHubActions verifies that a GitHub-hosted
-// runner forces a 4-CPU cap when MAGUS_CONCURRENCY is unset. Hosted
-// runners over-report NumCPU because the container's CPU limit isn't
-// reflected, so the cap is essential to avoid OOM / throttling on
-// standard runners.
-func TestDefaultConcurrency_GitHubActions(t *testing.T) {
+// TestProfileConcurrency_UnsetIsBalancedEverywhere pins the rule this package must not
+// break: an unconfigured profile sizes to balanced the same way regardless of the
+// process environment. magus reads no variable to guess where it is running, so the
+// same command behaves the same on a laptop and on any CI provider; a caller that
+// wants every core asks for concurrency_profile: aggressive explicitly.
+func TestProfileConcurrency_UnsetIsBalancedEverywhere(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("GITHUB_ACTIONS", "true")
-	t.Setenv("RUNNER_ENVIRONMENT", "github-hosted")
-	assert.Equal(t, 4, DefaultConcurrency(), "DefaultConcurrency should cap at 4 under GitHub-hosted runner")
-}
-
-// TestDefaultConcurrency_SelfHostedRunner verifies that a self-hosted
-// runner is exempt from the 4-CPU clamp and uses its real CPU count:
-// the over-report problem is specific to shared hosted runners.
-func TestDefaultConcurrency_SelfHostedRunner(t *testing.T) {
-	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("GITHUB_ACTIONS", "true")
-	t.Setenv("RUNNER_ENVIRONMENT", "self-hosted")
 	want := runtime.NumCPU()
 	if want > 8 {
 		want = 8
 	}
-	if want < 1 {
-		want = 1
-	}
-	assert.Equal(t, want, DefaultConcurrency(), "self-hosted should not clamp")
+	assert.Equal(t, want, ProfileConcurrency(""))
 }
 
-// TestDefaultConcurrency_EnvOverridesGitHubActions verifies that an
-// explicit MAGUS_CONCURRENCY wins over the GitHub Actions auto-cap.
-func TestDefaultConcurrency_EnvOverridesGitHubActions(t *testing.T) {
-	t.Setenv("MAGUS_CONCURRENCY", "12")
+// TestProfileConcurrency_ConcurrencyBeatsExplicitProfile verifies MAGUS_CONCURRENCY
+// outranks every profile, explicit or not.
+func TestProfileConcurrency_ConcurrencyBeatsExplicitProfile(t *testing.T) {
+	t.Setenv("MAGUS_CONCURRENCY", "3")
+	assert.Equal(t, 3, ProfileConcurrency(""))
+	assert.Equal(t, 3, ProfileConcurrency(types.ProfileAggressive))
+}
+
+// TestProfileConcurrency_GitHubHostedClampIsGone pins the retired GitHub-hosted 4-core
+// hard-code as gone: GITHUB_ACTIONS and RUNNER_ENVIRONMENT, like every other
+// environment variable naming where magus runs, no longer change the width at all.
+func TestProfileConcurrency_GitHubHostedClampIsGone(t *testing.T) {
+	t.Setenv("MAGUS_CONCURRENCY", "")
 	t.Setenv("GITHUB_ACTIONS", "true")
-	assert.Equal(t, 12, DefaultConcurrency(), "env should override")
+	t.Setenv("RUNNER_ENVIRONMENT", "github-hosted")
+	want := runtime.NumCPU()
+	if want > 8 {
+		want = 8
+	}
+	assert.Equal(t, want, ProfileConcurrency(""), "GITHUB_ACTIONS and RUNNER_ENVIRONMENT must not clamp to 4 or pick aggressive")
 }
 
-// TestDefaultConcurrency_LocalDefault verifies the no-CI fallback.
+// TestDefaultConcurrency_LocalDefault verifies the balanced fallback.
 func TestDefaultConcurrency_LocalDefault(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("GITHUB_ACTIONS", "")
 	want := runtime.NumCPU()
 	if want > 8 {
 		want = 8
@@ -80,22 +78,9 @@ func TestClampConcurrency(t *testing.T) {
 	assert.Equal(t, ceiling, n)
 }
 
-// A hosted runner's core count is 4 for every profile, and MAGUS_CONCURRENCY beats them all.
-func TestProfileConcurrency_HostedRunnerAndEnv(t *testing.T) {
-	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("GITHUB_ACTIONS", "true")
-	t.Setenv("RUNNER_ENVIRONMENT", "github-hosted")
-	assert.Equal(t, 2, ProfileConcurrency(types.ProfileConservative))
-	assert.Equal(t, 4, ProfileConcurrency(types.ProfileAggressive))
-
-	t.Setenv("MAGUS_CONCURRENCY", "3")
-	assert.Equal(t, 3, ProfileConcurrency(types.ProfileAggressive))
-}
-
 // An explicit width overrides the profile; the profile applies only when none is set.
 func TestResolveConcurrency_ExplicitOverridesProfile(t *testing.T) {
 	t.Setenv("MAGUS_CONCURRENCY", "")
-	t.Setenv("GITHUB_ACTIONS", "")
 	assert.Equal(t, 1, ResolveConcurrency(1, types.ProfileAggressive))
 	assert.Equal(t, MachineCeiling(), ResolveConcurrency(0, types.ProfileAggressive))
 }

@@ -8,23 +8,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOriginRoundTrip(t *testing.T) {
-	o := Origin{Agent: "claude-desktop/0.7.2"}
-	ctx := WithContext(context.Background(), o)
+func TestClientRoundTrip(t *testing.T) {
+	c := Client{Name: "claude-desktop/0.7.2"}
+	ctx := WithContext(context.Background(), c)
 	got, ok := FromContext(ctx)
 	require.True(t, ok, "FromContext returned ok=false after WithContext")
-	assert.Equal(t, o, got)
+	assert.Equal(t, c, got)
 }
 
-func TestOriginFromContext_EmptyContext(t *testing.T) {
+func TestClientFromContext_EmptyContext(t *testing.T) {
 	_, ok := FromContext(context.Background())
 	assert.False(t, ok, "FromContext on plain context should return ok=false")
 }
 
-func TestOriginFromContext_InnerShadowsOuter(t *testing.T) {
-	outer := WithContext(context.Background(), Origin{Agent: "outer"})
-	inner := WithContext(outer, Origin{Agent: "inner"})
+func TestClientFromContext_InnerShadowsOuter(t *testing.T) {
+	outer := WithContext(context.Background(), Client{Name: "outer"})
+	inner := WithContext(outer, Client{Name: "inner"})
 	got, ok := FromContext(inner)
 	require.True(t, ok)
-	assert.Equal(t, Origin{Agent: "inner"}, got)
+	assert.Equal(t, Client{Name: "inner"}, got)
 }

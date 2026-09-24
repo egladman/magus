@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEveryBoundaryTypeEncodes is the guard the DoctorCheckStatus bug got past.
+// TestEveryBoundaryTypeEncodes is the guard the CheckStatus bug got past.
 //
-// A field typed as a DEFINED type over a basic kind (types.DoctorCheckStatus,
+// A field typed as a DEFINED type over a basic kind (types.CheckStatus,
 // types.TargetRunState) matches no case in AnyVal's type switch, because a type switch
 // matches on identity rather than underlying type, so it fell through and arrived in
 // Buzz as null. `doctor().checks[0].status` read null rather than "ok" while the SDK

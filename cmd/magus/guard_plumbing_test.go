@@ -14,20 +14,24 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// denySpawns is a magusfile whose spawn rule denies every spawn.
-const denySpawns = `import "magus";
+// denyRules is a magusfile whose spawn rule denies every spawn and whose command rule
+// denies every command.
+const denyRules = `import "magus";
 
-magus\guard.spawn(fun (req: SpawnRequest) > SpawnVerdict {
+magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
     return magus\guard.deny("Name a model.");
+});
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    return magus\guard.deny("Not in this repository.");
 });
 `
 
-// committedDenyRule is a git repository whose committed root magusfile is denySpawns.
+// committedDenyRule is a git repository whose committed root magusfile is denyRules.
 func committedDenyRule(t *testing.T) string {
 	t.Helper()
 	root := initGitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(denySpawns), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(denyRules), 0o644))
 	runGit(t, root, "add", "-A")
 	runGit(t, root, "commit", "-q", "-m", "init")
 	return root
@@ -59,9 +63,16 @@ func TestApprovedSpawnRuleAtSurvivesABrokenWorkingTree(t *testing.T) {
 			rule, err := magus.ApprovedSpawnRuleAt(t.Context(), root)
 			require.NoError(t, err)
 			require.NotNil(t, rule)
-			got, err := rule(t.Context(), types.SpawnRequest{Kind: types.SpawnKindSpawn, Role: types.SpawnRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
+			got, err := rule(t.Context(), types.SpawnRequest{Kind: types.SpawnKindSpawn, Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
 			require.NoError(t, err)
-			assert.Equal(t, types.SpawnVerdict{Decision: types.SpawnDeny, Reason: "Name a model."}, got)
+			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Name a model."}, got)
+
+			command, err := magus.ApprovedCommandRuleAt(t.Context(), root)
+			require.NoError(t, err)
+			require.NotNil(t, command)
+			got, err = command(t.Context(), types.CommandRequest{Command: "ls", Role: types.AgentRoleRoot}, hint.NewGate(t.TempDir(), "claude-code/s1"))
+			require.NoError(t, err)
+			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Not in this repository."}, got)
 		})
 	}
 }
@@ -92,10 +103,29 @@ func resetWorkspaceMemo(t *testing.T) {
 	})
 }
 
-// A working tree that fails to load for a reason outside any .buzz file, here a version
-// floor this binary is below, must not take the committed rule down with it: resolving the
-// approved rule reads nothing the working tree's config says.
-func TestCommittedSpawnRuleSurvivesAVersionFloor(t *testing.T) {
+// The push facts come through the version control that resolves in the checkout: a
+// branch checkout names its branch, a detached one names none, and a directory under no
+// version control is unknown.
+func TestCheckoutStateForGuard(t *testing.T) {
+	root := committedDenyRule(t)
+	runGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+	got := checkoutStateForGuard(t.Context(), root)
+	require.NotNil(t, got)
+	assert.NotEmpty(t, got.Branch)
+	assert.Equal(t, []string{"origin/main"}, got.RemoteBranches)
+
+	runGit(t, root, "checkout", "-q", "--detach")
+	got = checkoutStateForGuard(t.Context(), root)
+	require.NotNil(t, got)
+	assert.Empty(t, got.Branch)
+
+	assert.Nil(t, checkoutStateForGuard(t.Context(), t.TempDir()), "outside any version control")
+}
+
+// The hook reads the root magusfile alone, so a working tree the full load would refuse,
+// here for a version floor this binary is below, still has its rules applied.
+func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	root := committedDenyRule(t)
 	resetWorkspaceMemo(t)
 	version = "v0.5.0"
@@ -106,19 +136,51 @@ func TestCommittedSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	assert.Equal(t, "Name a model.", v.Reason)
 }
 
-// otherRepository is a workspace that is not a *magus.Magus.
-type otherRepository struct{ types.WorkspaceRepository }
-
-// A workspace the hook cannot read its rules from is a load failure, not a workspace with
-// no rules, so the committed rule still applies.
-func TestUnreadableWorkspaceStillRunsTheCommittedRule(t *testing.T) {
+// A root magusfile that does not load is a load failure, not a workspace with no rules,
+// so the committed rules still apply to a spawn and to a command.
+func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	root := committedDenyRule(t)
 	resetWorkspaceMemo(t)
-	inspectOnce.Do(func() { inspectValue = otherRepository{} })
-
-	_, err := loadedWorkspace(t.Context())
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n\nmagus\\guard.spawn(\n"), 0o644))
+	t.Chdir(root)
+	_, err := loadGuardRules(t.Context())
 	require.Error(t, err)
+
 	v := judgeSpawnAt(t, root)
 	assert.Equal(t, "deny", v.Decision)
 	assert.Equal(t, "Name a model.", v.Reason)
+
+	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
+	v = guard.Judge(ctx, guardDependencies(), guard.Request{Input: "ls -la", Host: "claude-code"})
+	assert.Equal(t, "deny", v.Decision)
+	assert.Contains(t, v.Reason, "Not in this repository.")
+	assert.Equal(t, "workspace:command", v.Rule)
+}
+
+// The committed side is loaded only while a file the root load read differs from it:
+// an uncommitted edit anywhere else changes nothing either side registers.
+func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
+	root := committedDenyRule(t)
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "other"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "other", "spell.buzz"), []byte("// untracked\n"), 0o644))
+
+	rules, err := loadGuardRules(t.Context())
+	require.NoError(t, err)
+	approved, err := rules.ApprovedCommandRule(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, approved, "no policy source is pending, so the working tree's rule is the approved one")
+
+	// Loosen the rule in the working tree: now the committed deny must still answer.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n"), 0o644))
+	rules, err = loadGuardRules(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, rules.CommandRule())
+	approved, err = rules.ApprovedCommandRule(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, approved)
+	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardDeny, got.Decision)
 }

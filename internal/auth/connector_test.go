@@ -52,13 +52,28 @@ func (s *ConnectorSuite) TestCreateListVerify() {
 	require.Len(t, list, 1)
 	assert.Equal(t, c, list[0])
 
-	assert.True(t, st.VerifyScope(secret, ScopeMCP), "Verify rejected the freshly minted token")
+	assert.True(t, accepted(st.VerifyScope(secret, ScopeMCP)), "Verify rejected the freshly minted token")
 
 	// A validly-formatted but never-stored token must not verify.
 	other, err := mintToken()
 	require.NoError(t, err)
 	require.True(t, validTokenFormat(other))
-	assert.False(t, st.VerifyScope(other, ScopeMCP), "Verify accepted a non-stored token")
+	assert.False(t, accepted(st.VerifyScope(other, ScopeMCP)), "Verify accepted a non-stored token")
+}
+
+// Every record names the credential a request presented, so a connector or console token
+// minted as "cli" or "share" would read as the cli token or a share link.
+func (s *ConnectorSuite) TestCreateRefusesACredentialNameMagusReserves() {
+	t := s.T()
+	st := s.store()
+	for _, name := range []string{CLICredential, ShareCredential, " cli "} {
+		for _, scope := range []ClientScope{ScopeMCP, ScopeConsole} {
+			_, _, err := st.Create(name, time.Time{}, scope)
+			require.Error(t, err, "%q as %s", name, scope)
+			assert.Contains(t, err.Error(), "names a credential magus mints itself")
+		}
+	}
+	assert.Empty(t, st.List(), "a refused name writes nothing")
 }
 
 func (s *ConnectorSuite) TestCreateRejectsDuplicateName() {
@@ -85,7 +100,7 @@ func (s *ConnectorSuite) TestPersistenceAcrossLoads() {
 	// A fresh load sees the persisted entry and verifies the same secret.
 	reloaded := s.store()
 	require.Len(t, reloaded.List(), 1)
-	assert.True(t, reloaded.VerifyScope(secret, ScopeMCP))
+	assert.True(t, accepted(reloaded.VerifyScope(secret, ScopeMCP)))
 
 	// One file per token, named after the token, so revoking is an rm.
 	path := filepath.Join(s.stateDir, "magus", "connectors.d", "ide.json")
@@ -121,7 +136,7 @@ func (s *ConnectorSuite) TestRevoke() {
 	removed, err := st.Revoke("gone")
 	require.NoError(t, err)
 	assert.Equal(t, c, removed)
-	assert.False(t, st.VerifyScope(secret, ScopeMCP), "revoked token still verifies")
+	assert.False(t, accepted(st.VerifyScope(secret, ScopeMCP)), "revoked token still verifies")
 	assert.Empty(t, st.List())
 
 	_, err = st.Revoke("gone")
@@ -177,21 +192,21 @@ func (s *ConnectorSuite) TestExpiredTokenDoesNotVerify() {
 
 	past, _, err := st.Create("expired", time.Now().Add(-time.Minute), ScopeMCP)
 	require.NoError(t, err)
-	assert.False(t, st.VerifyScope(past, ScopeMCP), "expired token verified")
+	assert.False(t, accepted(st.VerifyScope(past, ScopeMCP)), "expired token verified")
 
 	future, _, err := st.Create("live", time.Now().Add(time.Hour), ScopeMCP)
 	require.NoError(t, err)
-	assert.True(t, st.VerifyScope(future, ScopeMCP), "non-expired token failed to verify")
+	assert.True(t, accepted(st.VerifyScope(future, ScopeMCP)), "non-expired token failed to verify")
 
 	never, _, err := st.Create("never", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
-	assert.True(t, st.VerifyScope(never, ScopeMCP), "never-expiring token failed to verify")
+	assert.True(t, accepted(st.VerifyScope(never, ScopeMCP)), "never-expiring token failed to verify")
 }
 
 func (s *ConnectorSuite) TestVerifyRejectsGarbageOffline() {
 	st := s.store()
 	for _, bad := range []string{"", "not-a-token", "mgs_short", "ghp_wrongprefix"} {
-		assert.False(s.T(), st.VerifyScope(bad, ScopeMCP), "Verify accepted garbage %q", bad)
+		assert.False(s.T(), accepted(st.VerifyScope(bad, ScopeMCP)), "Verify accepted garbage %q", bad)
 	}
 }
 
@@ -202,27 +217,34 @@ func (s *ConnectorSuite) TestVerifyTwoTier() {
 	t := s.T()
 
 	// No credentials at all: everything is rejected.
-	assert.False(t, VerifyMCPBearer("anything"))
+	assert.False(t, accepted(VerifyMCPBearer("anything")))
 
 	// cli token tier.
 	cli, err := Generate()
 	require.NoError(t, err)
 	_, err = SaveNew(cli)
 	require.NoError(t, err)
-	assert.True(t, VerifyMCPBearer(cli), "cli token not accepted")
-	assert.False(t, VerifyMCPBearer(cli+"x"), "near-miss cli token accepted")
+	name, ok := VerifyMCPBearer(cli)
+	assert.True(t, ok, "cli token not accepted")
+	assert.Equal(t, CLICredential, name, "the cli token is named as such, not as whoever holds it")
+	assert.False(t, accepted(VerifyMCPBearer(cli+"x")), "near-miss cli token accepted")
 
 	// connector tier.
 	live, _, err := s.store().Create("live", time.Now().Add(time.Hour), ScopeMCP)
 	require.NoError(t, err)
-	assert.True(t, VerifyMCPBearer(live), "live connector token not accepted")
+	name, ok = VerifyMCPBearer(live)
+	assert.True(t, ok, "live connector token not accepted")
+	assert.Equal(t, "live", name, "a connector token is named by the name it was minted with")
 
 	expired, _, err := s.store().Create("expired", time.Now().Add(-time.Hour), ScopeMCP)
 	require.NoError(t, err)
-	assert.False(t, VerifyMCPBearer(expired), "expired connector token accepted")
+	assert.False(t, accepted(VerifyMCPBearer(expired)), "expired connector token accepted")
 
-	assert.False(t, VerifyMCPBearer("mgs_not_a_real_token"), "garbage accepted")
+	assert.False(t, accepted(VerifyMCPBearer("mgs_not_a_real_token")), "garbage accepted")
 }
+
+// accepted drops a verifier's credential name, for an assertion about admission alone.
+func accepted(_ string, ok bool) bool { return ok }
 
 // The MCP and console surfaces must not share a credential class. A connector token
 // is minted for an agent, so accepting it on the console would let a leaked agent
@@ -240,11 +262,11 @@ func (s *ConnectorSuite) TestConsoleRejectsConnectorTokens() {
 	live, _, err := s.store().Create("agent", time.Now().Add(time.Hour), ScopeMCP)
 	require.NoError(t, err)
 
-	assert.True(t, VerifyMCPBearer(live), "a connector token must still reach /mcp")
-	assert.False(t, VerifyConsoleBearer(live), "a connector token must NOT reach the console")
+	assert.True(t, accepted(VerifyMCPBearer(live)), "a connector token must still reach /mcp")
+	assert.False(t, accepted(VerifyConsoleBearer(live)), "a connector token must NOT reach the console")
 
-	assert.True(t, VerifyConsoleBearer(cli), "the operator token opens both surfaces by design")
-	assert.True(t, VerifyMCPBearer(cli))
+	assert.True(t, accepted(VerifyConsoleBearer(cli)), "the operator token opens both surfaces by design")
+	assert.True(t, accepted(VerifyMCPBearer(cli)))
 }
 
 // The console's own two tiers: a full console token may change things, a viewer token
@@ -260,16 +282,18 @@ func (s *ConnectorSuite) TestConsoleWriteAndViewerTiers() {
 	require.NoError(t, err)
 
 	// The viewer reads and cannot write.
-	assert.True(t, VerifyConsoleReadBearer(viewer), "a viewer token must reach the read routes")
-	assert.False(t, VerifyConsoleBearer(viewer), "a viewer token must NOT reach a mutating route")
+	name, ok := VerifyConsoleReadBearer(viewer)
+	assert.True(t, ok, "a viewer token must reach the read routes")
+	assert.Equal(t, "phone", name, "a viewer is named apart from the cli token")
+	assert.False(t, accepted(VerifyConsoleBearer(viewer)), "a viewer token must NOT reach a mutating route")
 
 	// The write tier covers both.
-	assert.True(t, VerifyConsoleBearer(web))
-	assert.True(t, VerifyConsoleReadBearer(web), "the write tier is a superset of the read tier")
+	assert.True(t, accepted(VerifyConsoleBearer(web)))
+	assert.True(t, accepted(VerifyConsoleReadBearer(web)), "the write tier is a superset of the read tier")
 
 	// Neither console tier reaches the agent surface.
-	assert.False(t, VerifyMCPBearer(web), "a console token must NOT reach /mcp")
-	assert.False(t, VerifyMCPBearer(viewer), "a viewer token must NOT reach /mcp")
+	assert.False(t, accepted(VerifyMCPBearer(web)), "a console token must NOT reach /mcp")
+	assert.False(t, accepted(VerifyMCPBearer(viewer)), "a viewer token must NOT reach /mcp")
 }
 
 // TestConcurrentCreateNoLostUpdates proves N independent creates all survive.
@@ -322,10 +346,10 @@ func (s *ConnectorSuite) TestRevokeByRemovingTheFile() {
 	t := s.T()
 	secret, _, err := s.store().Create("byhand", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
-	require.True(t, s.store().VerifyScope(secret, ScopeMCP))
+	require.True(t, accepted(s.store().VerifyScope(secret, ScopeMCP)))
 
 	require.NoError(t, os.Remove(filepath.Join(s.stateDir, "magus", "connectors.d", "byhand.json")))
-	assert.False(t, s.store().VerifyScope(secret, ScopeMCP), "a removed file must stop verifying")
+	assert.False(t, accepted(s.store().VerifyScope(secret, ScopeMCP)), "a removed file must stop verifying")
 	assert.Empty(t, s.store().List())
 }
 

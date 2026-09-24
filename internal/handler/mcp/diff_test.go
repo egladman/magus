@@ -151,7 +151,7 @@ func TestAgentNameIsRecordedButCannotClaimToBeTheHuman(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	sess := resp.Data.(*types.DiffSession)
+	sess := resp.Data.(*types.DiffReview)
 	require.Len(t, sess.Comments, 1)
 	assert.Equal(t, types.DiffAuthorAgent, sess.Comments[0].Author, "author is stamped from the transport")
 	assert.Equal(t, "Eli Gladman (human)", sess.Comments[0].AgentName, "the label is kept, as attribution only")
@@ -166,7 +166,7 @@ func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 	// Built the same way op=state has always built its answer, independent of
 	// projectDiffState, the reference every case below is pinned against.
 	sess := tool.sessions.Get(tool.root)
-	want, err := json.Marshal(diffState{DiffSession: sess, Patch: agentPatch, Hunks: changeset.ParseHunks(agentPatch)})
+	want, err := json.Marshal(diffState{DiffReview: sess, Patch: agentPatch, Hunks: changeset.ParseHunks(agentPatch)})
 	require.NoError(t, err)
 
 	cases := []struct {
@@ -279,7 +279,7 @@ func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
 		"op": "comment", "path": "a.go", "body": "hi", "projection": "summary",
 	})
 	require.NoError(t, err)
-	_, ok := resp.Data.(*types.DiffSession)
+	_, ok := resp.Data.(*types.DiffReview)
 	assert.True(t, ok, "comment always returns the full session regardless of projection")
 }
 

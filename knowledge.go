@@ -428,7 +428,8 @@ func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
 		// store the checkout-relative path, and only events loaded before they did
 		// still need reducing here.
 		out = append(out, knowledge.AgentContact{
-			Session: rec.Session,
+			// A loaded event is filed under the host session, so that is its invocation id.
+			Session: rec.Invocation,
 			Path:    vcs.CheckoutRelative(ev.Text),
 			Read:    ev.Kind == sessions.EventFileRead,
 			Write:   ev.Kind == sessions.EventFileWrite,
@@ -924,12 +925,7 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *
 		log.DebugContext(ctx, "knowledge: vcs enabled but no version control resolved, skipping")
 		return nil
 	}
-	reporter, ok := res.VCS.(types.ChurnReporter)
-	if !ok {
-		log.DebugContext(ctx, "knowledge: vcs backend cannot report per-commit files, skipping", slog.String("vcs", res.Name))
-		return nil
-	}
-	changes, err := reporter.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
+	changes, err := res.VCS.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
 	if err != nil {
 		log.WarnContext(ctx, "knowledge: vcs history scan failed, skipping", slog.String("error", err.Error()))
 		return nil
@@ -1117,24 +1113,22 @@ func ShortRevision(id string) string {
 // uses on the shared remote backend, keeping its shards clear of build artifacts.
 const knowledgeRemoteNamespace = "__knowledge__"
 
-// remoteShardAdapter rides a build-cache RemoteBackend as a knowledge.RemoteShards:
-// a shard is content-addressed by fingerprint, stored under a fixed namespace, and
-// signed/verified by the same cache trust set as build artifacts.
-type remoteShardAdapter struct{ b cache.RemoteBackend }
+// remoteShardAdapter rides the build cache's remote tier as a knowledge.RemoteShards: a
+// shard is content-addressed by fingerprint, stored under a fixed namespace, signed on
+// the way out and verified on the way in by the cache's trust set, and written only by
+// a run that may write the remote tier.
+type remoteShardAdapter struct{ ns *cache.RemoteNamespace }
 
 func (a remoteShardAdapter) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {
-	rc, err := a.b.GetArtifact(ctx, knowledgeRemoteNamespace, key)
-	if err != nil {
-		return nil, err
+	rc, err := a.ns.Get(ctx, key)
+	if errors.Is(err, cache.ErrRemoteMiss) {
+		return nil, knowledge.ErrShardMiss
 	}
-	if rc == nil {
-		return nil, knowledge.ErrShardMiss // the cache backend signals a miss with (nil, nil); make it explicit
-	}
-	return rc, nil
+	return rc, err
 }
 
 func (a remoteShardAdapter) PutShard(ctx context.Context, key string, r io.Reader) error {
-	return a.b.PutArtifact(ctx, knowledgeRemoteNamespace, key, r)
+	return a.ns.Put(ctx, key, r)
 }
 
 // publishedShards reads shards out of a published OCI artifact: the read-only half of the
@@ -1255,8 +1249,8 @@ func remoteShards(ws types.Inspector) knowledge.RemoteShards {
 	}
 	var chain shardChain
 	if m.cache != nil {
-		if rb := m.cache.Remote(); rb != nil {
-			chain = append(chain, remoteShardAdapter{rb})
+		if ns := m.cache.RemoteNamespace(knowledgeRemoteNamespace); ns != nil {
+			chain = append(chain, remoteShardAdapter{ns})
 		}
 	}
 	if p := m.publishedShards.Load(); p != nil {

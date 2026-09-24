@@ -1,7 +1,7 @@
 ---
 title: Releasing
-description: Cut version tags for one or more workspace modules from your own machine with magus run release, what the dry run and its preflight show, and which tags the release workflow reacts to.
-tags: [release, versioning, tags, go-modules, workflow, preflight]
+description: Cut version tags for one or more workspace modules from your own machine with magus run release, what the dry run and its release checks show, and which tags the release workflow reacts to.
+tags: [release, versioning, tags, go-modules, workflow, release checks]
 ---
 
 # Releasing
@@ -110,9 +110,9 @@ half the modules tagged:
 - **A dirty tree**, under `cd`: `release: tree is dirty; commit before releasing`.
   The dry run warns instead of failing, so you can rehearse.
 
-## The preflight
+## The release checks
 
-The refusals above ask whether the version is legal. The preflight asks a
+The refusals above ask whether the version is legal. The release checks ask a
 different question: whether the release that follows this tag actually works.
 
 It runs on every `magus run release` that names a module, before any tag exists,
@@ -156,7 +156,7 @@ either way.
 one: magus asked git for `%(refname:short)`, which renders an ambiguous tag as
 `tags/v0.4.0`, and that was a bug in the query rather than an illegal repository
 state. It is fixed, and refusing a release over a state git is designed for would
-contradict the reason this preflight exists.
+contradict the reason these checks exist.
 
 What does survive is a handling detail worth knowing before you push. While both
 refs exist a bare name is ambiguous, so push the qualified form:
@@ -172,7 +172,7 @@ where the number gets chosen.
 
 ### The post-tag state, simulated
 
-The preflight computes the version `release-build` would stamp once these tags
+The release checks compute the version `release-build` would stamp once these tags
 sit on HEAD, then computes every asset name that version produces and checks each
 one against the glob `release.yaml` uploads with.
 
@@ -189,7 +189,7 @@ means `release.yaml` does not run, so there are no published assets to misname.
 ### What publish will need
 
 `magus-utils cut` runs in the publish job, after every binary is built, and
-refuses on two things the preflight can see now:
+refuses on two things the release checks can see now:
 
 - `releases/v<version>.yaml` already exists. Release manifests are immutable once
   committed.
@@ -199,9 +199,9 @@ refuses on two things the preflight can see now:
 ### The workflow contract
 
 `release.yaml`'s upload glob and tag trigger are stated in `magusfile.buzz` as
-`RELEASE_ASSET_GLOB` and `RELEASE_TAG_REFSPEC`, and the preflight checks that the
-workflow still contains both. Edit one side alone and the rehearsal names it. The
-preflight also confirms the root tag matches the trigger and that no module tag
+`RELEASE_ASSET_GLOB` and `RELEASE_TAG_REFSPEC`, and the release checks confirm the
+workflow still contains both. Edit one side alone and the rehearsal names it. They
+also confirm the root tag matches the trigger and that no module tag
 does, so a library bump cannot start a release run.
 
 ## Pushing
@@ -248,7 +248,7 @@ release.
 Nothing in `release.yaml` checks the asset names, and that is deliberate: the
 target already refuses to write one the upload could not collect. `release-build`
 matches every name it is about to write against `RELEASE_ASSET_GLOB` and throws
-before the first byte, and the preflight checks that same constant still appears in
+before the first byte, and the release checks confirm that same constant still appears in
 `release.yaml`. The two links compose, so a step re-checking the built files
 against the glob would restate a conclusion already reached twice.
 
@@ -257,7 +257,7 @@ one version, and `<goos>`, `<goarch>` and the variant suffix are fixed tokens wi
 no separator in them, so the glob selects all of a job's archives or none of them.
 A partial match is not reachable.
 
-One gap is left open on purpose. Tagging by hand skips the preflight, so it also
+One gap is left open on purpose. Tagging by hand skips the release checks, so it also
 skips the check that `RELEASE_ASSET_GLOB` still matches the workflow. Tagging by
 hand equally skips the version-legality, existing-tag, changelog and manifest
 checks, so the answer is to cut releases with `magus run release` rather than to

@@ -37,7 +37,6 @@ type VCSDriver interface {
 	// for correctness when work runs concurrently, since the process cwd is global.
 	Root(ctx context.Context, dir string) (string, error)
 	ChangedFiles(ctx context.Context, dir, base string) ([]string, error)
-	Bisect(ctx context.Context, dir string, opts BisectOptions) (Culprit, error)
 	DiffCommands(ctx context.Context, dir, base string) (DiffCommandHints, error)
 	// Preserve captures the working copy's uncommitted state, TRACKED changes and
 	// UNTRACKED files alike, and returns a backend-native handle for it. A clean tree
@@ -127,6 +126,55 @@ type VCSDriver interface {
 	// released": a shallow or single-branch clone commonly fetches none, so a
 	// caller deciding what shipped must treat empty as unknown.
 	Tags(ctx context.Context, dir, pattern string) ([]VCSTag, error)
+
+	// The capabilities. Every driver implements every one of them; a backend that cannot
+	// answer one returns a *VCSUnsupportedError naming itself and the capability from each
+	// of that capability's methods, before running anything. Callers call and handle the
+	// error rather than type-asserting, so a missing capability is a value a caller can
+	// report, never a silent false.
+	//
+	// Across VCSDriver, a parameter named dir is any directory inside the checkout, one
+	// named root is the checkout's top level, and every path argument and result is
+	// repo-relative with forward slashes. The exceptions: the path filters of Dirty,
+	// DirtyFiles, DirtyDiff, TrackedFiles, IgnoredFiles and RangeDiff are the backend's
+	// pathspecs, relative to dir; CheckoutProvisioner's dir names a checkout outside the
+	// repository; CheckoutLister returns absolute checkout roots; Bundler's file is an
+	// absolute path.
+	Bisector
+	MergeDriverInstaller
+	RefreshHookInstaller
+	DriftHookInstaller
+	RegenHookInstaller
+	RemoteReporter
+	RemoteConfigReporter
+	DefaultRefReporter
+	CheckoutStateReporter
+	PushStatusReporter
+	RevTimeReporter
+	TrackedFileReporter
+	IgnoredFileReporter
+	ChurnReporter
+	BranchChangeReporter
+	RangeReporter
+	AncestryReporter
+	ConflictResolver
+	RevisionFileReader
+	RevisionExporter
+	MergeStarter
+	CommitWriter
+	TreeReporter
+	TreeMerger
+	GeneratedPathReporter
+	CheckoutProvisioner
+	CheckoutLister
+	RevisionFetcher
+	Pusher
+	Bundler
+}
+
+// Bisector is the capability to find the first bad revision between a good and a bad one.
+type Bisector interface {
+	Bisect(ctx context.Context, dir string, opts BisectOptions) (Culprit, error)
 }
 
 // VCSTag is a VCS-agnostic release marker: a name pinned to a revision. Only the
@@ -307,15 +355,75 @@ type Culprit struct {
 	Info string // one-line subject, author, and date
 }
 
-// ErrVCSUnsupported is returned by operations not supported by a VCSDriver.
-var ErrVCSUnsupported = errors.New("vcs: operation not supported by this VCS")
+// ErrVCSUnsupported is returned by operations not supported by a VCSDriver. It matches
+// errors.ErrUnsupported, and a capability a backend lacks arrives as a
+// *VCSUnsupportedError, which matches both.
+var ErrVCSUnsupported error = vcsUnsupported{}
+
+type vcsUnsupported struct{}
+
+func (vcsUnsupported) Error() string { return "vcs: operation not supported by this VCS" }
+func (vcsUnsupported) Unwrap() error { return errors.ErrUnsupported }
+
+// VCSCapability names one of the capability interfaces VCSDriver embeds.
+type VCSCapability string
+
+// The capabilities, each named after its interface.
+const (
+	CapBisector              VCSCapability = "Bisector"
+	CapMergeDriverInstaller  VCSCapability = "MergeDriverInstaller"
+	CapRefreshHookInstaller  VCSCapability = "RefreshHookInstaller"
+	CapDriftHookInstaller    VCSCapability = "DriftHookInstaller"
+	CapRegenHookInstaller    VCSCapability = "RegenHookInstaller"
+	CapRemoteReporter        VCSCapability = "RemoteReporter"
+	CapRemoteConfigReporter  VCSCapability = "RemoteConfigReporter"
+	CapDefaultRefReporter    VCSCapability = "DefaultRefReporter"
+	CapCheckoutStateReporter VCSCapability = "CheckoutStateReporter"
+	CapPushStatusReporter    VCSCapability = "PushStatusReporter"
+	CapRevTimeReporter       VCSCapability = "RevTimeReporter"
+	CapTrackedFileReporter   VCSCapability = "TrackedFileReporter"
+	CapIgnoredFileReporter   VCSCapability = "IgnoredFileReporter"
+	CapChurnReporter         VCSCapability = "ChurnReporter"
+	CapBranchChangeReporter  VCSCapability = "BranchChangeReporter"
+	CapRangeReporter         VCSCapability = "RangeReporter"
+	CapAncestryReporter      VCSCapability = "AncestryReporter"
+	CapConflictResolver      VCSCapability = "ConflictResolver"
+	CapRevisionFileReader    VCSCapability = "RevisionFileReader"
+	CapRevisionExporter      VCSCapability = "RevisionExporter"
+	CapMergeStarter          VCSCapability = "MergeStarter"
+	CapCommitWriter          VCSCapability = "CommitWriter"
+	CapTreeReporter          VCSCapability = "TreeReporter"
+	CapTreeMerger            VCSCapability = "TreeMerger"
+	CapGeneratedPathReporter VCSCapability = "GeneratedPathReporter"
+	CapCheckoutProvisioner   VCSCapability = "CheckoutProvisioner"
+	CapCheckoutLister        VCSCapability = "CheckoutLister"
+	CapRevisionFetcher       VCSCapability = "RevisionFetcher"
+	CapPusher                VCSCapability = "Pusher"
+	CapBundler               VCSCapability = "Bundler"
+)
+
+// VCSUnsupportedError is a backend declining a capability it does not implement: the one
+// answer a VCSDriver gives from each method of such a capability.
+type VCSUnsupportedError struct {
+	// VCS is the backend's Name ("jj").
+	VCS        string
+	Capability VCSCapability
+}
+
+func (e *VCSUnsupportedError) Error() string {
+	return "vcs: " + e.VCS + " does not support " + string(e.Capability)
+}
+
+// Unwrap returns ErrVCSUnsupported, so a caller matching it or errors.ErrUnsupported
+// degrades the same way.
+func (e *VCSUnsupportedError) Unwrap() error { return ErrVCSUnsupported }
 
 // ErrVCSUnknown is returned by the VCS resolver when an explicit VCS name
 // is given but no built-in or registered implementation matches it.
 var ErrVCSUnknown = errors.New("vcs: unknown VCS")
 
-// MergeDriverInstaller is an optional capability for VCSDriver implementations
-// that can register magus as the merge driver for declared output globs.
+// MergeDriverInstaller is the capability to register magus as the merge driver for
+// declared output globs.
 type MergeDriverInstaller interface {
 	InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error
 	CheckMergeDriver(ctx context.Context, root string) (bool, error)
@@ -323,53 +431,58 @@ type MergeDriverInstaller interface {
 	// declared globs have moved on, reporting whether it changed anything. Callers
 	// run it routinely, so it must be cheap and silent in the steady state.
 	EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error)
+	// MergeDriverCommand returns the command line the VCS runs for a conflict in a declared
+	// output, as the backend's effective config for root holds it, or "" when none is
+	// registered. It reads what CheckMergeDriver only confirms is present, so a caller can
+	// probe whether that command still runs here.
+	MergeDriverCommand(ctx context.Context, root string) (string, error)
 }
 
-// RefreshHookInstaller is an optional capability (sibling of MergeDriverInstaller) for
-// VCSDriver implementations that can install a hook firing on a history-changing event
-// (branch switch, merge, rebase) to run command. It shares the managed-section
-// convention the merge-driver install uses, so magus has one VCS-integration path, not
-// two. Callers type-assert for it and skip gracefully when a backend lacks it (e.g. jj
-// has no native hooks). It returns the labels of the hooks it installed, for a notice.
+// RefreshHookInstaller is the capability (sibling of MergeDriverInstaller) to install a
+// hook firing on a history-changing event (branch switch, merge, rebase) to run command.
+// It shares the managed-section convention the merge-driver install uses, so magus has
+// one VCS-integration path, not two. Callers skip the install on *VCSUnsupportedError
+// (jj has no native hooks). It returns the labels of the hooks it installed, for a
+// notice.
 type RefreshHookInstaller interface {
 	InstallRefreshHook(ctx context.Context, root, command string) ([]string, error)
 }
 
-// DriftHookInstaller is an optional capability (sibling of RefreshHookInstaller) for
-// VCSDriver implementations that can install a hook firing after a commit is made and
-// again before it is pushed, to report generated output a commit left stale. It shares
-// the managed-section convention (and the fail-open, one-line hook body) the refresh
-// hook uses, under its own markers so the two coexist without one clobbering the other.
-// Callers type-assert for it and skip gracefully when a backend lacks it (jj has no
-// native hooks, same gap RefreshHookInstaller documents). It returns the labels of the
-// hooks it installed, for a notice.
+// DriftHookInstaller is the capability (sibling of RefreshHookInstaller) to install a
+// hook firing after a commit is made and again before it is pushed, to report generated
+// output a commit left stale. It shares the managed-section convention (and the
+// fail-open, one-line hook body) the refresh hook uses, under its own markers so the two
+// coexist without one clobbering the other. Callers skip the install on
+// *VCSUnsupportedError (jj has no native hooks, the gap RefreshHookInstaller documents).
+// It returns the labels of the hooks it installed, for a notice.
 type DriftHookInstaller interface {
 	InstallDriftHook(ctx context.Context, root, command string) ([]string, error)
 }
 
-// RegenHookInstaller is an optional capability (sibling of DriftHookInstaller) for
-// VCSDriver implementations that can install a hook firing once a merge, rebase, amend
-// or merge-concluding commit has finished, to run command: the job that regenerates the
-// files the merge driver kept one side of. The driver cannot do it, since it runs while
-// the merge is still writing the tree. Same managed-section and fail-open contract as
-// the other hook installers; callers type-assert and skip a backend without it. It
-// returns the labels of the hooks it installed, for a notice.
+// RegenHookInstaller is the capability (sibling of DriftHookInstaller) to install a hook
+// firing once a merge, rebase, amend or merge-concluding commit has finished, to run
+// command: the job that regenerates the files the merge driver kept one side of. The
+// driver cannot do it, since it runs while the merge is still writing the tree. Same
+// managed-section and fail-open contract as the other hook installers; callers skip the
+// install on *VCSUnsupportedError. It returns the labels of the hooks it installed, for
+// a notice.
 type RegenHookInstaller interface {
 	InstallRegenHook(ctx context.Context, root, command string) ([]string, error)
 }
 
-// RemoteReporter is an optional capability for VCSDriver implementations that can
-// report the repository's default remote URL (e.g. git's "origin" fetch URL). It
-// lets callers derive a forge browse/blob URL for turning a workspace-relative
-// source path into a link. Like the other optional capabilities, callers
-// type-assert for it and degrade gracefully (no link) when a backend lacks it.
+// RemoteReporter is the capability to report a remote's URL. It lets callers derive a
+// forge browse/blob URL for turning a workspace-relative source path into a link, and
+// degrade to no link on ErrVCSUnsupported.
 type RemoteReporter interface {
-	// RemoteURL returns the default remote URL for the repository containing dir,
-	// or "" with ErrVCSUnsupported when there is no remote configured.
-	RemoteURL(ctx context.Context, dir string) (string, error)
+	// RemoteURL returns the fetch URL of the remote called name in the repository
+	// containing dir. An empty name is the backend's default remote (git and jj
+	// "origin", hg and Sapling "default"). A name that resolves to no remote is
+	// ErrVCSUnsupported: to every caller so far "no remote" and "cannot tell" are one
+	// answer. A name that could only be an option, a URL or a path is an error.
+	RemoteURL(ctx context.Context, dir, name string) (string, error)
 }
 
-// RemoteConfigReporter is an optional capability (sibling of RemoteReporter) that reads
+// RemoteConfigReporter is the capability (sibling of RemoteReporter) to read
 // the default remote out of the backend's own config file, without running the backend.
 //
 // The missing context.Context is the contract: a method that may not start a process has
@@ -385,12 +498,23 @@ type RemoteConfigReporter interface {
 	ConfiguredRemote(dir string) (string, error)
 }
 
-// DefaultRefReporter is an optional capability (sibling of RemoteReporter) for
-// VCSDriver implementations that can report the repository's default branch, e.g.
-// "main", independent of whatever branch is currently checked out. Committed
-// artifacts (MAGUS.md's forge links) use it so their URLs stay stable no matter which
-// feature branch or worktree generated them. Callers type-assert for it and degrade
-// gracefully when a backend lacks it.
+// CheckoutLister is the capability to list every checkout of the repository containing
+// root (a git worktree set) by reading files, without starting the backend. Unlike
+// CheckoutProvisioner.Checkouts it lists every checkout, not only those magus made. The
+// install op seeds a missing dependency tree from a sibling, on a path where a
+// subprocess per project is not affordable; the missing context.Context is that
+// contract, as it is for RemoteConfigReporter.
+type CheckoutLister interface {
+	// OtherCheckouts returns the root of every OTHER live checkout of root's repository,
+	// primary first. A checkout whose directory is gone is omitted.
+	OtherCheckouts(root string) ([]string, error)
+}
+
+// DefaultRefReporter is the capability (sibling of RemoteReporter) to report the
+// repository's default branch, e.g. "main", independent of whatever branch is currently
+// checked out. Committed artifacts (MAGUS.md's forge links) use it so their URLs stay
+// stable no matter which feature branch or worktree generated them. Callers fall back on
+// ErrVCSUnsupported.
 type DefaultRefReporter interface {
 	// DefaultRef returns the repo's primary line of development (git's default
 	// branch, hg's "default", jj's trunk()) for the repo containing dir, or ""
@@ -398,22 +522,40 @@ type DefaultRefReporter interface {
 	DefaultRef(ctx context.Context, dir string) (string, error)
 }
 
-// PushStatusReporter is an optional capability for VCSDriver implementations that can
-// report whether a commit has already left the repository for its configured remote. It
-// answers the one question a history-rewrite suggestion must never guess at: amending or
-// rebasing a commit already pushed rewrites published history. Callers type-assert for
-// it; ok=false means the backend could not determine an answer (no remote/upstream
-// configured, or the question does not resolve here), and a caller must treat that the
-// same as "pushed": the safe direction, since the one unrecoverable mistake is treating
-// a published commit as safe to rewrite.
+// CheckoutState is which branch a checkout is on and which branches its repository
+// records its remotes as having.
+type CheckoutState struct {
+	// Branch is the branch the checkout is on, "" when it is on none (git's detached HEAD).
+	Branch string
+	// RemoteBranches are the remotes' branches as of the last fetch, each named
+	// `<remote>/<branch>`. A branch a remote has that was never fetched is absent.
+	RemoteBranches []string
+}
+
+// CheckoutStateReporter is the capability (sibling of DefaultRefReporter) to report a
+// CheckoutState without reading the working tree. It answers a rule about a push, which
+// needs these two facts and none of what Metadata spends a status on. Callers treat
+// ErrVCSUnsupported as unknown.
+type CheckoutStateReporter interface {
+	// CheckoutState returns the state of the checkout containing dir.
+	CheckoutState(ctx context.Context, dir string) (CheckoutState, error)
+}
+
+// PushStatusReporter is the capability to report whether a commit has already left the
+// repository for its configured remote. It answers the one question a history-rewrite
+// suggestion must never guess at: amending or rebasing a commit already pushed rewrites
+// published history. *VCSUnsupportedError and ok=false mean the backend could not
+// determine an answer (no remote/upstream configured, or the question does not resolve
+// here), and a caller must treat that the same as "pushed": the safe direction, since the
+// one unrecoverable mistake is treating a published commit as safe to rewrite.
 type PushStatusReporter interface {
 	// CommitPushed reports whether id is reachable from the repository's
 	// remote/upstream tracking state.
 	CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error)
 }
 
-// RevTimeReporter is an optional capability (sibling of RemoteReporter) for VCSDriver
-// implementations that can report when a named revision was committed.
+// RevTimeReporter is the capability (sibling of RemoteReporter) to report when a named
+// revision was committed.
 //
 // Separate from Metadata's CommitDate, which describes the checked-out commit and is
 // opaque display text. This one answers it for an ARBITRARY rev and returns a real
@@ -430,15 +572,15 @@ type RevTimeReporter interface {
 	RevTime(ctx context.Context, dir, rev string) (t time.Time, found bool, err error)
 }
 
-// TrackedFileReporter is an optional capability (sibling of RemoteReporter) for
-// VCSDriver implementations that can report which paths the VCS actually tracks.
+// TrackedFileReporter is the capability (sibling of RemoteReporter) to report which
+// paths the VCS actually tracks.
 //
 // "Tracked" is not answerable from Dirty or DirtyFiles, which is why this exists
 // separately: an ignored file and a clean tracked file both report nothing dirty, so
 // a caller that needs to tell a committed artifact from a build product cannot infer
-// it from cleanliness. Callers type-assert for it and skip the question when a
-// backend lacks it, rather than guessing: a wrong guess here misclassifies
-// generated output as committed, or the reverse.
+// it from cleanliness. Callers skip the question on *VCSUnsupportedError rather than
+// guessing: a wrong guess here misclassifies generated output as committed, or the
+// reverse.
 type TrackedFileReporter interface {
 	// TrackedFiles returns the subset of paths that the VCS tracks, as given.
 	// Paths are interpreted relative to dir, matching the backend CLI's own pathspec
@@ -447,8 +589,8 @@ type TrackedFileReporter interface {
 	TrackedFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 }
 
-// IgnoredFileReporter is an optional capability (sibling of TrackedFileReporter)
-// for VCSDriver implementations that can report which paths the VCS ignores.
+// IgnoredFileReporter is the capability (sibling of TrackedFileReporter) to report
+// which paths the VCS ignores.
 //
 // Different from TrackedFiles, and the difference is the point: "untracked" lumps
 // a file nobody has committed YET together with one nothing should ever commit,
@@ -456,8 +598,8 @@ type TrackedFileReporter interface {
 // reproducible from a clean checkout filters on IGNORED, or it drops work in
 // progress.
 //
-// Callers type-assert and skip the question when a backend lacks it, so treating
-// an unknown answer as "not ignored" keeps such a backend behaving as before.
+// Callers skip the question on *VCSUnsupportedError: an unknown answer treated as "not
+// ignored" keeps what it cannot classify.
 type IgnoredFileReporter interface {
 	// IgnoredFiles returns the subset of paths the VCS ignores, as given. Paths are
 	// interpreted relative to dir. An empty paths slice returns no results.
@@ -495,10 +637,9 @@ type CommitChange struct {
 	Files  []FileChange
 }
 
-// ChurnReporter is an optional capability for VCSDriver implementations that can
-// report which files recent commits touched, so churn (edit frequency) can be
-// attributed to projects. Like MergeDriverInstaller, callers type-assert for it
-// and degrade gracefully (skip the heatmap) when a backend lacks it.
+// ChurnReporter is the capability to report which files recent commits touched, so
+// churn (edit frequency) can be attributed to projects. Callers skip the heatmap on
+// *VCSUnsupportedError.
 type ChurnReporter interface {
 	// ChangesByCommit returns up to commits recent non-merge commits, newest
 	// first, each reduced to its author, date, and touched repo-relative paths.
@@ -526,12 +667,12 @@ type BranchChange struct {
 	Local bool `json:"local,omitempty"`
 }
 
-// BranchChangeReporter is an optional capability for VCSDriver implementations that can report
-// what OTHER branches are changing, so a reader can be told a file in front of them is also being
-// edited elsewhere before the merge conflict tells them.
+// BranchChangeReporter is the capability to report what OTHER branches are changing, so a
+// reader can be told a file in front of them is also being edited elsewhere before the merge
+// conflict tells them.
 //
-// Callers type-assert for it and degrade gracefully. Degrading here means saying NOTHING rather
-// than "no branch competes": a backend that cannot answer and a repository where nothing overlaps
+// Callers degrade on *VCSUnsupportedError. Degrading here means saying NOTHING rather than
+// "no branch competes": a backend that cannot answer and a repository where nothing overlaps
 // are different facts, and only one of them is reassuring.
 type BranchChangeReporter interface {
 	// BranchChanges returns up to limit branches other than the current one, most recently
@@ -552,13 +693,15 @@ type BranchChangeReporter interface {
 	BranchChanges(ctx context.Context, dir, base string, limit int) ([]BranchChange, error)
 }
 
-// RangeDiffReporter is an optional capability for VCSDriver implementations that can produce the
-// unified diff of a committed revision range, which is the half of review DirtyDiff cannot reach.
+// RangeReporter is the capability to read a committed revision range: its unified diff,
+// which is the half of review DirtyDiff cannot reach, and the paths and commits it holds.
+// dir is any directory in the repository.
 //
-// Callers type-assert for it and degrade gracefully. Degrading here means REFUSING, not answering
-// empty: a working tree with no changes is a real clean answer, but a range magus cannot diff is a
-// gap, and rendering a gap as an empty changeset would report a colleague's branch as untouched.
-type RangeDiffReporter interface {
+// Callers degrade on *VCSUnsupportedError. Degrading here means REFUSING, not answering
+// empty: a working tree with no changes is a real clean answer, but a range magus cannot
+// diff is a gap, and rendering a gap as an empty changeset would report a colleague's
+// branch as untouched.
+type RangeReporter interface {
 	// RangeDiff returns the unified diff from base to head, both backend-native revision names.
 	//
 	// Symmetric difference, not a two-dot comparison: the answer is what head added since it
@@ -568,12 +711,34 @@ type RangeDiffReporter interface {
 	//
 	// Reads what the repository already has and never fetches, matching BranchChanges. An
 	// unresolvable revision is an error rather than an empty diff, because the two read identically
-	// to a caller and only one of them means "nothing changed".
+	// to a caller and only one of them means "nothing changed". An empty base or head is
+	// refused too: backends would read it as different revisions.
 	//
-	// paths, when non-empty, narrows the answer to those repo-relative paths the way the
+	// paths, when non-empty, narrows the answer to those paths, relative to dir, the way the
 	// backend's own pathspec does, at the SOURCE, so a caller never has to re-emit a filtered
 	// patch and every count downstream is already scoped.
 	RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error)
+	// RangeFiles is RangeDiff's name list: the repository-relative slash paths head changed
+	// since it diverged from base, measured from the merge base like RangeDiff, never
+	// two-point. No rename detection, so a rename is its old path and its new one, and no
+	// user config can hide a path. paths, when non-empty, keeps only those literal
+	// repository-relative paths (a directory keeps what is under it). An unresolvable
+	// revision is an error, not an empty list.
+	RangeFiles(ctx context.Context, dir, base, head string, paths []string) ([]string, error)
+	// RangeCommits returns the commits reachable from head and not from base, newest first
+	// like History. Merges are included; a caller wanting only a change's own commits drops
+	// those with more than one parent. paths, when non-empty, keeps only the commits that
+	// changed one of those literal repository-relative paths.
+	RangeCommits(ctx context.Context, dir, base, head string, paths []string) ([]Commit, error)
+}
+
+// AncestryReporter is the capability to answer whether one revision is reachable from
+// another. PushStatusReporter answers it only against the upstream; this asks it of any
+// two revisions, such as a branch tip a caller fetched itself.
+type AncestryReporter interface {
+	// IsAncestor reports whether ancestor is reachable from descendant. A revision is its
+	// own ancestor. An unresolvable revision is an error.
+	IsAncestor(ctx context.Context, dir, ancestor, descendant string) (bool, error)
 }
 
 // ConflictKind classifies why a path is unresolved in an in-progress merge.
@@ -600,9 +765,8 @@ type Conflict struct {
 	Kind ConflictKind
 }
 
-// ConflictResolver is an optional capability (sibling of MergeDriverInstaller) for
-// VCSDriver implementations that can report and settle an in-progress merge's
-// unresolved paths in bulk.
+// ConflictResolver is the capability (sibling of MergeDriverInstaller) to report and
+// settle an in-progress merge's unresolved paths in bulk.
 //
 // A merge driver is the wrong shape for generated files: the VCS invokes one per
 // conflicted path inside its own index manipulation, so cost scales with the conflict
@@ -610,7 +774,7 @@ type Conflict struct {
 // once, then staging inverts that, and is the only way to settle ConflictKindDeleted,
 // which a driver is never called for.
 //
-// Callers type-assert and degrade to "resolve by hand" when a backend lacks it.
+// Callers degrade to "resolve by hand" on *VCSUnsupportedError.
 //
 // Every method takes the repository root and root-relative slash paths: a VCS reports
 // conflict paths from the top level but reads pathspecs from the process directory, so
@@ -640,16 +804,15 @@ type ConflictResolver interface {
 	IgnoredPaths(ctx context.Context, root string, paths []string) (map[string]bool, error)
 }
 
-// RevisionFileReader is an optional capability for VCSDriver implementations that can read
-// ONE file's content at a revision, without materializing a tree.
+// RevisionFileReader is the capability to read ONE file's content at a revision, without
+// materializing a tree.
 //
 // Sibling of RevisionExporter and deliberately narrower: exporting a whole revision to read
 // a single magusfile costs the size of the repository to answer a question about one file.
 // `magus vcs resolve` reads the committed magusfile this way when the merge in progress left
 // conflict markers in the working copy, which is the only version of it guaranteed to parse.
 //
-// Callers type-assert and degrade when a backend lacks it, like every other capability
-// here, though every backend magus ships does implement it.
+// Every backend magus ships implements it.
 type RevisionFileReader interface {
 	// ReadFileAt returns the content of a root-relative slash path at rev, EXACTLY as the
 	// revision holds it: no trimming, and a trailing newline is part of the file.
@@ -664,12 +827,10 @@ type RevisionFileReader interface {
 	ReadFileAt(ctx context.Context, root, rev, path string) (string, error)
 }
 
-// RevisionExporter is an optional capability for VCSDriver implementations that can
-// materialize a revision's tracked files into a directory (a "checkout to a throwaway
-// tree" without touching the working copy). Callers type-assert for it and degrade
-// gracefully when a backend lacks it: either wrapping ErrVCSUnsupported (like the other
-// capabilities) or, for a user-facing command, surfacing a plain message. It powers
-// `magus graph diff --rev`, which builds a base knowledge graph from the exported tree.
+// RevisionExporter is the capability to materialize a revision's tracked files into a
+// directory (a "checkout to a throwaway tree" without touching the working copy). It
+// powers `magus graph diff --rev`, which builds a base knowledge graph from the exported
+// tree.
 type RevisionExporter interface {
 	// ExportRevision writes the tree of rev (a backend-native revision expression)
 	// into dstDir, re-rooted at dir: only dir's own subtree is exported, with paths
@@ -677,9 +838,8 @@ type RevisionExporter interface {
 	ExportRevision(ctx context.Context, dir, rev, dstDir string) error
 }
 
-// MergeStarter is an optional capability for VCSDriver implementations that can BEGIN a
-// merge against a ref without committing it, and abandon one they began. Callers
-// type-assert for it and degrade gracefully when a backend lacks it.
+// MergeStarter is the capability to BEGIN a merge against a ref without committing it,
+// and abandon one it began. Committer concludes it.
 //
 // It exists because conflict resolution was reactive-only: ConflictResolver.Conflicts
 // reads an operation already in progress, so settling a branch against its base meant the
@@ -692,10 +852,196 @@ type MergeStarter interface {
 	// that completes cleanly is not an error, and neither is one that conflicts: both
 	// leave an operation in progress for the caller to conclude. A merge that could not
 	// be started at all (an unknown ref, an operation already underway) is.
-	StartMerge(ctx context.Context, root, ref string) error
+	//
+	// as is who anything the merge records is recorded as (git's reflog, jj's new
+	// working-copy commit), with a name and an email. The zero Person is the identity the
+	// box configures, which is what a person merging by hand means; a caller that needs
+	// the same outcome on every machine, a CI runner with no identity included, names one.
+	StartMerge(ctx context.Context, root, ref string, as Person) error
 	// AbortMerge abandons the in-progress merge, restoring the tree to its pre-merge
 	// state. Callers start from a clean tree so this cannot discard uncommitted work.
 	AbortMerge(ctx context.Context, root string) error
+}
+
+// CommitMeta is what a commit records besides its content, shared by both ways
+// CommitWriter makes one.
+type CommitMeta struct {
+	Message string
+	// Author and Committer are required, with a name and an email each: nothing reads the
+	// box's configured identity, so the same call yields the same commit on any machine.
+	Author, Committer Person
+	// Date is the author and committer date; zero means the time of the call, for both.
+	Date time.Time
+}
+
+// CheckoutCommit is one commit of a checkout's working tree, for CommitWriter.Commit.
+type CheckoutCommit struct {
+	CommitMeta
+	// Paths, when non-empty, are recorded from the working tree first (adds, edits and
+	// deletions alike) as literal repo-relative paths, never patterns.
+	// Empty commits what is already recorded, which after StartMerge and MarkResolved is
+	// the merge.
+	Paths []string
+}
+
+// TreeCommit is one commit of a tree, for CommitWriter.CommitTree.
+type TreeCommit struct {
+	CommitMeta
+	// Tree is a tree id.
+	Tree string
+	// Parents are commit ids in order; the first is the first parent. None makes a root
+	// commit.
+	Parents []string
+}
+
+// CommitWriter is the capability to make commits: of a checkout's working tree, the
+// conclusion StartMerge lacks, and of a tree with no checkout at all. It runs no hook and
+// signs nothing, whatever the box configures.
+type CommitWriter interface {
+	// Commit records c in the checkout at root and returns the commit id. With nothing
+	// recorded and no operation in progress it is an error, never an empty commit.
+	Commit(ctx context.Context, root string, c CheckoutCommit) (string, error)
+	// CommitTree records c and returns its id. It creates no ref; the caller anchors or
+	// pushes it. The same inputs and a fixed Date yield the same commit id everywhere.
+	CommitTree(ctx context.Context, root string, c TreeCommit) (string, error)
+}
+
+// TreeReporter is the capability to read the content identity a revision carries apart
+// from its history: git's tree id. Two revisions with one tree hold the same files,
+// whatever their parents.
+type TreeReporter interface {
+	// TreeID returns rev's tree id.
+	TreeID(ctx context.Context, root, rev string) (string, error)
+	// DiffTrees lists the paths whose content differs between a and b, each a tree id or a
+	// revision. No rename detection: a rename is its old path and its new one.
+	DiffTrees(ctx context.Context, root, a, b string) ([]string, error)
+}
+
+// TreeMerge names one three-way merge for TreeMerger.MergeTrees.
+type TreeMerge struct {
+	// Base is the merge base. Empty means the natural merge base of Ours and Theirs, which
+	// is what a plain merge uses; naming one merges only what Theirs added since it.
+	Base string
+	// Theirs is merged onto Ours.
+	Ours, Theirs string
+}
+
+// TreeMergeResult is what a three-way merge of trees produced.
+type TreeMergeResult struct {
+	// Tree is the merged tree id. With Conflicts it still names a tree: conflict markers
+	// in a content conflict, the surviving side of a deletion.
+	Tree string
+	// Conflicts are the unresolved paths, classified as ConflictResolver.Conflicts does.
+	Conflicts []Conflict
+}
+
+// TreeMerger is the capability to merge without a working copy, so a caller can combine
+// two revisions without checking out, or running, either of them.
+type TreeMerger interface {
+	// MergeTrees three-way merges m without touching any checkout. A conflict is a result,
+	// reported in TreeMergeResult.Conflicts, never an error; an error means the merge could
+	// not run (an unknown revision, a backend too old to merge trees).
+	MergeTrees(ctx context.Context, root string, m TreeMerge) (TreeMergeResult, error)
+}
+
+// GeneratedPathReporter is the capability to report which paths a REVISION marks as
+// generated. The mark is the backend's own: git's linguist-generated attribute, which
+// magus writes for every declared output and code review hosts collapse.
+//
+// The mark is read at the revision the caller names, never from the working copy or the
+// box, so a change cannot declare its own sources generated by editing .gitattributes in
+// its branch when the caller names the base.
+type GeneratedPathReporter interface {
+	// GeneratedPaths reports which of paths rev marks generated. Paths absent from the
+	// result are not marked. An empty paths returns an empty map.
+	GeneratedPaths(ctx context.Context, root, rev string, paths []string) (map[string]bool, error)
+}
+
+// CheckoutProvisioner is the capability to create, list and remove secondary checkouts
+// that share the repository's store: what IsSecondaryCheckout detects (a git linked
+// worktree). It manages only the checkouts it created, and nothing runs a hook while it
+// does. Here dir is the exception to VCSDriver's rule: it names the secondary checkout,
+// an absolute path outside the repository, not a directory inside root.
+type CheckoutProvisioner interface {
+	// CreateCheckout materializes rev at dir, detached from any branch. dir must be
+	// absolute, must not exist, and must lie outside root, symlinks resolved, where
+	// discovery would index it as a copy of the workspace (MGS1002).
+	CreateCheckout(ctx context.Context, root, dir, rev string) error
+	// RemoveCheckout removes the checkout at dir and its registration, whether or not the
+	// directory still exists. A checkout CreateCheckout did not make is refused. Commits
+	// made in it stay in the store.
+	RemoveCheckout(ctx context.Context, root, dir string) error
+	// Checkouts lists the checkouts CreateCheckout made, as absolute paths with symlinks
+	// resolved.
+	Checkouts(ctx context.Context, root string) ([]string, error)
+}
+
+// RevisionFetcher is the capability to bring revisions from a configured remote into the
+// local store without touching a working copy, a branch, a tag or a remote-tracking ref:
+// the user's view of the remote is exactly what it was. remote is the name of a remote the
+// repository has configured, never a URL or a path; any other name is an error.
+type RevisionFetcher interface {
+	// FetchRef fetches ref, a full ref name ("refs/heads/main", "refs/pull/482/head"), and
+	// returns the commit id it named at the time of the fetch.
+	FetchRef(ctx context.Context, root, remote, ref string) (string, error)
+	// FetchCommit makes the commit id present locally, fetching nothing when it already
+	// is. The remote must allow fetching by id, as GitHub and GitLab do.
+	FetchCommit(ctx context.Context, root, remote, id string) error
+}
+
+// ErrStaleLease is Pusher.Push finding the remote ref not at the commit the caller
+// expected: it moved, or was deleted, since the caller last looked. Retrying after
+// looking again can succeed.
+var ErrStaleLease = errors.New("vcs: the remote ref is not at the expected revision")
+
+// PushRejectedError is the remote refusing a push for a reason of its own (a pre-receive
+// hook, branch protection). Retrying will not change it.
+type PushRejectedError struct {
+	Ref string
+	// Reason is the remote's own words.
+	Reason string
+}
+
+func (e *PushRejectedError) Error() string {
+	return "vcs: " + e.Ref + " rejected by the remote: " + e.Reason
+}
+
+// PushLease is one leased update of a remote ref, for Pusher.Push.
+type PushLease struct {
+	// Remote is a configured remote's name, as for RevisionFetcher.
+	Remote string
+	// Ref is the full ref name on the remote ("refs/heads/main").
+	Ref string
+	// To is the commit id Ref should name after the push.
+	To string
+	// Expected is the commit id Ref must name now for the push to happen.
+	Expected string
+}
+
+// Pusher is the capability to update one remote ref under a lease.
+type Pusher interface {
+	// Push applies p. It never creates a ref: a deleted branch is ErrStaleLease, not a
+	// resurrection. A ref already at p.To is success, so a retried push whose first answer
+	// was lost does not report a lease it no longer needs. Anything else the remote refuses
+	// is a *PushRejectedError. No local hook runs and nothing is signed.
+	Push(ctx context.Context, root string, p PushLease) error
+}
+
+// BundleRange names commits for Bundler.Bundle: Head and every commit beneath it that
+// Base does not reach. Both are commit ids; an empty Base is Head's whole history.
+type BundleRange struct {
+	Base, Head string
+}
+
+// Bundler is the capability to carry commits between repositories through a file, which
+// git and Mercurial both call a bundle, so a job can hand the exact commits it validated
+// to another machine without pushing them. file is an absolute path, the exception to
+// VCSDriver's repo-relative rule.
+type Bundler interface {
+	// Bundle writes r's commits into file.
+	Bundle(ctx context.Context, root, file string, r BundleRange) error
+	// Unbundle verifies a file Bundle wrote and loads it into the store, creating no ref.
+	Unbundle(ctx context.Context, root, file string) error
 }
 
 // Status is the working tree's uncommitted state: whether it is clean, and which paths
@@ -799,6 +1145,17 @@ func ClassifyDrift(inputDirty bool, magusVersion string) (DiagnosticCode, string
 			"generated output drifted but its declared inputs and the generator version are unchanged - a non-deterministic generator"
 	}
 }
+
+// OutputDriftError is a drift gate's failure: Target left declared output stale in
+// Project, and re-running it under the rw charm is the fix. Its message is the gate's
+// report; the fields let a caller name that fix without parsing it.
+type OutputDriftError struct {
+	Project string
+	Target  string
+	Message string
+}
+
+func (e *OutputDriftError) Error() string { return e.Message }
 
 // SplitExplainedOutputs divides the dirty declared outputs into the ones this change
 // accounts for and the ones it does not.

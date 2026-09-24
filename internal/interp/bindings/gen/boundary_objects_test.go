@@ -149,7 +149,7 @@ func TestObjectNamedStringsCrossAsPlainStrings(t *testing.T) {
 		field string
 		want  string
 	}{
-		{"DoctorCheck.status", objectMap(t, ObjectDoctorCheck(types.DoctorCheck{Status: types.DoctorFail})), "status", "fail"},
+		{"Check.status", objectMap(t, ObjectCheck(types.Check{Status: types.CheckFail})), "status", "fail"},
 		{"TargetRun.state", objectMap(t, ObjectStatusTargetRun(types.StatusTargetRun{State: types.TargetRunPassed})), "state", "passed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

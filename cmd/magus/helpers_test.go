@@ -7,8 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"os"
 	"reflect"
+	"runtime/debug"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,14 +27,14 @@ import (
 // TestStatusGlyph maps every documented status to its plain (uncoloured) marker and
 // confirms the unknown-status fallback.
 func TestStatusGlyph(t *testing.T) {
-	assert.Equal(t, "[pass]", statusGlyph(types.DoctorOK, false))
-	assert.Equal(t, "[fail]", statusGlyph(types.DoctorFail, false))
+	assert.Equal(t, "[pass]", statusGlyph(types.CheckOK, false))
+	assert.Equal(t, "[fail]", statusGlyph(types.CheckFail, false))
 	assert.Equal(t, "[?]", statusGlyph("", false))
 	assert.Equal(t, "[?]", statusGlyph("unknown", false))
 	assert.Equal(t, "[?]", statusGlyph("OK", false)) // case-sensitive by design
 	// Coloured variant wraps the marker in ANSI but preserves the label.
-	assert.Contains(t, statusGlyph(types.DoctorFail, true), "[fail]")
-	assert.Contains(t, statusGlyph(types.DoctorFail, true), "\x1b[31m")
+	assert.Contains(t, statusGlyph(types.CheckFail, true), "[fail]")
+	assert.Contains(t, statusGlyph(types.CheckFail, true), "\x1b[31m")
 }
 
 // TestCanonicalTarget covers the short-alias expansions and the passthrough.
@@ -654,4 +657,48 @@ func TestHintCanonicalSpellingTeachesCharmOnce(t *testing.T) {
 	got := buf.String()
 	assert.Equal(t, 1, strings.Count(got, "hint:"), "the charm must teach once, not once per call: %q", got)
 	assert.Contains(t, got, `charm "UPDATE" is canonically "update"`)
+}
+
+// TestRelaxGCConcurrentCallersShareOneRestore reproduces the race a plain save/restore
+// pair had between loadMagus and inspectWorkspace: both can first-load in parallel
+// goroutines, and each capturing its own "prior" GOGC lets one's restore stomp the
+// other's still-active relaxation, or leave GOGC raised forever. Refcounting must keep
+// GOGC raised for as long as any holder is out, and restore it exactly once, only when
+// the last one releases, regardless of acquire order.
+func TestRelaxGCConcurrentCallersShareOneRestore(t *testing.T) {
+	if orig, ok := os.LookupEnv("GOGC"); ok {
+		require.NoError(t, os.Unsetenv("GOGC"))
+		t.Cleanup(func() { _ = os.Setenv("GOGC", orig) })
+	}
+
+	const before = 111 // distinctive, so a restore-to-the-wrong-value cannot pass by coincidence
+	debug.SetGCPercent(before)
+	t.Cleanup(func() { debug.SetGCPercent(before) })
+
+	const holders = 8
+	var wg sync.WaitGroup
+	releases := make([]func(), holders)
+	for i := range holders {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			releases[i] = relaxGC()
+		}(i)
+	}
+	wg.Wait()
+
+	// Peeking is itself a SetGCPercent call, so set back to what every holder expects
+	// raised: a no-op if the fix holds, a real (and revealing) change if it does not.
+	got := debug.SetGCPercent(loadGCPercent)
+	assert.Equal(t, loadGCPercent, got, "GOGC must stay raised while any holder has not released")
+
+	for _, release := range releases[:holders-1] {
+		release()
+	}
+	got = debug.SetGCPercent(loadGCPercent)
+	assert.Equal(t, loadGCPercent, got, "GOGC must stay raised until the LAST holder releases")
+
+	releases[holders-1]()
+	got = debug.SetGCPercent(before)
+	assert.Equal(t, before, got, "GOGC must be restored to its pre-relax value once every holder released")
 }

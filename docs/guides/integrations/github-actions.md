@@ -125,7 +125,8 @@ where a failure is a signal instead of a row everyone has learned to scroll past
 
 ## Installing magus
 
-`setup-magus` takes three inputs, and the interesting one is `installation-strategy`:
+`setup-magus` takes four inputs. `queue-app-client-id` belongs to the
+[merge queue](#merge-queue), and the interesting one is `installation-strategy`:
 
 | strategy    | what it installs                                   |
 | ----------- | -------------------------------------------------- |
@@ -336,20 +337,88 @@ kept too.
 
 ```yaml
 - uses: egladman/magus/.github/actions/advice@v0.4.0
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 One comment describing what your build graph noticed: generated files edited by hand,
-files no project claims, a change that reaches most of the workspace. Every advisor is an
-input, and every one can be silenced per pull request with a label. See
+files no project claims, a change that reaches most of the workspace. The pull request
+comes from the triggering event, so the step takes no pull request inputs. Every advisor
+is an input, and every one can be silenced per pull request with a label. See
 [Pull request advice](pr-advice.md).
+
+## Merge queue
+
+[`magus queue`](../../concepts/merge-queue.md) runs as two workflows: `queue.yaml`
+validates with a read-only token, and `queue-apply.yaml` merges with a write token and
+runs none of the changes' code. Copy both from this repository. They work unchanged on
+the job's own token, and unchanged again once you add the queue's own GitHub App.
+
+Without a credential, setup is three steps:
+
+1. Commit the two workflows.
+2. Run what `GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main`
+   prints: allow auto-merge, and a ruleset of its own requiring `merge-queue` from GitHub
+   Actions, with "Require branches to be up to date before merging" off. On a phone:
+   Settings > General > Pull Requests > "Allow auto-merge", then Settings > Rules >
+   Rulesets > New branch ruleset.
+3. Take the required checks it lists as running on `pull_request` out of the required
+   set, or accept that a change the queue pushes to waits until someone approves those
+   runs.
+
+The queue's own GitHub App is five more steps, with no YAML edit. Add it for a second
+writer, for required `pull_request` checks you want to keep, for pull requests touching
+`.github/workflows`, or for main's `push` workflows on every merge:
+
+1. Open the registration link `describe` printed and click "Create GitHub App".
+2. Generate a private key on the app's page.
+3. Install the app on this repository alone.
+4. Run `describe --app <slug>` and run the environment, variable and secret commands it
+   prints. On a phone, paste the key into Settings > Environments > magus-queue.
+5. Apply the ruleset change it prints, pinning `merge-queue` to the app.
+
+The apply job takes the app through `setup-magus`. The client id is an input, since it is
+not a secret; the key is never an input, and reaches the action through the calling
+step's `env`. The excerpt leaves out the checkout, which persists no credential, and the
+`gh auth setup-git` step that lets git push with the apply step's `GITHUB_TOKEN`:
+
+```yaml
+jobs:
+  apply:
+    environment: magus-queue
+    steps:
+      - id: magus
+        uses: egladman/magus/.github/actions/setup-magus@<sha>
+        with:
+          queue-app-client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
+        env:
+          MAGUS_QUEUE_APP_PRIVATE_KEY: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
+      - run: magus buzz tools/gha-queue.buzz
+        env:
+          QUEUE_STEP: apply
+          GITHUB_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
+          MERGEQUEUE_TOKEN: ${{ steps.magus.outputs.queue-token || secrets.GITHUB_TOKEN }}
+          COMMITTER: ${{ steps.magus.outputs.queue-committer }}
+          APP: ${{ steps.magus.outputs.queue-app-slug }}
+          DISPATCH: ${{ steps.magus.outputs.queue-token == '' }}
+```
+
+With neither the variable nor the secret, `setup-magus` mints nothing, its outputs are
+empty, and the job runs on its own token. With one and not the other it fails the job,
+since a queue that quietly fell back would post a status its ruleset does not count. The
+token is an output, never an environment variable, because `setup-magus` also runs in
+jobs that execute pull-request code. The mode reaches the queue as explicit flags
+(`--committer`, `--app`) and `DISPATCH`; nothing reads the runner's environment to guess.
 
 ## Permissions
 
-| job                               | needs                  |
-| --------------------------------- | ---------------------- |
-| running targets                   | `contents: read`       |
-| advice                            | `pull-requests: write` |
-| advice with `fix-generated-drift` | `contents: write`      |
+| job                               | needs                                                        |
+| --------------------------------- | ------------------------------------------------------------ |
+| running targets                   | `contents: read`                                             |
+| advice                            | `pull-requests: write`                                       |
+| advice with `fix-generated-drift` | `contents: write`                                            |
+| queue validation                  | `contents: read`, `pull-requests: read`                      |
+| queue apply                       | `contents`, `pull-requests`, `statuses` and `actions: write` |
 
 On a pull request from a fork the default token is read-only whatever you declare, so the
 advice comment and the drift autofix both fail there. That is the platform's rule, not

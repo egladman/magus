@@ -31,22 +31,31 @@ func (r *FSRemoteBackend) Name() string { return "fs" }
 // Active reports true: a filesystem backend is usable wherever its dir is.
 func (r *FSRemoteBackend) Active(context.Context) bool { return true }
 
-func (r *FSRemoteBackend) artifactPath(projectPath, hash string) string {
-	return filepath.Join(r.dir, flattenPath(projectPath), hash+".tar.gz")
+func (r *FSRemoteBackend) artifactPath(namespace, key string) string {
+	return filepath.Join(r.dir, flattenPath(namespace), key+".tar.gz")
 }
 
-// GetArtifact opens the artifact file. Returns (nil, nil) when not found.
-func (r *FSRemoteBackend) GetArtifact(_ context.Context, projectPath, hash string) (io.ReadCloser, error) {
-	f, err := os.Open(r.artifactPath(projectPath, hash))
+// GetArtifact opens the artifact file, or returns [ErrRemoteMiss].
+func (r *FSRemoteBackend) GetArtifact(_ context.Context, namespace, key string) (io.ReadCloser, error) {
+	f, err := os.Open(r.artifactPath(namespace, key))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil //nolint:nilnil // documented miss: nil reader = not found (see GetArtifact)
+		return nil, ErrRemoteMiss
 	}
 	return f, err
 }
 
+// HasArtifact stats the artifact file.
+func (r *FSRemoteBackend) HasArtifact(_ context.Context, namespace, key string) (bool, error) {
+	_, err := os.Stat(r.artifactPath(namespace, key))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // PutArtifact writes the artifact to the filesystem atomically.
-func (r *FSRemoteBackend) PutArtifact(_ context.Context, projectPath, hash string, data io.Reader) error {
-	path := r.artifactPath(projectPath, hash)
+func (r *FSRemoteBackend) PutArtifact(_ context.Context, namespace, key string, data io.Reader) error {
+	path := r.artifactPath(namespace, key)
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err

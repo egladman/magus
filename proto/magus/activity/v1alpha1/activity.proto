@@ -66,7 +66,7 @@ enum Kind {
   KIND_RUN = 12;
   // The effective workspace guard rules changed. action is loaded, tightened, loosen_pending,
   // committed or removed; the request blob names each source file by its working-tree and
-  // approved git blob ids, never its body. Written only on a change, so these rows read as the
+  // approved content ids, never its body. Written only on a change, so these rows read as the
   // lineage of the workspace's policy, and a verdict event's policy digest points at one.
   KIND_GUARD_POLICY = 13;
 }
@@ -81,15 +81,14 @@ enum Outcome {
 // ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
 // kind, action, outcome) is common to every kind; the payload refs point into the activity
 // blob store (fetched via GetPayload) so a large request/response body never bloats the line.
-// For an MCP tool call: actor is the agent id, action is the tool name, request is the
-// arguments, response is the result. For an agent command observation: actor is the host-supplied
-// agent/session identity when available, action is the host tool name, request is the normalized
-// invocation, and response is the guard decision. For a token lifecycle event: actor is "cli",
-// action is "connector.create"/"connector.revoke", and the refs are empty.
+// For an MCP tool call: action is the tool name, request is the arguments, response is the
+// result. For an agent command observation: action is the host tool name, request is the
+// normalized invocation, and response is the guard decision. For a token lifecycle event:
+// action is the RPC method and the refs are empty.
 message ActivityEvent {
   google.protobuf.Timestamp time = 1;    // when the action occurred
   Kind kind = 2;
-  string actor = 3;                      // who: an agent id, "cli", a user
+  string actor = 3;                      // the origin fields below as one label: "eli via claude-code", "daemon", "unattributed"
   string action = 4;                     // the specific action: a tool name, "connector.create"
   Outcome outcome = 5;
   string error = 6;                      // error text when outcome is OUTCOME_ERROR
@@ -111,9 +110,9 @@ message ActivityEvent {
   // The agent host behind the action and that host's own session id, empty when the producer
   // could not know them. The name is an opaque label the caller supplies, not a set magus
   // enumerates: a hook is told its host by the wrapper that ran it, because no local process can
-  // discover which agent host started it. An MCP call has no such wrapper and is attributed from
-  // its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by
-  // host rather than switching on kind first.
+  // discover which agent host started it. An MCP call is attributed from the client's handshake
+  // name, or its HTTP User-Agent when it recorded none, mapped into this same field so one view
+  // can group both kinds by host rather than switching on kind first.
   //
   // They ride the EVENT rather than the request blob, which also carries them: a 200-row feed
   // grouped by host must not cost 200 GetPayload calls.
@@ -140,6 +139,24 @@ message ActivityEvent {
   // contested event that names one of them, which is deliberate: the event is attributed to
   // nobody and is still that reader's business.
   repeated string contested = 17;
+
+  // Where the action came from, one field per channel, so a reader never guesses which kind of
+  // value a single string holds. user is the OS account the recording process ran as, read from
+  // the OS. entry_point is where the request entered magus (cli, hook, mcp, rpc, daemon).
+  // credential names the bearer credential a daemon request presented, as the daemon verified
+  // it. agent is the host's subagent id within session. actor above is these rendered as one
+  // label for a row head, and filters match that label.
+  string user = 18;
+  string entry_point = 19;
+  string credential = 20;
+  string agent = 21;
+
+  // Which source answered unit (the lease), where the producer resolved one: flag, agent (the
+  // spawn magus recorded for the calling subagent), marker (the checkout's `magus job exec`
+  // binding), contested (the marker, over a BAGGAGE claim naming another lease), or env (the
+  // BAGGAGE claim alone). Empty on events whose unit is a prompt's lease line. A new field, so
+  // it takes magus's word for the concept rather than unit's.
+  string lease_from = 22;
 }
 
 // ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a
@@ -168,7 +185,7 @@ service ActivityService {
 // a field OR; the time window bounds it.
 message ActivityQuery {
   repeated Kind kinds = 1;              // restrict to these action kinds
-  repeated string actors = 2;          // restrict to these actors
+  repeated string actors = 2;          // restrict to events whose origin names one of these in a single field: user, host, agent, credential or entry_point, matched exactly (never the actor label)
   repeated string actions = 3;         // restrict to these actions (e.g. tool names)
   magus.query.v1alpha1.TimeRange time = 4;   // action-time window
   // The three narrowings a person watching a worker asks for. They are here rather than on

@@ -23,3 +23,6 @@ where extraction could not resolve something cleanly, for a human to check.
   compiled-in module, so it becomes an inferred edge to the literal path.
 - [MGS7002](MGS7002.md): a doc page cites an `MGS####` code that is not
   registered, so no edge can link the mention to a real diagnostic node.
+- [MGS7003](MGS7003.md): `magus diff` could not bring the symbol index current
+  for a project the change touched, so the conformance checks did not run. This
+  one is reported as an error in place of their findings, not as an attribute.

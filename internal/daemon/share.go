@@ -60,7 +60,7 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		handler.LimitRequestBody(w, r)
 		var req shareRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		sess, err := mgr.Start(consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
+		link, err := mgr.Start(consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
 		if err != nil {
 			// A missing LAN interface (the common case) is a client-actionable
 			// condition, not a server fault: report it as 503 with the guidance
@@ -75,9 +75,9 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		if err := json.NewEncoder(w).Encode(shareResponse{
-			URL:        sess.URL,
-			ExpiresAt:  sess.ExpiresAt.UTC().Format(time.RFC3339),
-			Superseded: sess.Superseded,
+			URL:        link.URL,
+			ExpiresAt:  link.ExpiresAt.UTC().Format(time.RFC3339),
+			Superseded: link.Superseded,
 		}); err != nil {
 			log.WarnContext(r.Context(), "[SHARE] encode response", slog.String("error", err.Error()))
 		}

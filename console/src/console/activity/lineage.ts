@@ -29,6 +29,9 @@ export interface SessionNode {
   commands: number;
   denied: number;
   leases: string[];
+  // leaseFrom names the source that first answered each lease on this session's commands
+  // (flag, agent, marker, contested, env). A lease only a spawn declared has no entry.
+  leaseFrom: Map<string, string>;
   spawns: SessionSpawn[];
   children: SessionNode[];
   events: { event: ActivityEvent; index: number }[];
@@ -70,6 +73,7 @@ export function sessionLineage(events: ActivityEvent[]): SessionNode[] {
         commands: 0,
         denied: 0,
         leases: [],
+        leaseFrom: new Map(),
         spawns: [],
         children: [],
         events: [],
@@ -78,6 +82,9 @@ export function sessionLineage(events: ActivityEvent[]): SessionNode[] {
     }
     node.events.push({ event, index });
     if (event.unit && !node.leases.includes(event.unit)) node.leases.push(event.unit);
+    if (event.unit && event.leaseFrom && !node.leaseFrom.has(event.unit)) {
+      node.leaseFrom.set(event.unit, event.leaseFrom);
+    }
     if (event.kind === Kind.AGENT_COMMAND) {
       node.commands++;
       if (guardDecision(event.preview) === "deny") node.denied++;
@@ -146,6 +153,14 @@ export function sessionLabel(node: SessionNode): string {
   const parts = [node.host || "unknown host"];
   parts.push(node.commands + (node.commands === 1 ? " command" : " commands"));
   if (node.denied > 0) parts.push(node.denied + " denied");
-  if (node.leases.length) parts.push(node.leases.join(", "));
+  if (node.leases.length)
+    parts.push(node.leases.map((lease) => leaseWithSource(node, lease)).join(", "));
   return parts.join(", ");
+}
+
+// leaseWithSource renders a lease with the source that answered it, "fleet/a (marker)", or the
+// bare id when no command recorded one.
+function leaseWithSource(node: SessionNode, lease: string): string {
+  const from = node.leaseFrom.get(lease);
+  return from ? `${lease} (${from})` : lease;
 }

@@ -29,7 +29,7 @@ func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
 // the only producer the CLI has. It returns the session id so a row can be found by it.
 func recordSession(t *testing.T, root, verb string, args []string, inv string) string {
 	t.Helper()
-	handlers := withSessionJournal(context.Background(), nil, root, verb, args)
+	handlers := withInvocationJournal(context.Background(), nil, root, verb, args)
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: inv, Target: "build", Status: journal.StatusPass})
 	return inv
@@ -53,9 +53,9 @@ func sessionsLeaseCell(t *testing.T, out, session string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		// SESSION, date, time, HOST, LEASE, SPAWNER, PARENT, FACTS, EVENTS, TARGETS...
-		if len(fields) > 4 && fields[0] == session {
-			return fields[4]
+		// INVOCATION, date, time, SESSION, USER, HOST, LEASE, SPAWNER, PARENT, FACTS, EVENTS, TARGETS...
+		if len(fields) > 6 && fields[0] == session {
+			return fields[6]
 		}
 	}
 	t.Fatalf("no row for session %q in:\n%s", session, out)
@@ -81,6 +81,25 @@ func TestSessionsRendersTheLeaseColumnAttributedAndNot(t *testing.T) {
 	assert.Contains(t, out, "LEASE")
 	assert.Equal(t, "fleet/f3", sessionsLeaseCell(t, out, "invLease"))
 	assert.Equal(t, "-", sessionsLeaseCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
+}
+
+// A store written before the invocation rename is told as that, not as a killed process: a
+// reader who sees "killed mid-write" goes looking for a crash that never happened.
+func TestSessionsNamesLinesWrittenBeforeTheRename(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+	recordSession(t, root, "run", []string{"build"}, "invNew")
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	old := `{"v":1,"session":"0123456789abcdef","seq":1,"kind":"session_start","ts":1,"payload":{}}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "0123456789abcdef.jsonl"), []byte(old), 0o644))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, nil))
+	})
+	assert.Contains(t, out, "1 line(s) not shown: written before magus called a per-process id an invocation")
+	assert.NotContains(t, out, "killed mid-write")
 }
 
 // What the environment CLAIMED reaches the listing verbatim: the spawner label a person reads,
@@ -111,9 +130,9 @@ func TestSessionParentResolvesOnlyWhatTheStoreHolds(t *testing.T) {
 	t.Parallel()
 	bySpan := map[string]string{"00f067aa0ba902b7": "invParent"}
 
-	assert.Equal(t, "invParent", sessionParent(bySpan, "00f067aa0ba902b7"))
-	assert.Equal(t, "a1b2c3d4e5f60718", sessionParent(bySpan, "a1b2c3d4e5f60718"))
-	assert.Empty(t, sessionParent(bySpan, ""), "a session that claimed no parent has nothing to resolve")
+	assert.Equal(t, "invParent", invocationParent(bySpan, "00f067aa0ba902b7"))
+	assert.Equal(t, "a1b2c3d4e5f60718", invocationParent(bySpan, "a1b2c3d4e5f60718"))
+	assert.Empty(t, invocationParent(bySpan, ""), "a session that claimed no parent has nothing to resolve")
 }
 
 // The listing answers "what happened", but its reader is often looking for "what needs
@@ -137,7 +156,7 @@ func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
 		Source:  "claude/Notification",
 		Where:   root,
 		Message: "needs the deploy key",
-	}, sessions.SessionStart{Workspace: root})
+	}, sessions.InvocationStart{Workspace: root})
 	require.NoError(t, err)
 	require.True(t, opened)
 
@@ -158,7 +177,7 @@ func TestSessionsRejectsANegativeLimit(t *testing.T) {
 	err := sessionCmd(context.Background(), t.TempDir(), []string{"--limit=-1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "zero or more")
-	assert.Contains(t, err.Error(), "0 lists every session", "the error names the value that means what -1 was reaching for")
+	assert.Contains(t, err.Error(), "0 lists every invocation", "the error names the value that means what -1 was reaching for")
 }
 
 func TestParseSinceAcceptsBothSpellings(t *testing.T) {
@@ -194,23 +213,23 @@ func TestParseSinceRejectsAValueThatIsNeitherForm(t *testing.T) {
 // The filter turns on the LAST fact rather than the first, so a session that began
 // before the window and is still working stays listed. Hiding it is exactly the wrong
 // answer for the question --since asks.
-func TestSessionsSinceKeepsALongSessionStillWorking(t *testing.T) {
+func TestInvocationsSinceKeepsALongInvocationStillWorking(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	old := sessions.Summary{Session: "stale", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-47 * time.Hour).UnixMilli()}
-	long := sessions.Summary{Session: "long", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-time.Minute).UnixMilli()}
+	old := sessions.Summary{Invocation: "stale", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-47 * time.Hour).UnixMilli()}
+	long := sessions.Summary{Invocation: "long", StartedMs: now.Add(-48 * time.Hour).UnixMilli(), LastMs: now.Add(-time.Minute).UnixMilli()}
 
-	got := sessionsSince([]sessions.Summary{old, long}, now.Add(-2*time.Hour))
+	got := invocationsSince([]sessions.Summary{old, long}, now.Add(-2*time.Hour))
 	require.Len(t, got, 1)
-	assert.Equal(t, "long", got[0].Session)
+	assert.Equal(t, "long", got[0].Invocation)
 }
 
-func TestSessionsSinceWithNoCutoffKeepsEverything(t *testing.T) {
+func TestInvocationsSinceWithNoCutoffKeepsEverything(t *testing.T) {
 	t.Parallel()
 
-	all := []sessions.Summary{{Session: "a"}, {Session: "b"}}
-	assert.Equal(t, all, sessionsSince(all, time.Time{}))
+	all := []sessions.Summary{{Invocation: "a"}, {Invocation: "b"}}
+	assert.Equal(t, all, invocationsSince(all, time.Time{}))
 }
 
 // A store with sessions in it, all older than the window, must not read as a store
@@ -226,13 +245,13 @@ func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
 	out := captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "2099-01-01T00:00:00Z"}))
 	})
-	assert.Contains(t, out, "no sessions in that window")
-	assert.NotContains(t, out, "no sessions recorded yet")
+	assert.Contains(t, out, "no invocations in that window")
+	assert.NotContains(t, out, "no invocations recorded yet")
 
 	out = captureStdout(t, func() {
 		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "24h"}))
 	})
-	assert.Contains(t, out, "invOld", "a session inside the window is still listed")
+	assert.Contains(t, out, "invOld", "an invocation inside the window is still listed")
 }
 
 // loadStream writes lines to a file and loads them, returning what the command

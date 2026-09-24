@@ -39,12 +39,12 @@ func TestIsDue(t *testing.T) {
 
 	// Ran 25h ago (start + duration = finish): interval elapsed, due.
 	old := now.Add(-25 * time.Hour)
-	trail.Append(t.Context(), dir, trail.Event{Ts: old.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trail.KindJob, Actor: "daemon", Action: "server rotate-activities", Outcome: trail.OutcomeOK})
+	trail.Append(t.Context(), dir, trail.Event{Ts: old.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trail.KindJob, Action: "server rotate-activities", Outcome: trail.OutcomeOK})
 	require.True(t, isDue(dir, j, now))
 
 	// A more recent run (1h ago) is newest, so LastRun returns it: not due.
 	recent := now.Add(-time.Hour)
-	trail.Append(t.Context(), dir, trail.Event{Ts: recent.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trail.KindJob, Actor: "daemon", Action: "server rotate-activities", Outcome: trail.OutcomeOK})
+	trail.Append(t.Context(), dir, trail.Event{Ts: recent.Add(-time.Second).UnixMilli(), DurationMs: 1000, Kind: trail.KindJob, Action: "server rotate-activities", Outcome: trail.OutcomeOK})
 	require.False(t, isDue(dir, j, now))
 
 	// A run of a DIFFERENT job does not satisfy this one.

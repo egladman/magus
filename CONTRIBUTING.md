@@ -236,7 +236,7 @@ a real page or is claimed twice.
 
 CI runs the pipeline twice, in series, because there are two questions.
 
-**From source, and it gates.** `preflight` and the `ci` shards build magus from the
+**From source, and it gates.** The `plan` job and the `ci` shards build magus from the
 commit under test and run the workspace with it. Only this pass can answer "does this
 change work" - a magusfile needing a new host binding has no released binary able to
 load it. A failure blocks the PR.
