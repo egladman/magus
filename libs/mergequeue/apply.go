@@ -533,24 +533,14 @@ func (r *applyRun) generation(ctx context.Context, c types.Change, outputs []str
 		return types.Generation{}, &types.RefusedError{Paths: outputs, Reason: "merging it needs " + joinPaths(outputs) +
 			" regenerated, and this queue regenerates nothing", Remedy: r.mergeBaseIn()}
 	}
-	changed, err := r.vcs.RangeFiles(ctx, r.clone.Root, r.plan.BaseCommit, c.Head, nil)
+	g, err := generationOf(ctx, r.vcs, r.facts, r.clone.Root, r.plan.BaseCommit, c, outputs)
 	if err != nil {
 		return types.Generation{}, err
-	}
-	g, err := r.facts.Generation(ctx, outputs, changed)
-	if err != nil {
-		return types.Generation{}, fmt.Errorf("generation of %s: %w", joinPaths(outputs), err)
 	}
 	if regenerationProven(g) {
 		return g, nil
 	}
-	why, paths := g.Unbounded, g.Code
-	if why == "" {
-		why = "it changes code their regeneration runs"
-	}
-	if len(paths) == 0 {
-		paths = outputs
-	}
+	why, paths := unprovenWhy(g, outputs)
 	return types.Generation{}, &types.RefusedError{Paths: paths, Reason: "merging it needs " + joinPaths(outputs) + " regenerated, and " + why + " (" + joinPaths(paths) +
 		"), so only its author can regenerate them", Remedy: r.mergeBaseIn()}
 }

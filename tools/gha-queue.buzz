@@ -86,11 +86,21 @@ export fun private(line: str) > str {
         `GOMODCACHE="$MERGEQUEUE_SCRATCH/go-mod" XDG_CACHE_HOME="$MERGEQUEUE_SCRATCH/cache" ` + line;
 }
 
+// candidateMagus runs line with a magus linked from the candidate itself. The job's own
+// magus is main's, and a change that adds host surface its own magusfile uses cannot
+// even be loaded by it. Validation runs the change's code anyway; apply never does, and
+// keeps main's binary. A bare link is the bootstrap: the spell bytecode it embeds is
+// committed output the gate's drift check holds to its sources.
+export fun candidateMagus(line: str) > str {
+    return private(`go build -o "$MERGEQUEUE_SCRATCH/bin/magus" ./cmd/magus`) + " && " +
+        private(`PATH="$MERGEQUEUE_SCRATCH/bin:$PATH" ` + line);
+}
+
 // validateArgs keeps $MERGEQUEUE_ONTO literal: the queue sets it for each hook.
 export fun validateArgs(dir: str, change: str) > [str] {
     return ["queue", "validate", "--plan", dir + "/plan.json", "--only", change, "--verdicts", dir + "/verdicts",
-        "--gate", private(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`),
-        "--regenerate", private(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`)];
+        "--gate", candidateMagus(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`),
+        "--regenerate", candidateMagus(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`)];
 }
 
 // applyArgs polls every 15s: each poll is two API requests on the job's Actions token,
@@ -318,9 +328,16 @@ test "validation hooks see MERGEQUEUE_ONTO unexpanded and keep their caches priv
     final args = validateArgs("/t/queue", change: "482");
     assert\equal(args[0], want: "queue", message: "magus queue");
     assert\equal(args[5], want: "482", message: "--only names the change");
-    assert\equal(args[9], want: private(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`), message: "gate");
-    assert\equal(args[11], want: private(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`), message: "regenerate");
+    assert\equal(args[9], want: candidateMagus(`magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`), message: "gate");
+    assert\equal(args[11], want: candidateMagus(`magus affected generate:rw --base "$MERGEQUEUE_ONTO"`), message: "regenerate");
     assert\equal(private("x").startsWith(`MAGUS_CACHE_DIR="$MERGEQUEUE_SCRATCH/magus" `), want: true, message: "magus's cache is the candidate's own");
+}
+
+test "validation links the candidate's own magus and runs that one" {
+    final line = candidateMagus("magus version");
+    assert\equal(line, want: private(`go build -o "$MERGEQUEUE_SCRATCH/bin/magus" ./cmd/magus`) + " && " +
+        private(`PATH="$MERGEQUEUE_SCRATCH/bin:$PATH" magus version`), message: "link, then run it first on PATH");
+    assert\equal(applyArgs("99", repo: "o/r", committer: "", app: "")[9].indexOf("go build"), want: null, message: "apply keeps main's binary");
 }
 
 test "apply follows the validation run as its source and regenerates in the sandbox" {

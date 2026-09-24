@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -209,12 +210,18 @@ func renderExamples() (map[string]string, error) {
 // a runner they did not, so the same command produced two different pages and the
 // drift gate failed on CI alone. An empty state dir gives a machine-independent link
 // and nothing to leak.
+//
+// Every MAGUS_* variable and BAGGAGE is dropped for the same reason: the fixture's
+// magus must read only the fixture. The merge queue's gate exports MAGUS_CACHE_DIR,
+// and a cache holding a run of some other workspace's `.:test` put that run's
+// last_output_ref onto the fixture's target:.:test.
 func capture(bin, dir string, argv []string) (string, error) {
 	cmd := exec.Command(bin, argv...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(fixtureEnv(os.Environ()),
 		"MAGUS_DAEMON_ENABLED=false",
-		"XDG_STATE_HOME="+filepath.Join(dir, "state"))
+		"XDG_STATE_HOME="+filepath.Join(dir, "state"),
+		"XDG_CACHE_HOME="+filepath.Join(dir, "cache"))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -228,6 +235,14 @@ func capture(bin, dir string, argv []string) (string, error) {
 		text += "\n"
 	}
 	return text, nil
+}
+
+// fixtureEnv is environ without the variables that point magus at state outside the
+// fixture.
+func fixtureEnv(environ []string) []string {
+	return slices.DeleteFunc(slices.Clone(environ), func(kv string) bool {
+		return strings.HasPrefix(kv, "MAGUS_") || strings.HasPrefix(kv, "BAGGAGE=")
+	})
 }
 
 // inject replaces the content between each example's markers with its snippet. A
