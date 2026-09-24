@@ -55,7 +55,6 @@ jobs:
         with:
           merge-queue: 'true'
           merge-conflicts: 'false'
-          hand-edited-generated: 'false'
           target-outputs: 'false'
           doctor: 'false'
           version-floor: 'false'
