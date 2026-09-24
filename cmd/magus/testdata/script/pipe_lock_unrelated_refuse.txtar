@@ -1,0 +1,51 @@
+# Waiting is only ever on a proven pipe upstream. A run holding the project that does
+# not write this run's stdin is refused against at once, with attribution and exit 75,
+# however stdin arrives.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe'
+
+exec magus run holdslow . &
+exec bash -c 'for i in $(seq 200); do [ -f ready ] && exit 0; sleep 0.05; done; exit 1'
+
+# stdin piped from a process that is not magus.
+exec bash -c 'echo x | magus run consume .; [ $? -eq 75 ]'
+stderr 'locked by another magus process \(held by pid [0-9]+ \(.*run holdslow'
+! stderr 'waiting for pid'
+
+# stdin from a file.
+stdin plan.json
+! exec magus run consume .
+stderr 'locked by another magus process \(held by pid [0-9]+ \(.*run holdslow'
+
+# A process pretending to be magus (argv[0] only) proves nothing.
+exec bash -c '(exec -a magus sleep 2) | magus run consume .; [ $? -eq 75 ]'
+stderr 'locked by another magus process'
+! stderr 'waiting for pid'
+
+wait
+
+-- plan.json --
+{"matrix": []}
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+import "io";
+import "proc";
+
+magus\project({
+    "name": "pipe-root",
+    "targets": {
+        "holdslow": {"skip_cache": "holds the project"},
+        "consume": {"skip_cache": "reads stdin per invocation"},
+    },
+});
+
+export fun holdslow(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "touch ready; sleep 4"]);
+}
+
+export fun consume(ctx: magus\Context, args: [str]) > void !> any {
+    io\stdin.readAll();
+}

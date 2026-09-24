@@ -180,7 +180,7 @@ func TestUnloadedAnswersEveryToolWithTheLoadFailure(t *testing.T) {
 	for _, d := range Registry {
 		st, ok := tools[d.Name]
 		require.True(t, ok, d.Name)
-		res, err := st.Handler(context.Background(), callRequest(d.Name, nil))
+		res, err := st.Handler(trail.ContextWithCredential(context.Background(), types.CredentialStdio), callRequest(d.Name, nil))
 		require.NoError(t, err, d.Name)
 		assert.True(t, res.IsError, d.Name)
 		assert.True(t, strings.HasPrefix(allText(res), failure.Error()), "%s: %s", d.Name, allText(res))

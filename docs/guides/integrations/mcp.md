@@ -1,19 +1,51 @@
 ---
 title: MCP
-description: The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.
-tags: [mcp, model-context-protocol, ai, agents, claude, codex, cursor, daemon, ide]
+description: magus serves its tools as a Model Context Protocol server, over stdio for the agent host that launches magus mcp, or over Streamable HTTP from the daemon.
+tags: [mcp, model-context-protocol, ai, agents, claude, codex, cursor, daemon, ide, stdio]
 aliases: [guides/mcp]
 ---
 
 # MCP
 
-When the daemon is running, it also exposes an **MCP (Model Context Protocol) server** over Streamable HTTP. Agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call magus tools directly instead of shelling out.
+magus serves its tools as an **MCP (Model Context Protocol) server**, so agents and IDE plugins that speak MCP (Claude Desktop, Cursor, VS Code Copilot, and others) can call them directly instead of shelling out. There are two ways to reach it:
 
-Magus targets humans first. MCP is always compiled in; it is a runtime layer you turn off with `mcp.enabled=false` (see [Enabling and disabling](#enabling-and-disabling)) when you do not want it.
+- **stdio** (`magus mcp`): the host launches magus and talks to it over its stdin and stdout. It opens the workspace it is launched in and needs no daemon and no token. Start here.
+- **Streamable HTTP** (the daemon): one long-lived server at `http://127.0.0.1:7391/mcp` that several clients share, authenticated with a bearer token.
+
+Both serve the same tools. magus prints what a host needs (`magus mcp --help`) and never writes a host's config file; the snippets below are for you to place.
 
 For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, durable memory, and the drift check - see [Agents](agents.md).
 
-## Starting the daemon starts MCP
+## stdio: the host launches magus
+
+Register magus with your MCP client as a stdio server. Most clients take a command and its arguments:
+
+```json
+{
+  "command": "magus",
+  "args": ["mcp"]
+}
+```
+
+The host starts `magus mcp` in the workspace it opens, and it serves that workspace until the host closes stdin. Stdout carries only protocol frames; logs, and one line saying what is being served, go to stderr, which most hosts keep as the server's log.
+
+There is no token to mint. The caller is the local process the host started, running as you, so every tool call is admitted with the `stdio` credential, which holds `mcp=write` and nothing past it: the same grant a connector token holds (see [Tokens and grants](../../concepts/tokens.md)). The activity trail records each call with that credential and the client's name.
+
+To check the wiring by hand, pipe a handshake in:
+
+```sh
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | magus mcp
+```
+
+Each line of output is one JSON-RPC reply. Typed at a terminal with nothing piped in, `magus mcp` waits for a host to speak; press Ctrl+C to stop it.
+
+A host that launches one process per workspace gets one `magus mcp` per workspace. When several clients should share one warm server instead, use the daemon.
+
+## Streamable HTTP: the daemon serves MCP
+
+When the daemon is running, it also exposes the MCP server over Streamable HTTP. MCP is always compiled in; it is a runtime layer you turn off with `mcp.enabled=false` (see [Enabling and disabling](#enabling-and-disabling)) when you do not want it.
 
 You don't need a separate process. Start the daemon as usual:
 
@@ -67,7 +99,7 @@ The daemon also serves `/livez`, `/readyz`, and `/healthz` on the same port. If 
 
 ## Available tools
 
-The daemon exposes these tools. This list is authoritative at the time of writing;
+Both transports expose these tools. This list is authoritative at the time of writing;
 `magus describe mcp-tools` (or the `magus_describe` tool with `kind: mcp_tools`) prints
 the live set with full parameters, so trust that over this table if they ever differ.
 
@@ -175,6 +207,8 @@ a listener with TLS or a tunnel.
 ## Security: keep this local
 
 > **Warning:** Reaching the MCP endpoint is equivalent to having shell access to your build workspace. Any authenticated caller can execute arbitrary build targets, which in turn invoke arbitrary toolchain commands defined in your magusfiles.
+
+`magus mcp` opens no listener: only the process that launched it can reach it, through its pipes. Everything below is about the daemon's HTTP endpoint.
 
 The endpoint requires a **bearer token** whose grant includes `mcp=write` (see
 [Tokens and grants](../../concepts/tokens.md)). Two kinds hold it:

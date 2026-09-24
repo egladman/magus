@@ -1163,24 +1163,36 @@ it.`,
 
 var mcpCommand = Command{
 	Name:        "mcp",
-	Short:       "Print how to reach the MCP server",
-	Description: "Print the MCP endpoint, its auth token command, and how to point a client at it. MCP is served by the daemon (magus server start), not run as its own process.",
-	Tags:        []string{"cli", "magus mcp", "mcp", "agent", "daemon"},
-	Long: `MCP is not a standalone process: it is served by the daemon, alongside
-everything else magus server start hosts. This command prints what a client
-needs to reach it - the endpoint, the auth token command, and a liveness
-probe - and exits non-zero, since it starts nothing itself.
+	Short:       "Serve MCP over stdio for the agent host that launched it",
+	Description: "Serve the MCP tools over stdin and stdout for the agent host that launched the process, against the workspace it was launched in, with no daemon and no token.",
+	Tags:        []string{"cli", "magus mcp", "mcp", "agent", "stdio"},
+	Long: `Serve MCP over stdin and stdout, one JSON-RPC message per line, for the
+agent host that launched this process. It opens the workspace it is launched
+in and needs no daemon and no bearer token: the caller is the local process
+the host started, admitted with mcp=write, and every tool call is recorded on
+the activity trail with the stdio credential and the client's name.
 
-  magus server start                    start the daemon (MCP comes up with it)
-  magus config mcp connector create     mint a bearer token for one client
-  magus status --probe=liveness,mcp     confirm the endpoint is serving
+Stdout is the protocol wire and carries nothing else; logs and one line
+saying what is being served go to stderr. It stops when the host closes
+stdin, or on Ctrl+C.
+
+Register it with an MCP client as a stdio server:
+
+  command  magus
+  args     ["mcp"]
+
+The daemon (magus server start) serves the same tools over Streamable HTTP
+for one long-lived server shared by several clients; that endpoint takes a
+connector token (magus config mcp connector create).
 
 Per-client configuration lives in docs/guides/integrations/mcp.md, not in
 this binary: naming a client here would make a change to its config format a
 magus release.`,
 	Usage: "magus mcp",
 	ExitStatus: []ExitCode{
-		{2, "Always: mcp prints reach-it instructions and starts nothing, so the invocation is treated like any other command that named a retired verb."},
+		{0, "The host closed stdin."},
+		{1, "The workspace did not load, or reading stdin or writing stdout failed."},
+		{2, "An argument was given; mcp takes none."},
 	},
 }
 

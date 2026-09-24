@@ -113,6 +113,30 @@ func adapt(t spells.Driver) handlerFn {
 	}
 }
 
+// ToolNeed is what every MCP tool requires of the caller's credential, over either transport.
+// The daemon holds its /mcp route to the same Need, so a credential the route admits is never
+// refused by a tool behind it.
+var ToolNeed = types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
+
+// authorize refuses a call whose credential falls short of ToolNeed, as an MGS9015 tool error.
+// The credential is the one on ctx: the daemon's bearer guard stamps the bearer it verified,
+// and ServeStdio stamps types.CredentialStdio. A ctx carrying neither holds the zero
+// credential, which grants nothing.
+func authorize(fn handlerFn) handlerFn {
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		cred := trail.CredentialFromContext(ctx)
+		if !cred.Grant.Allows(ToolNeed) {
+			held := cred.Grant.String()
+			if held == "" {
+				held = "nothing"
+			}
+			err := types.DiagnosticErrorf(types.GrantInsufficient, "%s needs %s and the caller holds %s", req.Params.Name, ToolNeed, held)
+			return mcplib.NewToolResultError(err.Error()), nil
+		}
+		return fn(ctx, req)
+	}
+}
+
 // buildMCPTool turns a static ToolDescriptor into an mcplib.Tool.
 func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 	opts := []mcplib.ToolOption{mcplib.WithDescription(d.Description)}
@@ -220,7 +244,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 			return mcplib.NewToolResultError(opts.Unavailable().Error()), nil
 		}
 		for _, d := range Registry {
-			srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, func(ctx context.Context) context.Context { return ctx }, tel, unavailable))
+			srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, func(ctx context.Context) context.Context { return ctx }, tel, authorize(unavailable)))
 		}
 		return
 	}
@@ -241,7 +265,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, authorize(adapt(t))))
 	}
 	// The loop above only checks Registry -> driver; a driver built into allToolDrivers but
 	// missing its own Registry entry would otherwise mount nowhere, silently, with no
@@ -334,7 +358,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 			Ts:   start.UnixMilli(),
 			Kind: trail.KindMCPToolCall,
 			// Append stamps the origin from ctx: the entry point, the client's name as Host,
-			// and the credential the bearer guard verified (absent over stdio).
+			// and the credential authorize checks.
 			UserAgent:     o.UserAgent,
 			Action:        toolName,
 			Outcome:       trail.OutcomeOK,
