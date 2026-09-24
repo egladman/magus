@@ -236,11 +236,7 @@ inputs:
     default: ${{ github.event.pull_request.head.repo.full_name }}
 
 # The token is never an input. The calling step sets GITHUB_TOKEN from a secret in its
-# env, which every step here inherits:
-#
-#   - uses: egladman/magus/.github/actions/advice@<ref>
-#     env:
-#       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+# env, which every step here inherits; docs/guides/integrations/pr-advice.md shows it.
 #
 # It reads and posts the comment, and pushes when fix-generated-drift is on, so it needs
 # `pull-requests: write`, which GitHub withholds on a pull request from a fork.
@@ -251,7 +247,7 @@ runs:
       shell: bash
       run: |
         if [ -z "${GITHUB_TOKEN:-}" ]; then
-          echo "::error::magus advice: GITHUB_TOKEN is not set; set it from a secret in this step's env (GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }})" >&2
+          echo "::error::magus advice: GITHUB_TOKEN is not set; set it from secrets.GITHUB_TOKEN in the calling step's env" >&2
           exit 1
         fi
 
