@@ -13,10 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/types"
 )
 
 // The command's own serve path, driven over pipes: every line on the wire is a JSON-RPC
@@ -87,28 +84,4 @@ func TestMCPCmdRefusesArguments(t *testing.T) {
 
 	err = mcpCmd(context.Background(), "", []string{"serve"})
 	assert.ErrorContains(t, err, `magus mcp: takes no arguments (got "serve")`)
-}
-
-func TestMCPSocketPathFollowsTheSetting(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_RUNTIME_DIR", dir)
-	want := filepath.Join(dir, "magus", "mcp.sock")
-	on, off := true, false
-
-	assert.Empty(t, mcpSocketPath(config.MCP{UnixSocket: &off}), "false serves no socket")
-	assert.Equal(t, want, mcpSocketPath(config.MCP{UnixSocket: &on}), "true is the path even where the bind will refuse")
-	unset := ""
-	if httpx.PeerCredentialsSupported() {
-		unset = want
-	}
-	assert.Equal(t, unset, mcpSocketPath(config.MCP{}), "unset is on exactly where a peer's uid can be read")
-}
-
-func TestServerInfoReportsTheMCPSocket(t *testing.T) {
-	serverMCPSocket.Store("/run/magus/mcp.sock")
-	t.Cleanup(func() { serverMCPSocket.Store("") })
-
-	st := serverInfo("unix:///run/magus/server.sock")
-	assert.Contains(t, st.Listeners, types.StatusListener{Kind: types.ListenerMCPSocket, Address: "/run/magus/mcp.sock"})
-	assert.Contains(t, st.Listeners, types.StatusListener{Kind: types.ListenerSocket, Address: "unix:///run/magus/server.sock"})
 }

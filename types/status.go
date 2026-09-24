@@ -276,13 +276,11 @@ type StatusServer struct {
 type ListenerKind string
 
 const (
-	// ListenerSocket is a local unix socket, reachable only from this host.
+	// ListenerSocket is the server's unix socket: HTTP carrying the control operations, MCP
+	// and the Connect APIs to processes running as the server's user.
 	ListenerSocket ListenerKind = "socket"
-	// ListenerHTTP is the MCP endpoint and console.
+	// ListenerHTTP is loopback TCP: the console, and MCP and the APIs for bearer tokens.
 	ListenerHTTP ListenerKind = "http"
-	// ListenerMCPSocket is the MCP endpoint over a local unix socket, admitting only
-	// processes that run as the server's user.
-	ListenerMCPSocket ListenerKind = "mcp-socket"
 )
 
 // StatusListener is one address a server accepts connections on.

@@ -1,8 +1,8 @@
 // Package serverhttp is the HTTP composition of `magus server`: it mounts the MCP
 // Streamable-HTTP handler, the k8s health routes, and the browser Graph
 // Explorer console onto one loopback listener, applying the shared bearer
-// and DNS-rebind guards, and optionally MCP alone onto a unix socket behind
-// a peer-uid guard. It is the composition point that ties together
+// and DNS-rebind guards, and mounts /mcp and the Connect services onto the
+// server's unix socket as well. It is the composition point that ties together
 // internal/handler/mcp, internal/httpx, and internal/service/console so
 // neither the handler/mcp package nor the root magus package has to.
 //
@@ -20,10 +20,8 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"os"
 
 	"connectrpc.com/connect"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
@@ -82,8 +80,12 @@ type Server struct {
 	// unloaded is set by NewUnloaded: the workspace failed, so only the surfaces that
 	// need none are served.
 	unloaded *Unloaded
-	// socket is the unix socket path /mcp is also served on, "" for none.
-	socket string
+	// socket is the server's unix socket, which /mcp and the Connect services are also
+	// mounted on; nil for none.
+	socket Socket
+	// onSocketMounted receives each path mounted on the socket and its Need, before the
+	// server serves; the route tests read the socket's table through it.
+	onSocketMounted func(needs map[string]types.Need)
 	// onMounted receives every route pattern and each guarded pattern's Need once mounting
 	// is done, before the listener serves; the route tests read the mux through it.
 	onMounted func(patterns []string, needs map[string]types.Need)
@@ -115,13 +117,21 @@ func WithActivityWorkspaces(fn func() []activityhandler.Workspace) Option {
 	return func(d *Server) { d.workspaces = fn }
 }
 
-// WithMCPSocket also serves the MCP endpoint on a unix socket at path, admitting a connection
-// only when its peer runs as this process's uid, as [types.CredentialSocketPeer]; no bearer
-// token is read there. The socket carries /mcp alone. path's directory must already be private
-// to this user. Serve fails when the socket cannot be bound, including on a platform where a
-// peer's uid cannot be read.
-func WithMCPSocket(path string) Option {
-	return func(d *Server) { d.socket = path }
+// Socket is a unix socket that serves a mounted handler beside its own routes, admitting only
+// processes that run as the server's user and stamping them with the socket peer's credential.
+// *proc.Server is the one implementation.
+type Socket interface {
+	// Mount serves h on the socket until unmount runs. It fails where the socket cannot
+	// name its caller.
+	Mount(h http.Handler) (unmount func(), err error)
+}
+
+// WithSocket also mounts /mcp and every Connect service on sock while the server serves,
+// each held to the Need it holds on the loopback listener, against the credential the socket
+// stamped rather than a bearer token. The console, the /api routes, health and share stay on
+// loopback: they are for browsers, which cannot dial a unix socket.
+func WithSocket(sock Socket) Option {
+	return func(d *Server) { d.socket = sock }
 }
 
 // New returns a Server that will serve the MCP endpoint (plus health routes and
@@ -596,24 +606,27 @@ func (s *Server) Serve(ctx context.Context) error {
 
 func (s *Server) run(ctx context.Context, log *slog.Logger, f *frame) error {
 	if err := errors.Join(f.errs...); err != nil {
-		f.close()
+		_ = f.server.Close()
 		return err
 	}
 	httpServer := f.server
 	if s.onMounted != nil {
 		s.onMounted(httpServer.Patterns(), maps.Clone(f.needs))
 	}
-	// One listener failing takes the other down with it, so the server never runs on with
-	// half its MCP surface gone.
-	g, gctx := errgroup.WithContext(ctx)
-	for _, srv := range []*httpx.Server{httpServer, f.socket} {
-		if srv == nil {
-			continue
+	if f.socketMux != nil {
+		if s.onSocketMounted != nil {
+			s.onSocketMounted(maps.Clone(f.socketNeeds))
 		}
-		log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", srv.Where()))
-		g.Go(func() error { return srv.Serve(gctx) })
+		unmount, err := s.socket.Mount(f.socketMux)
+		if err != nil {
+			// Not fatal: loopback still serves all of it, to a bearer token.
+			log.WarnContext(ctx, "[AGENT] MCP and the APIs are not served on the server socket", slog.String("error", err.Error()))
+		} else {
+			defer unmount()
+		}
 	}
-	if err := g.Wait(); err != nil {
+	log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", httpServer.Addr().String()))
+	if err := httpServer.Serve(ctx); err != nil {
 		log.WarnContext(ctx, "[AGENT] shutdown error", slog.String("error", err.Error()))
 		return err
 	}
@@ -651,22 +664,31 @@ func (s *Server) prepare(ctx context.Context) (*slog.Logger, netip.AddrPort, err
 // guarded path's Need as it is mounted, and errs every mount that could not be guarded, which
 // stops the server before it serves.
 type frame struct {
-	server *httpx.Server
-	// socket serves /mcp alone on a unix socket, nil unless WithMCPSocket named one.
-	socket      *httpx.Server
+	server      *httpx.Server
 	allowed     httpx.AllowedSet
 	siteAllowed httpx.AllowedSet
 	cors        func(http.Handler) http.Handler
 	needs       map[string]types.Need
 	errs        []error
+	// socketMux is what the server mounts on its unix socket, nil without WithSocket, and
+	// socketNeeds the Need of each path on it.
+	socketMux   *http.ServeMux
+	socketNeeds map[string]types.Need
 }
 
-// close releases the listeners of a frame that will not serve.
-func (f *frame) close() {
-	_ = f.server.Close()
-	if f.socket != nil {
-		_ = f.socket.Close()
+// socketRoute mounts h at pattern on the socket mux, when there is one, holding each path to
+// its Need against the credential the socket stamped.
+func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[string]types.Need, h http.Handler) {
+	if f.socketMux == nil {
+		return
 	}
+	g, err := httpx.GrantGuard(format, needs, h)
+	if err != nil {
+		f.errs = append(f.errs, fmt.Errorf("server: socket %s: %w", pattern, err))
+		return
+	}
+	maps.Copy(f.socketNeeds, needs)
+	f.socketMux.Handle(pattern, g)
 }
 
 // guard mounts h at pattern behind rebind, then (for a console route) CORS, so a tokenless
@@ -705,6 +727,7 @@ func (f *frame) service(path string, h http.Handler) {
 		return
 	}
 	f.guard(path, rpcerr.FormatConnect, needs, true, h)
+	f.socketRoute(path, rpcerr.FormatConnect, needs, h)
 }
 
 // serviceRoute is a Connect service as the share listener serves it, held to the same Needs.
@@ -726,6 +749,9 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	// request is rejected before the bearer token is even examined; the bearer
 	// guard then enforces the shared secret on everything that gets past it.
 	f := &frame{allowed: httpx.AllowedHosts(addr), needs: map[string]types.Need{}}
+	if s.socket != nil {
+		f.socketMux, f.socketNeeds = http.NewServeMux(), map[string]types.Need{}
+	}
 	httpServer, err := httpx.NewServer(addr)
 	if err != nil {
 		return nil, err
@@ -738,13 +764,9 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 		handler.LimitRequestBody(w, r)
 		mcpHandler.ServeHTTP(w, r)
 	})
-	f.guard("/mcp", rpcerr.FormatJSON, map[string]types.Need{"/mcp": needMCP}, false, cappedMCP)
-	if s.socket != "" {
-		if err := f.mountSocket(s.socket, cappedMCP); err != nil {
-			_ = httpServer.Close()
-			return nil, err
-		}
-	}
+	mcpNeeds := map[string]types.Need{"/mcp": needMCP}
+	f.guard("/mcp", rpcerr.FormatJSON, mcpNeeds, false, cappedMCP)
+	f.socketRoute("/mcp", rpcerr.FormatJSON, mcpNeeds, cappedMCP)
 
 	// CORS allows the hosted explorer origin plus the two loopback origins derived from
 	// the server port. Built here (not only inside the console block) so /livez and
@@ -771,22 +793,6 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 		httpServer.Handle(path, f.cors(h))
 	}
 	return f, nil
-}
-
-// mountSocket binds the MCP unix socket at path and mounts mcpHandler at /mcp behind the peer
-// guard, held to the same Need as the loopback /mcp.
-func (f *frame) mountSocket(path string, mcpHandler http.Handler) error {
-	g, err := httpx.SocketPeerGuard(rpcerr.FormatJSON, os.Getuid(), types.CredentialSocketPeer, needMCP, mcpHandler)
-	if err != nil {
-		return fmt.Errorf("serverhttp: mcp socket: %w", err)
-	}
-	srv, err := httpx.NewUnixServer(path)
-	if err != nil {
-		return fmt.Errorf("serverhttp: mcp socket: %w", err)
-	}
-	srv.Handle("/mcp", g)
-	f.socket = srv
-	return nil
 }
 
 // serveUnloaded is Serve for a workspace that did not load. Every route a loaded server

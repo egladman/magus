@@ -107,54 +107,44 @@ current; turning off MCP turns off the endpoint and nothing else.
 The same tools answer on each transport. What differs is who can reach them and what
 proves who they are:
 
-| Transport                  | Where                                 | Credential                                   | Use it for                                                                                           |
-| -------------------------- | ------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| stdio                      | `magus mcp`, launched by the host     | none; the host launched the process as you   | one host driving the workspace it opens, with no server running                                      |
-| Streamable HTTP, socket    | `mcp.sock` in the private runtime dir | the kernel's word that the peer runs as you  | a local client that speaks HTTP over a unix socket and should share the server's warm graph          |
-| Streamable HTTP, loopback  | `http://127.0.0.1:7391/mcp`           | a bearer token holding `mcp=write`           | a client that only takes a URL, runs as another user, or reaches the server through a tunnel or TLS |
+| Transport                 | Where                                    | Credential                                  | Use it for                                                                                          |
+| ------------------------- | ---------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| stdio                     | `magus mcp`, launched by the host        | none; the host launched the process as you  | one host driving the workspace it opens, with no server running                                     |
+| Streamable HTTP, socket   | `/mcp` on the server's own `server.sock` | the kernel's word that the peer runs as you | a local client that speaks HTTP over a unix socket and should share the server's warm graph         |
+| Streamable HTTP, loopback | `http://127.0.0.1:7391/mcp`              | a bearer token holding `mcp=write`          | a client that only takes a URL, runs as another user, or reaches the server through a tunnel or TLS |
 
 Whichever the transport, each tool call is held to `mcp=write` again, and a caller
 below it gets [MGS9015](../../reference/codes/auth/MGS9015.md) as a tool error.
 
-## MCP over the unix socket
+## MCP over the server socket
 
-On Linux and macOS the server also serves `/mcp` on a unix socket in the private (`0700`)
-runtime directory it keeps its sockets in:
+The server has one unix socket, `server.sock` in the private (`0700`) runtime directory,
+and it speaks HTTP. `/mcp` is one path on it, beside the Connect APIs and the control
+operations the CLI uses (see [the server's socket](server.md#two-transports)):
 
 ```text
-$XDG_RUNTIME_DIR/magus/mcp.sock      # or $TMPDIR/magus-<uid>/mcp.sock without XDG_RUNTIME_DIR
+$XDG_RUNTIME_DIR/magus/server.sock      # or $TMPDIR/magus-<uid>/server.sock without XDG_RUNTIME_DIR
 ```
 
 It is Streamable HTTP, like the loopback endpoint, carried over the socket instead of TCP,
-and it takes no token. What admits a caller is the user it runs as: the socket file is
-`0600`, and for every connection the server asks the kernel for the peer's uid
-(`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on macOS) and admits only its own. Any other
-peer, root included, gets `403` [MGS9022](../../reference/codes/auth/MGS9022.md). An
-admitted call carries the `socket-peer` credential, which holds `mcp=write` and nothing
-past it, the grant a connector token holds, and the activity trail records each call
-under it. The socket serves `/mcp` alone: no console, no APIs, no health routes.
-
-`magus server status` lists it beside the HTTP listener, and `-o json` reports it under
-`server.listeners` with kind `mcp-socket`:
-
-```text
-listen  47001  http 127.0.0.1:7391
-listen  47001  mcp-socket /run/user/501/magus/mcp.sock
-```
+and it takes no token. What admits a caller is the user it runs as: for every connection
+the server asks the kernel for the peer's uid (`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on
+macOS) and admits only its own. Any other peer, root included, gets `403`
+[MGS9022](../../reference/codes/auth/MGS9022.md). An admitted call carries the
+`socket-peer` credential, which holds `mcp=write` and `console=write` but never token
+management, and the activity trail records each call under it. On a platform where magus
+cannot read a peer's uid, the socket carries the control operations alone and MCP stays
+on loopback.
 
 To check it by hand, send a handshake with curl:
 
 ```sh
-curl --unix-socket "$XDG_RUNTIME_DIR/magus/mcp.sock" http://localhost/mcp \
+curl --unix-socket "$XDG_RUNTIME_DIR/magus/server.sock" http://magus/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}'
 ```
 
-Turn it off with `mcp.unix_socket: false` (or `MAGUS_MCP_UNIX_SOCKET=0`); the loopback
-endpoint is unaffected. Setting it `true` beside `mcp.enabled: false` is a config error,
-and setting it `true` on a platform where magus cannot read a peer's uid stops the
-server rather than serving a socket nobody could be admitted to. A second server cannot
-take a socket a live one holds; a socket file a crashed server left behind is replaced.
+`mcp.enabled: false` takes `/mcp` off the socket and off loopback alike.
 
 ## Available tools
 
@@ -262,14 +252,6 @@ A non-loopback address (`0.0.0.0:7391` for a Kubernetes health probe, say) sends
 every bearer token in cleartext, so the server refuses to start on one unless you
 also set `mcp.insecure_bind: true` (or `MAGUS_MCP_INSECURE_BIND=true`). Front such
 a listener with TLS or a tunnel.
-
-To serve MCP over loopback HTTP only, without the unix socket:
-
-```yaml
-# magus.yaml
-mcp:
-  unix_socket: false
-```
 
 ## Security: keep this local
 
@@ -388,7 +370,7 @@ logs and history). How you connect depends on the client:
   public `https://` URL and rejects `http://` and loopback addresses. Front the
   server with a TLS tunnel first if you need that path.
 
-The [unix socket](#mcp-over-the-unix-socket) reads no token; the kernel's report of
+The [server socket](#mcp-over-the-server-socket) reads no token; the kernel's report of
 the peer's uid stands in for it, so anything running as you reaches it, just as it
 could read your operator token.
 

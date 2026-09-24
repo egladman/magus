@@ -107,10 +107,12 @@ that is not loopback, judged by the TCP peer address, so even a server bound pas
 loopback with `mcp.insecure_bind` serves only stored tokens to the network.
 
 One credential has no token and no prefix: `socket-peer`, the caller on the
-server's [MCP unix socket](../guides/integrations/mcp.md#mcp-over-the-unix-socket).
-The kernel names the uid of the process on the other end of each connection, and
-the server admits only its own, with `mcp=write` and nothing past it. Any other
-peer gets `403` [MGS9022](../reference/codes/auth/MGS9022.md). The trail records
+server's [unix socket](../guides/integrations/server.md#two-transports). The kernel
+names the uid of the process on the other end of each connection, and the server
+admits only its own, with `mcp=write` and `console=write`. It never holds
+`tokens=write`: a build step runs as the same user and can reach the socket, and a
+token it minted would outlive the run. Any other peer gets `403`
+[MGS9022](../reference/codes/auth/MGS9022.md). The trail records
 its calls with class `socket-peer`, a grant, and no id or name.
 
 The store holds every record to the rules a mint follows, at load: a record that

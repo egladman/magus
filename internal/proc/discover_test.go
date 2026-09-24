@@ -59,7 +59,7 @@ func TestDiscoverSocket_SkipsNonSocketsAndNonMatches(t *testing.T) {
 func TestDecodeWireError(t *testing.T) {
 	// Each server-side error STRING round-trips back to its typed sentinel so
 	// errors.Is keeps working across the wire.
-	for _, sentinel := range []error{ErrProtocolMismatch, ErrVersionMismatch, ErrCycleDetected} {
+	for _, sentinel := range []error{ErrVersionMismatch, ErrCycleDetected} {
 		assert.ErrorIs(t, decodeWireError(sentinel.Error()), sentinel)
 	}
 
@@ -71,7 +71,7 @@ func TestDecodeWireError(t *testing.T) {
 
 	// An unrecognized message becomes a plain error, matching none of the sentinels.
 	plain := decodeWireError("something else entirely")
-	assert.NotErrorIs(t, plain, ErrProtocolMismatch)
+	assert.NotErrorIs(t, plain, ErrVersionMismatch)
 	assert.Equal(t, "something else entirely", plain.Error())
 	assert.False(t, errors.Is(plain, ErrNotAdoptable))
 }

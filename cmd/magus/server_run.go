@@ -58,10 +58,6 @@ var serverStarted time.Time
 // it serves none. The proc Status RPC reads it on every request.
 var serverHTTPAddr atomic.Value // string
 
-// serverMCPSocket is the unix socket the server serves MCP on, empty while it serves none.
-// The proc Status RPC reads it on every request.
-var serverMCPSocket atomic.Value // string
-
 // serverWatch is the workspace roots whose graph and symbol indexes the server keeps
 // current.
 var serverWatch struct {
@@ -90,9 +86,6 @@ func serverInfo(sock string) *types.StatusServer {
 	}
 	if a, _ := serverHTTPAddr.Load().(string); a != "" {
 		st.Listeners = append(st.Listeners, types.StatusListener{Kind: types.ListenerHTTP, Address: a})
-	}
-	if p, _ := serverMCPSocket.Load().(string); p != "" {
-		st.Listeners = append(st.Listeners, types.StatusListener{Kind: types.ListenerMCPSocket, Address: p})
 	}
 	serverWatch.mu.Lock()
 	st.Watch = slices.Clone(serverWatch.roots)

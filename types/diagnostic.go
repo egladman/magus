@@ -429,7 +429,11 @@ const (
 	// PipeCycle is a run whose standard input is written, through a chain of processes
 	// holding at least one other magus, by itself. Each would wait for the one before it to settle its locks,
 	// so none ever would; the run is refused before it takes any lock.
-	PipeCycle                 DiagnosticCode = "MGS3023"
+	PipeCycle DiagnosticCode = "MGS3023"
+	// ServerProtocolOutdated is a client that reached a magus server, or a per-process pool,
+	// still speaking the socket protocol from before it carried HTTP: a process started by an
+	// older magus. Restarting it is the fix.
+	ServerProtocolOutdated    DiagnosticCode = "MGS3025"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -595,7 +599,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
-	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle,
+	PreflightFailed, PreflightOutsideClosure, BrokerUnavailable, PipeCycle, ServerProtocolOutdated,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit,

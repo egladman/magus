@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
-	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
@@ -48,19 +47,6 @@ func mcpAddrPort() (netip.AddrPort, error) {
 // address to probe.
 func mcpAddrString() string {
 	return mcpAddress(globalCfg.MCP)
-}
-
-// mcpSocketPath is the unix socket the server serves MCP on, "" for none: mcp.unix_socket
-// false, or unset where a socket peer's uid cannot be read. Set true there, it is still the
-// path, so the bind refuses loudly instead of the setting going unhonored.
-func mcpSocketPath(m config.MCP) string {
-	if m.UnixSocket != nil && !*m.UnixSocket {
-		return ""
-	}
-	if m.UnixSocket == nil && !httpx.PeerCredentialsSupported() {
-		return ""
-	}
-	return proc.MCPSocketPath()
 }
 
 // mcpCmd serves MCP over stdin and stdout for the agent host that launched it, against the
@@ -161,8 +147,8 @@ func publishServerTrailBase() {
 }
 
 // startBridge opens the server's own workspace, keeps its graph and symbol indexes
-// current, and serves MCP and the console over HTTP, and MCP on its unix socket unless
-// mcp.unix_socket says otherwise, when mcp.enabled allows. Called from
+// current, and serves MCP, the console and the APIs over loopback HTTP, and MCP and the APIs
+// on the server's own socket, when mcp.enabled allows. Called from
 // the server surface. cancel is the CancelFunc for the server's context; it is called if
 // the HTTP server exits for any reason other than ctx cancellation, so the server shuts
 // down rather than running on with MCP unavailable.
@@ -207,7 +193,6 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 			slog.String("root", root), slog.String("error", err.Error()))
 		serverRegistry.failBridge(root, err)
 		serverHTTPAddr.Store(addr.String())
-		serverMCPSocket.Store(mcpSocketPath(globalCfg.MCP))
 		go serveUnloadedBridge(ctx, cancel, root, addr)
 		return
 	}
@@ -223,7 +208,6 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 		return
 	}
 	serverHTTPAddr.Store(addr.String())
-	serverMCPSocket.Store(mcpSocketPath(globalCfg.MCP))
 	serveBridge(ctx, cancel, m, addr)
 }
 
@@ -338,8 +322,9 @@ func bridgeServerOptions() []serverhttp.Option {
 	if serverRegistry != nil {
 		opts = append(opts, serverhttp.WithActivityWorkspaces(serverRegistry.activityWorkspaces))
 	}
-	if sock, _ := serverMCPSocket.Load().(string); sock != "" {
-		opts = append(opts, serverhttp.WithMCPSocket(sock))
+	// The server's own socket carries MCP and the APIs beside its control routes.
+	if procServer != nil {
+		opts = append(opts, serverhttp.WithSocket(procServer))
 	}
 	return opts
 }

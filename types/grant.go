@@ -83,6 +83,8 @@ var (
 	GrantConnector = Grant{MCP: LevelWrite}
 	GrantConsole   = Grant{Console: LevelWrite}
 	GrantViewer    = Grant{Console: LevelRead}
+	// GrantSocketPeer is never minted: it is what a same-user peer on a magus unix socket holds.
+	GrantSocketPeer = Grant{MCP: LevelWrite, Console: LevelWrite}
 )
 
 // Level returns the grant's level on s, and LevelNone for a surface it does not know.
@@ -192,9 +194,9 @@ const (
 	// return it. The host started the process as the local user, the trust the CLI itself
 	// runs on.
 	ClassStdio CredentialClass = "stdio"
-	// ClassSocketPeer is a process connected to the server's MCP unix socket whose uid, as the
-	// kernel reports it for the connection, is the server's own. It presents no token, so no
-	// bearer verifier can return it.
+	// ClassSocketPeer is a process connected to a magus unix socket whose uid, as the kernel
+	// reports it for the connection, is the server's own. It presents no token, so no bearer
+	// verifier can return it.
 	ClassSocketPeer CredentialClass = "socket-peer"
 )
 
@@ -203,10 +205,12 @@ const (
 // process serves one caller.
 var CredentialStdio = Credential{Class: ClassStdio, Grant: GrantConnector}
 
-// CredentialSocketPeer is what a request on the MCP unix socket is admitted as once its peer's
-// uid matches the server's: the MCP surface and nothing past it, the grant a connector token
-// holds. It has no ID because it has no secret.
-var CredentialSocketPeer = Credential{Class: ClassSocketPeer, Grant: GrantConnector}
+// CredentialSocketPeer is what a request on a magus unix socket is admitted as once its peer's
+// uid matches the server's: MCP and the console surfaces, never token management. A build step
+// runs as the same user and can reach the socket, and minting a token would let it keep access
+// past the run, which is also why landlock keeps it from the operator file. It has no ID
+// because it has no secret.
+var CredentialSocketPeer = Credential{Class: ClassSocketPeer, Grant: GrantSocketPeer}
 
 // Credential is what a request was admitted as, a bearer the server verified, [CredentialStdio]
 // or [CredentialSocketPeer]: what it is, which one, what its owner called it, and what it may
@@ -237,7 +241,7 @@ func (c Credential) Phrase() string {
 	case c.Class == ClassStdio:
 		return "stdio"
 	case c.Class == ClassSocketPeer:
-		return "the MCP socket's owner"
+		return "the socket's owner"
 	case c.Name != "" && c.ID != "":
 		return "token " + c.Name + " (" + c.ID + ")"
 	case c.Name != "":

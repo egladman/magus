@@ -83,7 +83,7 @@ message Server {
 
 // Listener is one address the server accepts connections on.
 message Listener {
-  string kind = 1;     // socket | http | mcp-socket
+  string kind = 1;     // socket | http
   string address = 2;
 }
 
