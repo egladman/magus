@@ -75,7 +75,7 @@ generated file, a candidate tree or a review proof from a verdict.
   plain merge, gives exactly that merge's tree.
 - **Candidates share nothing.** Each candidate gets a checkout and a scratch directory
   of its own (`MERGEQUEUE_SCRATCH`), so no change's hook can plant a cache entry another
-  candidate's gate replays; `tools/queue.buzz` points magus's and Go's caches there. Every
+  candidate's gate replays; `tools/gha-queue.buzz` points magus's and Go's caches there. Every
   process a hook starts is killed when the hook exits, before its verdict is recorded; a
   process that leaves the hook's process group ends with the CI job.
 

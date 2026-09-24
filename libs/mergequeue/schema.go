@@ -53,6 +53,26 @@ func WriteChanges(w io.Writer, c types.Changes) error {
 	return json.NewEncoder(w).Encode(c)
 }
 
+// capabilitiesDoc is a provider's capabilities on one base, as a document.
+type capabilitiesDoc struct {
+	Schema       string              `json:"schema"`
+	Base         string              `json:"base"`
+	StackMerge   types.StackMerge    `json:"stack_merge"`
+	LinearStacks bool                `json:"linear_stacks"`
+	Methods      []types.MergeMethod `json:"methods"`
+	QueueLabel   string              `json:"queue_label,omitempty"`
+}
+
+// WriteCapabilities checks c and encodes what the provider supports on base, on one
+// line.
+func WriteCapabilities(w io.Writer, base string, c types.Capabilities) error {
+	if err := c.Check(); err != nil {
+		return fmt.Errorf("%s: %w", types.SchemaCapabilities, err)
+	}
+	return json.NewEncoder(w).Encode(capabilitiesDoc{Schema: types.SchemaCapabilities, Base: base, StackMerge: c.StackMerge,
+		LinearStacks: c.LinearStacks, Methods: c.Methods, QueueLabel: c.QueueLabel})
+}
+
 // WritePlan checks p and encodes it, stamping its schema.
 func WritePlan(w io.Writer, p types.Plan) error {
 	if err := p.Check(); err != nil {

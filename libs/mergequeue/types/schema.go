@@ -8,6 +8,9 @@ const (
 	SchemaChanges = "mergequeue.changes/v1"
 	SchemaPlan    = "mergequeue.plan/v1"
 	SchemaVerdict = "mergequeue.verdict/v1"
+	// SchemaCapabilities names what `magus queue describe` prints: a provider's
+	// [Capabilities] on one base.
+	SchemaCapabilities = "mergequeue.capabilities/v1"
 )
 
 // Changes is the queue's input: the changes carrying merge intent, in queue order.
@@ -100,6 +103,7 @@ const (
 	CodeWaitMethodChanged   Code = "WAIT_METHOD_CHANGED"   // its merge method changed since validation
 	CodeWaitWithdrawn       Code = "WAIT_WITHDRAWN"        // its merge intent was withdrawn since it was listed
 	CodeWaitUnqueuedBelow   Code = "WAIT_UNQUEUED_BELOW"   // it carries the commits of an open change nobody queued
+	CodeWaitNoCommitter     Code = "WAIT_NO_COMMITTER"     // it needs an update commit, and nothing names who commits it
 
 	CodeKickConflict Code = "KICK_CONFLICT" // a real conflict with the base in files that are not generated
 	CodeKickRed      Code = "KICK_RED"      // the gate was red on its candidate
@@ -111,7 +115,7 @@ func (c Code) decision() Decision {
 	switch c {
 	case CodeWaitNotApproved, CodeWaitHeadMoved, CodeWaitBehind, CodeWaitConflictAhead, CodeWaitRevalidate,
 		CodeWaitBranchMoved, CodeWaitProviderRefused, CodeWaitBelow, CodeWaitBelowKicked, CodeWaitRestack,
-		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow:
+		CodeWaitRetarget, CodeWaitMethodChanged, CodeWaitWithdrawn, CodeWaitUnqueuedBelow, CodeWaitNoCommitter:
 		return DecisionWait
 	case CodeKickConflict, CodeKickRed, CodeKickRefused:
 		return DecisionKick

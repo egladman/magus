@@ -57,6 +57,8 @@ final READ_REF = "GITHUB_TOKEN";
 final WRITE_REF = "MERGEQUEUE_TOKEN";
 // The label on a stack's top pull request that queues the stack, followed by a method.
 final QUEUE_LABEL = "queue: ";
+// Who commits what the queue pushes to a pull request's branch: the Actions bot.
+final COMMITTER = {"name": "github-actions[bot]", "email": "41898282+github-actions[bot]@users.noreply.github.com"};
 // Roles whose label queues a stack: the ones that can enable auto-merge.
 final QUEUE_ROLES = ["admin", "maintain", "write"];
 // How many pages of an issue timeline the labeler check reads before it gives up and
@@ -242,7 +244,7 @@ fun describeFrom(body: str) > any !> any {
     if (r.q("allow_rebase_merge").booleanValue()) {
         methods.append("rebase");
     }
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": methods};
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": methods, "queue_label": QUEUE_LABEL, "committer": COMMITTER};
 }
 
 export fun describe(io: {str: any}) > any !> any {
@@ -1090,6 +1092,9 @@ test "describe lists the methods the repository allows" {
     final got = describeFrom(`{"allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": true}`);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "allowed methods");
     assert\equal(got["stack_merge"], want: "atomic", message: "GitHub merges a stack in one call");
+    assert\equal(got["queue_label"], want: "queue: ", message: "the label a stack is queued by, before its method");
+    assert\equal(got["committer"], want: COMMITTER, message: "the Actions bot commits");
+    assert\equal(COMMITTER["email"], want: "41898282+github-actions[bot]@users.noreply.github.com", message: "the bot's noreply address");
 }
 
 test "the merge carries the queued method and the author's title, pinned to the sha" {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+
+	magustypes "github.com/egladman/magus/types"
 )
 
 // Provider is where changes are reviewed and merged, GitHub and the like. Planning
@@ -93,6 +95,12 @@ type Capabilities struct {
 	// its base, so an update commit the queue pushes there is linear too.
 	LinearStacks bool
 	Methods      []MergeMethod // the merge methods the repository allows
+	// QueueLabel is the prefix of the label that queues a change, followed by its merge
+	// method ("queue: squash"); empty when the provider queues changes some other way.
+	QueueLabel string
+	// Committer is the identity the provider's automation pushes as, which commits what
+	// the queue writes to a change's branch. Zero when the provider names none.
+	Committer magustypes.Person
 }
 
 // Check reports whether c names a known stack merge and at least one valid merge method.
@@ -107,6 +115,9 @@ func (c Capabilities) Check() error {
 		if !m.Valid() {
 			return fmt.Errorf("provider allows merge method %q, want merge, squash or rebase", m)
 		}
+	}
+	if c.Committer != (magustypes.Person{}) && (c.Committer.Name == "" || c.Committer.Email == "") {
+		return fmt.Errorf("provider names committer %q <%s>, which needs a name and an email", c.Committer.Name, c.Committer.Email)
 	}
 	return nil
 }

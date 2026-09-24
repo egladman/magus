@@ -2998,7 +2998,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     //                   dead - on a file that signs with MAGUS_REGISTRY_KEY.
     //
     // The MODE is per file, not per directory, because tools/ is not uniform.
-    // registry.buzz and queue.buzz are invoked bare by workflows, so they are the ones
+    // registry.buzz and gha-queue.buzz are invoked bare by workflows, so they are the ones
     // that have to survive strict; advisories, drift and toolchain-policy are magusfile imports and
     // therefore always embedded, and running THEM strict would fail a top-level `if`
     // or an unlabeled second argument that is legal everywhere they actually load - a
@@ -3008,7 +3008,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         cover_for(mod.value, ["--embedded"], {});
     }
     foreach (mod in fs\glob("tools/*.buzz")) {
-        if (mod.value == "tools/registry.buzz" or mod.value == "tools/queue.buzz") {
+        if (mod.value == "tools/registry.buzz" or mod.value == "tools/gha-queue.buzz") {
             cover_for(mod.value, [], {});
         } else {
             cover_for(mod.value, ["--embedded"], {});

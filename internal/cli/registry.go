@@ -1601,10 +1601,19 @@ validation run as the provider names it (github: <owner>/<name>/runs/<id>).
 The checkout is the one at the global --root (default: the current directory),
 and every relative path resolves against it. The provider is a built-in name
 (github) or a Buzz script. Every verb prints JSONL events (mergequeue.event/v1)
-on stdout; ls prints the changes document instead. The global --dry-run makes
+on stdout; ls and describe print their document instead. The global --dry-run makes
 apply report what would merge and call nothing on the provider.`,
-	Usage: "magus queue <ls|plan|validate|apply> [flags]",
+	Usage: "magus queue <describe|ls|plan|validate|apply> [flags]",
 	Children: []Command{
+		{
+			Name:  "describe",
+			Short: "Ask the provider what it supports on a base: its merge methods and how a change is queued; prints a mergequeue.capabilities/v1 document",
+			Usage: "magus queue describe --provider <provider> --base <branch> [flags]",
+			Flags: append([]Flag{
+				{Name: "provider", Kind: FlagString, Doc: "`provider`: a built-in name (github) or a .buzz file"},
+				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
+			}, queueCheckout...),
+		},
 		{
 			Name:  "ls",
 			Short: "Ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document",
@@ -1654,6 +1663,7 @@ apply report what would merge and call nothing on the provider.`,
 		},
 	},
 	Examples: []Example{
+		{"See the merge methods and the queue label", "magus queue describe --provider github --base main"},
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
 		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'"},

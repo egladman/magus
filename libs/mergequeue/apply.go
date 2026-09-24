@@ -38,8 +38,9 @@ type Applier struct {
 	Interval time.Duration
 	// DryRun reports what would merge and calls nothing on the provider.
 	DryRun bool
-	// Committer authors and commits every update commit. Zero means the queue's own
-	// identity.
+	// Committer commits every update commit, overriding the committer the provider
+	// names. An update commit that merges the base in or regenerates keeps the change's
+	// author; one that restacks the branch is the committer's own.
 	Committer magustypes.Person
 	// Regenerate is the base's own regeneration. An Applier runs it where validation's
 	// candidate holds regenerated files, and only once the build tool proved it runs
@@ -79,14 +80,10 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 	if err := plan.Check(); err != nil {
 		return err
 	}
-	committer := a.Committer
-	if committer == (magustypes.Person{}) {
-		committer = queueIdentity
+	if a.Committer != (magustypes.Person{}) && (a.Committer.Name == "" || a.Committer.Email == "") {
+		return fmt.Errorf("committer %q <%s> needs a name and an email", a.Committer.Name, a.Committer.Email)
 	}
-	if committer.Name == "" || committer.Email == "" {
-		return fmt.Errorf("committer %q <%s> needs a name and an email", committer.Name, committer.Email)
-	}
-	r := &applyRun{Applier: a, plan: plan, committer: committer, merged: map[string]bool{}, got: map[string]types.Verdict{}, rebuilt: map[string]string{}}
+	r := &applyRun{Applier: a, plan: plan, committer: a.Committer, merged: map[string]bool{}, got: map[string]types.Verdict{}, rebuilt: map[string]string{}}
 	if !a.DryRun {
 		caps, err := a.provider.Describe(ctx, types.ListQuery{Base: plan.Base, RemoteURL: plan.RemoteURL})
 		if err != nil {
@@ -96,6 +93,9 @@ func (a *Applier) Run(ctx context.Context, plan types.Plan) error {
 			return err
 		}
 		r.caps = caps
+		if r.committer == (magustypes.Person{}) {
+			r.committer = caps.Committer
+		}
 	}
 	defer func() {
 		if err := removeCheckoutsUnder(context.WithoutCancel(ctx), a.vcs, a.clone.Root, a.scratch); err != nil {
@@ -633,6 +633,11 @@ func (r *applyRun) hand(ctx context.Context, rd *ready) (bool, error) {
 		return false, r.kick(ctx, c, refusal(refusedErr))
 	case errors.As(err, &held):
 		return false, r.wait(ctx, c, c.Head, held.code, held.reason)
+	case errors.Is(err, types.ErrNoCommitter):
+		if werr := r.wait(ctx, c, c.Head, types.CodeWaitNoCommitter, "needs an update commit, and no committer is configured"); werr != nil {
+			return false, werr
+		}
+		return false, err
 	case err != nil:
 		return false, fmt.Errorf("push the update commit of %s: %w", c.Label(), err)
 	}
@@ -789,6 +794,14 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 		return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs an update commit, and its branch is also the head of " +
 			joinIDs(rd.approval.BranchSharedWith) + ", which would gain it too", Remedy: r.mergeBaseIn()}
 	}
+	if r.committer == (magustypes.Person{}) {
+		return "", types.ErrNoCommitter
+	}
+	head, err := r.vcs.FindCommit(ctx, root, c.Head)
+	if err != nil {
+		return "", err
+	}
+	author := head.Author
 	parents, msg := []string{c.Head, rd.tip}, "merge "+r.plan.Base+" into #"+c.ID+" and regenerate generated files"
 	switch {
 	case c.Method == types.MethodRebase:
@@ -808,12 +821,12 @@ func (r *applyRun) handOver(ctx context.Context, rd *ready) (string, error) {
 			return "", &types.RefusedError{Reason: "its merge onto `" + r.plan.Base + "` needs its branch restacked onto it, which would replace the commits #" + above +
 				" is stacked on", Remedy: "Restack the stack (gh stack rebase, gt restack or av sync) and queue it again."}
 		}
-		parents = []string{rd.tip}
+		parents, author = []string{rd.tip}, r.committer
 		msg = "restack #" + c.ID + " onto " + r.plan.Base + "\n\nReplaces " + c.Head + " and the commits beneath it that " +
 			r.plan.Base + " lacks with one commit holding their delta onto " + short(rd.tip) + "."
 	}
 	update, err := r.vcs.CommitTree(ctx, root, magustypes.TreeCommit{
-		CommitMeta: magustypes.CommitMeta{Message: msg, Author: r.committer, Committer: r.committer},
+		CommitMeta: magustypes.CommitMeta{Message: msg, Author: author, Committer: r.committer},
 		Tree:       rd.tree, Parents: parents,
 	})
 	if err != nil {

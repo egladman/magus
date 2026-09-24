@@ -44,7 +44,7 @@ func queueCmd(ctx context.Context, root string, args []string) error {
 func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
 		queueUsage(stderr)
-		return usagef("magus queue: a subcommand is required (want ls, plan, validate, or apply)")
+		return usagef("magus queue: a subcommand is required (want describe, ls, plan, validate, or apply)")
 	}
 	dir := root
 	if dir == "" {
@@ -57,6 +57,8 @@ func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, 
 	e := &queueEnv{dir: abs, stdin: stdin, stdout: stdout, stderr: stderr}
 	var verb func(context.Context, *queueEnv, []string) error
 	switch args[0] {
+	case "describe":
+		verb = queueDescribe
 	case "ls":
 		verb = queueLs
 	case "plan":
@@ -69,7 +71,7 @@ func runQueue(ctx context.Context, root string, args []string, stdin io.Reader, 
 		queueUsage(stdout)
 		return nil
 	default:
-		return usagef("magus queue: unknown subcommand %q (want ls, plan, validate, or apply)", args[0])
+		return usagef("magus queue: unknown subcommand %q (want describe, ls, plan, validate, or apply)", args[0])
 	}
 	err = verb(ctx, e, args[1:])
 	var misuse errUsage
@@ -83,6 +85,7 @@ func queueUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus queue <subcommand> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
+	fmt.Fprintln(w, "  describe  ask the provider for its merge methods and how a change is queued; prints a mergequeue.capabilities/v1 document")
 	fmt.Fprintln(w, "  ls        ask the provider for the changes carrying merge intent; prints a mergequeue.changes/v1 document")
 	fmt.Fprintln(w, "  plan      check approval, find stacks, drop what conflicts with the base, partition by affected set")
 	fmt.Fprintln(w, "  validate  build and gate a candidate per change, writing each verdict as it is decided (read access only)")
@@ -231,6 +234,34 @@ func (e *queueEnv) openFacts(ctx context.Context, verb string, targetGiven bool,
 		return nil, nil, fmt.Errorf("open the magus workspace at %s (pass --facts for another build tool): %w", e.dir, err)
 	}
 	return ws, ws.Close, nil
+}
+
+func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
+	f, _, _, err := queueParse(e, "describe", "magus queue describe --provider <provider> --base <branch> [flags]", args, gen.BindQueueDescribe)
+	if err != nil {
+		return err
+	}
+	if err := queueRequired("describe", [2]string{"provider", f.Provider}, [2]string{"base", f.Base}); err != nil {
+		return err
+	}
+	drv, cl, err := e.open(ctx, f.Remote, f.VCS)
+	if err != nil {
+		return err
+	}
+	url, err := drv.RemoteURL(ctx, cl.Root, cl.Remote)
+	if err != nil {
+		return err
+	}
+	p, err := e.openProvider(ctx, f.Provider)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: url})
+	if err != nil {
+		return err
+	}
+	return mergequeue.WriteCapabilities(e.stdout, f.Base, caps)
 }
 
 func queueLs(ctx context.Context, e *queueEnv, args []string) error {

@@ -20,9 +20,9 @@ import (
 	magustypes "github.com/egladman/magus/types"
 )
 
-// queueIdentity authors every candidate commit, and every update commit unless an
-// Applier names another. A candidate is never pushed.
-var queueIdentity = magustypes.Person{Name: "merge queue", Email: "queue@mergequeue.invalid"}
+// candidateIdentity authors every candidate commit. A candidate is never pushed, so no
+// one sees it; it is fixed so the same inputs yield the same commit.
+var candidateIdentity = magustypes.Person{Name: "merge queue", Email: "queue@mergequeue.invalid"}
 
 // candidateDate dates every candidate commit, so the same inputs yield the same commit
 // in every job that builds it.
@@ -227,7 +227,7 @@ func mergeIn(ctx context.Context, v types.BuildVCS, s candidateSpec, dir string)
 	c := s.change
 	// The queue's own identity, as on the commit concluding it: the candidate is the
 	// same commit in every job that builds it, whatever the box configures.
-	if err := v.StartMerge(ctx, dir, c.Head, queueIdentity); err != nil {
+	if err := v.StartMerge(ctx, dir, c.Head, candidateIdentity); err != nil {
 		return nil, err
 	}
 	conflicts, err := v.Conflicts(ctx, dir)
@@ -299,7 +299,7 @@ func regenerateIn(ctx context.Context, v types.BuildVCS, s candidateSpec, b buil
 }
 
 func queueMeta(msg string) magustypes.CommitMeta {
-	return magustypes.CommitMeta{Message: msg, Author: queueIdentity, Committer: queueIdentity, Date: candidateDate}
+	return magustypes.CommitMeta{Message: msg, Author: candidateIdentity, Committer: candidateIdentity, Date: candidateDate}
 }
 
 // predict is the tree the base carries once the candidate built onto onto merges onto

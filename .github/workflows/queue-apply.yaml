@@ -86,4 +86,4 @@ jobs:
           MERGEQUEUE_TOKEN: ${{ github.token }}
           RUN: ${{ github.event.workflow_run.id }}
           MAIN: ${{ github.event.repository.default_branch }}
-        run: magus buzz tools/queue.buzz
+        run: magus buzz tools/gha-queue.buzz

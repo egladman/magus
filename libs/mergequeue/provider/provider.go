@@ -203,8 +203,16 @@ func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabil
 	var c types.Capabilities
 	var sm string
 	var methods []string
-	if err := r.decode(required("stack_merge", &sm), required("linear_stacks", &c.LinearStacks), required("methods", &methods)); err != nil {
+	var committer map[string]string
+	if err := r.decode(required("stack_merge", &sm), required("linear_stacks", &c.LinearStacks), required("methods", &methods),
+		optional("queue_label", &c.QueueLabel), optional("committer", &committer)); err != nil {
 		return types.Capabilities{}, err
+	}
+	if committer != nil {
+		c.Committer.Name, c.Committer.Email = committer["name"], committer["email"]
+		if c.Committer.Name == "" || c.Committer.Email == "" {
+			return types.Capabilities{}, fmt.Errorf("%s: field %q needs a name and an email", r.where, "committer")
+		}
 	}
 	c.StackMerge = types.StackMerge(sm)
 	for _, s := range methods {

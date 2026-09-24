@@ -64,10 +64,10 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 	d.vcs.EXPECT().TreeID(mock.Anything, clone.Root, onto).Return("tip tree", nil)
 	recorded := head("recorded")
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
-		CommitMeta: magustypes.CommitMeta{Message: "merge queue: #2 is stacked on " + parent.Head[:12], Author: queueIdentity, Committer: queueIdentity, Date: candidateDate},
+		CommitMeta: magustypes.CommitMeta{Message: "merge queue: #2 is stacked on " + parent.Head[:12], Author: candidateIdentity, Committer: candidateIdentity, Date: candidateDate},
 		Tree:       "tip tree", Parents: []string{onto, parent.Head}}).Return(recorded, nil)
 	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded).Return(nil)
-	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, queueIdentity).Return(nil)
+	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil)
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil)
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #2")}).Return(head("cand"), nil)
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, onto, head("cand")).Return([]string{"lib/x.txt"}, nil)
@@ -114,7 +114,7 @@ func TestMergeInSettlesConflictsInGeneratedFilesAndRefusesTheRest(t *testing.T) 
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newDoubles(t)
-			d.vcs.EXPECT().StartMerge(mock.Anything, "/co", c.Head, queueIdentity).Return(nil)
+			d.vcs.EXPECT().StartMerge(mock.Anything, "/co", c.Head, candidateIdentity).Return(nil)
 			d.vcs.EXPECT().Conflicts(mock.Anything, "/co").Return(tc.conflicts, nil)
 			d.facts.EXPECT().Outputs(mock.Anything, conflictPaths(tc.conflicts)).Return(tc.outputs, nil)
 			tc.settle(d)

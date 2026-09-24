@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/libs/mergequeue/types"
+	magustypes "github.com/egladman/magus/types"
 )
 
 // The GitHub provider's own `test` blocks, run on the same VM surface the queue gives it.
@@ -49,7 +50,8 @@ import "std";
 import "serialize";
 
 export fun describe(io: {str: any}) > any {
-    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "{io["base"]}"]};
+    return {"stack_merge": "atomic", "linear_stacks": true, "methods": ["squash", "{io["base"]}"], "queue_label": "queue: ",
+        "committer": {"name": "bot", "email": "bot@example.com"}};
 }
 
 export fun list_changes(io: {str: any}) > any {
@@ -109,7 +111,8 @@ func TestDescribeDecodesWhatTheProviderSupports(t *testing.T) {
 	got, err := open(t, script).Describe(context.Background(), types.ListQuery{Base: "merge"})
 	require.NoError(t, err)
 	assert.Equal(t, types.Capabilities{StackMerge: types.StackMergeAtomic, LinearStacks: true,
-		Methods: []types.MergeMethod{types.MethodSquash, types.MethodMerge}}, got)
+		Methods: []types.MergeMethod{types.MethodSquash, types.MethodMerge}, QueueLabel: "queue: ",
+		Committer: magustypes.Person{Name: "bot", Email: "bot@example.com"}}, got)
 }
 
 func TestListChangesDecodesEveryFieldAndTheMergedAndUnqueuedChanges(t *testing.T) {

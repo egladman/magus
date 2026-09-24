@@ -119,18 +119,24 @@ func (d doubles) tip(commit string) {
 	d.vcs.EXPECT().FetchRef(mock.Anything, clone.Root, clone.Remote, "refs/heads/main").Return(commit, nil)
 }
 
-// caps describes a provider merging one change per call with methods.
+// bot is the committer the provider names, and author wrote every change's head.
+var (
+	bot    = magustypes.Person{Name: "bot", Email: "bot@example.com"}
+	author = magustypes.Person{Name: "author", Email: "author@example.com"}
+)
+
+// caps describes a provider merging one change per call with methods, committing as bot.
 func (d doubles) caps(methods ...types.MergeMethod) {
 	if len(methods) == 0 {
 		methods = []types.MergeMethod{types.MethodSquash}
 	}
 	d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main"}).
-		Return(types.Capabilities{StackMerge: types.StackMergeSequential, Methods: methods}, nil)
+		Return(types.Capabilities{StackMerge: types.StackMergeSequential, Methods: methods, Committer: bot}, nil)
 }
 
-// plain says commit has one parent, so a review of it covers it.
+// plain says commit has one parent, so a review of it covers it, and author wrote it.
 func (d doubles) plain(commit string) {
-	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, commit).Return(magustypes.Commit{ID: commit, Parents: []string{base}}, nil)
+	d.vcs.EXPECT().FindCommit(mock.Anything, clone.Root, commit).Return(magustypes.Commit{ID: commit, Parents: []string{base}, Author: author}, nil)
 }
 
 // noCheckouts is the cleanup a validator or an applier runs, finding nothing left.
@@ -157,7 +163,7 @@ func (d doubles) builds(b building) *checkouts {
 			co.onto[dir] = rev
 			return nil
 		}).Maybe()
-	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, mock.Anything, queueIdentity).
+	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, mock.Anything, candidateIdentity).
 		RunAndReturn(func(_ context.Context, dir, rev string, _ magustypes.Person) error {
 			co.mu.Lock()
 			defer co.mu.Unlock()

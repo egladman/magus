@@ -102,6 +102,7 @@ var commandsWithoutOutput = map[string]bool{
 	"notes edit":               true,
 	"notes promote":            true,
 	"queue apply":              true,
+	"queue describe":           true,
 	"queue ls":                 true,
 	"queue plan":               true,
 	"queue validate":           true,

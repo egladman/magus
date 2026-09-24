@@ -41,6 +41,7 @@ func TestVerdictCheckRefusesACodeThatContradictsItsDecision(t *testing.T) {
 	for _, v := range []Verdict{
 		{Change: change("1"), Decision: DecisionKick, Code: CodeKickConflict},
 		{Change: change("1"), Decision: DecisionWait, Code: CodeWaitUnqueuedBelow},
+		{Change: change("1"), Decision: DecisionWait, Code: CodeWaitNoCommitter},
 		{Change: change("1"), Decision: DecisionMerged},
 		green("1"),
 	} {

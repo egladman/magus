@@ -86,7 +86,7 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # Every step's logic is tools/queue.buzz, selected by QUEUE_STEP.
+      # Every step's logic is tools/gha-queue.buzz, selected by QUEUE_STEP.
       # Speculation depth: the first DEPTH changes of each partition get a validate job;
       # the rest wait for the run the next merge starts.
       - id: plan
@@ -95,7 +95,7 @@ jobs:
           QUEUE_STEP: plan
           GITHUB_TOKEN: ${{ github.token }}
           DEPTH: '3'
-        run: magus buzz tools/queue.buzz
+        run: magus buzz tools/gha-queue.buzz
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -145,13 +145,13 @@ jobs:
       # Pull request refs are fetched over the checkout's remote, which carries no
       # credential; the repository is public, so the read needs none.
       # Every hook keeps its caches in its own candidate's scratch directory
-      # (tools/queue.buzz), so no change beneath this one can plant a cache entry its
+      # (tools/gha-queue.buzz), so no change beneath this one can plant a cache entry its
       # gate replays as green.
       - name: Validate #${{ matrix.change }}
         env:
           QUEUE_STEP: validate
           CHANGE: ${{ matrix.change }}
-        run: magus buzz tools/queue.buzz
+        run: magus buzz tools/gha-queue.buzz
 
       # The directory's contents become the artifact's root: verdict.json.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

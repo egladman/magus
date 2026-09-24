@@ -1,10 +1,11 @@
-// The merge queue's workflow steps, here so .github/workflows/queue.yaml and
-// queue-apply.yaml carry no shell of their own. Each step is one invocation of `magus
+// This repository's GitHub Actions steps for the merge queue, here so
+// .github/workflows/queue.yaml and queue-apply.yaml carry no shell of their own. It is
+// this repository's glue, not part of magus. Each step is one invocation of `magus
 // queue`, the magus the workflow built from main:
 //
-//	QUEUE_STEP=plan      magus buzz tools/queue.buzz   plan the queue; write the validation matrix (DEPTH)
-//	QUEUE_STEP=validate  magus buzz tools/queue.buzz   validate one change of the plan (CHANGE)
-//	QUEUE_STEP=apply     magus buzz tools/queue.buzz   merge what validation run RUN uploads onto MAIN
+//	QUEUE_STEP=plan      magus buzz tools/gha-queue.buzz   plan the queue; write the validation matrix (DEPTH)
+//	QUEUE_STEP=validate  magus buzz tools/gha-queue.buzz   validate one change of the plan (CHANGE)
+//	QUEUE_STEP=apply     magus buzz tools/gha-queue.buzz   merge what validation run RUN uploads onto MAIN
 //
 // The step is an environment variable because `magus buzz` passes a script no
 // arguments; every input is one too. The decisions (which changes the matrix holds,
@@ -93,10 +94,9 @@ export fun validateArgs(dir: str, change: str) > [str] {
 // which GitHub limits to 1,000 an hour per repository. The regeneration is main's own,
 // run in magus's sandbox on exactly the projects that generate the files a merge needs
 // regenerated; the queue runs it only once the workspace proves the change touches none
-// of their code. The queue makes each update commit it pushes to a queued branch.
+// of their code. The provider names who commits each update commit the queue pushes.
 export fun applyArgs(run: str, repo: str) > [str] {
     return ["queue", "apply", "--provider", "github", "--status-context", "magus/queue", "--interval", "15s",
-        "--committer", "magus-queue <magus-queue@users.noreply.github.com>",
         "--regenerate", private(`MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`), "run:{repo}/runs/{run}"];
 }
 
@@ -217,7 +217,7 @@ test "validation hooks see MERGEQUEUE_ONTO unexpanded and keep their caches priv
 
 test "apply follows the validation run as its source and regenerates in the sandbox" {
     assert\equal(applyArgs("99", repo: "o/r"), want: ["queue", "apply", "--provider", "github", "--status-context", "magus/queue",
-        "--interval", "15s", "--committer", "magus-queue <magus-queue@users.noreply.github.com>",
+        "--interval", "15s",
         "--regenerate", private(`MAGUS_SANDBOX_ENABLED=1 magus run generate:rw $MERGEQUEUE_UNITS`), "run:o/r/runs/99"], message: "argv");
 }
 

@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"errors"
 
 	magustypes "github.com/egladman/magus/types"
 )
@@ -107,6 +108,11 @@ type Regeneration struct {
 // one, a generated file both sides changed keeps the change's side, and one either side
 // deleted stays deleted.
 type RegenerateFunc func(ctx context.Context, r Regeneration) error
+
+// ErrNoCommitter stops applying when a change needs an update commit and neither the
+// provider nor the applier's configuration names who commits it. The change waits with
+// [CodeWaitNoCommitter].
+var ErrNoCommitter = errors.New("no committer for the update commit: the provider names none and none was configured")
 
 // RefusedError is a refusal the author has to fix, such as a regeneration that failed on
 // the change's code. The change is kicked back with Reason, Paths name the files at issue

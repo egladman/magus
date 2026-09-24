@@ -55,7 +55,7 @@ func approvedAs(c types.Change) types.Approval {
 // touched.
 func (d doubles) rebuilds(c types.Change, onto, made string, touched ...string) {
 	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, onto).Return(nil).Once()
-	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, queueIdentity).Return(nil).Once()
+	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil).Once()
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil).Once()
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #" + c.ID)}).Return(made, nil).Once()
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, onto, made).Return(touched, nil).Once()
@@ -188,7 +188,8 @@ func TestEveryMergeMethodMustMergeInItsOwnShape(t *testing.T) {
 
 // I14: where the provider's own merge would differ from the validated tree in declared
 // outputs alone, applying pushes an update commit whose tree is the validated one on the
-// head and the tip, made by the queue, under a lease on the head, and merges that.
+// head and the tip, authored by the change's author and committed by the provider's
+// committer, under a lease on the head, and merges that.
 func TestAnUpdateCommitIsTheValidatedTreeOnTheHeadAndTheTip(t *testing.T) {
 	d := newDoubles(t)
 	c := change("1", "a")
@@ -207,7 +208,7 @@ func TestAnUpdateCommitIsTheValidatedTreeOnTheHeadAndTheTip(t *testing.T) {
 	d.vcs.EXPECT().RangeFiles(mock.Anything, clone.Root, base, c.Head, []string(nil)).Return([]string{"a/x.go"}, nil)
 	d.facts.EXPECT().Generation(mock.Anything, []string{"gen/x.go"}, []string{"a/x.go"}).Return(types.Generation{Units: []string{"gen"}}, nil)
 	d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, magustypes.TreeCommit{
-		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 and regenerate generated files", Author: queueIdentity, Committer: queueIdentity},
+		CommitMeta: magustypes.CommitMeta{Message: "merge main into #1 and regenerate generated files", Author: author, Committer: bot},
 		Tree:       "validated", Parents: []string{c.Head, base}}).Return(update, nil)
 	push := d.vcs.EXPECT().Push(mock.Anything, clone.Root, magustypes.PushLease{Remote: clone.Remote, Ref: "refs/heads/feature", To: update, Expected: c.Head}).Return(nil).Call
 	d.status(c, update, types.StatePending, "applying candidate")
@@ -236,9 +237,9 @@ func (d doubles) waits(c types.Change, commit, reason string) {
 	d.status(c, commit, types.StatePending, "waiting: "+reason)
 }
 
-// updating sets up c's merge up to the update commit it needs.
+// updating sets up c's merge up to the update commit it needs, after the provider was
+// described.
 func (d doubles) updating(c types.Change, v types.Verdict) {
-	d.caps()
 	d.bases(base)
 	d.rechecks(c, types.Approval{Approved: true, Head: c.Head, Base: "main", Method: c.Method, Queued: true, BranchSharedWith: sharedWith[c.ID]})
 	d.rebuilds(c, base, v.CandidateCommit, "gen/x.go")
@@ -251,6 +252,51 @@ func (d doubles) updating(c types.Change, v types.Verdict) {
 }
 
 var sharedWith = map[string][]string{"shared": {"9"}}
+
+// An update commit keeps the change's author. The committer is the provider's unless
+// one was configured, and with neither the change waits and applying stops, since every
+// change after it would need one too.
+func TestAnUpdateCommitIsCommittedByTheConfiguredCommitterElseTheProviders(t *testing.T) {
+	override := magustypes.Person{Name: "Release Bot", Email: "release@example.com"}
+	for name, tc := range map[string]struct {
+		configured magustypes.Person
+		named      magustypes.Person
+		want       magustypes.Person
+	}{
+		"the provider's":             {named: bot, want: bot},
+		"a configured one overrides": {configured: override, named: bot, want: override},
+		"a configured one alone":     {configured: override, want: override},
+		"none":                       {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := newDoubles(t)
+			c := change("1", "a")
+			c.Branch = "feature"
+			v := validated(c, base, "")
+			d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main"}).
+				Return(types.Capabilities{StackMerge: types.StackMergeSequential, Methods: []types.MergeMethod{types.MethodSquash}, Committer: tc.named}, nil)
+			d.updating(c, v)
+			if tc.want == (magustypes.Person{}) {
+				d.waits(c, c.Head, "needs an update commit, and no committer is configured")
+			} else {
+				d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, mock.MatchedBy(func(tc2 magustypes.TreeCommit) bool {
+					return tc2.Author == author && tc2.Committer == tc.want
+				})).Return(head("update"), nil)
+				d.vcs.EXPECT().Push(mock.Anything, clone.Root, mock.Anything).Return(fmt.Errorf("push: %w", magustypes.ErrStaleLease))
+				d.waits(c, c.Head, "its branch moved")
+			}
+			a := applierFor(t, d, planOf([]types.Change{c}), v)
+			a.Committer = tc.configured
+			a.Regenerate = func(context.Context, types.Regeneration) error { return nil }
+			err := a.Run(t.Context(), planOf([]types.Change{c}))
+			if tc.want == (magustypes.Person{}) {
+				require.ErrorIs(t, err, types.ErrNoCommitter)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
 
 // An update commit goes only where the queue may push it, and only to the change it is
 // for: a branch it cannot push to, or one another open change is headed at, sends the
@@ -275,6 +321,7 @@ func TestAnUpdateCommitGoesOnlyWhereItBelongs(t *testing.T) {
 			c := change(tc.id, "a")
 			c.Branch = tc.branch
 			v := validated(c, base, "")
+			d.caps()
 			d.updating(c, v)
 			if tc.pushed {
 				d.vcs.EXPECT().CommitTree(mock.Anything, clone.Root, mock.Anything).Return(head("update"), nil)
@@ -801,7 +848,7 @@ func FuzzRetarget(f *testing.F) {
 // merge of c brings back what m's squash left out and c's own delta from m does not.
 func (d doubles) restacking(c types.Change, m types.MergedChange, v types.Verdict) {
 	d.provider.EXPECT().Describe(mock.Anything, types.ListQuery{Base: "main"}).
-		Return(types.Capabilities{StackMerge: types.StackMergeSequential, LinearStacks: true, Methods: []types.MergeMethod{types.MethodSquash}}, nil)
+		Return(types.Capabilities{StackMerge: types.StackMergeSequential, LinearStacks: true, Methods: []types.MergeMethod{types.MethodSquash}, Committer: bot}, nil)
 	d.bases(base)
 	d.rechecks(c, approvedAs(c))
 	// The candidate is built with m recorded as merged into the base, so its natural
@@ -814,7 +861,7 @@ func (d doubles) restacking(c types.Change, m types.MergedChange, v types.Verdic
 		return slices.Equal(tc.Parents, []string{base, m.Head})
 	})).Return(recorded, nil)
 	d.vcs.EXPECT().CreateCheckout(mock.Anything, clone.Root, mock.Anything, recorded).Return(nil)
-	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, queueIdentity).Return(nil)
+	d.vcs.EXPECT().StartMerge(mock.Anything, mock.Anything, c.Head, candidateIdentity).Return(nil)
 	d.vcs.EXPECT().Conflicts(mock.Anything, mock.Anything).Return(nil, nil)
 	d.vcs.EXPECT().Commit(mock.Anything, mock.Anything, magustypes.CheckoutCommit{CommitMeta: queueMeta("merge queue: candidate #" + c.ID)}).Return(v.CandidateCommit, nil)
 	d.vcs.EXPECT().DiffTrees(mock.Anything, clone.Root, base, v.CandidateCommit).Return([]string{"lib/x.txt"}, nil)
@@ -828,8 +875,8 @@ func (d doubles) restacking(c types.Change, m types.MergedChange, v types.Verdic
 }
 
 // A restack replaces the branch's commits with one holding their delta. That commit is
-// the queue's: made by the committer, never passed off as the author's, and naming the
-// head it replaces.
+// the queue's: authored and committed by the committer, never passed off as the
+// author's, and naming the head it replaces.
 func TestARestackCommitIsTheQueuesAndNamesWhatItReplaces(t *testing.T) {
 	m := types.MergedChange{ID: "9", Head: head("m9"), Commit: head("m9 on base"), Method: types.MethodSquash}
 	c := change("1", "a")
@@ -837,7 +884,6 @@ func TestARestackCommitIsTheQueuesAndNamesWhatItReplaces(t *testing.T) {
 	v := validated(c, base, "")
 	plan := planOf([]types.Change{c})
 	plan.Merged = []types.MergedChange{m}
-	bot := magustypes.Person{Name: "Merge Bot", Email: "bot@example.invalid"}
 
 	d := newDoubles(t)
 	d.restacking(c, m, v)
@@ -855,7 +901,6 @@ func TestARestackCommitIsTheQueuesAndNamesWhatItReplaces(t *testing.T) {
 	d.mergesAt(c, update, v.Message, after, "validated", base)
 	d.status(c, update, types.StateSuccess, "merged as")
 	a := applierFor(t, d, plan, v)
-	a.Committer = bot
 	require.NoError(t, a.Run(t.Context(), plan))
 }
 
