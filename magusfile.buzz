@@ -17,6 +17,8 @@ import "spells/git/hooks" as githooks;
 // This repository's rules for the agents that work on it; see tools/policy/guard.buzz.
 import "./tools/policy/guard" as agentpolicy;
 magus\guard.command(agentpolicy\judge);
+magus\guard.spawn(agentpolicy\judgeSpawn);
+magus\guard.write(agentpolicy\judgeWrite);
 
 // Host modules: magus layers its methods onto Buzz's stdlib (camelCase).
 import "os";

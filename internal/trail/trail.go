@@ -122,7 +122,7 @@ const (
 	// loaded, tightened by an edit that is live, loosened by one waiting on approval,
 	// settled by approval, or removed. Written only on a change, so the lineage of a
 	// workspace's policy reads as one row per step. The request blob carries each source
-	// path with its working-tree and approved git blob ids, never a source body.
+	// path with its working-tree and approved content ids, never a source body.
 	KindGuardPolicy Kind = "guard_policy"
 )
 

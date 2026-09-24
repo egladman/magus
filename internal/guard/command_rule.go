@@ -1,7 +1,9 @@
 package guard
 
 import (
+	"cmp"
 	"context"
+	"path/filepath"
 
 	"mvdan.cc/sh/v3/syntax"
 
@@ -20,8 +22,9 @@ const workspaceCommandRule = workspaceShellPrefix + "command"
 // broken on every command until someone edits it.
 const advisoryCommandRuleFailed hint.MarkerKind = "workspace-command-failed"
 
-// commandRuleRecord is what the trail keeps about how the workspace command rule judged.
-type commandRuleRecord struct {
+// workspaceRuleRecord is what the trail keeps about how a workspace command or write rule
+// judged.
+type workspaceRuleRecord struct {
 	// decidedBy is the side whose answer stands, "" when the rule changed nothing.
 	decidedBy string
 	failures  []trail.RuleFailure
@@ -44,15 +47,20 @@ type commandRuleInput struct {
 //
 // A command magus itself served stays served: the rule's advice stands down on it as every
 // advisory does, while its deny still holds, like the other workspace-wide denies.
-func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdict, in commandRuleInput, who hookAttribution, at location) (Verdict, commandRuleRecord) {
+func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdict, in commandRuleInput, who hookAttribution, at location) (Verdict, workspaceRuleRecord) {
 	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
-		return verdict, commandRuleRecord{}
+		return verdict, workspaceRuleRecord{}
 	}
 	if verdict.Decision != "pass" && verdict.Decision != "advise" {
-		return verdict, commandRuleRecord{}
+		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.sessionKey())
 	req := commandRequest(ctx, in, who, at, facts)
+	if deps.GitState != nil {
+		if dir, ok := gitPushDir(req.Commands, cmp.Or(at.dir, at.workspace)); ok {
+			req.Git = deps.GitState(ctx, dir)
+		}
+	}
 	bind := func(rule workspace.CommandRule) ruleCall {
 		if rule == nil {
 			return nil
@@ -68,7 +76,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	}
 	asked := askWorkspaceRules(ctx, seamCommand, deps.LoadFailure, resolve, bind(deps.CommandRule))
 	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {
-		return verdict, commandRuleRecord{failures: asked.failures}
+		return verdict, workspaceRuleRecord{failures: asked.failures}
 	}
 	decided := ""
 	if verdict.Decision != "pass" {
@@ -79,7 +87,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 		decided = ""
 	}
 	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamCommand, asked.failures, asked.answered)
-	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), commandRuleRecord{decidedBy: decided, failures: asked.failures}
+	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 
 // commandRequest normalizes one shell command for the workspace rule. Every field is read
@@ -97,6 +105,30 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 		Role:        role,
 		Lease:       lease,
 	}
+}
+
+// gitPushDir is the directory the first `git push` on a line runs in, the one command whose
+// rule needs the checkout's git state: dir, moved by each `-C` git is given, as git
+// applies them. False when the line pushes nothing.
+func gitPushDir(cmds []types.CommandInvocation, dir string) (string, bool) {
+	for _, c := range cmds {
+		if c.Program != "git" {
+			continue
+		}
+		if ops := operands(c.Args, "C"); len(ops) == 0 || ops[0] != "push" {
+			continue
+		}
+		for i := 0; i+1 < len(c.Args) && c.Args[i] != "push"; i++ {
+			if c.Args[i] == "-C" {
+				dir = filepath.Join(dir, c.Args[i+1])
+				if filepath.IsAbs(c.Args[i+1]) {
+					dir = c.Args[i+1]
+				}
+			}
+		}
+		return dir, true
+	}
+	return "", false
 }
 
 // actingRole is where a caller acting under lease stands, and the lease's job row. A bound

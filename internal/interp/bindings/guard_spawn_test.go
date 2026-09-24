@@ -183,7 +183,7 @@ func TestSpawnHelpersRefuseOutsideARule(t *testing.T) {
 import "magus";
 final told = magus\guard.once("x");
 `)
-	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn or magus\\guard.command rule")
+	require.ErrorContains(t, err, "only callable inside a magus\\guard.spawn, command or write rule")
 }
 
 // A rule reads the job rows the guard pinned and the facts magus recorded about a

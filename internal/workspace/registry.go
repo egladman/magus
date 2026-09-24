@@ -40,6 +40,8 @@ type WorkspaceRegistry struct {
 	spawnRule SpawnRule
 	// commandRule is the function a magusfile registered via magus\guard.command, or nil.
 	commandRule CommandRule
+	// writeRule is the function a magusfile registered via magus\guard.write, or nil.
+	writeRule WriteRule
 	// harnesses are the spell names a magusfile wired as agent harnesses (via
 	// magus\harness.provider), in wiring order. Many hosts, like workspace.provider;
 	// unlike cache.remote's one.
@@ -67,6 +69,10 @@ type SpawnRule func(ctx context.Context, req types.SpawnRequest, facts hint.Gate
 // CommandRule judges one agent shell command for magus\guard.command, with the same
 // facts and error contract as SpawnRule.
 type CommandRule func(ctx context.Context, req types.CommandRequest, facts hint.Gate) (types.GuardVerdict, error)
+
+// WriteRule judges one agent file write for magus\guard.write, with the same facts and
+// error contract as SpawnRule.
+type WriteRule func(ctx context.Context, req types.WriteRequest, facts hint.Gate) (types.GuardVerdict, error)
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
 func NewWorkspaceRegistry() *WorkspaceRegistry {
@@ -192,6 +198,20 @@ func (r *WorkspaceRegistry) CommandRule() CommandRule {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.commandRule
+}
+
+// SetWriteRule records the magus\guard.write rule, on the terms of SetSpawnRule.
+func (r *WorkspaceRegistry) SetWriteRule(rule WriteRule) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.writeRule = rule
+}
+
+// WriteRule returns the magus\guard.write rule, or nil when none was registered.
+func (r *WorkspaceRegistry) WriteRule() WriteRule {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.writeRule
 }
 
 // AddHarness records a spell name a magusfile wired as an agent harness,

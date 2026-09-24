@@ -41,6 +41,13 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 | `parent`      | the description the calling subagent was itself spawned with; empty for a root caller |
 | `role`        | `worker` when a lease binds the calling session in this checkout, else `root`         |
 | `lease`       | the bound job row for a worker, null for root                                         |
+| `git`         | for a line that runs `git push` only: the checkout's git state (below); null otherwise |
+
+`git` is read in the directory the push runs in (after any `-C`), from git itself, and
+only for a push, since it costs two processes: `detached` is true when HEAD names a
+commit rather than a branch, and `remoteBranches` lists the remote-tracking branches as
+git names them short (`origin/main`). A branch the remote has that this checkout never
+fetched is absent from it.
 
 Each entry of `commands`:
 
@@ -73,25 +80,54 @@ judges nothing: the built-ins apply alone and the agent is told once per session
 the workspace rule failed. Registering twice, from a project's magusfile, or with a
 non-function stops the workspace load with [MGS1045](codes/magusfile/MGS1045.md).
 
-When a `.buzz` file differs from the checked-out commit, the rule runs from both the
-working tree and the committed sources, files it imports included, and the stricter
-answer stands, as for [`magus\guard.spawn`](guard-spawn.md#tighten-live-loosen-on-approval).
-An agent's edit can tighten the policy that grades it and cannot loosen it. Evaluating
-the committed side loads the root magusfile a second time on every command while such
-an edit is pending; running out of time there denies the command.
+When a file the root magusfile's load read differs from the checked-out commit, the rule
+runs from both the working tree and the committed sources, files it imports included,
+and the stricter answer stands, as for
+[`magus\guard.spawn`](guard-spawn.md#tighten-live-loosen-on-approval). An agent's edit
+can tighten the policy that grades it and cannot loosen it.
+
+## What it costs
+
+The guard reads its rules from the root magusfile alone, not the whole workspace, and
+the rules that need the workspace open it only when they apply. On a clean tree a rule
+adds one VCS status to a hook call; measured in this repository, a `magus shell` hook
+takes about 120ms with the rules registered, against about 1.6s when every call loaded
+the workspace. Only while a file the root load read is uncommitted does a call load the
+committed root magusfile as well, reading just the changed files through the VCS and the
+rest from disk: about 100ms more. The three-second limit on resolving the committed side,
+which denies when it runs out, therefore has an order of magnitude to spare.
+
+## File writes: magus\guard.write
+
+`magus\guard.write(fun (req: WriteRequest) > GuardVerdict)` is the same seam for a file
+an agent writes through its host's edit tools, after the built-in path rules. It is
+strengthen only, fails open, and runs from both sides exactly as the command rule does.
+
+| field                  | what it is                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `path`                 | the file as the host named it                                                   |
+| `workspace`            | the root of the workspace holding `path`, empty when none does                  |
+| `content`              | a whole-file write's new content; empty for an edit                             |
+| `oldText`, `newText`   | an edit's replaced text and its replacement; empty for a whole-file write       |
+| `host`, `session`, `parent`, `role`, `lease` | the caller, as on a command request                       |
+
+The texts are read from the host's payload by shape. An edit shape magus does not read
+leaves all three empty, which a rule should take as unknown rather than as an empty file.
 
 ## Writing a repository policy
 
 Keep the rules in their own file, import it from the root magusfile, and register one
-function. magus's own repository does this in
+function per seam. magus's own repository does this in
 [`tools/policy/guard.buzz`](https://github.com/egladman/magus/blob/main/tools/policy/guard.buzz):
 
 ```buzz
 import "./tools/policy/guard" as agentpolicy;
 magus\guard.command(agentpolicy\judge);
+magus\guard.spawn(agentpolicy\judgeSpawn);
+magus\guard.write(agentpolicy\judgeWrite);
 ```
 
-It holds two rules magus does not ship, because they are that repository's preference:
+It holds rules magus does not ship, because they are that repository's preference:
 
 - **Deny waiting on CI.** `gh run watch`, the `--watch` form of `gh pr checks` and
   `gh run view`, and a CI or merge-queue read that a `while` loop or `watch` repeats are
@@ -99,14 +135,27 @@ It holds two rules magus does not ship, because they are that repository's prefe
 - **Advise batching, once per session.** Reading one pull request's checks is advised to
   ask for the whole board; reading the merge queue's runs or labels through GitHub is
   advised to ask `magus queue ls`.
+- **Only an integrator gates.** `magus affected ci` and `magus run ci` are denied to a
+  subagent (one a lease binds, or one spawned with a title) unless its title's role is
+  `integrate`. A person or the orchestrator, which no lease binds and no spawn titled,
+  runs it freely, and anyone may run the `--plan` form, which runs nothing.
+- **Name a new branch in full from a detached HEAD.** `git push <remote> HEAD:<name>`
+  is denied when HEAD is detached and the checkout has no `<remote>/<name>`, since git
+  refuses that push; the reason names `HEAD:refs/heads/<name>`.
+- **A code-changing worker gets its own checkout.** A spawn titled
+  `<parent>/<role> <job>` with a change role (feat, fix, refactor, perf, docs, test,
+  chore) and no isolation is denied.
+- **Changelog entries are fragments.** Once `changes/unreleased/` exists in the checkout,
+  a write that adds a line to CHANGELOG.md's `[Unreleased]` section is denied; a fix to a
+  released section is not.
 
 Three habits keep a policy like it maintainable:
 
-- **Test the rule without a guard session.** The file's `judge` copies the request into
-  a local record and calls `decide`, which takes the once-per-session gate as an
-  argument, so in-file `test` blocks run under `magus buzz -t --embedded` with a fake
-  gate. A test cannot build the host's `CommandRequest`, so keep the logic on your own
-  records.
+- **Test the rule without a guard session.** Each `judge` copies the request into local
+  records and calls a `decide` function that takes the once-per-session gate and any file
+  it would read as arguments, so in-file `test` blocks run under
+  `magus buzz -t --embedded`. A test cannot build the host's request objects, so keep the
+  logic on your own records.
 - **Deny only what you can prove.** A deny that misfires stops an agent doing its job;
   an advisory that misfires is noise. Key a deny on the parsed program and its operands,
   never on prose.

@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   advise, never lift a built-in deny. It fails open and is held to the committed copy as
   `magus\guard.spawn` is. Both rules now return `GuardVerdict` (was `SpawnVerdict`) and
   share `once`/`count`.
+- **`magus\guard.write` registers a workspace file-write rule.** One Buzz function sees
+  every file an agent writes through its host's edit tools, with the text the host says
+  it writes, on the same strengthen-only, fail-open, committed-copy terms as
+  `magus\guard.command`. A command rule judging `git push` also gets the checkout's
+  detached state and remote-tracking branches.
 - **The guard denies a trailing exit-status echo (`exit-status-echo`).** `cmd; echo "rc=$?"`
   and its `printf` forms are refused: the harness already reports a nonzero exit, and the
   echo exits 0, masking the failure. Only a last statement printing `$?` and literal text
@@ -122,6 +127,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The agent guard hook no longer loads the workspace.** `magus shell` reads its rules
+  from the root magusfile alone, and loads the committed copy only while a file that
+  load read is uncommitted. Measured here: about 120ms per call, down from about 1.6s.
 - **magus never waits on another magus invocation.** A workspace lock or machine budget
   held by another invocation refuses immediately (exit 75), naming the holder.
   `MAGUS_NO_WAIT` is removed. Invocations in one process (the daemon's) queue for each

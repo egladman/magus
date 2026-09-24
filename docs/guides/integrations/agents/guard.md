@@ -229,7 +229,8 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   parsed programs it runs, answering allow, advise or deny. The function form of
   `magus\guard.shell`, for a rule a program-and-args match cannot express. magus ships
   none; [magus\guard.command](../../../reference/guard-command.md) walks through writing
-  a repository policy.
+  a repository policy. `magus\guard.write(fun)` is the same seam for the files an agent
+  writes through its host's edit tools.
 
 | dialect | parser                        |
 | ------- | ----------------------------- |

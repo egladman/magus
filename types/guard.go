@@ -166,6 +166,42 @@ type CommandRequest struct {
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
 	Lease *Job
+	// Git is the state of the checkout the line runs in, read only when the line runs
+	// `git push`, since reading it costs processes; nil otherwise, and when the directory
+	// is not a git checkout.
+	Git *GitState
+}
+
+// GitState is what a rule about a push needs to know about the checkout it leaves from.
+type GitState struct {
+	// Detached is true when HEAD names a commit rather than a branch.
+	Detached bool
+	// RemoteBranches are the checkout's remote-tracking branches as git names them short:
+	// `origin/main`. A branch the remote has that was never fetched is absent.
+	RemoteBranches []string
+}
+
+// WriteRequest is what a magus\guard.write rule is handed: one file an agent is about to
+// write through its host's edit tools, with the text the host said it writes.
+type WriteRequest struct {
+	// Host, Session, Parent, Role and Lease are the caller's, as on CommandRequest.
+	Host    string
+	Session string
+	Parent  string
+	Role    AgentRole
+	Lease   *Job
+	// Path is the file as the host named it.
+	Path string
+	// Workspace is the root of the workspace holding Path, empty when none does.
+	Workspace string
+	// Content is the whole new content of a write that replaces the file, empty for an
+	// edit.
+	Content string
+	// OldText and NewText are an edit's replaced text and its replacement, empty for a
+	// write that replaces the file. A host edit shape magus does not read leaves all
+	// three empty, which a rule reads as "unknown", never as "empty file".
+	OldText string
+	NewText string
 }
 
 // CommandInvocation is one program a shell line runs.

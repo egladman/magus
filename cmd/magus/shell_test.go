@@ -1273,6 +1273,9 @@ func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
+	// Outside this checkout, whose own policy refuses the gate to a worker whatever magus
+	// served: this test is about the built-in rules standing down.
+	t.Chdir(t.TempDir())
 	ctx, _, cacheDir := fleetFixture(t, narrowLease())
 	gate := hint.NewGate(cacheDir, "session-preauth")
 	command := "./magus affected ci --no-default-charms"

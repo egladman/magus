@@ -258,7 +258,7 @@ const (
 	// path holds no spell, the spell there has another name than the embedded one it
 	// replaces, or it names an embedded spell this magus does not ship.
 	SpellOverrideInvalid DiagnosticCode = "MGS1044"
-	// GuardRuleMisdeclared is a magus\guard.spawn or magus\guard.command registration the
+	// GuardRuleMisdeclared is a magus\guard.spawn, command or write registration the
 	// workspace cannot use: one that is not a function, a second one in the same load, or
 	// one outside the root magusfile. The load stops, because a rule that silently did not
 	// register is a guard that looks enforced and is not.

@@ -646,6 +646,11 @@ export object CommandInvocation {
     repeats: bool = false,
 }
 
+export object GitState {
+    detached: bool = false,
+    remoteBranches: [str] = [],
+}
+
 export object CommandRequest {
     host: str = "",
     session: str = "",
@@ -655,6 +660,20 @@ export object CommandRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
+    git: GitState? = null,
+}
+
+export object WriteRequest {
+    host: str = "",
+    session: str = "",
+    parent: str = "",
+    role: str = "",
+    lease: Job? = null,
+    path: str = "",
+    workspace: str = "",
+    content: str = "",
+    oldText: str = "",
+    newText: str = "",
 }
 
 export object JobOverlap {
@@ -749,6 +768,7 @@ export object guard {
     static extern fun once(key: str) > bool;
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: Function) > void;
+    static extern fun write(rule: Function) > void;
 }
 
 // Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.

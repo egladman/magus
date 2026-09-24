@@ -47,6 +47,7 @@ type functionSeam string
 const (
 	seamSpawn   functionSeam = "spawn"
 	seamCommand functionSeam = "command"
+	seamWrite   functionSeam = "write"
 )
 
 func (s functionSeam) member() string { return `magus\guard.` + string(s) }
@@ -195,8 +196,11 @@ func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFai
 
 // ruleFailedKind names the notice that a seam's workspace rule judged nothing.
 func ruleFailedKind(seam functionSeam) hint.MarkerKind {
-	if seam == seamCommand {
+	switch seam {
+	case seamCommand:
 		return advisoryCommandRuleFailed
+	case seamWrite:
+		return advisoryWriteRuleFailed
 	}
 	return advisorySpawnRuleFailed
 }

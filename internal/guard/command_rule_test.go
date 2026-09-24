@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -244,6 +245,24 @@ func TestApprovedCommandRuleTimeoutDenies(t *testing.T) {
 	v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code"})
 	assert.Equal(t, "deny", v.Decision)
 	assert.Contains(t, v.Reason, approvedRuleTimedOut(seamCommand))
+}
+
+// The checkout's git state costs processes, so it is read only for a line that pushes.
+func TestCommandRuleSeesGitStateOnlyForAPush(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	var read []string
+	state := &types.GitState{Detached: true, RemoteBranches: []string{"origin/main"}}
+	deps := Dependencies{GitState: func(_ context.Context, dir string) *types.GitState { read = append(read, dir); return state }}
+	probe := &commandRuleProbe{}
+	deps.CommandRule = probe.rule()
+
+	Judge(ctx, deps, Request{Input: "git status", Host: "claude-code"})
+	Judge(ctx, deps, Request{Input: "git -C ../other push -q origin HEAD:topic", Host: "claude-code"})
+	require.Len(t, probe.asked, 2)
+	assert.Nil(t, probe.asked[0].Git)
+	assert.Equal(t, state, probe.asked[1].Git)
+	at := hookLocation(ctx, Dependencies{})
+	assert.Equal(t, []string{filepath.Join(at.dir, "../other")}, read, "read once, in the checkout -C names")
 }
 
 // A command magus itself served stays served: the rule's advice stands down, as every

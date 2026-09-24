@@ -48,6 +48,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "FlagParse", Zero: types.FlagParse{}, Encode: func(v any) vm.Value { return ObjectFlagParse(v.(types.FlagParse)) }},
 	{Name: "GateEvidence", Zero: types.GateEvidence{}, Encode: func(v any) vm.Value { return ObjectGateEvidence(v.(types.GateEvidence)) }},
 	{Name: "GateStatus", Zero: types.GateStatus{}, Encode: func(v any) vm.Value { return ObjectGateStatus(v.(types.GateStatus)) }},
+	{Name: "GitState", Zero: types.GitState{}, Encode: func(v any) vm.Value { return ObjectGitState(v.(types.GitState)) }},
 	{Name: "Graph", Zero: types.GraphView{}, Encode: func(v any) vm.Value { return ObjectGraphView(v.(types.GraphView)) }},
 	{Name: "GuardVerdict", Zero: types.GuardVerdict{}, Encode: func(v any) vm.Value { return ObjectGuardVerdict(v.(types.GuardVerdict)) }},
 	{Name: "Hotspots", Zero: types.HotspotOutput{}, Encode: func(v any) vm.Value { return ObjectHotspotOutput(v.(types.HotspotOutput)) }},
@@ -111,4 +112,5 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "VCSCheckpoint", Zero: types.VCSCheckpoint{}, Encode: func(v any) vm.Value { return ObjectVCSCheckpoint(v.(types.VCSCheckpoint)) }},
 	{Name: "Volatility", Zero: types.VolatilityReport{}, Encode: func(v any) vm.Value { return ObjectVolatilityReport(v.(types.VolatilityReport)) }},
 	{Name: "VolatilityTarget", Zero: types.VolatilityTarget{}, Encode: func(v any) vm.Value { return ObjectVolatilityTarget(v.(types.VolatilityTarget)) }},
+	{Name: "WriteRequest", Zero: types.WriteRequest{}, Encode: func(v any) vm.Value { return ObjectWriteRequest(v.(types.WriteRequest)) }},
 }

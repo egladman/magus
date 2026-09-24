@@ -73,9 +73,18 @@ type Dependencies struct {
 	CommandRule workspace.CommandRule
 	// ApprovedCommandRule is ApprovedSpawnRule for the command rule, resolved per command.
 	ApprovedCommandRule func(ctx context.Context) (workspace.CommandRule, error)
+	// WriteRule is the working tree's magus\guard.write rule, nil when none is registered.
+	// It is called on every file write the built-in rules let through.
+	WriteRule workspace.WriteRule
+	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per write.
+	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
+	// GitState reads the git checkout holding dir for a command rule judging a push, nil
+	// when dir is in none.
+	GitState func(ctx context.Context, dir string) *types.GitState
 	// LoadFailure is why the working tree's workspace did not load, nil when it loaded or
-	// there is none. SpawnRule and CommandRule are then nil because nothing could be read,
-	// not because no rule is registered, and the failure is reported beside the verdict.
+	// there is none. SpawnRule, CommandRule and WriteRule are then nil because nothing could
+	// be read, not because no rule is registered, and the failure is reported beside the
+	// verdict.
 	LoadFailure error
 	// Policy describes the effective workspace rules for the lineage the trail keeps,
 	// nil when the caller cannot say. See RecordPolicy.
@@ -235,6 +244,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// there to pin a location.
 	callDir := ""
 	description := ""
+	var write writeFields
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -274,6 +284,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		input = env.Value
 		description = env.Description
+		write = env.Write
 		hasInput = input != ""
 		if env.IsPath {
 			isPath = true
@@ -327,7 +338,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
 	// advisory fires on it, and the role-scoped rules stand down. The workspace-wide
 	// denies do not, and they are the ones whose reasons say why (see internal/guard/preauth.go).
-	var commandRule commandRuleRecord
+	var ruleRecord workspaceRuleRecord
 	preauth := ""
 	if hasInput && !req.Observe && !isPath {
 		preauth = servedNextPreauthorizes(markers, input)
@@ -469,6 +480,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Context = advice
 			verdict.Rule = string(adviceKind)
 		}
+		// The workspace's magus\guard.write rule, last because it may only add.
+		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, location)
 		// A denied write never happens, so it never touched anything.
 		if verdict.Decision != "deny" {
 			drift.record()
@@ -584,7 +597,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		// The workspace's magus\guard.command rule, last because it may only add to what
 		// every rule above said.
-		verdict, commandRule = gradeWorkspaceCommand(ctx, deps, verdict, commandRuleInput{
+		verdict, ruleRecord = gradeWorkspaceCommand(ctx, deps, verdict, commandRuleInput{
 			command:     input,
 			description: description,
 			dialect:     shellD,
@@ -660,7 +673,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, commandRule)
+	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
 	return verdict
 }
 
@@ -808,6 +821,13 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value = env.Command
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
+		// Read by shape, like the path: a whole-file write carries its content, an edit the
+		// text it replaces and the replacement. Another shape leaves all three empty.
+		req.Write = writeFields{
+			Content: envelopeString(env.ToolInput, "content"),
+			OldText: envelopeString(env.ToolInput, "old_string"),
+			NewText: envelopeString(env.ToolInput, "new_string"),
+		}
 	case envelopeString(env.ToolInput, "skill") != "":
 		// A skill load carries nothing to judge; it is recorded so a later spawn can ask
 		// whether the session read the brief. The FIELD name is magus's contract with the
@@ -924,6 +944,8 @@ type hookRequest struct {
 	IsPath bool
 	// Description is the label the caller wrote for a shell command, "" when it wrote none.
 	Description string
+	// Write is the text a file write carries, each field empty when the host sent none.
+	Write writeFields
 	// Cwd is where the host says the call runs; "" when the envelope carried none.
 	Cwd string
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
@@ -1067,9 +1089,9 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 // because a clearance nobody counts is a clearance nobody can audit: uptake per template is
 // the number that decides whether a breadcrumb is reworded or deleted.
 //
-// rule is how the workspace command rule judged, which alone knows whether its answer came
+// rule is how the workspace command or write rule judged, which alone knows whether its answer came
 // from the approved side or the working tree.
-func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict, rule commandRuleRecord) {
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict, rule workspaceRuleRecord) {
 	if input == "" || location.cacheDir == "" {
 		return
 	}

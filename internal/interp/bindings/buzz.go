@@ -259,6 +259,7 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 		guard.MapSet("bash", magusfileOnly(obs, `magus\guard.bash`))
 		guard.MapSet("spawn", magusfileOnly(obs, `magus\guard.spawn`))
 		guard.MapSet("command", magusfileOnly(obs, `magus\guard.command`))
+		guard.MapSet("write", magusfileOnly(obs, `magus\guard.write`))
 		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
 	}
 	return magus

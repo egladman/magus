@@ -1700,6 +1700,17 @@ func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
 	return out
 }
 
+func ObjectGitState(v types.GitState) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("detached", vm.BoolValue(v.Detached))
+	itemsRemoteBranches := make([]vm.Value, len(v.RemoteBranches))
+	for indexRemoteBranches := range v.RemoteBranches {
+		itemsRemoteBranches[indexRemoteBranches] = vm.StrValue(v.RemoteBranches[indexRemoteBranches])
+	}
+	out.MapSet("remoteBranches", vm.ListValue(itemsRemoteBranches))
+	return out
+}
+
 func ObjectCommandRequest(v types.CommandRequest) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("host", vm.StrValue(v.Host))
@@ -1718,6 +1729,30 @@ func ObjectCommandRequest(v types.CommandRequest) vm.Value {
 		optLease = ObjectJob((*v.Lease))
 	}
 	out.MapSet("lease", optLease)
+	optGit := vm.Null
+	if v.Git != nil {
+		optGit = ObjectGitState((*v.Git))
+	}
+	out.MapSet("git", optGit)
+	return out
+}
+
+func ObjectWriteRequest(v types.WriteRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("role", vm.StrValue(string(v.Role)))
+	optLease := vm.Null
+	if v.Lease != nil {
+		optLease = ObjectJob((*v.Lease))
+	}
+	out.MapSet("lease", optLease)
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("workspace", vm.StrValue(v.Workspace))
+	out.MapSet("content", vm.StrValue(v.Content))
+	out.MapSet("oldText", vm.StrValue(v.OldText))
+	out.MapSet("newText", vm.StrValue(v.NewText))
 	return out
 }
 

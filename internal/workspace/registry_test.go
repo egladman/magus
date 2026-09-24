@@ -46,6 +46,22 @@ func TestWorkspaceRegistry_SpawnRuleReplaces(t *testing.T) {
 	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "second"}, got)
 }
 
+func TestWorkspaceRegistry_WriteRuleReplaces(t *testing.T) {
+	r := NewWorkspaceRegistry()
+	assert.Nil(t, r.WriteRule())
+
+	verdict := func(reason string) WriteRule {
+		return func(context.Context, types.WriteRequest, hint.Gate) (types.GuardVerdict, error) {
+			return types.GuardVerdict{Decision: types.GuardDeny, Reason: reason}, nil
+		}
+	}
+	r.SetWriteRule(verdict("first"))
+	r.SetWriteRule(verdict("second"))
+	got, err := r.WriteRule()(context.Background(), types.WriteRequest{}, hint.Gate{})
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "second"}, got)
+}
+
 func TestWorkspaceRegistry_CommandRuleReplaces(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	assert.Nil(t, r.CommandRule())

@@ -102,7 +102,7 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 func ruleFactsArg(ctx context.Context, member string, args []vm.Value) (hint.Gate, hint.MarkerKind, error) {
 	facts, ok := ctx.Value(ruleFactsKey{}).(hint.Gate)
 	if !ok {
-		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: only callable inside a magus\guard.spawn or magus\guard.command rule while the guard runs it, since it counts per agent session`, member)
+		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: only callable inside a magus\guard.spawn, command or write rule while the guard runs it, since it counts per agent session`, member)
 	}
 	if len(args) != 1 || !args[0].IsStr() || args[0].AsString() == "" {
 		return hint.Gate{}, "", fmt.Errorf(`magus\guard.%s: expected one non-empty key string`, member)

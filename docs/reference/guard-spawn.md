@@ -116,12 +116,14 @@ non-function stops the workspace load with [MGS1045](codes/magusfile/MGS1045.md)
 
 ## Tighten live, loosen on approval
 
-When the magusfile is under version control and a `.buzz` file differs from the
-checked-out commit, the guard evaluates the rule twice: once from the working tree and
-once from the committed sources, and keeps the stricter answer. An edit that tightens
-applies on the next spawn; one that loosens waits for a commit. The committed
-side reads each file through the VCS layer rather than a checkout. Local spells
-imported by path are read from the working tree on both sides.
+When the magusfile is under version control and a file its root load read differs from
+the checked-out commit, the guard evaluates the rule twice: once from the working tree
+and once from the committed sources, and keeps the stricter answer. An edit that tightens
+applies on the next spawn; one that loosens waits for a commit. The committed side reads
+the changed files through the VCS layer rather than a checkout, and the unchanged ones
+from disk. Local spells imported by path are read from the working tree on both sides.
+Both sides load the root magusfile alone, never the whole workspace; see
+[what the guard costs](guard-command.md#what-it-costs).
 
 ## Hosts
 

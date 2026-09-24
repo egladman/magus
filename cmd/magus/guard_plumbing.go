@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/egladman/magus"
@@ -22,7 +24,8 @@ import (
 // themselves: the memoized inspect, this process's loaded config, the index-staleness
 // advice, and the spell catalog, all of which live in the CLI rather than in the rules.
 func guardDependencies() guard.Dependencies {
-	shellRules, shellDialect := loadWorkspaceShellRules(context.Background())
+	rules, loadErr := loadGuardRules(context.Background())
+	shellRules, shellDialect := workspaceShellRules(rules)
 	deps := guard.Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 			if root == "" {
@@ -49,14 +52,16 @@ func guardDependencies() guard.Dependencies {
 		SymbolDefined:    symbolDefinedForGuard,
 		HeadCommit:       headCommitForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
+		GitState:         gitStateForGuard,
 	}
-	m, loadErr := loadedWorkspace(context.Background())
-	if m != nil {
-		deps.SpawnRule = m.SpawnRule()
-		deps.ApprovedSpawnRule = m.ApprovedSpawnRule
-		deps.CommandRule = m.CommandRule()
-		deps.ApprovedCommandRule = m.ApprovedCommandRule
-		deps.Policy = func() guard.PolicyState { return guardPolicyState(m) }
+	if rules != nil {
+		deps.SpawnRule = rules.SpawnRule()
+		deps.ApprovedSpawnRule = rules.ApprovedSpawnRule
+		deps.CommandRule = rules.CommandRule()
+		deps.ApprovedCommandRule = rules.ApprovedCommandRule
+		deps.WriteRule = rules.WriteRule()
+		deps.ApprovedWriteRule = rules.ApprovedWriteRule
+		deps.Policy = func() guard.PolicyState { return guardPolicyState(rules) }
 		return deps
 	}
 	root, err := magus.FindRoot("")
@@ -72,46 +77,53 @@ func guardDependencies() guard.Dependencies {
 	deps.ApprovedCommandRule = func(ctx context.Context) (workspace.CommandRule, error) {
 		return magus.ApprovedCommandRuleAt(ctx, root)
 	}
+	deps.ApprovedWriteRule = func(ctx context.Context) (workspace.WriteRule, error) {
+		return magus.ApprovedWriteRuleAt(ctx, root)
+	}
 	return deps
 }
 
-// loadedWorkspace is the memoized workspace the hook's rules read, nil with the reason
-// when it does not load. Unloadable is not fatal for the reason loadWorkspaceShellRules
-// gives: a magusfile typo must not take down every hook.
-func loadedWorkspace(ctx context.Context) (*magus.Magus, error) {
-	ws, err := inspectWorkspace(ctx, "")
+// loadGuardRules loads the guard rules of the workspace this process runs in from its
+// root magusfile alone, nil with the reason when that file does not load, and nil with no
+// error outside any workspace. Unloadable is not fatal for the reason
+// loadWorkspaceShellRules gives: a magusfile typo must not take down every hook.
+//
+// Not the full workspace load: that opens every project and costs an order of magnitude
+// more, on every agent tool call, for facts no guard rule reads. The rules that do need
+// the workspace open it through Dependencies.Inspect, and only when they apply.
+func loadGuardRules(ctx context.Context) (*magus.GuardRules, error) {
+	root, err := magus.FindRoot("")
 	if err != nil {
-		return nil, err
+		return nil, nil //nolint:nilnil,nilerr // outside a workspace there are no rules and nothing failed
 	}
-	m, ok := ws.(*magus.Magus)
-	if !ok {
-		return nil, fmt.Errorf("inspect returned a %T, not a *magus.Magus", ws)
-	}
-	return m, nil
+	return magus.LoadGuardRules(ctx, root, types.VCSOptions{
+		Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
+	})
 }
 
-// guardPolicyState describes the loaded workspace's guard rules for the trail's lineage.
-// The approved ids are left to a callback, since reading them runs a process per file and
-// the lineage asks only when the policy moved.
-func guardPolicyState(m *magus.Magus) guard.PolicyState {
-	policy := m.GuardPolicy()
+// guardPolicyState describes the workspace's guard rules for the trail's lineage. The
+// approved ids are left to a callback, since reading them runs a process per file and the
+// lineage asks only when the policy moved.
+func guardPolicyState(rules *magus.GuardRules) guard.PolicyState {
+	policy := rules.Policy()
 	return guard.PolicyState{
 		Digest:      policy.Digest,
 		ShellRules:  policy.ShellRules,
 		SpawnRule:   policy.SpawnRule,
 		CommandRule: policy.CommandRule,
+		WriteRule:   policy.WriteRule,
 		Sources: func(ctx context.Context) []guard.PolicySource {
 			paths := make([]string, len(policy.Sources))
 			for i, s := range policy.Sources {
 				paths[i] = s.Path
 			}
-			approved := m.ApprovedBlobIDs(ctx, paths)
+			approved := rules.ApprovedContentIDs(ctx, paths)
 			if approved == nil {
 				return nil
 			}
 			out := make([]guard.PolicySource, len(policy.Sources))
 			for i, s := range policy.Sources {
-				out[i] = guard.PolicySource{Path: s.Path, Worktree: s.BlobID, Approved: approved[s.Path]}
+				out[i] = guard.PolicySource{Path: s.Path, Worktree: s.ContentID, Approved: approved[s.Path]}
 			}
 			return out
 		},
@@ -160,6 +172,26 @@ func checkoutBaseForGuard(ctx context.Context, root string) string {
 	return checkpointToken(cp)
 }
 
+// gitStateForGuard reads the git checkout holding dir for a rule judging a `git push`: the
+// command being judged is git's own, so its facts come from git rather than through the
+// VCS layer. Two processes, spent only on a push. Nil when dir is in no git checkout.
+func gitStateForGuard(ctx context.Context, dir string) *types.GitState {
+	if dir == "" {
+		return nil
+	}
+	// symbolic-ref -q exits 1, printing nothing, exactly when HEAD names no branch.
+	_, headErr := exec.CommandContext(ctx, "git", "-C", dir, "symbolic-ref", "-q", "HEAD").Output()
+	var exit *exec.ExitError
+	if headErr != nil && (!errors.As(headErr, &exit) || exit.ExitCode() != 1) {
+		return nil
+	}
+	refs, err := exec.CommandContext(ctx, "git", "-C", dir, "for-each-ref", "--format=%(refname:short)", "refs/remotes").Output()
+	if err != nil {
+		return nil
+	}
+	return &types.GitState{Detached: headErr != nil, RemoteBranches: strings.Fields(string(refs))}
+}
+
 // symbolDefinedForGuard answers the one question that lets the guard deny a symbol
 // search: does refs return the same sites this grep is reaching for.
 //
@@ -187,11 +219,17 @@ func symbolDefinedForGuard(ident string) (defined, definitive bool) {
 // Missing or unloadable is empty so a magusfile typo cannot take down every
 // shell hook (built-ins still apply).
 func loadWorkspaceShellRules(ctx context.Context) ([]guard.WorkspaceShellRule, guard.Dialect) {
-	m, _ := loadedWorkspace(ctx)
-	if m == nil {
+	rules, _ := loadGuardRules(ctx)
+	return workspaceShellRules(rules)
+}
+
+// workspaceShellRules converts the loaded rules' magus\guard.shell entries for the guard,
+// empty when nothing loaded.
+func workspaceShellRules(rules *magus.GuardRules) ([]guard.WorkspaceShellRule, guard.Dialect) {
+	if rules == nil {
 		return nil, ""
 	}
-	src := m.ShellRules()
+	src := rules.ShellRules()
 	if len(src) == 0 {
 		return nil, ""
 	}

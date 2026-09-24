@@ -28,8 +28,11 @@ import (
 // without the evaluator, the stricter-of merge or the trail provenance changing.
 type ApprovedPolicy interface {
 	// Pending returns the absolute paths of the workspace sources that may differ from
-	// their approved content: every .buzz source, and the config that shapes a load. Empty
-	// lets the caller skip evaluating the approved sources at all.
+	// their approved content: every .buzz source, the config that shapes a load, and each
+	// untracked directory, which ends in a separator and stands for everything under it.
+	// A path it does not cover holds its approved content in the working tree, which is
+	// what lets a caller read it from disk. Empty lets the caller skip evaluating the
+	// approved sources at all.
 	Pending(ctx context.Context) ([]string, error)
 	// ReadFile returns the approved content of an absolute path inside the workspace, and
 	// an error when the approved state has no such file.
@@ -56,17 +59,67 @@ func (h headPolicy) Pending(ctx context.Context) ([]string, error) {
 	}
 	var out []string
 	for _, p := range dirty {
-		if strings.HasSuffix(p, ".buzz") || slices.Contains(loadShapingFiles, path.Base(p)) {
+		switch {
+		case strings.HasSuffix(p, "/"):
+			// A status entry ending in a separator is an untracked directory: no file under
+			// it is listed on its own, and none of them is committed.
+			out = append(out, filepath.Join(h.repoRoot, filepath.FromSlash(p))+string(filepath.Separator))
+		case strings.HasSuffix(p, ".buzz") || slices.Contains(loadShapingFiles, path.Base(p)):
 			out = append(out, filepath.Join(h.repoRoot, filepath.FromSlash(p)))
 		}
 	}
 	return out, nil
 }
 
+// pendingSet answers whether a path is one Pending covers. Paths are compared with their
+// directory's symlinks resolved, because a load names its sources from the workspace root
+// and Pending names them from the resolved repository root.
+type pendingSet struct {
+	files map[string]bool
+	dirs  []string
+}
+
+func newPendingSet(pending []string) pendingSet {
+	set := pendingSet{files: map[string]bool{}}
+	for _, p := range pending {
+		if strings.HasSuffix(p, string(filepath.Separator)) {
+			set.dirs = append(set.dirs, canonicalPath(strings.TrimSuffix(p, string(filepath.Separator)))+string(filepath.Separator))
+			continue
+		}
+		set.files[canonicalPath(p)] = true
+	}
+	return set
+}
+
+func (s pendingSet) covers(p string) bool {
+	p = canonicalPath(p)
+	if s.files[p] {
+		return true
+	}
+	return slices.ContainsFunc(s.dirs, func(dir string) bool { return strings.HasPrefix(p, dir) })
+}
+
+// canonicalPath resolves the symlinks in the deepest existing directory above p, leaving
+// the rest alone so a deleted file, or one in a directory not created yet, still has a
+// name comparable with the same path reached another way.
+func canonicalPath(p string) string {
+	p = filepath.Clean(p)
+	rest := filepath.Base(p)
+	for dir := filepath.Dir(p); ; dir = filepath.Dir(dir) {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(resolved, rest)
+		}
+		if parent := filepath.Dir(dir); parent == dir {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
+	}
+}
+
 func (h headPolicy) ReadFile(ctx context.Context, path string) ([]byte, error) {
 	// The directory is resolved, not the file, so a file the working tree deleted still
-	// maps to its place in the repository. git reports the root resolved, and a temp or
-	// home directory behind a symlink would otherwise read as outside it.
+	// maps to its place in the repository. The driver reports the root resolved, and a temp
+	// or home directory behind a symlink would otherwise read as outside it.
 	dir, err := filepath.EvalSymlinks(filepath.Dir(path))
 	if err != nil {
 		dir = filepath.Dir(path)
@@ -151,7 +204,18 @@ func (m *Magus) ApprovedCommandRule(ctx context.Context) (workspace.CommandRule,
 }
 
 func (m *Magus) approvedRegistry(ctx context.Context) (*workspace.WorkspaceRegistry, error) {
-	approved, err := approvedPolicyAt(ctx, m.ws.Root, m.ws.VCSOptions)
+	var sources []interp.SourceFile
+	if m.policyLog != nil {
+		sources = m.policyLog.Files()
+	}
+	return approvedRegistryBeside(ctx, m.ws.Root, m.rootProjectPath(), m.ws.VCSOptions, m.resolver, sources, m.policyLog != nil)
+}
+
+// approvedRegistryBeside is the approved sources' registry for a working tree whose root
+// load read sources, nil when it cannot differ from what that load registered. loaded is
+// false when the working tree's load is not known, which leaves nothing to compare with.
+func approvedRegistryBeside(ctx context.Context, root, projectPath string, opts types.VCSOptions, resolver *secret.Resolver, sources []interp.SourceFile, loaded bool) (*workspace.WorkspaceRegistry, error) {
+	approved, err := approvedPolicyAt(ctx, root, opts)
 	if err != nil || approved == nil {
 		return nil, err
 	}
@@ -159,7 +223,46 @@ func (m *Magus) approvedRegistry(ctx context.Context) (*workspace.WorkspaceRegis
 	if err != nil || len(pending) == 0 {
 		return nil, err
 	}
-	return approvedRegistry(ctx, m.ws.Root, m.rootProjectPath(), m.resolver, approved, pending)
+	if loaded && !pendingTouchesLoad(root, newPendingSet(pending), sources) {
+		// Every file the root load read holds its approved content, so the approved load
+		// would read the same bytes and register the working tree's rules.
+		return nil, nil //nolint:nilnil // no approved difference is the documented nil answer
+	}
+	return approvedRegistry(ctx, root, projectPath, resolver, approved, pending)
+}
+
+// pendingTouchesLoad reports whether a pending path can change what the root magusfile's
+// load registers: a file that load read, a config that shapes it, or a new root magusfile
+// source the load did not read because it did not exist in the working tree.
+//
+// Imports are reached only through files the load read, so a pending file that none of
+// them reaches cannot change the approved load either.
+func pendingTouchesLoad(root string, pending pendingSet, sources []interp.SourceFile) bool {
+	for _, s := range sources {
+		if pending.covers(s.Path) {
+			return true
+		}
+	}
+	candidates, err := interp.MagusfileCandidates(root)
+	if err != nil {
+		return true
+	}
+	for _, name := range loadShapingFiles {
+		candidates = append(candidates, filepath.Join(root, name))
+	}
+	if slices.ContainsFunc(candidates, pending.covers) {
+		return true
+	}
+	// A root source the working tree does not have yet, added or restored.
+	magusfiles := filepath.Dir(canonicalPath(filepath.Join(root, "magusfiles", "a.buzz")))
+	for file := range pending.files {
+		if filepath.Dir(file) == magusfiles && filepath.Ext(file) == ".buzz" {
+			return true
+		}
+	}
+	return slices.ContainsFunc(pending.dirs, func(dir string) bool {
+		return strings.HasPrefix(magusfiles+string(filepath.Separator), dir)
+	})
 }
 
 // ApprovedSpawnRuleAt is ApprovedSpawnRule for the workspace at root when its working tree
@@ -183,6 +286,15 @@ func ApprovedCommandRuleAt(ctx context.Context, root string) (workspace.CommandR
 	return reg.CommandRule(), nil
 }
 
+// ApprovedWriteRuleAt is ApprovedSpawnRuleAt for the magus\guard.write rule.
+func ApprovedWriteRuleAt(ctx context.Context, root string) (workspace.WriteRule, error) {
+	reg, err := approvedRegistryAt(ctx, root)
+	if err != nil || reg == nil {
+		return nil, err
+	}
+	return reg.WriteRule(), nil
+}
+
 func approvedRegistryAt(ctx context.Context, root string) (*workspace.WorkspaceRegistry, error) {
 	approved, err := approvedPolicyAt(ctx, root, types.VCSOptions{})
 	if err != nil || approved == nil {
@@ -203,9 +315,19 @@ func approvedRegistry(ctx context.Context, root, projectPath string, resolver *s
 		return nil, nil //nolint:nilnil // without an interpreter no magusfile can register a rule
 	}
 	memo := map[string][]byte{}
+	changed := newPendingSet(pending)
 	read := func(path string) ([]byte, error) {
 		if data, ok := memo[path]; ok {
 			return data, nil
+		}
+		// A file Pending does not cover holds its approved content on disk, and reading it
+		// there costs no VCS process. Only a failed read (a file moved away, say) asks the
+		// approval authority.
+		if !changed.covers(path) {
+			if data, err := os.ReadFile(path); err == nil {
+				memo[path] = data
+				return data, nil
+			}
 		}
 		data, err := approved.ReadFile(ctx, path)
 		if err != nil {
@@ -284,65 +406,90 @@ type GuardPolicy struct {
 	// Digest names the rule set; "" when the working tree declares no guard rule.
 	Digest string
 	// Sources are the files the root magusfile's load read, which is where a spawn rule can
-	// come from, each named by the git blob id of the bytes read.
+	// come from, each named by the ContentID of the bytes read.
 	Sources     []interp.SourceFile
 	ShellRules  int
 	SpawnRule   bool
 	CommandRule bool
+	WriteRule   bool
 }
 
 // GuardPolicy describes the workspace guard rules this load registered.
 //
-// A spawn or command rule is code, so its digest covers every file its load read: an edit
-// to any of them counts as a policy change while either is registered. Shell rules are
-// data and count only for themselves.
+// A spawn, command or write rule is code, so its digest covers every file its load read:
+// an edit to any of them counts as a policy change while one is registered. Shell rules
+// are data and count only for themselves.
 func (m *Magus) GuardPolicy() GuardPolicy {
-	rules := m.ShellRules()
-	spawn := m.SpawnRule() != nil
-	command := m.CommandRule() != nil
 	var sources []interp.SourceFile
 	if m.policyLog != nil {
 		sources = m.policyLog.Files()
 	}
-	policy := GuardPolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn, CommandRule: command}
-	if len(rules) == 0 && !spawn && !command {
+	var write bool
+	if m.wsReg != nil {
+		write = m.wsReg.WriteRule() != nil
+	}
+	return guardPolicyOf(m.ShellRules(), m.SpawnRule() != nil, m.CommandRule() != nil, write, sources)
+}
+
+func guardPolicyOf(rules []workspace.ShellRule, spawn, command, write bool, sources []interp.SourceFile) GuardPolicy {
+	policy := GuardPolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn, CommandRule: command, WriteRule: write}
+	if len(rules) == 0 && !spawn && !command && !write {
 		return policy
 	}
 	h := sha256.New()
 	for _, r := range rules {
 		fmt.Fprintf(h, "shell %q %q %q %q %q %q\n", r.Name, r.Decision, r.Program, r.Args, r.Reason, r.Dialect)
 	}
-	// Registering a command rule over the same files is still a new digest. The spawn
-	// rule's lines keep their spelling so its digests stay what they were.
+	// Registering another rule over the same files is still a new digest. The spawn rule's
+	// lines keep their spelling so its digests stay what they were.
 	if command {
 		fmt.Fprintln(h, "rule command")
 	}
-	if spawn || command {
+	if write {
+		fmt.Fprintln(h, "rule write")
+	}
+	if spawn || command || write {
 		for _, s := range sources {
-			fmt.Fprintf(h, "spawn %s %s\n", s.Path, s.BlobID)
+			fmt.Fprintf(h, "spawn %s %s\n", s.Path, s.ContentID)
 		}
 	}
 	policy.Digest = hex.EncodeToString(h.Sum(nil))
 	return policy
 }
 
-// ApprovedBlobIDs maps each path to the git blob id of its approved content, "" when the
-// approved state has no such file. Nil when the workspace has no approval authority. It
-// reads each file through the authority, one process per file on git, so call it only
-// when the answer can change what is recorded.
-func (m *Magus) ApprovedBlobIDs(ctx context.Context, paths []string) map[string]string {
-	approved, err := approvedPolicyAt(ctx, m.ws.Root, m.ws.VCSOptions)
+// ApprovedContentIDs maps each path to the interp.ContentID of its approved content, ""
+// when the approved state has no such file. Nil when the workspace has no approval
+// authority. A path Pending does not cover is hashed from disk; the rest are read through
+// the authority, which can cost a process per file, so call it only when the answer can
+// change what is recorded.
+func (m *Magus) ApprovedContentIDs(ctx context.Context, paths []string) map[string]string {
+	return approvedContentIDs(ctx, m.ws.Root, m.ws.VCSOptions, paths)
+}
+
+func approvedContentIDs(ctx context.Context, root string, opts types.VCSOptions, paths []string) map[string]string {
+	approved, err := approvedPolicyAt(ctx, root, opts)
 	if err != nil || approved == nil {
 		return nil
 	}
+	pending, err := approved.Pending(ctx)
+	if err != nil {
+		return nil
+	}
+	changed := newPendingSet(pending)
 	out := make(map[string]string, len(paths))
 	for _, p := range paths {
+		if !changed.covers(p) {
+			if data, err := os.ReadFile(p); err == nil {
+				out[p] = interp.ContentID(data)
+				continue
+			}
+		}
 		data, err := approved.ReadFile(ctx, p)
 		if err != nil {
 			out[p] = ""
 			continue
 		}
-		out[p] = interp.GitBlobID(data)
+		out[p] = interp.ContentID(data)
 	}
 	return out
 }
