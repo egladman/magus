@@ -1447,7 +1447,45 @@ func TestGuardDeniesReadAck(t *testing.T) {
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "only a person can record one")
+		assert.Contains(t, v.Deny, "can record either")
+	}
+}
+
+// TestGuardDeniesSessionDispose is finding F1's fix: disposing an attention request
+// records that a PERSON answered it (docs/doctrine.md, "Manual on purpose"), and until
+// now nothing stopped an agent from closing any request, including one addressed to a
+// person. It folds into the same rule as TestGuardDeniesReadAck rather than a rule of
+// its own, since both are a person's act to record.
+func TestGuardDeniesSessionDispose(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus session dispose att-3f9a`,
+		`./magus session dispose att-3f9a --reason "done"`,
+		`cd /tmp && magus session dispose att-3f9a`,
+		// A GLOBAL FLAG before the verb is the same invocation, the same gap the
+		// anchored --ack pattern used to leave open.
+		`magus -o json session dispose att-3f9a`,
+		`magus --root . session dispose att-3f9a`,
+		// A line the parser cannot read still falls back to the pattern.
+		`magus session dispose att-3f9a && (`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+		assert.Contains(t, v.Deny, "can record either")
+		assert.Contains(t, v.Deny, "session dispose")
+	}
+}
+
+// TestGuardAllowsSessionAttention is the negative half of TestGuardDeniesSessionDispose:
+// listing the queue is read-only and an agent raises the requests in the first place, so
+// only the verb that CLOSES one is denied.
+func TestGuardAllowsSessionAttention(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus session attention`,
+		`magus session attention -o json`,
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "unexpected deny for %q", cmd)
 	}
 }
 

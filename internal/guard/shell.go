@@ -82,7 +82,7 @@ type denyRuleName string
 
 const (
 	denyRuleNotesAuthor       denyRuleName = "notes-author"
-	denyRuleReadAck           denyRuleName = "read-ack"
+	denyRulePersonOnly        denyRuleName = "person-only"
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
@@ -881,18 +881,20 @@ var (
 	// so `capture`, which defaults to the private one, has no other rule that sees it.
 	notesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
 
-	// readAckRe matches an invocation that would mint a read receipt.
+	// personOnlyRe matches an invocation of either verb this package folds into one
+	// rule: minting a read receipt, or closing an attention request.
 	//
-	// A receipt is a claim that a PERSON read something, and it is the only fact in a
-	// review no analysis can supply. An agent that can mint one turns the whole measure
-	// into a formality it satisfies on the way past, and it would, because stamping the
-	// changeset is the obvious tidy-up at the end of a task.
+	// A receipt is a claim that a PERSON read something, and a disposed request is a
+	// claim that a PERSON answered it; both are the only fact in their measure that no
+	// analysis can supply. An agent able to record either turns the measure into a
+	// formality it satisfies on the way past, and it would, because stamping the
+	// changeset or clearing its own block is the obvious tidy-up at the end of a task.
 	//
 	// The guard is the right place precisely because of what it sees: it is wired into
 	// agent hosts, so every command reaching it came from an agent by construction. A
 	// person at a terminal never meets this rule.
 	// The unparsable-line fallback for magusInvokes, as above.
-	readAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
+	personOnlyRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+dispose\b`)
 
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
@@ -1054,8 +1056,9 @@ var (
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
-	denyReadAck = "Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one).\n" +
-		"A read receipt records that a PERSON read a change, so only a person can record one. Say you cannot and hand back the unread list."
+	denyPersonOnly = "A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it. Only a person can record either, so every spelling of both is refused.\n" +
+		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one). Say you cannot ack and hand back the unread list.\n" +
+		"Waiting on a request instead: say you are waiting on its id and hand it back; `" + hint.SessionDispose.With("<id>") + "` is a person's to run."
 
 	denyNotesAuthor = "Use `" + hint.MemoryPut.With("<name>") + "`: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design, so every spelling of the write is denied: `capture` files a transcript as a note, `promote` writes into the SHARED store, and both put a person's name on prose they never read.\n" +
@@ -1301,16 +1304,6 @@ func ruleFires(cmds []hint.Invocation, parsed bool, command string,
 	return fallback.MatchString(command)
 }
 
-// magusRuleFires answers off the resolved argv when the line parses and off the anchored
-// pattern when it does not, the same split gitGuard and gitGuardFallback make, and for the
-// same reason: a line with no AST to read must still be judged.
-func magusRuleFires(cmds []hint.Invocation, parsed bool, command string, fallback *regexp.Regexp, words ...string) bool {
-	if parsed {
-		return magusInvokes(cmds, words...)
-	}
-	return fallback.MatchString(command)
-}
-
 // notesWriteVerbs are the `magus notes` subcommands that AUTHOR a note; `ls`, `get` and
 // `verify` read and stay allowed.
 //
@@ -1327,6 +1320,17 @@ func notesWriteFires(cmds []hint.Invocation, parsed bool, command string) bool {
 	return slices.ContainsFunc(notesWriteVerbs, func(verb string) bool {
 		return magusInvokes(cmds, "notes", verb)
 	})
+}
+
+// personOnlyFires is magusRuleFires over two shapes it cannot express as one word set:
+// minting a read receipt (`diff --ack`) and closing an attention request (`session
+// dispose`) are different verbs recording different acts, but both record that a PERSON
+// did something, so one rule and one deny cover both rather than a third rule per verb.
+func personOnlyFires(cmds []hint.Invocation, parsed bool, command string) bool {
+	if !parsed {
+		return personOnlyRe.MatchString(command)
+	}
+	return magusInvokes(cmds, "diff", "--ack") || magusInvokes(cmds, "session", "dispose")
 }
 
 // searchHints is the unscoped default translator, used when no project list is
@@ -1532,8 +1536,8 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
-	if magusRuleFires(cmds, parsed, command, readAckRe, "diff", "--ack") {
-		return ShellVerdict{Deny: denyReadAck, Rule: denyRule{Name: denyRuleReadAck}}
+	if personOnlyFires(cmds, parsed, command) {
+		return ShellVerdict{Deny: denyPersonOnly, Rule: denyRule{Name: denyRulePersonOnly}}
 	}
 	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) {
 		return ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
