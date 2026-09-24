@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
@@ -31,7 +32,6 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
-	"github.com/egladman/magus/internal/proc"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
@@ -158,10 +158,12 @@ type Magus struct {
 	tel            observability.Provider
 	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
 	metricsCollect bool                   // daemon: build an always-on local metrics collector for the dashboard
-	// machineAdmitter is the machine budget supplied by the process that HOLDS it (the
-	// daemon); nil everywhere else, where Open finds the daemon over its socket.
-	machineAdmitter cache.MachineAdmitter
-	skipProviders   bool // open without running wired workspace providers (see WithoutWorkspaceProviders)
+	// broker is this workspace's broker client, nil when the policy is off. ownsBroker is
+	// set when Open made it, and Close then hangs it up.
+	broker        *broker.Client
+	ownsBroker    bool
+	brokerPolicy  types.BrokerPolicy // WithBrokerPolicy's override; empty keeps the config's
+	skipProviders bool               // open without running wired workspace providers (see WithoutWorkspaceProviders)
 
 	daemon Daemon
 }
@@ -505,7 +507,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	if o.Limiter != nil {
 		m.limOnce.Do(func() { m.lim = o.Limiter })
 	}
-	m.machineAdmitter = o.MachineAdmitter
+	m.broker, m.brokerPolicy = o.Broker, o.BrokerPolicy
 	m.metricsCollect = o.MetricsCollect
 	m.injectedTel = o.Provider
 	m.skipProviders = o.SkipWorkspaceProviders
@@ -804,26 +806,20 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 			cfgOpts = append(cfgOpts, cache.WithRemoteBackend(observability.InstrumentRemoteBackend(rb, tel)))
 		}
 	}
-	// Machine-wide admission. Wired here rather than inside cache.Open because the
-	// arbiter is a property of the HOST, and the composition root is the only layer
-	// that knows where this machine keeps it. A cache that found its own arbiter would
-	// give every worktree a different one, and N of them would each admit a full
-	// machine's worth of work.
-	//
-	// The daemon injects the budget it holds; everyone else dials it, at the configured
-	// address when there is one: the stable path is only where an unconfigured daemon
-	// happens to land.
-	if admitter := m.machineAdmitter; admitter != nil {
-		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(admitter))
-	} else if addr := m.cfg.Daemon.Address; addr != "" && proc.SocketLive(ctx, addr) {
-		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.DaemonAdmitter{Addr: addr}))
-	} else if addr, ok := proc.LookupStableSocket(ctx); ok {
-		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(proc.DaemonAdmitter{Addr: addr}))
-	}
-	c, err := cache.Open(ctx, cacheDir, cfgOpts...)
+	// Host capacity. Wired here rather than inside cache.Open because the arbiter is a
+	// property of the HOST, and the composition root is the only layer that knows where
+	// this machine keeps it. A cache that found its own arbiter would give every worktree
+	// a different one, and N of them would each admit a full machine's worth of work.
+	brokerOpts, err := m.wireBroker()
 	if err != nil {
 		shutdownTel()
 		return nil, err
+	}
+	cfgOpts = append(cfgOpts, brokerOpts...)
+	c, err := cache.Open(ctx, cacheDir, cfgOpts...)
+	if err != nil {
+		shutdownTel()
+		return nil, errors.Join(err, m.closeBroker())
 	}
 	m.cache = c
 	m.limiter().SetHooks(
@@ -1638,6 +1634,9 @@ func (m *Magus) Close() error {
 		if err := m.buzzPoolReg.Close(); err != nil {
 			errs = append(errs, err)
 		}
+	}
+	if err := m.closeBroker(); err != nil {
+		errs = append(errs, fmt.Errorf("magus: hang up the broker: %w", err))
 	}
 	return errors.Join(errs...)
 }

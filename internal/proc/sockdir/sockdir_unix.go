@@ -1,6 +1,6 @@
 //go:build !windows
 
-package proc
+package sockdir
 
 import (
 	"fmt"
@@ -9,11 +9,10 @@ import (
 	"syscall"
 )
 
-// SockDir returns the directory where magus proc sockets are stored.
-func SockDir() string { return sockDir() }
-
-// sockDir prefers $XDG_RUNTIME_DIR/magus/ and falls back to $TMPDIR/magus-$UID/.
-func sockDir() string {
+// Dir prefers $XDG_RUNTIME_DIR/magus/ and falls back to $TMPDIR/magus-$UID/. It panics
+// when the directory exists but is not private to this user, since a socket there is
+// one another account could tamper with.
+func Dir() string {
 	if xdg := os.Getenv("XDG_RUNTIME_DIR"); xdg != "" {
 		dir := filepath.Join(xdg, "magus")
 		if err := os.MkdirAll(dir, 0o700); err == nil {

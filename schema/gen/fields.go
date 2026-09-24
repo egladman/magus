@@ -573,6 +573,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...",
 	},
 	{
+		GoPath:   "Broker",
+		YamlPath: "broker",
+		EnvVar:   "MAGUS_BROKER",
+		Flag:     fieldtype.FlagNames{Long: "broker"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_BROKER: Broker decides whether a run asks the broker, the per-user process holding this host's slots, declared memory and sha...",
+	},
+	{
 		GoPath:   "MaxFailures",
 		YamlPath: "max_failures",
 		EnvVar:   "MAGUS_MAX_FAILURES",

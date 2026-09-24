@@ -31,6 +31,7 @@ var All = []Command{
 	notesCommand,
 	diffCommand,
 	serverCommand,
+	brokerCommand,
 	mcpCommand,
 	buzzCommand,
 	completionCommand,
@@ -1085,90 +1086,140 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 
 var serverCommand = Command{
 	Name:        "server",
-	Short:       "Manage the persistent magus daemon",
-	Description: "Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.",
-	Tags:        []string{"cli", "magus server", "daemon", "server", "socket", "persistent"},
-	Long: `Start, stop, or check the liveness of a persistent magus daemon.
+	Short:       "Manage the magus server: MCP, the console, APIs and background jobs",
+	Description: "Start, stop, reload or check the magus server a person starts: MCP over HTTP, the console, the APIs, background jobs and the warm graph and symbol watch.",
+	Tags:        []string{"cli", "magus server", "server", "mcp", "console", "socket", "persistent"},
+	Long: `Start, stop, reload or check the magus server.
 
-By default every magus invocation starts a short-lived proc server that dies
-when the command exits. The persistent daemon keeps the server alive across
-invocations so workspace discovery, config loading, and the content-addressed
-cache are paid for once. Nested magus calls (from build scripts, editor
-integrations, etc.) forward work to the daemon automatically.
+The server is the background process a person asks for. It serves MCP and the
+console over HTTP, the APIs behind them, background jobs and scheduled
+maintenance, and keeps each workspace's knowledge graph and symbol indexes
+current. It keeps workspaces warm, so nested magus calls that forward to it pay
+for discovery and config once. Nothing starts it but ` + "`magus server start`" + ` (and
+` + "`graph export --follow`" + `, which asks for the console by name), and it runs
+until stopped.
+
+It is not what holds this host's capacity: that is ` + "`magus broker`" + `, which a
+run starts on its own. The server asks the broker like any run does.
 
 The socket address is resolved in priority order:
   --socket flag  >  MAGUS_DAEMON_ADDRESS env  >  daemon.address in magus.yaml  >
-  stable default ($XDG_RUNTIME_DIR/magus/magus-daemon.sock)
+  default ($XDG_RUNTIME_DIR/magus/server.sock)
 
-The socket file acts as the lock: present means a daemon is running, absent
-means none. Shell init hooks (e.g. Nix-injected .profile lines) typically
-check for the file with [ -S "$socket" ] before starting one.`,
-	Usage: "magus server <start|stop|reload|job> [flags]",
+A detached server logs to $XDG_STATE_HOME/magus/server.log; under
+--foreground it logs to stderr for the supervisor to keep.`,
+	Usage: "magus server <start|stop|status|reload> [flags]",
 	// Each subcommand carries its own flags. --foreground sat on the parent with
-	// "(server start)" in its doc, and stop's --socket and --services were not
-	// declared at all, bound by the command, absent from every man page.
+	// "(server start)" in its doc, and stop's --socket was not declared at all, bound
+	// by the command, absent from every man page.
 	Children: []Command{
 		{
 			Name:  "start",
-			Short: "Start a persistent daemon (auto-backgrounds by default; --foreground blocks)",
+			Short: "Start the server (auto-backgrounds by default; --foreground blocks)",
 			Flags: []Flag{
 				{Name: "foreground", Kind: FlagBool, Doc: "Run in the foreground and block, instead of auto-backgrounding"},
 			},
 		},
 		{
 			Name:  "stop",
-			Short: "Send a graceful shutdown request to a running daemon",
+			Short: "Send a graceful shutdown request to the running server",
 			Flags: []Flag{
-				{Name: "socket", Kind: FlagString, Doc: "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)"},
-				{Name: "services", Kind: FlagBool, Doc: "Stop the daemon's hosted services, leaving the daemon running"},
+				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)"},
 			},
 		},
 		{
 			Name:        "status",
-			Short:       "The daemon: whether it is up and where you reach it",
-			Description: "Report the running daemon's pid, version, uptime, socket, MCP url and console url, what it is running and queueing, and the workspaces it has loaded. Exits non-zero when no daemon is running.",
-			Long: `The daemon, and nothing else: is it up, and where do I reach it.
+			Short:       "The server: whether it is up and where you reach it",
+			Description: "Report the running server's pid, version, uptime, socket, listeners, MCP url and console url, what it is running, and the workspaces it has loaded. Exits non-zero when no server is running.",
+			Long: `The server, and nothing else: is it up, and where do I reach it.
 
 ` + "`magus status`" + ` is the other one. It answers what this workspace and this
-machine are doing: what is loaded, what holds slots, and what the cache and
-config are. It embeds the daemon block too, so this verb is the narrow view
-rather than a different fact.
+host are doing: the broker and what holds capacity, the server, what is
+loaded, and what the cache and config are. It embeds the server rows too, so
+this verb is the narrow view rather than a different fact.
 
-Both read one report and print the identity and capacity lines through one
-renderer, so the two can never disagree about a number. It exits non-zero when
-no daemon is running, matching ` + "`magus server stop`" + `, so a script can chain on
-it.`,
+It exits non-zero when no server is running, matching ` + "`magus server stop`" + `,
+so a script can chain on it.`,
 			Usage: "magus server status [--socket <addr>] [flags]",
 			Flags: []Flag{
-				{Name: "socket", Kind: FlagString, Doc: "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)"},
+				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)"},
 			},
 		},
 		{
 			Name:  "reload",
-			Short: "Re-read configuration without restarting: drop the daemon's open workspaces",
+			Short: "Re-read configuration without restarting: drop the server's open workspaces",
 			Flags: []Flag{
-				{Name: "socket", Kind: FlagString, Doc: "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)"},
+				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_DAEMON_ADDRESS / server.sock)"},
 			},
 		},
 	},
 	Examples: []Example{
-		{"Start the daemon (auto-backgrounds)", "magus server start"},
-		{"Run the daemon in the foreground (supervisor or debugging)", "magus server start --foreground"},
-		{"Stop the running daemon", "magus server stop"},
+		{"Start the server (auto-backgrounds)", "magus server start"},
+		{"Run the server in the foreground (supervisor or debugging)", "magus server start --foreground"},
+		{"Stop the running server", "magus server stop"},
 		{"Reload configuration without restarting", "magus server reload"},
-		{"Inspect daemon pool state", "magus status"},
+		{"Everything running on this host", "magus status"},
 		{"Use a custom socket path", "magus --daemon-address unix:///tmp/m.sock server start"},
+	},
+}
+
+var brokerCommand = Command{
+	Name:        "broker",
+	Short:       "The per-user process holding this host's capacity and shared services",
+	Description: "Check or stop the broker: the per-user process that holds this host's concurrency slots, declared memory and shared services, which a run starts on its own.",
+	Tags:        []string{"cli", "magus broker", "broker", "capacity", "memory_mb", "services", "concurrency"},
+	Long: `The broker holds this host's capacity: the concurrency slots and declared
+memory_mb every magus on it shares, and the services runs keep warm between
+them. Every run asks it before starting a step; a step that does not fit
+alongside what other invocations hold is refused with MGS3009 (exit 75).
+
+A run starts a broker when none answers, and prints one line saying so. It
+loads no workspace, records no telemetry and listens on a unix socket only
+($XDG_RUNTIME_DIR/magus/broker.sock). It exits once it has held nothing (no
+claim, no service with a dependent) for ten minutes; a started broker logs to
+$XDG_STATE_HOME/magus/broker.log.
+
+Each run holds one connection to it for its life, and every claim and service
+reference rides that connection, so a run killed outright releases what it
+held at once. When a broker dies with runs still going, they re-assert their
+claims on the next one.
+
+The broker setting in magus.yaml decides what a run does about it: required
+refuses a step when none answers (MGS3022, exit 69), best-effort (the default)
+runs unarbitrated and says so once, off never starts or contacts one.
+
+Run with no target, it serves in this process and logs to stderr.`,
+	Usage: "magus broker [status|stop] [flags]",
+	Children: []Command{
+		{
+			Name:        "status",
+			Short:       "The broker: its capacity, every claim holding it, and its services",
+			Description: "Report the broker's pid, socket, capacity, each claim holding it and the services it hosts. Exits non-zero when no broker is running.",
+			Usage:       "magus broker status [flags]",
+		},
+		{
+			Name:  "stop",
+			Short: "Stop the broker, or with --services only the services it hosts",
+			Flags: []Flag{
+				{Name: "services", Kind: FlagBool, Doc: "Stop the broker's hosted services, leaving the broker running"},
+			},
+		},
+	},
+	Examples: []Example{
+		{"Is a broker up, and what holds capacity", "magus broker status"},
+		{"Stop the services it keeps warm", "magus broker stop --services"},
+		{"Never start or ask one, for this run", "magus run test . --broker off"},
 	},
 }
 
 var mcpCommand = Command{
 	Name:        "mcp",
 	Short:       "Serve MCP over stdio for the agent host that launched it",
-	Description: "Serve the MCP tools over stdin and stdout for the agent host that launched the process, against the workspace it was launched in, with no daemon and no token.",
+	Description: "Serve the MCP tools over stdin and stdout for the agent host that launched the process, against the workspace it was launched in, with no server and no token.",
 	Tags:        []string{"cli", "magus mcp", "mcp", "agent", "stdio"},
 	Long: `Serve MCP over stdin and stdout, one JSON-RPC message per line, for the
 agent host that launched this process. It opens the workspace it is launched
-in and needs no daemon and no bearer token: the caller is the local process
+in and needs no server and no bearer token: the caller is the local process
 the host started, admitted with mcp=write, and every tool call is recorded on
 the activity trail with the stdio credential and the client's name.
 
@@ -1181,9 +1232,10 @@ Register it with an MCP client as a stdio server:
   command  magus
   args     ["mcp"]
 
-The daemon (magus server start) serves the same tools over Streamable HTTP
-for one long-lived server shared by several clients; that endpoint takes a
-connector token (magus config mcp connector create).
+magus server start serves the same tools over Streamable HTTP for one
+long-lived server shared by several clients; that endpoint takes a
+connector token (magus config mcp connector create). A target this process
+runs asks the broker for host capacity like any other run.
 
 Per-client configuration lives in docs/guides/integrations/mcp.md, not in
 this binary: naming a client here would make a change to its config format a

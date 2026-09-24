@@ -1,6 +1,6 @@
 //go:build !windows
 
-package proc
+package sockdir
 
 import (
 	"os"

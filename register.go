@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
@@ -56,6 +57,22 @@ func WithProvider(p observability.Provider) Option {
 // check, since a caller with no version has no version to be too old.
 func WithVersion(v string) Option {
 	return workspace.WithVersion(v)
+}
+
+// WithBroker routes this workspace's host capacity claims and shared services through
+// b instead of a client Open would make for itself. Share one client across Open calls,
+// as with [WithLimiter], so a process holds one broker connection however many
+// workspaces it opens. Open never starts a broker; b dials on first use.
+//
+// A resolved policy of off (see [WithBrokerPolicy]) ignores b.
+func WithBroker(b *broker.Client) Option {
+	return func(o *workspace.Load) { o.Broker = b }
+}
+
+// WithBrokerPolicy overrides the workspace's `broker` setting for this Open. An invalid
+// policy fails Open.
+func WithBrokerPolicy(p types.BrokerPolicy) Option {
+	return func(o *workspace.Load) { o.BrokerPolicy = p }
 }
 
 // WithoutWorkspaceProviders opens the workspace without running its wired workspace

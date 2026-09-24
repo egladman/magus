@@ -45,15 +45,11 @@ type StatusSnapshot struct {
 	// box must still report the capacity and in-use numbers, never an error demanding
 	// --socket.
 	Pools []StatusOutput `json:"pools,omitempty" yaml:"pools,omitempty"`
-	// Runs are the invocations the daemon is executing right now (adopted
+	// Runs are the invocations the server is executing right now (adopted
 	// dispatches), each with its per-target execution state. Empty when nothing is
-	// running or when reported by a process that is not the daemon.
+	// running or when reported by a process that is not the server.
 	Runs []StatusRun `json:"runs,omitempty" yaml:"runs,omitempty"`
-	// Services are the long-running shared services the daemon is hosting right now,
-	// kept warm across invocations. Empty when none are held or when reported by a
-	// process that is not the daemon.
-	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`
-	// ObservingSince is when this daemon began observing (its start). The telemetry and
+	// ObservingSince is when this server began observing (its start). The telemetry and
 	// cache counters above are cumulative from this instant and are NOT persisted across
 	// restarts, so a dashboard can be transparent that the numbers are "since <this>", not
 	// all-time. Zero (omitted) when reported by a non-daemon `magus status`.
@@ -78,20 +74,21 @@ type StatusSnapshot struct {
 	// holds one indefinitely, and every other run simply waits. Surfacing who holds
 	// what turns that from a hang into a fact.
 	Locks []StatusLock `json:"locks,omitempty" yaml:"locks,omitempty"`
+	// BrokerPolicy is the broker setting this report was made under. It is reported even
+	// when Broker is nil, because it decides what a missing broker means: a refused step
+	// under required, an unarbitrated one under best-effort, nothing at all under off.
+	BrokerPolicy BrokerPolicy `json:"broker_policy,omitempty" yaml:"broker_policy,omitempty"`
+	// Broker is the process holding this host's capacity and shared services; nil when
+	// none is running.
+	Broker *StatusBroker `json:"broker,omitempty" yaml:"broker,omitempty"`
+	// Server is the process serving MCP, the console and background jobs; nil when none
+	// is running.
+	Server *StatusServer `json:"server,omitempty" yaml:"server,omitempty"`
 	// PipeWaits are runs that have not taken their locks yet because a magus upstream of
 	// them in a shell pipe still holds, or may still take, a project they need. Without
 	// it such a run shows nowhere: it holds no lock and runs no target. Additive JSON,
 	// not on the proto event wire.
 	PipeWaits []StatusPipeWait `json:"pipe_waits,omitempty" yaml:"pipe_waits,omitempty"`
-	// Machine is the host-wide admission budget the daemon arbitrates: what every magus
-	// on this machine holds and who is queued for it. Nil when no daemon is running, or
-	// when the one that answered is a per-process proc server, which arbitrates nothing
-	// beyond itself.
-	//
-	// It belongs beside Locks for the same reason: held is the normal state, and what
-	// makes it worth reporting is WHO. A run queued for the machine is otherwise a run
-	// with nothing to show for itself in another terminal.
-	Machine *MachineSnapshot `json:"machine,omitempty" yaml:"machine,omitempty"`
 	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (an editor,
 	// IDEs, Desktop) actually connect to: its address and whether it is really serving.
 	// It is checked independently of the Pool fields above, which report the proc socket
@@ -238,6 +235,59 @@ type StatusService struct {
 	StartedAt  time.Time    `json:"started_at,omitempty" yaml:"started_at,omitempty"`
 }
 
+// StatusBroker is the broker's own report: the per-user process that holds this host's
+// capacity (slots and declared memory) and the services every magus on it shares.
+type StatusBroker struct {
+	PID     int    `json:"pid" yaml:"pid"`
+	Version string `json:"version,omitempty" yaml:"version,omitempty"`
+	// Protocol is the broker wire version it speaks.
+	Protocol int    `json:"protocol" yaml:"protocol"`
+	Socket   string `json:"socket" yaml:"socket"`
+	// Executable is the binary the broker runs from. A broker started by a worktree's
+	// ./magus keeps running after that worktree is gone, and this is where to look.
+	Executable string    `json:"executable,omitempty" yaml:"executable,omitempty"`
+	StartTime  time.Time `json:"start_time" yaml:"start_time"`
+	// Capacity is the whole budget, what is held, and every claim holding it.
+	Capacity MachineSnapshot `json:"capacity" yaml:"capacity"`
+	// Services are the shared services it hosts right now.
+	Services []StatusService `json:"services,omitempty" yaml:"services,omitempty"`
+	// IdleExitSeconds is how long the broker stays up once it holds nothing: no claim,
+	// no service with a dependent.
+	IdleExitSeconds int `json:"idle_exit_seconds,omitzero" yaml:"idle_exit_seconds,omitempty"`
+}
+
+// StatusServer is the server's own report: the person-started process serving MCP, the
+// console, the APIs and background jobs.
+type StatusServer struct {
+	PID        int       `json:"pid" yaml:"pid"`
+	Version    string    `json:"version,omitempty" yaml:"version,omitempty"`
+	Socket     string    `json:"socket" yaml:"socket"`
+	Executable string    `json:"executable,omitempty" yaml:"executable,omitempty"`
+	StartTime  time.Time `json:"start_time" yaml:"start_time"`
+	// Listeners is every address the server accepts connections on. An HTTP entry is
+	// absent when nothing is served over HTTP.
+	Listeners []StatusListener `json:"listeners,omitempty" yaml:"listeners,omitempty"`
+	// Watch is the workspace roots whose knowledge graph and symbol indexes the server
+	// keeps current.
+	Watch []string `json:"watch,omitempty" yaml:"watch,omitempty"`
+}
+
+// ListenerKind is the transport a [StatusListener] accepts on.
+type ListenerKind string
+
+const (
+	// ListenerSocket is a local unix socket, reachable only from this host.
+	ListenerSocket ListenerKind = "socket"
+	// ListenerHTTP is the MCP endpoint and console.
+	ListenerHTTP ListenerKind = "http"
+)
+
+// StatusListener is one address a server accepts connections on.
+type StatusListener struct {
+	Kind    ListenerKind `json:"kind" yaml:"kind"`
+	Address string       `json:"address" yaml:"address"`
+}
+
 // StatusLock is one held per-project workspace lock and the process holding it.
 //
 // Held is the normal state, not an alarm. What makes it worth reporting is the
@@ -334,9 +384,8 @@ type CacheStatus struct {
 
 // StatusOutput is the public shape of the live concurrency pool reported by `magus status`.
 type StatusOutput struct {
-	ParentPID     int    `json:"parent_pid" yaml:"parent_pid"`
-	DaemonVersion string `json:"daemon_version,omitempty" yaml:"daemon_version,omitempty"`
-	Mode          string `json:"mode,omitempty" yaml:"mode,omitempty"` // "daemon", "proc", or ""
+	ParentPID int    `json:"parent_pid" yaml:"parent_pid"`
+	Version   string `json:"version,omitempty" yaml:"version,omitempty"`
 	// Socket is the proc-server address this snapshot was read from, so a reader running
 	// more than one server can tell the entries apart and narrow with --socket.
 	Socket   string `json:"socket,omitempty" yaml:"socket,omitempty"`

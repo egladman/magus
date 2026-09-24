@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -85,18 +86,12 @@ func probeName(kind probeKind) string {
 func evaluateHealth(status *types.StatusOutput, err error, kind probeKind, root string) (ok bool, reason string) {
 	if err != nil || status == nil {
 		if err != nil {
-			return false, fmt.Sprintf("daemon unreachable: %v", err)
+			return false, fmt.Sprintf("server unreachable: %v", err)
 		}
-		return false, "daemon unreachable"
+		return false, "server unreachable"
 	}
 	if kind == probeLiveness {
-		return true, fmt.Sprintf("daemon pid %d is alive", status.ParentPID)
-	}
-	// Readiness is a multi-workspace daemon concept — only the daemon reports
-	// which workspaces are loaded. A per-process proc server never does, so
-	// report that honestly instead of a misleading "no workspaces loaded".
-	if status.Mode == "proc" {
-		return false, "daemon is in per-process mode; readiness requires `" + hint.ServerStart.String() + "`"
+		return true, fmt.Sprintf("server pid %d is alive", status.ParentPID)
 	}
 	if root != "" {
 		clean := filepath.Clean(root)
@@ -231,11 +226,17 @@ func evaluateMCPHealth(m *types.MCPEndpointStatus) (ok bool, reason string) {
 	return false, "mcp endpoint " + m.State
 }
 
-// statusFunc returns the daemon's current status snapshot for a health check.
+// statusFunc returns the server's current status snapshot for a health check.
 // It is a seam so tests can supply a snapshot without dialing a live socket.
 type statusFunc func(ctx context.Context) (*types.StatusOutput, error)
 
-// daemonStatus dials socket (auto-discovered when empty) for a live status snapshot.
+// errNotServer is a health probe that reached a per-process proc server. It answers a
+// socket and loads no workspace, so reporting its empty workspace list as "no
+// workspaces loaded" would be a misleading readiness verdict.
+var errNotServer = errors.New("a per-process pool answered, not the server; readiness requires `" + hint.ServerStart.String() + "`")
+
+// daemonStatus dials socket (auto-discovered when empty) for a live status snapshot of
+// the server.
 func daemonStatus(socket string) statusFunc {
 	return func(ctx context.Context) (*types.StatusOutput, error) {
 		addr, err := resolveStatusSocket(ctx, socket)
@@ -245,6 +246,9 @@ func daemonStatus(socket string) statusFunc {
 		reply, err := proc.QueryStatus(ctx, addr)
 		if err != nil {
 			return nil, err
+		}
+		if reply.Server == nil {
+			return nil, errNotServer
 		}
 		return reply.StatusOutput(), nil
 	}
@@ -286,7 +290,7 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 		st.Note = "MCP endpoint is listening but no workspace is loaded yet."
 	default:
 		st.State = "unreachable"
-		st.Note = fmt.Sprintf("nothing is serving MCP at %s; start the daemon: %s", addr, hint.ServerStart)
+		st.Note = fmt.Sprintf("nothing is serving MCP at %s; start the server: %s", addr, hint.ServerStart)
 	}
 	return st
 }
@@ -312,7 +316,7 @@ func buildConsoleStatus(cfg config.Console, mcp *types.MCPEndpointStatus) *types
 	st := &types.ConsoleStatus{Enabled: true, Address: mcp.Address, URL: console.Root(mcp.Address)}
 	if !mcp.Reachable {
 		st.State = "unreachable"
-		st.Note = fmt.Sprintf("nothing is listening at %s; start the daemon: %s", mcp.Address, hint.ServerStart)
+		st.Note = fmt.Sprintf("nothing is listening at %s; start the server: %s", mcp.Address, hint.ServerStart)
 		return st
 	}
 	st.Reachable, st.State = true, "serving"
@@ -452,24 +456,21 @@ func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.Statu
 // never a workspace root (see the Detail policy above).
 func workspacesComponent(snapshot *types.StatusOutput) types.ReadinessComponent {
 	c := types.ReadinessComponent{Name: types.ReadinessWorkspaces}
+	if snapshot == nil {
+		c.Status, c.Detail = types.ReadinessDown, "server unreachable"
+		return c
+	}
+	loaded := loadedCount(snapshot.Workspaces)
+	failed := failedCount(snapshot.Workspaces)
 	switch {
-	case snapshot == nil:
-		c.Status, c.Detail = types.ReadinessDown, "daemon unreachable"
-	case snapshot.Mode == "proc":
-		c.Status, c.Detail = types.ReadinessDown, "daemon is in per-process mode"
+	case loaded == 0 && failed == 0:
+		c.Status, c.Detail = types.ReadinessDown, "no workspaces loaded"
+	case loaded == 0:
+		c.Status, c.Detail = types.ReadinessDown, fmt.Sprintf("%d failed to load", failed)
+	case failed > 0:
+		c.Status, c.Detail = types.ReadinessDegraded, fmt.Sprintf("%d loaded, %d failed to load", loaded, failed)
 	default:
-		loaded := loadedCount(snapshot.Workspaces)
-		failed := failedCount(snapshot.Workspaces)
-		switch {
-		case loaded == 0 && failed == 0:
-			c.Status, c.Detail = types.ReadinessDown, "no workspaces loaded"
-		case loaded == 0:
-			c.Status, c.Detail = types.ReadinessDown, fmt.Sprintf("%d failed to load", failed)
-		case failed > 0:
-			c.Status, c.Detail = types.ReadinessDegraded, fmt.Sprintf("%d loaded, %d failed to load", loaded, failed)
-		default:
-			c.Status, c.Detail = types.ReadinessOK, fmt.Sprintf("%d loaded", loaded)
-		}
+		c.Status, c.Detail = types.ReadinessOK, fmt.Sprintf("%d loaded", loaded)
 	}
 	return c
 }

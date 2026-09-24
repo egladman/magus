@@ -146,7 +146,7 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Co
 	globalsMu.Unlock()
 	if fp != current { // mismatch: kernel-level and binding-level policies would disagree
 		RecordApply(ctx, 0, "mismatch", "workspace", nil) // no ruleset installed; count the outcome, not rules
-		return ctx, fmt.Errorf("%w: sandbox policy for workspace %q differs from the policy already applied to this daemon process (fingerprint %s vs %s); restart the daemon to pick up new sandbox configuration",
+		return ctx, fmt.Errorf("%w: sandbox policy for workspace %q differs from the policy already applied to this server process (fingerprint %s vs %s); restart the server to pick up new sandbox configuration",
 			types.DiagnosticErrorf(types.SandboxPolicyMismatch, "sandbox policy mismatch"),
 			root, fp, current)
 	}

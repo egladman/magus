@@ -88,6 +88,7 @@ func CheckCompat(ctx context.Context, repoRoot, baseTag string) (CompatReport, e
 	// the shared daemon would load it with its own build instead of this one.
 	cfg.Cache.Dir = filepath.Join(scratch, "cache")
 	cfg.Daemon.Enabled = false
+	cfg.Broker = types.BrokerOff
 	ws, err := magus.Inspect(ctx, tree, magus.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
 	if c, ok := ws.(io.Closer); ok {
 		_ = c.Close()

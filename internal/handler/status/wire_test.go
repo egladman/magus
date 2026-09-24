@@ -27,7 +27,7 @@ func TestStatusProtoMapsPool(t *testing.T) {
 	started := time.UnixMilli(1700)
 	r := types.StatusSnapshot{
 		Pool: &types.StatusOutput{
-			ParentPID: 42, Mode: "daemon", Capacity: 8, Running: 3, Queued: 1,
+			ParentPID: 42, Capacity: 8, Running: 3, Queued: 1,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, Step: "go-build"}},
 		},
 	}
@@ -55,7 +55,7 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 	r := types.StatusSnapshot{
 		Cache: types.CacheStatus{SizeMB: 2048},
 		Pool: &types.StatusOutput{
-			Mode: "daemon", Capacity: 4, Running: 2,
+			Capacity: 4, Running: 2,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build"}, Inv: "inv7c3a9f2"}},
 			Workspaces: []types.StatusWorkspace{
 				{Root: "/repo", CacheHit: 1284, CacheMiss: 217, CacheError: 3, CacheBytes: 734003200},
@@ -189,6 +189,58 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 	assert.Equal(t, statusv1.TargetRun_STATE_CACHED, run.GetTargets()[2].GetState())
 }
 
+// TestStatusProtoCarriesTheBrokerAndTheServer pins wire parity with `magus status`: the
+// broker's capacity and every claim holding it, the policy that decides what a missing
+// broker means, the server's listeners, and the broker's services on the list the
+// dashboard already reads.
+func TestStatusProtoCarriesTheBrokerAndTheServer(t *testing.T) {
+	since := time.UnixMilli(1700)
+	r := types.StatusSnapshot{
+		BrokerPolicy: types.BrokerRequired,
+		Broker: &types.StatusBroker{
+			PID: 48213, Protocol: 1, Socket: "unix:///run/magus/broker.sock", IdleExitSeconds: 600,
+			Capacity: types.MachineSnapshot{
+				BudgetMB: 48 << 10, HeldMB: 12 << 10, BudgetSlots: 10, HeldSlots: 4,
+				Holders: []types.MachineClaimant{{
+					Project: "api", Target: "test", PID: 48190, MemoryMB: 12 << 10, Slots: 4,
+					Dir: "/src/a", Command: "magus affected ci", Since: since,
+				}},
+			},
+			Services: []types.StatusService{{ID: "pg", Label: "postgres-15", Dependents: 2}},
+		},
+		Server: &types.StatusServer{
+			PID: 47001, Socket: "unix:///run/magus/server.sock",
+			Listeners: []types.StatusListener{{Kind: types.ListenerHTTP, Address: "127.0.0.1:7391"}},
+			Watch:     []string{"/repo"},
+		},
+	}
+	s := toProto(t, r, types.BuildInfo{Version: "v1"})
+
+	assert.Equal(t, "required", s.GetBrokerPolicy())
+	b := s.GetBroker()
+	require.NotNil(t, b)
+	assert.Equal(t, int32(48213), b.GetPid())
+	assert.Equal(t, int32(600), b.GetIdleExitSeconds())
+	assert.Equal(t, int32(10), b.GetCapacity().GetBudgetSlots())
+	require.Len(t, b.GetCapacity().GetHolders(), 1)
+	h := b.GetCapacity().GetHolders()[0]
+	assert.Equal(t, "magus affected ci", h.GetCommand())
+	assert.Equal(t, int64(1700), h.GetStartTime().AsTime().UnixMilli())
+	require.Len(t, s.GetServices(), 1, "the broker's services ride Status.services")
+	assert.Equal(t, "postgres-15", s.GetServices()[0].GetLabel())
+
+	srv := s.GetServer()
+	require.NotNil(t, srv)
+	assert.Equal(t, int32(47001), srv.GetPid())
+	require.Len(t, srv.GetListeners(), 1)
+	assert.Equal(t, "http", srv.GetListeners()[0].GetKind())
+	assert.Equal(t, []string{"/repo"}, srv.GetWatch())
+
+	none := toProto(t, types.StatusSnapshot{}, types.BuildInfo{Version: "v1"})
+	assert.Nil(t, none.GetBroker(), "no broker running is an absent section")
+	assert.Nil(t, none.GetServer())
+}
+
 // TestStatusProtoCarriesSecretProviderName pins that the selected provider's NAME reaches
 // the dashboard, and that a workspace which declared none reports empty rather than
 // inventing the built-in one's name. The console keys "is a provider declared" off exactly
@@ -200,7 +252,6 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
 	r := types.StatusSnapshot{
 		Pool: &types.StatusOutput{
-			Mode: "daemon",
 			Workspaces: []types.StatusWorkspace{
 				{Root: "/repo", SecretProvider: "onepassword"},
 				{Root: "/svc"},

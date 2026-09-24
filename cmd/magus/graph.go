@@ -114,9 +114,9 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Rebuild the knowledge graph now. By default it first reindexes code symbols")
 			fmt.Fprintln(os.Stderr, "by running each symbol-capable project's `scip` op, then runs each adapter")
 			fmt.Fprintln(os.Stderr, "declared in knowledge.sessions to fold this machine's agent transcripts into")
-			fmt.Fprintln(os.Stderr, "the @session overlay, then rebuilds and re-ingests. The daemon does this")
+			fmt.Fprintln(os.Stderr, "the @session overlay, then rebuilds and re-ingests. The server does this")
 			fmt.Fprintln(os.Stderr, "automatically in the background; this is the manual trigger (after a branch")
-			fmt.Fprintln(os.Stderr, "switch, or when the daemon is not running).")
+			fmt.Fprintln(os.Stderr, "switch, or when the server is not running).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -1034,9 +1034,9 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 			fmt.Fprintf(os.Stderr, "start it: %s\n", hint.ServerStart)
 			return errSilent{exitCode: 1}
 		}
-	} else if err := ensureConsoleDaemon(ctx, hostPort, root); err != nil {
+	} else if err := ensureConsoleServer(ctx, hostPort, root); err != nil {
 		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: %v\n", err)
-		fmt.Fprintf(os.Stderr, "start it yourself to see the daemon's own output: %s\n", hint.ServerStart)
+		fmt.Fprintf(os.Stderr, "start it yourself to see the server's own output: %s\n", hint.ServerStart)
 		return errSilent{exitCode: 1}
 	}
 

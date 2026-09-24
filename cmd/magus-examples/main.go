@@ -214,6 +214,7 @@ func capture(bin, dir string, argv []string) (string, error) {
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"MAGUS_DAEMON_ENABLED=false",
+		"MAGUS_BROKER=off",
 		"XDG_STATE_HOME="+filepath.Join(dir, "state"))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

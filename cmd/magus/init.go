@@ -234,7 +234,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 
 	// Daemon rc snippet — clearly optional, copy/paste only.
 	interactive.Emit(os.Stderr, "")
-	interactive.Emit(os.Stderr, "optional: start the daemon automatically on login")
+	interactive.Emit(os.Stderr, "optional: start the server automatically on login")
 	interactive.Emit(os.Stderr, "add to ~/.bashrc, ~/.zshrc, or ~/.profile:")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "  # start magus daemon on login (magus works fine without it)")

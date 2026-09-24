@@ -470,6 +470,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			errs = append(errs, fmt.Errorf("MAGUS_CONCURRENCY_PROFILE: %w", err))
 		}
 	}
+	if v := getenv("MAGUS_BROKER"); v != "" {
+		if err := cfg.Broker.UnmarshalText([]byte(v)); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_BROKER: %w", err))
+		}
+	}
 	if v := getenv("MAGUS_MAX_FAILURES"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_MAX_FAILURES: %w", err))
