@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
@@ -343,6 +345,95 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate t
 			id, declared, load, held[0].ID, store.root, id, load, hint.DescribeFile.With(load))
 	}
 	return nil
+}
+
+// RefuseDirectoryWritePaths refuses a fork whose write paths name an existing directory that
+// is not a project root (MGS3018). A directory claims every file beneath it, so the job
+// overlaps every job that edits anything there, and the overlap report fills with pairs
+// that share no file. Every fork door runs it, and there is no override.
+//
+// Declarable: a file; a path that does not exist yet, which the job creates; and a project
+// root, which the job owns whole ("." when the workspace root is a project). A glob whose
+// last segments are only wildcards (`docs/**`, `docs/*`, `docs/**/*`) names everything
+// under its directory, so it is judged as that directory, each match when the directory
+// part is itself a pattern. Any other glob (`docs/*.md`) names files and passes.
+//
+// A nil store, or one with no workspace root, has no tree to read and refuses nothing.
+func RefuseDirectoryWritePaths(store *Store, id string, candidate types.Job) error {
+	if store == nil || store.root == "" {
+		return nil
+	}
+	var refused []string
+	for _, decl := range candidate.WritePaths {
+		for _, dir := range claimedDirs(store.root, decl) {
+			if describe.IsProjectRoot(store.root, dir) {
+				continue
+			}
+			named := fmt.Sprintf("%q", decl)
+			if dir != path.Clean(strings.TrimSpace(decl)) {
+				named = fmt.Sprintf("%q (matching the directory %q)", decl, dir)
+			}
+			refused = append(refused, fmt.Sprintf("%s, inside project %q", named, enclosingProject(store.root, dir)))
+		}
+	}
+	if len(refused) == 0 {
+		return nil
+	}
+	return types.DiagnosticErrorf(types.WritePathIsDirectory,
+		"job: %s declares a directory as a write path: %s. A directory claims every file under it, so the job"+
+			" would overlap every job editing anything there. List the files the job will edit, or declare the"+
+			" root of the project it owns whole",
+		id, strings.Join(refused, "; "))
+}
+
+// claimedDirs returns the existing directories, workspace-relative, that the write path
+// decl claims whole. See [RefuseDirectoryWritePaths] for how a glob is read.
+func claimedDirs(root, decl string) []string {
+	decl = strings.TrimSpace(decl)
+	if decl == "" {
+		return nil
+	}
+	segs := strings.Split(path.Clean(decl), "/")
+	base := len(segs)
+	for base > 0 && strings.Trim(segs[base-1], "*") == "" {
+		base--
+	}
+	dir := path.Join(segs[:base]...)
+	if dir == "" {
+		dir = "."
+	}
+	isGlob := strings.ContainsAny(dir, "*?[{")
+	if base == len(segs) && isGlob {
+		return nil
+	}
+	if !isGlob {
+		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(dir))); err == nil && info.IsDir() {
+			return []string{dir}
+		}
+		return nil
+	}
+	matches, err := doublestar.Glob(os.DirFS(root), dir)
+	if err != nil {
+		return nil
+	}
+	var dirs []string
+	for _, m := range matches {
+		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(m))); err == nil && info.IsDir() {
+			dirs = append(dirs, m)
+		}
+	}
+	return dirs
+}
+
+// enclosingProject returns the nearest project root at or above dir, "." when none is.
+func enclosingProject(root, dir string) string {
+	for dir != "." && dir != "/" {
+		dir = path.Dir(dir)
+		if describe.IsProjectRoot(root, dir) {
+			return dir
+		}
+	}
+	return "."
 }
 
 // writePathCovering reports which declared write path covers rel, using the same reading the

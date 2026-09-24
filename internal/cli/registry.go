@@ -2189,7 +2189,7 @@ shows what it is doing.`,
 		},
 	},
 	Examples: []Example{
-		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions --check 'test internal/sessions'"},
+		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions/sessions.go --check 'test internal/sessions'"},
 		{"Declare it from a record", "magus job fork --stdin < job.json"},
 		{"Take it in this checkout", "magus job exec session-load/core"},
 		{"Give up this checkout's binding", "magus job exec --vacate"},

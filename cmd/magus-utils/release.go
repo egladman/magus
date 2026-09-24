@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -250,19 +251,19 @@ func loadManifests(dir string) ([]ReleaseManifest, error) {
 	return manifests, nil
 }
 
-// runCut moves the Unreleased section of CHANGELOG.md into a
+// runCut folds the changelog fragments in unreleasedDir into a
 // releases/v<version>.yaml manifest, alongside the size and SHA-256 of every
-// artifact in artifactsDir. The changelog's [Unreleased] is emptied by the same
-// call, because the manifest now owns that text.
+// artifact in artifactsDir, and deletes the fragments it folded: the manifest owns
+// that text now, and CHANGELOG.md is generated back out of the manifests.
 //
-// Usage: magus-utils cut -version v0.2.0 -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases
+// Usage: magus-utils cut -version v0.2.0 -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
 //
 // The MAGUS_SIGNING_KEY env var is NOT required here; signing SHA256SUMS is a
 // separate step (magus-utils sign). The manifest itself is not signed; only
 // index.json is signed (by runReleaseIndex).
 func runCut(args []string) error {
 	// Simple flag parsing without flag package to avoid import bloat.
-	var version, artifactsDir, changelogPath, outDir string
+	var version, artifactsDir, unreleasedDir, outDir string
 	for i := 0; i < len(args)-1; i++ {
 		switch args[i] {
 		case "-version":
@@ -271,16 +272,16 @@ func runCut(args []string) error {
 		case "-artifacts":
 			artifactsDir = args[i+1]
 			i++
-		case "-changelog":
-			changelogPath = args[i+1]
+		case "-unreleased":
+			unreleasedDir = args[i+1]
 			i++
 		case "-out":
 			outDir = args[i+1]
 			i++
 		}
 	}
-	if version == "" || artifactsDir == "" || changelogPath == "" || outDir == "" {
-		return fmt.Errorf("usage: magus-utils cut -version v0.2.0 -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases")
+	if version == "" || artifactsDir == "" || unreleasedDir == "" || outDir == "" {
+		return fmt.Errorf("usage: magus-utils cut -version v0.2.0 -artifacts ./dist -unreleased ./changes/unreleased -out ./releases")
 	}
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -292,11 +293,15 @@ func runCut(args []string) error {
 	if err != nil {
 		return err
 	}
+	frags, err := readFragments(unreleasedDir)
+	if err != nil {
+		return fmt.Errorf("read fragments: %w", err)
+	}
 
-	// Ordering matters: the artifacts are hashed before the changelog is read, so an
-	// already-cut version is recognised without consuming anything. On a rerun
-	// [Unreleased] is empty (this call emptied it), and the parse below would otherwise
-	// fail first, reporting a missing section when the work is simply already done.
+	// Ordering matters: the artifacts are hashed before the fragments are judged, so an
+	// already-cut version is recognised without consuming anything. On a rerun the
+	// fragments are gone (this call deleted them), and the check below would otherwise
+	// fail first, reporting no notes when the work is simply already done.
 	//
 	// A rerun whose manifest names exactly these artifacts converges, because a publish
 	// job can fail at any later step and must be resumable. DIFFERENT bytes under a
@@ -314,29 +319,31 @@ func runCut(args []string) error {
 				"immutable once committed, so this is a rebuild under a shipped tag rather than a rerun:\n%s",
 				outPath, diff)
 		}
+		// A fragment the manifest already carries is one an interrupted cut folded but
+		// did not delete.
+		var folded []fragment
+		for _, f := range frags {
+			if strings.Contains(prev.Body, f.entry) {
+				folded = append(folded, f)
+			}
+		}
+		if err := removeFragments(folded); err != nil {
+			return err
+		}
 		fmt.Printf("%s already names these %d artifact(s); nothing to cut\n", outPath, len(artifacts))
 		return nil
 	}
 
-	// Extract the Unreleased section from CHANGELOG.md.
-	notes, body, err := parseUnreleased(changelogPath)
-	if err != nil {
-		return fmt.Errorf("parse changelog: %w", err)
+	if len(frags) == 0 {
+		return fmt.Errorf("%s holds no changelog fragments, and %s does not exist. "+
+			"An earlier run consumed the fragments without leaving the manifest behind; recover them from that "+
+			"run's checkout or from git history and cut again", unreleasedDir, outPath)
 	}
-	if body == "" {
-		return fmt.Errorf("CHANGELOG.md has no [Unreleased] section with content, and %s does not exist. "+
-			"An earlier run consumed the notes without leaving the manifest behind; recover them from that "+
-			"run's checkout or from git history, restore [Unreleased], and cut again", outPath)
-	}
-	if problems := lintUnreleased(body); len(problems) > 0 {
-		return fmt.Errorf("CHANGELOG.md [Unreleased] does not follow the changelog format, so cutting it would drop or garble release notes:\n  %s",
-			strings.Join(problems, "\n  "))
-	}
-
+	body := renderUnreleased(frags)
 	m := ReleaseManifest{
 		Version:   version,
 		Date:      time.Now().UTC().Format("2006-01-02"),
-		Notes:     notes,
+		Notes:     notesFromBodyString(body),
 		Body:      body,
 		Artifacts: artifacts,
 	}
@@ -346,55 +353,31 @@ func runCut(args []string) error {
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
 
-	// The manifest is staged and only renamed into place once the changelog has been
-	// cleared, so no failure leaves a state a rerun cannot recover from. Writing it
-	// first wedged every retry on "manifests are immutable" the moment clearUnreleased
-	// failed; clearing first would instead destroy the notes the manifest never got.
+	// The manifest lands before any fragment is deleted, so no failure destroys notes
+	// a manifest never got, and a rerun finishes an interrupted deletion (above).
 	tmpPath := outPath + ".tmp"
 	if err := os.WriteFile(tmpPath, out, 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", tmpPath, err)
 	}
-
-	// The manifest OWNS this text once it lands, and CHANGELOG.md is generated back out
-	// of the manifests, so leaving [Unreleased] populated would print the same entries
-	// twice: once under Unreleased and once under the version that just shipped them.
-	if err := clearUnreleased(changelogPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("clear unreleased: %w", err)
-	}
 	if err := os.Rename(tmpPath, outPath); err != nil {
 		return fmt.Errorf("write %s: %w", outPath, err)
 	}
-	fmt.Printf("wrote %s\n", outPath)
-	return nil
+	fmt.Printf("wrote %s from %d fragment(s)\n", outPath, len(frags))
+	return removeFragments(frags)
 }
 
-// clearUnreleased empties the [Unreleased] section of CHANGELOG.md, leaving the
-// heading and one blank line. Everything from the next "## " heading on is kept.
-func clearUnreleased(path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(string(data), "\n")
-	var out []string
-	skipping := false
-	for _, line := range lines {
-		if strings.HasPrefix(line, "## ") {
-			rest := line[3:]
-			if closeIdx := strings.Index(rest, "]"); strings.HasPrefix(rest, "[") && closeIdx >= 0 &&
-				strings.EqualFold(rest[1:closeIdx], "unreleased") {
-				out = append(out, line, "")
-				skipping = true
-				continue
-			}
-			skipping = false
-		}
-		if !skipping {
-			out = append(out, line)
+// removeFragments deletes folded fragments, reporting every failure.
+func removeFragments(frags []fragment) error {
+	var errs []error
+	for _, f := range frags {
+		if err := os.Remove(f.path); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return os.WriteFile(path, []byte(strings.Join(out, "\n")), 0o644)
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("delete folded fragments; rerun cut to finish: %w", err)
+	}
+	return nil
 }
 
 // runMigrate reads CHANGELOG.md and writes a releases/*.yaml for every released
@@ -557,14 +540,19 @@ func runReleaseIndex(args []string) error {
 	return nil
 }
 
-// runGenerateChangelog regenerates CHANGELOG.md from releases/*.yaml, preserving
-// the [Unreleased] section verbatim. This is the drift-gate-safe inverse of migration.
+// runGenerateChangelog writes a changelog from releases/*.yaml. [Unreleased] is
+// empty unless -unreleased names the fragment directory to render into it: the
+// committed CHANGELOG.md is written without, so no pull request changes it, and the
+// docs page with, so readers still see what is coming. `-changelog -` writes to stdout.
+//
+// Without -unreleased it refuses to overwrite a changelog whose [Unreleased] holds
+// entries, since regenerating would delete them; they belong in fragments.
 //
 // Usage:
 //
-//	magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
+//	magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md [-unreleased ./changes/unreleased]
 func runGenerateChangelog(args []string) error {
-	var releasesDir, changelogPath string
+	var releasesDir, changelogPath, unreleasedDir string
 	for i := 0; i < len(args)-1; i++ {
 		switch args[i] {
 		case "-releases":
@@ -573,16 +561,31 @@ func runGenerateChangelog(args []string) error {
 		case "-changelog":
 			changelogPath = args[i+1]
 			i++
+		case "-unreleased":
+			unreleasedDir = args[i+1]
+			i++
 		}
 	}
 	if releasesDir == "" || changelogPath == "" {
-		return fmt.Errorf("usage: magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md")
+		return fmt.Errorf("usage: magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md [-unreleased ./changes/unreleased]")
 	}
 
-	// Read the current Unreleased section from CHANGELOG.md.
-	unreleased, err := readUnreleasedSection(changelogPath)
-	if err != nil {
-		return fmt.Errorf("read unreleased: %w", err)
+	var unreleased string
+	if unreleasedDir != "" {
+		frags, err := readFragments(unreleasedDir)
+		if err != nil {
+			return fmt.Errorf("read fragments: %w", err)
+		}
+		unreleased = renderUnreleased(frags)
+	} else if changelogPath != "-" {
+		written, err := readUnreleasedSection(changelogPath)
+		if err != nil {
+			return fmt.Errorf("read unreleased: %w", err)
+		}
+		if strings.TrimSpace(written) != "" {
+			return fmt.Errorf("%s has entries under [Unreleased]; move each into its own fragment under "+
+				"changes/unreleased/ (see changes/README.md), since regenerating would delete them", changelogPath)
+		}
 	}
 
 	manifests, err := loadManifests(releasesDir)
@@ -595,17 +598,12 @@ func runGenerateChangelog(args []string) error {
 	b.WriteString("All notable changes to this project will be documented in this file.\n")
 	b.WriteString("The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\n")
 	b.WriteString("and this project adheres to [Semantic Versioning](https://semver.org/).\n")
+	b.WriteString("Entries for the next release wait as one file each under `changes/unreleased/`.\n")
 	b.WriteString("\n")
-	// Unreleased section: preserved verbatim. The body already ends with "\n"
-	// (the trailing empty line before the next section in the original file);
-	// we strip it here so the released-section separator ("\n## [...]") produces
-	// exactly one blank line between them, matching the original Keep-a-Changelog
-	// format.
-	// TrimRight rather than != "": the section a freshly cut release leaves behind is
-	// newlines only, and writing those back adds a blank line per release.
 	b.WriteString("## [Unreleased]\n")
-	if trimmed := strings.TrimRight(unreleased, "\n"); trimmed != "" {
-		b.WriteString(trimmed)
+	if unreleased != "" {
+		b.WriteString("\n")
+		b.WriteString(unreleased)
 		b.WriteString("\n")
 	}
 	// Released sections: generated from manifests (newest first).
@@ -622,6 +620,10 @@ func runGenerateChangelog(args []string) error {
 		b.WriteString("\n")
 	}
 
+	if changelogPath == "-" {
+		_, err := os.Stdout.WriteString(b.String())
+		return err
+	}
 	return os.WriteFile(changelogPath, []byte(b.String()), 0o644)
 }
 
@@ -692,52 +694,10 @@ func parseReleasedVersions(path string) ([]changelogEntry, error) {
 	return entries, nil
 }
 
-// parseUnreleased extracts the [Unreleased] section from CHANGELOG.md and
-// returns it as both structured notes and a trimmed body string.
-func parseUnreleased(path string) (ReleaseNotes, string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return ReleaseNotes{}, "", err
-	}
-	defer f.Close()
-
-	var bodyLines []string
-	inUnreleased := false
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "## ") {
-			if inUnreleased {
-				// Hit the next section: done.
-				break
-			}
-			rest := line[3:]
-			if strings.HasPrefix(rest, "[") {
-				close := strings.Index(rest, "]")
-				if close >= 0 && strings.EqualFold(rest[1:close], "unreleased") {
-					inUnreleased = true
-					bodyLines = []string{""} // leading blank line
-					continue
-				}
-			}
-		} else if inUnreleased {
-			bodyLines = append(bodyLines, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return ReleaseNotes{}, "", err
-	}
-
-	raw := strings.Join(bodyLines, "\n") + "\n"
-	body := strings.TrimSpace(raw)
-	notes := notesFromBodyString(body)
-	return notes, body, nil
-}
-
 // readUnreleasedSection returns the body of the [Unreleased] section (everything
 // after the `## [Unreleased]` heading, up to the next `## ` heading), with a
-// leading newline if non-empty. Used by generate-changelog to preserve it verbatim.
+// leading newline if non-empty. generate-changelog reads it to refuse deleting
+// hand-written entries.
 func readUnreleasedSection(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -874,7 +834,7 @@ func scanReleaseArtifacts(dir, version string) ([]ReleaseArtifact, error) {
 // first, because one mismatched digest and all of them mean different things.
 //
 // Only the identity fields are compared: Date moves on a rerun and says nothing about the
-// bytes, and the notes cannot be recomputed once [Unreleased] is empty.
+// bytes, and the notes cannot be recomputed once the fragments are deleted.
 func artifactDiff(committed, scanned []ReleaseArtifact) string {
 	key := func(xs []ReleaseArtifact) map[string]ReleaseArtifact {
 		m := make(map[string]ReleaseArtifact, len(xs))

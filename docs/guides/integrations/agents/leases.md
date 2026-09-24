@@ -106,12 +106,16 @@ and the one check it runs. It replaces any job with the same id.
 ```sh
 magus job fork <job> \
   --criteria 'move the store' \
-  --write-paths internal/job \
+  --write-paths internal/job/store.go,internal/job/store_test.go \
   --check 'test internal/job'
 
 magus job fork --stdin < job.json   # the same job as a record
 magus job fork --schema             # what that record must satisfy
 ```
+
+Write paths name files. An existing directory is refused
+([MGS3018](../../../reference/codes/sandbox/MGS3018.md)) unless it is the root
+of a project the job owns whole, or does not exist yet because the job creates it.
 
 A row carries `id` and optionally `parent` (the job this one was forked from),
 `criteria` (the prose half; the machine-checkable half is `completion_gates`),

@@ -43,7 +43,7 @@ func TestForkRefusesAWorkspaceLoadWritePathInASharedCheckout(t *testing.T) {
 	limits := config.Jobs{}
 
 	held, err := ForkMerge(ctx, s, "wave/worker-one", func(u *types.Job) {
-		u.State, u.WritePaths = types.StateRunning, []string{"internal/job"}
+		u.State, u.WritePaths = types.StateRunning, []string{"internal/job/store.go"}
 	}, limits, nil)
 	require.NoError(t, err)
 	require.NoError(t, Checkout{CacheDir: loc.CacheDir}.Bind(held.ID))
@@ -85,7 +85,7 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 	s := NewStore(loc)
 
 	alone, err := ForkMerge(ctx, s, "wave/first", func(u *types.Job) {
-		u.State, u.WritePaths = types.StateRunning, []string{"internal/job"}
+		u.State, u.WritePaths = types.StateRunning, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.WriteProofAlone, alone.WriteProof, "nothing else holds the checkout")
@@ -105,6 +105,70 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 		"an overlap is recorded, never refused: widening a write path is the orchestrator's call")
 }
 
+// TestForkRefusesADirectoryWritePath pins MGS3018 on both doors that fork by merge: a
+// directory claims every file under it, so it is declarable only as a project root the job
+// owns whole, or as a directory the job creates.
+func TestForkRefusesADirectoryWritePath(t *testing.T) {
+	t.Parallel()
+
+	root := loadableRoot(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "lib"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "libs", "lib", "magusfile.buzz"), []byte("export fun build() {}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "lib", "src"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "node_modules", "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "node_modules", "pkg", "magusfile.buzz"), nil, 0o644))
+
+	cases := []struct {
+		name  string
+		paths []string
+		want  string // "" forks; otherwise a substring of the refusal
+	}{
+		{"a file", []string{"internal/job/store.go"}, ""},
+		{"a project root", []string{"libs/lib"}, ""},
+		{"the workspace root, itself a project", []string{"."}, ""},
+		{"a directory the job creates", []string{"internal/fresh"}, ""},
+		{"a file pattern", []string{"internal/job/*.go", "internal/**/*_test.go"}, ""},
+		{"a wildcard subtree of a project root", []string{"libs/lib/**"}, ""},
+		{"a plain directory", []string{"internal/job"}, `"internal/job", inside project "."`},
+		{"a directory inside a project", []string{"libs/lib/src"}, `"libs/lib/src", inside project "libs/lib"`},
+		{"a directory spelled as a glob", []string{"internal/**"}, `"internal/**" (matching the directory "internal")`},
+		{"a directory pattern", []string{"libs/*/src/*"}, `(matching the directory "libs/lib/src")`},
+		{"a vendored tree holding a magusfile", []string{"node_modules/pkg"}, `"node_modules/pkg"`},
+		{"every bad path at once", []string{"internal", "libs/lib/src"}, `"internal", inside project "."; "libs/lib/src"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := NewStore(tmpLoc(t, root))
+			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
+				u.State, u.WritePaths = types.StateDeclared, tc.paths
+			}, config.Jobs{}, nil)
+			if tc.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, types.WritePathIsDirectory)
+			assert.Contains(t, err.Error(), tc.want)
+			assert.Contains(t, err.Error(), "List the files the job will edit")
+			rows, lerr := s.List()
+			require.NoError(t, lerr)
+			assert.Empty(t, rows, "a refused fork writes no row")
+		})
+	}
+
+	t.Run("an update to a row that exists is not a fork", func(t *testing.T) {
+		t.Parallel()
+		s := NewStore(tmpLoc(t, root))
+		ctx := context.Background()
+		_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
+			u.State, u.WritePaths = types.StateDeclared, []string{"internal/job/store.go"}
+		}, config.Jobs{}, nil)
+		require.NoError(t, err)
+		_, err = ForkMerge(ctx, s, "wave/job", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
+		require.NoError(t, err)
+	})
+}
+
 // TestSharedCheckoutRefusalIgnoresAJobThatIsOver is why the rule reads the STATE: a
 // checkout still carrying the marker of a job that passed is a checkout nobody is
 // working in, and refusing the next fork over it would strand the worktree.
@@ -117,7 +181,7 @@ func TestSharedCheckoutRefusalIgnoresAJobThatIsOver(t *testing.T) {
 	s := NewStore(loc)
 
 	done, err := ForkMerge(ctx, s, "wave/done", func(u *types.Job) {
-		u.State, u.WritePaths = types.StatePass, []string{"internal/job"}
+		u.State, u.WritePaths = types.StatePass, []string{"internal/job/store.go"}
 	}, config.Jobs{}, nil)
 	require.NoError(t, err)
 	require.NoError(t, Checkout{CacheDir: loc.CacheDir}.Bind(done.ID))
