@@ -72,7 +72,7 @@ The host is not a variable. Every command names it as an argument, `--agent-name
 from the event's shape, not from the environment, never by default. The configuration
 `magus agent harness apply` writes renders it from the harness spell's own name. A
 template given none refuses the call
-([MGS3019](../../../reference/codes/sandbox/MGS3019.md)) rather than answer in a guessed
+([MGS3022](../../../reference/codes/sandbox/MGS3022.md)) rather than answer in a guessed
 host's dialect, because a reply shaped for the wrong host can let a call through.
 
 To magus, the name and `HOST_SESSION_PATH` are attribution: they label the recorded
@@ -161,7 +161,7 @@ is one implementation to reason about and two ways to run it.
 # REQUIRED argument: `--agent-name <host>`, the host this entry is wired into, which the
 # configuration `magus agent harness apply` writes on the command
 # (`sh magus-command.sh --agent-name codex`). It is the only place this file learns the
-# host, and without it `magus shell` refuses the call (MGS3019).
+# host, and without it `magus shell` refuses the call (MGS3022).
 #
 # The host name and the session are ATTRIBUTION to magus, not policy. magus records them
 # on its activity event so a reader can tell which host produced an observation;
@@ -214,7 +214,7 @@ is one implementation to reason about and two ways to run it.
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 # The host this entry is wired into, from the entry's own argv and nowhere else: never the
 # event's shape, never the environment, never a default. Without it `magus shell` refuses
-# the call (MGS3019). See --agent-name in magus-command.buzz.
+# the call (MGS3022). See --agent-name in magus-command.buzz.
 agent_name=
 while [ $# -gt 0 ]; do
   case $1 in
@@ -755,7 +755,7 @@ surface, and this file carries no verdict on no surface.
 #
 # REQUIRED argument: `--agent-name <host>`, the host recorded alongside the observation,
 # which the configuration `magus agent harness apply` writes on the command. Without it
-# nothing is recorded and a coded message (MGS3019) goes to stderr: an observation filed
+# nothing is recorded and a coded message (MGS3022) goes to stderr: an observation filed
 # under a guessed host would be wrong, and a silent gap would be invisible.
 #
 # The defaults are Claude Code's event shape, matching its two siblings. A
@@ -791,7 +791,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ -z "$agent_name" ]; then
-  printf '%s\n' "magus-observe.sh: [MGS3019] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
+  printf '%s\n' "magus-observe.sh: [MGS3022] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
   exit 0
 fi
 # Prefer the workspace's own ./magus over PATH, for the same reason its two siblings do - and
@@ -956,7 +956,7 @@ The command guard, in Buzz. Same host overrides, same replies, same version mark
 //                    apply` writes on every command. It is the ONLY place this file
 //                    learns the host: never the event's shape, never the environment,
 //                    never a default. Without it `magus shell` refuses the call
-//                    (MGS3019), so a hand-written config that omits it fails loudly
+//                    (MGS3022), so a hand-written config that omits it fails loudly
 //   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
 //                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
 //                    that also matches its host's skill tool passes
@@ -1379,7 +1379,7 @@ fun shellFlags(args: [str]) > [str] {
 }
 
 // agentNameOf is the host this entry names on its argv, or "" when it names none. Empty is
-// not defaulted: `magus shell` refuses installed glue that names no host (MGS3019).
+// not defaulted: `magus shell` refuses installed glue that names no host (MGS3022).
 fun agentNameOf(args: [str]) > str {
     final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
@@ -1596,7 +1596,7 @@ fun main(args: [str]) > void {
     if (!rawEvent) { pushRule = pushRuleFor(field(event, dotPath: eventPath)); }
 
     // Codex is the host the entry names, never one the event's shape suggests: see
-    // AGENT_NAME_FLAG. An entry that names no host gets MGS3019 from magus, whatever arm
+    // AGENT_NAME_FLAG. An entry that names no host gets MGS3022 from magus, whatever arm
     // is assembled here.
     final codex = agentName == "codex";
 
@@ -1923,7 +1923,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 
 // agentNameOf reads the host off this script's argv, "" when the entry names none, and
 // reports every other argument. Empty is not defaulted: `magus shell` refuses installed
-// glue that names no host (MGS3019).
+// glue that names no host (MGS3022).
 //
 // An argument that arrives here means the wiring meant something by it, and reading none
 // at all accepted that in silence. Reported and then ignored, which is the same policy
@@ -2059,7 +2059,7 @@ The observer, in Buzz. It prints nothing, always exits 0, and declares no covera
 //
 // REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
 // observation, which the configuration `magus agent harness apply` writes on the
-// command. Without it nothing is recorded and MGS3019 goes to stderr.
+// command. Without it nothing is recorded and MGS3022 goes to stderr.
 //
 // The defaults are Claude Code's event shape, matching its two siblings. A
 // different host overrides the dot-paths.
@@ -2197,7 +2197,7 @@ fun main(args: [str]) > void {
     // filed under the wrong host is wrong, and a silent gap is invisible.
     final agentName = agentNameOf(args);
     if (agentName == "") {
-        warn("[MGS3019] this hook was not given --agent-name, so nothing was recorded. "
+        warn("[MGS3022] this hook was not given --agent-name, so nothing was recorded. "
             + "Run `magus agent harness apply` to rewrite the host's hook configuration; "
             + "the commands it writes name the host.");
         return;
@@ -2279,7 +2279,7 @@ does, so it selects nothing and imports no JSON reader at all.
 //
 // REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
 // checkpoint, which the configuration `magus agent harness apply` writes on the
-// command. Without it nothing is recorded and MGS3019 goes to stderr.
+// command. Without it nothing is recorded and MGS3022 goes to stderr.
 //
 // A host whose envelope spells those fields differently passes them as flags
 // instead, since `--session` and `--transcript` outrank the envelope, and a host that
@@ -2386,7 +2386,7 @@ fun main(args: [str]) > void {
     // No host, no record, and a coded line on stderr rather than a guess.
     final agentName = agentNameOf(args);
     if (agentName == "") {
-        warn("[MGS3019] this hook was not given --agent-name, so nothing was recorded. "
+        warn("[MGS3022] this hook was not given --agent-name, so nothing was recorded. "
             + "Run `magus agent harness apply` to rewrite the host's hook configuration; "
             + "the commands it writes name the host.");
         return;
@@ -2700,7 +2700,7 @@ It declares no `magus-guard-coverage` line, for the reason
 #
 # REQUIRED argument: `--agent-name <host>`, the host recorded alongside the checkpoint,
 # which the configuration `magus agent harness apply` writes on the command. Without it
-# nothing is recorded and a coded message (MGS3019) goes to stderr.
+# nothing is recorded and a coded message (MGS3022) goes to stderr.
 #
 # A host whose envelope spells those fields differently passes them as flags
 # instead - `--session` and `--transcript` outrank the envelope - and a host that
@@ -2731,7 +2731,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ -z "$agent_name" ]; then
-  printf '%s\n' "magus-checkpoint.sh: [MGS3019] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
+  printf '%s\n' "magus-checkpoint.sh: [MGS3022] this hook was not given --agent-name, so nothing was recorded. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host." >&2
   exit 0
 fi
 # Prefer the workspace's own ./magus over PATH, found by walking UP to the

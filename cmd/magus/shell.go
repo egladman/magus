@@ -114,7 +114,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// than a set magus knows, because a magus that enumerated hosts would need a
 	// release per host. A wrapper that cannot extract a session id must still get a
 	// verdict. The one requirement is that installed glue (--transport) names its
-	// host at all; guard.Judge refuses it otherwise (MGS3019).
+	// host at all; guard.Judge refuses it otherwise (MGS3022).
 	sf := gen.BindShell(fset)
 	// The environment supplies the DEFAULT, so an explicit --lease still wins: a shell
 	// that exported the variable for a whole session must not outrank a per-call

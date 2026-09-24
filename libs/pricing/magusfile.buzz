@@ -46,11 +46,8 @@ magus\project({
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
-
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
     ctx.needs(index_generate);
 }
 

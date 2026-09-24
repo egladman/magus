@@ -224,7 +224,7 @@ Four subsystems accept one, and each detects its ops by name:
 
 | Subsystem                                   | Selected with                    | Ops                                                                                |
 | ------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
-| [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)`    | `enabled` (optional), `get_artifact`, `put_artifact`, `prune` (optional)           |
+| [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)`    | `enabled`, `has_artifact`, `prune` (optional); `get_artifact`, `put_artifact`      |
 | [CI provider](../concepts/ci/providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
 | [Secrets](../concepts/secrets.md)           | `magus\secret.provider(<spell>)` | `resolve_secret`                                                                   |
 | [Review](../concepts/review.md)             | `magus\review.provider(<spell>)` | `find_review`, `review_threads`, `publish_review`, `reply_review` - any subset     |

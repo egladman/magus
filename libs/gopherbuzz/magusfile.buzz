@@ -59,15 +59,12 @@ magus\project({
 // Targets. Each delegates to the go spell's ops; gopherbuzz is a pure library, so the
 // pipeline is the Go lifecycle plus index-generate.
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
-
 // Regenerates MAGUS.md. Use the rw charm to keep the result; without it the engine's drift
 // gate compares what regeneration produced against what is committed. Nothing declares that
 // gate here - index_generate declaring MAGUS.md as its output is the whole declaration
 // magus needs. It hashes before and after rather than asking whether the tree was clean, so
 // an uncommitted-but-current MAGUS.md still passes: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/gopherbuzz");
     ctx.needs(index_generate);
 }
@@ -197,8 +194,6 @@ fun upstream_pinned_sha(version_src: str) > str {
 // into a cache directory outside the tree instead, so a later re-run reuses
 // (fetches, not re-clones) rather than re-downloading whole history.
 export fun conformance(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
-
     final pinned = upstream_pinned_sha(fs\readFile("version.go"));
     final cache_dir = fs\join(env\home(), ".cache", "magus", "gopherbuzz-upstream-buzz");
 

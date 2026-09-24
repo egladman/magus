@@ -44,7 +44,7 @@
 #
 # Every call passes on the --agent-name this script was given (`--agent-name cursor`, from
 # the configuration `magus agent harness apply` writes) so the observation magus records
-# says which host produced it; a config that names none is refused (MGS3019). Cursor carries conversation_id on every hook and session_id on
+# says which host produced it; a config that names none is refused (MGS3022). Cursor carries conversation_id on every hook and session_id on
 # the session ones, so the session is attributable too; neither can change a verdict.
 #
 # Coverage declarations, machine-read by the host-parity gate - see the longer
@@ -167,7 +167,7 @@ fi
 # and every event says why on stderr. The write and shell gates are where an unguarded
 # call would slip through, so they fail closed here rather than allowing.
 if [ -z "$agent_name" ]; then
-  unnamed="[MGS3019] this hook was not given --agent-name, so nothing was judged. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host."
+  unnamed="[MGS3022] this hook was not given --agent-name, so nothing was judged. Run \`magus agent harness apply\` to rewrite the host's hook configuration; the commands it writes name the host."
   printf 'cursor-hook.sh: %s\n' "$unnamed" >&2
   case $event_name in
   beforeShellExecution | preToolUse)

@@ -157,8 +157,8 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // those surfaces stop being judged with nothing anywhere saying so.
 // 17: the host is named on the hook command, `--agent-name <host>`, rendered from the
 // harness spell's own mgs_getName(), and read from there ONLY. __MAGUS_AGENT_NAME is gone,
-// no template defaults to claude-code, and none infers Codex from an event's turn_id.
-// installed glue that names no host is refused with MGS3019 instead of answered in a
+// no template defaults to one host, and none infers a host from an event's shape.
+// Installed glue that names no host is refused with MGS3022 instead of answered in a
 // guessed host's dialect. This bumps because the CONFIG and the glue moved together: a
 // config written for 16 sets the environment variable a 17 copy never reads, so every
 // call it makes is refused until `magus agent harness apply` rewrites it.

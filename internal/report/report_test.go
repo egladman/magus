@@ -314,7 +314,7 @@ func TestCacheRunOptions(t *testing.T) {
 
 	opts := RunOptions(w, nil)
 
-	c, err := cache.Open(t.Context(), cdir, cache.WithMutable(true))
+	c, err := cache.Open(t.Context(), cdir, cache.WithLocalWrite(true))
 	require.NoError(t, err)
 	ctx := t.Context()
 	_, err = c.Run(ctx, spec, func(_ context.Context) error {
@@ -322,7 +322,7 @@ func TestCacheRunOptions(t *testing.T) {
 	}, opts...)
 	require.NoError(t, err, "run (miss)")
 
-	c2, err := cache.Open(t.Context(), cdir, cache.WithMutable(true))
+	c2, err := cache.Open(t.Context(), cdir, cache.WithLocalWrite(true))
 	require.NoError(t, err)
 	_, err = c2.Run(ctx, spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("bin"), 0o755)
@@ -372,7 +372,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 	}
 
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
-	c, err := cache.Open(t.Context(), cacheDir, cache.WithMutable(true))
+	c, err := cache.Open(t.Context(), cacheDir, cache.WithLocalWrite(true))
 	require.NoError(t, err)
 	served := ServedIn(cacheDir, root)
 	_, err = c.Run(t.Context(), spec, func(_ context.Context) error {
@@ -516,7 +516,7 @@ func TestStructuredRunEventTypes(t *testing.T) {
 		{"RunStep dry", RunStep{Label: "magus", Project: ".", Target: "build", Status: "dry"}, TypeRunStep},
 		{"RunSummary", RunSummary{Hits: 3, Misses: 1, Errors: 0, DurationMs: 1600}, TypeRunSummary},
 		{"RunSummary dry", RunSummary{Dry: true, Planned: 4, DurationMs: 12}, TypeRunSummary},
-		{"RunRemote", RunRemote{Hits: 2, Misses: 1, Published: 1, Failures: 1, DownBytes: 2048, UpBytes: 512}, TypeRunRemote},
+		{"RunRemote", RunRemote{Hits: 2, Misses: 1, Stored: 1, Failures: 1, DownBytes: 2048, UpBytes: 512}, TypeRunRemote},
 		{"RunDry", RunDry{}, TypeRunDry},
 		{"LockSuperseded", LockSuperseded{Project: ".", HolderPID: 4242, Command: "magus run ci"}, TypeLockSuperseded},
 		{"LockSupersedeRefused", LockSupersedeRefused{Project: ".", HolderPID: 4242, Command: "magus run ci", BoundMs: 30000}, TypeLockSupersedeRefused},

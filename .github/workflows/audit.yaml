@@ -69,7 +69,7 @@ jobs:
       - name: Resolve magus release
         id: resolve_magus
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
@@ -105,7 +105,7 @@ jobs:
         run: magus ls
 
       - name: Run ci with the released magus
-        run: magus affected ci --no-default-charms
+        run: magus affected ci --no-default-charms --concurrency-profile aggressive
 
   determinism:
     # Byte-stability is an invariant drift gating, cache replay, and regenerate-to-resolve
@@ -156,7 +156,7 @@ jobs:
       # generator rewrites a committed file, killing the run before replay compares
       # anything. Children still run; ctx.needs precedes the charm check.
       - name: Replay every generator and compare declared outputs
-        run: magus run generate:rw --race=replay
+        run: magus run generate:rw --race=replay --concurrency-profile aggressive
 
   toolchain:
     # Has anything this workspace runs been superseded upstream? Squarely this

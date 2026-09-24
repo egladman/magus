@@ -39,10 +39,15 @@ func openSpellRemoteBackend(ctx context.Context, selector string) (cache.RemoteB
 // an ordinary magus spell — authored in Buzz with the mgs_ functions — exposing
 // these handler ops:
 //
-//	enabled()                        -> bool   is this backend usable here? (optional)
-//	get_artifact({project, hash, dest}) -> bool   download the artifact into dest; true=hit
-//	put_artifact({project, hash, src})  -> bool   upload the artifact at src;     true=stored
-//	prune({older_than_secs, ...})    -> bool   evict artifacts by retention policy (optional)
+//	enabled()                           -> bool  is this backend usable here? (optional)
+//	get_artifact({project, hash, dest}) -> bool  download into dest; true=hit, false=miss
+//	put_artifact({project, hash, src})  -> bool  upload src; true=stored, false=already present
+//	has_artifact({project, hash})       -> bool  is it stored? without downloading (optional)
+//	prune({older_than_secs, ...})       -> bool  evict by retention policy (optional)
+//
+// An op that cannot do its job THROWS: a transport or protocol failure is an error,
+// which the cache counts as failed, never as a miss. The wire keeps the names project
+// and hash for the Go side's namespace and key, so existing spells keep working.
 //
 // The adapter moves a temp file across the boundary and reads the op's Data; it
 // has no provider knowledge, so the binary stays CI-provider-agnostic.
@@ -86,28 +91,34 @@ func (b *spellRemoteBackend) Active(ctx context.Context) bool {
 	return b.active
 }
 
-// GetArtifact invokes the spell's get_artifact op against a fresh temp file. A truthy
-// result yields a reader over that file (deleted on Close); anything else is a miss.
-func (b *spellRemoteBackend) GetArtifact(ctx context.Context, projectPath, hash string) (io.ReadCloser, error) {
+// GetArtifact invokes the spell's get_artifact op against a fresh temp file. true yields
+// a reader over that file (deleted on Close), false is [cache.ErrRemoteMiss], and a
+// throw is an error.
+func (b *spellRemoteBackend) GetArtifact(ctx context.Context, namespace, key string) (io.ReadCloser, error) {
 	dest, err := tempArtifactPath("magus-remote-get-")
 	if err != nil {
 		return nil, err
 	}
 	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
 		Target: "get_artifact",
-		Params: map[string]any{"project": projectPath, "hash": hash, "dest": dest},
+		Params: map[string]any{"project": namespace, "hash": key, "dest": dest},
 	})
 	if err != nil {
 		_ = os.Remove(dest)
 		return nil, err
 	}
-	if hit, _ := resp.Data.(bool); !hit {
+	hit, ok := resp.Data.(bool)
+	if !ok {
 		_ = os.Remove(dest)
-		return nil, nil //nolint:nilnil // remote miss: nil reader = not found
+		return nil, fmt.Errorf("remote backend %q: get_artifact returned %T, want bool", b.drv.Name(), resp.Data)
+	}
+	if !hit {
+		_ = os.Remove(dest)
+		return nil, cache.ErrRemoteMiss
 	}
 	f, err := os.Open(dest)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil //nolint:nilnil // hit but no file written; treat as a miss
+		return nil, fmt.Errorf("remote backend %q: get_artifact reported a hit but wrote nothing", b.drv.Name())
 	}
 	if err != nil {
 		_ = os.Remove(dest)
@@ -116,8 +127,29 @@ func (b *spellRemoteBackend) GetArtifact(ctx context.Context, projectPath, hash 
 	return &removeOnClose{File: f, path: dest}, nil
 }
 
-// PutArtifact streams r into a temp file and invokes the spell's put_artifact op.
-func (b *spellRemoteBackend) PutArtifact(ctx context.Context, projectPath, hash string, r io.Reader) error {
+// HasArtifact invokes the spell's optional has_artifact op. A spell that declares none
+// answers [errors.ErrUnsupported].
+func (b *spellRemoteBackend) HasArtifact(ctx context.Context, namespace, key string) (bool, error) {
+	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
+		Target: "has_artifact",
+		Params: map[string]any{"project": namespace, "hash": key},
+	})
+	if err != nil {
+		return false, err
+	}
+	if resp.Data == nil {
+		return false, errors.ErrUnsupported
+	}
+	has, ok := resp.Data.(bool)
+	if !ok {
+		return false, fmt.Errorf("remote backend %q: has_artifact returned %T, want bool", b.drv.Name(), resp.Data)
+	}
+	return has, nil
+}
+
+// PutArtifact streams r into a temp file and invokes the spell's put_artifact op. false
+// is [cache.ErrRemoteExists].
+func (b *spellRemoteBackend) PutArtifact(ctx context.Context, namespace, key string, r io.Reader) error {
 	src, err := tempArtifactPath("magus-remote-put-")
 	if err != nil {
 		return err
@@ -138,13 +170,17 @@ func (b *spellRemoteBackend) PutArtifact(ctx context.Context, projectPath, hash 
 
 	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
 		Target: "put_artifact",
-		Params: map[string]any{"project": projectPath, "hash": hash, "src": src},
+		Params: map[string]any{"project": namespace, "hash": key, "src": src},
 	})
 	if err != nil {
 		return err
 	}
-	if stored, ok := resp.Data.(bool); !ok || !stored {
-		return fmt.Errorf("remote backend %q did not store artifact", b.drv.Name())
+	stored, ok := resp.Data.(bool)
+	if !ok {
+		return fmt.Errorf("remote backend %q: put_artifact returned %T, want bool", b.drv.Name(), resp.Data)
+	}
+	if !stored {
+		return cache.ErrRemoteExists
 	}
 	return nil
 }

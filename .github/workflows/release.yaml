@@ -109,11 +109,11 @@ jobs:
       # archive nobody has run is what this omission avoids. Re-add these once the
       # 32-bit plan has an executed test suite behind it.
       - name: Build release artifacts (static)
-        run: magus run release-build --no-default-charms
+        run: magus run release-build --no-default-charms --concurrency-profile aggressive
 
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
-        run: magus run release-build:dynamic --no-default-charms
+        run: magus run release-build:dynamic --no-default-charms --concurrency-profile aggressive
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-linux-amd64
@@ -146,11 +146,11 @@ jobs:
             || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
                  && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
       - name: Build release artifacts (static)
-        run: magus run release-build --no-default-charms
+        run: magus run release-build --no-default-charms --concurrency-profile aggressive
 
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
-        run: magus run release-build:dynamic --no-default-charms
+        run: magus run release-build:dynamic --no-default-charms --concurrency-profile aggressive
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-linux-arm64
@@ -180,11 +180,11 @@ jobs:
         if: ${{ inputs.include_dynamic_builds }}
         run: brew install zstd xz
       - name: Build release artifacts (static)
-        run: magus run release-build --no-default-charms
+        run: magus run release-build --no-default-charms --concurrency-profile aggressive
 
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
-        run: magus run release-build:dynamic --no-default-charms
+        run: magus run release-build:dynamic --no-default-charms --concurrency-profile aggressive
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-darwin-arm64
@@ -224,11 +224,11 @@ jobs:
         if: ${{ inputs.include_dynamic_builds }}
         run: brew install zstd xz
       - name: Build release artifacts (static)
-        run: magus run release-build --no-default-charms
+        run: magus run release-build --no-default-charms --concurrency-profile aggressive
 
       - name: Build release artifacts (dynamic)
         if: ${{ inputs.include_dynamic_builds }}
-        run: magus run release-build:dynamic --no-default-charms
+        run: magus run release-build:dynamic --no-default-charms --concurrency-profile aggressive
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-darwin-amd64
@@ -290,13 +290,13 @@ jobs:
       - name: Build release artifacts (amd64 + arm64, static)
         shell: bash
         run: |
-          magus run release-build --no-default-charms
-          GOOS=windows GOARCH=arm64 magus run release-build --no-default-charms
+          magus run release-build --no-default-charms --concurrency-profile aggressive
+          GOOS=windows GOARCH=arm64 magus run release-build --no-default-charms --concurrency-profile aggressive
 
       - name: Build release artifacts (amd64 dynamic)
         if: ${{ inputs.include_dynamic_builds }}
         shell: msys2 {0}
-        run: magus run release-build:dynamic --no-default-charms
+        run: magus run release-build:dynamic --no-default-charms --concurrency-profile aggressive
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -386,7 +386,7 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
           # Not inferred from the tag name: left to the default, v0.5.0-rc.1 would take the
           # repo's `latest` pointer, which audit's compat job and `magus self update` follow.
@@ -432,9 +432,9 @@ jobs:
       - name: Publish the release index
         env:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REASON: the ${{ github.ref_name }} release
-        run: magus run release-index:cd --no-default-charms -- "$REASON"
+        run: magus run release-index:cd --no-default-charms --concurrency-profile aggressive -- "$REASON"
 
   image:
     name: Publish container images
@@ -525,4 +525,4 @@ jobs:
         # outright rather than guessed at. The derivation lives in the magusfile's channel(),
         # not in YAML, so this step and the prerelease flag on the release below cannot
         # disagree about what is being shipped. gha adds the job summary of what was pushed.
-        run: magus run image-build:cd,tagged,gha --no-default-charms
+        run: magus run image-build:cd,tagged,gha --no-default-charms --concurrency-profile aggressive

@@ -28,7 +28,7 @@ fun codex_skills_paths() > [str] {
 // codex_named_command runs one sh glue script with `--agent-name` and this spell's own
 // mgs_getName(), the one identity the glue acts on. Rendered here, from the declaration,
 // so the name on the command cannot drift from the harness it belongs to; the glue
-// refuses a call without it (MGS3019) rather than guessing a host. env is a per-entry
+// refuses a call without it (MGS3022) rather than guessing a host. env is a per-entry
 // variable prefix, which works here because Codex runs a hook command through a shell.
 fun codex_named_command(script: str, env: str) > str {
     return "{env}sh docs/guides/integrations/agents/{script}.sh --agent-name {mgs_getName()}";

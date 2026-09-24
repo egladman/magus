@@ -29,7 +29,7 @@ fun cursor_config_defaults() > {str: int} {
 fun cursor_skills_form() > str { return "short"; }
 
 // The script reads the host from `--agent-name` and nowhere else, and refuses a call
-// without it (MGS3019), so the name is this spell's own mgs_getName(), rendered from the
+// without it (MGS3022), so the name is this spell's own mgs_getName(), rendered from the
 // declaration rather than written into the script.
 fun cursor_guard_command() > str {
     return "sh docs/guides/integrations/agents/cursor-hook.sh --agent-name {mgs_getName()}";

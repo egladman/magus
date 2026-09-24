@@ -236,7 +236,7 @@ func hostUnnamed() Verdict {
 // Judge evaluates one request against this workspace's rules and reports the verdict.
 //
 // A request from installed glue (Transport set) that names no Host is refused with
-// MGS3019 before anything is judged.
+// MGS3022 before anything is judged.
 //
 // An EMPTY input passes: a wrapper that hands the hook nothing must not have every tool
 // call blocked. The caller owns the opposite case, a payload that failed to READ, because
@@ -595,6 +595,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision = "advise"
 				verdict.Context = notice
 				verdict.Rule = string(advisoryGraphStale)
+			}
+		}
+		// The SPLIT-RUN rule's cross-call shape: the same target run again on a different
+		// project set, as a separate command rather than chained on one line (that shape is
+		// splitRunLineAdvice's, inside Evaluate). gradeSplitRun records this call's
+		// invocation on the SESSION's facts either way, so it must run whenever nothing
+		// louder already spoke, not only when it turns out to have something to say.
+		if verdict.Decision == "pass" && preauth == "" {
+			if text, matched := gradeSplitRun(facts, input); matched {
+				if held := markers.Once(advisorySplitRun, text); held != "" {
+					verdict.Decision = "advise"
+					verdict.Context = held
+					verdict.Rule = string(advisorySplitRun)
+				}
 			}
 		}
 	}

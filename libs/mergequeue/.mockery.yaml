@@ -1,0 +1,19 @@
+# mockery generates the testify mocks for the merge queue's contract, the way the root
+# .mockery.yaml does for magus's: this module has its own go.mod, which the root's
+# mockery cannot load. The mocks_generate target in magusfile.buzz runs it.
+#
+# Every interface here is public, and a provider, a CI system or a build tool built on
+# the queue fakes the same ones. The version control the steps take is not listed:
+# magus's types/gen/mocks.MockVCSDriver implements ReadVCS, BuildVCS and PushVCS.
+template: testify
+dir: "{{.InterfaceDir}}/gen/mocks"
+pkgname: mocks
+filename: "{{.InterfaceName | snakecase}}.go"
+packages:
+  github.com/egladman/magus/libs/mergequeue/types:
+    interfaces:
+      Provider:
+      Gate:
+      BuildFacts:
+      VerdictSource:
+      ArtifactLister:
