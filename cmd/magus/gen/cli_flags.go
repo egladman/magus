@@ -421,6 +421,8 @@ const (
 	FlagQueueApplyVCS = "vcs"
 	// queue describe: --app
 	FlagQueueDescribeApp = "app"
+	// queue describe: --app-id
+	FlagQueueDescribeAppID = "app-id"
 	// queue describe: --base
 	FlagQueueDescribeBase = "base"
 	// queue describe: --provider
@@ -1272,6 +1274,7 @@ type QueueDescribeFlags struct {
 	Base          string // --base
 	StatusContext string // --status-context
 	App           string // --app
+	AppID         string // --app-id
 	Remote        string // --remote
 	VCS           string // --vcs
 }
@@ -1283,6 +1286,7 @@ func BindQueueDescribe(fs *flag.FlagSet) *QueueDescribeFlags {
 	fs.StringVar(&f.Base, FlagQueueDescribeBase, "", "`branch` the queue merges into")
 	fs.StringVar(&f.StatusContext, FlagQueueDescribeStatusContext, "merge-queue", "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup")
 	fs.StringVar(&f.App, FlagQueueDescribeApp, "", "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential")
+	fs.StringVar(&f.AppID, FlagQueueDescribeAppID, "", "`id` of the --app integration, for a provider that cannot read the app (github: the App ID under About on a private app's settings page, never its client id); the status is pinned to it")
 	fs.StringVar(&f.Remote, FlagQueueDescribeRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
 	fs.StringVar(&f.VCS, FlagQueueDescribeVCS, "git", "Version control `backend` of the checkout at --root")
 	return &f

@@ -205,7 +205,7 @@ func changeParams(c types.Change) map[string]any {
 // Describe calls describe. The queue checks what it reports before relying on it.
 func (p *Script) Describe(ctx context.Context, q types.ListQuery) (types.Capabilities, error) {
 	r, err := p.callRecord(ctx, opDescribe, map[string]any{
-		"base": q.Base, "remote_url": q.RemoteURL, "status_context": q.StatusContext, "app": q.App, "setup_steps": q.SetupSteps,
+		"base": q.Base, "remote_url": q.RemoteURL, "status_context": q.StatusContext, "app": q.App, "app_id": q.AppID, "setup_steps": q.SetupSteps,
 	})
 	if err != nil {
 		return types.Capabilities{}, err

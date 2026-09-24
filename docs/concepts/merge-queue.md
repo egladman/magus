@@ -558,29 +558,89 @@ Add it when any of these holds:
 - you want main's `push` workflows to start on every merge, with nothing dispatched and
   nothing run twice.
 
-1. Open the registration link `describe` printed last and click "Create GitHub App". It
-   is pre-filled: private, no webhook, and contents, pull requests, commit statuses,
-   actions and workflows write.
-2. On the app's page, generate a private key. A `.pem` downloads.
-3. Install the app on this repository alone.
-4. Run `describe` again with `--app <slug>`, and run the commands it prints: they create
-   the `magus-queue` environment with its secrets released to the default branch only,
-   set the `MAGUS_QUEUE_APP_CLIENT_ID` variable to the app's client id, store the key as
-   the environment's `MAGUS_QUEUE_APP_PRIVATE_KEY` secret, and delete the download. On a
-   phone, paste the key into Settings > Environments > magus-queue > Add secret.
-5. Apply the ruleset change it prints, which pins `merge-queue` to the app's id: a
-   `gh api` rewrite of the ruleset step 2 created, or a link for any other.
+The app has two identifiers, and both sit under About on its settings page
+(`https://github.com/settings/apps/<slug>`, or
+`https://github.com/organizations/<org>/settings/apps/<slug>` for an organization's app).
+Neither is secret, and they do not swap: the client id (it starts with `Iv`) is what
+`setup-magus` mints the token with, and the App ID (a number) is the only value a
+ruleset's `integration_id` accepts.
 
-The next `queue-apply` run finds the variable and the secret. `setup-magus` mints a token
-for this repository alone that expires when the job ends, and the queue merges, pushes,
-commits and posts its status as the app's bot. The key lives in the environment, and a
-pull request's run is evaluated against its merge ref, so no pull request's workflow can
-read it.
+`describe` cannot read the app for you. The registration link creates a private app,
+and GitHub answers `GET /apps/<slug>` for a private app with 404 to a token that is not
+the app's own installation's, the owner's `gh auth token` included. So the printed
+steps ask you for the client id, and `describe` takes the App ID as `--app-id`.
 
-`apply` refuses to start, with [MGS3019](../reference/codes/sandbox/MGS3019.md), when the
-ruleset pins `merge-queue` to one integration and it holds another's token: GitHub would
-count none of the statuses it posts. That happens when step 5 is skipped, or when the
-secret goes missing and the job falls back to its own token.
+1. Open the registration link `describe` printed last. It is pre-filled: private, no
+   webhook, and contents, pull requests, commit statuses, actions and workflows write.
+   The name is editable, and the slug follows it: name it `magus-queue` and the slug is
+   `magus-queue`, whatever the pre-filled name was. The app page's URL ends in the slug.
+   Click "Create GitHub App".
+2. On the app's settings page, under Private keys, click "Generate a private key". A
+   `<slug>.<date>.private-key.pem` downloads.
+3. Install the app on this repository alone ("Only select repositories"). For this
+   repository the page is <https://github.com/apps/magus-queue/installations/new>, and
+   <https://github.com/egladman/magus/settings/installations> lists the app once it is
+   installed; `describe` prints both for yours. Install it before step 5: until then
+   GitHub refuses the pin with `422 Invalid rule 'required_status_checks': Invalid
+   parameter required_status_checks: Invalid integration ids`.
+4. Run `describe` with the slug. For this repository:
+
+   ```sh
+   GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main --app magus-queue
+   ```
+
+   Run the commands it prints, which name your repository and slug already. The first
+   creates the `magus-queue` environment and releases its secrets to `main` alone. The
+   second stores the key and the client id, asking you for the client id, then deletes
+   the key and lists what it stored. For this repository it prints:
+
+   ```sh
+   (
+     set -e
+     pem=$(ls -t ~/Downloads/magus-queue.*.private-key.pem | head -n 1)
+     test -n "$pem"
+     echo "storing $pem"
+     gh secret set MAGUS_QUEUE_APP_PRIVATE_KEY --repo egladman/magus --env magus-queue < "$pem"
+     printf 'Client ID, under About on https://github.com/settings/apps/magus-queue (it starts with Iv): '
+     read -r cid
+     test -n "$cid"
+     gh variable set MAGUS_QUEUE_APP_CLIENT_ID --repo egladman/magus --body "$cid"
+     rm "$pem"
+     gh secret ls --repo egladman/magus --env magus-queue
+     gh variable ls --repo egladman/magus
+   )
+   ```
+
+   On a phone, paste the key into Settings > Environments > magus-queue > Add secret, and
+   the client id into Settings > Secrets and variables > Actions > Variables.
+5. Pin `merge-queue` to the app. The last command `describe` printed asks for the App ID
+   and runs `describe` again with it:
+
+   ```sh
+   printf 'App ID, under About on https://github.com/settings/apps/magus-queue: '
+   read -r appid
+   GITHUB_TOKEN=$(gh auth token) magus queue describe --provider github --base main --app magus-queue --app-id "$appid"
+   ```
+
+   Its last step is the pin, set to that App ID: a `gh api` rewrite of the ruleset the
+   first setup created, or a link for any other ruleset. Run it as printed; `gh api`
+   prints GitHub's error when it refuses. Once the pin holds, `describe` prints no pin
+   step. An `--app-id` that is not a number, or that disagrees with an app `describe`
+   can read, is an error.
+
+The key reaches only runs on `main`. The `magus-queue` environment holds it, its branch
+policy names `main` alone, and a pull request's run is evaluated against its merge ref,
+so no pull request's workflow can read it. `setup-magus` mints a token for this
+repository alone that expires when the job ends, and the queue merges, pushes, commits
+and posts its status as the app's bot.
+
+The first `queue-apply` run after this proves the key and the ids. A wrong client id or
+key fails the token step. The variable without the secret, or the secret without the
+variable, fails `setup-magus`. With neither, the job falls back to its own token, and
+`apply` refuses to start with [MGS3019](../reference/codes/sandbox/MGS3019.md): the
+ruleset pins `merge-queue` to the app, so GitHub would count none of the statuses the
+Actions token posts. Skip step 5 and `apply` refuses the same way: the ruleset still pins
+`merge-queue` to GitHub Actions while the job holds the app's token.
 
 ## Providers
 

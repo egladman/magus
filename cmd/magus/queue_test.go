@@ -267,6 +267,28 @@ gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true
 `, string(out))
 }
 
+// An app the provider could not read has no id yet: describe says so rather than print
+// an empty one, and --app-id means nothing without the app it names.
+func TestQueueDescribeNamesAnAppWhoseIDIsNotKnown(t *testing.T) {
+	withOutput(t, "")
+	f := newSetupFixture(t)
+	src, err := os.ReadFile(f.provider)
+	require.NoError(t, err)
+	src = []byte(strings.Replace(string(src), `"credential": {"id": "812", "name": "{io["app"]}"},`,
+		`"credential": {"id": "{io["app_id"]}", "name": "{io["app"]}"}, "app": {"slug": "{io["app"]}", "id": "{io["app_id"]}"},`, 1))
+	require.NoError(t, os.WriteFile(f.provider, src, 0o644))
+	out, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q")
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "# the queue posts \"merge-queue\" as app q, whose id the provider could not read\n")
+	assert.NotContains(t, string(out), "# app q is integration")
+	out, err = f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "q", "--app-id", "2034567")
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "# the queue posts \"merge-queue\" as 2034567 (q)\n# ")
+	assert.Contains(t, string(out), "# app q is integration 2034567\n")
+	_, err = f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app-id", "2034567")
+	require.ErrorContains(t, err, "--app-id needs --app")
+}
+
 // -o json carries the setup as the capabilities document's structure.
 func TestQueueDescribeJSONCarriesTheSetup(t *testing.T) {
 	withOutput(t, "")

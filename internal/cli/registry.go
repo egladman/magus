@@ -1706,7 +1706,10 @@ commands that finish the wiring; magus never runs them, a person does.
 
 --app names the app whose credential apply will write with (github: a GitHub
 App's slug), and the steps become that app's: install it, store its credential,
-and pin the status to its id. Every read goes to the provider over the network,
+and pin the status to its id. --app-id gives that id when the provider cannot
+read the app (github: a private app is hidden from every token but its own
+installation's, so the id comes from the app's settings page); without it the
+steps end by asking for it. Every read goes to the provider over the network,
 with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 
 -o json prints the mergequeue.capabilities/v1 document with the setup inside it.`,
@@ -1716,6 +1719,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "base", Kind: FlagString, Doc: "`branch` the queue merges into"},
 				{Name: "status-context", Kind: FlagString, Default: "merge-queue", Doc: "Commit status the queue posts, whose wiring is described; empty describes what the provider supports and reads no setup"},
 				{Name: "app", Kind: FlagString, Doc: "`slug` of the app apply writes with (github: a GitHub App); empty describes the provider's default credential"},
+				{Name: "app-id", Kind: FlagString, Doc: "`id` of the --app integration, for a provider that cannot read the app (github: the App ID under About on a private app's settings page, never its client id); the status is pinned to it"},
 			}, queueCheckout...),
 		},
 		{
@@ -1772,6 +1776,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 	Examples: []Example{
 		{"Print the commands that wire the queue up", "magus queue describe --provider github --base main"},
 		{"Print the commands that move it onto your own GitHub App", "magus queue describe --provider github --base main --app acme-magus-queue"},
+		{"The same for a private app, whose App ID only its settings page shows", "magus queue describe --provider github --base main --app acme-magus-queue --app-id 2034567"},
 		{"List what carries merge intent", "magus queue ls --provider github --base main > changes.json"},
 		{"Plan it", "magus queue plan --provider github --out plan.json < changes.json"},
 		{"Validate every candidate", "magus queue validate --plan plan.json --verdicts verdicts --gate 'magus affected ci'"},
