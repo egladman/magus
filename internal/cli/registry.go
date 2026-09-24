@@ -1686,6 +1686,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "verdicts", Kind: FlagString, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
 				{Name: "only", Kind: FlagString, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
 				{Name: "parallel", Kind: FlagInt, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
+				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to $MERGEQUEUE_SCRATCH/DIR for every hook, so the cache it names is the candidate's own; repeatable"},
 			}, queueFacts...), queueCheckout...),
 		},
 		{
@@ -1700,6 +1701,7 @@ with the credential the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
 				{Name: "app", Kind: FlagString, Doc: "`slug` of the app whose credential the provider writes with (github: a GitHub App); empty is the provider's default credential. apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
 				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command`, run with the generated files to rewrite on stdin and $MERGEQUEUE_UNITS naming what regenerates them, only where the build tool proves the change touches none of its code; no credential reaches it"},
+				{Name: "scratch-env", Kind: FlagCustom, Doc: "`NAME=DIR` sets NAME to $MERGEQUEUE_SCRATCH/DIR for the regeneration, so the cache it names is that rebuild's own; repeatable"},
 			}, queueFacts...), queueCheckout...),
 		},
 	},

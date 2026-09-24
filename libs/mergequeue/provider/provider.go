@@ -457,6 +457,10 @@ func (p *Script) KickBack(ctx context.Context, c types.Change, commit string, k 
 	params["paths"] = k.Paths
 	params["with"] = k.With
 	params["candidate_commit"] = k.CandidateCommit
+	params["source"] = k.Source
+	if k.Reproduce != nil {
+		params["reproduce"] = map[string]string{"gate": k.Reproduce.Gate, "regenerate": k.Reproduce.Regenerate}
+	}
 	return p.acknowledged(ctx, opKickBack, params)
 }
 
@@ -601,7 +605,7 @@ func (r record) set(f field, v any) error {
 }
 
 // toValue converts the records the bridge builds, whose values are strings, bools, lists
-// of strings and lists of string records, into Buzz values.
+// of strings, string records and lists of them, into Buzz values.
 func toValue(params map[string]any) (vm.Value, error) {
 	m := vm.NewMap()
 	for k, v := range params {
@@ -616,14 +620,12 @@ func toValue(params map[string]any) (vm.Value, error) {
 				items[i] = vm.StrValue(s)
 			}
 			m.MapSet(k, vm.ListValue(items))
+		case map[string]string:
+			m.MapSet(k, stringRecord(x))
 		case []map[string]string:
 			items := make([]vm.Value, len(x))
 			for i, rec := range x {
-				rm := vm.NewMap()
-				for rk, rv := range rec {
-					rm.MapSet(rk, vm.StrValue(rv))
-				}
-				items[i] = rm
+				items[i] = stringRecord(rec)
 			}
 			m.MapSet(k, vm.ListValue(items))
 		default:
@@ -631,6 +633,14 @@ func toValue(params map[string]any) (vm.Value, error) {
 		}
 	}
 	return m, nil
+}
+
+func stringRecord(rec map[string]string) vm.Value {
+	m := vm.NewMap()
+	for k, v := range rec {
+		m.MapSet(k, vm.StrValue(v))
+	}
+	return m
 }
 
 // fromValue converts a Buzz value a script returned into plain Go values.

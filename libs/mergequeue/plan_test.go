@@ -200,7 +200,10 @@ func TestPlanAdmission(t *testing.T) {
 			if v.Code == types.CodeKickConflict {
 				assert.Equal(t, []string{"a/x.go"}, v.Paths)
 				assert.Equal(t, []string{head("x")[:12] + " change a/x.go"}, v.With)
-				assert.Contains(t, v.Report, "Merge `main` into this branch, resolve these by hand")
+				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.\n\n"+
+					"Merge `main` into this branch and resolve the conflict by hand.\n", v.Report, "the files travel in paths and with, not in the prose")
+				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.", v.Reason)
+				assert.Empty(t, v.Gate, "planning runs no hook")
 			}
 		})
 	}

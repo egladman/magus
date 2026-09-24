@@ -305,6 +305,13 @@ func (d doubles) kicks(c types.Change, code types.Code, report string) {
 	})).Return(nil).Once()
 }
 
+// kicksWith expects c kicked back at its head with exactly want.
+func (d doubles) kicksWith(c types.Change, want types.Kick) {
+	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, c.Head).Return(approvedAs(c), nil).Once()
+	d.status(c, c.Head, types.StateFailure, "kicked back")
+	d.provider.EXPECT().KickBack(mock.Anything, mock.Anything, c.Head, want).Return(nil).Once()
+}
+
 // waits expects c left queued at commit, its status naming reason.
 func (d doubles) waits(c types.Change, commit, reason string) {
 	d.status(c, commit, types.StatePending, "waiting: "+reason)
@@ -622,16 +629,18 @@ func TestAnUnreadableVerdictHoldsItsChangeAlone(t *testing.T) {
 	require.NoError(t, a.Run(t.Context(), planOf([]types.Change{one})))
 }
 
-// Planning's verdicts and validation's red ones reach the provider; a kick for a head
-// that moved since it was decided waits instead, since the new head gets its own
+// Planning's verdicts and validation's red ones reach the provider, each naming the run
+// they came from, and validation's with the hook lines to run it again; a kick for a
+// head that moved since it was decided waits instead, since the new head gets its own
 // decision.
 func TestSettledVerdictsReachTheProvider(t *testing.T) {
 	kicked, held, gone, red, moved := change("1", "a"), change("2", "b"), change("3", "c"), change("4", "d"), change("5", "e")
 	d := newDoubles(t)
 	d.caps()
-	d.kicks(kicked, types.CodeKickConflict, "conflicts")
+	d.kicksWith(kicked, types.Kick{Code: types.CodeKickConflict, Report: "conflicts in a.go", Source: "acme/widgets/runs/7"})
 	d.waits(held, held.Head, "not approved")
-	d.kicks(red, types.CodeKickRed, "the gate failed")
+	d.kicksWith(red, types.Kick{Code: types.CodeKickRed, Report: "the gate failed: exit 1", Source: "acme/widgets/runs/7",
+		Reproduce: &types.Reproduction{Gate: "make test", Regenerate: "make gen"}})
 	d.provider.EXPECT().ApprovalAt(mock.Anything, mock.Anything, moved.Head).Return(types.Approval{Head: head("newer"), Base: "main", Method: types.MethodSquash}, nil)
 	d.waits(moved, head("newer"), "head moved to "+head("newer")[:12]+" since it was decided")
 	plan := planOf([]types.Change{red}, []types.Change{moved})
@@ -640,9 +649,11 @@ func TestSettledVerdictsReachTheProvider(t *testing.T) {
 		{Change: held, Decision: types.DecisionWait, Code: types.CodeWaitNotApproved, Reason: "not approved"},
 		{Change: gone, Decision: types.DecisionMerged, Reason: "its head is already on main"},
 	}
-	redV := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed: exit 1"}
+	redV := types.Verdict{BaseCommit: base, Change: red, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed: exit 1",
+		Gate: "make test", Regenerate: "make gen"}
 	movedV := types.Verdict{BaseCommit: base, Change: moved, Decision: types.DecisionKick, Code: types.CodeKickRed, Report: "the gate failed"}
 	a := applierFor(t, d, plan, redV, movedV)
+	a.Source = "acme/widgets/runs/7"
 	require.NoError(t, a.Run(t.Context(), plan))
 }
 

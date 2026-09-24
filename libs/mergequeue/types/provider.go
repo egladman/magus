@@ -280,6 +280,20 @@ type Kick struct {
 	Paths           []string // the files at issue: conflicting, or outside what may differ
 	With            []string // base-branch commits touching Paths ("abc123 subject")
 	CandidateCommit string   // the candidate it was validated in, when one was built
+	// Source is the validation run apply followed, as the provider names it
+	// ("acme/widgets/runs/7"); empty when apply read a directory.
+	Source string
+	// Reproduce is how to run what validation ran on the change's candidate again; nil
+	// when validation did not decide the kick-back, as for a conflict planning found.
+	Reproduce *Reproduction
+}
+
+// Reproduction is the hook command lines validation ran on a candidate, as given to
+// `magus queue validate`: run with its --gate and --regenerate, and --only the change,
+// they build and gate that candidate again.
+type Reproduction struct {
+	Gate       string
+	Regenerate string // empty when validation ran no regeneration
 }
 
 // ArtifactLister is the CI system's side of the queue: what one validation run has

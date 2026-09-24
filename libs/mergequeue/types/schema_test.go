@@ -73,6 +73,18 @@ func TestVerdictCheckRefusesAMergeThatNamesNoCandidate(t *testing.T) {
 	require.ErrorContains(t, Verdict{Change: change("1"), Decision: "ship"}.Check(), `unknown decision "ship"`)
 }
 
+func TestHookLinesBelongToValidationsVerdicts(t *testing.T) {
+	v := green("1")
+	v.Regenerate = `magus affected generate:rw --base "$MERGEQUEUE_ONTO"`
+	require.ErrorContains(t, v.Check(), "names a regeneration but no gate")
+	v.Gate = `magus affected ci --base "$MERGEQUEUE_ONTO" --no-default-charms`
+	require.NoError(t, v.Check())
+
+	kicked := Verdict{Change: change("1"), Decision: DecisionKick, Code: CodeKickConflict, Report: "conflicts", Gate: "true"}
+	plan := Plan{Base: "main", BaseCommit: base, Depth: 1, Verdicts: []Verdict{kicked}}
+	require.ErrorContains(t, plan.Check(), "planning's verdict on #1 names a gate, which only validation runs")
+}
+
 func TestPlanCheckRefusesAChangeAheadOfWhatItIsStackedOnADuplicateAndAPlanningMerge(t *testing.T) {
 	child := change("2")
 	child.Below = "1"
