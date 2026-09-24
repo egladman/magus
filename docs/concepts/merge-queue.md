@@ -101,7 +101,12 @@ generated file, a candidate tree or a review proof from a verdict.
 - **Generated means declared.** A file is generated when some target declares it as its
   output (`magus describe file` says `output`), read from main's declarations. A
   `linguist-generated` attribute alone makes nothing generated: a vendored tree so marked
-  is source, and a reviewer has to see it.
+  is source, and a reviewer has to see it. A file that `generate`, or a target it
+  needs, rewrites in place (`magus describe file` says `declared: update`) stays
+  source: regeneration may write it, but its conflicts are the author's and a review
+  sees it. Another target's in-place update, such as a formatter's, does not count. A file magus maintains itself
+  (`maintained`, such as `.gitattributes`) is rewritten by main's magus whenever a hook
+  runs it, so the queue puts the change's version back and never commits main's.
 - **A review is proven in apply.** Whether a review of an older commit covers a merge of
   main into the change is a version control question apply answers itself, and a merge
   differing only in generated files is covered only when main's regeneration, run on the
@@ -328,9 +333,11 @@ only what the top change adds. Each candidate is a checkout of its own (a git wo
 with a scratch directory of its own; keep every cache there.
 
 A generated-file conflict takes the change's side and `--regenerate` rewrites it, with
-the generated paths on stdin; without a hook, a file either side deleted stays deleted. A
-regeneration that fails, or writes anything no target declares as output, kicks that
-change back and the run goes on.
+the generated paths on stdin; without a hook, a file either side deleted stays deleted.
+The regeneration's writes to outputs and to files `generate`'s targets update in place
+are committed; a file magus maintains is restored to the candidate's version and left out. A
+regeneration that fails, or writes anything nothing declares it writes, kicks that change
+back and the run goes on.
 
 ## What a review covers
 
@@ -659,14 +666,18 @@ command hooks.
 | `ReadVCS`        | revisions, trees, ranges, ancestry, tree merges; fetching (planning)    | magus's `types.VCSDriver`   |
 | `BuildVCS`       | `ReadVCS` plus checkouts, merges in them and local commits (validation) | magus's `types.VCSDriver`   |
 | `PushVCS`        | `BuildVCS` plus a leased push (applying)                                | magus's `types.VCSDriver`   |
-| `BuildFacts`     | a change's affected set, declared outputs, what regenerating them runs  | `client.Workspace`          |
+| `BuildFacts`     | a change's affected set, how paths are written, what regenerating runs  | `client.Workspace`          |
 | `Provider`       | list, describe, approve, post a status, retarget, merge, kick back      | the `provider` Buzz scripts |
 | `ArtifactLister` | the artifacts a validation run uploaded                                 | the `provider` Buzz scripts |
 
 Every merge, check and push is composed in the queue from the capabilities' facts, so
 which merge base a prediction takes, which conflicts are the author's and which
 differences a review need not see are decided once, whatever the version control.
-`CommandFacts` is the `BuildFacts` behind `--facts`.
+`CommandFacts` is the `BuildFacts` behind `--facts`. Asked for `outputs`, with the paths
+on stdin, the command prints `{"outputs": [path], "updated": [path], "maintained":
+[path]}`: the paths a target writes whole, the ones a target rewrites in place, and the
+ones the build tool rewrites itself on every run. A missing key names none, so a command
+that prints only `outputs` declares no update and maintains nothing.
 
 Where Go ends and Buzz begins is a rule, not a taste. Go holds what the invariants are
 proven over and what needs the machine: admission, partitioning, candidate order, the

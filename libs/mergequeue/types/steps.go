@@ -28,6 +28,7 @@ type BuildVCS interface {
 	magustypes.MergeStarter
 	magustypes.ConflictResolver
 	magustypes.CommitWriter
+	magustypes.RevisionFileReader
 	// DirtyFiles is magus's VCSDriver's own; no capability carries it.
 	DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 }
@@ -68,14 +69,28 @@ type BuildFacts interface {
 	// reach, and, when that set is not a proof, why: the paths edit the declarations it
 	// was computed from, or files nothing claims. A nil affected set is unbounded.
 	Affected(ctx context.Context, c Change, paths []string) (affected []string, unboundedBy string, err error)
-	// Outputs reports which of paths some target declares as its output. Only those are
-	// generated: a path a VCS attribute or anything else marks generated is source,
-	// and a reviewer has to see it.
-	Outputs(ctx context.Context, paths []string) (map[string]bool, error)
+	// Classify reports how the build tool writes each of paths. A path absent from the
+	// result is plain source. Only an Output is generated: a path a VCS attribute or
+	// anything else marks generated is source, and a reviewer has to see it.
+	Classify(ctx context.Context, paths []string) (map[string]Writes, error)
 	// Generation reports what regenerating outputs runs, and which of changed it would
 	// run as code.
 	Generation(ctx context.Context, outputs, changed []string) (Generation, error)
 }
+
+// Writes is what the build tool knows about how it writes one path.
+type Writes struct {
+	// Output says a target writes the whole file: it is generated.
+	Output bool
+	// Updated says a target rewrites part of the file in place. The file stays source.
+	Updated bool
+	// Maintained says the build tool rewrites the file itself on every run, whatever
+	// the change holds.
+	Maintained bool
+}
+
+// Declared reports whether the build tool writes the path at all.
+func (w Writes) Declared() bool { return w.Output || w.Updated || w.Maintained }
 
 // Generation is the build tool's account of regenerating some outputs.
 type Generation struct {
