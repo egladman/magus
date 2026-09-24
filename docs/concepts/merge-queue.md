@@ -488,7 +488,10 @@ On GitHub the queue's credential merges past its own pending status as a bypass 
 a ruleset. A ruleset's bypass list bypasses every rule in that ruleset, not one rule:
 required reviews, signed commits, code scanning and all. Put the queue's required status
 in a ruleset of its own whose only rule it is, with the queue's actor as its only bypass
-actor, so the other rulesets still apply to every merge the queue makes.
+actor, so the other rulesets still apply to every merge the queue makes. Its `describe`
+narrows `methods` to what the repository settings and every active ruleset rule
+targeting the base branch both allow, dropping `merge` when one of those rules requires
+a linear history, and errors when nothing is left in common.
 
 ## The library
 

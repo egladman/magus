@@ -259,6 +259,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The GitHub provider no longer offers a merge method a ruleset refuses.** `describe`
+  intersected repository settings alone; it now narrows `methods` to what every active
+  ruleset rule targeting the base branch also allows, drops `merge` under a required
+  linear history, and errors when nothing is left in common.
 - **Concurrent fetches into one repository no longer fail.** Two `git fetch` runs read
   each other's refs mid-update and failed with "bad object"; magus now fetches into a
   repository one at a time.

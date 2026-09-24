@@ -230,11 +230,14 @@ fun pages(url: str, what: str, hdrs: {str: str}) > [str] !> any {
     return bodies;
 }
 
-// describeFrom reads the merge methods a repository allows. GitHub merges a stack in one
-// call and needs each stacked branch linear on the one below.
-fun describeFrom(body: str) > any !> any {
+// describeFrom reads the merge methods a repository allows, narrowed by every active
+// ruleset rule the base branch's rules carry: a "pull_request" rule's
+// allowed_merge_methods intersects the settings, and a "required_linear_history" rule
+// rules out "merge". GitHub merges a stack in one call and needs each stacked branch
+// linear on the one below.
+fun describeFrom(body: str, rules: str) > any !> any {
     final r = serialize\jsonDecode(body);
-    final methods = mut [<str>];
+    var methods = mut [<str>];
     if (r.q("allow_merge_commit").booleanValue()) {
         methods.append("merge");
     }
@@ -244,13 +247,49 @@ fun describeFrom(body: str) > any !> any {
     if (r.q("allow_rebase_merge").booleanValue()) {
         methods.append("rebase");
     }
+    var linear = false;
+    foreach (rule in serialize\jsonDecode(rules).listValue()) {
+        final kind = rule.q("type").stringValue();
+        if (kind == "required_linear_history") {
+            linear = true;
+        } else if (kind == "pull_request") {
+            final allowed = rule.q("parameters").q("allowed_merge_methods").listValue();
+            if (allowed.len() > 0) {
+                final names = mut [<str>];
+                foreach (m in allowed) {
+                    names.append(m.stringValue().lower());
+                }
+                final kept = mut [<str>];
+                foreach (m in methods) {
+                    if (names.indexOf(m) != null) {
+                        kept.append(m);
+                    }
+                }
+                methods = kept;
+            }
+        }
+    }
+    if (linear) {
+        final kept = mut [<str>];
+        foreach (m in methods) {
+            if (m != "merge") {
+                kept.append(m);
+            }
+        }
+        methods = kept;
+    }
+    if (methods.len() == 0) {
+        throw "github: describe: the repository settings and its rulesets on the base branch allow no merge method in common";
+    }
     return {"stack_merge": "atomic", "linear_stacks": true, "methods": methods, "queue_label": QUEUE_LABEL, "committer": COMMITTER};
 }
 
 export fun describe(io: {str: any}) > any !> any {
     final hdrs = reading("describe");
     final repo = repoOf(io);
-    return describeFrom(expect(get(apiBase() + "/repos/" + repo, hdrs: hdrs), status: 200, what: "describe {repo}"));
+    final base = "{io["base"] ?? ""}";
+    final rules = expect(get(apiBase() + "/repos/" + repo + "/rules/branches/" + escape(base), hdrs: hdrs), status: 200, what: "read the rules on {base}");
+    return describeFrom(expect(get(apiBase() + "/repos/" + repo, hdrs: hdrs), status: 200, what: "describe {repo}"), rules: rules);
 }
 
 // id reads an identifier GitHub may send as a number or a string.
@@ -1089,12 +1128,40 @@ test "the other pull requests from a branch share it" {
 }
 
 test "describe lists the methods the repository allows" {
-    final got = describeFrom(`{"allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": true}`);
+    final got = describeFrom(`{"allow_merge_commit": false, "allow_squash_merge": true, "allow_rebase_merge": true}`, rules: `[]`);
     assert\equal(got["methods"], want: ["squash", "rebase"], message: "allowed methods");
     assert\equal(got["stack_merge"], want: "atomic", message: "GitHub merges a stack in one call");
     assert\equal(got["queue_label"], want: "queue: ", message: "the label a stack is queued by, before its method");
     assert\equal(got["committer"], want: COMMITTER, message: "the Actions bot commits");
     assert\equal(COMMITTER["email"], want: "41898282+github-actions[bot]@users.noreply.github.com", message: "the bot's noreply address");
+}
+
+test "an active pull_request ruleset rule narrows methods to what it allows" {
+    final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": true, "allow_rebase_merge": true}`,
+        rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash", "rebase"]}}]`);
+    assert\equal(got["methods"], want: ["squash", "rebase"], message: "the repo settings allow merge too, but the ruleset does not");
+}
+
+test "a required_linear_history rule drops merge even when settings and rulesets both allow it" {
+    final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": true, "allow_rebase_merge": true}`,
+        rules: `[{"type": "required_linear_history"}]`);
+    assert\equal(got["methods"], want: ["squash", "rebase"], message: "a merge commit is never linear");
+}
+
+test "no rule targeting the base leaves the settings untouched" {
+    final got = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": false, "allow_rebase_merge": false}`, rules: `[]`);
+    assert\equal(got["methods"], want: ["merge"], message: "a ruleset on another branch never reaches this call, since the rules are read for the base branch alone");
+}
+
+test "an empty intersection is an error naming why" {
+    var reason = "";
+    try {
+        final _ = describeFrom(`{"allow_merge_commit": true, "allow_squash_merge": false, "allow_rebase_merge": false}`,
+            rules: `[{"type": "pull_request", "parameters": {"allowed_merge_methods": ["squash"]}}]`);
+    } catch (e) {
+        reason = "{e}";
+    }
+    assert\contains(reason, item: "no merge method", message: "the error names why, not just that it failed");
 }
 
 test "the merge carries the queued method and the author's title, pinned to the sha" {
