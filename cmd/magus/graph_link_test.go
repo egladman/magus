@@ -7,31 +7,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestBuildGraphLink covers the pure seam under liveExplorerLink: with host/token
+// TestBuildGraphLink covers the pure seam under liveExplorerLink: with host/code
 // injected, it must format the exact daemon-origin deep-link
-// (http://<host>/console/graph/#<directives>&token=), drop the token directive
-// when there is no token, and omit (return "") only when there is no host to link to.
+// (http://<host>/console/graph/#<directives>&code=), drop the code directive
+// when there is no code, and omit (return "") only when there is no host to link to.
 func TestBuildGraphLink(t *testing.T) {
 	const (
-		host  = "127.0.0.1:7391"
-		token = "tok"
+		host = "127.0.0.1:7391"
+		code = "mgx_code"
 	)
 
 	t.Run("full link with directives", func(t *testing.T) {
-		got := buildGraphLink(host, token, url.GraphLinkOpts{
+		got := buildGraphLink(host, code, url.GraphLinkOpts{
 			View: "blast",
 			Node: "project:pkg/foo",
 		})
 		require.Equal(t,
-			"http://127.0.0.1:7391/console/graph/#view=blast&node=project%3Apkg%2Ffoo&token=tok",
+			"http://127.0.0.1:7391/console/graph/#view=blast&node=project%3Apkg%2Ffoo&code=mgx_code",
 			got)
 	})
 
 	t.Run("no host omits the link", func(t *testing.T) {
-		require.Equal(t, "", buildGraphLink("", token, url.GraphLinkOpts{View: "blast"}))
+		require.Equal(t, "", buildGraphLink("", code, url.GraphLinkOpts{View: "blast"}))
 	})
 
-	t.Run("no token drops the token directive but keeps the link", func(t *testing.T) {
+	t.Run("no code drops the code directive but keeps the link", func(t *testing.T) {
 		got := buildGraphLink(host, "", url.GraphLinkOpts{View: "blast"})
 		require.Equal(t,
 			"http://127.0.0.1:7391/console/graph/#view=blast",
@@ -74,12 +74,14 @@ func TestConsoleLinksCarryNoToken(t *testing.T) {
 	}
 }
 
-// The sign-in line is a command a person can run as printed: the token is a substitution
-// their shell expands, never a value this process read.
+// The sign-in line is a command a person can run as printed: the code is a substitution
+// their shell expands, never a value this process read, and what reaches the opener's argv
+// is a one-time code rather than a token.
 func TestAuthHintIsRunnable(t *testing.T) {
 	got := authHint("http://127.0.0.1:7391/console/plan/#job=a")
-	require.Contains(t, got, `"http://127.0.0.1:7391/console/plan/#job=a&token=$(`)
-	require.Contains(t, got, `config console token create --expires 12h)"`)
+	require.Contains(t, got, `"http://127.0.0.1:7391/console/plan/#job=a&code=$(`)
+	require.Contains(t, got, `config console token create --code --expires 12h)"`)
+	require.NotContains(t, got, "token=$(", "no token in argv")
 	require.NotContains(t, got, "config token print", "a sign-in line never hands the operator token to a browser")
 }
 

@@ -19,12 +19,13 @@ import (
 // is re-minted before it starts failing auth.
 const expiringSoon = 14 * 24 * time.Hour
 
-// checkTokens reports the daemon's credentials. It FAILS on what stops a credential working
-// with an error the reader must act on: an operator token file that is not mgo_, a token store
-// written before grants, a secret file looser than 0600. It ADVISES when a stored token
+// checkTokens reports the daemon's credentials. It FAILS on what stops a credential working,
+// or on a record no mint could have written, with an error the reader must act on: an operator
+// token file that is not mgo_, a token store written before grants, a record that Skipped
+// reports (a planted or damaged file, one looser than 0600). It ADVISES when a stored token
 // expires within expiringSoon, and when the magus state dir is readable by other accounts.
-// Reading the store removes expired tokens. An absent operator token is normal: the daemon
-// mints one on start.
+// List deletes expired tokens. An absent operator token is normal: the daemon mints one on
+// start.
 func (*runner) checkTokens() types.DoctorCheck {
 	const name = "tokens"
 	var (
@@ -32,27 +33,29 @@ func (*runner) checkTokens() types.DoctorCheck {
 		parts         []string
 	)
 
-	tok, err := auth.Load()
+	tok, err := auth.LoadOperator()
 	switch {
 	case errors.Is(err, auth.ErrNoToken):
 		parts = append(parts, "operator token: absent (the daemon mints one on start)")
 	case err != nil:
 		fails = append(fails, err.Error())
 	default:
-		parts = append(parts, "operator token: present (id "+auth.Fingerprint(tok)+")")
+		parts = append(parts, "operator token: present (id "+auth.TokenID(tok)+")")
 	}
 
-	if store, err := auth.LoadStore(); err != nil {
+	stored, skipped, err := readStore()
+	for _, e := range skipped {
+		fails = append(fails, e.Error())
+	}
+	if err != nil {
 		fails = append(fails, err.Error())
 	} else {
-		stored := store.List()
 		now := time.Now()
 		var nearest time.Time
 		for _, t := range stored {
 			if nearest.IsZero() || t.Expires.Before(nearest) {
 				nearest = t.Expires
 			}
-			// List has already removed the expired ones.
 			if left := t.Expires.Sub(now); left <= expiringSoon {
 				days := fmt.Sprintf("%dd", int(left.Hours())/24)
 				if left < 24*time.Hour {
@@ -87,6 +90,24 @@ func (*runner) checkTokens() types.DoctorCheck {
 		status = types.DoctorAdvice
 	}
 	return types.DoctorCheck{Name: name, Status: status, Message: strings.Join(parts, "; "), Details: details}
+}
+
+// readStore lists the live stored tokens and the records the store skipped.
+func readStore() ([]auth.Token, []error, error) {
+	dir, err := auth.StoreDir()
+	if err != nil {
+		return nil, nil, err
+	}
+	store, err := auth.LoadStore(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	stored, err := store.List()
+	if err != nil {
+		return nil, nil, err
+	}
+	skipped, err := store.Skipped()
+	return stored, skipped, err
 }
 
 // probeBridgeReachability issues a real HTTP GET to /api/v1/graph to confirm

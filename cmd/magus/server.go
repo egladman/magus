@@ -213,7 +213,7 @@ func serverStart(ctx context.Context, args []string) error {
 	// it is printed here rather than left in the log. A console that is not mounted says
 	// so: a silent absence is what sends somebody reading daemon.go.
 	if u := consoleRootURL(); u != "" {
-		fmt.Fprintf(os.Stderr, "magus: console at %s (it asks for a token; `%s` mints one)\n", u, hint.ConfigConsoleTokenCreate.With("--expires", console.LinkTokenLifetime))
+		fmt.Fprintf(os.Stderr, "magus: console at %s (it asks for a token; `%s` mints one)\n", u, hint.ConfigConsoleTokenCreate.With("--expires", console.LinkTokenExpires()))
 	} else {
 		fmt.Fprintln(os.Stderr, "magus: no console is mounted (none is built, or console.enabled is false)")
 	}

@@ -1749,35 +1749,81 @@ func TestGuardDeniesExitStatusEcho(t *testing.T) {
 	}
 }
 
-// Every command the guard judges came from an agent, and an agent never reads or rotates the
-// operator token, however the line spells it: the operator token reaches token management.
-// Minting a scoped token, and asking whether the operator token exists, stay allowed.
-func TestOperatorTokenIsDeniedToAnAgent(t *testing.T) {
+// Every command the guard judges came from an agent, and an agent holds the token it was given:
+// every verb the CLI registry marks as a credential verb is refused however the line spells
+// it, the binary included. Listing tokens and asking whether the operator token exists stay
+// allowed.
+func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 	for _, cmd := range []string{
 		"magus config token print",
 		"./magus config token print",
+		"/usr/local/bin/magus config token print",
 		"magus --root . config token print",
 		"magus config token generate --force",
+		"magus config token revoke",
+		"magus config console token create",
+		"magus config console token create --viewer --expires 1h",
+		"magus config console token create --code --expires 12h",
+		"magus -C . config console token create",
+		"magus config mcp connector create --name agent",
+		"magus graph export --open --follow",
+		"magus graph export --open --follow --print",
+		"magus graph export --follow --open --targets",
+		"go run ./cmd/magus config console token create",
+		"go run github.com/egladman/magus/cmd/magus@latest config mcp connector create",
+		"go run -tags dev ./cmd/magus config token print",
 		`export MAGUS_MCP_TOKEN="$(magus config token print)"`,
-		`open "http://127.0.0.1:7391/console/#token=$(magus config token print)"`,
+		`open "http://127.0.0.1:7391/console/#code=$(magus config console token create --code --expires 12h)"`,
+		`sh -c "magus config console token create"`,
+		`bash -lc 'magus config mcp connector create'`,
+		"env FOO=1 magus config console token create",
+		"timeout 5 magus config mcp connector create",
+		`eval "magus config token print"`,
 		"magus config token print | pbcopy",
 		"true && magus config token generate",
-		"magus config token print && (", // unparsable: the pattern answers
+		"magus config token print && (",                 // unparsable: the pattern answers
+		"magus config console token create --code && (", // unparsable: the pattern answers
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
-		assert.Equal(t, denyRuleOperatorToken, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "config mcp connector create", "the reason names the token an agent may hold: %s", cmd)
+		assert.Equal(t, denyRuleCredentialVerb, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "config mcp connector create", "the reason names what a person runs: %s", cmd)
 	}
 	for _, cmd := range []string{
 		"magus config token status",
-		"magus config mcp connector create --name agent",
-		"magus config console token create --expires 12h",
+		"magus config console token ls",
+		"magus config mcp connector ls",
+		"magus config console token revoke laptop",
+		"magus graph export --open",
+		"magus graph export --open --print",
 		"magus run go::go-test . -- -run 'Token'",
 		"grep -rn 'config token print' docs",
+		"magus describe rule credential-verb",
+		"go run ./cmd/magus-docs config console token create",
 	} {
-		assert.NotEqual(t, denyRuleOperatorToken, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleCredentialVerb, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
+}
+
+// The credential verbs are read off the registry, so a verb marked there is refused without a
+// second list here to keep in step.
+func TestCredentialVerbsComeFromTheRegistry(t *testing.T) {
+	var words []string
+	for _, inv := range credentialInvocations() {
+		w := strings.Join(inv.words, " ")
+		if inv.flag != "" {
+			w += " --" + inv.flag
+		}
+		words = append(words, w)
+	}
+	assert.ElementsMatch(t, []string{
+		"config mcp connector create",
+		"config token generate",
+		"config token print",
+		"config token revoke",
+		"config console token create",
+		"graph export --follow",
+	}, words)
 }
 
 // The rule refuses only a status printed and dropped. Every form here can feed $? into

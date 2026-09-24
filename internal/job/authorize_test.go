@@ -281,7 +281,7 @@ func TestRowRecordsTheDoorThatDeclaredIt(t *testing.T) {
 	t.Parallel()
 
 	loc := tmpLoc(t, t.TempDir())
-	cred := types.Credential{Class: types.ClassToken, ID: "3fa9c1d2", Name: "connector-1", Grant: types.GrantConnector}
+	cred := types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "connector-1", Grant: types.GrantConnector}
 	ctx := trail.ContextWithHost(trail.ContextWithCredential(trail.ContextWithEntryPoint(t.Context(), types.EntryPointMCP), cred), "claude-code")
 	row := workerRow()
 	stored, err := NewStore(loc).Update(ctx, row.ID, func(cur *types.Job) { *cur = row })

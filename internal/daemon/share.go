@@ -42,8 +42,9 @@ type shareRequest struct {
 // mints a fresh share token within the caller's grant and opens a new LAN listener,
 // superseding any active one. consoleDir is the built console served to the phone;
 // when it is empty (no build found), the endpoint fails with a clear, actionable
-// message rather than opening a listener that would 404 the app.
-func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded map[string]share.Route, log *slog.Logger) http.Handler {
+// message rather than opening a listener that would 404 the app. Every mint is recorded to the
+// trail under trailDir.
+func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded map[string]share.Route, trailDir string, log *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			handler.RefuseMethod(w, r, http.MethodPost)
@@ -64,13 +65,13 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 			refuseShare(w, r, rpcerr.Error{
 				Code:    connect.CodeInvalidArgument,
-				Reason:  types.ShareUnavailable,
+				Reason:  types.ShareRequestMalformed,
 				Message: "the share request body is not JSON of the form {\"ttl_seconds\": N}: " + err.Error(),
 			}, log)
 			return
 		}
-		minter := trail.CredentialFromContext(r.Context()).Grant
-		link, err := mgr.Start(minter, consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
+		minter := trail.CredentialFromContext(r.Context())
+		link, err := mgr.Start(minter.Grant, consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
 		switch {
 		case errors.Is(err, auth.ErrExceedsGrant):
 			refuseShare(w, r, rpcerr.Error{Code: connect.CodePermissionDenied, Reason: types.GrantInsufficient, Message: err.Error()}, log)
@@ -89,6 +90,7 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			}, log)
 			return
 		}
+		trail.AppendMint(r.Context(), trailDir, "share.mint", trail.MintRecord{Minted: link.Credential, Expires: link.ExpiresAt, Minter: minter})
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		if err := json.NewEncoder(w).Encode(shareResponse{

@@ -10,27 +10,47 @@
 // HTML, so a token name can carry no markup into the page.
 
 import { createClient, type Client } from "@connectrpc/connect";
-import { TokenService, TokenScope, type TokenInfo } from "@wire/token/v1alpha1/token_pb";
+import {
+  CredentialClass,
+  Level,
+  TokenService,
+  type Grant,
+  type TokenInfo,
+} from "@wire/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 
-// scopeLabel names a token's preset grant for the operator. The operator token never reaches a
-// ListTokens response; an unspecified scope falls back to a plain "Token", and the grant column
-// says what it may do.
-function scopeLabel(scope: TokenScope): string {
-  switch (scope) {
-    case TokenScope.CONNECTOR:
-      return "Connector";
-    case TokenScope.CONSOLE:
-      return "Console";
-    case TokenScope.CONSOLE_READ:
-      return "Viewer";
-    case TokenScope.SHARE_READ:
-      return "Read-only share";
-    default:
+// classLabel names a token's class for the operator. The operator token never reaches a
+// ListTokens response; the grant beside it says what each may do.
+function classLabel(c: CredentialClass): string {
+  switch (c) {
+    case CredentialClass.STORED:
       return "Token";
+    case CredentialClass.SHARE:
+      return "Read-only share";
+    case CredentialClass.EXCHANGE:
+      return "Link code";
+    default:
+      return "Unknown";
   }
+}
+
+// grantLabel renders a grant the way the CLI does ("mcp=write,console=read"), naming only the
+// surfaces it reaches.
+function grantLabel(g: Grant | undefined): string {
+  if (!g) return "nothing";
+  const level = (l: Level): string =>
+    l === Level.WRITE ? "write" : l === Level.READ ? "read" : "";
+  const parts: string[] = [];
+  for (const [surface, l] of [
+    ["tokens", g.tokens],
+    ["mcp", g.mcp],
+    ["console", g.console],
+  ] as const) {
+    if (level(l)) parts.push(surface + "=" + level(l));
+  }
+  return parts.join(",") || "nothing";
 }
 
 // expiryLabel renders a token's expiry as a local date-time. Every token the daemon lists
@@ -123,7 +143,7 @@ export function buildTokensSection(
 
     const head = h("div", "console-settings-tokens__row console-settings-tokens__row--head");
     head.setAttribute("role", "row");
-    for (const label of ["Type", "Name", "ID", "Expires", ""]) {
+    for (const label of ["Class", "Grant", "Name", "ID", "Expires", ""]) {
       const cell = h("span", "console-settings-tokens__cell", label);
       cell.setAttribute("role", "columnheader");
       head.append(cell);
@@ -137,9 +157,11 @@ export function buildTokensSection(
       const type = h("span", "console-settings-tokens__cell");
       type.setAttribute("role", "cell");
       const label = h("span", "pf-v6-c-label pf-m-compact");
-      label.append(h("span", "pf-v6-c-label__content", scopeLabel(t.scope)));
-      if (t.grant) label.title = t.grant;
+      label.append(h("span", "pf-v6-c-label__content", classLabel(t.class)));
       type.append(label);
+
+      const grant = h("span", "console-settings-tokens__cell", grantLabel(t.grant));
+      grant.setAttribute("role", "cell");
 
       const name = h(
         "span",
@@ -148,11 +170,7 @@ export function buildTokensSection(
       );
       name.setAttribute("role", "cell");
 
-      const fp = h(
-        "span",
-        "console-settings-tokens__cell console-settings-tokens__fp",
-        t.identifier,
-      );
+      const fp = h("span", "console-settings-tokens__cell console-settings-tokens__fp", t.id);
       fp.setAttribute("role", "cell");
 
       const exp = h(
@@ -172,13 +190,13 @@ export function buildTokensSection(
       revoke.type = "button";
       // The label already reads "Revoke"; the descriptive title/aria-label names WHICH token so the
       // control's effect is unambiguous (the repo's explicit-labeling standard).
-      const who = (t.name ? t.name : scopeLabel(t.scope)) + " (" + t.identifier + ")";
+      const who = (t.name ? t.name : classLabel(t.class)) + " (" + t.id + ")";
       revoke.title = "Revoke token " + who;
       revoke.setAttribute("aria-label", "Revoke token " + who);
       revoke.addEventListener("click", () => void revokeToken(t, revoke));
       actionCell.append(revoke);
 
-      row.append(type, name, fp, exp, actionCell);
+      row.append(type, grant, name, fp, exp, actionCell);
       table.append(row);
     }
     return table;
@@ -187,19 +205,19 @@ export function buildTokensSection(
   // revokeToken confirms, calls RevokeToken by fingerprint, then reloads the list. Revoking the
   // share token also closes its LAN listener - the server handles that teardown, not the UI.
   async function revokeToken(t: TokenInfo, btn: HTMLButtonElement): Promise<void> {
-    const who = t.name ? t.name : scopeLabel(t.scope);
-    const isShare = t.scope === TokenScope.SHARE_READ;
+    const who = t.name ? t.name : classLabel(t.class);
+    const isShare = t.class === CredentialClass.SHARE;
     const detail = isShare
       ? 'Revoke the share token "' +
         who +
         '"? This also closes the read-only share listener immediately.'
-      : 'Revoke connector token "' +
+      : 'Revoke token "' +
         who +
         '"? Any client using it will stop working. This cannot be undone - mint a new one from the CLI if needed.';
     if (!confirm(detail)) return;
     btn.disabled = true;
     try {
-      await client.revokeToken({ name: t.identifier });
+      await client.revokeToken({ name: t.id });
       if (stale) return;
       showToast("Access tokens", "Revoked " + who + ".");
       await renderList();

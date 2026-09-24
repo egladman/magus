@@ -1,8 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { CONSOLE_TOKEN_TTL_MS, ensureScopedToken, exchangeOperatorToken } from "./token-exchange";
-import { getLiveToken, hasScopedToken } from "./daemon";
+import {
+  CONSOLE_TOKEN_TTL_MS,
+  ensureConsoleToken,
+  exchangeOperatorToken,
+  redeemLinkCode,
+} from "./token-exchange";
+import { getLiveToken } from "./daemon";
 
 // withStorage stubs the two Web Storage objects the exchange reads and writes, seeded with
 // an existing bearer. Async because the exchange is, unlike the sync harness in
@@ -33,10 +38,32 @@ async function withStorage(seed: Record<string, string>, fn: () => Promise<void>
   }
 }
 
+// withFetch stubs fetch for one call site, recording what was sent.
+async function withFetch(
+  respond: (url: string, init?: RequestInit) => Response,
+  fn: (calls: { url: string; body: string }[]) => Promise<void>,
+): Promise<void> {
+  const realFetch = globalThis.fetch;
+  const calls: { url: string; body: string }[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const raw = init?.body;
+    calls.push({
+      url: String(input),
+      body: typeof raw === "string" ? raw : new TextDecoder().decode(raw as Uint8Array),
+    });
+    return respond(String(input), init);
+  }) as typeof fetch;
+  try {
+    await fn(calls);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
 test("a page holding no token has nothing to exchange", async () => {
   await withStorage({}, async () => {
     let called = false;
-    const out = await ensureScopedToken(async () => {
+    const out = await ensureConsoleToken(async () => {
       called = true;
       return "mgs_new";
     });
@@ -45,108 +72,116 @@ test("a page holding no token has nothing to exchange", async () => {
   });
 });
 
-test("the exchange runs once, not on every load", async () => {
-  await withStorage({ "magus-live-token": "mgs_console", "magus-live-scoped": "1" }, async () => {
-    let called = false;
-    const out = await ensureScopedToken(async () => {
-      called = true;
-      return "mgs_another";
-    });
-    assert.equal(out, "already-scoped");
-    assert.equal(called, false, "a marked page must not mint a second token");
-    assert.equal(getLiveToken(), "mgs_console", "the stored token is left alone");
-  });
-});
-
-test("a successful mint replaces the operator token and marks the page", async () => {
+test("a successful mint replaces the operator token", async () => {
   await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
-    const out = await ensureScopedToken(async () => "mgs_console");
+    const out = await ensureConsoleToken(async () => "mgs_console");
     assert.equal(out, "exchanged");
-    assert.equal(getLiveToken(), "mgs_console", "the page now holds the scoped token");
-    assert.equal(hasScopedToken(), true);
+    assert.equal(getLiveToken(), "mgs_console", "the page now holds the console token");
   });
 });
 
-// The class is in the token: a stored or share token is already scoped, and is never sent to
-// the mint, so a console token cannot even ask for a second one.
+// The prefix decides, with no stored marker: a stored or share token is never sent to the
+// mint, on this load or any later one, so a console token cannot even ask for a second one.
 test("a token that is not the operator's is never exchanged", async () => {
   for (const held of ["mgs_console", "mgl_share"]) {
     await withStorage({ "magus-live-token": held }, async () => {
       let called = false;
-      const out = await ensureScopedToken(async () => {
+      const out = await ensureConsoleToken(async () => {
         called = true;
         return "mgs_another";
       });
       assert.equal(out, "already-scoped", held);
       assert.equal(called, false, "a scoped token must not reach the mint: " + held);
       assert.equal(getLiveToken(), held);
-      assert.equal(hasScopedToken(), true);
     });
   }
 });
 
-// The daemon still decides: a refusal is the steady state, not a fault, so it is recorded and
-// the next load stops asking.
-test("a refusal is recorded rather than retried, and keeps the token", async () => {
+// A refusal is a failure like any other: the page still holds the operator token, so the
+// caller says so, and the next load asks again rather than settling for it.
+test("a refused exchange fails loudly and keeps asking", async () => {
   await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
-    const out = await ensureScopedToken(async () => {
-      throw new ConnectError("token management not offered", Code.PermissionDenied);
-    });
-    assert.equal(out, "denied");
-    assert.equal(getLiveToken(), "mgo_operator", "a refusal must not disturb the credential");
-    assert.equal(hasScopedToken(), true, "a refused page must stop asking");
-  });
-});
-
-// The safety property. A daemon restarting mid-exchange must leave the page holding the
-// credential it already had, and unmarked, so the swap is retried rather than lost. A bug
-// here strands the console with no working token and no way back except a fresh paste.
-test("a transport failure leaves the page exactly as it was", async () => {
-  await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
-    const out = await ensureScopedToken(async () => {
-      throw new ConnectError("connection refused", Code.Unavailable);
-    });
-    assert.equal(out, "failed");
-    assert.equal(getLiveToken(), "mgo_operator", "the working credential must survive");
-    assert.equal(hasScopedToken(), false, "an unmarked page retries on the next load");
+    for (const code of [Code.PermissionDenied, Code.Unimplemented, Code.Unavailable]) {
+      let called = 0;
+      const out = await ensureConsoleToken(async () => {
+        called++;
+        throw new ConnectError("refused", code);
+      });
+      assert.equal(out, "failed", Code[code]);
+      assert.equal(called, 1);
+      assert.equal(getLiveToken(), "mgo_operator", "a refusal must not disturb the credential");
+    }
   });
 });
 
 test("an empty secret is treated as a failure, not stored", async () => {
   await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
-    const out = await ensureScopedToken(async () => "");
+    const out = await ensureConsoleToken(async () => "");
     assert.equal(out, "failed");
     assert.equal(getLiveToken(), "mgo_operator");
-    assert.equal(hasScopedToken(), false);
   });
 });
 
-// The daemon refuses a console mint with no expiry (400, InvalidArgument), which is what every console
-// load hit before this sent one. Pinned on the wire: the request carries an expiry at the daemon's
+// Pinned on the wire: the request carries a console=write grant and an expiry at the daemon's
 // ceiling, and the minted secret replaces the operator token.
-test("the real exchange asks for an expiring console token", async () => {
+test("the real exchange asks for an expiring console=write grant", async () => {
   await withStorage({ "magus-live-token": "mgo_operator" }, async () => {
-    const realFetch = globalThis.fetch;
-    let body: Record<string, unknown> = {};
-    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-      const raw = init?.body;
-      body = JSON.parse(
-        typeof raw === "string" ? raw : new TextDecoder().decode(raw as Uint8Array),
-      );
-      return new Response(JSON.stringify({ secret: "mgs_console" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    }) as typeof fetch;
-    try {
-      const now = Date.UTC(2026, 8, 22);
-      const out = await exchangeOperatorToken("127.0.0.1:7391", now);
-      assert.equal(out, "exchanged");
-      assert.equal(body.scope, "TOKEN_SCOPE_CONSOLE");
-      assert.equal(Date.parse(String(body.expireTime)), now + CONSOLE_TOKEN_TTL_MS);
-      assert.equal(getLiveToken(), "mgs_console");
-    } finally {
-      globalThis.fetch = realFetch;
-    }
+    await withFetch(
+      () =>
+        new Response(JSON.stringify({ secret: "mgs_console" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      async (calls) => {
+        const now = Date.UTC(2026, 8, 22);
+        const out = await exchangeOperatorToken("127.0.0.1:7391", now);
+        assert.equal(out, "exchanged");
+        const body = JSON.parse(calls[0].body);
+        assert.deepEqual(body.grant, { console: "LEVEL_WRITE" });
+        assert.equal(body.scope, undefined, "the retired scope field is gone");
+        assert.equal(Date.parse(String(body.expireTime)), now + CONSOLE_TOKEN_TTL_MS);
+        assert.equal(getLiveToken(), "mgs_console");
+      },
+    );
   });
+});
+
+// A link's code goes to the daemon that served the page, in the body and nowhere else, and the
+// token it is traded for is what the page stores.
+test("a link code is redeemed once, in the body, for the token it stands for", async () => {
+  await withStorage({}, async () => {
+    await withFetch(
+      () =>
+        new Response(JSON.stringify({ token: "mgs_console", expires_at: "2026-09-24T00:00:00Z" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      async (calls) => {
+        const out = await redeemLinkCode("127.0.0.1:7391", "mgx_code");
+        assert.equal(out, "exchanged");
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].url, "http://127.0.0.1:7391/api/v1/token/exchange");
+        assert.deepEqual(JSON.parse(calls[0].body), { code: "mgx_code" });
+        assert.equal(getLiveToken(), "mgs_console");
+      },
+    );
+  });
+});
+
+test("a used or expired code, or a daemon that is down, stores nothing", async () => {
+  for (const respond of [
+    () => new Response('{"error":{"code":401}}', { status: 401 }),
+    () => new Response("not json", { status: 200 }),
+    () => new Response('{"token":""}', { status: 200 }),
+    (): Response => {
+      throw new TypeError("connection refused");
+    },
+  ]) {
+    await withStorage({}, async () => {
+      await withFetch(respond, async () => {
+        assert.equal(await redeemLinkCode("127.0.0.1:7391", "mgx_code"), "failed");
+        assert.equal(getLiveToken(), null);
+      });
+    });
+  }
 });

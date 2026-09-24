@@ -216,11 +216,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **BREAKING: tokens carry their class and always expire; older ones are refused.**
   `mgo_` is the operator, `mgs_` a stored token (now in `tokens.d`), `mgl_` a share link,
   which the loopback daemon refuses. Stored tokens live at most 366 days and share links
-  24 hours; longer, or `never`, is MGS9018. Expired tokens are deleted on the next list
-  or mint. An old operator file is MGS9016, anything in `connectors.d` MGS9017.
-- **Console links carry a 12-hour console token, never the operator token.** The guard
-  denies `magus config token print|generate` to agents (`operator-token`), and a
-  non-loopback `mcp.address` needs `mcp.insecure_bind: true`.
+  24 hours; longer, or `never`, is MGS9018. An old operator file is MGS9016, anything in
+  `connectors.d` MGS9017.
+- **Console links carry a one-time code, never a token.** `#code=` lives a minute and
+  works once; the console trades it at `POST /api/v1/token/exchange` for a 12-hour console
+  token. The guard denies agents every credential verb the CLI registry marks
+  (`credential-verb`) and the token files (`token-state`). A non-loopback `mcp.address`
+  needs `mcp.insecure_bind: true`, and the operator token is refused off loopback.
+- **A planted token record cannot outrank a minted one.** The store skips, with MGS9019,
+  a record holding `tokens=write`, outliving 366 days or naming another file, and keeps
+  the rest; `magus doctor` fails on it. Revoke takes an exact id or name, within the
+  caller's grant. Every mint is audited, and a revoked token ends its open streams.
+- **Every Connect procedure and `/api/` route names its own need.** The daemon refuses to
+  start on a missing or empty one, and an unloaded daemon holds the same needs. Graph
+  reads need `console=read`. TokenService takes a `Grant` and lists each token's class;
+  `TokenScope` is gone. A malformed share body is MGS9020, an impossible mint MGS9021.
 - **"Session" now means only the host's conversation; magus's per-process id is an
   invocation.** `magus session` lists INVOCATION and SESSION columns; `-o json` keys are
   `invocations`, `invocation` and `session`. The store is schema 2; a schema-1 line is

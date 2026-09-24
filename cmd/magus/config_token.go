@@ -4,9 +4,9 @@ package main
 // every surface on loopback, and the only one that may manage other tokens.
 //
 // It lives at `magus config token`, NOT under `config mcp`, because it is not an MCP
-// credential: it opens the console and token management as much as /mcp. `print` and
-// `generate` are denied to agent sessions by the guard (rule operator-token); an agent
-// holds its own connector token.
+// credential: it opens the console and token management as much as /mcp. `print`,
+// `generate` and `revoke` are denied to agent sessions by the guard (rule credential-verb);
+// an agent holds its own connector token.
 
 import (
 	"errors"
@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -87,7 +88,7 @@ func configTokenGenerate(args []string) error {
 		return err
 	}
 
-	tok, err := auth.Generate()
+	tok, err := auth.GenerateOperator()
 	if err != nil {
 		return err
 	}
@@ -96,9 +97,9 @@ func configTokenGenerate(args []string) error {
 	// daemon may already be serving; --force is an explicit atomic overwrite.
 	var path string
 	if gf.Force {
-		path, err = auth.Save(tok)
+		path, err = auth.SaveOperator(tok)
 	} else {
-		path, err = auth.SaveNew(tok)
+		path, err = auth.SaveNewOperator(tok)
 		if errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("magus config token generate: a token already exists; pass --force to rotate it")
 		}
@@ -106,6 +107,8 @@ func configTokenGenerate(args []string) error {
 	if err != nil {
 		return err
 	}
+	operator := types.Credential{Class: types.ClassOperator, ID: auth.TokenID(tok), Grant: types.GrantOperator}
+	auditMint("cli.generate", trail.MintRecord{Minted: operator, Minter: operator})
 
 	// The secret goes to stdout alone, once; repeating it on stderr would put it in every
 	// terminal log that captures both.
@@ -120,7 +123,7 @@ func configTokenPrint(args []string) error {
 	if err := noFlags("config token print", args); err != nil {
 		return err
 	}
-	tok, err := auth.Load()
+	tok, err := auth.LoadOperator()
 	if errors.Is(err, auth.ErrNoToken) {
 		return types.DiagnosticErrorf(types.NoAuthToken, "magus config token print: no token configured; run `%s`", hint.MCPTokenGenerate)
 	}
@@ -135,7 +138,7 @@ func configTokenRevoke(args []string) error {
 	if err := noFlags("config token revoke", args); err != nil {
 		return err
 	}
-	if err := auth.Revoke(); err != nil {
+	if err := auth.RevokeOperator(); err != nil {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "magus config token revoke: token removed")
@@ -146,11 +149,11 @@ func configTokenStatus(args []string) error {
 	if err := noFlags("config token status", args); err != nil {
 		return err
 	}
-	path, err := auth.Path()
+	path, err := auth.OperatorPath()
 	if err != nil {
 		return err
 	}
-	tok, err := auth.Load()
+	tok, err := auth.LoadOperator()
 	if errors.Is(err, auth.ErrNoToken) {
 		fmt.Printf("token:       absent (the daemon mints one on next start)\n")
 		fmt.Printf("path:        %s\n", path)
@@ -160,7 +163,7 @@ func configTokenStatus(args []string) error {
 		return err
 	}
 	fmt.Printf("token:       present\n")
-	fmt.Printf("id:          %s\n", auth.Fingerprint(tok))
+	fmt.Printf("id:          %s\n", auth.TokenID(tok))
 	fmt.Printf("path:        %s\n", path)
 	return nil
 }

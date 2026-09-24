@@ -42,7 +42,11 @@ func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServ
 	verify := SingleTokenVerifier(func() (string, error) { return t.token, nil }, types.GrantViewer)
 	need := types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
 	for pattern, h := range routes {
-		s.Handle(pattern, RequireLoopbackPeer(CORS(origin)(BearerGuardWithQueryToken(rpcerr.FormatJSON, verify, need, h))))
+		guarded, err := BearerGuardWithQueryToken(rpcerr.FormatJSON, verify, need, h)
+		if err != nil {
+			return nil, err
+		}
+		s.Handle(pattern, RequireLoopbackPeer(CORS(origin)(guarded)))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.cancel = cancel

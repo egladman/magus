@@ -8,9 +8,9 @@
 // endpoint drives, never a second store.
 //
 // Access: every RPC needs tokens=write, which only the operator grant holds, so a console,
-// viewer, connector or share token is refused at the mount with 403. A mint is ALSO checked
-// against the caller's own grant (a token is never granted more than its minter holds), so
-// the mount is defense in depth rather than the rule.
+// viewer, connector or share token is refused at the mount with 403. A mint and a revoke are
+// ALSO checked against the caller's own grant (a token is never granted, or revoked, beyond
+// what its caller holds), so the mount is defense in depth rather than the rule.
 //
 // The operator token is out of reach here: it lives in a file this service never opens, so it
 // is neither listed nor revocable, and the management UI cannot lock the operator out. There
@@ -63,13 +63,13 @@ type TokenServiceClient interface {
 	// ListTokens returns every stored token plus the active share link (if any), each described
 	// without its secret.
 	ListTokens(context.Context, *connect.Request[v1alpha1.ListTokensRequest]) (*connect.Response[v1alpha1.ListTokensResponse], error)
-	// RevokeToken removes a stored token or the share link by name or id. Revoking the share
-	// link also closes its LAN listener. The operator token is not revocable here.
+	// RevokeToken removes a stored token or the share link by exact id or exact name. Revoking
+	// the share link also closes its LAN listener. The operator token is not revocable here.
 	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error)
-	// CreateToken mints a console or viewer token and returns its secret ONCE. CONSOLE and
-	// CONSOLE_READ are the only scopes it mints: OPERATOR is a file this service never opens,
-	// and CONNECTOR would be an /mcp bearer minted from a browser. The expiry is required and at
-	// most 366 days out; a request beyond it is refused, never shortened.
+	// CreateToken mints a stored token holding grant and returns its secret ONCE. It mints
+	// console grants only (a browser has no business minting an /mcp token), never more than
+	// the caller holds, and the expiry is required and at most 366 days out; a request beyond it
+	// is refused, never shortened.
 	CreateToken(context.Context, *connect.Request[v1alpha1.CreateTokenRequest]) (*connect.Response[v1alpha1.CreateTokenResponse], error)
 }
 
@@ -132,13 +132,13 @@ type TokenServiceHandler interface {
 	// ListTokens returns every stored token plus the active share link (if any), each described
 	// without its secret.
 	ListTokens(context.Context, *connect.Request[v1alpha1.ListTokensRequest]) (*connect.Response[v1alpha1.ListTokensResponse], error)
-	// RevokeToken removes a stored token or the share link by name or id. Revoking the share
-	// link also closes its LAN listener. The operator token is not revocable here.
+	// RevokeToken removes a stored token or the share link by exact id or exact name. Revoking
+	// the share link also closes its LAN listener. The operator token is not revocable here.
 	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error)
-	// CreateToken mints a console or viewer token and returns its secret ONCE. CONSOLE and
-	// CONSOLE_READ are the only scopes it mints: OPERATOR is a file this service never opens,
-	// and CONNECTOR would be an /mcp bearer minted from a browser. The expiry is required and at
-	// most 366 days out; a request beyond it is refused, never shortened.
+	// CreateToken mints a stored token holding grant and returns its secret ONCE. It mints
+	// console grants only (a browser has no business minting an /mcp token), never more than
+	// the caller holds, and the expiry is required and at most 366 days out; a request beyond it
+	// is refused, never shortened.
 	CreateToken(context.Context, *connect.Request[v1alpha1.CreateTokenRequest]) (*connect.Response[v1alpha1.CreateTokenResponse], error)
 }
 

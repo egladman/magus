@@ -170,8 +170,9 @@ the console logs a warning and does not register its routes.
 
 **Bearer token.** Every request must carry `Authorization: Bearer <token>`
 holding `console=read` for the read routes and `console=write` for the rest (see
-[Tokens and grants](../concepts/tokens.md)). The links magus prints mint a console
-token that expires in 12 hours; mint one yourself with:
+[Tokens and grants](../concepts/tokens.md)). The links magus prints carry a one-time
+code the console trades for a console token that expires in 12 hours; mint a token
+yourself with:
 
 ```sh
 magus config console token create --expires 12h

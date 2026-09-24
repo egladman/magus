@@ -58,9 +58,13 @@ func TestGrantLatticeLaws(t *testing.T) {
 		},
 		"operator is the top":   func(a Grant) bool { return a.Within(GrantOperator) },
 		"nothing is the bottom": func(a Grant) bool { return Grant{}.Within(a) },
-		"string round-trips": func(a Grant) bool {
-			back, err := ParseGrant(a.String())
-			return err == nil && back == a
+		"json round-trips": func(a Grant) bool {
+			b, err := json.Marshal(a)
+			if err != nil {
+				return false
+			}
+			var back Grant
+			return json.Unmarshal(b, &back) == nil && back == a
 		},
 	}
 	for name, law := range laws {
@@ -83,30 +87,48 @@ func TestGrantWithinIsPointwiseOnEveryPair(t *testing.T) {
 	}
 }
 
-func TestGrantValidRefusesLevelsASurfaceHasNoMeaningFor(t *testing.T) {
+func TestGrantValidateRefusesLevelsASurfaceHasNoMeaningFor(t *testing.T) {
 	t.Parallel()
 	for _, g := range validGrants() {
-		assert.NoError(t, g.Valid(), g.String())
+		assert.NoError(t, g.Validate(), g.String())
 	}
 	for _, g := range []Grant{{Tokens: LevelRead}, {MCP: LevelRead}, {Console: 3}, {Tokens: 9}} {
-		assert.Error(t, g.Valid(), "%+v", g)
+		assert.Error(t, g.Validate(), "%+v", g)
 	}
-	for _, s := range []string{"tokens=read", "mcp=read", "console=admin", "files=write", "mcp", "mcp=write,mcp=write"} {
-		_, err := ParseGrant(s)
-		assert.Error(t, err, s)
+}
+
+// A guard built on a zero or invalid need would admit every credential, so Validate refuses
+// each: none is not a need, and a surface or level magus does not know is not one either.
+func TestNeedValidateRefusesZeroAndInvalid(t *testing.T) {
+	t.Parallel()
+	for _, n := range []Need{
+		{Surface: SurfaceTokens, Level: LevelWrite},
+		{Surface: SurfaceMCP, Level: LevelWrite},
+		{Surface: SurfaceConsole, Level: LevelRead},
+		{Surface: SurfaceConsole, Level: LevelWrite},
+	} {
+		assert.NoError(t, n.Validate(), "%+v", n)
+	}
+	for _, n := range []Need{
+		{},
+		{Surface: SurfaceConsole},
+		{Surface: "files", Level: LevelWrite},
+		{Surface: SurfaceMCP, Level: LevelRead},
+		{Surface: SurfaceConsole, Level: 7},
+	} {
+		assert.Error(t, n.Validate(), "%+v", n)
 	}
 }
 
 // The presets are hand-pinned: a change to any of them is a change to what a minted token can
-// do, and must show in a diff. GrantShare equals GrantViewer so a share link and a viewer see
-// the same routes.
+// do, and must show in a diff. A share link holds GrantViewer, so it and a viewer see the same
+// routes.
 func TestGrantPresets(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "tokens=write,mcp=write,console=write", GrantOperator.String())
 	assert.Equal(t, "mcp=write", GrantConnector.String())
 	assert.Equal(t, "console=write", GrantConsole.String())
 	assert.Equal(t, "console=read", GrantViewer.String())
-	assert.Equal(t, GrantViewer, GrantShare)
 	assert.Equal(t, "", Grant{}.String())
 }
 
@@ -127,6 +149,7 @@ func TestCredentialPhrase(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "", Credential{}.Phrase())
 	assert.Equal(t, "the operator token", Credential{Class: ClassOperator, ID: "0badf00d"}.Phrase())
-	assert.Equal(t, "token laptop (3fa9c1d2)", Credential{Class: ClassToken, ID: "3fa9c1d2", Name: "laptop"}.Phrase())
+	assert.Equal(t, "token laptop (3fa9c1d2)", Credential{Class: ClassStored, ID: "3fa9c1d2", Name: "laptop"}.Phrase())
 	assert.Equal(t, "share link 9b2e04aa", Credential{Class: ClassShare, ID: "9b2e04aa"}.Phrase())
+	assert.Equal(t, "link code 51c0de00", Credential{Class: ClassExchange, ID: "51c0de00", Name: "console-1"}.Phrase())
 }

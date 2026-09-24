@@ -3,7 +3,6 @@ package auth
 import (
 	"crypto/subtle"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/egladman/magus/types"
@@ -34,11 +33,13 @@ type ShareToken struct {
 }
 
 // MintShare mints a share token that expires ttl from now and returns its secret once, for
-// the link. It refuses a minter whose grant does not include [types.GrantShare]
-// (ErrExceedsGrant) and a ttl outside [MinShareTTL, MaxShareTTL] (ErrShareLifetime).
+// the link. A share link holds [types.GrantViewer]. It refuses a minter whose grant does not
+// include that (ErrExceedsGrant, coded GrantInsufficient) and a ttl outside [MinShareTTL,
+// MaxShareTTL] (ErrShareLifetime, coded TokenLifetimeOutOfRange).
 func MintShare(minter types.Grant, ttl time.Duration) (secret string, tok ShareToken, err error) {
-	if !types.GrantShare.Within(minter) {
-		return "", ShareToken{}, fmt.Errorf("%w: a share link needs %s, the minter holds %q", ErrExceedsGrant, types.GrantShare, minter.String())
+	if !types.GrantViewer.Within(minter) {
+		return "", ShareToken{}, types.WrapDiagnostic(types.GrantInsufficient, ErrExceedsGrant,
+			"auth: a share link needs %s, the minter holds %s", types.GrantViewer, grantOrNothing(minter))
 	}
 	if ttl < MinShareTTL || ttl > MaxShareTTL {
 		return "", ShareToken{}, types.WrapDiagnostic(types.TokenLifetimeOutOfRange, ErrShareLifetime,
@@ -64,7 +65,7 @@ func (t ShareToken) ID() string {
 
 // Credential is the credential this token verifies as.
 func (t ShareToken) Credential() types.Credential {
-	return types.Credential{Class: types.ClassShare, ID: t.ID(), Grant: types.GrantShare}
+	return types.Credential{Class: types.ClassShare, ID: t.ID(), Grant: types.GrantViewer}
 }
 
 // Verify reports whether presented is exactly this token and unexpired at now. Anything that
@@ -74,7 +75,7 @@ func (t ShareToken) Verify(presented string, now time.Time) bool {
 	if t.SHA256 == "" || t.Expired(now) {
 		return false
 	}
-	if class, ok := Class(presented); !ok || class != types.ClassShare {
+	if class, ok := classOf(presented); !ok || class != types.ClassShare {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(t.SHA256), []byte(digest(presented))) == 1

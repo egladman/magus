@@ -14,7 +14,7 @@ func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
 	t.Parallel()
 	secret, tok, err := MintShare(types.GrantConsole, 10*time.Minute)
 	require.NoError(t, err)
-	class, ok := Class(secret)
+	class, ok := classOf(secret)
 	require.True(t, ok)
 	assert.Equal(t, types.ClassShare, class)
 
@@ -25,7 +25,7 @@ func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
 	assert.False(t, tok.Verify(other, now), "another link's secret")
 	assert.False(t, tok.Verify(secret, tok.Expires.Add(time.Second)), "after expiry")
 	assert.False(t, ShareToken{}.Verify(secret, now), "the zero token verifies nothing")
-	assert.Equal(t, types.Credential{Class: types.ClassShare, ID: tok.ID(), Grant: types.GrantShare}, tok.Credential())
+	assert.Equal(t, types.Credential{Class: types.ClassShare, ID: tok.ID(), Grant: types.GrantViewer}, tok.Credential())
 }
 
 // The share door follows the minting rule: a minter below the share's grant is refused, and
@@ -49,12 +49,4 @@ func TestMintShareFollowsTheMintingRule(t *testing.T) {
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now().Add(MaxShareTTL), tok.Expires, time.Second)
 	assert.Equal(t, 24*time.Hour, MaxShareTTL, "the owner's decision: a share link lives a day at most")
-}
-
-// The share token, the viewer token and the share grant are one set of routes, asserted so a
-// change to either grant is a visible diff here.
-func TestShareGrantIsTheViewerGrant(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, types.GrantViewer, types.GrantShare)
-	assert.True(t, types.GrantShare.Within(types.GrantViewer))
 }

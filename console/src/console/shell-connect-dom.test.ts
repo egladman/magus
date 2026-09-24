@@ -226,7 +226,7 @@ describe("the shell sign-in gate", () => {
     const cmd = page.querySelector("[data-sign-in-command]")?.textContent ?? "";
     assert.match(
       cmd,
-      /\/console\/runs\/#token=\$\(magus config console token create --expires 12h\)"$/,
+      /\/console\/runs\/#code=\$\(magus config console token create --code --expires 12h\)"$/,
     );
     assert.doesNotMatch(cmd, /test-token/);
   });

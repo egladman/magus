@@ -103,7 +103,7 @@ const (
 	denyRuleCd                denyRuleName = "cd"
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 	denyRuleExitStatusEcho    denyRuleName = "exit-status-echo"
-	denyRuleOperatorToken     denyRuleName = "operator-token"
+	denyRuleCredentialVerb    denyRuleName = "credential-verb" //nolint:gosec // a rule's name, not a credential
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 
@@ -116,6 +116,9 @@ const (
 	// Upgraded from the push-gate ADVISORY when the run log proves no green gate covers
 	// this commit; see internal/guard/push.go.
 	denyRulePushUngated denyRuleName = "push-ungated"
+	// Both surfaces, like cache-dir-write: a file write and a shell line; see
+	// internal/guard/credential.go.
+	denyRuleTokenState denyRuleName = "token-state"
 )
 
 // denyRule is the rule plus what it fired on, so a rule that renders a verb or a
@@ -926,12 +929,6 @@ var (
 	// The unparsable-line fallback for magusInvokes, as above.
 	personOnlyRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b|\bmagus\s+session\s+dispose\b`)
 
-	// operatorTokenRe matches reading or rotating the operator token, the unparsable-line
-	// fallback for operatorTokenFires. Every command reaching the guard came from an agent,
-	// and an agent holds its own scoped token: the operator token also reaches token
-	// management, so an agent that reads it can mint itself anything.
-	operatorTokenRe = regexp.MustCompile(`\bmagus\s+config\s+token\s+(print|generate)\b`)
-
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
 	// The flag is not portable and the two spellings silently destroy each other's work:
@@ -1096,8 +1093,8 @@ var (
 		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one). Say you cannot ack and hand back the unread list.\n" +
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `" + hint.SessionDispose.With("<id>") + "` is a person's to run."
 
-	denyOperatorToken = "Use your own token: `" + hint.ConfigMCPConnectorCreate.With("--name", "<client>") + "` mints one holding mcp=write, and a person runs it for you.\n" +
-		"The operator token reaches token management, so a session that reads or rotates it can mint itself any grant. Only the person at the terminal handles it."
+	denyCredentialVerb = "Use the token you were given. Minting, printing, rotating or revoking a credential is the person's to do: `" + hint.ConfigMCPConnectorCreate.With("--name", "<client>") + "` mints one holding mcp=write, and they run it for you.\n" +
+		"A session that mints a token, or holds a console link's code, holds a grant nobody handed it; the operator token also reaches token management, so whoever reads it can mint any grant."
 
 	denyNotesAuthor = "Use `" + hint.MemoryPut.With("<name>") + "`: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design, so every spelling of the write is denied: `capture` files a transcript as a note, `promote` writes into the SHARED store, and both put a person's name on prose they never read.\n" +
@@ -1374,14 +1371,6 @@ func personOnlyFires(cmds []hint.Invocation, parsed bool, command string) bool {
 	return magusInvokes(cmds, "diff", "--ack") || magusInvokes(cmds, "session", "dispose")
 }
 
-// operatorTokenFires reports `magus config token print` or `generate`, however spelled.
-func operatorTokenFires(cmds []hint.Invocation, parsed bool, command string) bool {
-	if !parsed {
-		return operatorTokenRe.MatchString(command)
-	}
-	return magusInvokes(cmds, "config", "token", "print") || magusInvokes(cmds, "config", "token", "generate")
-}
-
 // searchHints is the unscoped default translator, used when no project list is
 // available (and by the pure guard tests). Judge builds a manifest-scoped
 // translator per invocation and hands it to evaluateWith, so live
@@ -1589,8 +1578,8 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		return ShellVerdict{Deny: denyPersonOnly, Rule: denyRule{Name: denyRulePersonOnly}}
 	}
 	// A credential rule, so it holds however the line is spelled, before any rule about shape.
-	if operatorTokenFires(cmds, parsed, command) {
-		return ShellVerdict{Deny: denyOperatorToken, Rule: denyRule{Name: denyRuleOperatorToken}}
+	if credentialVerbFires(cmds, parsed, command) {
+		return ShellVerdict{Deny: denyCredentialVerb, Rule: denyRule{Name: denyRuleCredentialVerb}}
 	}
 	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) {
 		return ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}

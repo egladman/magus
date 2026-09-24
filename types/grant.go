@@ -3,6 +3,7 @@ package types
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -76,14 +77,12 @@ type Grant struct {
 	Console Level `json:"console,omitzero" yaml:"console,omitempty"`
 }
 
-// The grants magus mints. GrantShare equals GrantViewer on purpose: a share link and a viewer
-// token see the same routes.
+// The grants magus mints. A share link holds GrantViewer: it sees what a viewer token sees.
 var (
 	GrantOperator  = Grant{Tokens: LevelWrite, MCP: LevelWrite, Console: LevelWrite}
 	GrantConnector = Grant{MCP: LevelWrite}
 	GrantConsole   = Grant{Console: LevelWrite}
 	GrantViewer    = Grant{Console: LevelRead}
-	GrantShare     = Grant{Console: LevelRead}
 )
 
 // Level returns the grant's level on s, and LevelNone for a surface it does not know.
@@ -99,20 +98,26 @@ func (g Grant) Level(s Surface) Level {
 	return LevelNone
 }
 
-// Valid refuses a level a surface has no meaning for. Token management and MCP have no read
+// Validate refuses a level a surface has no meaning for. Token management and MCP have no read
 // half, so tokens=read and mcp=read are errors, as is any level past write.
-func (g Grant) Valid() error {
+func (g Grant) Validate() error {
 	var errs []error
 	for _, s := range surfaces {
-		l := g.Level(s)
-		switch {
-		case l > LevelWrite:
-			errs = append(errs, fmt.Errorf("grant: %s has unknown level %d", s, uint8(l)))
-		case l == LevelRead && s != SurfaceConsole:
-			errs = append(errs, fmt.Errorf("grant: %s=read means nothing; %s is none or write", s, s))
+		if err := validLevel(s, g.Level(s)); err != nil {
+			errs = append(errs, fmt.Errorf("grant: %w", err))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func validLevel(s Surface, l Level) error {
+	switch {
+	case l > LevelWrite:
+		return fmt.Errorf("%s has unknown level %d", s, uint8(l))
+	case l == LevelRead && s != SurfaceConsole:
+		return fmt.Errorf("%s=read means nothing; %s is none or write", s, s)
+	}
+	return nil
 }
 
 // Allows reports whether g reaches n: its level on n's surface is at least n's level. A need
@@ -131,7 +136,6 @@ func (g Grant) Within(outer Grant) bool {
 }
 
 // String renders the surfaces g grants, as "mcp=write,console=read", and "" for nothing.
-// [ParseGrant] reads it back.
 func (g Grant) String() string {
 	var parts []string
 	for _, s := range surfaces {
@@ -140,42 +144,6 @@ func (g Grant) String() string {
 		}
 	}
 	return strings.Join(parts, ",")
-}
-
-// ParseGrant reads what [Grant.String] writes. An unknown surface, a repeated one, an unknown
-// level, or a grant [Grant.Valid] refuses is an error; "" is the zero grant.
-func ParseGrant(s string) (Grant, error) {
-	var g Grant
-	if s == "" {
-		return g, nil
-	}
-	seen := map[Surface]bool{}
-	for part := range strings.SplitSeq(s, ",") {
-		name, levelName, ok := strings.Cut(part, "=")
-		if !ok {
-			return Grant{}, fmt.Errorf("grant: %q is not surface=level", part)
-		}
-		l, err := ParseLevel(levelName)
-		if err != nil {
-			return Grant{}, fmt.Errorf("grant: %w", err)
-		}
-		surface := Surface(name)
-		if seen[surface] {
-			return Grant{}, fmt.Errorf("grant: %s appears twice", surface)
-		}
-		seen[surface] = true
-		switch surface {
-		case SurfaceTokens:
-			g.Tokens = l
-		case SurfaceMCP:
-			g.MCP = l
-		case SurfaceConsole:
-			g.Console = l
-		default:
-			return Grant{}, fmt.Errorf("grant: unknown surface %q (want tokens, mcp or console)", name)
-		}
-	}
-	return g, g.Valid()
 }
 
 // Need is what a daemon route requires of the credential presented to it. Each mount declares
@@ -188,6 +156,21 @@ type Need struct {
 // String renders the need as "console=write".
 func (n Need) String() string { return string(n.Surface) + "=" + n.Level.String() }
 
+// Validate refuses a need no grant is meant to meet or every grant meets: an unknown surface,
+// a level the surface has no meaning for, and LevelNone, which would admit any credential.
+func (n Need) Validate() error {
+	if !slices.Contains(surfaces, n.Surface) {
+		return fmt.Errorf("need: unknown surface %q", n.Surface)
+	}
+	if n.Level == LevelNone {
+		return fmt.Errorf("need: %s=none admits every credential", n.Surface)
+	}
+	if err := validLevel(n.Surface, n.Level); err != nil {
+		return fmt.Errorf("need: %w", err)
+	}
+	return nil
+}
+
 // CredentialClass is which kind of bearer a credential is. It is carried in the token string
 // itself, as the prefix, so a verifier knows which store to consult before it hashes anything.
 type CredentialClass string
@@ -195,10 +178,14 @@ type CredentialClass string
 const (
 	// ClassOperator is the retrievable operator token (mgo_), one per user.
 	ClassOperator CredentialClass = "operator"
-	// ClassToken is a stored, hashed, expiring token (mgs_): a connector, console or viewer.
-	ClassToken CredentialClass = "token"
+	// ClassStored is a stored, hashed, expiring token (mgs_): a connector, console or viewer.
+	ClassStored CredentialClass = "stored"
 	// ClassShare is a share link's token (mgl_), held in daemon memory only.
 	ClassShare CredentialClass = "share"
+	// ClassExchange is a one-time code (mgx_) a console link carries in place of a token. It is
+	// never a bearer: the console trades it once, within a minute, for the stored token it
+	// stands for.
+	ClassExchange CredentialClass = "exchange"
 )
 
 // Credential is a bearer the daemon verified: what it is, which one, what its owner called
@@ -224,6 +211,8 @@ func (c Credential) Phrase() string {
 		return "the operator token"
 	case c.Class == ClassShare:
 		return strings.TrimSpace("share link " + c.ID)
+	case c.Class == ClassExchange:
+		return strings.TrimSpace("link code " + c.ID)
 	case c.Name != "" && c.ID != "":
 		return "token " + c.Name + " (" + c.ID + ")"
 	case c.Name != "":

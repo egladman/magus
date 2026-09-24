@@ -907,7 +907,7 @@ const diffBridgeClose = 3 * time.Second
 // about a tree the reader is not looking at, and the coordinate every comment and every
 // viewed mark is keyed by would silently mean something else.
 func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridge {
-	token, err := auth.Load()
+	token, err := auth.LoadOperator()
 	if err != nil {
 		return nil
 	}

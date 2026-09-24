@@ -50,7 +50,7 @@ func list(t *testing.T, dir string, q *activityv1.ActivityQuery) []*activityv1.A
 }
 
 // consoleCred is the verified credential the seeded token event was made under.
-var consoleCred = types.Credential{Class: types.ClassToken, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+var consoleCred = types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
 
 func seedTrail(t *testing.T) (dir, respRef string) {
 	t.Helper()

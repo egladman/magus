@@ -1013,9 +1013,9 @@ func liveBridgeReachable(ctx context.Context) bool {
 // There is no #live= host directive and no hosted explorer base: the --url flag governs only
 // the static (--data/--targets/--serve) modes, not --follow.
 //
-// The link carries a freshly minted console=write token that expires in consoleLinkTTL, never
-// the operator token, in the URL fragment (which browsers do not transmit in HTTP requests);
-// the page strips it from the fragment on first load.
+// The link carries a one-time code in the URL fragment (which browsers do not transmit in HTTP
+// requests), never a token: the page trades it once, within a minute, for a console=write token
+// living console.LinkTokenLifetime, so the opener's argv holds nothing worth stealing.
 func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets bool) error {
 	hostPort := mcpAddrString()
 
@@ -1040,13 +1040,13 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		return errSilent{exitCode: 1}
 	}
 
-	token, err := mintConsoleLinkToken()
+	code, err := mintConsoleLinkCode()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: could not mint a console token for the link: %v\n", err)
+		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: could not mint a sign-in code for the link: %v\n", err)
 		return errSilent{exitCode: 1}
 	}
 
-	linkOpts := console.LinkOpts{Host: hostPort, Surface: "graph", Token: token}
+	linkOpts := console.LinkOpts{Host: hostPort, Surface: "graph", Code: code}
 	if useTargets {
 		linkOpts.Fragment = append(linkOpts.Fragment, console.FragmentParam{Key: "flavor", Value: "targets"})
 	}

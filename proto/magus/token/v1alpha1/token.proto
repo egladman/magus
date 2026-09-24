@@ -6,9 +6,9 @@ syntax = "proto3";
 // endpoint drives, never a second store.
 //
 // Access: every RPC needs tokens=write, which only the operator grant holds, so a console,
-// viewer, connector or share token is refused at the mount with 403. A mint is ALSO checked
-// against the caller's own grant (a token is never granted more than its minter holds), so
-// the mount is defense in depth rather than the rule.
+// viewer, connector or share token is refused at the mount with 403. A mint and a revoke are
+// ALSO checked against the caller's own grant (a token is never granted, or revoked, beyond
+// what its caller holds), so the mount is defense in depth rather than the rule.
 //
 // The operator token is out of reach here: it lives in a file this service never opens, so it
 // is neither listed nor revocable, and the management UI cannot lock the operator out. There
@@ -26,52 +26,56 @@ service TokenService {
   // ListTokens returns every stored token plus the active share link (if any), each described
   // without its secret.
   rpc ListTokens(ListTokensRequest) returns (ListTokensResponse);
-  // RevokeToken removes a stored token or the share link by name or id. Revoking the share
-  // link also closes its LAN listener. The operator token is not revocable here.
+  // RevokeToken removes a stored token or the share link by exact id or exact name. Revoking
+  // the share link also closes its LAN listener. The operator token is not revocable here.
   rpc RevokeToken(RevokeTokenRequest) returns (TokenInfo);
 
-  // CreateToken mints a console or viewer token and returns its secret ONCE. CONSOLE and
-  // CONSOLE_READ are the only scopes it mints: OPERATOR is a file this service never opens,
-  // and CONNECTOR would be an /mcp bearer minted from a browser. The expiry is required and at
-  // most 366 days out; a request beyond it is refused, never shortened.
+  // CreateToken mints a stored token holding grant and returns its secret ONCE. It mints
+  // console grants only (a browser has no business minting an /mcp token), never more than
+  // the caller holds, and the expiry is required and at most 366 days out; a request beyond it
+  // is refused, never shortened.
   rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse);
 }
 
-// TokenScope names the preset grant a token was minted with, so a client can group and label
-// listed tokens. It is a label over TokenInfo.grant, which is what the daemon enforces.
-enum TokenScope {
-  TOKEN_SCOPE_UNSPECIFIED = 0;
-  // TOKEN_SCOPE_OPERATOR is the operator token: every surface on loopback. It is managed
-  // SOLELY by the CLI and never appears in a ListTokensResponse; it is named here so the full
-  // taxonomy has one home.
-  TOKEN_SCOPE_OPERATOR = 3;
-  // TOKEN_SCOPE_CONNECTOR is mcp=write: the grant an external agent holds.
-  TOKEN_SCOPE_CONNECTOR = 1;
-  // TOKEN_SCOPE_SHARE_READ is the share link: console=read, served only on the link's own LAN
-  // listener and held only in daemon memory.
-  TOKEN_SCOPE_SHARE_READ = 2;
-  // TOKEN_SCOPE_CONSOLE is console=write.
-  TOKEN_SCOPE_CONSOLE = 4;
-  // TOKEN_SCOPE_CONSOLE_READ is console=read: a viewer.
-  TOKEN_SCOPE_CONSOLE_READ = 5;
+// Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes
+// every lower one. The zero value is none.
+enum Level {
+  LEVEL_UNSPECIFIED = 0; // none
+  LEVEL_READ = 1;
+  LEVEL_WRITE = 2;
+}
+
+// Grant is what a token may do: one level per surface, as the daemon enforces it.
+message Grant {
+  Level tokens = 1;
+  Level mcp = 2;
+  Level console = 3;
+}
+
+// CredentialClass is which kind of token a record is, carried in the token's prefix.
+enum CredentialClass {
+  CREDENTIAL_CLASS_UNSPECIFIED = 0;
+  CREDENTIAL_CLASS_OPERATOR = 1; // mgo_; never listed here
+  CREDENTIAL_CLASS_STORED = 2;   // mgs_
+  CREDENTIAL_CLASS_SHARE = 3;    // mgl_
+  CREDENTIAL_CLASS_EXCHANGE = 4; // mgx_, a console link's one-time code
 }
 
 // TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and
-// revoke UI needs: the revoke handle (identifier, the 8-hex id, never the token bytes or the
-// full hash), the scope, the grant, the expiry, and the name. A list is still an intelligence
+// revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full
+// hash), the class, the grant, the expiry, and the name. A list is still an intelligence
 // surface, so it omits the full hash, any filesystem path, and the creation time.
 message TokenInfo {
-  // 4 (created) and 6 (last_used) are RESERVED: created leaked timing a list UI does not need,
-  // and last_used was never populated.
-  reserved 4, 6;
-  reserved "created", "last_used";
+  // 2 (identifier) and 3 (scope) gave way to id and grant; 4 (created) leaked timing a list UI
+  // does not need; 6 (last_used) was never populated.
+  reserved 2, 3, 4, 6;
+  reserved "identifier", "scope", "created", "last_used";
 
   string name = 1;             // the token's name, or a label for the share link
-  string identifier = 2;       // the 8-hex id; the Revoke key
-  TokenScope scope = 3;
+  string id = 8;               // the 8-hex id; a Revoke key
+  CredentialClass class = 9;
+  Grant grant = 7;
   google.protobuf.Timestamp expire_time = 5;
-  // The grant as the daemon enforces it, e.g. "console=write" or "mcp=write".
-  string grant = 7;
 }
 
 message ListTokensRequest {}
@@ -81,12 +85,17 @@ message ListTokensResponse {
 }
 
 message CreateTokenRequest {
-  // A human label, unique among stored tokens. Empty asks the daemon to derive one.
+  // 2 (scope) gave way to grant.
+  reserved 2;
+  reserved "scope";
+
+  // A human label, unique among stored tokens, that does not look like an id. Empty asks the
+  // daemon to derive one.
   string name = 1;
-  // Must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; anything else is refused.
-  TokenScope scope = 2 [(buf.validate.field).enum = {defined_only: true}];
   // Required: when the token dies, in the future and at most 366 days out.
   optional google.protobuf.Timestamp expire_time = 3;
+  // The grant to mint. Console levels only; within the caller's own grant.
+  Grant grant = 4;
 }
 
 // CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource, because
@@ -99,6 +108,6 @@ message CreateTokenResponse {
 }
 
 message RevokeTokenRequest {
-  // The token's name, or its identifier as TokenInfo gives it.
+  // The token's exact id (8 hex digits), or its exact name.
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }

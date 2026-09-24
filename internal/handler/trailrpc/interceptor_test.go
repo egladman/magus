@@ -150,7 +150,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 }
 
 var (
-	console1 = types.Credential{Class: types.ClassToken, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
+	console1 = types.Credential{Class: types.ClassStored, ID: "3fa9c1d2", Name: "console-1", Grant: types.GrantConsole}
 	operator = types.Credential{Class: types.ClassOperator, ID: "0badf00d", Grant: types.GrantOperator}
 )
 
@@ -159,7 +159,7 @@ var (
 type subjectService struct{ fakeTokenService }
 
 func (subjectService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
-	return connect.NewResponse(&tokenv1.TokenInfo{Identifier: "3fa9c1d2", Name: "laptop"}), nil
+	return connect.NewResponse(&tokenv1.TokenInfo{Id: "3fa9c1d2", Name: "laptop"}), nil
 }
 
 func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
@@ -167,7 +167,7 @@ func TestInterceptorWithSubjectRecordsTheSubjectNotTheSecret(t *testing.T) {
 	subject := func(resp connect.AnyResponse) ([]byte, string) {
 		switch msg := resp.Any().(type) {
 		case *tokenv1.TokenInfo:
-			return []byte(`{"identifier":"` + msg.GetIdentifier() + `"}`), "token " + msg.GetIdentifier()
+			return []byte(`{"id":"` + msg.GetId() + `"}`), "token " + msg.GetId()
 		case *tokenv1.CreateTokenResponse:
 			return []byte(`{"identifier":"minted"}`), "token minted"
 		}

@@ -37,12 +37,12 @@ func liveExplorerLink(directives url.GraphLinkOpts) string {
 	return buildGraphLink(mcpAddrString(), "", directives)
 }
 
-// buildGraphLink fills Host/Token on the caller's directives and formats the URL,
+// buildGraphLink fills Host/Code on the caller's directives and formats the URL,
 // returning "" only when GraphLink has no host to link to. It is split out with the
 // inputs injected so tests can assert the URL without a daemon.
-func buildGraphLink(host, token string, directives url.GraphLinkOpts) string {
+func buildGraphLink(host, code string, directives url.GraphLinkOpts) string {
 	directives.Host = host
-	directives.Token = token
+	directives.Code = code
 	link, err := url.GraphLink(directives)
 	if err != nil {
 		return ""

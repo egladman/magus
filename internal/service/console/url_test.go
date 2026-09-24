@@ -33,34 +33,34 @@ func TestLogViewerURL(t *testing.T) {
 }
 
 // TestLink pins the daemon-origin grammar Link mints: the ORIGIN is the daemon's own
-// loopback host, the surface is a /console/<surface>/ path, and only the bearer token rides
+// loopback host, the surface is a /console/<surface>/ path, and only the one-time code rides
 // the fragment (never the query string, so it is not transmitted on the document GET). There
 // is no #live= host directive; the origin already names which daemon.
 func TestLink(t *testing.T) {
-	got := Link(LinkOpts{Host: "127.0.0.1:7391", Surface: "dashboard", Token: "mgs_abc123"})
-	assert.Equal(t, "http://127.0.0.1:7391/console/dashboard/#token=mgs_abc123", got)
+	got := Link(LinkOpts{Host: "127.0.0.1:7391", Surface: "dashboard", Code: "mgx_abc123"})
+	assert.Equal(t, "http://127.0.0.1:7391/console/dashboard/#code=mgx_abc123", got)
 	assert.NotContains(t, got, "#live=", "the daemon-origin grammar carries no #live= host directive")
 
 	before, after, found := strings.Cut(got, "#")
 	require.True(t, found, "url must have a fragment")
 	assert.NotContains(t, before, "?", "the surface rides the clean path, not a query string")
-	assert.Contains(t, after, "token=mgs_abc123", "the token must live in the fragment")
+	assert.Contains(t, after, "code=mgx_abc123", "the code must live in the fragment")
 }
 
-// TestLinkFragmentThenToken pins the ordering the consolidated grammar promises: content
-// directives lead, in the order given, and the token is emitted LAST. A tokenless link is a
+// TestLinkFragmentThenCode pins the ordering the consolidated grammar promises: content
+// directives lead, in the order given, and the code is emitted LAST. A codeless link is a
 // bare surface path with a directive-only fragment.
-func TestLinkFragmentThenToken(t *testing.T) {
+func TestLinkFragmentThenCode(t *testing.T) {
 	got := Link(LinkOpts{
 		Host:     "127.0.0.1:7391",
 		Surface:  "graph",
-		Token:    "mgs_abc123",
+		Code:     "mgx_abc123",
 		Fragment: []FragmentParam{{Key: "flavor", Value: "targets"}},
 	})
-	assert.Equal(t, "http://127.0.0.1:7391/console/graph/#flavor=targets&token=mgs_abc123", got)
+	assert.Equal(t, "http://127.0.0.1:7391/console/graph/#flavor=targets&code=mgx_abc123", got)
 
-	noTok := Link(LinkOpts{Host: "127.0.0.1:7391", Surface: "graph"})
-	assert.Equal(t, "http://127.0.0.1:7391/console/graph/", noTok, "no token and no directives yields a bare surface path")
+	bare := Link(LinkOpts{Host: "127.0.0.1:7391", Surface: "graph"})
+	assert.Equal(t, "http://127.0.0.1:7391/console/graph/", bare, "no code and no directives yields a bare surface path")
 }
 
 // TestEncodeComponent pins the encodeURIComponent-equivalent policy shared by every producer
@@ -144,11 +144,11 @@ func TestOpenCommandAs(t *testing.T) {
 		goos, link, want string
 	}{
 		{"darwin", "http://127.0.0.1:7391/console/plan/",
-			`open "http://127.0.0.1:7391/console/plan/#token=$(magus config console token create --expires 12h)"`},
+			`open "http://127.0.0.1:7391/console/plan/#code=$(magus config console token create --code --expires 12h)"`},
 		{"linux", "http://127.0.0.1:7391/console/plan/#job=a",
-			`xdg-open "http://127.0.0.1:7391/console/plan/#job=a&token=$(magus config console token create --expires 12h)"`},
+			`xdg-open "http://127.0.0.1:7391/console/plan/#job=a&code=$(magus config console token create --code --expires 12h)"`},
 		{"windows", "http://127.0.0.1:7391/console/",
-			`Start-Process "http://127.0.0.1:7391/console/#token=$(magus config console token create --expires 12h)"`},
+			`Start-Process "http://127.0.0.1:7391/console/#code=$(magus config console token create --code --expires 12h)"`},
 	} {
 		assert.Equal(t, tc.want, OpenCommandAs(tc.link, tc.goos, "magus"), tc.goos)
 	}

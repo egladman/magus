@@ -510,6 +510,15 @@ const (
 	// TokenLifetimeOutOfRange is a stored token or a share link asked to live outside its
 	// bound, never included: refused rather than shortened.
 	TokenLifetimeOutOfRange DiagnosticCode = "MGS9018"
+	// TokenRecordInvalid is a file in the token store that no mint could have written: a
+	// grant a stored token may not hold, an expiry past the bound, a name that is not its
+	// filename, a malformed hash. It is skipped, and the rest of the store still loads.
+	TokenRecordInvalid DiagnosticCode = "MGS9019"
+	// ShareRequestMalformed is a share request whose body is not the JSON it takes.
+	ShareRequestMalformed DiagnosticCode = "MGS9020"
+	// TokenRequestInvalid is a mint or revoke that asks for something no token can be: an
+	// invalid or empty grant, or a name that is not a valid name or looks like an id.
+	TokenRequestInvalid DiagnosticCode = "MGS9021"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -576,6 +585,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	HostNotAllowed, LoopbackPeerRequired, ShareBoundToAnotherDevice, ConsoleFileWithheld,
 	BearerMissing, MethodNotAllowed, ConsoleNotBuilt, ShareUnavailable,
 	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
+	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

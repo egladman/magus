@@ -2,19 +2,18 @@
 // tokens, and lists and revokes the active share link. It is a second door onto the stores the
 // CLI and the share flow already use (auth.Store, share.Manager), never a store of its own.
 //
-// Two rules keep it from being a way up. A mint is checked against the caller's own grant, read
-// from the credential the bearer guard verified (auth.Store.Mint refuses anything wider), so the
-// daemon's tokens=write mount is defense in depth rather than the rule. And it mints only the
-// two console presets: a browser has no business minting an /mcp bearer, and the operator token
-// lives in a file this handler never opens, so it can be neither listed nor revoked here and the
-// management UI cannot lock the operator out.
+// Two rules keep it from being a way up. A mint and a revoke are checked against the caller's
+// own grant, read from the credential the bearer guard verified (auth.Store refuses anything
+// wider), so the daemon's tokens=write mount is defense in depth rather than the rule. And it
+// mints console grants only: a browser has no business minting an /mcp token, and the operator
+// token lives in a file this handler never opens, so it can be neither listed nor revoked here
+// and the management UI cannot lock the operator out.
 package token
 
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -36,10 +35,9 @@ type shareView interface {
 }
 
 // Service implements tokenv1alpha1connect.TokenServiceHandler over the token store and the
-// daemon's share manager. loadStore is injectable so the mapping is testable without a daemon.
+// daemon's share manager.
 type Service struct {
-	share     shareView
-	loadStore func() (*auth.Store, error)
+	share shareView
 }
 
 // NewService builds a TokenService handler over the token store and mgr. It takes the concrete
@@ -50,23 +48,30 @@ func NewService(mgr *share.Manager) *Service {
 	if mgr != nil {
 		view = mgr
 	}
-	return newService(view)
-}
-
-func newService(view shareView) *Service {
-	return &Service{share: view, loadStore: auth.LoadStore}
+	return &Service{share: view}
 }
 
 var _ tokenv1alpha1connect.TokenServiceHandler = (*Service)(nil)
 
+func openStore() (*auth.Store, error) {
+	dir, err := auth.StoreDir()
+	if err != nil {
+		return nil, err
+	}
+	return auth.LoadStore(dir)
+}
+
 // ListTokens returns every stored token plus the active share link, each secret-free. The
 // operator token is never read here, so it never appears.
 func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListTokensRequest]) (*connect.Response[tokenv1.ListTokensResponse], error) {
-	store, err := s.loadStore()
+	store, err := openStore()
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, connectError(err)
 	}
-	stored := store.List()
+	stored, err := store.List()
+	if err != nil {
+		return nil, connectError(err)
+	}
 	out := make([]*tokenv1.TokenInfo, 0, len(stored)+1)
 	for _, t := range stored {
 		out = append(out, storedInfo(t))
@@ -79,140 +84,156 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 	return connect.NewResponse(&tokenv1.ListTokensResponse{Tokens: out}), nil
 }
 
-// CreateToken mints a console or viewer token within the caller's grant and returns its
-// secret once. expire_time is required and must fall within auth.MaxTokenTTL; it is refused,
-// never shortened. A caller whose grant does not cover the request gets PermissionDenied.
+// CreateToken mints a stored token holding the requested console grant, within the caller's
+// grant, and returns its secret once. expire_time is required and must fall within
+// auth.MaxTokenTTL; it is refused, never shortened.
 func (s *Service) CreateToken(ctx context.Context, req *connect.Request[tokenv1.CreateTokenRequest]) (*connect.Response[tokenv1.CreateTokenResponse], error) {
-	grant, ok := mintableGrant(req.Msg.GetScope())
-	if !ok {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("token: scope must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; the operator and connector classes are not minted here"))
-	}
-	if req.Msg.ExpireTime == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("token: expire_time is required; a token must expire, at most 366 days out"))
-	}
-	store, err := s.loadStore()
+	grant, err := fromWireGrant(req.Msg.GetGrant())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("token: %w", err))
+		return nil, connectError(err)
 	}
-	name := strings.TrimSpace(req.Msg.GetName())
-	if name == "" {
-		name = defaultConsoleTokenName(store)
+	if grant.MCP != types.LevelNone || grant.Tokens != types.LevelNone {
+		return nil, connectError(types.WrapDiagnostic(types.TokenRequestInvalid, auth.ErrInvalidTokenRequest,
+			"token: the console mints console grants only; mint an /mcp token with `magus config mcp connector create`"))
+	}
+	var ttl time.Duration
+	if exp := req.Msg.ExpireTime; exp != nil {
+		ttl = time.Until(exp.AsTime())
+	}
+	store, err := openStore()
+	if err != nil {
+		return nil, connectError(err)
 	}
 	minter := trail.CredentialFromContext(ctx).Grant
-	secret, rec, err := store.Mint(minter, auth.MintRequest{Name: name, Grant: grant, Expires: req.Msg.GetExpireTime().AsTime()})
-	switch {
-	case errors.Is(err, auth.ErrExceedsGrant):
-		return nil, connect.NewError(connect.CodePermissionDenied, err)
-	case errors.Is(err, auth.ErrTokenLifetime):
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, auth.ErrTokenExists):
-		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("token: a token named %q already exists", name))
-	case err != nil:
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	secret, rec, err := store.Mint(minter, auth.MintRequest{Name: req.Msg.GetName(), Grant: grant, TTL: ttl})
+	if err != nil {
+		return nil, connectError(err)
 	}
 	return connect.NewResponse(&tokenv1.CreateTokenResponse{Token: storedInfo(rec), Secret: secret}), nil
 }
 
-// defaultConsoleTokenName picks an unused "console-N", so a caller that names nothing cannot
-// collide with a name it never chose.
-func defaultConsoleTokenName(store *auth.Store) string {
-	taken := map[string]bool{}
-	for _, t := range store.List() {
-		taken[t.Name] = true
-	}
-	for i := 1; ; i++ {
-		candidate := fmt.Sprintf("console-%d", i)
-		if !taken[candidate] {
-			return candidate
-		}
-	}
-}
-
-// RevokeToken removes the token identifier names. The active share link is checked first,
-// and CloseIf revokes it only if that exact link is still live, so a revoke that raced a new
-// share reports NotFound rather than tearing the new one down. Otherwise it falls to the store.
-// The operator token is never consulted, so it cannot be revoked here.
-func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
-	id := strings.TrimSpace(req.Msg.GetName())
-	if id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("token: identifier is required"))
-	}
+// RevokeToken removes the token id names, by exact id or exact name, when it is within the
+// caller's grant. The active share link is checked first, and CloseIf revokes it only if that
+// exact link is still live, so a revoke that raced a new share reports NotFound rather than
+// tearing the new one down. The operator token is never consulted, so it cannot be revoked
+// here.
+func (s *Service) RevokeToken(ctx context.Context, req *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
+	id := req.Msg.GetName()
+	caller := trail.CredentialFromContext(ctx).Grant
 	if s.share != nil {
 		if info, ok := s.share.Active(); ok && shareMatches(info, id) {
+			if !types.GrantViewer.Within(caller) {
+				return nil, connectError(types.WrapDiagnostic(types.GrantInsufficient, auth.ErrExceedsGrant, "token: revoking the share link needs %s", types.GrantViewer))
+			}
 			if s.share.CloseIf(info.ID) {
 				return connect.NewResponse(shareInfo(info)), nil
 			}
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("token: no token matches %q", id))
+			return nil, connectError(types.WrapDiagnostic(types.TokenNotFound, auth.ErrTokenNotFound, "token: no token has the name or id %q", id))
 		}
 	}
-	store, err := s.loadStore()
+	store, err := openStore()
 	if err != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		return nil, connectError(err)
 	}
-	removed, err := store.Revoke(id)
+	removed, err := store.Revoke(caller, id)
 	if err != nil {
-		if errors.Is(err, auth.ErrTokenNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("token: no token matches %q", id))
-		}
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connectError(err)
 	}
 	return connect.NewResponse(storedInfo(removed)), nil
 }
 
-// mintableGrant is the which-door policy: the grants a browser may ask for by scope.
-func mintableGrant(s tokenv1.TokenScope) (types.Grant, bool) {
-	switch s {
-	case tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE:
-		return types.GrantConsole, true
-	case tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ:
-		return types.GrantViewer, true
+// connectError maps an auth refusal onto its Connect code by the sentinel it wraps, keeping
+// the coded message. Anything else, a disk failure included, is Internal.
+func connectError(err error) error {
+	code := connect.CodeInternal
+	switch {
+	case errors.Is(err, auth.ErrExceedsGrant):
+		code = connect.CodePermissionDenied
+	case errors.Is(err, auth.ErrTokenLifetime), errors.Is(err, auth.ErrInvalidTokenRequest):
+		code = connect.CodeInvalidArgument
+	case errors.Is(err, auth.ErrTokenExists):
+		code = connect.CodeAlreadyExists
+	case errors.Is(err, auth.ErrTokenNotFound):
+		code = connect.CodeNotFound
+	case errors.Is(err, types.TokenStoreTooOld), errors.Is(err, types.InsecureTokenPermissions), errors.Is(err, types.TokenStoreTooNew):
+		code = connect.CodeFailedPrecondition
 	}
-	return types.Grant{}, false
-}
-
-// wireScope labels a grant with its preset. A grant matching no preset is UNSPECIFIED; the
-// grant field says what it is.
-func wireScope(g types.Grant) tokenv1.TokenScope {
-	switch g {
-	case types.GrantConnector:
-		return tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR
-	case types.GrantConsole:
-		return tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE
-	case types.GrantViewer:
-		return tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ
-	}
-	return tokenv1.TokenScope_TOKEN_SCOPE_UNSPECIFIED
+	return connect.NewError(code, err)
 }
 
 // shareTokenLabel names the share link in a listing, and doubles as a revoke alias.
 const shareTokenLabel = "share to phone"
 
-// storedInfo is a stored token's secret-free wire shape.
+// storedInfo is a stored record's secret-free wire shape.
 func storedInfo(t auth.Token) *tokenv1.TokenInfo {
 	return &tokenv1.TokenInfo{
 		Name:       t.Name,
-		Identifier: t.ID,
-		Scope:      wireScope(t.Grant),
+		Id:         t.ID,
+		Class:      wireClass(t.Class),
+		Grant:      wireGrant(t.Grant),
 		ExpireTime: timestamppb.New(t.Expires),
-		Grant:      t.Grant.String(),
 	}
 }
 
 func shareInfo(i share.TokenInfo) *tokenv1.TokenInfo {
 	return &tokenv1.TokenInfo{
 		Name:       shareTokenLabel,
-		Identifier: i.ID,
-		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ,
+		Id:         i.ID,
+		Class:      tokenv1.CredentialClass_CREDENTIAL_CLASS_SHARE,
+		Grant:      wireGrant(types.GrantViewer),
 		ExpireTime: timestamppb.New(i.Expires),
-		Grant:      types.GrantShare.String(),
 	}
 }
 
 // shareMatches reports whether identifier names the share link: its label or its exact id.
-// No prefix match, so a prefix shared with a stored token's id resolves to the stored token.
 func shareMatches(i share.TokenInfo, identifier string) bool {
 	return identifier == shareTokenLabel || identifier == i.ID
+}
+
+var wireLevels = map[types.Level]tokenv1.Level{
+	types.LevelNone:  tokenv1.Level_LEVEL_UNSPECIFIED,
+	types.LevelRead:  tokenv1.Level_LEVEL_READ,
+	types.LevelWrite: tokenv1.Level_LEVEL_WRITE,
+}
+
+func wireGrant(g types.Grant) *tokenv1.Grant {
+	return &tokenv1.Grant{Tokens: wireLevels[g.Tokens], Mcp: wireLevels[g.MCP], Console: wireLevels[g.Console]}
+}
+
+// fromWireGrant reads a wire grant, refusing a level this magus does not know.
+func fromWireGrant(w *tokenv1.Grant) (types.Grant, error) {
+	level := func(l tokenv1.Level) (types.Level, error) {
+		for local, wire := range wireLevels {
+			if wire == l {
+				return local, nil
+			}
+		}
+		return types.LevelNone, types.WrapDiagnostic(types.TokenRequestInvalid, auth.ErrInvalidTokenRequest, "token: unknown level %d", l)
+	}
+	var g types.Grant
+	var err error
+	if g.Tokens, err = level(w.GetTokens()); err != nil {
+		return g, err
+	}
+	if g.MCP, err = level(w.GetMcp()); err != nil {
+		return g, err
+	}
+	g.Console, err = level(w.GetConsole())
+	return g, err
+}
+
+func wireClass(c types.CredentialClass) tokenv1.CredentialClass {
+	switch c {
+	case types.ClassOperator:
+		return tokenv1.CredentialClass_CREDENTIAL_CLASS_OPERATOR
+	case types.ClassStored:
+		return tokenv1.CredentialClass_CREDENTIAL_CLASS_STORED
+	case types.ClassShare:
+		return tokenv1.CredentialClass_CREDENTIAL_CLASS_SHARE
+	case types.ClassExchange:
+		return tokenv1.CredentialClass_CREDENTIAL_CLASS_EXCHANGE
+	}
+	return tokenv1.CredentialClass_CREDENTIAL_CLASS_UNSPECIFIED
 }
 
 // AuditSubject renders what the trail records about a mint or revoke: the TokenInfo of the
@@ -234,12 +255,12 @@ func AuditSubject(resp connect.AnyResponse) (blob []byte, preview string) {
 	if err != nil {
 		return nil, ""
 	}
-	preview = "token " + info.GetIdentifier()
+	preview = "token " + info.GetId()
 	if info.GetName() != "" {
 		preview += " (" + info.GetName() + ")"
 	}
-	if info.GetGrant() != "" {
-		preview += " " + info.GetGrant()
+	if g, err := fromWireGrant(info.GetGrant()); err == nil && g != (types.Grant{}) {
+		preview += " " + g.String()
 	}
 	if info.ExpireTime != nil {
 		preview += " until " + info.GetExpireTime().AsTime().UTC().Format("2006-01-02")

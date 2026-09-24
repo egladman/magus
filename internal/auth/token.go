@@ -1,16 +1,20 @@
 // Package auth holds the daemon's bearer credentials and decides which credential a
-// presented token is. It authenticates; it never authorizes. Whether a credential may use a
-// route is its [types.Grant] against the route's [types.Need], decided in one place
-// (internal/httpx's bearer guard).
+// presented token is. It authenticates; it never authorizes a route. Whether a credential may
+// use a route is its [types.Grant] against the route's [types.Need], decided in one place
+// (internal/httpx's bearer guard). It does decide what may be minted: a token never holds more
+// than its minter's grant.
 //
-// Three classes, told apart by the token's prefix (see format.go):
+// Four classes, told apart by the token's prefix (see format.go):
 //
 //	mgo_ operator  one retrievable file per user, every surface on loopback, never expires
-//	mgs_ token     stored hashed in tokens.d, a grant within its minter's, always expires
+//	mgs_ stored    stored hashed in tokens.d, a grant within its minter's, always expires
 //	mgl_ share     daemon memory only, console=read, the share link's LAN listener only
+//	mgx_ exchange  stored hashed in tokens.d for a minute, traded once for an mgs_ token
 //
-// The CLI (`magus config token ...`) and the daemon read the same files through this one
-// implementation.
+// The files are protected by their mode and by the guard, which keeps agent sessions away
+// from them. Neither is a boundary against a process running as the same user: that process
+// can read the files. What magus enforces is every layer it can prove, see
+// docs/concepts/tokens.md.
 package auth
 
 import (
@@ -26,14 +30,13 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrNoToken is returned by Load when no operator token file exists yet.
+// ErrNoToken is returned by LoadOperator when no operator token file exists yet.
 var ErrNoToken = errors.New("auth: no token configured")
 
-// Path returns the operator token file: <UserStateDir>/magus/mcp_token. It lives in the state
-// dir, not the config dir, because config may be shared or committed and a secret must not
-// ride along. The file name predates the operator class; it is not something anyone types, so
-// it was not worth a rename.
-func Path() (string, error) {
+// OperatorPath returns the operator token file: <UserStateDir>/magus/mcp_token. It lives in
+// the state dir, not the config dir, because config may be shared or committed and a secret
+// must not ride along.
+func OperatorPath() (string, error) {
 	dir, err := StateDir()
 	if err != nil {
 		return "", err
@@ -41,14 +44,14 @@ func Path() (string, error) {
 	return filepath.Join(dir, "mcp_token"), nil
 }
 
-// Generate returns a fresh mgo_ operator token without persisting it; pass it to Save or
-// SaveNew.
-func Generate() (string, error) { return mintSecret(types.ClassOperator) }
+// GenerateOperator returns a fresh mgo_ operator token without persisting it; pass it to
+// SaveOperator or SaveNewOperator.
+func GenerateOperator() (string, error) { return mintSecret(types.ClassOperator) }
 
-// Save writes token as the operator token, replacing any existing one atomically, at 0600.
-// It returns the path written.
-func Save(token string) (string, error) {
-	path, err := Path()
+// SaveOperator writes token as the operator token, replacing any existing one atomically, at
+// 0600. It returns the path written.
+func SaveOperator(token string) (string, error) {
+	path, err := OperatorPath()
 	if err != nil {
 		return "", err
 	}
@@ -89,11 +92,11 @@ func atomicWriteSecret(path string, data []byte) error {
 	return nil
 }
 
-// SaveNew writes token only if no operator token file exists yet. The O_EXCL create is the
-// whole decision, so a CLI `generate` racing the daemon's first start cannot clobber the
+// SaveNewOperator writes token only if no operator token file exists yet. The O_EXCL create is
+// the whole decision, so a CLI `generate` racing the daemon's first start cannot clobber the
 // token the other is serving; the loser gets an error satisfying errors.Is(err, os.ErrExist).
-func SaveNew(token string) (string, error) {
-	path, err := Path()
+func SaveNewOperator(token string) (string, error) {
+	path, err := OperatorPath()
 	if err != nil {
 		return "", err
 	}
@@ -116,13 +119,13 @@ func SaveNew(token string) (string, error) {
 	return path, nil
 }
 
-// Load reads the operator token. It returns ErrNoToken when the file does not exist, an
-// InsecureTokenPermissions error for a file looser than 0600, and an OperatorTokenFormat
+// LoadOperator reads the operator token. It returns ErrNoToken when the file does not exist,
+// an InsecureTokenPermissions error for a file looser than 0600, and an OperatorTokenFormat
 // error for a file that does not hold a well-formed mgo_ token, which is what a file written
 // before the class prefix holds. There is no migration: the error names the command that
 // re-issues it.
-func Load() (string, error) {
-	path, err := Path()
+func LoadOperator() (string, error) {
+	path, err := OperatorPath()
 	if err != nil {
 		return "", err
 	}
@@ -141,16 +144,16 @@ func Load() (string, error) {
 		return "", fmt.Errorf("auth: read token: %w", err)
 	}
 	tok := strings.TrimSpace(string(raw))
-	if class, ok := Class(tok); !ok || class != types.ClassOperator {
+	if class, ok := classOf(tok); !ok || class != types.ClassOperator {
 		return "", types.DiagnosticErrorf(types.OperatorTokenFormat,
 			"auth: the operator token at %s is not an mgo_ token (it predates the class prefix); re-issue it with `%s`", path, hint.MCPTokenGenerate.With("--force"))
 	}
 	return tok, nil
 }
 
-// Revoke deletes the operator token file. It is not an error if none exists.
-func Revoke() error {
-	path, err := Path()
+// RevokeOperator deletes the operator token file. It is not an error if none exists.
+func RevokeOperator() error {
+	path, err := OperatorPath()
 	if err != nil {
 		return err
 	}
@@ -160,9 +163,8 @@ func Revoke() error {
 	return nil
 }
 
-// OperatorCredential is the credential the operator token verifies as.
-func OperatorCredential(token string) types.Credential {
-	return types.Credential{Class: types.ClassOperator, ID: Fingerprint(token), Grant: types.GrantOperator}
+func operatorCredential(token string) types.Credential {
+	return types.Credential{Class: types.ClassOperator, ID: TokenID(token), Grant: types.GrantOperator}
 }
 
 // EnsureOperator loads the operator token, minting and persisting one when none exists. The
@@ -172,22 +174,22 @@ func OperatorCredential(token string) types.Credential {
 // The secret is never logged: the daemon log lands in journald and nohup.out. Only the path
 // is.
 func EnsureOperator(ctx context.Context, log *slog.Logger) (string, error) {
-	tok, err := Load()
+	tok, err := LoadOperator()
 	if err == nil {
 		return tok, nil
 	}
 	if !errors.Is(err, ErrNoToken) {
 		return "", err
 	}
-	tok, err = Generate()
+	tok, err = GenerateOperator()
 	if err != nil {
 		return "", err
 	}
-	path, err := SaveNew(tok)
+	path, err := SaveNewOperator(tok)
 	if err != nil {
 		// A racing `magus config token generate` won the create; serve its token.
 		if errors.Is(err, os.ErrExist) {
-			return Load()
+			return LoadOperator()
 		}
 		return "", err
 	}

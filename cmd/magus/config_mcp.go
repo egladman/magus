@@ -1,19 +1,20 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"flag"
 	"fmt"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -127,11 +128,11 @@ func configMCPConnectorCreate(args []string) error {
 		return err
 	}
 
-	exp, err := parseExpiry(time.Now(), cf.Expires)
+	ttl, err := parseExpiry(cf.Expires)
 	if err != nil {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
-	secret, rec, err := mintToken(cf.Name, types.GrantConnector, exp)
+	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: types.GrantConnector, TTL: ttl}, false)
 	if err != nil {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
@@ -146,28 +147,43 @@ func configMCPConnectorCreate(args []string) error {
 }
 
 func configMCPConnectorList(args []string) error {
-	if err := noFlags("config mcp connector list", args); err != nil {
-		return err
-	}
-	store, err := auth.LoadStore()
-	if err != nil {
-		return err
-	}
-	conns := slices.DeleteFunc(store.List(), func(t auth.Token) bool { return !isConnector(t) })
-	if len(conns) == 0 {
-		fmt.Fprintln(os.Stderr, "no connector tokens; create one with `"+hint.ConfigMCPConnectorCreate.String()+"`")
-		return nil
-	}
-	return tokenTable(conns)
+	return tokenList("config mcp connector ls", args)
 }
 
 func configMCPConnectorRevoke(args []string) error {
-	fs := flag.NewFlagSet("config mcp connector revoke", flag.ContinueOnError)
+	return tokenRevoke("config mcp connector revoke", args)
+}
+
+// tokenList prints every stored token, whatever its grant: the console and connector commands
+// read one store and show all of it, so neither hides a token the other minted.
+func tokenList(cmd string, args []string) error {
+	if err := noFlags(cmd, args); err != nil {
+		return err
+	}
+	store, err := openTokenStore()
+	if err != nil {
+		return err
+	}
+	toks, err := store.List()
+	if err != nil {
+		return err
+	}
+	if len(toks) == 0 {
+		fmt.Fprintln(os.Stderr, "no stored tokens; mint one with `"+hint.ConfigConsoleTokenCreate.String()+"` or `"+hint.ConfigMCPConnectorCreate.String()+"`")
+		return nil
+	}
+	return tokenTable(toks)
+}
+
+// tokenRevoke deletes the stored token its one argument names: by exact id when it is 8 hex
+// digits, by exact name otherwise.
+func tokenRevoke(cmd string, args []string) error {
+	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector revoke <name|id>")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Delete a connector token. The daemon stops accepting it immediately.")
+		fmt.Fprintf(os.Stderr, "Usage: magus %s <id|name>\n\n", cmd)
+		fmt.Fprintln(os.Stderr, "Delete a stored token by its exact 8-hex id or its exact name. The daemon stops")
+		fmt.Fprintln(os.Stderr, "accepting it at once, open streams included.")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -175,64 +191,63 @@ func configMCPConnectorRevoke(args []string) error {
 	rest := fs.Args()
 	if len(rest) != 1 {
 		fs.Usage()
-		return fmt.Errorf("magus config mcp connector revoke: expected exactly one <name|id>")
+		return fmt.Errorf("magus %s: expected exactly one <id|name>", cmd)
 	}
-	q := rest[0]
-
-	store, err := auth.LoadStore()
+	store, err := openTokenStore()
 	if err != nil {
 		return err
 	}
-	// Confined to the MCP pool: see configConsoleTokenRevoke for the mirror of this.
-	removed, err := store.RevokeMatching(q, isConnector)
-	if errors.Is(err, auth.ErrTokenNotFound) {
-		if matchesToken(slices.DeleteFunc(store.List(), func(t auth.Token) bool { return !isConsole(t) }), q) {
-			return usagef("magus config mcp connector revoke: %q is a console token, not an MCP connector; revoke it with `"+hint.ConfigConsoleTokenRevoke.With("%s")+"`", q, q)
-		}
-		return types.DiagnosticErrorf(types.TokenNotFound, "magus config mcp connector revoke: no connector matches %q", q)
-	}
+	removed, err := store.Revoke(types.GrantOperator, rest[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("magus %s: %w", cmd, err)
 	}
-	fmt.Fprintf(os.Stderr, "magus config mcp connector revoke: removed %q (id %s)\n", removed.Name, removed.ID)
+	fmt.Fprintf(os.Stderr, "magus %s: removed %q (id %s, %s)\n", cmd, removed.Name, removed.ID, removed.Grant)
 	return nil
 }
 
-// parseExpiry converts an --expires flag value into an absolute expiry time relative to now.
-// "" is auth.DefaultTokenTTL; "<N>d" is N days; anything else is a Go duration ("48h"). A
-// token must expire, so "never" is refused, as is a lifetime that is not positive or exceeds
+func openTokenStore() (*auth.Store, error) {
+	dir, err := auth.StoreDir()
+	if err != nil {
+		return nil, err
+	}
+	return auth.LoadStore(dir)
+}
+
+// parseExpiry converts an --expires flag value into a token lifetime. "" is
+// auth.DefaultTokenTTL; "<N>d" is N days; anything else is a Go duration ("48h"). A token must
+// expire, so "never" is refused, as is a lifetime that is not positive or exceeds
 // auth.MaxTokenTTL; nothing is shortened to fit.
-func parseExpiry(now time.Time, s string) (time.Time, error) {
+func parseExpiry(s string) (time.Duration, error) {
 	s = strings.TrimSpace(s)
 	switch {
 	case s == "":
-		return now.Add(auth.DefaultTokenTTL), nil
+		return auth.DefaultTokenTTL, nil
 	case strings.EqualFold(s, "never"):
-		return time.Time{}, outOfBound(s)
+		return 0, outOfBound(s)
 	}
 
 	var d time.Duration
 	if rest, ok := strings.CutSuffix(s, "d"); ok {
 		days, err := strconv.Atoi(rest)
 		if err != nil {
-			return time.Time{}, fmt.Errorf("invalid --expires %q (use e.g. 90d or 48h)", s)
+			return 0, fmt.Errorf("invalid --expires %q (use e.g. 90d or 48h)", s)
 		}
 		// Checked before multiplying, so a huge day count cannot wrap int64 nanoseconds.
 		if days > int(auth.MaxTokenTTL/(24*time.Hour)) {
-			return time.Time{}, outOfBound(s)
+			return 0, outOfBound(s)
 		}
 		d = time.Duration(days) * 24 * time.Hour
 	} else {
 		parsed, err := time.ParseDuration(s)
 		if err != nil {
-			return time.Time{}, fmt.Errorf("invalid --expires %q (use e.g. 90d or 48h)", s)
+			return 0, fmt.Errorf("invalid --expires %q (use e.g. 90d or 48h)", s)
 		}
 		d = parsed
 	}
 	if d <= 0 || d > auth.MaxTokenTTL {
-		return time.Time{}, outOfBound(s)
+		return 0, outOfBound(s)
 	}
-	return now.Add(d), nil
+	return d, nil
 }
 
 // outOfBound is the --expires refusal for a lifetime a token cannot have: the same
@@ -242,41 +257,38 @@ func outOfBound(s string) error {
 		"invalid --expires %q: a token must expire, more than 0 and at most 366d out", s)
 }
 
-// mintToken mints a stored token from the CLI. The shell is the user, so the minter is the
-// operator grant; the grant is still checked, and the expiry refused rather than shortened.
-func mintToken(name string, grant types.Grant, expires time.Time) (string, auth.Token, error) {
-	store, err := auth.LoadStore()
+// mintToken mints a stored token from the CLI, or with code a one-time exchange code standing
+// for one. The shell is the user, so the minter is the operator grant; the grant is still
+// checked, and the lifetime refused rather than shortened. Every mint is recorded to the
+// activity trail of the workspace the command runs in.
+func mintToken(req auth.MintRequest, code bool) (string, auth.Token, error) {
+	store, err := openTokenStore()
 	if err != nil {
 		return "", auth.Token{}, err
 	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		prefix := "console"
-		if grant == types.GrantConnector {
-			prefix = "connector"
-		}
-		name = unusedTokenName(store, prefix)
+	mint, action := store.Mint, "cli.mint"
+	if code {
+		mint, action = store.MintCode, "link.code"
 	}
-	secret, rec, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: name, Grant: grant, Expires: expires})
-	if errors.Is(err, auth.ErrTokenExists) {
-		return "", auth.Token{}, types.DiagnosticErrorf(types.TokenNameExists, "a token named %q already exists; pass a different --name", name)
+	secret, rec, err := mint(types.GrantOperator, req)
+	if err != nil {
+		return "", auth.Token{}, err
 	}
-	return secret, rec, err
+	operator := types.Credential{Class: types.ClassOperator, Grant: types.GrantOperator}
+	auditMint(action, trail.MintRecord{Minted: rec.Credential(), Expires: rec.Expires, Minter: operator})
+	return secret, rec, nil
 }
 
-// unusedTokenName returns the first unused "<prefix>-N". It scans every stored token, since
-// names are unique across the store.
-func unusedTokenName(store *auth.Store, prefix string) string {
-	taken := make(map[string]struct{})
-	for _, t := range store.List() {
-		taken[t.Name] = struct{}{}
-	}
-	for i := 1; ; i++ {
-		name := fmt.Sprintf("%s-%d", prefix, i)
-		if _, ok := taken[name]; !ok {
-			return name
+// auditMint records a CLI mint to the activity trail of the workspace the command runs in, and
+// says on stderr when there is no workspace to record it in.
+func auditMint(action string, rec trail.MintRecord) {
+	if root := resolveRootOrEmpty(""); root != "" {
+		if base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg)); err == nil {
+			trail.AppendMint(context.Background(), base, action, rec)
+			return
 		}
 	}
+	fmt.Fprintln(os.Stderr, "note: no magus workspace here, so this mint is recorded in no activity trail")
 }
 
 // printMinted writes a freshly minted token: the secret alone on stdout, so `... > secret.txt`
@@ -293,32 +305,12 @@ func printMinted(cmd string, secret string, rec auth.Token) {
 // store's List has already removed the expired ones.
 func tokenTable(toks []auth.Token) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tID\tGRANT\tCREATED\tEXPIRES")
+	fmt.Fprintln(tw, "NAME\tID\tCLASS\tGRANT\tCREATED\tEXPIRES")
 	for _, t := range toks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Grant, t.Created.Format("2006-01-02"), t.Expires.Format("2006-01-02"))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.Name, t.ID, t.Class, t.Grant, t.Created.Format("2006-01-02"), t.Expires.Format("2006-01-02"))
 	}
 	return tw.Flush()
 }
-
-// matchesToken reports whether q names one of toks by exact name, or by an exact or prefix id:
-// the spellings Revoke accepts, over a slice already filtered to one pool.
-func matchesToken(toks []auth.Token, q string) bool {
-	q = strings.TrimSpace(q)
-	if q == "" {
-		return false
-	}
-	for _, t := range toks {
-		if t.Name == q || strings.HasPrefix(t.ID, q) {
-			return true
-		}
-	}
-	return false
-}
-
-// isConnector and isConsole split the store into the pools the two commands own: a console
-// command never lists or revokes an MCP token, nor the reverse.
-func isConnector(t auth.Token) bool { return t.Grant.MCP != types.LevelNone }
-func isConsole(t auth.Token) bool   { return !isConnector(t) }
 
 // noFlags rejects any argument for subcommands that take none, so a stray flag
 // is reported instead of silently ignored.

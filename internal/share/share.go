@@ -111,6 +111,8 @@ type Link struct {
 	// Superseded reports whether starting this share revoked a previous active
 	// one, so the UI can tell the user the old QR just died.
 	Superseded bool
+	// Credential is the minted link's credential, for the trail. Never its secret.
+	Credential types.Credential
 }
 
 // active holds the runtime state of one live share: the closer that tears the
@@ -138,7 +140,6 @@ type TokenInfo struct {
 // for concurrent use.
 type Manager struct {
 	parent context.Context
-	ttl    time.Duration
 	log    *slog.Logger
 
 	// selectAddr picks the bind IP. Production uses SelectLANIPv4; tests swap in
@@ -147,6 +148,9 @@ type Manager struct {
 	// mint is auth.MintShare; a test swaps in one whose token expires sooner than the
 	// minimum, to exercise the timeout teardown without waiting a minute.
 	mint func(minter types.Grant, ttl time.Duration) (string, auth.ShareToken, error)
+
+	// grace is shutdownGrace; a test shortens it.
+	grace time.Duration
 
 	// trailDir is the activity-trail base (the workspace cache dir). When set, the
 	// first authenticated request from each remote device on a link records one
@@ -172,27 +176,32 @@ func WithTrailDir(dir string) option {
 	return func(m *Manager) { m.trailDir = dir }
 }
 
-// NewManager returns a Manager whose shares live for ttl when a caller asks for no lifetime
-// (<=0 uses auth.DefaultShareTTL), and whose listeners are torn down when parent is cancelled
-// (daemon shutdown).
-func NewManager(parent context.Context, ttl time.Duration, log *slog.Logger, opts ...option) *Manager {
-	if ttl <= 0 {
-		ttl = auth.DefaultShareTTL
-	}
+// WithListenAddr binds every share listener on addr instead of the first LAN IPv4, for a
+// machine whose phone reaches it on another interface.
+func WithListenAddr(addr netip.Addr) option {
+	return func(m *Manager) { m.selectAddr = func() (netip.Addr, error) { return addr, nil } }
+}
+
+// NewManager returns a Manager whose listeners are torn down when parent is cancelled (daemon
+// shutdown).
+func NewManager(parent context.Context, log *slog.Logger, opts ...option) *Manager {
 	if log == nil {
 		log = slog.Default()
 	}
-	m := &Manager{parent: parent, ttl: ttl, log: log, selectAddr: SelectLANIPv4, mint: auth.MintShare}
+	m := &Manager{parent: parent, log: log, selectAddr: SelectLANIPv4, mint: auth.MintShare, grace: shutdownGrace}
 	for _, opt := range opts {
 		opt(m)
 	}
 	return m
 }
 
-// Route is one data route a share serves, with the format its refusals are written in.
+// Route is one data route a share serves: its handler, the format its refusals are written
+// in, and the Need of each path under it (a Connect service names each procedure; a plain
+// route names itself). They are the same Needs the loopback daemon holds the route to.
 type Route struct {
 	Handler http.Handler
 	Format  rpcerr.Format
+	Needs   map[string]types.Need
 }
 
 // Start mints a fresh read-only token and opens a new LAN listener serving the
@@ -201,11 +210,13 @@ type Route struct {
 // active share is revoked first, so there is exactly one live token bound 1:1 to
 // exactly one live listener: a token from a prior link validates nowhere.
 // The listener closes and the token expires together after ttl (or on parent
-// cancellation / Close). ttl is the caller-requested lifetime: a non-positive value
-// uses the manager's configured default. consoleDir must contain the built console.
+// cancellation / Close); a non-positive ttl is auth.DefaultShareTTL. When the link dies, every
+// request on it is cancelled at once (their contexts derive from the link's) and the listener
+// is closed after a short grace, so an open stream does not outlive the link. consoleDir must
+// contain the built console.
 //
 // minter is the grant of the credential that asked. The link is minted by the same rule as
-// every stored token (auth.MintShare), so a minter below [types.GrantShare] gets
+// every stored token (auth.MintShare), so a minter below [types.GrantViewer] gets
 // auth.ErrExceedsGrant and a ttl outside [auth.MinShareTTL, auth.MaxShareTTL] gets
 // auth.ErrShareLifetime; neither opens a listener.
 //
@@ -214,7 +225,7 @@ type Route struct {
 // which would tear the share down the instant that POST returned.
 func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[string]Route, ttl time.Duration) (Link, error) {
 	if ttl <= 0 {
-		ttl = m.ttl
+		ttl = auth.DefaultShareTTL
 	}
 	secret, tok, err := m.mint(minter, ttl)
 	if err != nil {
@@ -248,7 +259,6 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 		}
 		return tok.Credential(), true
 	}
-	need := types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
 	mux := http.NewServeMux()
 	// Static console: unauthenticated. The app shell is not a secret; it reads the
 	// fragment token and replays it as a bearer on the guarded API routes below. It is
@@ -274,10 +284,13 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	// runs after BearerGuard, so it only ever sees requests that already carry a valid
 	// token; it binds the first device and rejects the token replayed from any other.
 	for pattern, rt := range guarded {
-		mux.Handle(pattern, httpx.BearerGuard(rt.Format, verify, need, sg.admit(rt.Format, rt.Handler)))
+		h, err := httpx.ProcedureGuard(rt.Format, verify, rt.Needs, sg.admit(rt.Format, rt.Handler))
+		if err != nil {
+			_ = ln.Close()
+			return Link{}, fmt.Errorf("share: %s: %w", pattern, err)
+		}
+		mux.Handle(pattern, h)
 	}
-
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	// The TTL and the parent lifetime are one context: whichever fires first
 	// (timeout, daemon shutdown, or a Close/supersede cancel) tears the listener
 	// down. Closing the listener and expiring the token are therefore the same
@@ -290,6 +303,11 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	// directive as unused and it is gone. The reasoning stays: it is why the pattern
 	// is safe, not merely why a linter was quiet.
 	ctx, cancel := context.WithDeadline(m.parent, tok.Expires)
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
 
 	// Supersede any current share and publish this one under the lock BEFORE starting
 	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if
@@ -309,6 +327,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	go func() {
 		_ = srv.Serve(ln)
 	}()
+	grace := m.grace
 	go func() {
 		<-ctx.Done()
 		// WithoutCancel, not Background: this runs precisely BECAUSE ctx is done, so a
@@ -316,9 +335,12 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 		// Shutdown would return without draining a single connection. WithoutCancel drops
 		// the cancellation while keeping whatever values the daemon's context carries,
 		// which is what anything logging during shutdown reads.
-		shutCtx, sc := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		shutCtx, sc := context.WithTimeout(context.WithoutCancel(ctx), grace)
 		defer sc()
-		_ = srv.Shutdown(shutCtx)
+		// A stream that ignores its cancelled context holds Shutdown open; Close ends it.
+		if err := srv.Shutdown(shutCtx); err != nil {
+			_ = srv.Close()
+		}
 	}()
 
 	if superseded {
@@ -328,8 +350,12 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 		slog.String("addr", fmt.Sprintf("%s:%d", addr, port)),
 		slog.Time("expires", tok.Expires),
 	)
-	return Link{URL: url, ExpiresAt: tok.Expires, Superseded: superseded}, nil
+	return Link{URL: url, ExpiresAt: tok.Expires, Superseded: superseded, Credential: tok.Credential()}, nil
 }
+
+// shutdownGrace is how long a dead link's listener lets in-flight requests finish before it
+// closes their connections.
+const shutdownGrace = 5 * time.Second
 
 // Active returns secret-free metadata for the currently live share token, or
 // ok=false when no share is active. A share whose token has already expired (in

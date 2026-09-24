@@ -38,53 +38,53 @@ func TestTokenSuite(t *testing.T) {
 
 func (s *TokenSuite) TestRoundTrip() {
 	t := s.T()
-	_, err := Load()
-	require.ErrorIs(t, err, ErrNoToken, "Load on empty")
+	_, err := LoadOperator()
+	require.ErrorIs(t, err, ErrNoToken, "LoadOperator on empty")
 
-	tok, err := Generate()
+	tok, err := GenerateOperator()
 	require.NoError(t, err)
-	class, ok := Class(tok)
-	require.True(t, ok, "Generate must mint a well-formed token")
+	class, ok := classOf(tok)
+	require.True(t, ok, "GenerateOperator must mint a well-formed token")
 	assert.Equal(t, types.ClassOperator, class)
 
-	path, err := Save(tok)
+	path, err := SaveOperator(tok)
 	require.NoError(t, err)
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 
-	got, err := Load()
+	got, err := LoadOperator()
 	require.NoError(t, err)
 	assert.Equal(t, tok, got)
 }
 
 func (s *TokenSuite) TestLoadRejectsInsecurePerms() {
 	t := s.T()
-	tok, _ := Generate()
-	path, err := Save(tok)
+	tok, _ := GenerateOperator()
+	path, err := SaveOperator(tok)
 	require.NoError(t, err)
 	require.NoError(t, os.Chmod(path, 0o644))
 
-	_, err = Load()
+	_, err = LoadOperator()
 	assert.ErrorIs(t, err, types.InsecureTokenPermissions)
 }
 
 // An operator file written before the class prefix, or edited into anything else, is refused
-// with MGS9016 naming the command that re-issues it, from Load and from EnsureOperator: the
-// daemon does not start on it and no command runs on it.
+// with MGS9016 naming the command that re-issues it, from LoadOperator and from
+// EnsureOperator: the daemon does not start on it and no command runs on it.
 func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 	t := s.T()
 	for _, old := range []string{
 		"dGhpcyBpcyAzMiBieXRlcyBvZiBiYXNlNjR1cmwgZGF0YQ", // base64url, the old format
 		"",
-		prefixToken + "00000000000000000000000000000000000000000000000000", // an mgs_ body in the operator file
+		prefixStored + "00000000000000000000000000000000000000000000000000", // an mgs_ body in the operator file
 	} {
-		path, err := Path()
+		path, err := OperatorPath()
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 		require.NoError(t, os.WriteFile(path, []byte(old+"\n"), 0o600))
 
-		_, err = Load()
+		_, err = LoadOperator()
 		require.ErrorIs(t, err, types.OperatorTokenFormat, "%q", old)
 		assert.Contains(t, err.Error(), "config token generate --force")
 
@@ -92,28 +92,28 @@ func (s *TokenSuite) TestOldOperatorFileIsRefusedWithTheReissueCommand() {
 		require.ErrorIs(t, err, types.OperatorTokenFormat, "the daemon must not start on %q", old)
 	}
 	// A valid store token copied into the operator file is refused too: its class is wrong.
-	stored, err := mintSecret(types.ClassToken)
+	stored, err := mintSecret(types.ClassStored)
 	require.NoError(t, err)
-	_, err = Save(stored)
+	_, err = SaveOperator(stored)
 	require.NoError(t, err)
-	_, err = Load()
+	_, err = LoadOperator()
 	assert.ErrorIs(t, err, types.OperatorTokenFormat)
 }
 
-func (s *TokenSuite) TestRevoke() {
+func (s *TokenSuite) TestRevokeOperator() {
 	t := s.T()
-	require.NoError(t, Revoke(), "Revoke on empty")
-	tok, _ := Generate()
-	_, err := Save(tok)
+	require.NoError(t, RevokeOperator(), "RevokeOperator on empty")
+	tok, _ := GenerateOperator()
+	_, err := SaveOperator(tok)
 	require.NoError(t, err)
-	require.NoError(t, Revoke())
-	_, err = Load()
+	require.NoError(t, RevokeOperator())
+	_, err = LoadOperator()
 	assert.ErrorIs(t, err, ErrNoToken)
 }
 
-func (s *TokenSuite) TestPathLocation() {
+func (s *TokenSuite) TestOperatorPathLocation() {
 	t := s.T()
-	path, err := Path()
+	path, err := OperatorPath()
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(s.stateDir, "magus", "mcp_token"), path)
 }
@@ -122,19 +122,20 @@ func (s *TokenSuite) TestPathLocation() {
 // rebuilding the handler.
 func (s *TokenSuite) TestGuardHotReload() {
 	t := s.T()
-	a, _ := Generate()
-	_, err := SaveNew(a)
+	a, _ := GenerateOperator()
+	_, err := SaveNewOperator(a)
 	require.NoError(t, err)
 	need := types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
-	h := httpx.BearerGuard(rpcerr.FormatJSON, Verify, need, okHandler)
+	h, err := httpx.BearerGuard(rpcerr.FormatJSON, Verify, need, okHandler)
+	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+a))
-	b, _ := Generate()
-	_, err = Save(b)
+	b, _ := GenerateOperator()
+	_, err = SaveOperator(b)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, reqStatus(h, "Bearer "+a), "old token after rotate")
 	assert.Equal(t, http.StatusOK, reqStatus(h, "Bearer "+b))
-	require.NoError(t, Revoke())
+	require.NoError(t, RevokeOperator())
 	assert.Equal(t, http.StatusUnauthorized, reqStatus(h, "Bearer "+b), "after revoke")
 }
 
@@ -146,7 +147,7 @@ func (s *TokenSuite) TestEnsureOperatorGeneratesWithoutLoggingSecret() {
 
 	tok, err := EnsureOperator(t.Context(), log)
 	require.NoError(t, err)
-	got, err := Load()
+	got, err := LoadOperator()
 	require.NoError(t, err)
 	assert.Equal(t, tok, got)
 	assert.NotContains(t, buf.String(), tok, "the secret leaked into the log")
@@ -156,27 +157,29 @@ func (s *TokenSuite) TestEnsureOperatorGeneratesWithoutLoggingSecret() {
 	assert.Equal(t, tok, again, "a second call returns the persisted token")
 }
 
-func (s *TokenSuite) TestSaveNewRefusesOverwrite() {
+func (s *TokenSuite) TestSaveNewOperatorRefusesOverwrite() {
 	t := s.T()
-	first, _ := Generate()
-	_, err := SaveNew(first)
+	first, _ := GenerateOperator()
+	_, err := SaveNewOperator(first)
 	require.NoError(t, err)
-	_, err = SaveNew("other")
+	_, err = SaveNewOperator("other")
 	assert.ErrorIs(t, err, os.ErrExist)
-	got, _ := Load()
+	got, _ := LoadOperator()
 	assert.Equal(t, first, got, "token clobbered")
 }
 
-func TestFingerprintStable(t *testing.T) {
+func TestTokenIDStable(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, Fingerprint("abc"), Fingerprint("abc"))
-	assert.NotEqual(t, Fingerprint("abc"), Fingerprint("abd"))
-	assert.Len(t, Fingerprint("abc"), 8)
+	assert.Equal(t, TokenID("abc"), TokenID("abc"))
+	assert.NotEqual(t, TokenID("abc"), TokenID("abd"))
+	assert.Len(t, TokenID("abc"), 8)
 }
 
-// reqStatus drives one request through h with the given Authorization header (empty = none).
+// reqStatus drives one request from a loopback peer through h with the given Authorization
+// header (empty = none).
 func reqStatus(h http.Handler, authHeader string) int {
 	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.RemoteAddr = "127.0.0.1:40000"
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}

@@ -76,6 +76,9 @@ var titles = map[types.DiagnosticCode]string{
 	types.OperatorTokenFormat:       "operator token predates the class prefix",
 	types.TokenStoreTooOld:          "token store predates grants",
 	types.TokenLifetimeOutOfRange:   "token lifetime outside its bound",
+	types.TokenRecordInvalid:        "invalid token record skipped",
+	types.ShareRequestMalformed:     "malformed share request",
+	types.TokenRequestInvalid:       "invalid token request",
 }
 
 // Error returns the rendered message, so an Error can travel as a Go error.

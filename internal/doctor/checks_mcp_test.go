@@ -35,24 +35,26 @@ func TestCheckTokens(t *testing.T) {
 
 	t.Run("present operator token shows its id", func(t *testing.T) {
 		isolate(t)
-		tok, err := auth.Generate()
+		tok, err := auth.GenerateOperator()
 		require.NoError(t, err)
-		_, err = auth.SaveNew(tok)
+		_, err = auth.SaveNewOperator(tok)
 		require.NoError(t, err)
 		got := (&runner{}).checkTokens()
-		assert.Contains(t, got.Message, "operator token: present (id "+auth.Fingerprint(tok))
+		assert.Contains(t, got.Message, "operator token: present (id "+auth.TokenID(tok))
 	})
 
-	t.Run("a token expiring within 14 days is advice naming its pool's revoke", func(t *testing.T) {
+	t.Run("a token expiring within 14 days is advice", func(t *testing.T) {
 		isolate(t)
-		store, err := auth.LoadStore()
+		dir, err := auth.StoreDir()
+		require.NoError(t, err)
+		store, err := auth.LoadStore(dir)
 		require.NoError(t, err)
 		for name, g := range map[string]types.Grant{"soon": types.GrantConnector, "later": types.GrantConsole} {
 			ttl := 48 * time.Hour
 			if name == "later" {
 				ttl = 60 * 24 * time.Hour
 			}
-			_, _, err = store.Mint(types.GrantOperator, auth.MintRequest{Name: name, Grant: g, Expires: time.Now().Add(ttl)})
+			_, _, err = store.Mint(types.GrantOperator, auth.MintRequest{Name: name, Grant: g, TTL: ttl})
 			require.NoError(t, err)
 		}
 		got := (&runner{}).checkTokens()
@@ -75,6 +77,28 @@ func TestCheckTokens(t *testing.T) {
 		assert.Contains(t, joined, "MGS9016")
 		assert.Contains(t, joined, "MGS9017")
 		assert.Contains(t, joined, old)
+	})
+
+	// A record no mint could have written is skipped by the store, and doctor fails on it,
+	// naming the file, while the good tokens beside it still count.
+	t.Run("a planted token record fails naming its file", func(t *testing.T) {
+		isolate(t)
+		dir, err := auth.StoreDir()
+		require.NoError(t, err)
+		store, err := auth.LoadStore(dir)
+		require.NoError(t, err)
+		_, _, err = store.Mint(types.GrantOperator, auth.MintRequest{Name: "good", Grant: types.GrantConsole, TTL: time.Hour})
+		require.NoError(t, err)
+		planted := filepath.Join(dir, "planted.json")
+		body := `{"version":2,"id":"aaaaaaaa","name":"planted","class":"stored","sha256":"` + strings.Repeat("a", 64) +
+			`","grant":{"tokens":"write","mcp":"write","console":"write"},"created":"2026-01-01T00:00:00Z","expires":"9999-01-01T00:00:00Z"}`
+		require.NoError(t, os.WriteFile(planted, []byte(body), 0o600))
+		got := (&runner{}).checkTokens()
+		assert.Equal(t, types.DoctorFail, got.Status)
+		joined := strings.Join(got.Details, "\n")
+		assert.Contains(t, joined, "MGS9019")
+		assert.Contains(t, joined, planted)
+		assert.Contains(t, got.Message, "1 stored token(s)")
 	})
 
 	t.Run("a state dir other accounts can read is advice", func(t *testing.T) {

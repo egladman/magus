@@ -18,33 +18,34 @@ import (
 //
 // The prefix names the class, so a verifier routes a token to the one store that can hold
 // it before hashing anything, and a secret scanner recognizes every class with
-// `mg[osl]_[0-9A-Za-z]{49}`. The checksum rejects a typo or a truncated paste offline. The
+// `mg[oslx]_[0-9A-Za-z]{49}`. The checksum rejects a typo or a truncated paste offline. The
 // body has a ~10^77 keyspace, so one fast SHA-256 at rest is the right hash: there is
 // nothing to brute-force, and a slow hash would only add latency to every request.
 const (
 	prefixOperator = "mgo_"
-	prefixToken    = "mgs_"
+	prefixStored   = "mgs_"
 	prefixShare    = "mgl_"
+	prefixExchange = "mgx_"
 
 	// 62^43 just exceeds 2^256, so 43 characters hold any 256-bit body; 42 would not.
 	tokenBodyLen  = 43
 	tokenCheckLen = 6
-	// TokenLen is the length of every magus token, prefix included.
-	TokenLen = len(prefixToken) + tokenBodyLen + tokenCheckLen
+	tokenLen      = len(prefixStored) + tokenBodyLen + tokenCheckLen
 
 	base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 )
 
 var classPrefixes = map[types.CredentialClass]string{
 	types.ClassOperator: prefixOperator,
-	types.ClassToken:    prefixToken,
+	types.ClassStored:   prefixStored,
 	types.ClassShare:    prefixShare,
+	types.ClassExchange: prefixExchange,
 }
 
-// Class reads a token's class from its prefix and checks its length, alphabet and checksum.
-// It touches no store: a string that fails here is refused before the daemon does any work on
-// it, and one that passes is only well-formed, not valid.
-func Class(token string) (types.CredentialClass, bool) {
+// classOf reads a token's class from its prefix and checks its length, alphabet and
+// checksum. It touches no store: a string that fails here is refused before any work is done
+// on it, and one that passes is only well-formed, not valid.
+func classOf(token string) (types.CredentialClass, bool) {
 	for class, prefix := range classPrefixes {
 		if rest, ok := strings.CutPrefix(token, prefix); ok {
 			return class, validBody(rest)
@@ -122,6 +123,25 @@ func digest(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Fingerprint is a token's stable, non-reversible id: the first 8 hex of its SHA-256. It is
-// what listings print and what a record names a credential by.
-func Fingerprint(token string) string { return digest(token)[:8] }
+// TokenID is a token's stable, non-reversible id: the first 8 hex of its SHA-256. It is what
+// listings print and what a record names a credential by.
+func TokenID(token string) string { return digest(token)[:8] }
+
+// looksLikeID reports a string of exactly 8 lowercase hex digits, the shape of an id. A name
+// may not take it, so revoking by one can never mean the other.
+func looksLikeID(s string) bool {
+	if len(s) != 8 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if !strings.ContainsRune("0123456789abcdef", rune(s[i])) {
+			return false
+		}
+	}
+	return true
+}
+
+// validDigest reports a 64-character lowercase hex SHA-256.
+func validDigest(s string) bool {
+	return len(s) == 64 && strings.Trim(s, "0123456789abcdef") == ""
+}

@@ -20,7 +20,7 @@ func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
 		{Origin{User: "eli", EntryPoint: EntryPointCLI}, "eli"},
 		{Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1"}, "eli via claude-code"},
 		{Origin{User: "eli", EntryPoint: EntryPointHook, Host: "claude-code", Session: "s1", Agent: "a1b2"}, "eli via claude-code via agent a1b2"},
-		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Class: ClassToken, ID: "3fa9c1d2", Name: "console-1"}}, "eli via token console-1 (3fa9c1d2)"},
+		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Class: ClassStored, ID: "3fa9c1d2", Name: "console-1"}}, "eli via token console-1 (3fa9c1d2)"},
 		{Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Credential: Credential{Class: ClassOperator, ID: "0badf00d"}}, "eli via claude-code via the operator token"},
 		{Origin{User: "eli", EntryPoint: EntryPointRPC, Credential: Credential{Class: ClassShare, ID: "9b2e04aa"}}, "eli via share link 9b2e04aa"},
 		{Origin{User: "eli", EntryPoint: EntryPointDaemon}, "daemon"},
@@ -37,8 +37,8 @@ func TestOriginLabelNamesEachChannelItHas(t *testing.T) {
 func TestOriginNamesMatchesEachFieldExactly(t *testing.T) {
 	t.Parallel()
 	o := Origin{User: "eli", EntryPoint: EntryPointMCP, Host: "claude-code", Agent: "a1b2",
-		Credential: Credential{Class: ClassToken, ID: "3fa9c1d2", Name: "laptop", Grant: GrantConnector}}
-	for _, name := range []string{"eli", "claude-code", "a1b2", "token", "3fa9c1d2", "laptop", "mcp"} {
+		Credential: Credential{Class: ClassStored, ID: "3fa9c1d2", Name: "laptop", Grant: GrantConnector}}
+	for _, name := range []string{"eli", "claude-code", "a1b2", "stored", "3fa9c1d2", "laptop", "mcp"} {
 		assert.True(t, o.Names(name), name)
 	}
 	for _, name := range []string{"", "el", "eli via claude-code", "claude", "s1", "3fa9", "mcp=write", "token laptop (3fa9c1d2)"} {

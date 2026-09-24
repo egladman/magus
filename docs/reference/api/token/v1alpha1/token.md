@@ -23,7 +23,7 @@ Takes [ListTokensRequest](#listtokensrequest), returns [ListTokensResponse](#lis
 
 ### RevokeToken
 
-RevokeToken removes a stored token or the share link by name or id. Revoking the share link also closes its LAN listener. The operator token is not revocable here.
+RevokeToken removes a stored token or the share link by exact id or exact name. Revoking the share link also closes its LAN listener. The operator token is not revocable here.
 
 `POST /magus.token.v1alpha1.TokenService/RevokeToken`: unary. Source: [token.proto:31](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L31).
 
@@ -31,7 +31,7 @@ Takes [RevokeTokenRequest](#revoketokenrequest), returns [TokenInfo](#tokeninfo)
 
 ### CreateToken
 
-CreateToken mints a console or viewer token and returns its secret ONCE. CONSOLE and CONSOLE\_READ are the only scopes it mints: OPERATOR is a file this service never opens, and CONNECTOR would be an /mcp bearer minted from a browser. The expiry is required and at most 366 days out; a request beyond it is refused, never shortened.
+CreateToken mints a stored token holding grant and returns its secret ONCE. It mints console grants only (a browser has no business minting an /mcp token), never more than the caller holds, and the expiry is required and at most 366 days out; a request beyond it is refused, never shortened.
 
 `POST /magus.token.v1alpha1.TokenService/CreateToken`: unary. Source: [token.proto:37](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L37).
 
@@ -41,13 +41,15 @@ Takes [CreateTokenRequest](#createtokenrequest), returns [CreateTokenResponse](#
 
 ### CreateTokenRequest
 
-Source: [token.proto:83](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L83).
+Source: [token.proto:87](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L87).
 
-| Field         | Type                      | # | Description                                                                                                 |
-| ------------- | ------------------------- | - | ----------------------------------------------------------------------------------------------------------- |
-| `name`        | string                    | 1 | A human label, unique among stored tokens. Empty asks the daemon to derive one.                             |
-| `scope`       | [TokenScope](#tokenscope) | 2 | _enum.defined_only_ Must be TOKEN\_SCOPE\_CONSOLE or TOKEN\_SCOPE\_CONSOLE\_READ; anything else is refused. |
-| `expire_time` | Timestamp                 | 3 | _optional_ Required: when the token dies, in the future and at most 366 days out.                           |
+| Field         | Type            | # | Description                                                                                                    |
+| ------------- | --------------- | - | -------------------------------------------------------------------------------------------------------------- |
+| `name`        | string          | 1 | A human label, unique among stored tokens, that does not look like an id. Empty asks the daemon to derive one. |
+| `expire_time` | Timestamp       | 3 | _optional_ Required: when the token dies, in the future and at most 366 days out.                              |
+| `grant`       | [Grant](#grant) | 4 | The grant to mint. Console levels only; within the caller's own grant.                                         |
+
+_Reserved: 2; `scope`._
 
 Used by: [CreateToken (request)](token.md#createtoken).
 
@@ -55,7 +57,7 @@ Used by: [CreateToken (request)](token.md#createtoken).
 
 CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource, because the secret is NOT part of the resource: TokenInfo is secret-free so that listing tokens cannot leak one, and the plaintext exists only in this reply.
 
-Source: [token.proto:95](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L95).
+Source: [token.proto:104](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L104).
 
 | Field    | Type                    | # | Description                                                     |
 | -------- | ----------------------- | - | --------------------------------------------------------------- |
@@ -64,9 +66,23 @@ Source: [token.proto:95](https://github.com/egladman/magus/blob/main/proto/magus
 
 Used by: [CreateToken (response)](token.md#createtoken).
 
+### Grant
+
+Grant is what a token may do: one level per surface, as the daemon enforces it.
+
+Source: [token.proto:49](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L49).
+
+| Field     | Type            | # | Description |
+| --------- | --------------- | - | ----------- |
+| `tokens`  | [Level](#level) | 1 |             |
+| `mcp`     | [Level](#level) | 2 |             |
+| `console` | [Level](#level) | 3 |             |
+
+Used by: [CreateToken (request)](token.md#createtoken), [CreateToken (response)](token.md#createtoken), [ListTokens (response)](token.md#listtokens), [RevokeToken (response)](token.md#revoketoken).
+
 ### ListTokensRequest
 
-Source: [token.proto:77](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L77).
+Source: [token.proto:81](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L81).
 
 No fields.
 
@@ -74,7 +90,7 @@ Used by: [ListTokens (request)](token.md#listtokens).
 
 ### ListTokensResponse
 
-Source: [token.proto:79](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L79).
+Source: [token.proto:83](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L83).
 
 | Field    | Type                             | # | Description |
 | -------- | -------------------------------- | - | ----------- |
@@ -84,48 +100,61 @@ Used by: [ListTokens (response)](token.md#listtokens).
 
 ### RevokeTokenRequest
 
-Source: [token.proto:101](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L101).
+Source: [token.proto:110](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L110).
 
-| Field  | Type   | # | Description                                                                    |
-| ------ | ------ | - | ------------------------------------------------------------------------------ |
-| `name` | string | 1 | _string.min_len: 1_ The token's name, or its identifier as TokenInfo gives it. |
+| Field  | Type   | # | Description                                                                 |
+| ------ | ------ | - | --------------------------------------------------------------------------- |
+| `name` | string | 1 | _string.min_len: 1_ The token's exact id (8 hex digits), or its exact name. |
 
 Used by: [RevokeToken (request)](token.md#revoketoken).
 
 ### TokenInfo
 
-TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and revoke UI needs: the revoke handle (identifier, the 8-hex id, never the token bytes or the full hash), the scope, the grant, the expiry, and the name. A list is still an intelligence surface, so it omits the full hash, any filesystem path, and the creation time.
+TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full hash), the class, the grant, the expiry, and the name. A list is still an intelligence surface, so it omits the full hash, any filesystem path, and the creation time.
 
-Source: [token.proto:63](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L63).
+Source: [token.proto:68](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L68).
 
-| Field         | Type                      | # | Description                                                               |
-| ------------- | ------------------------- | - | ------------------------------------------------------------------------- |
-| `name`        | string                    | 1 | the token's name, or a label for the share link                           |
-| `identifier`  | string                    | 2 | the 8-hex id; the Revoke key                                              |
-| `scope`       | [TokenScope](#tokenscope) | 3 |                                                                           |
-| `expire_time` | Timestamp                 | 5 |                                                                           |
-| `grant`       | string                    | 7 | The grant as the daemon enforces it, e.g. "console=write" or "mcp=write". |
+| Field         | Type                                | # | Description                                     |
+| ------------- | ----------------------------------- | - | ----------------------------------------------- |
+| `name`        | string                              | 1 | the token's name, or a label for the share link |
+| `id`          | string                              | 8 | the 8-hex id; a Revoke key                      |
+| `class`       | [CredentialClass](#credentialclass) | 9 |                                                 |
+| `grant`       | [Grant](#grant)                     | 7 |                                                 |
+| `expire_time` | Timestamp                           | 5 |                                                 |
 
-_Reserved: 4, 6; `created`, `last_used`._
+_Reserved: 2, 3, 4, 6; `identifier`, `scope`, `created`, `last_used`._
 
 Used by: [CreateToken (response)](token.md#createtoken), [ListTokens (response)](token.md#listtokens), [RevokeToken (response)](token.md#revoketoken).
 
 ## Enums
 
-### TokenScope
+### CredentialClass
 
-TokenScope names the preset grant a token was minted with, so a client can group and label listed tokens. It is a label over TokenInfo.grant, which is what the daemon enforces.
+CredentialClass is which kind of token a record is, carried in the token's prefix.
+
+Source: [token.proto:56](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L56).
+
+| Value                          | # | Description                           |
+| ------------------------------ | - | ------------------------------------- |
+| `CREDENTIAL_CLASS_UNSPECIFIED` | 0 |                                       |
+| `CREDENTIAL_CLASS_OPERATOR`    | 1 | mgo\_; never listed here              |
+| `CREDENTIAL_CLASS_STORED`      | 2 | mgs\_                                 |
+| `CREDENTIAL_CLASS_SHARE`       | 3 | mgl\_                                 |
+| `CREDENTIAL_CLASS_EXCHANGE`    | 4 | mgx\_, a console link's one-time code |
+
+Used by: [CreateToken (response)](token.md#createtoken), [ListTokens (response)](token.md#listtokens), [RevokeToken (response)](token.md#revoketoken).
+
+### Level
+
+Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes every lower one. The zero value is none.
 
 Source: [token.proto:42](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L42).
 
-| Value                      | # | Description                                                                                                                                                                                             |
-| -------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TOKEN_SCOPE_UNSPECIFIED`  | 0 |                                                                                                                                                                                                         |
-| `TOKEN_SCOPE_OPERATOR`     | 3 | TOKEN\_SCOPE\_OPERATOR is the operator token: every surface on loopback. It is managed SOLELY by the CLI and never appears in a ListTokensResponse; it is named here so the full taxonomy has one home. |
-| `TOKEN_SCOPE_CONNECTOR`    | 1 | TOKEN\_SCOPE\_CONNECTOR is mcp=write: the grant an external agent holds.                                                                                                                                |
-| `TOKEN_SCOPE_SHARE_READ`   | 2 | TOKEN\_SCOPE\_SHARE\_READ is the share link: console=read, served only on the link's own LAN listener and held only in daemon memory.                                                                   |
-| `TOKEN_SCOPE_CONSOLE`      | 4 | TOKEN\_SCOPE\_CONSOLE is console=write.                                                                                                                                                                 |
-| `TOKEN_SCOPE_CONSOLE_READ` | 5 | TOKEN\_SCOPE\_CONSOLE\_READ is console=read: a viewer.                                                                                                                                                  |
+| Value               | # | Description |
+| ------------------- | - | ----------- |
+| `LEVEL_UNSPECIFIED` | 0 | none        |
+| `LEVEL_READ`        | 1 |             |
+| `LEVEL_WRITE`       | 2 |             |
 
 Used by: [CreateToken (request)](token.md#createtoken), [CreateToken (response)](token.md#createtoken), [ListTokens (response)](token.md#listtokens), [RevokeToken (response)](token.md#revoketoken).
 

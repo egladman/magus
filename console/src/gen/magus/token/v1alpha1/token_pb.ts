@@ -8,9 +8,9 @@
 // endpoint drives, never a second store.
 //
 // Access: every RPC needs tokens=write, which only the operator grant holds, so a console,
-// viewer, connector or share token is refused at the mount with 403. A mint is ALSO checked
-// against the caller's own grant (a token is never granted more than its minter holds), so
-// the mount is defense in depth rather than the rule.
+// viewer, connector or share token is refused at the mount with 403. A mint and a revoke are
+// ALSO checked against the caller's own grant (a token is never granted, or revoked, beyond
+// what its caller holds), so the mount is defense in depth rather than the rule.
 //
 // The operator token is out of reach here: it lives in a file this service never opens, so it
 // is neither listed nor revocable, and the management UI cannot lock the operator out. There
@@ -29,12 +29,41 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/token/v1alpha1/token.proto.
  */
 export const file_magus_token_v1alpha1_token: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEivgEKCVRva2VuSW5mbxIMCgRuYW1lGAEgASgJEhIKCmlkZW50aWZpZXIYAiABKAkSLwoFc2NvcGUYAyABKA4yIC5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlblNjb3BlEi8KC2V4cGlyZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVncmFudBgHIAEoCUoECAQQBUoECAYQB1IHY3JlYXRlZFIJbGFzdF91c2VkIhMKEUxpc3RUb2tlbnNSZXF1ZXN0IkUKEkxpc3RUb2tlbnNSZXNwb25zZRIvCgZ0b2tlbnMYASADKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8iowEKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEjkKBXNjb3BlGAIgASgOMiAubWFndXMudG9rZW4udjFhbHBoYTEuVG9rZW5TY29wZUIIukgFggECEAESNAoLZXhwaXJlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSACIAQFCDgoMX2V4cGlyZV90aW1lIlUKE0NyZWF0ZVRva2VuUmVzcG9uc2USLgoFdG9rZW4YASABKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8SDgoGc2VjcmV0GAIgASgJIisKElJldm9rZVRva2VuUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABKrEBCgpUb2tlblNjb3BlEhsKF1RPS0VOX1NDT1BFX1VOU1BFQ0lGSUVEEAASGAoUVE9LRU5fU0NPUEVfT1BFUkFUT1IQAxIZChVUT0tFTl9TQ09QRV9DT05ORUNUT1IQARIaChZUT0tFTl9TQ09QRV9TSEFSRV9SRUFEEAISFwoTVE9LRU5fU0NPUEVfQ09OU09MRRAEEhwKGFRPS0VOX1NDT1BFX0NPTlNPTEVfUkVBRBAFMq0CCgxUb2tlblNlcnZpY2USXwoKTGlzdFRva2VucxInLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxpc3RUb2tlbnNSZXF1ZXN0GigubWFndXMudG9rZW4udjFhbHBoYTEuTGlzdFRva2Vuc1Jlc3BvbnNlElgKC1Jldm9rZVRva2VuEigubWFndXMudG9rZW4udjFhbHBoYTEuUmV2b2tlVG9rZW5SZXF1ZXN0Gh8ubWFndXMudG9rZW4udjFhbHBoYTEuVG9rZW5JbmZvEmIKC0NyZWF0ZVRva2VuEigubWFndXMudG9rZW4udjFhbHBoYTEuQ3JlYXRlVG9rZW5SZXF1ZXN0GikubWFndXMudG9rZW4udjFhbHBoYTEuQ3JlYXRlVG9rZW5SZXNwb25zZULjAQoYY29tLm1hZ3VzLnRva2VuLnYxYWxwaGExQgpUb2tlblByb3RvUAFaSWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL3Rva2VuL3YxYWxwaGExO3Rva2VudjFhbHBoYTGiAgNNVFiqAhRNYWd1cy5Ub2tlbi5WMWFscGhhMcoCFE1hZ3VzXFRva2VuXFYxYWxwaGEx4gIgTWFndXNcVG9rZW5cVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhZNYWd1czo6VG9rZW46OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp, file_buf_validate_validate]);
+  fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEijAEKBUdyYW50EisKBnRva2VucxgBIAEoDjIbLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxldmVsEigKA21jcBgCIAEoDjIbLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxldmVsEiwKB2NvbnNvbGUYAyABKA4yGy5tYWd1cy50b2tlbi52MWFscGhhMS5MZXZlbCL3AQoJVG9rZW5JbmZvEgwKBG5hbWUYASABKAkSCgoCaWQYCCABKAkSNAoFY2xhc3MYCSABKA4yJS5tYWd1cy50b2tlbi52MWFscGhhMS5DcmVkZW50aWFsQ2xhc3MSKgoFZ3JhbnQYByABKAsyGy5tYWd1cy50b2tlbi52MWFscGhhMS5HcmFudBIvCgtleHBpcmVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBKBAgCEANKBAgDEARKBAgEEAVKBAgGEAdSCmlkZW50aWZpZXJSBXNjb3BlUgdjcmVhdGVkUglsYXN0X3VzZWQiEwoRTGlzdFRva2Vuc1JlcXVlc3QiRQoSTGlzdFRva2Vuc1Jlc3BvbnNlEi8KBnRva2VucxgBIAMoCzIfLm1hZ3VzLnRva2VuLnYxYWxwaGExLlRva2VuSW5mbyKhAQoSQ3JlYXRlVG9rZW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSNAoLZXhwaXJlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSACIAQESKgoFZ3JhbnQYBCABKAsyGy5tYWd1cy50b2tlbi52MWFscGhhMS5HcmFudEIOCgxfZXhwaXJlX3RpbWVKBAgCEANSBXNjb3BlIlUKE0NyZWF0ZVRva2VuUmVzcG9uc2USLgoFdG9rZW4YASABKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8SDgoGc2VjcmV0GAIgASgJIisKElJldm9rZVRva2VuUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABKj8KBUxldmVsEhUKEUxFVkVMX1VOU1BFQ0lGSUVEEAASDgoKTEVWRUxfUkVBRBABEg8KC0xFVkVMX1dSSVRFEAIqqgEKD0NyZWRlbnRpYWxDbGFzcxIgChxDUkVERU5USUFMX0NMQVNTX1VOU1BFQ0lGSUVEEAASHQoZQ1JFREVOVElBTF9DTEFTU19PUEVSQVRPUhABEhsKF0NSRURFTlRJQUxfQ0xBU1NfU1RPUkVEEAISGgoWQ1JFREVOVElBTF9DTEFTU19TSEFSRRADEh0KGUNSRURFTlRJQUxfQ0xBU1NfRVhDSEFOR0UQBDKtAgoMVG9rZW5TZXJ2aWNlEl8KCkxpc3RUb2tlbnMSJy5tYWd1cy50b2tlbi52MWFscGhhMS5MaXN0VG9rZW5zUmVxdWVzdBooLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxpc3RUb2tlbnNSZXNwb25zZRJYCgtSZXZva2VUb2tlbhIoLm1hZ3VzLnRva2VuLnYxYWxwaGExLlJldm9rZVRva2VuUmVxdWVzdBofLm1hZ3VzLnRva2VuLnYxYWxwaGExLlRva2VuSW5mbxJiCgtDcmVhdGVUb2tlbhIoLm1hZ3VzLnRva2VuLnYxYWxwaGExLkNyZWF0ZVRva2VuUmVxdWVzdBopLm1hZ3VzLnRva2VuLnYxYWxwaGExLkNyZWF0ZVRva2VuUmVzcG9uc2VC4wEKGGNvbS5tYWd1cy50b2tlbi52MWFscGhhMUIKVG9rZW5Qcm90b1ABWklnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy90b2tlbi92MWFscGhhMTt0b2tlbnYxYWxwaGExogIDTVRYqgIUTWFndXMuVG9rZW4uVjFhbHBoYTHKAhRNYWd1c1xUb2tlblxWMWFscGhhMeICIE1hZ3VzXFRva2VuXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIWTWFndXM6OlRva2VuOjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_buf_validate_validate]);
+
+/**
+ * Grant is what a token may do: one level per surface, as the daemon enforces it.
+ *
+ * @generated from message magus.token.v1alpha1.Grant
+ */
+export type Grant = Message<"magus.token.v1alpha1.Grant"> & {
+  /**
+   * @generated from field: magus.token.v1alpha1.Level tokens = 1;
+   */
+  tokens: Level;
+
+  /**
+   * @generated from field: magus.token.v1alpha1.Level mcp = 2;
+   */
+  mcp: Level;
+
+  /**
+   * @generated from field: magus.token.v1alpha1.Level console = 3;
+   */
+  console: Level;
+};
+
+/**
+ * Describes the message magus.token.v1alpha1.Grant.
+ * Use `create(GrantSchema)` to create a new message.
+ */
+export const GrantSchema: GenMessage<Grant> = /*@__PURE__*/
+  messageDesc(file_magus_token_v1alpha1_token, 0);
 
 /**
  * TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and
- * revoke UI needs: the revoke handle (identifier, the 8-hex id, never the token bytes or the
- * full hash), the scope, the grant, the expiry, and the name. A list is still an intelligence
+ * revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full
+ * hash), the class, the grant, the expiry, and the name. A list is still an intelligence
  * surface, so it omits the full hash, any filesystem path, and the creation time.
  *
  * @generated from message magus.token.v1alpha1.TokenInfo
@@ -48,28 +77,26 @@ export type TokenInfo = Message<"magus.token.v1alpha1.TokenInfo"> & {
   name: string;
 
   /**
-   * the 8-hex id; the Revoke key
+   * the 8-hex id; a Revoke key
    *
-   * @generated from field: string identifier = 2;
+   * @generated from field: string id = 8;
    */
-  identifier: string;
+  id: string;
 
   /**
-   * @generated from field: magus.token.v1alpha1.TokenScope scope = 3;
+   * @generated from field: magus.token.v1alpha1.CredentialClass class = 9;
    */
-  scope: TokenScope;
+  class: CredentialClass;
+
+  /**
+   * @generated from field: magus.token.v1alpha1.Grant grant = 7;
+   */
+  grant?: Grant;
 
   /**
    * @generated from field: google.protobuf.Timestamp expire_time = 5;
    */
   expireTime?: Timestamp;
-
-  /**
-   * The grant as the daemon enforces it, e.g. "console=write" or "mcp=write".
-   *
-   * @generated from field: string grant = 7;
-   */
-  grant: string;
 };
 
 /**
@@ -77,7 +104,7 @@ export type TokenInfo = Message<"magus.token.v1alpha1.TokenInfo"> & {
  * Use `create(TokenInfoSchema)` to create a new message.
  */
 export const TokenInfoSchema: GenMessage<TokenInfo> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 0);
+  messageDesc(file_magus_token_v1alpha1_token, 1);
 
 /**
  * @generated from message magus.token.v1alpha1.ListTokensRequest
@@ -90,7 +117,7 @@ export type ListTokensRequest = Message<"magus.token.v1alpha1.ListTokensRequest"
  * Use `create(ListTokensRequestSchema)` to create a new message.
  */
 export const ListTokensRequestSchema: GenMessage<ListTokensRequest> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 1);
+  messageDesc(file_magus_token_v1alpha1_token, 2);
 
 /**
  * @generated from message magus.token.v1alpha1.ListTokensResponse
@@ -107,25 +134,19 @@ export type ListTokensResponse = Message<"magus.token.v1alpha1.ListTokensRespons
  * Use `create(ListTokensResponseSchema)` to create a new message.
  */
 export const ListTokensResponseSchema: GenMessage<ListTokensResponse> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 2);
+  messageDesc(file_magus_token_v1alpha1_token, 3);
 
 /**
  * @generated from message magus.token.v1alpha1.CreateTokenRequest
  */
 export type CreateTokenRequest = Message<"magus.token.v1alpha1.CreateTokenRequest"> & {
   /**
-   * A human label, unique among stored tokens. Empty asks the daemon to derive one.
+   * A human label, unique among stored tokens, that does not look like an id. Empty asks the
+   * daemon to derive one.
    *
    * @generated from field: string name = 1;
    */
   name: string;
-
-  /**
-   * Must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; anything else is refused.
-   *
-   * @generated from field: magus.token.v1alpha1.TokenScope scope = 2;
-   */
-  scope: TokenScope;
 
   /**
    * Required: when the token dies, in the future and at most 366 days out.
@@ -133,6 +154,13 @@ export type CreateTokenRequest = Message<"magus.token.v1alpha1.CreateTokenReques
    * @generated from field: optional google.protobuf.Timestamp expire_time = 3;
    */
   expireTime?: Timestamp;
+
+  /**
+   * The grant to mint. Console levels only; within the caller's own grant.
+   *
+   * @generated from field: magus.token.v1alpha1.Grant grant = 4;
+   */
+  grant?: Grant;
 };
 
 /**
@@ -140,7 +168,7 @@ export type CreateTokenRequest = Message<"magus.token.v1alpha1.CreateTokenReques
  * Use `create(CreateTokenRequestSchema)` to create a new message.
  */
 export const CreateTokenRequestSchema: GenMessage<CreateTokenRequest> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 3);
+  messageDesc(file_magus_token_v1alpha1_token, 4);
 
 /**
  * CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource, because
@@ -168,14 +196,14 @@ export type CreateTokenResponse = Message<"magus.token.v1alpha1.CreateTokenRespo
  * Use `create(CreateTokenResponseSchema)` to create a new message.
  */
 export const CreateTokenResponseSchema: GenMessage<CreateTokenResponse> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 4);
+  messageDesc(file_magus_token_v1alpha1_token, 5);
 
 /**
  * @generated from message magus.token.v1alpha1.RevokeTokenRequest
  */
 export type RevokeTokenRequest = Message<"magus.token.v1alpha1.RevokeTokenRequest"> & {
   /**
-   * The token's name, or its identifier as TokenInfo gives it.
+   * The token's exact id (8 hex digits), or its exact name.
    *
    * @generated from field: string name = 1;
    */
@@ -187,64 +215,84 @@ export type RevokeTokenRequest = Message<"magus.token.v1alpha1.RevokeTokenReques
  * Use `create(RevokeTokenRequestSchema)` to create a new message.
  */
 export const RevokeTokenRequestSchema: GenMessage<RevokeTokenRequest> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 5);
+  messageDesc(file_magus_token_v1alpha1_token, 6);
 
 /**
- * TokenScope names the preset grant a token was minted with, so a client can group and label
- * listed tokens. It is a label over TokenInfo.grant, which is what the daemon enforces.
+ * Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes
+ * every lower one. The zero value is none.
  *
- * @generated from enum magus.token.v1alpha1.TokenScope
+ * @generated from enum magus.token.v1alpha1.Level
  */
-export enum TokenScope {
+export enum Level {
   /**
-   * @generated from enum value: TOKEN_SCOPE_UNSPECIFIED = 0;
+   * none
+   *
+   * @generated from enum value: LEVEL_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
-   * TOKEN_SCOPE_OPERATOR is the operator token: every surface on loopback. It is managed
-   * SOLELY by the CLI and never appears in a ListTokensResponse; it is named here so the full
-   * taxonomy has one home.
-   *
-   * @generated from enum value: TOKEN_SCOPE_OPERATOR = 3;
+   * @generated from enum value: LEVEL_READ = 1;
    */
-  OPERATOR = 3,
+  READ = 1,
 
   /**
-   * TOKEN_SCOPE_CONNECTOR is mcp=write: the grant an external agent holds.
-   *
-   * @generated from enum value: TOKEN_SCOPE_CONNECTOR = 1;
+   * @generated from enum value: LEVEL_WRITE = 2;
    */
-  CONNECTOR = 1,
-
-  /**
-   * TOKEN_SCOPE_SHARE_READ is the share link: console=read, served only on the link's own LAN
-   * listener and held only in daemon memory.
-   *
-   * @generated from enum value: TOKEN_SCOPE_SHARE_READ = 2;
-   */
-  SHARE_READ = 2,
-
-  /**
-   * TOKEN_SCOPE_CONSOLE is console=write.
-   *
-   * @generated from enum value: TOKEN_SCOPE_CONSOLE = 4;
-   */
-  CONSOLE = 4,
-
-  /**
-   * TOKEN_SCOPE_CONSOLE_READ is console=read: a viewer.
-   *
-   * @generated from enum value: TOKEN_SCOPE_CONSOLE_READ = 5;
-   */
-  CONSOLE_READ = 5,
+  WRITE = 2,
 }
 
 /**
- * Describes the enum magus.token.v1alpha1.TokenScope.
+ * Describes the enum magus.token.v1alpha1.Level.
  */
-export const TokenScopeSchema: GenEnum<TokenScope> = /*@__PURE__*/
+export const LevelSchema: GenEnum<Level> = /*@__PURE__*/
   enumDesc(file_magus_token_v1alpha1_token, 0);
+
+/**
+ * CredentialClass is which kind of token a record is, carried in the token's prefix.
+ *
+ * @generated from enum magus.token.v1alpha1.CredentialClass
+ */
+export enum CredentialClass {
+  /**
+   * @generated from enum value: CREDENTIAL_CLASS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * mgo_; never listed here
+   *
+   * @generated from enum value: CREDENTIAL_CLASS_OPERATOR = 1;
+   */
+  OPERATOR = 1,
+
+  /**
+   * mgs_
+   *
+   * @generated from enum value: CREDENTIAL_CLASS_STORED = 2;
+   */
+  STORED = 2,
+
+  /**
+   * mgl_
+   *
+   * @generated from enum value: CREDENTIAL_CLASS_SHARE = 3;
+   */
+  SHARE = 3,
+
+  /**
+   * mgx_, a console link's one-time code
+   *
+   * @generated from enum value: CREDENTIAL_CLASS_EXCHANGE = 4;
+   */
+  EXCHANGE = 4,
+}
+
+/**
+ * Describes the enum magus.token.v1alpha1.CredentialClass.
+ */
+export const CredentialClassSchema: GenEnum<CredentialClass> = /*@__PURE__*/
+  enumDesc(file_magus_token_v1alpha1_token, 1);
 
 /**
  * TokenService lists, mints and revokes stored tokens, and lists and revokes the active share
@@ -265,8 +313,8 @@ export const TokenService: GenService<{
     output: typeof ListTokensResponseSchema;
   },
   /**
-   * RevokeToken removes a stored token or the share link by name or id. Revoking the share
-   * link also closes its LAN listener. The operator token is not revocable here.
+   * RevokeToken removes a stored token or the share link by exact id or exact name. Revoking
+   * the share link also closes its LAN listener. The operator token is not revocable here.
    *
    * @generated from rpc magus.token.v1alpha1.TokenService.RevokeToken
    */
@@ -276,10 +324,10 @@ export const TokenService: GenService<{
     output: typeof TokenInfoSchema;
   },
   /**
-   * CreateToken mints a console or viewer token and returns its secret ONCE. CONSOLE and
-   * CONSOLE_READ are the only scopes it mints: OPERATOR is a file this service never opens,
-   * and CONNECTOR would be an /mcp bearer minted from a browser. The expiry is required and at
-   * most 366 days out; a request beyond it is refused, never shortened.
+   * CreateToken mints a stored token holding grant and returns its secret ONCE. It mints
+   * console grants only (a browser has no business minting an /mcp token), never more than
+   * the caller holds, and the expiry is required and at most 366 days out; a request beyond it
+   * is refused, never shortened.
    *
    * @generated from rpc magus.token.v1alpha1.TokenService.CreateToken
    */

@@ -97,13 +97,15 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	waitReady(t, base+"/readyz")
 
 	// EnsureOperator minted the operator token during Serve; read it back.
-	cli, err := auth.Load()
+	cli, err := auth.LoadOperator()
 	require.NoError(t, err)
 
 	// A non-expired connector token reaches /mcp.
-	store, err := auth.LoadStore()
+	dir, err := auth.StoreDir()
 	require.NoError(t, err)
-	connectorTok, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "test", Grant: types.GrantConnector, Expires: time.Now().Add(time.Hour)})
+	store, err := auth.LoadStore(dir)
+	require.NoError(t, err)
+	connectorTok, _, err := store.Mint(types.GrantOperator, auth.MintRequest{Name: "test", Grant: types.GrantConnector, TTL: time.Hour})
 	require.NoError(t, err)
 
 	// status issues a GET and returns only the status code. It must NOT read the
@@ -305,7 +307,7 @@ func TestServeConsoleHostedOriginCORS(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Equal(t, siteOrigin, resp.Header.Get("Access-Control-Allow-Origin"))
 
-	cli, err := auth.Load()
+	cli, err := auth.LoadOperator()
 	require.NoError(t, err)
 
 	// Authenticated GET with the hosted Origin must not be 403 from rebind.
@@ -483,6 +485,12 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 		switch {
 		case health[pattern]:
 			assert.Equal(t, http.StatusOK, status(http.MethodGet, pattern), pattern)
+		case pattern == "/api/v1/token/exchange":
+			// No bearer here: the code in the body is the credential, so an anonymous caller
+			// without one is refused for the missing code, and one with a wrong code as a
+			// wrong bearer would be.
+			assert.Equal(t, http.StatusMethodNotAllowed, status(http.MethodGet, pattern))
+			assert.Equal(t, http.StatusBadRequest, status(http.MethodPost, pattern))
 		case pattern == "/console/":
 			for _, p := range []string{"/console/", "/console/console.js", "/console/sw.js",
 				"/console/manifest.webmanifest", "/console/graph/", "/console/graph/explorer.js"} {
@@ -539,7 +547,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitReady(t, base+"/readyz")
-	cli, err := auth.Load()
+	cli, err := auth.LoadOperator()
 	require.NoError(t, err)
 
 	call := func(method, path, token, contentType, body string) (int, []byte) {
@@ -621,9 +629,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 // TestServeUnloadedRefusesEveryLoadedConnectService derives, from a REAL loaded daemon's own
 // mounted patterns, every Connect service prefix that reads the workspace (StatusService
 // excepted, since it needs none), then asserts an unloaded daemon refuses each one with the
-// load error rather than a bare 404. workspaceServices is a hand-kept list; this catches it
-// drifting out of sync with what Serve actually mounts, rather than trusting the list to
-// describe itself.
+// load error rather than a bare 404, so the two daemons cannot drift apart in what they mount.
 func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := fixtureWorkspace(t)
@@ -669,7 +675,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 	unloadedBase := fmt.Sprintf("http://127.0.0.1:%d", unloadedPort)
 	waitReady(t, unloadedBase+"/readyz")
 
-	cli, err := auth.Load()
+	cli, err := auth.LoadOperator()
 	require.NoError(t, err)
 
 	for _, name := range services {
@@ -682,7 +688,7 @@ func TestServeUnloadedRefusesEveryLoadedConnectService(t *testing.T) {
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
-		if !assert.NotEqual(t, http.StatusNotFound, resp.StatusCode, "%s: workspaceServices is missing this mount", name) {
+		if !assert.NotEqual(t, http.StatusNotFound, resp.StatusCode, "%s: the unloaded daemon is missing this mount", name) {
 			continue
 		}
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "%s: %s", name, body)

@@ -136,9 +136,11 @@ Console:
 `magus_console_present` does not open a browser or hand a client a token. A compatible
 desktop client may render its link as an action. Other clients can return the link as text.
 Its `open` field is a shell command that opens the link signed in, for example
-`open "http://127.0.0.1:7391/console/dashboard/#token=$(magus config console token create --expires 12h)"`;
-the token is a substitution the person's shell expands, so it never appears in the reply,
-and it is a console token that expires in 12 hours, never the operator token.
+`open "http://127.0.0.1:7391/console/dashboard/#code=$(magus config console token create --code --expires 12h)"`;
+the code is a substitution the person's shell expands, so it never appears in the reply,
+and it is a one-time code the console trades within a minute for a console token that
+expires in 12 hours, never the operator token. The guard refuses that command to an
+agent session, so a person runs it.
 The console must be enabled and bound locally.
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.

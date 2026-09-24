@@ -1,37 +1,28 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"slices"
-	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
 // config_console.go is the console's own token surface, deliberately NOT under `config mcp`:
 // a console token holds console=write or console=read and is refused at /mcp, so minting one
-// through a command spelled "mcp connector" would teach the opposite.
-//
-// Both commands write one store, because the record shape is identical. What each shows and
-// touches is its own pool: a console listing never shows an MCP token and a console revoke
-// never deletes one.
+// through a command spelled "mcp connector" would teach the opposite. Both commands read and
+// write one store, and each lists and revokes all of it.
 
-// consoleLinkTTL is how long the token a CLI-opened console link carries lives. The link holds
-// that console=write token rather than the operator secret, so a browser never holds a
-// credential that can reach token management. A shell sign-in line asks for the same span,
-// console.LinkTokenLifetime.
-const consoleLinkTTL = 12 * time.Hour
-
-// mintConsoleLinkToken mints the token a console link carries.
-func mintConsoleLinkToken() (string, error) {
-	secret, _, err := mintToken("", types.GrantConsole, time.Now().Add(consoleLinkTTL))
-	return secret, err
+// mintConsoleLinkCode mints the one-time code a CLI-opened console link carries. The console
+// trades it for a console=write token living console.LinkTokenLifetime, so neither the
+// operator secret nor a token ever reaches a browser's argv.
+func mintConsoleLinkCode() (string, error) {
+	code, _, err := mintToken(auth.MintRequest{Grant: types.GrantConsole, TTL: console.LinkTokenLifetime}, true)
+	return code, err
 }
 
 func configConsoleCmd(args []string) error {
@@ -127,7 +118,7 @@ func configConsoleTokenCreate(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	exp, err := parseExpiry(time.Now(), cf.Expires)
+	ttl, err := parseExpiry(cf.Expires)
 	if err != nil {
 		return fmt.Errorf("magus config console token create: %w", err)
 	}
@@ -135,9 +126,16 @@ func configConsoleTokenCreate(args []string) error {
 	if cf.Viewer {
 		grant = types.GrantViewer
 	}
-	secret, rec, err := mintToken(cf.Name, grant, exp)
+	secret, rec, err := mintToken(auth.MintRequest{Name: cf.Name, Grant: grant, TTL: ttl}, cf.Code)
 	if err != nil {
 		return fmt.Errorf("magus config console token create: %w", err)
+	}
+	if cf.Code {
+		// The code alone on stdout, for `#code=$(...)`; it is spent on first use.
+		fmt.Println(secret)
+		fmt.Fprintf(os.Stderr, "magus config console token create: a one-time code (id %s) for a %s token living %s; it must be redeemed within %s\n",
+			rec.ID, rec.Grant, rec.TokenTTL, auth.ExchangeCodeTTL)
+		return nil
 	}
 	printMinted("magus config console token create", secret, rec)
 	if grant == types.GrantViewer {
@@ -150,55 +148,9 @@ func configConsoleTokenCreate(args []string) error {
 }
 
 func configConsoleTokenList(args []string) error {
-	if err := noFlags("config console token ls", args); err != nil {
-		return err
-	}
-	store, err := auth.LoadStore()
-	if err != nil {
-		return err
-	}
-	toks := slices.DeleteFunc(store.List(), func(t auth.Token) bool { return !isConsole(t) })
-	if len(toks) == 0 {
-		fmt.Fprintln(os.Stderr, "no console tokens; create one with `"+hint.ConfigConsoleTokenCreate.String()+"`")
-		return nil
-	}
-	return tokenTable(toks)
+	return tokenList("config console token ls", args)
 }
 
 func configConsoleTokenRevoke(args []string) error {
-	fs := flag.NewFlagSet("config console token revoke", flag.ContinueOnError)
-	bindDisplayFlags(fs)
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config console token revoke <name|id>")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Delete a console token. The daemon stops accepting it immediately.")
-	}
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	rest := fs.Args()
-	if len(rest) != 1 {
-		fs.Usage()
-		return fmt.Errorf("magus config console token revoke: expected exactly one <name|id>")
-	}
-	q := rest[0]
-
-	store, err := auth.LoadStore()
-	if err != nil {
-		return err
-	}
-	// Confined to the console pool, so an MCP connector is never deleted by a console
-	// command; one that would have matched is named with the command that revokes it.
-	removed, err := store.RevokeMatching(q, isConsole)
-	if errors.Is(err, auth.ErrTokenNotFound) {
-		if matchesToken(slices.DeleteFunc(store.List(), func(t auth.Token) bool { return !isConnector(t) }), q) {
-			return usagef("magus config console token revoke: %q is an MCP connector, not a console token; revoke it with `"+hint.ConfigMCPConnectorRevoke.With("%s")+"`", q, q)
-		}
-		return types.DiagnosticErrorf(types.TokenNotFound, "magus config console token revoke: no console token matches %q", q)
-	}
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "magus config console token revoke: removed %q (id %s)\n", removed.Name, removed.ID)
-	return nil
+	return tokenRevoke("config console token revoke", args)
 }
