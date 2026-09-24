@@ -16,11 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **`magus run` and `magus affected` take `--preflight <target>[,<target>...]`.** The named
-  targets run first across every selected project; a failure stops everything before the
-  invoked target starts, exits 3 (MGS3020) and names the target, projects and fix. A green
-  pass is not repeated and moves no cache key. A name outside the invoked target's
-  `ctx.needs` closure is refused, exit 2 (MGS3021). With `affected --plan` a red pass
-  prints no plan, which is how this repo's CI now fails fast on drift.
+  targets run first across every selected project; a failure stops everything, exits 3
+  (MGS3020) and names the target, projects and fix. A green pass is not repeated. A name
+  outside the invoked target's `ctx.needs` closure is refused, exit 2 (MGS3021). With
+  `affected --plan` a red pass prints no plan.
 
 - **The guard advises on a split `magus run` (`split-run`).** One target run on two
   project sets, on one line or in two calls within ten minutes, gets the combined form,
