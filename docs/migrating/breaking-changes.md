@@ -119,8 +119,9 @@ a diff:
 1. The drift gate fails on any surface change, breaking or not.
 2. You regenerate, and the `.lock` diff joins the pull request.
 3. A reviewer reads it. An added line needs no ceremony. A removed line is a
-   backward-incompatible change, so you record it as a `### Breaking` note under
-   `## [Unreleased]` in [CHANGELOG.md](https://keepachangelog.com/en/1.1.0/).
+   backward-incompatible change, so you record it as an entry whose headline
+   starts `Breaking:`, in a changelog fragment under `changes/unreleased/` (see
+   [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)).
 
 The `CHANGELOG` note is the release story; the `.lock` diff is the proof. Neither
 requires a new subcommand or a config flag, because the compatibility record is the

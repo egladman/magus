@@ -1,13 +1,16 @@
-// Decides whether a pull request owes CHANGELOG.md an [Unreleased] entry, for the
-// pr-changelog target. Pure functions over paths and text, so the rule is tested
-// here and the target only gathers the inputs.
+// Decides whether a pull request owes a changelog fragment, for the pr-changelog target.
+// Pure functions over paths, so the rule is tested here and the target only gathers the
+// inputs. changes/README.md describes a fragment; cmd/magus-utils parses them.
 namespace changelog;
 
 import "std";
 import "tools/commits" as commits;
 
+// FRAGMENT_DIR holds one file per unreleased entry.
+export final FRAGMENT_DIR = "changes/unreleased/";
+
 // problem returns "" when a pull request titled title, changing the repository-relative
-// paths in changed and adding the [Unreleased] bullets in added (see addedEntries), passes,
+// paths in changed and adding or editing the fragments in added (see fragments), passes,
 // and otherwise the reason it fails, phrased to be printed as is.
 //
 // An entry is owed only when the title's type is feat, fix or perf, or the title is marked
@@ -27,9 +30,9 @@ export fun problem(title: str, changed: [str], added: [str]) > str {
     if (shipped.len() > 10) {
         listed = shipped.sub(0, len: 10).join("\n  ") + "\n  ...and {shipped.len() - 10} more";
     }
-    return "\"{title}\" changes {shipped.len()} shipped path(s) and CHANGELOG.md's [Unreleased] "
-        + "section gained no entry. Add a bullet under the fitting heading; if no user can notice "
-        + "the change, its type is not feat, fix or perf, so retitle it.\n  " + listed;
+    return "\"{title}\" changes {shipped.len()} shipped path(s) and adds no changelog fragment. "
+        + "Add {FRAGMENT_DIR}<branch>.md (changes/README.md has the format); if no user can "
+        + "notice the change, its type is not feat, fix or perf, so retitle it.\n  " + listed;
 }
 
 // owed returns the paths in changed that make a pull request titled title owe an entry:
@@ -85,22 +88,16 @@ export fun ships(path: str) > bool {
     return true;
 }
 
-// addedEntries returns the bullet lines in head's [Unreleased] body that base's lacks.
-// A set difference rather than a line diff, so a branch behind main, whose base already
-// carries entries the branch never saw, still finds exactly its own.
-export fun addedEntries(baseBody: str, headBody: str) > [str] {
-    var seen = mut {<str: bool>};
-    foreach (line in baseBody.split("\n")) {
-        seen[line.trim()] = true;
+// fragments returns the paths in changed that are changelog fragments. The caller keeps
+// only those still present, since a release deletes the fragments it folds. A path is
+// changed against the merge base, so a branch behind main finds exactly its own; an
+// edited fragment counts, as a reworded entry always has.
+export fun fragments(changed: [str]) > [str] {
+    var found = mut [<str>];
+    foreach (path in changed) {
+        if (path.startsWith(FRAGMENT_DIR) and path.endsWith(".md")) { found.append(path); }
     }
-    var added = mut [<str>];
-    foreach (line in headBody.split("\n")) {
-        final entry = line.trim();
-        if (entry.startsWith("- ") and seen[entry] == null) {
-            added.append(entry);
-        }
-    }
-    return added;
+    return found;
 }
 
 test "engine code ships and the exempt paths do not" {
@@ -125,8 +122,8 @@ test "a feat touching shipped paths without an entry fails" {
     final got = problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: [<str>]);
     std\assert(got.startsWith("\"feat(cache): add a key\" changes 1 shipped path(s)"), message: got);
     std\assert(got.endsWith("\n  internal/cache/key.go"), message: "names the shipped path");
-    std\assert(problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: ["- **A key.**"]) == "",
-        message: "an entry covers it");
+    std\assert(problem("feat(cache): add a key", changed: ["internal/cache/key.go"], added: ["changes/unreleased/key.md"]) == "",
+        message: "a fragment covers it");
 }
 
 test "a refactor touching shipped paths passes" {
@@ -156,12 +153,9 @@ test "a title that is not a conventional subject is a failure, not a pass" {
     std\assert(problem("", changed: [<str>], added: [<str>]) != "", message: "an empty title");
 }
 
-test "only bullets the branch added count as an entry" {
-    final base = "### Added\n\n- an old thing";
-    std\assert(addedEntries(base, base).len() == 0, message: "nothing new");
-    std\assert(addedEntries(base, base + "\n- a new thing").len() == 1, message: "one new bullet");
-    std\assert(addedEntries(base + "\n- main gained this", base + "\n- a new thing")[0] == "- a new thing",
-        message: "a branch behind main finds only its own bullet");
-    std\assert(addedEntries("", "### Fixed").len() == 0, message: "a heading alone is not an entry");
-    std\assert(addedEntries(base, "### Added\n\n- an old thing, reworded").len() == 1, message: "a reworded bullet counts");
+test "only markdown files under the fragment directory are fragments" {
+    final got = fragments(["internal/cache/key.go", "changes/unreleased/key.md", "changes/README.md",
+        "changes/unreleased/notes.txt", "CHANGELOG.md"]);
+    std\assert(got.len() == 1 and got[0] == "changes/unreleased/key.md", message: "{got}");
+    std\assert(!ships("changes/unreleased/key.md"), message: "a fragment ships nothing itself");
 }

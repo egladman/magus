@@ -405,7 +405,7 @@ jobs:
       # They run AFTER the release is created on purpose. The binaries are what a tag
       # is for; a failure to publish the update index must not withhold them.
       #
-      # cut moves the CHANGELOG's [Unreleased] section into the manifest and empties it,
+      # cut folds the changes/unreleased/ fragments into the manifest and deletes them,
       # then generate-changelog folds the new version back in - the repo's CHANGELOG.md
       # is generated from releases/*.yaml, so both halves have to happen here or the
       # next drift gate on main fails.
@@ -413,7 +413,7 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -changelog ./CHANGELOG.md -out ./releases
+          go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
           go run ./cmd/magus-utils generate-changelog -releases ./releases -changelog ./CHANGELOG.md
 
       # The whole build-sign-regenerate-branch-PR flow lives in the magusfile's
