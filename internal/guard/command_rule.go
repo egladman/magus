@@ -56,9 +56,9 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	}
 	facts := hint.NewGate(at.cacheDir, who.sessionKey())
 	req := commandRequest(ctx, in, who, at, facts)
-	if deps.GitState != nil {
+	if deps.CheckoutState != nil {
 		if dir, ok := gitPushDir(req.Commands, cmp.Or(at.dir, at.workspace)); ok {
-			req.Git = deps.GitState(ctx, dir)
+			req.Checkout = deps.CheckoutState(ctx, dir)
 		}
 	}
 	bind := func(rule workspace.CommandRule) ruleCall {
@@ -108,7 +108,7 @@ func commandRequest(ctx context.Context, in commandRuleInput, who hookAttributio
 }
 
 // gitPushDir is the directory the first `git push` on a line runs in, the one command whose
-// rule needs the checkout's git state: dir, moved by each `-C` git is given, as git
+// rule needs the checkout's state: dir, moved by each `-C` git is given, as git
 // applies them. False when the line pushes nothing.
 func gitPushDir(cmds []types.CommandInvocation, dir string) (string, bool) {
 	for _, c := range cmds {

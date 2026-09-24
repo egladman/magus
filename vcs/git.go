@@ -781,31 +781,55 @@ func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 	return strings.TrimPrefix(out, "origin/"), nil
 }
 
+// CheckoutState implements types.CheckoutStateReporter with two reads of refs and none of
+// the working tree: `symbolic-ref` names the branch HEAD points at and exits 1 when HEAD
+// names a commit, and `for-each-ref` lists refs/remotes.
+func (gitVCS) CheckoutState(ctx context.Context, dir string) (types.CheckoutState, error) {
+	var state types.CheckoutState
+	branch, err := gitExec(ctx, "-C", dir, "symbolic-ref", "-q", "--short", "HEAD").Output()
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		state.Branch = strings.TrimSpace(string(branch))
+	case !errors.As(err, &exit) || exit.ExitCode() != 1:
+		return types.CheckoutState{}, fmt.Errorf("git symbolic-ref: %w", err)
+	}
+	refs, err := gitExec(ctx, "-C", dir, "for-each-ref", "--format=%(refname)", "refs/remotes").Output()
+	if err != nil {
+		return types.CheckoutState{}, fmt.Errorf("git for-each-ref: %w", err)
+	}
+	for _, ref := range strings.Fields(string(refs)) {
+		state.RemoteBranches = append(state.RemoteBranches, strings.TrimPrefix(ref, "refs/remotes/"))
+	}
+	return state, nil
+}
+
 // Compile-time on purpose: every one of these interfaces is reached by type assertion at
 // its call site, so dropping a method would not fail the build, it would silently demote
 // git to whatever the caller's fallback answers ("assume pushed" and no amend command from
 // the drift notice, a named diagnostic instead of a branch-competition report, and so on).
-// git implements all seventeen optional VCSDriver capabilities, so asserting the full set
+// git implements all eighteen optional VCSDriver capabilities, so asserting the full set
 // here is what turns losing one of them into a build failure instead of a regression nobody
 // notices until a caller's fallback quietly fires.
 var (
-	_ types.MergeDriverInstaller = gitVCS{}
-	_ types.RefreshHookInstaller = gitVCS{}
-	_ types.DriftHookInstaller   = gitVCS{}
-	_ types.RegenHookInstaller   = gitVCS{}
-	_ types.RemoteReporter       = gitVCS{}
-	_ types.DefaultRefReporter   = gitVCS{}
-	_ types.PushStatusReporter   = gitVCS{}
-	_ types.RevTimeReporter      = gitVCS{}
-	_ types.TrackedFileReporter  = gitVCS{}
-	_ types.IgnoredFileReporter  = gitVCS{}
-	_ types.ChurnReporter        = gitVCS{}
-	_ types.BranchChangeReporter = gitVCS{}
-	_ types.RangeDiffReporter    = gitVCS{}
-	_ types.ConflictResolver     = gitVCS{}
-	_ types.RevisionFileReader   = gitVCS{}
-	_ types.RevisionExporter     = gitVCS{}
-	_ types.MergeStarter         = gitVCS{}
+	_ types.MergeDriverInstaller  = gitVCS{}
+	_ types.RefreshHookInstaller  = gitVCS{}
+	_ types.DriftHookInstaller    = gitVCS{}
+	_ types.RegenHookInstaller    = gitVCS{}
+	_ types.RemoteReporter        = gitVCS{}
+	_ types.DefaultRefReporter    = gitVCS{}
+	_ types.CheckoutStateReporter = gitVCS{}
+	_ types.PushStatusReporter    = gitVCS{}
+	_ types.RevTimeReporter       = gitVCS{}
+	_ types.TrackedFileReporter   = gitVCS{}
+	_ types.IgnoredFileReporter   = gitVCS{}
+	_ types.ChurnReporter         = gitVCS{}
+	_ types.BranchChangeReporter  = gitVCS{}
+	_ types.RangeDiffReporter     = gitVCS{}
+	_ types.ConflictResolver      = gitVCS{}
+	_ types.RevisionFileReader    = gitVCS{}
+	_ types.RevisionExporter      = gitVCS{}
+	_ types.MergeStarter          = gitVCS{}
 )
 
 // CommitPushed implements types.PushStatusReporter: it asks whether id is an ancestor of

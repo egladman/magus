@@ -247,20 +247,20 @@ func TestApprovedCommandRuleTimeoutDenies(t *testing.T) {
 	assert.Contains(t, v.Reason, approvedRuleTimedOut(seamCommand))
 }
 
-// The checkout's git state costs processes, so it is read only for a line that pushes.
-func TestCommandRuleSeesGitStateOnlyForAPush(t *testing.T) {
+// The checkout's state costs processes, so it is read only for a line that pushes.
+func TestCommandRuleSeesCheckoutStateOnlyForAPush(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	var read []string
-	state := &types.GitState{Detached: true, RemoteBranches: []string{"origin/main"}}
-	deps := Dependencies{GitState: func(_ context.Context, dir string) *types.GitState { read = append(read, dir); return state }}
+	state := &types.CheckoutState{RemoteBranches: []string{"origin/main"}}
+	deps := Dependencies{CheckoutState: func(_ context.Context, dir string) *types.CheckoutState { read = append(read, dir); return state }}
 	probe := &commandRuleProbe{}
 	deps.CommandRule = probe.rule()
 
 	Judge(ctx, deps, Request{Input: "git status", Host: "claude-code"})
 	Judge(ctx, deps, Request{Input: "git -C ../other push -q origin HEAD:topic", Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
-	assert.Nil(t, probe.asked[0].Git)
-	assert.Equal(t, state, probe.asked[1].Git)
+	assert.Nil(t, probe.asked[0].Checkout)
+	assert.Equal(t, state, probe.asked[1].Checkout)
 	at := hookLocation(ctx, Dependencies{})
 	assert.Equal(t, []string{filepath.Join(at.dir, "../other")}, read, "read once, in the checkout -C names")
 }

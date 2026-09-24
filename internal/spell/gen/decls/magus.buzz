@@ -646,8 +646,8 @@ export object CommandInvocation {
     repeats: bool = false,
 }
 
-export object GitState {
-    detached: bool = false,
+export object CheckoutState {
+    branch: str = "",
     remoteBranches: [str] = [],
 }
 
@@ -660,7 +660,7 @@ export object CommandRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
-    git: GitState? = null,
+    checkout: CheckoutState? = null,
 }
 
 export object WriteRequest {

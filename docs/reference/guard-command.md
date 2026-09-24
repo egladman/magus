@@ -41,13 +41,14 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 | `parent`      | the description the calling subagent was itself spawned with; empty for a root caller |
 | `role`        | `worker` when a lease binds the calling session in this checkout, else `root`         |
 | `lease`       | the bound job row for a worker, null for root                                         |
-| `git`         | for a line that runs `git push` only: the checkout's git state (below); null otherwise |
+| `checkout`    | for a line that runs `git push` only: the checkout's state (below); null otherwise    |
 
-`git` is read in the directory the push runs in (after any `-C`), from git itself, and
-only for a push, since it costs two processes: `detached` is true when HEAD names a
-commit rather than a branch, and `remoteBranches` lists the remote-tracking branches as
-git names them short (`origin/main`). A branch the remote has that this checkout never
-fetched is absent from it.
+`checkout` is read in the directory the push runs in (after any `-C`), through the
+version control that resolves there, and only for a push, since it costs processes:
+`branch` is the branch the checkout is on, empty when it is on none (a detached HEAD),
+and `remoteBranches` lists the remotes' branches as `<remote>/<branch>` as of the last
+fetch, so a branch never fetched is absent. It is null when that version control cannot
+report it, which a rule should read as unknown.
 
 Each entry of `commands`:
 

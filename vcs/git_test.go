@@ -1838,3 +1838,19 @@ func TestDriverIsReachableHere(t *testing.T) {
 	assert.True(t, driverIsReachableHere(t.Context(), root, `"`+self+`" vcs merge-driver %O`),
 		"a quoted path is unwrapped before comparison")
 }
+
+// CheckoutState names the branch HEAD points at, names none on a detached HEAD, and lists
+// remote-tracking branches under their remote's name.
+func TestGitCheckoutState(t *testing.T) {
+	dir, _ := checkpointRepo(t)
+	gitRun(t, dir, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+	got, err := gitVCS{}.CheckoutState(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, types.CheckoutState{Branch: "work", RemoteBranches: []string{"origin/main"}}, got)
+
+	gitRun(t, dir, "checkout", "-q", "--detach")
+	got, err = gitVCS{}.CheckoutState(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, types.CheckoutState{RemoteBranches: []string{"origin/main"}}, got)
+}

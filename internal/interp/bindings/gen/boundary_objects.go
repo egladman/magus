@@ -1700,9 +1700,9 @@ func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
 	return out
 }
 
-func ObjectGitState(v types.GitState) vm.Value {
+func ObjectCheckoutState(v types.CheckoutState) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("detached", vm.BoolValue(v.Detached))
+	out.MapSet("branch", vm.StrValue(v.Branch))
 	itemsRemoteBranches := make([]vm.Value, len(v.RemoteBranches))
 	for indexRemoteBranches := range v.RemoteBranches {
 		itemsRemoteBranches[indexRemoteBranches] = vm.StrValue(v.RemoteBranches[indexRemoteBranches])
@@ -1729,11 +1729,11 @@ func ObjectCommandRequest(v types.CommandRequest) vm.Value {
 		optLease = ObjectJob((*v.Lease))
 	}
 	out.MapSet("lease", optLease)
-	optGit := vm.Null
-	if v.Git != nil {
-		optGit = ObjectGitState((*v.Git))
+	optCheckout := vm.Null
+	if v.Checkout != nil {
+		optCheckout = ObjectCheckoutState((*v.Checkout))
 	}
-	out.MapSet("git", optGit)
+	out.MapSet("checkout", optCheckout)
 	return out
 }
 

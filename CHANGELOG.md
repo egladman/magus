@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   every file an agent writes through its host's edit tools, with the text the host says
   it writes, on the same strengthen-only, fail-open, committed-copy terms as
   `magus\guard.command`. A command rule judging `git push` also gets the checkout's
-  detached state and remote-tracking branches.
+  branch and its remotes' branches, read through the VCS driver.
 - **The guard denies a trailing exit-status echo (`exit-status-echo`).** `cmd; echo "rc=$?"`
   and its `printf` forms are refused: the harness already reports a nonzero exit, and the
   echo exits 0, masking the failure. Only a last statement printing `$?` and literal text

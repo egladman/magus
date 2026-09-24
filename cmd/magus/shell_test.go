@@ -30,7 +30,13 @@ import (
 // shellStdin runs `magus shell` with its input on stdin, which is the shape a host's
 // pre-tool-use hook uses. A person passes the command as an operand instead; both reach
 // the same evaluator, and the operand path has its own cases below.
+//
+// It judges by the built-in rules alone: these tests run inside magus's own checkout, whose
+// Buzz policy is not what they are about. guard_plumbing_test.go covers workspace rules.
 func shellStdin(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
+	saved := guardRoot
+	guardRoot = func() (string, error) { return "", errors.New("no workspace rules in this test") }
+	defer func() { guardRoot = saved }()
 	return shellCmdWithErrorWriter(ctx, in, out, os.Stderr, args)
 }
 
@@ -382,19 +388,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	assert.Equal(t, "pass\n", out.String())
 	events, err = trail.ReadRecent(emptyDir, 1)
 	require.NoError(t, err)
-	assert.Empty(t, withoutPolicyEvents(events), "a hook with no command/path has no observable invocation to record")
-}
-
-// withoutPolicyEvents drops the guard_policy lineage the hook records for the rules this
-// checkout's own magusfile registers, which the tests that call it are not about.
-func withoutPolicyEvents(events []trail.Event) []trail.Event {
-	var out []trail.Event
-	for _, e := range events {
-		if e.Kind != trail.KindGuardPolicy {
-			out = append(out, e)
-		}
-	}
-	return out
+	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
 }
 
 // TestHookCmd_RecordsHostAttribution covers the --agent-name/--session/--event flags: the wrapper is
@@ -420,9 +414,8 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 
 	// Whole-struct assertion with the content-addressed and clock-dependent fields lifted out
 	// first, so a new field on Event cannot be silently dropped by the hook producer.
-	// The policy digest names the rules this checkout's own magusfile registers.
 	requestRef, responseRef := got.RequestRef, got.ResponseRef
-	got.Ts, got.RequestRef, got.ResponseRef, got.PolicyDigest = 0, "", "", ""
+	got.Ts, got.RequestRef, got.ResponseRef = 0, "", ""
 	got.RequestBytes, got.ResponseBytes = 0, 0
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentCommand,
@@ -583,7 +576,7 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 
 	events, err := trail.ReadRecent(dir, 1)
 	require.NoError(t, err)
-	assert.Empty(t, withoutPolicyEvents(events))
+	assert.Empty(t, events)
 }
 
 // TestHookCmd_RecordsSpawnFromEnvelope covers the spawn surface end to end: a host payload
@@ -620,9 +613,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	got := events[0]
 
 	requestRef := got.RequestRef
-	// The digest names the rules this checkout's own magusfile registers, which is not what
-	// this test is about.
-	got.Ts, got.RequestRef, got.RequestBytes, got.PolicyDigest = 0, "", 0, ""
+	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentSpawn,
 		Actor:     "agent",
@@ -1273,9 +1264,6 @@ func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
-	// Outside this checkout, whose own policy refuses the gate to a worker whatever magus
-	// served: this test is about the built-in rules standing down.
-	t.Chdir(t.TempDir())
 	ctx, _, cacheDir := fleetFixture(t, narrowLease())
 	gate := hint.NewGate(cacheDir, "session-preauth")
 	command := "./magus affected ci --no-default-charms"

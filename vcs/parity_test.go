@@ -1101,3 +1101,20 @@ func TestParityRangeDiffScopesToPaths(t *testing.T) {
 		assert.NotContainsf(t, diff, "drop.txt", "%s scoped RangeDiff did not narrow to the given path", b.name)
 	})
 }
+
+// A fresh repository with no remote reports its checkout without error and no remote
+// branches, whichever backend answers. A backend without the capability is unknown.
+func TestParityCheckoutStateWithoutARemote(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		reporter, ok := b.drv.(types.CheckoutStateReporter)
+		if !ok {
+			t.Skipf("%s does not implement CheckoutStateReporter", b.name)
+		}
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n"})
+
+		got, err := reporter.CheckoutState(t.Context(), dir)
+		require.NoErrorf(t, err, "%s CheckoutState", b.name)
+		assert.Emptyf(t, got.RemoteBranches, "%s has no remote to report", b.name)
+	})
+}

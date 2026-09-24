@@ -398,6 +398,26 @@ type DefaultRefReporter interface {
 	DefaultRef(ctx context.Context, dir string) (string, error)
 }
 
+// CheckoutState is which branch a checkout is on and which branches its repository
+// records its remotes as having.
+type CheckoutState struct {
+	// Branch is the branch the checkout is on, "" when it is on none (git's detached HEAD).
+	Branch string
+	// RemoteBranches are the remotes' branches as of the last fetch, each named
+	// `<remote>/<branch>`. A branch a remote has that was never fetched is absent.
+	RemoteBranches []string
+}
+
+// CheckoutStateReporter is an optional capability (sibling of DefaultRefReporter) for
+// VCSDriver implementations that can report a CheckoutState without reading the working
+// tree. It answers a rule about a push, which needs these two facts and none of what
+// Metadata spends a status on. Callers type-assert for it and treat a backend without it
+// as unknown.
+type CheckoutStateReporter interface {
+	// CheckoutState returns the state of the checkout containing dir.
+	CheckoutState(ctx context.Context, dir string) (CheckoutState, error)
+}
+
 // PushStatusReporter is an optional capability for VCSDriver implementations that can
 // report whether a commit has already left the repository for its configured remote. It
 // answers the one question a history-rewrite suggestion must never guess at: amending or

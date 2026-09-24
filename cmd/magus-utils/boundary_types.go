@@ -182,7 +182,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "SpawnTarget", Type: reflect.TypeFor[types.SpawnTarget](), RuntimeObject: true},
 	{Name: "SpawnRequest", Type: reflect.TypeFor[types.SpawnRequest](), RuntimeObject: true},
 	{Name: "CommandInvocation", Type: reflect.TypeFor[types.CommandInvocation](), RuntimeObject: true},
-	{Name: "GitState", Type: reflect.TypeFor[types.GitState](), RuntimeObject: true},
+	{Name: "CheckoutState", Type: reflect.TypeFor[types.CheckoutState](), RuntimeObject: true},
 	{Name: "CommandRequest", Type: reflect.TypeFor[types.CommandRequest](), RuntimeObject: true},
 	{Name: "WriteRequest", Type: reflect.TypeFor[types.WriteRequest](), RuntimeObject: true},
 	{Name: "GuardVerdict", Type: reflect.TypeFor[types.GuardVerdict](), RuntimeObject: true},

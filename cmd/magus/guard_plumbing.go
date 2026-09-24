@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/egladman/magus"
@@ -52,7 +50,7 @@ func guardDependencies() guard.Dependencies {
 		SymbolDefined:    symbolDefinedForGuard,
 		HeadCommit:       headCommitForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
-		GitState:         gitStateForGuard,
+		CheckoutState:    checkoutStateForGuard,
 	}
 	if rules != nil {
 		deps.SpawnRule = rules.SpawnRule()
@@ -64,7 +62,7 @@ func guardDependencies() guard.Dependencies {
 		deps.Policy = func() guard.PolicyState { return guardPolicyState(rules) }
 		return deps
 	}
-	root, err := magus.FindRoot("")
+	root, err := guardRoot()
 	if err != nil {
 		return deps
 	}
@@ -83,6 +81,11 @@ func guardDependencies() guard.Dependencies {
 	return deps
 }
 
+// guardRoot finds the workspace whose rules the guard enforces. A variable so the hook's
+// own tests judge by the built-in rules alone rather than by the policy of whichever
+// checkout they happen to run in.
+var guardRoot = func() (string, error) { return magus.FindRoot("") }
+
 // loadGuardRules loads the guard rules of the workspace this process runs in from its
 // root magusfile alone, nil with the reason when that file does not load, and nil with no
 // error outside any workspace. Unloadable is not fatal for the reason
@@ -92,7 +95,7 @@ func guardDependencies() guard.Dependencies {
 // more, on every agent tool call, for facts no guard rule reads. The rules that do need
 // the workspace open it through Dependencies.Inspect, and only when they apply.
 func loadGuardRules(ctx context.Context) (*magus.GuardRules, error) {
-	root, err := magus.FindRoot("")
+	root, err := guardRoot()
 	if err != nil {
 		return nil, nil //nolint:nilnil,nilerr // outside a workspace there are no rules and nothing failed
 	}
@@ -172,24 +175,26 @@ func checkoutBaseForGuard(ctx context.Context, root string) string {
 	return checkpointToken(cp)
 }
 
-// gitStateForGuard reads the git checkout holding dir for a rule judging a `git push`: the
-// command being judged is git's own, so its facts come from git rather than through the
-// VCS layer. Two processes, spent only on a push. Nil when dir is in no git checkout.
-func gitStateForGuard(ctx context.Context, dir string) *types.GitState {
+// checkoutStateForGuard reads the checkout holding dir through the version control that
+// resolves there, for a rule judging a push. Nil when there is none, when its driver cannot
+// report the state, or when the read fails: a rule reads nil as unknown.
+func checkoutStateForGuard(ctx context.Context, dir string) *types.CheckoutState {
 	if dir == "" {
 		return nil
 	}
-	// symbolic-ref -q exits 1, printing nothing, exactly when HEAD names no branch.
-	_, headErr := exec.CommandContext(ctx, "git", "-C", dir, "symbolic-ref", "-q", "HEAD").Output()
-	var exit *exec.ExitError
-	if headErr != nil && (!errors.As(headErr, &exit) || exit.ExitCode() != 1) {
-		return nil
-	}
-	refs, err := exec.CommandContext(ctx, "git", "-C", dir, "for-each-ref", "--format=%(refname:short)", "refs/remotes").Output()
+	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
 	if err != nil {
 		return nil
 	}
-	return &types.GitState{Detached: headErr != nil, RemoteBranches: strings.Fields(string(refs))}
+	reporter, ok := res.VCS.(types.CheckoutStateReporter)
+	if !ok {
+		return nil
+	}
+	state, err := reporter.CheckoutState(ctx, dir)
+	if err != nil {
+		return nil
+	}
+	return &state
 }
 
 // symbolDefinedForGuard answers the one question that lets the guard deny a symbol

@@ -166,19 +166,10 @@ type CommandRequest struct {
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
 	Lease *Job
-	// Git is the state of the checkout the line runs in, read only when the line runs
-	// `git push`, since reading it costs processes; nil otherwise, and when the directory
-	// is not a git checkout.
-	Git *GitState
-}
-
-// GitState is what a rule about a push needs to know about the checkout it leaves from.
-type GitState struct {
-	// Detached is true when HEAD names a commit rather than a branch.
-	Detached bool
-	// RemoteBranches are the checkout's remote-tracking branches as git names them short:
-	// `origin/main`. A branch the remote has that was never fetched is absent.
-	RemoteBranches []string
+	// Checkout is the state of the checkout a push leaves from, read only for a line that
+	// pushes, since reading it costs processes. Nil otherwise, and when the checkout's
+	// version control cannot report it: a rule reads nil as unknown.
+	Checkout *CheckoutState
 }
 
 // WriteRequest is what a magus\guard.write rule is handed: one file an agent is about to

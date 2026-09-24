@@ -67,8 +67,8 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         programs.append(Program{ name = c.program, args = c.args, repeats = c.repeats });
     }
     var checkout: Checkout? = null;
-    if (req.git != null) {
-        checkout = Checkout{ detached = req.git!.detached, remoteBranches = req.git!.remoteBranches };
+    if (req.checkout != null) {
+        checkout = Checkout{ detached = req.checkout!.branch == "", remoteBranches = req.checkout!.remoteBranches };
     }
     return decide(programs, caller: Caller{ role = req.role, title = req.parent }, checkout: checkout, once: fun (key: str) > bool {
         return magus\guard.once(key);

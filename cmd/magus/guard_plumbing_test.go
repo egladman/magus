@@ -103,22 +103,24 @@ func resetWorkspaceMemo(t *testing.T) {
 	})
 }
 
-// The push facts come from git itself: a branch checkout is attached, a commit checkout is
-// detached, and remote-tracking branches are listed as git names them short.
-func TestGitStateForGuard(t *testing.T) {
+// The push facts come through the version control that resolves in the checkout: a
+// branch checkout names its branch, a detached one names none, and a directory under no
+// version control is unknown.
+func TestCheckoutStateForGuard(t *testing.T) {
 	root := committedDenyRule(t)
 	runGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
 
-	got := gitStateForGuard(t.Context(), root)
+	got := checkoutStateForGuard(t.Context(), root)
 	require.NotNil(t, got)
-	assert.Equal(t, types.GitState{Detached: false, RemoteBranches: []string{"origin/main"}}, *got)
+	assert.NotEmpty(t, got.Branch)
+	assert.Equal(t, []string{"origin/main"}, got.RemoteBranches)
 
 	runGit(t, root, "checkout", "-q", "--detach")
-	got = gitStateForGuard(t.Context(), root)
+	got = checkoutStateForGuard(t.Context(), root)
 	require.NotNil(t, got)
-	assert.True(t, got.Detached)
+	assert.Empty(t, got.Branch)
 
-	assert.Nil(t, gitStateForGuard(t.Context(), t.TempDir()), "outside any git checkout")
+	assert.Nil(t, checkoutStateForGuard(t.Context(), t.TempDir()), "outside any version control")
 }
 
 // The hook reads the root magusfile alone, so a working tree the full load would refuse,
