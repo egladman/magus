@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -200,6 +201,45 @@ func (d doubles) builds(b building) *checkouts {
 			return nil
 		}).Maybe()
 	return co
+}
+
+// trail records, in order, the marks a step shows as "<id> <mark>" ("none" for
+// [types.MarkNone]), plus " in <repo>" for a change naming its repository, beside
+// whatever else a test adds to it.
+type trail struct {
+	mu  sync.Mutex
+	got []string
+}
+
+func (tr *trail) add(entry string) {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	tr.got = append(tr.got, entry)
+}
+
+func (tr *trail) entries() []string {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	return slices.Clone(tr.got)
+}
+
+// marks records every mark the provider is asked to show, failing the entries fail
+// names. Set before [applierFor], it answers every mark ahead of that catch-all.
+func (d doubles) marks(fail map[string]error) *trail {
+	tr := &trail{}
+	d.provider.EXPECT().Mark(mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, c types.Change, m types.Mark) error {
+			entry := c.ID + " " + string(m)
+			if m == types.MarkNone {
+				entry = c.ID + " none"
+			}
+			if c.Repo != "" {
+				entry += " in " + c.Repo
+			}
+			tr.add(entry)
+			return fail[entry]
+		}).Maybe()
+	return tr
 }
 
 // checkouts are the checkouts building candidates made.

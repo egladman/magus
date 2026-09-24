@@ -18,6 +18,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -236,35 +237,88 @@ func runHook(ctx context.Context, c hookCommand) error {
 	}
 }
 
-// CommandGate is a [types.Gate] running line in each candidate's checkout. Exit status 0 is
-// green; anything else the hook's processes do is red. line's output goes to log, each
-// line tagged with its candidate; a nil log discards it.
-func CommandGate(line string, plan types.Plan, log *HookLog) types.Gate {
-	return commandGate{line: line, base: plan.Base, baseCommit: plan.BaseCommit, log: log}
+// ScratchVar is an environment variable the queue points into each hook's scratch
+// directory: Name is set to $MERGEQUEUE_SCRATCH/Dir. It keeps a cache private to one
+// candidate without the hook's command line saying so, which leaves that line one a
+// person can run outside the queue as it stands.
+type ScratchVar struct {
+	Name string
+	Dir  string // relative, inside the scratch directory
+}
+
+// ParseScratchVar reads "NAME=DIR". NAME is a shell variable name the queue does not
+// set itself, and DIR a relative path that stays inside the scratch directory.
+func ParseScratchVar(spec string) (ScratchVar, error) {
+	name, dir, ok := strings.Cut(spec, "=")
+	switch {
+	case !ok || !isEnvName(name) || dir == "":
+		return ScratchVar{}, fmt.Errorf("%q is not NAME=DIR", spec)
+	case strings.HasPrefix(name, "MERGEQUEUE_") || slices.Contains(scrubbed, name):
+		return ScratchVar{}, fmt.Errorf("%q: the queue sets or removes %s itself", spec, name)
+	case !filepath.IsLocal(dir):
+		return ScratchVar{}, fmt.Errorf("%q: %s leaves the scratch directory", spec, dir)
+	}
+	return ScratchVar{Name: name, Dir: filepath.Clean(dir)}, nil
+}
+
+func isEnvName(s string) bool {
+	for i, r := range s {
+		switch {
+		case r == '_', 'a' <= r && r <= 'z', 'A' <= r && r <= 'Z':
+		case i > 0 && '0' <= r && r <= '9':
+		default:
+			return false
+		}
+	}
+	return s != ""
+}
+
+// scratchEnv creates each of vars under scratch and returns their assignments.
+func scratchEnv(scratch string, vars []ScratchVar) ([]string, error) {
+	env := make([]string, 0, len(vars))
+	for _, v := range vars {
+		dir := filepath.Join(scratch, v.Dir)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, err
+		}
+		env = append(env, v.Name+"="+dir)
+	}
+	return env, nil
+}
+
+// CommandGate is a [types.Gate] running line in each candidate's checkout, with vars
+// pointed into the candidate's scratch directory. Exit status 0 is green; anything else
+// the hook's processes do is red. line's output goes to log, each line tagged with its
+// candidate; a nil log discards it.
+func CommandGate(line string, plan types.Plan, vars []ScratchVar, log *HookLog) types.Gate {
+	return commandGate{line: line, base: plan.Base, baseCommit: plan.BaseCommit, vars: vars, log: log}
 }
 
 type commandGate struct {
 	line, base, baseCommit string
+	vars                   []ScratchVar
 	log                    *HookLog
 }
 
 func (g commandGate) Validate(ctx context.Context, cand types.Candidate, onto string, c types.Change) (types.GateResult, error) {
-	label := "[" + short(cand.Commit) + " #" + c.ID + "] "
-	out := g.log.Prefixed(label)
+	env, err := scratchEnv(cand.Scratch, g.vars)
+	if err != nil {
+		return types.GateResult{}, fmt.Errorf("gate on the candidate `%s`: %w", short(cand.Commit), err)
+	}
+	out := g.log.Prefixed("[" + short(cand.Commit) + " #" + c.ID + "] ")
 	defer out.Close()
-	err := runHook(ctx, hookCommand{
+	err = runHook(ctx, hookCommand{
 		Line: g.line,
 		Dir:  cand.Dir,
-		Env: []string{EnvChange + "=" + c.ID, EnvHead + "=" + c.Head, EnvBase + "=" + g.base,
-			EnvBaseCommit + "=" + g.baseCommit, EnvOnto + "=" + onto, EnvCandidate + "=" + cand.Commit, EnvScratch + "=" + cand.Scratch},
+		Env: append(env, EnvChange+"="+c.ID, EnvHead+"="+c.Head, EnvBase+"="+g.base,
+			EnvBaseCommit+"="+g.baseCommit, EnvOnto+"="+onto, EnvCandidate+"="+cand.Commit, EnvScratch+"="+cand.Scratch),
 		Stdout: out,
 		Stderr: out,
 	})
 	var failed changeFailure
 	switch {
 	case errors.As(err, &failed):
-		return types.GateResult{Summary: fmt.Sprintf("`%s` %s on the candidate `%s`; the queue log's lines prefixed %q name what failed.",
-			g.line, failed.why, short(cand.Commit), strings.TrimSpace(label))}, nil
+		return types.GateResult{Summary: "the gate " + failed.why}, nil
 	case err != nil:
 		return types.GateResult{}, fmt.Errorf("gate on the candidate `%s`: %w", short(cand.Commit), err)
 	}
@@ -272,27 +326,30 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, onto st
 }
 
 // CommandRegenerate is a [types.RegenerateFunc] running line in a checkout with the generated
-// paths on stdin, one per line. A failure of the hook's processes is a *[types.RefusedError]:
-// the change did not regenerate.
-func CommandRegenerate(line string, plan types.Plan, log *HookLog) types.RegenerateFunc {
+// paths on stdin, one per line, and vars pointed into the checkout's scratch directory. A
+// failure of the hook's processes is a *[types.RefusedError] naming the paths: the change
+// did not regenerate.
+func CommandRegenerate(line string, plan types.Plan, vars []ScratchVar, log *HookLog) types.RegenerateFunc {
 	return func(ctx context.Context, r types.Regeneration) error {
-		label := "[regenerate #" + r.Change.ID + "] "
-		out := log.Prefixed(label)
+		env, err := scratchEnv(r.Scratch, vars)
+		if err != nil {
+			return fmt.Errorf("regenerate %s: %w", r.Change.Label(), err)
+		}
+		out := log.Prefixed("[regenerate #" + r.Change.ID + "] ")
 		defer out.Close()
-		err := runHook(ctx, hookCommand{
+		err = runHook(ctx, hookCommand{
 			Line: line,
 			Dir:  r.Dir,
-			Env: []string{EnvChange + "=" + r.Change.ID, EnvHead + "=" + r.Change.Head, EnvBase + "=" + plan.Base,
-				EnvBaseCommit + "=" + plan.BaseCommit, EnvOnto + "=" + r.Onto, EnvScratch + "=" + r.Scratch,
-				EnvUnits + "=" + strings.Join(r.Units, " ")},
+			Env: append(env, EnvChange+"="+r.Change.ID, EnvHead+"="+r.Change.Head, EnvBase+"="+plan.Base,
+				EnvBaseCommit+"="+plan.BaseCommit, EnvOnto+"="+r.Onto, EnvScratch+"="+r.Scratch,
+				EnvUnits+"="+strings.Join(r.Units, " ")),
 			Stdin:  strings.NewReader(strings.Join(r.Paths, "\n") + "\n"),
 			Stdout: out,
 			Stderr: out,
 		})
 		var failed changeFailure
 		if errors.As(err, &failed) {
-			return &types.RefusedError{Reason: fmt.Sprintf("`%s` %s regenerating %s", line, failed.why, strings.Join(r.Paths, ", ")),
-				Remedy: fmt.Sprintf("The queue log's lines prefixed %q name what failed.", strings.TrimSpace(label))}
+			return &types.RefusedError{Reason: "the regeneration " + failed.why, Paths: r.Paths}
 		}
 		return err
 	}
