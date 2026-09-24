@@ -351,6 +351,15 @@ func TestUsageNeedsNoWorkspace(t *testing.T) {
 	}
 }
 
+// The guard runs before every agent tool call and loads its rules from the root magusfile
+// alone. A preload put a full workspace load, over a second of it in this repository, in
+// front of each of those calls.
+func TestShellProfileSkipsTheWorkspacePreload(t *testing.T) {
+	if got := resolveProfile("shell", nil); got != (dispatchProfile{needsConfig: true}) {
+		t.Errorf("resolveProfile(shell) = %+v, want config only", got)
+	}
+}
+
 func TestWantsUsage(t *testing.T) {
 	for _, tc := range []struct {
 		name string

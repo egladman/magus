@@ -339,6 +339,12 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// OS notifier rather than one on the daemon's host, and a listing is one
 		// directory read with no warm daemon state to reuse.
 		return dispatchProfile{needsConfig: true}
+	case "shell":
+		// The guard an agent host calls before every tool call. It reads the root magusfile's
+		// guard rules itself (loadGuardRules), and the few rules that need the workspace open
+		// it lazily, so a preload would put a full workspace load in front of every tool
+		// call for nothing. Never forwarded: a verdict is not adoptable work.
+		return dispatchProfile{needsConfig: true}
 	case "events":
 		// Reads the run-log directory; the magusfile never. Loading the workspace would
 		// refresh the merge-driver registration, and a subscriber an editor spawns must

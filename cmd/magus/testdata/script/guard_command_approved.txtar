@@ -1,0 +1,73 @@
+# magus\guard.command's committed-vs-worktree policy, through the real `magus shell` a
+# hook invokes, with the rule living in a file the root magusfile imports, the way a
+# repository keeps its policy: an uncommitted TIGHTEN applies live, an uncommitted LOOSEN
+# of the imported file waits for a commit, and committing it lets it take effect.
+
+exec git init -q
+exec git config user.email test@example.com
+exec git config user.name Test
+
+cp policy-advise.buzz policy.buzz
+exec git add magusfile.buzz policy.buzz
+exec git commit -q -m baseline
+
+# The committed rule advises.
+stdin bash.json
+exec magus shell
+stdout 'advise \[workspace:command\]: poll the board'
+
+# (a) TIGHTEN, live.
+cp policy-deny.buzz policy.buzz
+stdin bash.json
+! exec magus shell
+stdout 'deny \[workspace:command\]: no watching here'
+exec git commit -q -am tighten
+
+# (b) LOOSEN the imported file, uncommitted: the committed deny still wins.
+cp policy-allow.buzz policy.buzz
+stdin bash.json
+! exec magus shell
+stdout 'deny \[workspace:command\]: no watching here'
+
+# (c) Commit the loosening: the approved side catches up.
+exec git commit -q -am loosen
+stdin bash.json
+exec magus shell
+! stdout 'deny'
+
+-- magusfile.buzz --
+import "magus";
+import "./policy";
+
+magus\guard.command(policy\judge);
+-- policy-advise.buzz --
+namespace policy;
+
+import "magus";
+
+export fun judge(req: CommandRequest) > GuardVerdict {
+    return magus\guard.advise("poll the board");
+}
+-- policy-deny.buzz --
+namespace policy;
+
+import "magus";
+
+export fun judge(req: CommandRequest) > GuardVerdict {
+    foreach (c in req.commands) {
+        if (c.program == "gh" and c.args.len() > 1 and c.args[1] == "watch") {
+            return magus\guard.deny("no watching here");
+        }
+    }
+    return magus\guard.allow();
+}
+-- policy-allow.buzz --
+namespace policy;
+
+import "magus";
+
+export fun judge(req: CommandRequest) > GuardVerdict {
+    return magus\guard.allow();
+}
+-- bash.json --
+{"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "gh run watch 123", "description": "watch ci"}}

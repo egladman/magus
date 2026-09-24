@@ -26,12 +26,16 @@ import (
 // Rules are APPEND-ONLY and cannot disable a built-in. Match criteria are the
 // resolved program name plus an optional arg subset, judged by ParseCommands.
 //
-// spawn() registers the one function the guard calls on every agent spawn and
-// continuation, with allow/advise/deny to build its answer and once/count for state
-// that lasts the calling session. See registerSpawnRule.
+// spawn(), command() and write() each register the one function the guard calls on every
+// agent spawn and continuation, every agent shell command, or every agent file write, with
+// allow/advise/deny to build its answer and once/count for state that lasts the calling
+// session. See registerSpawnRule, registerCommandRule and registerWriteRule.
 func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
 	guardMap := vm.NewMap()
+	registerVerdictMembers(obs, guardMap)
 	registerSpawnRule(ctx, sess, obs, guardMap)
+	registerCommandRule(ctx, sess, obs, guardMap)
+	registerWriteRule(ctx, sess, obs, guardMap)
 	registerShellRule := func(member, obsName, defaultDialect string) {
 		guardMap.MapSet(member, directVal(obs, obsName, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			if len(args) == 0 || !args[0].IsMap() {

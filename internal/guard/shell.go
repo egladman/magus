@@ -87,7 +87,6 @@ const (
 	denyRuleBusyWait          denyRuleName = "busy-wait"
 	denyRuleProcessPoll       denyRuleName = "process-poll"
 	denyRuleCaptureFilter     denyRuleName = "capture-filter"
-	denyRuleCIWatch           denyRuleName = "ci-watch"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
 	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
 	denyRuleRawTool           denyRuleName = "raw-tool"
@@ -1091,9 +1090,6 @@ var (
 	denyCaptureFilter = "Read that file whole (`cat`, or your editor tool), or give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
 		"A failure prints `cause:` and `output: out<hex>` two lines apart, so `grep cause:` keeps the symptom and drops the ref `" + hint.QueryOutput.With("<ref>") + "` reads the whole log from.\n" +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION. Reading the whole file stays allowed."
-	denyCIWatch = "Ask for the board once, when you need the answer:\n" +
-		"  gh pr list --state open --json number,mergeable,statusCheckRollup\n" +
-		"Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: the human merges, not you. Poll that command instead while you are acting on a RED run."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
@@ -1549,12 +1545,6 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(cmds) {
 		return ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}
-	}
-	// Beside busy-wait and for the same reason: both are an agent blocking on a condition
-	// it will be told about anyway. This one has no raw-line fallback, because an
-	// unparseable line naming `watch` is far more likely to be something else entirely.
-	if parsed && ciWatchFires(cmds) {
-		return ShellVerdict{Deny: denyCIWatch, Rule: denyRule{Name: denyRuleCIWatch}}
 	}
 	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
 	// a task capture, this one refuses trimming it once it arrives. It has to sit above

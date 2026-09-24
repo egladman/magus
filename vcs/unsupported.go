@@ -96,6 +96,10 @@ func (declines[N]) DefaultRef(context.Context, string) (string, error) {
 	return "", decline[N](types.CapDefaultRefReporter)
 }
 
+func (declines[N]) CheckoutState(context.Context, string) (types.CheckoutState, error) {
+	return types.CheckoutState{}, decline[N](types.CapCheckoutStateReporter)
+}
+
 func (declines[N]) CommitPushed(context.Context, string, string) (bool, bool, error) {
 	return false, false, decline[N](types.CapPushStatusReporter)
 }

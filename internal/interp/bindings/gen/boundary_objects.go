@@ -1688,7 +1688,75 @@ func ObjectSpawnRequest(v types.SpawnRequest) vm.Value {
 	return out
 }
 
-func ObjectSpawnVerdict(v types.SpawnVerdict) vm.Value {
+func ObjectCommandInvocation(v types.CommandInvocation) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("program", vm.StrValue(v.Program))
+	itemsArgs := make([]vm.Value, len(v.Args))
+	for indexArgs := range v.Args {
+		itemsArgs[indexArgs] = vm.StrValue(v.Args[indexArgs])
+	}
+	out.MapSet("args", vm.ListValue(itemsArgs))
+	out.MapSet("repeats", vm.BoolValue(v.Repeats))
+	return out
+}
+
+func ObjectCheckoutState(v types.CheckoutState) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("branch", vm.StrValue(v.Branch))
+	itemsRemoteBranches := make([]vm.Value, len(v.RemoteBranches))
+	for indexRemoteBranches := range v.RemoteBranches {
+		itemsRemoteBranches[indexRemoteBranches] = vm.StrValue(v.RemoteBranches[indexRemoteBranches])
+	}
+	out.MapSet("remoteBranches", vm.ListValue(itemsRemoteBranches))
+	return out
+}
+
+func ObjectCommandRequest(v types.CommandRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("command", vm.StrValue(v.Command))
+	out.MapSet("description", vm.StrValue(v.Description))
+	itemsCommands := make([]vm.Value, len(v.Commands))
+	for indexCommands := range v.Commands {
+		itemsCommands[indexCommands] = ObjectCommandInvocation(v.Commands[indexCommands])
+	}
+	out.MapSet("commands", vm.ListValue(itemsCommands))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("role", vm.StrValue(string(v.Role)))
+	optLease := vm.Null
+	if v.Lease != nil {
+		optLease = ObjectJob((*v.Lease))
+	}
+	out.MapSet("lease", optLease)
+	optCheckout := vm.Null
+	if v.Checkout != nil {
+		optCheckout = ObjectCheckoutState((*v.Checkout))
+	}
+	out.MapSet("checkout", optCheckout)
+	return out
+}
+
+func ObjectWriteRequest(v types.WriteRequest) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("parent", vm.StrValue(v.Parent))
+	out.MapSet("role", vm.StrValue(string(v.Role)))
+	optLease := vm.Null
+	if v.Lease != nil {
+		optLease = ObjectJob((*v.Lease))
+	}
+	out.MapSet("lease", optLease)
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("workspace", vm.StrValue(v.Workspace))
+	out.MapSet("content", vm.StrValue(v.Content))
+	out.MapSet("oldText", vm.StrValue(v.OldText))
+	out.MapSet("newText", vm.StrValue(v.NewText))
+	return out
+}
+
+func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", vm.StrValue(string(v.Decision)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
